@@ -229,6 +229,11 @@ distance from the start and/or end and returns another path dictionary.
 #let trimmed = kurvst.trim(path, start-outset: 0.15, end-outset: 0.1)
 ```
 
+`intersections(a, b)` returns transverse crossings sorted by arc distance along
+`a`. Each record includes `point`, `distance-a`, `distance-b`, segment indices,
+and local segment parameters. Path-endpoint and tangential contacts are
+omitted, so the distances can be passed directly to path-splitting logic.
+
 `hobby-through(start, through, end)` builds a smooth open curve through three
 points; `segments` returns the two cubic halves split at `through`.
 `hobby-spline(points)` does the same for any open point sequence with at least

@@ -212,6 +212,17 @@
   accuracy: 0.001,
 ) = _impl.length(path, accuracy: accuracy)
 
+/// Find transverse crossings between two paths, sorted by arc distance along the first path.
+/// -> array
+#let intersections(
+  /// First Kurvst path dictionary. -> dictionary
+  a,
+  /// Second Kurvst path dictionary. -> dictionary
+  b,
+  /// Absolute geometry and arc-length tolerance. -> float
+  accuracy: 0.001,
+) = _impl.intersections(a, b, accuracy: accuracy)
+
 /// Resolve a fixed and relative visible path length.
 /// -> none | int | float
 #let resolve-length(

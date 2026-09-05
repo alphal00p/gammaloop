@@ -2,7 +2,8 @@ mod curve_api;
 
 pub use curve_api::{
     curve_hobby_spline_bytes, curve_hobby_through_bytes, curve_parallel_path_bytes,
-    curve_path_length_bytes, curve_pattern_path_bytes, curve_trim_path_bytes,
+    curve_path_intersections_bytes, curve_path_length_bytes, curve_pattern_path_bytes,
+    curve_trim_path_bytes,
 };
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
@@ -45,4 +46,10 @@ pub fn curve_parallel_path(arg: &[u8]) -> Result<Vec<u8>, String> {
 #[wasm_func]
 pub fn curve_path_length(arg: &[u8]) -> Result<Vec<u8>, String> {
     curve_path_length_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn curve_path_intersections(arg: &[u8]) -> Result<Vec<u8>, String> {
+    curve_path_intersections_bytes(arg)
 }

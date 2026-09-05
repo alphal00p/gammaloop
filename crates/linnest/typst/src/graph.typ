@@ -683,12 +683,14 @@
 /// Create a grouped placement coordinate.
 ///
 /// `side: "+"` keeps the solved coordinate non-negative and `side: "-"`
-/// keeps it non-positive. Groups are layout constraints and therefore require
-/// pin placement, which is the @pos default. Node and edge coordinates with
-/// the same group name and side share the final axis coordinate.
+/// keeps it non-positive. `start` supplies an initial value without fixing the
+/// coordinate; multiple starts for one group are averaged. Groups are layout
+/// constraints and therefore require pin placement, which is the @pos default.
+/// Node and edge coordinates with the same group name and side share one axis
+/// coordinate throughout layout.
 ///
 /// ```example
-/// #group("right", side: "+")
+/// #group("right", side: "+", start: 4)
 /// ```
 /// -> dictionary
 #let group(
@@ -696,7 +698,9 @@
   name,
   /// Optional sign constraint: `"+"`, `"-"`, `"positive"`, or `"negative"`. -> none | string
   side: none,
-) = _impl.group(name, side)
+  /// Optional initial coordinate; unlike @pin, this remains movable. -> none | int | float
+  start: none,
+) = _impl.group(name, side, start)
 
 /// Mark one coordinate as a layout constraint.
 /// -> dictionary

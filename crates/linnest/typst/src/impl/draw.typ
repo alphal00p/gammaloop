@@ -71,6 +71,11 @@
   split-gap: 0,
 )
 
+#let _edge-crossing-defaults = (
+  crossing-under: none,
+  crossing-gap: 0.55,
+)
+
 #let _edge-routing-defaults = (
   source-anchor: auto,
   sink-anchor: auto,
@@ -111,6 +116,7 @@
 #let _draw-style(style) = {
   let clean = _without-pattern-style(style)
   clean = _without-keys(clean, _edge-geometry-defaults.keys())
+  clean = _without-keys(clean, _edge-crossing-defaults.keys())
   clean = _without-keys(clean, _edge-routing-defaults.keys())
   _without-keys(clean, _mark-defaults.keys())
 }
@@ -156,6 +162,8 @@
 #let _style-value(style, key) = {
   if _edge-geometry-defaults.keys().contains(key) {
     style.at(key, default: _edge-geometry-defaults.at(key))
+  } else if _edge-crossing-defaults.keys().contains(key) {
+    style.at(key, default: _edge-crossing-defaults.at(key))
   } else if _edge-routing-defaults.keys().contains(key) {
     style.at(key, default: _edge-routing-defaults.at(key))
   } else if _pattern-defaults.keys().contains(key) {
@@ -1200,6 +1208,97 @@
   _path-elements(path, style, auto, true, true, label-pos).elements
 }
 
+#let _segments-path(segments) = {
+  curve-api.path(..segments.map(curve-api.from-cubic))
+}
+
+#let _crossing-target(crossing-paths, under, eid) = {
+  let targets = if type(under) == int {
+    crossing-paths.ids
+  } else if type(under) == label {
+    crossing-paths.names
+  } else {
+    panic(
+      "draw: crossing-under on edge " + str(eid)
+        + " must be an integer edge id or Typst edge name",
+    )
+  }
+  let key = str(under)
+  if not targets.keys().contains(key) {
+    let shown = if type(under) == label { "<" + key + ">" } else { key }
+    panic(
+      "draw: crossing-under on edge " + str(eid)
+        + " refers to unknown or invisible edge " + shown,
+    )
+  }
+  let target = targets.at(key)
+  if target.eid == eid {
+    panic("draw: crossing-under on edge " + str(eid) + " cannot refer to itself")
+  }
+  target
+}
+
+#let _crossing-arclengths(path, style, crossing-paths, eid) = {
+  let under = _style-value(style, "crossing-under")
+  if under == none {
+    return ()
+  }
+  if _has-mark(style) {
+    panic("draw: crossing-under does not support a mark on the same style layer")
+  }
+  let target = _crossing-target(crossing-paths, under, eid)
+  let accuracy = _style-value(style, "accuracy")
+  curve-api.intersections(path, target.path, accuracy: accuracy).map(hit => hit.at("distance-a"))
+}
+
+#let _cut-path-elements(path, style, cuts) = {
+  let gap = calc.max(0, _style-value(style, "crossing-gap"))
+  if cuts.len() == 0 or gap == 0 {
+    return _segments-elements(curve-api.segments(path), style, auto, true, true).elements
+  }
+  if _has-mark(style) {
+    panic("draw: crossing-under does not support a mark on the same style layer")
+  }
+  let accuracy = _style-value(style, "accuracy")
+  let total = curve-api.length(path, accuracy: accuracy)
+  let cursor = 0
+  let elements = ()
+  for center in cuts {
+    let cut-start = calc.max(cursor, calc.min(total, center - gap / 2))
+    if cut-start > cursor {
+      let piece = curve-api.trim(
+        path,
+        start-outset: cursor,
+        end-outset: total - cut-start,
+        accuracy: accuracy,
+      )
+      let phase = if _has-pattern(style) {
+        float(_style-value(style, "pattern-phase")) + 2 * calc.pi * cursor / _style-value(style, "pattern-wavelength")
+      } else {
+        auto
+      }
+      elements += _segments-elements(
+        curve-api.segments(piece),
+        style,
+        phase,
+        cursor == 0,
+        false,
+      ).elements
+    }
+    cursor = calc.max(cursor, calc.min(total, center + gap / 2))
+  }
+  if cursor < total {
+    let piece = curve-api.trim(path, start-outset: cursor, accuracy: accuracy)
+    let phase = if _has-pattern(style) {
+      float(_style-value(style, "pattern-phase")) + 2 * calc.pi * cursor / _style-value(style, "pattern-wavelength")
+    } else {
+      auto
+    }
+    elements += _segments-elements(curve-api.segments(piece), style, phase, false, true).elements
+  }
+  elements
+}
+
 #let _node-outset(style, node-outset) = {
   if node-outset == auto {
     _radius-outset(style.at("radius", default: 0))
@@ -1340,6 +1439,183 @@
     _point-scale((-_point-y(tangent), _point-x(tangent)), 0.12 * side / length)
   }
   _point-add(point, normal)
+}
+
+#let _drawing-edge-record(e, nodes, node-boxes, scope) = {
+  let edge = e + (pos: _edge-pos(e, nodes))
+  let source-half-edge = edge.source
+  let sink-half-edge = edge.sink
+  let source-statement = if source-half-edge == none { none } else { source-half-edge.statement }
+  let sink-statement = if sink-half-edge == none { none } else { sink-half-edge.statement }
+  let source-node = if source-half-edge == none { none } else { node-boxes.at(source-half-edge.node).node }
+  let sink-node = if sink-half-edge == none { none } else { node-boxes.at(sink-half-edge.node).node }
+  let data = edge.statements
+  let record-label = _data-label(edge)
+  let statement-label = data.at("label", default: none)
+  let data-label = if record-label == none { statement-label } else { record-label }
+  let label-pos = if edge.label-pos == none { edge.pos } else { edge.label-pos }
+  (
+    edge: edge,
+    source-half-edge: source-half-edge,
+    sink-half-edge: sink-half-edge,
+    data-label: data-label,
+    label-pos: label-pos,
+    edge-data: (
+      scope
+        + data
+        + _data-fields(edge)
+        + (
+          eid: edge.edge,
+          edge: edge,
+          source-statement: source-statement,
+          sink-statement: sink-statement,
+          source-half-edge: source-half-edge,
+          sink-half-edge: sink-half-edge,
+          source-node: source-node,
+          sink-node: sink-node,
+          data: edge.at("data", default: none),
+          label: data-label,
+          label-pos: label-pos,
+          orientation: edge.orientation,
+          ext: source-half-edge == none or sink-half-edge == none,
+        )
+    ),
+  )
+}
+
+#let _has-crossing-style(style) = (
+  style != none and style.at("crossing-under", default: none) != none
+)
+
+#let _has-crossing-layer(layers) = layers.any(_has-crossing-style)
+
+#let _primary-edge-path(
+  record,
+  nodes,
+  node-boxes,
+  node-outsets,
+  geometry-style,
+  edge-stroke,
+  edge-omega,
+  edge-trim-accuracy,
+) = {
+  let source-layer = _style-layer(record.source-style-layers, 0)
+  let sink-layer = _style-layer(record.sink-style-layers, 0)
+  let source-style = if source-layer == none {
+    none
+  } else {
+    (stroke: edge-stroke) + geometry-style + source-layer
+  }
+  let sink-style = if sink-layer == none {
+    none
+  } else {
+    (stroke: edge-stroke) + geometry-style + sink-layer
+  }
+  if source-style == none and sink-style == none {
+    return none
+  }
+
+  let edge = record.edge
+  let source-half-edge = record.source-half-edge
+  let sink-half-edge = record.sink-half-edge
+  if source-half-edge != none and sink-half-edge != none {
+    let source-geometry-style = if source-style == none { sink-style } else { source-style }
+    let sink-geometry-style = if sink-style == none { source-style } else { sink-style }
+    let halves = _edge-geometry-halves(
+      edge,
+      nodes,
+      node-boxes,
+      source-geometry-style,
+      sink-geometry-style,
+      (
+        omega: edge-omega,
+        source-outset: node-outsets.at(source-half-edge.node),
+        sink-outset: node-outsets.at(sink-half-edge.node),
+        accuracy: edge-trim-accuracy,
+        label-pos: record.label-pos,
+      ),
+    )
+    let segments = if halves.whole == none {
+      halves.source + halves.sink
+    } else {
+      halves.whole
+    }
+    if segments.len() == 0 { none } else { _segments-path(segments) }
+  } else if source-half-edge != none {
+    let source-geometry-style = if source-style == none { sink-style } else { source-style }
+    let source-anchor = _style-value(source-geometry-style, "source-anchor")
+    let line-start = if source-anchor == auto {
+      curve-api.outset-point(
+        _point(_node-pos(nodes.at(source-half-edge.node))),
+        _point(edge.pos),
+        distance: node-outsets.at(source-half-edge.node),
+      )
+    } else {
+      _node-anchor-point(node-boxes.at(source-half-edge.node), source-anchor)
+    }
+    let path = _dangling-path(
+      line-start,
+      edge.pos,
+      edge.at("bend", default: none),
+      source-geometry-style,
+    )
+    _path-layer(path, source-geometry-style, 0, 0, record.label-pos, auto)
+  } else {
+    let sink-geometry-style = if sink-style == none { source-style } else { sink-style }
+    let sink-anchor = _style-value(sink-geometry-style, "sink-anchor")
+    let line-end = if sink-anchor == auto {
+      curve-api.outset-point(
+        _point(_node-pos(nodes.at(sink-half-edge.node))),
+        _point(edge.pos),
+        distance: node-outsets.at(sink-half-edge.node),
+      )
+    } else {
+      _node-anchor-point(node-boxes.at(sink-half-edge.node), sink-anchor)
+    }
+    let path = _dangling-path(
+      edge.pos,
+      line-end,
+      edge.at("bend", default: none),
+      sink-geometry-style,
+      dangling-at-start: true,
+    )
+    _path-layer(path, sink-geometry-style, 0, 0, record.label-pos, auto)
+  }
+}
+
+#let _crossing-path-index(
+  records,
+  nodes,
+  node-boxes,
+  node-outsets,
+  geometry-style,
+  edge-stroke,
+  edge-omega,
+  edge-trim-accuracy,
+) = {
+  let ids = (:)
+  let names = (:)
+  for record in records {
+    let path = _primary-edge-path(
+      record,
+      nodes,
+      node-boxes,
+      node-outsets,
+      geometry-style,
+      edge-stroke,
+      edge-omega,
+      edge-trim-accuracy,
+    )
+    if path != none {
+      let entry = (eid: record.edge.edge, path: path)
+      ids.insert(str(entry.eid), entry)
+      let name = record.edge.at("name", default: none)
+      if name != none {
+        names.insert(str(name), entry)
+      }
+    }
+  }
+  (ids: ids, names: names)
 }
 
 #let draw(graph, options) = {
@@ -1491,62 +1767,87 @@
           }
         }
 
-        for (i, e) in edges.enumerate() {
-          let edge-pos = _edge-pos(e, nodes)
-          let edge = e + (pos: edge-pos)
-          let source-half-edge = edge.source
-          let sink-half-edge = edge.sink
-          let source-statement = if source-half-edge == none { none } else { source-half-edge.statement }
-          let sink-statement = if sink-half-edge == none { none } else { sink-half-edge.statement }
-          let source-node = if source-half-edge == none { none } else { node-boxes.at(source-half-edge.node).node }
-          let sink-node = if sink-half-edge == none { none } else { node-boxes.at(sink-half-edge.node).node }
-          let ext = source-half-edge == none or sink-half-edge == none
-          let data = edge.statements
-          let record-label = _data-label(edge)
-          let statement-label = data.at("label", default: none)
-          let data-label = if record-label == none { statement-label } else { record-label }
-          let orientation = edge.orientation
-          let label-pos = if edge.label-pos == none { edge.pos } else { edge.label-pos }
-          let edge-data = (
-            scope
-              + data
-              + _data-fields(edge)
-              + (
-                eid: edge.edge,
-                edge: edge,
-                source-statement: source-statement,
-                sink-statement: sink-statement,
-                source-half-edge: source-half-edge,
-                sink-half-edge: sink-half-edge,
-                source-node: source-node,
-                sink-node: sink-node,
-                data: edge.at("data", default: none),
-                label: data-label,
-                label-pos: label-pos,
-                orientation: orientation,
-                ext: ext,
-              )
+        let geometry-style = _edge-geometry-defaults + (
+          offset: edge-offset,
+          length: edge-length,
+          ratio: edge-ratio,
+          resolve-length: edge-resolve-length,
+          accuracy: edge-accuracy,
+          optimize: edge-optimize,
+          split-gap: edge-split-gap,
+          dangling-tangent: edge-dangling-tangent,
+        )
+        let edge-records = ()
+        for e in edges {
+          let record = _drawing-edge-record(e, nodes, node-boxes, scope)
+          let source-subgraph-styles = _subgraph-edge-styles(
+            subgraph-records,
+            record.source-half-edge,
+            record.edge-data,
           )
-          let source-subgraph-styles = _subgraph-edge-styles(subgraph-records, source-half-edge, edge-data)
-          let sink-subgraph-styles = _subgraph-edge-styles(subgraph-records, sink-half-edge, edge-data)
-          let source-in-subgraph = source-subgraph-styles.len() > 0
-          let sink-in-subgraph = sink-subgraph-styles.len() > 0
+          let sink-subgraph-styles = _subgraph-edge-styles(
+            subgraph-records,
+            record.sink-half-edge,
+            record.edge-data,
+          )
+          let source-style-layers = _style-layers(source-style, record.edge-data)
+          let sink-style-layers = _style-layers(sink-style, record.edge-data)
+          edge-records.push(record + (
+            source-subgraph-styles: source-subgraph-styles,
+            sink-subgraph-styles: sink-subgraph-styles,
+            source-in-subgraph: source-subgraph-styles.len() > 0,
+            sink-in-subgraph: sink-subgraph-styles.len() > 0,
+            source-style-layers: source-style-layers,
+            sink-style-layers: sink-style-layers,
+            layer-count: calc.max(source-style-layers.len(), sink-style-layers.len()),
+            ev-label: _content(edge-label, record.edge-data, _as-content(record.data-label)),
+            edge-label-draw-style: (
+              _style(graph-edge-label-style, record.edge-data)
+                + _style(edge-label-style, record.edge-data)
+            ),
+          ))
+        }
+        let has-crossings = edge-records.any(record => (
+          _has-crossing-layer(record.source-style-layers)
+            or _has-crossing-layer(record.sink-style-layers)
+            or (
+              not subgraph-edge-underlay
+                and (
+                  _has-crossing-style(_last-style(record.source-subgraph-styles))
+                    or _has-crossing-style(_last-style(record.sink-subgraph-styles))
+                )
+            )
+        ))
+        let crossing-paths = if has-crossings {
+          _crossing-path-index(
+            edge-records,
+            nodes,
+            node-boxes,
+            node-outsets,
+            geometry-style,
+            edge-stroke,
+            edge-omega,
+            edge-trim-accuracy,
+          )
+        } else {
+          (ids: (:), names: (:))
+        }
 
-          let geometry-style = _edge-geometry-defaults + (
-            offset: edge-offset,
-            length: edge-length,
-            ratio: edge-ratio,
-            resolve-length: edge-resolve-length,
-            accuracy: edge-accuracy,
-            optimize: edge-optimize,
-            split-gap: edge-split-gap,
-            dangling-tangent: edge-dangling-tangent,
-          )
-          let source-style-layers = _style-layers(source-style, edge-data)
-          let sink-style-layers = _style-layers(sink-style, edge-data)
-          let layer-count = calc.max(source-style-layers.len(), sink-style-layers.len())
-          let ev-label = _content(edge-label, edge-data, _as-content(data-label))
-          let edge-label-draw-style = _style(graph-edge-label-style, edge-data) + _style(edge-label-style, edge-data)
+        for (i, record) in edge-records.enumerate() {
+          let edge = record.edge
+          let source-half-edge = record.source-half-edge
+          let sink-half-edge = record.sink-half-edge
+          let label-pos = record.label-pos
+          let edge-data = record.edge-data
+          let source-subgraph-styles = record.source-subgraph-styles
+          let sink-subgraph-styles = record.sink-subgraph-styles
+          let source-in-subgraph = record.source-in-subgraph
+          let sink-in-subgraph = record.sink-in-subgraph
+          let source-style-layers = record.source-style-layers
+          let sink-style-layers = record.sink-style-layers
+          let layer-count = record.layer-count
+          let ev-label = record.ev-label
+          let edge-label-draw-style = record.edge-label-draw-style
           let source-label-segments = none
           let sink-label-segments = none
           let self-loop = (
@@ -1584,6 +1885,38 @@
               sink-style-value
             }
             sink-draw-style = _orient-mark-style(sink-draw-style, edge-data, "sink")
+            let source-crossing-under = if source-draw-style == none {
+              none
+            } else {
+              _style-value(source-draw-style, "crossing-under")
+            }
+            let sink-crossing-under = if sink-draw-style == none {
+              none
+            } else {
+              _style-value(sink-draw-style, "crossing-under")
+            }
+            let source-crossing-gap = if source-draw-style == none {
+              none
+            } else {
+              _style-value(source-draw-style, "crossing-gap")
+            }
+            let sink-crossing-gap = if sink-draw-style == none {
+              none
+            } else {
+              _style-value(sink-draw-style, "crossing-gap")
+            }
+            let crossing-under = if source-crossing-under != none {
+              source-crossing-under
+            } else {
+              sink-crossing-under
+            }
+            if (
+              crossing-under != none
+                and subgraph-edge-underlay
+                and (source-in-subgraph or sink-in-subgraph)
+            ) {
+              panic("draw: crossing-under is incompatible with a subgraph edge underlay")
+            }
 
             if source-style-value == none and sink-style-value == none {
               ()
@@ -1640,7 +1973,26 @@
                   }
                 }
               }
-              if source-style-value != none and sink-style-value != none {
+              if crossing-under != none {
+                if (
+                  source-draw-style == none
+                    or sink-draw-style == none
+                    or source-crossing-under != sink-crossing-under
+                    or source-crossing-gap != sink-crossing-gap
+                    or halves.whole == none
+                    or not _same-draw-path-style(source-draw-style, sink-draw-style)
+                ) {
+                  panic(
+                    "draw: crossing-under on paired edge " + str(edge-data.eid)
+                      + " requires one continuous source/sink style layer",
+                  )
+                }
+                let path = _segments-path(halves.whole)
+                let cuts = _crossing-arclengths(path, source-draw-style, crossing-paths, edge-data.eid)
+                for element in _cut-path-elements(path, source-draw-style, cuts) {
+                  elements.push(element)
+                }
+              } else if source-style-value != none and sink-style-value != none {
                 for element in _pattern-edge-halves(halves, source-draw-style, sink-draw-style) {
                   elements.push(element)
                 }
@@ -1667,6 +2019,7 @@
               }
               let bend = edge.at("bend", default: none)
               let dangling-path = _dangling-path(line-start, edge.pos, bend, source-geometry-style)
+              let visible-path = _path-layer(dangling-path, source-geometry-style, 0, 0, label-pos, auto)
               if source-label-segments == none and source-geometry-style != none {
                 source-label-segments = _geometry-path-segments(
                   dangling-path,
@@ -1689,7 +2042,14 @@
                 }
               }
               if source-style-value != none {
-                for element in _pattern-dangling(dangling-path, _dangling-mark-style(source-draw-style), label-pos) {
+                let draw-style = _dangling-mark-style(source-draw-style)
+                let cuts = _crossing-arclengths(visible-path, draw-style, crossing-paths, edge-data.eid)
+                let drawn = if cuts.len() == 0 {
+                  _pattern-dangling(dangling-path, draw-style, label-pos)
+                } else {
+                  _cut-path-elements(visible-path, draw-style, cuts)
+                }
+                for element in drawn {
                   elements.push(element)
                 }
               }
@@ -1713,6 +2073,7 @@
                 sink-geometry-style,
                 dangling-at-start: true,
               )
+              let visible-path = _path-layer(dangling-path, sink-geometry-style, 0, 0, label-pos, auto)
               if sink-label-segments == none and sink-geometry-style != none {
                 sink-label-segments = _geometry-path-segments(
                   dangling-path,
@@ -1735,7 +2096,14 @@
                 }
               }
               if sink-style-value != none {
-                for element in _pattern-dangling(dangling-path, _dangling-mark-style(sink-draw-style), label-pos) {
+                let draw-style = _dangling-mark-style(sink-draw-style)
+                let cuts = _crossing-arclengths(visible-path, draw-style, crossing-paths, edge-data.eid)
+                let drawn = if cuts.len() == 0 {
+                  _pattern-dangling(dangling-path, draw-style, label-pos)
+                } else {
+                  _cut-path-elements(visible-path, draw-style, cuts)
+                }
+                for element in drawn {
                   elements.push(element)
                 }
               }

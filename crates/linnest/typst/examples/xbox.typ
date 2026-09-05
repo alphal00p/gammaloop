@@ -86,6 +86,8 @@
       source(<a>),
       sink(<d>),
       particle: "a",
+      crossing-under: 7,
+      crossing-gap: 0.9,
       momentum-arrow-shift: -0.55,
       momentum-arrow-offset: 0.80,
     )
@@ -99,6 +101,9 @@
   }))
   xbox = layout-box(xbox)
 
+  let opened-in-x = group("in", side: "-", start: -7)
+  let opened-out-x = group("out", side: "+", start: 7)
+  let opened-cut-y = group("cut", start: 0)
   let xbox-opened = style(graph.build({
     node(<a>, pos: pos(x: start(0), y: pin(0)))
     node(<b>, pos: pos(x: start(-2), y: pin(-3)))
@@ -115,30 +120,33 @@
       sink(<a>),
       source(<b>),
       particle: "d",
+      pos: pos(x: group("lower-inner", side: "+", start: 0.5)),
       momentum-arrow-shift: 0.35,
     )
     edge(
       sink(<b>),
       particle: "d",
-      pos: pos(x: group("in", side: "-"), y: pin(-4)),
+      pos: pos(x: opened-in-x, y: pin(-4)),
       bend: 0.18,
     )
     edge(
       sink(<c>),
       particle: "d",
-      pos: pos(x: group("in", side: "-"), y: pin(4)),
+      pos: pos(x: opened-in-x, y: pin(4)),
     )
     edge(
       sink(<d>),
       particle: "d",
-      pos: pos(x: group("out", side: "+"), y: pin(4)),
+      pos: pos(x: opened-out-x, y: pin(4)),
       momentum-label-shift: -1.8,
     )
     edge(
       source(<d>),
       particle: "d",
-      pos: pos(x: group("out", side: "+"), y: pin(-4)),
+      pos: pos(x: opened-out-x, y: pin(-4)),
       bend: -0.18,
+      crossing-under: 7,
+      crossing-gap: 0.9,
     )
 
     edge(
@@ -151,14 +159,14 @@
     edge(
       source(<b>),
       particle: "g",
-      pos: pos(x: group("out", side: "+"), y: pin(0)),
+      pos: pos(x: opened-out-x, y: opened-cut-y),
       bend: -0.55,
       momentum-label-shift: -1.0,
     )
     edge(
       sink(<c>),
       particle: "g",
-      pos: pos(x: group("in", side: "-"), y: pin(0)),
+      pos: pos(x: opened-in-x, y: opened-cut-y),
     )
   }))
   xbox-opened = layout-box(
@@ -178,43 +186,57 @@
     z-spring: 1,
     z-spring-growth: 1,
   )
+  assert(
+    graph.edges(xbox-opened).at(7).pos.y == graph.edges(xbox-opened).at(8).pos.y,
+    message: "the two cut gluons must remain in one free y-coordinate group",
+  )
 
+  let in-x = group("in", side: "-", start: -7)
+  let out-x = group("out", side: "+", start: 7)
+  let top-y = group("top", side: "+", start: 5)
+  let bottom-y = group("bottom", side: "-", start: -5)
+  let upper-middle-y = group("upper-middle", side: "+", start: 2)
+  let lower-middle-y = group("lower-middle", side: "-", start: -2)
   let xbox-cut = style(graph.build({
-    node(<a>, pos: pos(x: pin(-3), y: pin(5)))
-    node(<b>, pos: pos(x: pin(-3), y: pin(-5)))
-    node(<c>, pos: pos(x: pin(3), y: pin(5)))
-    node(<d>, pos: pos(x: pin(3), y: pin(-5)))
+    node(<a>, pos: pos(x: pin(-3), y: top-y))
+    node(<b>, pos: pos(x: pin(-3), y: bottom-y))
+    node(<c>, pos: pos(x: pin(3), y: top-y))
+    node(<d>, pos: pos(x: pin(3), y: bottom-y))
 
     edge(
       source(<a>),
       particle: "d",
-      pos: pos(x: pin(-7), y: pin(5)),
+      pos: pos(x: in-x, y: top-y),
       momentum-label-shift: 1.0,
     )
-    edge(sink(<a>), source(<b>), particle: "d")
+    edge(
+      sink(<a>),
+      source(<b>),
+      particle: "d",
+      crossing-under: 3,
+      crossing-gap: 1.5,
+    )
     edge(
       sink(<b>),
       particle: "d",
-      pos: pos(x: pin(-7), y: pin(-5)),
+      pos: pos(x: in-x, y: bottom-y),
     )
 
     node(
       <h1>,
       hidden: true,
-      pos: pos(x: pin(-7), y: pin(-2)),
+      pos: pos(x: in-x, y: lower-middle-y),
     )
     node(
       <h2>,
       hidden: true,
-      pos: pos(x: pin(7), y: pin(2)),
+      pos: pos(x: out-x, y: upper-middle-y),
     )
     edge(
       source(<h1>),
       sink(<h2>),
       particle: "g",
-      cut: true,
-      cut-gap: 0.70,
-      pos: pos(x: pin(0), y: pin(0)),
+      pos: pos(x: pin(0)),
       route: "straight-through",
       momentum-arrow-shift: 0.55,
       momentum-arrow-offset: 0.80,
@@ -223,29 +245,37 @@
     edge(
       sink(<c>),
       particle: "d",
-      pos: pos(x: pin(7), y: pin(5)),
+      pos: pos(x: out-x, y: top-y),
     )
-    edge(source(<c>), sink(<d>), particle: "d")
+    edge(
+      source(<c>),
+      sink(<d>),
+      particle: "d",
+      crossing-under: 3,
+      crossing-gap: 1.5,
+    )
     edge(
       source(<d>),
       particle: "d",
-      pos: pos(x: pin(7), y: pin(-5)),
+      pos: pos(x: out-x, y: bottom-y),
     )
 
     edge(
       source(<a>),
       particle: "g",
-      pos: pos(x: pin(-7), y: pin(2)),
+      pos: pos(x: in-x, y: upper-middle-y),
     )
     edge(
       sink(<d>),
       particle: "g",
-      pos: pos(x: pin(7), y: pin(-2)),
+      pos: pos(x: out-x, y: lower-middle-y),
     )
     edge(
       source(<b>),
       sink(<c>),
       particle: "a",
+      crossing-under: 3,
+      crossing-gap: 1.5,
       momentum-arrow-shift: -0.45,
       momentum-arrow-offset: 0.80,
     )
@@ -253,7 +283,7 @@
   xbox-cut = layout-box(
     xbox-cut,
     gamma-dangling: 2.0,
-    gamma-ev: 0.05,
+    gamma-ev: 0.5,
     beta: 10,
   )
 

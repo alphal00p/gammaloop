@@ -1,12 +1,10 @@
-use std::ops::{Index, IndexMut};
-
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Point3, Vector2, Vector3, Zero};
 
 use crate::half_edge::{
     involution::{EdgeIndex, EdgeVec},
     layout::spring::{
         apply_edge_shift_with_groups, apply_vertex_shift_with_groups, directional_force_shift,
-        Constraint, HasPointConstraint, LayoutState, PointConstraint, Shiftable,
+        Constraint, HasPointConstraint, LayoutPointIndex, LayoutState, PointConstraint,
         SpringChargeEnergy,
     },
     nodestore::NodeStorageOps,
@@ -33,10 +31,11 @@ pub fn force_directed_layout<'a, E, V, H, N>(
     energy: &SpringChargeEnergy,
     cfg: ForceLayoutConfig,
 ) where
-    E: Shiftable + HasPointConstraint,
-    V: Shiftable + HasPointConstraint,
+    E: HasPointConstraint,
+    V: HasPointConstraint,
     N: NodeStorageOps<NodeData = V> + Clone,
 {
+    state.synchronize_grouped_coordinates();
     let mut step = cfg.step;
     let mut rng = SmallRng::seed_from_u64(cfg.seed);
     let workset = ForceWorkSet::new(state);
@@ -74,7 +73,7 @@ pub fn force_directed_layout<'a, E, V, H, N>(
                 for &idx in &workset.movable_nodes {
                     let bias = directional_force_shift(
                         state.graph[idx].point_constraint(),
-                        idx.0,
+                        LayoutPointIndex::Node(idx),
                         state.vertex_points[idx],
                         state.directional_force,
                     );
@@ -83,7 +82,7 @@ pub fn force_directed_layout<'a, E, V, H, N>(
                 for &idx in &workset.movable_edges {
                     let bias = directional_force_shift(
                         state.graph[idx].point_constraint(),
-                        idx.0,
+                        LayoutPointIndex::Edge(idx),
                         state.edge_points[idx],
                         state.directional_force,
                     );
@@ -150,11 +149,11 @@ impl ForceWorkSet {
         for i in 0..n {
             let idx = NodeIndex(i);
             let constraints = state.graph[idx].point_constraint();
-            let movable = can_shift_directly(constraints, i);
+            let movable = can_shift_directly(constraints, LayoutPointIndex::Node(idx));
             if movable {
                 movable_nodes.push(idx);
             }
-            let receives_force = can_receive_force(constraints, i);
+            let receives_force = can_receive_force(constraints, LayoutPointIndex::Node(idx));
             if receives_force {
                 force_nodes.push(idx);
             }
@@ -167,11 +166,11 @@ impl ForceWorkSet {
         for i in 0..m {
             let idx = EdgeIndex(i);
             let constraints = state.graph[idx].point_constraint();
-            let movable = can_shift_directly(constraints, i);
+            let movable = can_shift_directly(constraints, LayoutPointIndex::Edge(idx));
             if movable {
                 movable_edges.push(idx);
             }
-            let receives_force = can_receive_force(constraints, i);
+            let receives_force = can_receive_force(constraints, LayoutPointIndex::Edge(idx));
             if receives_force {
                 force_edges.push(idx);
             }
@@ -205,15 +204,15 @@ impl ForceWorkSet {
     }
 }
 
-fn can_shift_directly(constraints: &PointConstraint, index: usize) -> bool {
+fn can_shift_directly(constraints: &PointConstraint, index: LayoutPointIndex) -> bool {
     can_shift_axis(constraints.x, index) || can_shift_axis(constraints.y, index)
 }
 
-fn can_shift_axis(constraint: Constraint, index: usize) -> bool {
+fn can_shift_axis(constraint: Constraint, index: LayoutPointIndex) -> bool {
     constraint.force_target(index) == Some(index)
 }
 
-fn can_receive_force(constraints: &PointConstraint, index: usize) -> bool {
+fn can_receive_force(constraints: &PointConstraint, index: LayoutPointIndex) -> bool {
     constraints.x.force_target(index).is_some() || constraints.y.force_target(index).is_some()
 }
 
@@ -236,8 +235,8 @@ fn apply_initial_jitter<'a, E, V, H, N>(
     jitter: f64,
     workset: &ForceWorkSet,
 ) where
-    E: Shiftable + HasPointConstraint,
-    V: Shiftable + HasPointConstraint,
+    E: HasPointConstraint,
+    V: HasPointConstraint,
     N: NodeStorageOps<NodeData = V> + Clone,
 {
     for &idx in &workset.movable_nodes {
@@ -481,41 +480,61 @@ where
 
     // A grouped axis is one shared degree of freedom. Its generalized force is
     // the sum of every dependent point's force along that axis.
-    project_grouped_forces(&mut forces_v, n, |idx: NodeIndex| {
-        *state.graph[idx].point_constraint()
-    });
-    project_grouped_forces(&mut forces_e, m, |idx: EdgeIndex| {
-        *state.graph[idx].point_constraint()
-    });
+    project_grouped_forces(state, &mut forces_v, &mut forces_e);
 
     (forces_v, forces_e)
 }
 
-fn project_grouped_forces<I, F>(
-    forces: &mut F,
-    len: usize,
-    mut constraints: impl FnMut(I) -> PointConstraint,
+fn project_grouped_forces<'a, E, V, H, N>(
+    state: &LayoutState<'a, E, V, H, N>,
+    forces_v: &mut NodeVec<Vector3<f64>>,
+    forces_e: &mut EdgeVec<Vector3<f64>>,
 ) where
-    I: From<usize> + Copy,
-    F: Index<I, Output = Vector3<f64>> + IndexMut<I>,
+    E: HasPointConstraint,
+    V: HasPointConstraint,
+    N: NodeStorageOps<NodeData = V> + Clone,
 {
-    let mut projected = vec![Vector3::zero(); len];
-    for i in 0..len {
-        let idx = I::from(i);
-        let force = forces[idx];
-        let constraint = constraints(idx);
-        if let Some(target) = constraint.x.force_target(i) {
-            projected[target].x += force.x;
+    let mut projected_v = state
+        .graph
+        .new_nodevec(|node, _, _| Vector3::new(0.0, 0.0, forces_v[node].z));
+    let mut projected_e = state
+        .graph
+        .new_edgevec(|_, edge, _| Vector3::new(0.0, 0.0, forces_e[edge].z));
+
+    let mut add = |target: LayoutPointIndex, x: Option<f64>, y: Option<f64>| {
+        let force = match target {
+            LayoutPointIndex::Node(index) => &mut projected_v[index],
+            LayoutPointIndex::Edge(index) => &mut projected_e[index],
+        };
+        force.x += x.unwrap_or(0.0);
+        force.y += y.unwrap_or(0.0);
+    };
+
+    for i in 0..forces_v.len().0 {
+        let index = NodeIndex(i);
+        let point = LayoutPointIndex::Node(index);
+        let constraints = state.graph[index].point_constraint();
+        if let Some(target) = constraints.x.force_target(point) {
+            add(target, Some(forces_v[index].x), None);
         }
-        if let Some(target) = constraint.y.force_target(i) {
-            projected[target].y += force.y;
+        if let Some(target) = constraints.y.force_target(point) {
+            add(target, None, Some(forces_v[index].y));
         }
-        projected[i].z = force.z;
+    }
+    for i in 0..forces_e.len().0 {
+        let index = EdgeIndex(i);
+        let point = LayoutPointIndex::Edge(index);
+        let constraints = state.graph[index].point_constraint();
+        if let Some(target) = constraints.x.force_target(point) {
+            add(target, Some(forces_e[index].x), None);
+        }
+        if let Some(target) = constraints.y.force_target(point) {
+            add(target, None, Some(forces_e[index].y));
+        }
     }
 
-    for (i, force) in projected.into_iter().enumerate() {
-        forces[I::from(i)] = force;
-    }
+    *forces_v = projected_v;
+    *forces_e = projected_e;
 }
 
 fn point3_from_point(p: Point2<f64>, z: f64) -> Point3<f64> {
@@ -566,7 +585,10 @@ fn init_edge_z(rng: &mut impl Rng, len: usize, spread: f64, movable: &[EdgeIndex
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::half_edge::layout::spring::ShiftDirection;
+    use crate::half_edge::{
+        builder::HedgeGraphBuilder, layout::spring::ShiftDirection, nodestore::DefaultNodeStore,
+        HedgeGraph, NoData,
+    };
 
     #[test]
     fn center_gravity_force_points_toward_origin() {
@@ -590,35 +612,53 @@ mod tests {
     }
 
     #[test]
-    fn dependent_group_forces_are_summed_at_reference() {
-        let constraints = [
-            PointConstraint {
-                x: Constraint::Grouped(0, ShiftDirection::Any),
-                y: Constraint::Free,
-            },
-            PointConstraint {
-                x: Constraint::Grouped(0, ShiftDirection::Any),
-                y: Constraint::Free,
-            },
-            PointConstraint {
-                x: Constraint::Grouped(0, ShiftDirection::Any),
-                y: Constraint::Fixed,
-            },
-        ];
-        assert!(!can_shift_directly(&constraints[2], 2));
-        assert!(can_receive_force(&constraints[2], 2));
+    fn cross_kind_group_forces_are_summed_at_reference() {
+        let reference = LayoutPointIndex::Node(NodeIndex(0));
+        let grouped_node = PointConstraint {
+            x: Constraint::Grouped(reference, ShiftDirection::Any),
+            y: Constraint::Free,
+        };
+        let grouped_edge = PointConstraint {
+            x: Constraint::Grouped(reference, ShiftDirection::Any),
+            y: Constraint::Fixed,
+        };
+        let fixed = PointConstraint {
+            x: Constraint::Fixed,
+            y: Constraint::Fixed,
+        };
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(grouped_node);
+        let b = builder.add_node(fixed);
+        builder.add_edge(a, b, grouped_edge, false);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
 
-        let mut forces = NodeVec::new();
-        forces.push(Vector3::new(1.0, 10.0, 100.0));
-        forces.push(Vector3::new(2.0, 20.0, 200.0));
-        forces.push(Vector3::new(3.0, 30.0, 300.0));
+        assert!(can_shift_directly(&grouped_node, reference));
+        assert!(!can_shift_directly(
+            &grouped_edge,
+            LayoutPointIndex::Edge(EdgeIndex(0)),
+        ));
+        assert!(can_receive_force(
+            &grouped_edge,
+            LayoutPointIndex::Edge(EdgeIndex(0)),
+        ));
 
-        project_grouped_forces(&mut forces, constraints.len(), |idx: NodeIndex| {
-            constraints[idx.0]
-        });
+        let mut node_points = NodeVec::new();
+        node_points.push(Point2::origin());
+        node_points.push(Point2::origin());
+        let mut edge_points = EdgeVec::new();
+        edge_points.push(Point2::origin());
+        let state = graph.new_layout_state(node_points, edge_points, 1.0, 0.0, false);
 
-        assert_eq!(forces[NodeIndex(0)], Vector3::new(6.0, 10.0, 100.0));
-        assert_eq!(forces[NodeIndex(1)], Vector3::new(0.0, 20.0, 200.0));
-        assert_eq!(forces[NodeIndex(2)], Vector3::new(0.0, 0.0, 300.0));
+        let mut forces_v = NodeVec::new();
+        forces_v.push(Vector3::new(1.0, 10.0, 100.0));
+        forces_v.push(Vector3::new(2.0, 20.0, 200.0));
+        let mut forces_e = EdgeVec::new();
+        forces_e.push(Vector3::new(3.0, 30.0, 300.0));
+
+        project_grouped_forces(&state, &mut forces_v, &mut forces_e);
+
+        assert_eq!(forces_v[NodeIndex(0)], Vector3::new(4.0, 10.0, 100.0));
+        assert_eq!(forces_v[NodeIndex(1)], Vector3::new(0.0, 0.0, 200.0));
+        assert_eq!(forces_e[EdgeIndex(0)], Vector3::new(0.0, 0.0, 300.0));
     }
 }

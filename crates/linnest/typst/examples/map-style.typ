@@ -84,7 +84,7 @@
   "source"
 }
 
-#let _particle-style(edge, half) = {
+#let _particle-styles(edge, half) = {
   let entry = _entry(edge)
   let style = entry.at(half, default: entry.source)
   if _field(edge, "cut", false) == true {
@@ -92,17 +92,31 @@
   }
   let route = _field(edge, "route", none)
   if route != none { style += (route: route) }
-  if entry.at("fermion", default: false) {
-    (
-      style
-        + (
-          mark: fermion-mark,
-          mark-position: "center-if-dangling",
-          mark-orientation: "edge",
-        )
+  let crossing-under = _field(edge, "crossing-under", none)
+  if crossing-under != none {
+    style += (
+      crossing-under: crossing-under,
+      crossing-gap: _number(edge, "crossing-gap", 0.55),
     )
+  }
+  if entry.at("fermion", default: false) {
+    let mark-style = (
+      mark: fermion-mark,
+      mark-position: "center-if-dangling",
+      mark-orientation: "edge",
+    )
+    if crossing-under == none {
+      (style + mark-style,)
+    } else {
+      // A crossing splits the stroke into several paths. Keep the one fermion
+      // arrow on an uncut, invisible overlay instead of repeating it per piece.
+      let overlay = style
+      let _ = overlay.remove("crossing-under")
+      let _ = overlay.remove("crossing-gap")
+      (style, overlay + (stroke: none) + mark-style)
+    }
   } else {
-    style
+    (style,)
   }
 }
 
@@ -146,7 +160,7 @@
 }
 
 #let _half-style(edge, half) = (
-  _particle-style(edge, half),
+  .._particle-styles(edge, half),
   _momentum-style(edge, half),
 )
 
@@ -156,18 +170,17 @@
 #let edge-label-style(edge) = (anchor: "center", padding: 0.05)
 
 #let _hidden(node) = _field(node, "hidden", false) == true
-#let node-label(node) = if _hidden(node) { none } else { [$n_#(node.vid)$] }
 #let node-style(node) = if _hidden(node) {
   (radius: 0, fill: none, stroke: none)
 } else {
-  (fill: white, stroke: black + 0.6pt)
+  (radius: 0.38, fill: white, stroke: edge-stroke)
 }
 
 // Measure labels and nodes before layout. Draw reuses the stored callbacks.
 #let style(graph_, unit: 1.35) = graph.style(
   graph_,
   unit: unit,
-  node-label: node-label,
+  node-label: none,
   node-style: node-style,
   edge-label: edge-label,
   edge-label-style: edge-label-style,

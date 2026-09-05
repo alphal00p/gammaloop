@@ -8,7 +8,7 @@ use linnet::{
         involution::{
             ArchivedOrientation, EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation,
         },
-        layout::spring::{Constraint, PointConstraint},
+        layout::spring::{Constraint, LayoutPointIndex, PointConstraint},
         nodestore::DefaultNodeStore,
         subgraph::{Inclusion, SuBitGraph, SubSetLike},
         NodeIndex,
@@ -117,6 +117,8 @@ struct TypstPlacementGroup {
     name: String,
     #[serde(default)]
     side: Option<String>,
+    #[serde(default)]
+    start: Option<TypstNumber>,
 }
 
 #[derive(Debug, Clone, Copy, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -132,6 +134,8 @@ struct ResolvedPlacement {
     point: ResolvedPoint,
     pin: Option<String>,
     mode: PlacementMode,
+    group_start_x: bool,
+    group_start_y: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -702,7 +706,13 @@ fn point_statements_changed(statements: &BTreeMap<String, String>) -> bool {
     statements.keys().any(|key| {
         matches!(
             normalize_statement_key(key).as_str(),
-            "pos" | "pin" | "pos-x-set" | "pos-y-set" | "pos-mode"
+            "pos"
+                | "pin"
+                | "pos-x-set"
+                | "pos-y-set"
+                | "pos-mode"
+                | "group-start-x"
+                | "group-start-y"
         )
     })
 }
@@ -721,7 +731,7 @@ fn typst_node_positions(graph: &TypstGraph) -> Vec<ResolvedPoint> {
 }
 
 fn refresh_structural_state_from_statements(graph: &mut TypstGraph) {
-    let mut node_group_map = HashMap::new();
+    let mut group_map = HashMap::new();
     for index in 0..graph.graph.n_nodes() {
         let index = NodeIndex(index);
         let node = &mut graph.graph[index];
@@ -730,17 +740,16 @@ fn refresh_structural_state_from_statements(graph: &mut TypstGraph) {
             node.shift = Some(Vector2::new(x, y));
         }
         refresh_point_state(
-            index.0,
+            LayoutPointIndex::Node(index),
             &statements,
             &mut node.pos,
             &mut node.constraints,
             &mut node.start_x,
             &mut node.start_y,
-            &mut node_group_map,
+            &mut group_map,
         );
     }
 
-    let mut edge_group_map = HashMap::new();
     for index in 0..graph.graph.n_edges() {
         let index = EdgeIndex(index);
         let edge = &mut graph.graph[index];
@@ -759,25 +768,25 @@ fn refresh_structural_state_from_statements(graph: &mut TypstGraph) {
             edge.bend_explicit = true;
         }
         refresh_point_state(
-            index.0,
+            LayoutPointIndex::Edge(index),
             &statements,
             &mut edge.pos,
             &mut edge.constraints,
             &mut edge.start_x,
             &mut edge.start_y,
-            &mut edge_group_map,
+            &mut group_map,
         );
     }
 }
 
 fn refresh_point_state(
-    index: usize,
+    index: LayoutPointIndex,
     statements: &BTreeMap<String, String>,
     point: &mut Point2<f64>,
     constraints: &mut PointConstraint,
     start_x: &mut bool,
     start_y: &mut bool,
-    group_map: &mut HashMap<String, usize>,
+    group_map: &mut HashMap<String, LayoutPointIndex>,
 ) {
     let position = parse_statement_point(statements, "pos");
     let pin = statement_map_value(statements, "pin").and_then(|value| PinConstraint::parse(value));
@@ -786,10 +795,10 @@ fn refresh_point_state(
         Some(pin) => {
             let (mut pin_point, pin_constraints) = pin.point_constraint(index, group_map);
             if let Some(position) = position {
-                if matches!(pin_constraints.x, Constraint::Free) && position.x_set {
+                if !matches!(pin_constraints.x, Constraint::Fixed) && position.x_set {
                     pin_point.x = position.x;
                 }
-                if matches!(pin_constraints.y, Constraint::Free) && position.y_set {
+                if !matches!(pin_constraints.y, Constraint::Fixed) && position.y_set {
                     pin_point.y = position.y;
                 }
                 *start_x = position.x_set;
@@ -1253,6 +1262,8 @@ fn add_edge_to_builder(
             },
             pin: None,
             mode: PlacementMode::Start,
+            group_start_x: false,
+            group_start_y: false,
         })
     });
     let mut local_statements = apply_placement_statements(edge.statements, placement.as_ref());
@@ -1346,6 +1357,14 @@ fn apply_placement_statements(
         }
         .to_string(),
     );
+    statements.remove("group-start-x");
+    statements.remove("group-start-y");
+    if placement.group_start_x {
+        statements.insert("group-start-x".to_string(), "true".to_string());
+    }
+    if placement.group_start_y {
+        statements.insert("group-start-y".to_string(), "true".to_string());
+    }
 
     if let Some(pin) = &placement.pin {
         statements.insert("pin".to_string(), pin.clone());
@@ -1417,6 +1436,14 @@ impl TypstPlacementSpec {
 
         let x_mode = self.x_mode.unwrap_or(self.mode);
         let y_mode = self.y_mode.unwrap_or(self.mode);
+        let group_start_x = matches!(
+            &self.x,
+            Some(TypstPlacementCoord::Group(group)) if group.start.is_some() || point.x_set
+        );
+        let group_start_y = matches!(
+            &self.y,
+            Some(TypstPlacementCoord::Group(group)) if group.start.is_some() || point.y_set
+        );
         let x_pin = self
             .x
             .as_ref()
@@ -1459,7 +1486,13 @@ impl TypstPlacementSpec {
             PlacementMode::Start
         };
 
-        Ok(ResolvedPlacement { point, pin, mode })
+        Ok(ResolvedPlacement {
+            point,
+            pin,
+            mode,
+            group_start_x,
+            group_start_y,
+        })
     }
 }
 
@@ -1488,6 +1521,13 @@ impl TypstPlacementCoord {
                         "placement {axis} coordinate expected graph.group(...), got kind {:?}",
                         group.kind
                     ));
+                }
+                if let Some(start) = group.start {
+                    if axis == "x" {
+                        point.x = start.as_f64();
+                    } else {
+                        point.y = start.as_f64();
+                    }
                 }
                 if axis == "x" {
                     point.x_set = true;
@@ -1724,6 +1764,8 @@ fn public_statements(mut statements: BTreeMap<String, String>) -> BTreeMap<Strin
         "pos-x-set",
         "pos-y-set",
         "pos-mode",
+        "group-start-x",
+        "group-start-y",
         "pin",
         TYPST_EDGE_NAME_KEY,
     ] {

@@ -244,6 +244,17 @@
 /// )
 /// #draw(layout(g), unit: 1.4, source-style: oriented-arrow, sink-style: oriented-arrow)
 /// `,dir:ttb)
+///
+/// A style layer may set `crossing-under` to a visible edge's integer id or
+/// Typst label name and `crossing-gap` (default `0.55`) to the total arc length
+/// hidden around each proper centerline intersection. References are resolved
+/// independently of edge order. The current layer is split with Kurvst, so
+/// patterned phases continue across the hidden spans. Dangling layers and
+/// paired layers with one continuous source/sink style are supported. On a
+/// paired layer both half styles must specify the same target and gap. The cut
+/// layer cannot itself carry a mark or subgraph underlay; put those decorations
+/// on another layer. References to self, unknown, or invisible edges are errors.
+/// A valid pair with no proper interior intersection is left unchanged.
 /// -> content
 #let draw(
   /// Graph object with positions from `layout` or explicit graph API `pos` fields. -> bytes

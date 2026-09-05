@@ -114,13 +114,23 @@
   }
 }
 
+#let _statement-value(value, context_) = {
+  if type(value) == str {
+    value
+  } else if type(value) == int or type(value) == float or type(value) == bool {
+    str(value).replace("−", "-")
+  } else {
+    panic(context_ + ": statement values must be flat scalars; use data for nested data or Typst content")
+  }
+}
+
 #let _point-statement(point) = {
   if type(point) == str {
     point
   } else if type(point) == dictionary and point.keys().contains("x") and point.keys().contains("y") {
-    str(point.x) + "," + str(point.y)
+    _statement-value(point.x, "graph position x") + "," + _statement-value(point.y, "graph position y")
   } else if type(point) == array and point.len() == 2 {
-    str(point.at(0)) + "," + str(point.at(1))
+    _statement-value(point.at(0), "graph position x") + "," + _statement-value(point.at(1), "graph position y")
   } else {
     panic("graph position values must be strings, (x:, y:) dictionaries, or two-item arrays")
   }
@@ -132,16 +142,6 @@
     result.insert(key, _point-statement(point))
   }
   result
-}
-
-#let _statement-value(value, context_) = {
-  if type(value) == str {
-    value
-  } else if type(value) == int or type(value) == float or type(value) == bool {
-    str(value)
-  } else {
-    panic(context_ + ": statement values must be flat scalars; use data for nested data or Typst content")
-  }
 }
 
 #let _statements-with-value(statements, key, value, context_) = {
@@ -416,11 +416,14 @@
   }
   (nodes: resolved-nodes, edges: resolved-edges)
 }
-#let group(name, side) = {
+#let group(name, side, start) = {
   if side != none and not (side == "+" or side == "-" or side == "positive" or side == "negative") {
     panic("graph.group: side must be none, \"+\", \"-\", \"positive\", or \"negative\"")
   }
-  (kind: "group", name: _statement-value(name, "graph.group name"), side: side)
+  if start != none and type(start) != int and type(start) != float {
+    panic("graph.group: start must be none, an integer, or a float")
+  }
+  (kind: "group", name: _statement-value(name, "graph.group name"), side: side, start: start)
 }
 #let _axis-placement-kind = "axis-placement"
 #let _axis-placement(mode, value, context_) = {

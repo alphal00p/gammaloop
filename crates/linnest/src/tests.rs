@@ -3,9 +3,10 @@ use std::{collections::BTreeMap, fs};
 use figment::providers::Serialized;
 use figment::{Figment, Profile};
 use linnet::half_edge::layout::{
-    simulatedanneale::{Energy, Neighbor},
+    simulatedanneale::{anneal, Energy, GeoSchedule, Neighbor, SAConfig},
     spring::{Constraint, PinnedLayoutNeighbor, ShiftDirection},
 };
+use linnet::half_edge::subgraph::Inclusion;
 use linnet::half_edge::swap::Swap;
 use linnet::half_edge::{involution::EdgeIndex, NodeIndex};
 use linnet::{dot, parser::set::DotGraphSet};
@@ -534,6 +535,8 @@ struct TestPlacementGroup {
     name: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     side: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -1350,6 +1353,7 @@ fn test_graph_spec_uses_first_class_placements() {
                     kind: "group",
                     name: "edge-column",
                     side: Some("+"),
+                    start: None,
                 })),
                 y: Some(TestPlacementCoord::Number(0.5)),
                 reference: None,
@@ -1389,6 +1393,99 @@ fn test_graph_spec_uses_first_class_placements() {
         laid_out_nodes[1].pos,
         Some(crate::TypstPoint { x: 4.0, y: 1.0 })
     );
+}
+
+#[test]
+fn test_group_start_seeds_first_class_placement() {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&TestPlacementGraphSpec {
+        name: "group-start".to_string(),
+        nodes: vec![
+            TestPlacedNodeSpec {
+                name: "a".to_string(),
+                pos: Some(TestPlacementSpec {
+                    mode: Some("pin"),
+                    x: Some(TestPlacementCoord::Group(TestPlacementGroup {
+                        kind: "group",
+                        name: "column",
+                        side: None,
+                        start: Some(2.0),
+                    })),
+                    y: Some(TestPlacementCoord::Number(0.0)),
+                    reference: None,
+                    dx: None,
+                    dy: None,
+                }),
+                statements: BTreeMap::new(),
+            },
+            TestPlacedNodeSpec {
+                name: "b".to_string(),
+                pos: Some(TestPlacementSpec {
+                    mode: Some("pin"),
+                    x: Some(TestPlacementCoord::Number(0.0)),
+                    y: Some(TestPlacementCoord::Number(2.0)),
+                    reference: None,
+                    dx: None,
+                    dy: None,
+                }),
+                statements: BTreeMap::new(),
+            },
+        ],
+        edges: vec![TestPlacedEdgeSpec {
+            source: Some(TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: None,
+            }),
+            sink: Some(TestEndpointSpec {
+                node: 1,
+                compass: None,
+                statement: None,
+            }),
+            pos: Some(TestPlacementSpec {
+                mode: Some("pin"),
+                x: Some(TestPlacementCoord::Group(TestPlacementGroup {
+                    kind: "group",
+                    name: "column",
+                    side: None,
+                    start: Some(6.0),
+                })),
+                y: Some(TestPlacementCoord::Number(1.0)),
+                reference: None,
+                dx: None,
+                dy: None,
+            }),
+            statements: BTreeMap::new(),
+        }],
+    }))
+    .unwrap();
+
+    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
+    assert_eq!(nodes[0].pos, Some(crate::TypstPoint { x: 2.0, y: 0.0 }));
+    assert_eq!(edges[0].pos, Some(crate::TypstPoint { x: 6.0, y: 1.0 }));
+
+    let mut graph = crate::graph_api::decode_typst_graph(&graph).unwrap();
+    let (node_positions, edge_positions) = graph.new_positions(TreeInitCfg { dx: 1.0, dy: 1.0 });
+    assert_eq!(node_positions[NodeIndex(0)].x, 4.0);
+    assert_eq!(edge_positions[EdgeIndex(0)].x, 4.0);
+
+    let settings = BTreeMap::from([
+        ("layout-algo".to_string(), "force".to_string()),
+        ("steps".to_string(), "20".to_string()),
+        ("epochs".to_string(), "1".to_string()),
+        ("step".to_string(), "0.05".to_string()),
+        ("beta".to_string(), "0".to_string()),
+        ("gamma-ev".to_string(), "0".to_string()),
+        ("k-spring".to_string(), "4".to_string()),
+        ("z-spring".to_string(), "0".to_string()),
+    ]);
+    graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+        settings,
+        Profile::Default,
+    )));
+    graph.layout();
+    assert_eq!(graph[NodeIndex(0)].pos.x, graph[EdgeIndex(0)].pos.x);
+    assert!((graph[NodeIndex(0)].pos.x - 4.0).abs() > 1e-3);
 }
 
 #[test]
@@ -1462,6 +1559,7 @@ fn test_graph_structural_patch_updates_edge_position() {
                         kind: "group",
                         name: "right",
                         side: Some("+"),
+                        start: None,
                     })),
                     y: Some(TestPlacementCoord::Number(10.0)),
                     reference: None,
@@ -2960,6 +3058,42 @@ fn test_fixed_node_iterative_layout_keeps_nodes_and_complement_fixed() {
 }
 
 #[test]
+fn fixed_grouped_nodes_anchor_edges_without_being_rewritten() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph fixed_group {
+            helper [id=0 pos="-5,2" pin="x:+@column"]
+            a [id=1 pos="0,0!"]
+            b [id=2 pos="4,0!"]
+            a -> b [id=0 pin="x:+@column,y:1"]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    for algorithm in ["tree", "force"] {
+        let laid_out = layout_parsed_graph_bytes(
+            &graph,
+            &encode_cbor(&BTreeMap::from([
+                ("layout-algo".to_string(), algorithm.to_string()),
+                ("layout-nodes".to_string(), "fixed".to_string()),
+                ("label-steps".to_string(), "0".to_string()),
+                ("steps".to_string(), "4".to_string()),
+                ("epochs".to_string(), "2".to_string()),
+            ])),
+        )
+        .unwrap();
+        let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
+        let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+
+        assert_point_close(
+            nodes[0].pos.as_ref().unwrap(),
+            &TypstPoint { x: -5.0, y: 2.0 },
+        );
+        assert_eq!(edges[0].pos.as_ref().unwrap().x, -5.0);
+    }
+}
+
+#[test]
 fn test_fixed_node_dot_layout_routes_only_selected_edges() {
     let parsed = parse_dot_graphs_bytes(
         br#"digraph fixed_dot {
@@ -3689,6 +3823,54 @@ fn test_directional_constraints() {
 }
 
 #[test]
+fn grouped_coordinate_identity_includes_axis_and_side() {
+    let graph = TypstGraph::from_dot(
+        dot!(digraph {
+            both [id=0 pin="@same"]
+            x_member [id=1 pin="x:@same"]
+            y_member [id=2 pin="y:@same"]
+            positive [id=3 pin="x:+@same"]
+            negative [id=4 pin="x:-@same"]
+        })
+        .unwrap(),
+        &test_figment(),
+    );
+
+    let Constraint::Grouped(both_x, _) = graph[NodeIndex(0)].constraints.x else {
+        panic!("combined group lost its x coordinate");
+    };
+    let Constraint::Grouped(both_y, _) = graph[NodeIndex(0)].constraints.y else {
+        panic!("combined group lost its y coordinate");
+    };
+    let Constraint::Grouped(x_member, _) = graph[NodeIndex(1)].constraints.x else {
+        panic!("x member lost its grouped coordinate");
+    };
+    let Constraint::Grouped(y_member, _) = graph[NodeIndex(2)].constraints.y else {
+        panic!("y member lost its grouped coordinate");
+    };
+    let Constraint::Grouped(positive_x, _) = graph[NodeIndex(3)].constraints.x else {
+        panic!("positive group lost its x coordinate");
+    };
+    let Constraint::Grouped(negative_x, _) = graph[NodeIndex(4)].constraints.x else {
+        panic!("negative group lost its x coordinate");
+    };
+
+    assert_eq!(x_member, both_x);
+    assert_eq!(y_member, both_y);
+    assert_ne!(positive_x, negative_x);
+    assert_ne!(both_x, positive_x);
+    assert_ne!(both_x, negative_x);
+
+    let (mut nodes, mut edges) = graph.new_positions(TreeInitCfg { dx: 1.0, dy: 1.0 });
+    nodes[NodeIndex(0)] = cgmath::Point2::new(1.0, 2.0);
+    nodes[NodeIndex(1)] = cgmath::Point2::new(-9.0, 30.0);
+    nodes[NodeIndex(2)] = cgmath::Point2::new(40.0, -8.0);
+    graph.apply_grouped_constraints(&mut nodes, &mut edges);
+    assert_eq!(nodes[NodeIndex(1)], cgmath::Point2::new(1.0, 30.0));
+    assert_eq!(nodes[NodeIndex(2)], cgmath::Point2::new(40.0, 2.0));
+}
+
+#[test]
 fn grouped_directional_constraints_enforce_pin_side_after_layout() {
     let figment = test_figment();
     let typst_graph = TypstGraph::from_dot(
@@ -3734,7 +3916,107 @@ fn node_and_edge_groups_share_their_axis() {
         node_positions[NodeIndex(0)].x,
         edge_positions[EdgeIndex(0)].x
     );
-    assert_eq!(edge_positions[EdgeIndex(0)].x, -5.0);
+    assert_eq!(edge_positions[EdgeIndex(0)].x, -2.0);
+}
+
+#[test]
+fn cross_kind_group_is_one_force_and_annealing_coordinate() {
+    let settings = BTreeMap::from([
+        ("layout-algo".to_string(), "force".to_string()),
+        ("steps".to_string(), "20".to_string()),
+        ("epochs".to_string(), "1".to_string()),
+        ("step".to_string(), "0.05".to_string()),
+        ("delta".to_string(), "0.2".to_string()),
+        ("beta".to_string(), "0".to_string()),
+        ("k-spring".to_string(), "4".to_string()),
+        ("z-spring".to_string(), "0".to_string()),
+        ("length-scale".to_string(), "0.2".to_string()),
+    ]);
+    let figment = Figment::from(Serialized::from(settings, Profile::Default));
+    let mut graph = TypstGraph::from_dot(
+        dot!(digraph {
+            helper [id=0 pin="y:@row"]
+            a [id=1 pin="-2,-2"]
+            b [id=2 pin="2,3"]
+            a -> b [id=0 pin="x:0,y:@row"]
+        })
+        .unwrap(),
+        &figment,
+    );
+
+    let Constraint::Grouped(node_reference, _) = graph[NodeIndex(0)].constraints.y else {
+        panic!("helper node lost its y group");
+    };
+    let Constraint::Grouped(edge_reference, _) = graph[EdgeIndex(0)].constraints.y else {
+        panic!("edge control point lost its y group");
+    };
+    assert_eq!(node_reference, edge_reference);
+
+    let selected_nodes = graph.new_nodevec(|_, _, _| false);
+    let mut selected_edges = graph.new_edgevec(|_, _, _| false);
+    selected_edges[EdgeIndex(0)] = true;
+    let (node_axes, edge_axes) =
+        graph.grouped_layout_selection(&selected_nodes, &selected_edges, true);
+    assert!(!node_axes[NodeIndex(0)].x);
+    assert!(node_axes[NodeIndex(0)].y);
+    assert!(edge_axes[EdgeIndex(0)].x);
+    assert!(edge_axes[EdgeIndex(0)].y);
+    let saved_node_constraints = graph.new_nodevec(|_, _, node| node.constraints);
+    let saved_edge_constraints = graph.new_edgevec(|edge, _, _| edge.constraints);
+    graph.freeze_unselected_layout_axes(&node_axes, &edge_axes);
+    assert!(matches!(
+        graph[NodeIndex(0)].constraints.x,
+        Constraint::Fixed
+    ));
+    assert!(matches!(
+        graph[NodeIndex(0)].constraints.y,
+        Constraint::Grouped(_, _)
+    ));
+    graph.restore_layout_constraints(saved_node_constraints, saved_edge_constraints);
+
+    let spring = linnet::half_edge::layout::spring::ParamTuning::from(&graph.layout_config.spring);
+    let (tree, energy) = graph.tree_init_cfg(&spring);
+    let (mut nodes, mut edges) = graph.new_positions(tree);
+    nodes[NodeIndex(0)].y = 4.0;
+    edges[EdgeIndex(0)].y = -3.0;
+
+    let state = graph.new_layout_state(nodes.clone(), edges.clone(), 0.2, 0.0, true);
+    let mut empty_schedule = GeoSchedule::new(0, 0, 0.85, 0.15, 0.7, 1e-6);
+    let (prepared, _) = anneal::<_, _, _, _, SmallRng>(
+        state.clone(),
+        SAConfig {
+            seed: 7,
+            temp: 0.3,
+            step: 0.2,
+        },
+        &PinnedLayoutNeighbor,
+        &energy,
+        &mut empty_schedule,
+    );
+    assert_eq!(
+        prepared.vertex_points[NodeIndex(0)].y,
+        prepared.edge_points[EdgeIndex(0)].y
+    );
+
+    let mut rng = SmallRng::seed_from_u64(7);
+    let next = PinnedLayoutNeighbor.propose(&state, &mut rng, 0.2, 0.3);
+    assert_eq!(
+        next.vertex_points[NodeIndex(0)].y,
+        next.edge_points[EdgeIndex(0)].y
+    );
+    assert_ne!(next.vertex_points[NodeIndex(0)].y, 4.0);
+    assert!(next.changed_nodes.includes(&NodeIndex(0)));
+    assert!(next.changed_edges.includes(&EdgeIndex(0)));
+    let cached = energy.energy(None, &state);
+    let incremental = energy.energy(Some((&state, cached)), &next);
+    let mut full = next.clone();
+    full.incremental = false;
+    let exact = energy.energy(None, &full);
+    assert!((incremental - exact).abs() <= 1e-9 * (1.0 + exact.abs()));
+
+    let (nodes, edges) = graph.optimized_positions(nodes, edges, &energy);
+    assert_eq!(nodes[NodeIndex(0)].y, edges[EdgeIndex(0)].y);
+    assert_ne!(nodes[NodeIndex(0)].y, 4.0);
 }
 
 #[test]
@@ -3913,6 +4195,160 @@ fn dangling_centroid_repulsion_keeps_grouped_external_edges_outside() {
 
     assert!(edges[EdgeIndex(4)].x > nodes[NodeIndex(3)].x);
     assert!(edges[EdgeIndex(2)].x < nodes[NodeIndex(2)].x);
+}
+
+#[test]
+fn grouped_open_xbox_keeps_cut_gluons_aligned_and_outside() {
+    let input = r#"digraph {
+        a [pin="y:0" pos="0,0" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true"]
+        b [pin="y:-3" pos="-2,-3" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true"]
+        c [pin="y:3" pos="-2,3" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true"]
+        d [pin="y:0" pos="2,0" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true"]
+        a -> c [id=0]
+        b -> a [id=1 pin="x:@+lower-inner" pos="0.5,0" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="false" "group-start-x"="true"]
+        ext2 [style=invis]
+        ext2 -> b [id=2 pin="x:@-in,y:-4" pos="0,-4" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true"]
+        ext3 [style=invis]
+        ext3 -> c [id=3 pin="x:@-in,y:4" pos="0,4" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true"]
+        ext4 [style=invis]
+        ext4 -> d [id=4 pin="x:@+out,y:4" pos="0,4" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true"]
+        ext5 [style=invis]
+        d -> ext5 [id=5 pin="x:@+out,y:-4" pos="0,-4" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true"]
+        a -> d [id=6]
+        ext7 [style=invis]
+        b -> ext7 [id=7 pin="x:@+out,y:@cut" pos="0,0" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true" "group-start-y"="true"]
+        ext8 [style=invis]
+        ext8 -> c [id=8 pin="x:@-in,y:@cut" pos="0,0" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true" "group-start-y"="true"]
+    }"#;
+    let settings = BTreeMap::from([
+        ("layout-algo".to_string(), "force".to_string()),
+        ("steps".to_string(), "50".to_string()),
+        ("epochs".to_string(), "50".to_string()),
+        ("seed".to_string(), "2".to_string()),
+        ("step".to_string(), "0.09".to_string()),
+        ("delta".to_string(), "0.35".to_string()),
+        ("cool".to_string(), "0.92".to_string()),
+        ("gamma-dangling".to_string(), "1.8".to_string()),
+        ("gamma-dangling-centroid".to_string(), "3.6".to_string()),
+        ("gamma-ev".to_string(), "0.07".to_string()),
+        ("k-spring".to_string(), "11".to_string()),
+        ("beta".to_string(), "4.8".to_string()),
+        ("gamma-ee".to_string(), "0.08".to_string()),
+        ("g-center".to_string(), "0.015".to_string()),
+        ("directional-force".to_string(), "5".to_string()),
+        ("length-scale".to_string(), "0.51".to_string()),
+        ("z-spring".to_string(), "1".to_string()),
+        ("z-spring-growth".to_string(), "1".to_string()),
+    ]);
+    let figment = Figment::from(Serialized::from(settings, Profile::Default));
+    let mut graph = TypstGraph::parse(input).unwrap();
+    graph.layout_config = crate::LayoutConfig::from_figment(&figment);
+
+    let Constraint::Grouped(right_cut_y, ShiftDirection::Any) = graph[EdgeIndex(7)].constraints.y
+    else {
+        panic!("right cut gluon lost its free y group")
+    };
+    let Constraint::Grouped(left_cut_y, ShiftDirection::Any) = graph[EdgeIndex(8)].constraints.y
+    else {
+        panic!("left cut gluon lost its free y group")
+    };
+    assert_eq!(right_cut_y, left_cut_y);
+    assert_eq!(graph[EdgeIndex(7)].pos.y, graph[EdgeIndex(8)].pos.y);
+
+    graph.layout();
+
+    let lower_inner = graph[EdgeIndex(1)].pos;
+    let upper_in = graph[EdgeIndex(3)].pos;
+    let upper_out = graph[EdgeIndex(4)].pos;
+    let lower_out = graph[EdgeIndex(5)].pos;
+    let right_cut = graph[EdgeIndex(7)].pos;
+    let left_cut = graph[EdgeIndex(8)].pos;
+    let right_node = graph[NodeIndex(3)].pos;
+    assert!(
+        lower_inner.x > 0.0,
+        "lower-inner control moved left: {lower_inner:?}"
+    );
+    assert!(
+        (lower_out.y + 4.0).abs() < 1e-9,
+        "pinned outgoing edge moved: {lower_out:?}"
+    );
+    assert_eq!(right_cut.y, left_cut.y);
+    assert!((upper_out.x - lower_out.x).abs() < 1e-9);
+    assert!((lower_out.x - right_cut.x).abs() < 1e-9);
+    assert!((upper_in.x - left_cut.x).abs() < 1e-9);
+    assert!(
+        lower_out.x > right_node.x,
+        "out group is not outside: {lower_out:?} {right_node:?}"
+    );
+
+    let mut repeated = TypstGraph::parse(input).unwrap();
+    repeated.layout_config = crate::LayoutConfig::from_figment(&figment);
+    repeated.layout();
+    for edge in [1, 3, 4, 5, 7, 8] {
+        assert_eq!(graph[EdgeIndex(edge)].pos, repeated[EdgeIndex(edge)].pos);
+    }
+}
+
+#[test]
+fn grouped_xbox_hidden_nodes_stay_clear_of_dangling_endpoints() {
+    let input = r#"digraph {
+        ext [style=invis]
+        a [id=0 pin="x:-3,y:@+top" pos="-3,5" "group-start-y"=true]
+        b [id=1 pin="x:-3,y:@-bottom" pos="-3,-5" "group-start-y"=true]
+        c [id=2 pin="x:3,y:@+top" pos="3,5" "group-start-y"=true]
+        d [id=3 pin="x:3,y:@-bottom" pos="3,-5" "group-start-y"=true]
+        h1 [id=4 pin="x:@-in,y:@-lower-middle" pos="-7,-2" "group-start-x"=true "group-start-y"=true]
+        h2 [id=5 pin="x:@+out,y:@+upper-middle" pos="7,2" "group-start-x"=true "group-start-y"=true]
+        a -> ext [id=0 pin="x:@-in,y:@+top" pos="-7,5" "group-start-x"=true "group-start-y"=true]
+        b -> a [id=1]
+        ext -> b [id=2 pin="x:@-in,y:@-bottom" pos="-7,-5" "group-start-x"=true "group-start-y"=true]
+        h1 -> h2 [id=3 pin="x:0" pos="0,0" "pos-x-set"=true "pos-y-set"=false]
+        ext -> c [id=4 pin="x:@+out,y:@+top" pos="7,5" "group-start-x"=true "group-start-y"=true]
+        c -> d [id=5]
+        d -> ext [id=6 pin="x:@+out,y:@-bottom" pos="7,-5" "group-start-x"=true "group-start-y"=true]
+        a -> ext [id=7 pin="x:@-in,y:@+upper-middle" pos="-7,2" "group-start-x"=true "group-start-y"=true]
+        ext -> d [id=8 pin="x:@+out,y:@-lower-middle" pos="7,-2" "group-start-x"=true "group-start-y"=true]
+        b -> c [id=9]
+    }"#;
+    let settings = BTreeMap::from([
+        ("layout-algo".to_string(), "force".to_string()),
+        ("steps".to_string(), "50".to_string()),
+        ("epochs".to_string(), "50".to_string()),
+        ("seed".to_string(), "2".to_string()),
+        ("step".to_string(), "0.81".to_string()),
+        ("cool".to_string(), "0.85".to_string()),
+        ("delta".to_string(), "0.4".to_string()),
+        ("beta".to_string(), "10".to_string()),
+        ("k-spring".to_string(), "4".to_string()),
+        ("gamma-dangling".to_string(), "2".to_string()),
+        ("gamma-dangling-centroid".to_string(), "0".to_string()),
+        ("gamma-ev".to_string(), "0.5".to_string()),
+        ("gamma-ee".to_string(), "0.1".to_string()),
+        ("g-center".to_string(), "0.005".to_string()),
+        ("directional-force".to_string(), "10".to_string()),
+        ("length-scale".to_string(), "0.45".to_string()),
+        ("z-spring".to_string(), "2".to_string()),
+    ]);
+    let figment = Figment::from(Serialized::from(settings, Profile::Default));
+    let mut graph = TypstGraph::parse(input).unwrap();
+    graph.layout_config = crate::LayoutConfig::from_figment(&figment);
+    graph.layout();
+
+    let h1 = graph[NodeIndex(4)].pos;
+    let h2 = graph[NodeIndex(5)].pos;
+    assert!((h1.y - graph[EdgeIndex(8)].pos.y).abs() < 1e-9);
+    assert!((h2.y - graph[EdgeIndex(7)].pos.y).abs() < 1e-9);
+    assert!(h1.x < 0.0 && h1.y < 0.0, "{h1:?}");
+    assert!(h2.x > 0.0 && h2.y > 0.0, "{h2:?}");
+
+    let left_gap = (h1.y - graph[EdgeIndex(7)].pos.y).abs();
+    let right_gap = (h2.y - graph[EdgeIndex(8)].pos.y).abs();
+    // Two 0.25-amplitude coils need more than 0.5 centerline spacing before
+    // accounting for their strokes.
+    assert!(
+        left_gap > 0.75 && right_gap > 0.75,
+        "hidden/dangling y gaps are too small: left={left_gap}, right={right_gap}",
+    );
 }
 
 #[test]

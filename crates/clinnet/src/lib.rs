@@ -1095,7 +1095,7 @@ mod tests {
   _element-edge-style,
   _layout-pass,
 )
-#import "crates/linnest/typst/src/lib.typ": graph
+#import "crates/linnest/typst/src/lib.typ": draw, graph
 
 #let source-drawing = (statement: "source-statement", compass: "e")
 #source-drawing.insert("port-label", "source-port")
@@ -1185,6 +1185,83 @@ mod tests {
 #let explicit-roundtrip-edge = graph.edges(explicit-roundtrip).first()
 #assert(explicit-roundtrip-edge.at("pos-x-set") == false)
 #assert(explicit-roundtrip-edge.at("pos-y-set") == true)
+
+#let signed-values = graph.build({
+  graph.node(<signed>)
+  graph.edge(
+    graph.source(<signed>),
+    bend: -0.55,
+    label-angle: -0.4,
+    shift: (-0.25, -1),
+  )
+})
+#let signed-edge = graph.edges(signed-values).first()
+#assert(calc.abs(signed-edge.bend + 0.55) < 1e-9)
+#assert(calc.abs(signed-edge.label-angle + 0.4) < 1e-9)
+#assert(calc.abs(signed-edge.shift.x + 0.25) < 1e-9)
+#assert(calc.abs(signed-edge.shift.y + 1) < 1e-9)
+
+// Exercise real Kurvst intersection detection and trimming on both a continuous
+// paired layer with a forward numeric target and a sink-dangling layer with a
+// named target. The second style layer deliberately keeps its mark and remains
+// uncut.
+#let crossing-layers(under) = (
+  if under != none {
+    (
+      stroke: black + 0.55pt,
+      pattern: "coil",
+      pattern-amplitude: 0.08,
+      pattern-wavelength: 0.45,
+      crossing-under: under,
+      crossing-gap: 0.4,
+    )
+  } else {
+    (stroke: black + 0.55pt)
+  },
+  (
+    offset: 0.16,
+    length: 0.8,
+    stroke: red + 0.45pt,
+    mark: (end: ">"),
+  ),
+)
+#let crossing-style(edge) = crossing-layers(if edge.eid == 0 { 1 } else { none })
+#let named-crossing-style(edge) = crossing-layers(
+  if edge.eid == 1 { <vertical-target> } else { none },
+)
+#let crossing-paired = graph.build({
+  graph.node(<pa>, pos: graph.pos(x: -2, y: 0, mode: "pin"))
+  graph.node(<pb>, pos: graph.pos(x: 6, y: 0, mode: "pin"))
+  graph.node(<pc>, pos: graph.pos(x: 0, y: -1, mode: "pin"))
+  graph.node(<pd>, pos: graph.pos(x: 4, y: -1, mode: "pin"))
+  graph.edge(
+    graph.source(<pa>),
+    graph.sink(<pb>),
+    pos: graph.pos(x: 2, y: 0, mode: "pin"),
+  )
+  graph.edge(
+    graph.source(<pc>),
+    graph.sink(<pd>),
+    pos: graph.pos(x: 2, y: 2, mode: "pin"),
+  )
+})
+#let crossing-dangling = graph.build({
+  graph.node(<vertical>, pos: graph.pos(x: 2, y: 1, mode: "pin"))
+  graph.node(<horizontal>, pos: graph.pos(x: 0, y: 0, mode: "pin"))
+  graph.edge(
+    graph.source(<vertical>),
+    <vertical-target>,
+    pos: graph.pos(x: 2, y: -1, mode: "pin"),
+  )
+  graph.edge(
+    graph.sink(<horizontal>),
+    pos: graph.pos(x: 4, y: 0, mode: "pin"),
+  )
+})
+#stack(
+  draw(crossing-paired, node-label: none, source-style: crossing-style, sink-style: crossing-style),
+  draw(crossing-dangling, node-label: none, source-style: named-crossing-style, sink-style: named-crossing-style),
+)
 [ok]
 "#,
         )
