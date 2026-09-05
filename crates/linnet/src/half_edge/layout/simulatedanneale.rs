@@ -15,6 +15,9 @@ pub trait Energy<S> {
 }
 
 pub trait Neighbor<S> {
+    /// Prepare the initial state before it is scored and stored as the best state.
+    fn prepare(&self, _state: &mut S) {}
+
     /// Propose a new state from `s` given step scale and temperature.
     fn propose(&self, s: &S, rng: &mut impl Rng, step: f64, temp: f64) -> S;
 }
@@ -57,7 +60,8 @@ pub fn anneal<S: Clone, N: Neighbor<S>, E: Energy<S>, Sch: Schedule, R: Seedable
     sched: &mut Sch,
 ) -> (S, SAStats) {
     let mut rng = R::seed_from_u64(cfg.seed);
-    let mut cur = init.clone();
+    let mut cur = init;
+    neigh.prepare(&mut cur);
     let mut current_energy = energy.energy(None, &cur);
 
     let mut best = cur.clone();

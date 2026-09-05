@@ -515,6 +515,20 @@
 
 #let length(path, accuracy: 0.001) = _length(path, accuracy: accuracy)
 
+/// Find transverse crossings between two paths.
+///
+/// Results are sorted by arc distance along `a`. Each result contains `point`,
+/// `distance-a`, `distance-b`, `segment-a`, `segment-b`, `t-a`, and `t-b`.
+/// Path-endpoint and tangential contacts are omitted.
+/// -> array
+#let intersections(a, b, accuracy: 0.001) = {
+  cbor(_plugin.curve_path_intersections(cbor.encode((
+    a: _path-value(a),
+    b: _path-value(b),
+    accuracy: accuracy,
+  ))))
+}
+
 /// Resolve a fixed and relative visible path length.
 ///
 /// `length` is interpreted as a fixed arc length. `ratio` is interpreted as a

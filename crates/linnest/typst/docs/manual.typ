@@ -417,6 +417,11 @@ coordinate into a fixed layout constraint and a drawable position. Use
 
 `graph.group` links one coordinate across several nodes or edge control points.
 A `side` of `"+"` keeps the coordinate positive, and `"-"` keeps it negative.
+Use `start` to seed the shared coordinate without fixing it. Matching node and
+edge groups are one degree of freedom during force and annealing layouts, so
+repulsion and springs act on their combined force rather than being reconciled
+afterward. If several members supply starts for one group, their mean initializes
+the shared coordinate.
 GammaLoop external-edge columns use this to keep incoming and outgoing external
 legs on opposite sides while pairing rows by a shared `y` group:
 
@@ -425,7 +430,7 @@ legs on opposite sides while pairing rows by a shared `y` group:
   edge(
     source(<right-ext>),
     sink(<center>),
-    pos: graph.pos(x: graph.group("right", side: "+"), y: graph.group("edgee0")),
+    pos: graph.pos(x: graph.group("right", side: "+", start: 4), y: graph.group("edgee0")),
   ),
   edge(
     source(<center>),
@@ -588,6 +593,27 @@ value for only that layer. Wave and coil phases continue across the hidden
 span. `edge-halves` and `to-cetz-edge-halves` accept the same `split-gap`
 control and report the effective gap if either half is too short. This cuts at
 `edge.pos`; it does not detect arbitrary crossings.
+
+For a known centerline crossing, put `crossing-under: 5` (using the target's
+integer edge id) or `crossing-under: <bridge>` (using its Typst edge name), and
+optionally `crossing-gap` (default `0.55`) on the style layer that should be
+interrupted. Targets are resolved independently of edge order.
+Kurvst locates proper intersections and trims the current path by arc length;
+wave and coil phases continue across every hidden span. This works for
+dangling layers and for paired layers whose source and sink have one continuous
+style. Both paired half styles must name the same target and gap. A cut layer
+cannot itself carry a mark or participate in a subgraph underlay; keep those on
+a separate layer. Self, unknown, and invisible references are reported as
+errors. A valid edge pair with no proper interior intersection, including one
+that only shares an endpoint, is left unchanged.
+
+```typ
+#let crossed-style(edge) = if edge.eid == 7 {
+  (stroke: black, pattern: "coil", crossing-under: 5, crossing-gap: 0.55)
+} else {
+  (stroke: black)
+}
+```
 
 For dangling edges, `edge-dangling-tangent: "horizontal"` or `"vertical"`
 constrains the tangent at the free edge position while retaining the edge's

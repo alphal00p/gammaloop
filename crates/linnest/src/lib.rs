@@ -43,8 +43,8 @@ use linnet::{
             },
             simulatedanneale::{anneal, GeoSchedule, SAConfig},
             spring::{
-                Constraint, HasPointConstraint, LayoutState, ParamTuning, PinnedLayoutNeighbor,
-                PointConstraint, ShiftDirection, Shiftable, SpringChargeEnergy,
+                Constraint, HasPointConstraint, LayoutPointIndex, LayoutState, ParamTuning,
+                PinnedLayoutNeighbor, PointConstraint, ShiftDirection, SpringChargeEnergy,
             },
         },
         nodestore::{DefaultNodeStore, NodeStorageOps},
@@ -248,17 +248,6 @@ impl Default for TypstNode {
     }
 }
 
-impl Shiftable for TypstNode {
-    fn shift<I: From<usize> + PartialEq + Copy, R: std::ops::IndexMut<I, Output = Point2<f64>>>(
-        &self,
-        shift: Vector2<f64>,
-        index: I,
-        values: &mut R,
-    ) -> bool {
-        self.constraints.shift(shift, index, values)
-    }
-}
-
 impl HasPointConstraint for TypstNode {
     fn point_constraint(&self) -> &PointConstraint {
         &self.constraints
@@ -395,17 +384,6 @@ pub struct TypstEdge {
     statements: BTreeMap<String, String>,
     pub constraints: PointConstraint,
 }
-impl Shiftable for TypstEdge {
-    fn shift<I: From<usize> + PartialEq + Copy, R: std::ops::IndexMut<I, Output = Point2<f64>>>(
-        &self,
-        shift: Vector2<f64>,
-        index: I,
-        values: &mut R,
-    ) -> bool {
-        self.constraints.shift(shift, index, values)
-    }
-}
-
 impl HasPointConstraint for TypstEdge {
     fn point_constraint(&self) -> &PointConstraint {
         &self.constraints
@@ -696,6 +674,12 @@ struct LayoutRect {
     max_x: f64,
     min_y: f64,
     max_y: f64,
+}
+
+#[derive(Clone, Copy, Default)]
+struct LayoutAxisSelection {
+    x: bool,
+    y: bool,
 }
 
 impl LayoutRect {
@@ -1134,10 +1118,10 @@ fn apply_dot_placement_statements(
 }
 
 fn initial_point_constraint(
-    index: usize,
+    index: LayoutPointIndex,
     statements: &BTreeMap<String, String>,
     placement: Option<&DotResolvedPlacement>,
-    group_map: &mut HashMap<String, usize>,
+    group_map: &mut HashMap<String, LayoutPointIndex>,
 ) -> (Point2<f64>, PointConstraint) {
     let explicit_pin =
         dot_statement_value(statements, "pin").and_then(|value| PinConstraint::parse(value));
@@ -1146,10 +1130,10 @@ fn initial_point_constraint(
     if let Some(pin) = pin {
         let (mut point, constraints) = pin.point_constraint(index, group_map);
         if let Some(placement) = placement {
-            if matches!(constraints.x, Constraint::Free) && placement.x_set {
+            if !matches!(constraints.x, Constraint::Fixed) && placement.x_set {
                 point.x = placement.point.x;
             }
-            if matches!(constraints.y, Constraint::Free) && placement.y_set {
+            if !matches!(constraints.y, Constraint::Fixed) && placement.y_set {
                 point.y = placement.point.y;
             }
         } else if let Some((x, y)) = TypstNode::parse_position(statements, "pos") {
@@ -1186,24 +1170,22 @@ impl TypstGraph {
             .new_edgevec(|_, eid, _| placement_context.resolve_edge(eid));
 
         let mut group_map = HashMap::new();
-        let edge_pin_constrains: EdgeVec<(Point2<f64>, PointConstraint)> =
-            dot.graph.new_edgevec(|e, eid, _| {
+        let node_pin_constrains: NodeVec<(Point2<f64>, PointConstraint)> =
+            dot.graph.new_nodevec(|nid, _, n| {
                 initial_point_constraint(
-                    eid.0,
-                    &e.statements,
-                    edge_placements[eid].as_ref(),
+                    LayoutPointIndex::Node(nid),
+                    &n.statements,
+                    node_placements[nid].as_ref(),
                     &mut group_map,
                 )
             });
 
-        let mut group_map = HashMap::new();
-
-        let node_pin_constrains: NodeVec<(Point2<f64>, PointConstraint)> =
-            dot.graph.new_nodevec(|nid, _, n| {
+        let edge_pin_constrains: EdgeVec<(Point2<f64>, PointConstraint)> =
+            dot.graph.new_edgevec(|e, eid, _| {
                 initial_point_constraint(
-                    nid.0,
-                    &n.statements,
-                    node_placements[nid].as_ref(),
+                    LayoutPointIndex::Edge(eid),
+                    &e.statements,
+                    edge_placements[eid].as_ref(),
                     &mut group_map,
                 )
             });
@@ -2370,18 +2352,160 @@ impl TypstGraph {
         pos_v: &mut NodeVec<Point2<f64>>,
         pos_e: &mut EdgeVec<Point2<f64>>,
     ) {
-        let node_len = pos_v.len().0;
-        for i in 0..node_len {
-            let idx = NodeIndex(i);
-            let constraints = &self[idx].constraints;
-            if let Constraint::Grouped(reference, _) = constraints.x {
-                if reference < node_len && reference != i {
-                    pos_v[idx].x = pos_v[NodeIndex(reference)].x;
+        let nodes_are_fixed = self.layout_config.layout_nodes.nodes_are_fixed();
+        self.apply_group_references(pos_v, pos_e, nodes_are_fixed);
+        self.apply_group_directions(pos_v, pos_e, nodes_are_fixed);
+    }
+
+    fn apply_initial_grouped_constraints(
+        &self,
+        pos_v: &mut NodeVec<Point2<f64>>,
+        pos_e: &mut EdgeVec<Point2<f64>>,
+    ) {
+        self.apply_group_starts(
+            pos_v,
+            pos_e,
+            self.layout_config.layout_nodes.nodes_are_fixed(),
+        );
+        self.apply_grouped_constraints(pos_v, pos_e);
+    }
+
+    fn apply_group_starts(
+        &self,
+        pos_v: &mut NodeVec<Point2<f64>>,
+        pos_e: &mut EdgeVec<Point2<f64>>,
+        nodes_are_fixed: bool,
+    ) {
+        let mut x_starts = HashMap::<LayoutPointIndex, (f64, usize)>::new();
+        let mut y_starts = HashMap::<LayoutPointIndex, (f64, usize)>::new();
+        if !nodes_are_fixed {
+            for i in 0..pos_v.len().0 {
+                let index = NodeIndex(i);
+                let node = &self[index];
+                if TypstNode::parse_bool_statement(&node.statements, "group-start-x")
+                    .unwrap_or(false)
+                {
+                    if let Constraint::Grouped(reference, _) = node.constraints.x {
+                        let start = x_starts.entry(reference).or_default();
+                        start.0 += pos_v[index].x;
+                        start.1 += 1;
+                    }
+                }
+                if TypstNode::parse_bool_statement(&node.statements, "group-start-y")
+                    .unwrap_or(false)
+                {
+                    if let Constraint::Grouped(reference, _) = node.constraints.y {
+                        let start = y_starts.entry(reference).or_default();
+                        start.0 += pos_v[index].y;
+                        start.1 += 1;
+                    }
                 }
             }
-            if let Constraint::Grouped(reference, _) = constraints.y {
-                if reference < node_len && reference != i {
-                    pos_v[idx].y = pos_v[NodeIndex(reference)].y;
+        }
+        for i in 0..pos_e.len().0 {
+            let index = EdgeIndex(i);
+            let edge = &self[index];
+            if TypstNode::parse_bool_statement(&edge.statements, "group-start-x").unwrap_or(false) {
+                if let Constraint::Grouped(reference, _) = edge.constraints.x {
+                    if !nodes_are_fixed || !matches!(reference, LayoutPointIndex::Node(_)) {
+                        let start = x_starts.entry(reference).or_default();
+                        start.0 += pos_e[index].x;
+                        start.1 += 1;
+                    }
+                }
+            }
+            if TypstNode::parse_bool_statement(&edge.statements, "group-start-y").unwrap_or(false) {
+                if let Constraint::Grouped(reference, _) = edge.constraints.y {
+                    if !nodes_are_fixed || !matches!(reference, LayoutPointIndex::Node(_)) {
+                        let start = y_starts.entry(reference).or_default();
+                        start.0 += pos_e[index].y;
+                        start.1 += 1;
+                    }
+                }
+            }
+        }
+
+        for (reference, (sum, count)) in x_starts {
+            self.set_group_coordinate(
+                reference,
+                true,
+                sum / count as f64,
+                pos_v,
+                pos_e,
+                nodes_are_fixed,
+            );
+        }
+        for (reference, (sum, count)) in y_starts {
+            self.set_group_coordinate(
+                reference,
+                false,
+                sum / count as f64,
+                pos_v,
+                pos_e,
+                nodes_are_fixed,
+            );
+        }
+    }
+
+    fn set_group_coordinate(
+        &self,
+        reference: LayoutPointIndex,
+        x_axis: bool,
+        value: f64,
+        pos_v: &mut NodeVec<Point2<f64>>,
+        pos_e: &mut EdgeVec<Point2<f64>>,
+        nodes_are_fixed: bool,
+    ) {
+        if !nodes_are_fixed {
+            for i in 0..pos_v.len().0 {
+                let index = NodeIndex(i);
+                let constraint = if x_axis {
+                    self[index].constraints.x
+                } else {
+                    self[index].constraints.y
+                };
+                if matches!(constraint, Constraint::Grouped(group, _) if group == reference) {
+                    if x_axis {
+                        pos_v[index].x = value;
+                    } else {
+                        pos_v[index].y = value;
+                    }
+                }
+            }
+        }
+        for i in 0..pos_e.len().0 {
+            let index = EdgeIndex(i);
+            let constraint = if x_axis {
+                self[index].constraints.x
+            } else {
+                self[index].constraints.y
+            };
+            if matches!(constraint, Constraint::Grouped(group, _) if group == reference) {
+                if x_axis {
+                    pos_e[index].x = value;
+                } else {
+                    pos_e[index].y = value;
+                }
+            }
+        }
+    }
+
+    fn apply_group_references(
+        &self,
+        pos_v: &mut NodeVec<Point2<f64>>,
+        pos_e: &mut EdgeVec<Point2<f64>>,
+        nodes_are_fixed: bool,
+    ) {
+        if !nodes_are_fixed {
+            let node_len = pos_v.len().0;
+            for i in 0..node_len {
+                let idx = NodeIndex(i);
+                let constraints = &self[idx].constraints;
+                if let Constraint::Grouped(reference, _) = constraints.x {
+                    pos_v[idx].x = Self::layout_point(reference, pos_v, pos_e).x;
+                }
+                if let Constraint::Grouped(reference, _) = constraints.y {
+                    pos_v[idx].y = Self::layout_point(reference, pos_v, pos_e).y;
                 }
             }
         }
@@ -2391,131 +2515,61 @@ impl TypstGraph {
             let idx = EdgeIndex(i);
             let constraints = &self[idx].constraints;
             if let Constraint::Grouped(reference, _) = constraints.x {
-                if reference < edge_len && reference != i {
-                    pos_e[idx].x = pos_e[EdgeIndex(reference)].x;
-                }
+                pos_e[idx].x = Self::layout_point(reference, pos_v, pos_e).x;
             }
             if let Constraint::Grouped(reference, _) = constraints.y {
-                if reference < edge_len && reference != i {
-                    pos_e[idx].y = pos_e[EdgeIndex(reference)].y;
-                }
+                pos_e[idx].y = Self::layout_point(reference, pos_v, pos_e).y;
             }
-        }
-
-        self.apply_cross_kind_grouped_constraints(pos_v, pos_e, false);
-
-        for i in 0..node_len {
-            let idx = NodeIndex(i);
-            Self::apply_directional_constraint(&self[idx].constraints.x, &mut pos_v[idx].x);
-            Self::apply_directional_constraint(&self[idx].constraints.y, &mut pos_v[idx].y);
-        }
-
-        for i in 0..edge_len {
-            let idx = EdgeIndex(i);
-            Self::apply_directional_constraint(&self[idx].constraints.x, &mut pos_e[idx].x);
-            Self::apply_directional_constraint(&self[idx].constraints.y, &mut pos_e[idx].y);
         }
     }
 
-    fn apply_cross_kind_grouped_constraints(
+    fn layout_point(
+        index: LayoutPointIndex,
+        pos_v: &NodeVec<Point2<f64>>,
+        pos_e: &EdgeVec<Point2<f64>>,
+    ) -> Point2<f64> {
+        match index {
+            LayoutPointIndex::Node(index) => pos_v[index],
+            LayoutPointIndex::Edge(index) => pos_e[index],
+        }
+    }
+
+    fn apply_group_directions(
         &self,
         pos_v: &mut NodeVec<Point2<f64>>,
         pos_e: &mut EdgeVec<Point2<f64>>,
         nodes_are_fixed: bool,
     ) {
-        let mut x_groups = BTreeMap::<String, (Option<f64>, Option<f64>)>::new();
-        let mut y_groups = BTreeMap::<String, (Option<f64>, Option<f64>)>::new();
-        let node_groups = self.new_nodevec(|_, _, data| Self::constraint_groups(&data.statements));
-        let edge_groups = self.new_edgevec(|data, _, _| Self::constraint_groups(&data.statements));
-
-        for (node, (x_group, y_group)) in node_groups.iter() {
-            if let Some(group) = x_group {
-                x_groups
-                    .entry(group.clone())
-                    .or_default()
-                    .0
-                    .get_or_insert(pos_v[node].x);
-            }
-            if let Some(group) = y_group {
-                y_groups
-                    .entry(group.clone())
-                    .or_default()
-                    .0
-                    .get_or_insert(pos_v[node].y);
-            }
-        }
-        for (edge, (x_group, y_group)) in edge_groups.iter() {
-            if let Some(group) = x_group {
-                x_groups
-                    .entry(group.clone())
-                    .or_default()
-                    .1
-                    .get_or_insert(pos_e[edge].x);
-            }
-            if let Some(group) = y_group {
-                y_groups
-                    .entry(group.clone())
-                    .or_default()
-                    .1
-                    .get_or_insert(pos_e[edge].y);
-            }
-        }
-
-        let x_groups: BTreeMap<_, _> = x_groups
-            .into_iter()
-            .filter_map(|(group, (node, edge))| {
-                let node = node?;
-                Some((
-                    group,
-                    if nodes_are_fixed {
-                        node
-                    } else {
-                        (node + edge?) * 0.5
-                    },
-                ))
-            })
-            .collect();
-        let y_groups: BTreeMap<_, _> = y_groups
-            .into_iter()
-            .filter_map(|(group, (node, edge))| {
-                let node = node?;
-                Some((
-                    group,
-                    if nodes_are_fixed {
-                        node
-                    } else {
-                        (node + edge?) * 0.5
-                    },
-                ))
-            })
-            .collect();
-
         if !nodes_are_fixed {
-            for (node, (x_group, y_group)) in node_groups.iter() {
-                if let Some(x) = x_group.as_ref().and_then(|group| x_groups.get(group)) {
-                    pos_v[node].x = *x;
-                }
-                if let Some(y) = y_group.as_ref().and_then(|group| y_groups.get(group)) {
-                    pos_v[node].y = *y;
-                }
+            let node_len = pos_v.len().0;
+            for i in 0..node_len {
+                let idx = NodeIndex(i);
+                Self::apply_directional_constraint(&self[idx].constraints.x, &mut pos_v[idx].x);
+                Self::apply_directional_constraint(&self[idx].constraints.y, &mut pos_v[idx].y);
             }
         }
-        for (edge, (x_group, y_group)) in edge_groups.iter() {
-            if let Some(x) = x_group.as_ref().and_then(|group| x_groups.get(group)) {
-                pos_e[edge].x = *x;
-            }
-            if let Some(y) = y_group.as_ref().and_then(|group| y_groups.get(group)) {
-                pos_e[edge].y = *y;
-            }
-        }
-    }
 
-    fn constraint_groups(
-        statements: &BTreeMap<String, String>,
-    ) -> (Option<String>, Option<String>) {
-        dot_statement_value(statements, "pin")
-            .and_then(|pin| PinConstraint::parse(pin))
-            .map_or((None, None), PinConstraint::into_axis_groups)
+        let edge_len = pos_e.len().0;
+        for i in 0..edge_len {
+            let idx = EdgeIndex(i);
+            let constraints = self[idx].constraints;
+            if !(nodes_are_fixed
+                && matches!(
+                    constraints.x,
+                    Constraint::Grouped(LayoutPointIndex::Node(_), _)
+                ))
+            {
+                Self::apply_directional_constraint(&constraints.x, &mut pos_e[idx].x);
+            }
+            if !(nodes_are_fixed
+                && matches!(
+                    constraints.y,
+                    Constraint::Grouped(LayoutPointIndex::Node(_), _)
+                ))
+            {
+                Self::apply_directional_constraint(&constraints.y, &mut pos_e[idx].y);
+            }
+        }
     }
 
     fn apply_layout_constraints(
@@ -2523,36 +2577,7 @@ impl TypstGraph {
         pos_v: &mut NodeVec<Point2<f64>>,
         pos_e: &mut EdgeVec<Point2<f64>>,
     ) {
-        if self.layout_config.layout_nodes.nodes_are_fixed() {
-            self.apply_edge_grouped_constraints(pos_e);
-            self.apply_cross_kind_grouped_constraints(pos_v, pos_e, true);
-        } else {
-            self.apply_grouped_constraints(pos_v, pos_e);
-        }
-    }
-
-    fn apply_edge_grouped_constraints(&self, pos_e: &mut EdgeVec<Point2<f64>>) {
-        let edge_len = pos_e.len().0;
-        for i in 0..edge_len {
-            let idx = EdgeIndex(i);
-            let constraints = &self[idx].constraints;
-            if let Constraint::Grouped(reference, _) = constraints.x {
-                if reference < edge_len && reference != i {
-                    pos_e[idx].x = pos_e[EdgeIndex(reference)].x;
-                }
-            }
-            if let Constraint::Grouped(reference, _) = constraints.y {
-                if reference < edge_len && reference != i {
-                    pos_e[idx].y = pos_e[EdgeIndex(reference)].y;
-                }
-            }
-        }
-
-        for i in 0..edge_len {
-            let idx = EdgeIndex(i);
-            Self::apply_directional_constraint(&self[idx].constraints.x, &mut pos_e[idx].x);
-            Self::apply_directional_constraint(&self[idx].constraints.y, &mut pos_e[idx].y);
-        }
+        self.apply_grouped_constraints(pos_v, pos_e);
     }
 
     fn apply_directional_constraint(constraint: &Constraint, value: &mut f64) {
@@ -2569,10 +2594,11 @@ impl TypstGraph {
 
     fn optimized_positions(
         &self,
-        pos_n: NodeVec<Point2<f64>>,
-        pos_e: EdgeVec<Point2<f64>>,
+        mut pos_n: NodeVec<Point2<f64>>,
+        mut pos_e: EdgeVec<Point2<f64>>,
         energy: &SpringChargeEnergy,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
+        self.apply_initial_grouped_constraints(&mut pos_n, &mut pos_e);
         let spring_length = energy.spring_length;
 
         match self.layout_config.layout_algo {
@@ -3106,54 +3132,41 @@ impl TypstGraph {
         I: From<usize> + PartialEq + Copy,
         R: IndexMut<I, Output = Point2<f64>>,
     {
-        match (constraints.x, constraints.y) {
-            (Constraint::Free, Constraint::Free) => {
-                if !start_x {
-                    points[index].x = target.x;
+        if !start_x {
+            match constraints.x {
+                Constraint::Fixed => {}
+                Constraint::Free => points[index].x = target.x,
+                Constraint::Grouped(_, direction) => {
+                    points[index].x = Self::directional_target(target.x, direction, fallback.x);
                 }
-                if !start_y {
-                    points[index].y = target.y;
-                }
-            }
-            (Constraint::Fixed, Constraint::Fixed) => {}
-            (Constraint::Free, Constraint::Fixed) => {
-                if !start_x {
-                    points[index].x = target.x;
-                }
-            }
-            (Constraint::Fixed, Constraint::Free) => {
-                if !start_y {
-                    points[index].y = target.y;
-                }
-            }
-            (Constraint::Grouped(_, x_dir), Constraint::Free) => {
-                if !start_y {
-                    points[index].y = target.y;
-                }
-                let target_x = Self::directional_target(target.x, x_dir, fallback.x);
-                constraints.shift((target_x, 0.0).into(), index, points);
-            }
-            (Constraint::Free, Constraint::Grouped(_, y_dir)) => {
-                if !start_x {
-                    points[index].x = target.x;
-                }
-                let target_y = Self::directional_target(target.y, y_dir, fallback.y);
-                constraints.shift((0.0, target_y).into(), index, points);
-            }
-            (Constraint::Grouped(_, x_dir), Constraint::Grouped(_, y_dir)) => {
-                let target_x = Self::directional_target(target.x, x_dir, fallback.x);
-                let target_y = Self::directional_target(target.y, y_dir, fallback.y);
-                constraints.shift((target_x, target_y).into(), index, points);
-            }
-            (Constraint::Fixed, Constraint::Grouped(_, y_dir)) => {
-                let target_y = Self::directional_target(target.y, y_dir, fallback.y);
-                constraints.shift((0.0, target_y).into(), index, points);
-            }
-            (Constraint::Grouped(_, x_dir), Constraint::Fixed) => {
-                let target_x = Self::directional_target(target.x, x_dir, fallback.x);
-                constraints.shift((target_x, 0.0).into(), index, points);
             }
         }
+        if !start_y {
+            match constraints.y {
+                Constraint::Fixed => {}
+                Constraint::Free => points[index].y = target.y,
+                Constraint::Grouped(_, direction) => {
+                    points[index].y = Self::directional_target(target.y, direction, fallback.y);
+                }
+            }
+        }
+    }
+
+    fn layout_start_flags(
+        constraints: &PointConstraint,
+        start_x: bool,
+        start_y: bool,
+        statements: &BTreeMap<String, String>,
+    ) -> (bool, bool) {
+        let uses_start = |constraint, start, key| {
+            start
+                && (!matches!(constraint, Constraint::Grouped(_, _))
+                    || Self::statement_bool(statements, key).unwrap_or(false))
+        };
+        (
+            uses_start(constraints.x, start_x, "group-start-x"),
+            uses_start(constraints.y, start_y, "group-start-y"),
+        )
     }
 
     fn selected_layout_nodes(
@@ -3216,7 +3229,7 @@ impl TypstGraph {
         algo: LayoutAlgo,
         selected_edges: Option<&EdgeVec<bool>>,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
-        match algo {
+        let (mut pos_v, mut pos_e) = match algo {
             LayoutAlgo::Tree => {
                 self.edge_layout_positions_from_current_nodes(cfg, selected_edges, false)
             }
@@ -3224,7 +3237,9 @@ impl TypstGraph {
                 self.dot_edge_layout_positions_from_current_nodes(cfg, selected_edges, false)
             }
             LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
-        }
+        };
+        self.apply_initial_grouped_constraints(&mut pos_v, &mut pos_e);
+        (pos_v, pos_e)
     }
 
     fn partial_optimized_positions(
@@ -3233,31 +3248,38 @@ impl TypstGraph {
         subgraph: &SuBitGraph,
         energy: &SpringChargeEnergy,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
-        let (mut selected_nodes, selected_edges) = self.selected_layout_items(subgraph);
-        let (pos_n, pos_e) = if self.layout_config.layout_nodes.nodes_are_fixed() {
-            selected_nodes = self.new_nodevec(|_, _, _| false);
-            self.edge_layout_positions_from_current_nodes(cfg, Some(&selected_edges), true)
+        let fixed_nodes = self.layout_config.layout_nodes.nodes_are_fixed();
+        let (selected_nodes, selected_edges) = self.selected_layout_items(subgraph);
+        let (selected_node_axes, selected_edge_axes) =
+            self.grouped_layout_selection(&selected_nodes, &selected_edges, !fixed_nodes);
+        let selected_edge_points =
+            self.new_edgevec(|_, edge, _| selected_edge_axes[edge].x || selected_edge_axes[edge].y);
+        let (mut pos_n, mut pos_e) = if fixed_nodes {
+            self.edge_layout_positions_from_current_nodes(cfg, Some(&selected_edge_points), true)
         } else {
-            let (mut pos_n, mut pos_e) =
-                self.partial_layout_positions(cfg, LayoutAlgo::Tree, subgraph);
-
-            for (node, selected) in selected_nodes.iter() {
-                if !selected {
-                    pos_n[node] = self.graph[node].pos;
-                }
-            }
-            for (edge, selected) in selected_edges.iter() {
-                if !selected {
-                    pos_e[edge] = self.graph[edge].pos;
-                }
-            }
-
-            (pos_n, pos_e)
+            self.partial_layout_positions(cfg, LayoutAlgo::Tree, subgraph)
         };
+
+        for (node, selected) in selected_node_axes.iter() {
+            if !selected.x {
+                pos_n[node].x = self.graph[node].pos.x;
+            }
+            if !selected.y {
+                pos_n[node].y = self.graph[node].pos.y;
+            }
+        }
+        for (edge, selected) in selected_edge_axes.iter() {
+            if !selected.x {
+                pos_e[edge].x = self.graph[edge].pos.x;
+            }
+            if !selected.y {
+                pos_e[edge].y = self.graph[edge].pos.y;
+            }
+        }
 
         let saved_node_constraints = self.new_nodevec(|_, _, node| node.constraints);
         let saved_edge_constraints = self.new_edgevec(|edge, _, _| edge.constraints);
-        self.freeze_unselected_layout_items(&selected_nodes, &selected_edges);
+        self.freeze_unselected_layout_axes(&selected_node_axes, &selected_edge_axes);
         let positions = self.optimized_positions(pos_n, pos_e, energy);
         self.restore_layout_constraints(saved_node_constraints, saved_edge_constraints);
         positions
@@ -3272,23 +3294,99 @@ impl TypstGraph {
         (nodes, edges)
     }
 
-    fn freeze_unselected_layout_items(
-        &mut self,
+    fn grouped_layout_selection(
+        &self,
         selected_nodes: &NodeVec<bool>,
         selected_edges: &EdgeVec<bool>,
+        move_nodes: bool,
+    ) -> (NodeVec<LayoutAxisSelection>, EdgeVec<LayoutAxisSelection>) {
+        let mut node_axes = self.new_nodevec(|node, _, _| {
+            let selected = move_nodes && selected_nodes[node];
+            LayoutAxisSelection {
+                x: selected,
+                y: selected,
+            }
+        });
+        let mut edge_axes = self.new_edgevec(|_, edge, _| LayoutAxisSelection {
+            x: selected_edges[edge],
+            y: selected_edges[edge],
+        });
+        let mut x_groups = HashSet::new();
+        let mut y_groups = HashSet::new();
+        for (node, selected) in node_axes.iter() {
+            let constraints = self[node].constraints;
+            if selected.x {
+                if let Constraint::Grouped(reference, _) = constraints.x {
+                    x_groups.insert(reference);
+                }
+            }
+            if selected.y {
+                if let Constraint::Grouped(reference, _) = constraints.y {
+                    y_groups.insert(reference);
+                }
+            }
+        }
+        for (edge, selected) in edge_axes.iter() {
+            let constraints = self[edge].constraints;
+            if selected.x {
+                if let Constraint::Grouped(reference, _) = constraints.x {
+                    x_groups.insert(reference);
+                }
+            }
+            if selected.y {
+                if let Constraint::Grouped(reference, _) = constraints.y {
+                    y_groups.insert(reference);
+                }
+            }
+        }
+
+        if move_nodes {
+            for (node, selected) in node_axes.iter_mut() {
+                let constraints = self[node].constraints;
+                selected.x |= matches!(
+                    constraints.x,
+                    Constraint::Grouped(reference, _) if x_groups.contains(&reference)
+                );
+                selected.y |= matches!(
+                    constraints.y,
+                    Constraint::Grouped(reference, _) if y_groups.contains(&reference)
+                );
+            }
+        }
+        for (edge, selected) in edge_axes.iter_mut() {
+            let constraints = self[edge].constraints;
+            selected.x |= matches!(
+                constraints.x,
+                Constraint::Grouped(reference, _) if x_groups.contains(&reference)
+            );
+            selected.y |= matches!(
+                constraints.y,
+                Constraint::Grouped(reference, _) if y_groups.contains(&reference)
+            );
+        }
+
+        (node_axes, edge_axes)
+    }
+
+    fn freeze_unselected_layout_axes(
+        &mut self,
+        selected_nodes: &NodeVec<LayoutAxisSelection>,
+        selected_edges: &EdgeVec<LayoutAxisSelection>,
     ) {
-        let fixed = PointConstraint {
-            x: Constraint::Fixed,
-            y: Constraint::Fixed,
-        };
         for (node, selected) in selected_nodes.iter() {
-            if !selected {
-                self.graph[node].constraints = fixed;
+            if !selected.x {
+                self.graph[node].constraints.x = Constraint::Fixed;
+            }
+            if !selected.y {
+                self.graph[node].constraints.y = Constraint::Fixed;
             }
         }
         for (edge, selected) in selected_edges.iter() {
-            if !selected {
-                self.graph[edge].constraints = fixed;
+            if !selected.x {
+                self.graph[edge].constraints.x = Constraint::Fixed;
+            }
+            if !selected.y {
+                self.graph[edge].constraints.y = Constraint::Fixed;
             }
         }
     }
@@ -3493,10 +3591,16 @@ impl TypstGraph {
             let Some(target) = *target else {
                 continue;
             };
-            Self::apply_target_point(
+            let (start_x, start_y) = Self::layout_start_flags(
                 &self[node].constraints,
                 self[node].start_x,
                 self[node].start_y,
+                &self[node].statements,
+            );
+            Self::apply_target_point(
+                &self[node].constraints,
+                start_x,
+                start_y,
                 target,
                 Vector2::new(cfg.dx, cfg.dy),
                 node,
@@ -3509,7 +3613,12 @@ impl TypstGraph {
                 continue;
             };
             let (start_x, start_y) = if respect_edge_start {
-                (self[edge].start_x, self[edge].start_y)
+                Self::layout_start_flags(
+                    &self[edge].constraints,
+                    self[edge].start_x,
+                    self[edge].start_y,
+                    &self[edge].statements,
+                )
             } else {
                 (false, false)
             };
@@ -3539,7 +3648,7 @@ impl TypstGraph {
             }
         }
 
-        self.apply_grouped_constraints(&mut pos_v, &mut pos_e);
+        self.apply_initial_grouped_constraints(&mut pos_v, &mut pos_e);
         (pos_v, pos_e)
     }
 
@@ -3834,10 +3943,16 @@ impl TypstGraph {
             let Some(target) = *target else {
                 continue;
             };
-            Self::apply_target_point(
+            let (start_x, start_y) = Self::layout_start_flags(
                 &self[node].constraints,
                 self[node].start_x,
                 self[node].start_y,
+                &self[node].statements,
+            );
+            Self::apply_target_point(
+                &self[node].constraints,
+                start_x,
+                start_y,
                 target,
                 Vector2::new(cfg.dx, cfg.dy),
                 node,
@@ -3858,10 +3973,16 @@ impl TypstGraph {
                     pos_v[node] + Vector2::new(0.0, cfg.dy * 0.5)
                 }
             };
-            Self::apply_target_point(
+            let (start_x, start_y) = Self::layout_start_flags(
                 &self[eid].constraints,
                 self[eid].start_x,
                 self[eid].start_y,
+                &self[eid].statements,
+            );
+            Self::apply_target_point(
+                &self[eid].constraints,
+                start_x,
+                start_y,
                 target,
                 Vector2::new(cfg.dx * 0.5, cfg.dy * 0.5),
                 eid,
@@ -3869,7 +3990,7 @@ impl TypstGraph {
             );
         }
 
-        self.apply_grouped_constraints(&mut pos_v, &mut pos_e);
+        self.apply_initial_grouped_constraints(&mut pos_v, &mut pos_e);
         (pos_v, pos_e)
     }
 
@@ -3902,7 +4023,12 @@ impl TypstGraph {
                 }
             };
             let (start_x, start_y) = if respect_start {
-                (self[eid].start_x, self[eid].start_y)
+                Self::layout_start_flags(
+                    &self[eid].constraints,
+                    self[eid].start_x,
+                    self[eid].start_y,
+                    &self[eid].statements,
+                )
             } else {
                 (false, false)
             };
@@ -4040,7 +4166,12 @@ impl TypstGraph {
                 continue;
             };
             let (start_x, start_y) = if respect_start {
-                (self[eid].start_x, self[eid].start_y)
+                Self::layout_start_flags(
+                    &self[eid].constraints,
+                    self[eid].start_x,
+                    self[eid].start_y,
+                    &self[eid].statements,
+                )
             } else {
                 (false, false)
             };

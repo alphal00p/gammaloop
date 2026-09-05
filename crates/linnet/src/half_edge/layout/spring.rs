@@ -1,5 +1,3 @@
-use std::ops::IndexMut;
-
 use cgmath::{EuclideanSpace, MetricSpace, Point2, Vector2, Zero};
 
 use rand::{distributions::Uniform, prelude::Distribution, Rng};
@@ -49,6 +47,18 @@ pub enum ShiftDirection {
     NegativeOnly,
 }
 
+/// A node or edge-control-point index in the shared layout coordinate space.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
+pub enum LayoutPointIndex {
+    Node(NodeIndex),
+    Edge(EdgeIndex),
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 #[cfg_attr(
     feature = "rkyv",
@@ -59,26 +69,17 @@ pub enum Constraint {
     Fixed,
     #[default]
     Free,
-    Grouped(usize, ShiftDirection),
+    Grouped(LayoutPointIndex, ShiftDirection),
 }
 
 impl Constraint {
-    pub(crate) fn force_target(self, index: usize) -> Option<usize> {
+    pub(crate) fn force_target(self, index: LayoutPointIndex) -> Option<LayoutPointIndex> {
         match self {
             Constraint::Fixed => None,
             Constraint::Free => Some(index),
             Constraint::Grouped(reference, _) => Some(reference),
         }
     }
-}
-
-pub trait Shiftable {
-    fn shift<I: From<usize> + PartialEq + Copy, R: IndexMut<I, Output = Point2<f64>>>(
-        &self,
-        shift: Vector2<f64>,
-        index: I,
-        values: &mut R,
-    ) -> bool;
 }
 
 pub trait HasPointConstraint {
@@ -91,17 +92,9 @@ impl HasPointConstraint for PointConstraint {
     }
 }
 
-fn apply_directional_shift(shift_val: f64, direction: ShiftDirection) -> f64 {
-    match direction {
-        ShiftDirection::Any | ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
-            shift_val
-        }
-    }
-}
-
 pub(crate) fn directional_force_shift(
     constraints: &PointConstraint,
-    index: usize,
+    index: LayoutPointIndex,
     point: Point2<f64>,
     magnitude: f64,
 ) -> Vector2<f64> {
@@ -127,105 +120,6 @@ pub(crate) fn directional_force_shift(
         component(constraints.x, point.x),
         component(constraints.y, point.y),
     )
-}
-
-impl Shiftable for PointConstraint {
-    fn shift<I: From<usize> + PartialEq + Copy, R: IndexMut<I, Output = Point2<f64>>>(
-        &self,
-        shift: Vector2<f64>,
-        index: I,
-        values: &mut R,
-    ) -> bool {
-        let mut changed = false;
-
-        match (self.x, self.y) {
-            (Constraint::Fixed, Constraint::Fixed) => {}
-            (Constraint::Free, Constraint::Free) => {
-                values[index] += shift;
-                changed = true;
-            }
-            (Constraint::Fixed, Constraint::Free) => {
-                values[index].y += shift.y;
-                changed = true;
-            }
-            (Constraint::Free, Constraint::Fixed) => {
-                values[index].x += shift.x;
-                changed = true;
-            }
-            (Constraint::Grouped(r, dir), Constraint::Fixed) => {
-                let i = r.into();
-                if i != index {
-                    values[index].x = values[i].x;
-                } else {
-                    let x_shift = apply_directional_shift(shift.x, dir);
-                    values[index].x += x_shift;
-                    changed = x_shift != 0.0;
-                }
-            }
-            (Constraint::Grouped(r, dir), Constraint::Free) => {
-                let i = r.into();
-                if i != index {
-                    values[index].x = values[i].x;
-                    values[index].y += shift.y;
-                    changed = true;
-                } else {
-                    let x_shift = apply_directional_shift(shift.x, dir);
-                    values[index].x += x_shift;
-                    values[index].y += shift.y;
-                    changed = x_shift != 0.0 || shift.y != 0.0;
-                }
-            }
-
-            (Constraint::Fixed, Constraint::Grouped(r, dir)) => {
-                let i = r.into();
-                if i != index {
-                    values[index].y = values[i].y;
-                } else {
-                    let y_shift = apply_directional_shift(shift.y, dir);
-                    values[index].y += y_shift;
-                    changed = y_shift != 0.0;
-                }
-            }
-            (Constraint::Free, Constraint::Grouped(r, dir)) => {
-                let i = r.into();
-                if i != index {
-                    values[index].y = values[i].y;
-                    values[index].x += shift.x;
-                    changed = true;
-                } else {
-                    let y_shift = apply_directional_shift(shift.y, dir);
-                    values[index].x += shift.x;
-                    values[index].y += y_shift;
-                    changed = shift.x != 0.0 || y_shift != 0.0;
-                }
-            }
-            (Constraint::Grouped(xi, x_dir), Constraint::Grouped(yi, y_dir)) => {
-                let ix = xi.into();
-                let iy = yi.into();
-                if ix != index && iy != index {
-                    values[index].x = values[ix].x;
-                    values[index].y = values[iy].y;
-                } else if ix == index && iy != index {
-                    let x_shift = apply_directional_shift(shift.x, x_dir);
-                    values[index].x += x_shift;
-                    values[index].y = values[iy].y;
-                    changed = x_shift != 0.0;
-                } else if ix != index && iy == index {
-                    let y_shift = apply_directional_shift(shift.y, y_dir);
-                    values[index].x = values[ix].x;
-                    values[index].y += y_shift;
-                    changed = y_shift != 0.0;
-                } else {
-                    let x_shift = apply_directional_shift(shift.x, x_dir);
-                    let y_shift = apply_directional_shift(shift.y, y_dir);
-                    values[index].x += x_shift;
-                    values[index].y += y_shift;
-                    changed = x_shift != 0.0 || y_shift != 0.0;
-                }
-            }
-        }
-        changed
-    }
 }
 
 pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
@@ -301,8 +195,8 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
 
 pub struct LayoutNeighbor;
 
-impl<'a, E: Shiftable, V: Shiftable, H, N: NodeStorageOps<NodeData = V> + Clone>
-    Neighbor<LayoutState<'a, E, V, H, N>> for LayoutNeighbor
+impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Neighbor<LayoutState<'a, E, V, H, N>>
+    for LayoutNeighbor
 {
     fn propose(
         &self,
@@ -382,10 +276,15 @@ pub struct PinnedLayoutNeighbor;
 
 impl<'a, E, V, H, N> Neighbor<LayoutState<'a, E, V, H, N>> for PinnedLayoutNeighbor
 where
-    E: Shiftable + HasPointConstraint,
-    V: Shiftable + HasPointConstraint,
+    E: HasPointConstraint,
+    V: HasPointConstraint,
     N: NodeStorageOps<NodeData = V> + Clone,
 {
+    fn prepare(&self, state: &mut LayoutState<'a, E, V, H, N>) {
+        state.synchronize_grouped_coordinates();
+        state.clear_changes();
+    }
+
     fn propose(
         &self,
         s: &LayoutState<'a, E, V, H, N>,
@@ -394,6 +293,7 @@ where
         _temp: f64,
     ) -> LayoutState<'a, E, V, H, N> {
         let mut st = s.clone();
+        st.synchronize_grouped_coordinates();
         let n_v: NodeIndex = st.vertex_points.len();
         let n_e: EdgeIndex = st.edge_points.len();
         let step_range: Uniform<f64> = Uniform::from(-step..step);
@@ -418,7 +318,7 @@ where
                         let mut shift = LayoutNeighbor::axis_shift(&step_range, rng);
                         let bias = directional_force_shift(
                             st.graph[v].point_constraint(),
-                            v.0,
+                            LayoutPointIndex::Node(v),
                             st.vertex_points[v],
                             st.directional_force * step,
                         );
@@ -430,7 +330,7 @@ where
                         let mut shift = LayoutNeighbor::axis_shift(&step_range, rng);
                         let bias = directional_force_shift(
                             st.graph[e].point_constraint(),
-                            e.0,
+                            LayoutPointIndex::Edge(e),
                             st.edge_points[e],
                             st.directional_force * step,
                         );
@@ -446,7 +346,7 @@ where
                     let shift = LayoutNeighbor::diagonal_shift(&step_range, rng, 0.6);
                     let vertex_bias = directional_force_shift(
                         st.graph[v].point_constraint(),
-                        v.0,
+                        LayoutPointIndex::Node(v),
                         st.vertex_points[v],
                         st.directional_force * step,
                     );
@@ -461,7 +361,7 @@ where
                         // Propagate to incident edge control points; any change gets recorded.
                         let edge_bias = directional_force_shift(
                             st.graph[index].point_constraint(),
-                            index.0,
+                            LayoutPointIndex::Edge(index),
                             st.edge_points[index],
                             st.directional_force * step,
                         );
@@ -477,177 +377,219 @@ where
     }
 }
 
-pub(crate) fn apply_vertex_shift<
-    'a,
-    E: Shiftable,
-    V: Shiftable,
-    H,
-    N: NodeStorageOps<NodeData = V> + Clone,
->(
+pub(crate) fn apply_vertex_shift<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone>(
     state: &mut LayoutState<'a, E, V, H, N>,
     idx: NodeIndex,
     shift: Vector2<f64>,
 ) -> bool {
-    let changed = state.graph[idx].shift(shift, idx, &mut state.vertex_points);
-    if changed {
-        state.mark_node_changed(idx);
+    if shift == Vector2::zero() {
+        return false;
     }
-    changed
+    state.vertex_points[idx] += shift;
+    state.mark_node_changed(idx);
+    true
 }
 
-pub(crate) fn apply_edge_shift<
-    'a,
-    E: Shiftable,
-    V: Shiftable,
-    H,
-    N: NodeStorageOps<NodeData = V> + Clone,
->(
+pub(crate) fn apply_edge_shift<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone>(
     state: &mut LayoutState<'a, E, V, H, N>,
     idx: EdgeIndex,
     shift: Vector2<f64>,
 ) -> bool {
-    let changed = state.graph[idx].shift(shift, idx, &mut state.edge_points);
-    if changed {
-        state.mark_edge_changed(idx);
+    if shift == Vector2::zero() {
+        return false;
     }
-    changed
+    state.edge_points[idx] += shift;
+    state.mark_edge_changed(idx);
+    true
 }
 
-fn is_group_reference(constraints: &PointConstraint, reference: usize) -> bool {
-    matches!(constraints.x, Constraint::Grouped(r, _) if r == reference)
-        || matches!(constraints.y, Constraint::Grouped(r, _) if r == reference)
+#[derive(Clone, Copy)]
+enum LayoutAxis {
+    X,
+    Y,
 }
 
-fn propagate_grouped_nodes<'a, E, V, H, N>(
-    state: &mut LayoutState<'a, E, V, H, N>,
-    reference: NodeIndex,
-) -> bool
+impl<'a, E, V, H, N> LayoutState<'a, E, V, H, N>
 where
+    E: HasPointConstraint,
     V: HasPointConstraint,
     N: NodeStorageOps<NodeData = V> + Clone,
 {
-    let graph = state.graph;
-    let reference_point = state.vertex_points[reference];
-    let reference_id = reference.0;
-    let mut changed_any = false;
-    let len = state.vertex_points.len().0;
-
-    for i in 0..len {
-        if i == reference_id {
-            continue;
-        }
-        let idx = NodeIndex(i);
-        let constraints = graph[idx].point_constraint();
-        let mut changed = false;
-
-        if matches!(constraints.x, Constraint::Grouped(r, _) if r == reference_id)
-            && state.vertex_points[idx].x != reference_point.x
-        {
-            state.vertex_points[idx].x = reference_point.x;
-            changed = true;
-        }
-        if matches!(constraints.y, Constraint::Grouped(r, _) if r == reference_id)
-            && state.vertex_points[idx].y != reference_point.y
-        {
-            state.vertex_points[idx].y = reference_point.y;
-            changed = true;
-        }
-
-        if changed {
-            state.mark_node_changed(idx);
-            changed_any = true;
+    fn constraints(&self, index: LayoutPointIndex) -> PointConstraint {
+        match index {
+            LayoutPointIndex::Node(index) => *self.graph[index].point_constraint(),
+            LayoutPointIndex::Edge(index) => *self.graph[index].point_constraint(),
         }
     }
 
-    changed_any
-}
-
-fn propagate_grouped_edges<'a, E, V, H, N>(
-    state: &mut LayoutState<'a, E, V, H, N>,
-    reference: EdgeIndex,
-) -> bool
-where
-    E: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
-{
-    let graph = state.graph;
-    let reference_point = state.edge_points[reference];
-    let reference_id = reference.0;
-    let mut changed_any = false;
-    let len = state.edge_points.len().0;
-
-    for i in 0..len {
-        if i == reference_id {
-            continue;
+    fn group_members(
+        &self,
+        reference: LayoutPointIndex,
+        axis: LayoutAxis,
+    ) -> Vec<LayoutPointIndex> {
+        let matches_reference = |constraints: PointConstraint| {
+            matches!(
+                match axis {
+                    LayoutAxis::X => constraints.x,
+                    LayoutAxis::Y => constraints.y,
+                },
+                Constraint::Grouped(group_reference, _) if group_reference == reference
+            )
+        };
+        let mut members = Vec::new();
+        for i in 0..self.vertex_points.len().0 {
+            let index = NodeIndex(i);
+            if matches_reference(*self.graph[index].point_constraint()) {
+                members.push(LayoutPointIndex::Node(index));
+            }
         }
-        let idx = EdgeIndex(i);
-        let constraints = graph[idx].point_constraint();
-        let mut changed = false;
-
-        if matches!(constraints.x, Constraint::Grouped(r, _) if r == reference_id)
-            && state.edge_points[idx].x != reference_point.x
-        {
-            state.edge_points[idx].x = reference_point.x;
-            changed = true;
+        for i in 0..self.edge_points.len().0 {
+            let index = EdgeIndex(i);
+            if matches_reference(*self.graph[index].point_constraint()) {
+                members.push(LayoutPointIndex::Edge(index));
+            }
         }
-        if matches!(constraints.y, Constraint::Grouped(r, _) if r == reference_id)
-            && state.edge_points[idx].y != reference_point.y
-        {
-            state.edge_points[idx].y = reference_point.y;
-            changed = true;
-        }
+        members
+    }
 
-        if changed {
-            state.mark_edge_changed(idx);
-            changed_any = true;
+    fn shift_coordinate(&mut self, index: LayoutPointIndex, axis: LayoutAxis, shift: f64) {
+        match index {
+            LayoutPointIndex::Node(index) => {
+                match axis {
+                    LayoutAxis::X => self.vertex_points[index].x += shift,
+                    LayoutAxis::Y => self.vertex_points[index].y += shift,
+                }
+                self.mark_node_changed(index);
+            }
+            LayoutPointIndex::Edge(index) => {
+                match axis {
+                    LayoutAxis::X => self.edge_points[index].x += shift,
+                    LayoutAxis::Y => self.edge_points[index].y += shift,
+                }
+                self.mark_edge_changed(index);
+            }
         }
     }
 
-    changed_any
+    fn coordinate(&self, index: LayoutPointIndex, axis: LayoutAxis) -> f64 {
+        match (index, axis) {
+            (LayoutPointIndex::Node(index), LayoutAxis::X) => self.vertex_points[index].x,
+            (LayoutPointIndex::Node(index), LayoutAxis::Y) => self.vertex_points[index].y,
+            (LayoutPointIndex::Edge(index), LayoutAxis::X) => self.edge_points[index].x,
+            (LayoutPointIndex::Edge(index), LayoutAxis::Y) => self.edge_points[index].y,
+        }
+    }
+
+    fn set_coordinate(&mut self, index: LayoutPointIndex, axis: LayoutAxis, value: f64) -> bool {
+        if self.coordinate(index, axis) == value {
+            return false;
+        }
+        let coordinate = match index {
+            LayoutPointIndex::Node(index) => {
+                self.mark_node_changed(index);
+                &mut self.vertex_points[index]
+            }
+            LayoutPointIndex::Edge(index) => {
+                self.mark_edge_changed(index);
+                &mut self.edge_points[index]
+            }
+        };
+        match axis {
+            LayoutAxis::X => coordinate.x = value,
+            LayoutAxis::Y => coordinate.y = value,
+        }
+        true
+    }
+
+    pub(crate) fn synchronize_grouped_coordinates(&mut self) {
+        for i in 0..self.vertex_points.len().0 {
+            let index = NodeIndex(i);
+            let point = LayoutPointIndex::Node(index);
+            let constraints = self.constraints(point);
+            if let Constraint::Grouped(reference, _) = constraints.x {
+                let value = self.coordinate(reference, LayoutAxis::X);
+                self.set_coordinate(point, LayoutAxis::X, value);
+            }
+            if let Constraint::Grouped(reference, _) = constraints.y {
+                let value = self.coordinate(reference, LayoutAxis::Y);
+                self.set_coordinate(point, LayoutAxis::Y, value);
+            }
+        }
+        for i in 0..self.edge_points.len().0 {
+            let index = EdgeIndex(i);
+            let point = LayoutPointIndex::Edge(index);
+            let constraints = self.constraints(point);
+            if let Constraint::Grouped(reference, _) = constraints.x {
+                let value = self.coordinate(reference, LayoutAxis::X);
+                self.set_coordinate(point, LayoutAxis::X, value);
+            }
+            if let Constraint::Grouped(reference, _) = constraints.y {
+                let value = self.coordinate(reference, LayoutAxis::Y);
+                self.set_coordinate(point, LayoutAxis::Y, value);
+            }
+        }
+    }
+
+    fn shift_axis(
+        &mut self,
+        index: LayoutPointIndex,
+        axis: LayoutAxis,
+        constraint: Constraint,
+        shift: f64,
+    ) -> bool {
+        if shift == 0.0 {
+            return false;
+        }
+        match constraint {
+            Constraint::Fixed => false,
+            Constraint::Free => {
+                self.shift_coordinate(index, axis, shift);
+                true
+            }
+            Constraint::Grouped(reference, _) if reference == index => {
+                self.shift_coordinate(index, axis, shift);
+                let value = self.coordinate(index, axis);
+                for member in self.group_members(reference, axis) {
+                    self.set_coordinate(member, axis, value);
+                }
+                true
+            }
+            Constraint::Grouped(_, _) => false,
+        }
+    }
+
+    fn shift_constrained(&mut self, index: LayoutPointIndex, shift: Vector2<f64>) -> bool {
+        let constraints = self.constraints(index);
+        let changed_x = self.shift_axis(index, LayoutAxis::X, constraints.x, shift.x);
+        let changed_y = self.shift_axis(index, LayoutAxis::Y, constraints.y, shift.y);
+        changed_x || changed_y
+    }
 }
 
-pub(crate) fn apply_vertex_shift_with_groups<
-    'a,
-    E: Shiftable + HasPointConstraint,
-    V: Shiftable + HasPointConstraint,
-    H,
-    N: NodeStorageOps<NodeData = V> + Clone,
->(
+pub(crate) fn apply_vertex_shift_with_groups<'a, E, V, H, N>(
     state: &mut LayoutState<'a, E, V, H, N>,
     idx: NodeIndex,
     shift: Vector2<f64>,
-) -> bool {
-    let changed = state.graph[idx].shift(shift, idx, &mut state.vertex_points);
-    if changed {
-        state.mark_node_changed(idx);
-        let constraints = state.graph[idx].point_constraint();
-        if is_group_reference(constraints, idx.0) {
-            return propagate_grouped_nodes(state, idx) || changed;
-        }
-    }
-    changed
+) -> bool
+where
+    E: HasPointConstraint,
+    V: HasPointConstraint,
+    N: NodeStorageOps<NodeData = V> + Clone,
+{
+    state.shift_constrained(LayoutPointIndex::Node(idx), shift)
 }
 
-pub(crate) fn apply_edge_shift_with_groups<
-    'a,
-    E: Shiftable + HasPointConstraint,
-    V: Shiftable + HasPointConstraint,
-    H,
-    N: NodeStorageOps<NodeData = V> + Clone,
->(
+pub(crate) fn apply_edge_shift_with_groups<'a, E, V, H, N>(
     state: &mut LayoutState<'a, E, V, H, N>,
     idx: EdgeIndex,
     shift: Vector2<f64>,
-) -> bool {
-    let changed = state.graph[idx].shift(shift, idx, &mut state.edge_points);
-    if changed {
-        state.mark_edge_changed(idx);
-        let constraints = state.graph[idx].point_constraint();
-        if is_group_reference(constraints, idx.0) {
-            return propagate_grouped_edges(state, idx) || changed;
-        }
-    }
-    changed
+) -> bool
+where
+    E: HasPointConstraint,
+    V: HasPointConstraint,
+    N: NodeStorageOps<NodeData = V> + Clone,
+{
+    state.shift_constrained(LayoutPointIndex::Edge(idx), shift)
 }
 
 fn swap_on_fixed_axis_nodes<'a, E, V, H, N>(
@@ -1585,25 +1527,31 @@ mod tests {
 
     #[test]
     fn directional_force_only_restores_wrong_side() {
+        let reference = LayoutPointIndex::Node(NodeIndex(0));
         let constraints = PointConstraint {
-            x: Constraint::Grouped(0, ShiftDirection::PositiveOnly),
-            y: Constraint::Grouped(0, ShiftDirection::NegativeOnly),
+            x: Constraint::Grouped(reference, ShiftDirection::PositiveOnly),
+            y: Constraint::Grouped(reference, ShiftDirection::NegativeOnly),
         };
 
         assert_eq!(
-            directional_force_shift(&constraints, 0, Point2::new(-1.0, 1.0), 2.0),
+            directional_force_shift(&constraints, reference, Point2::new(-1.0, 1.0), 2.0),
             Vector2::new(2.0, -2.0)
         );
         assert_eq!(
-            directional_force_shift(&constraints, 0, Point2::new(0.0, 0.0), 2.0),
+            directional_force_shift(&constraints, reference, Point2::new(0.0, 0.0), 2.0),
             Vector2::new(2.0, -2.0)
         );
         assert_eq!(
-            directional_force_shift(&constraints, 0, Point2::new(1.0, -1.0), 2.0),
+            directional_force_shift(&constraints, reference, Point2::new(1.0, -1.0), 2.0),
             Vector2::zero()
         );
         assert_eq!(
-            directional_force_shift(&constraints, 1, Point2::new(-1.0, 1.0), 2.0),
+            directional_force_shift(
+                &constraints,
+                LayoutPointIndex::Node(NodeIndex(1)),
+                Point2::new(-1.0, 1.0),
+                2.0,
+            ),
             Vector2::zero()
         );
     }
