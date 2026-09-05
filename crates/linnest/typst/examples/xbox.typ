@@ -147,6 +147,7 @@
       bend: -0.18,
       crossing-under: 7,
       crossing-gap: 0.9,
+      fermion-arrow-shift: 1.15,
     )
 
     edge(
@@ -215,6 +216,7 @@
       particle: "d",
       crossing-under: 3,
       crossing-gap: 1.5,
+      fermion-arrow-shift: 1.15,
     )
     edge(
       sink(<b>),
@@ -253,6 +255,7 @@
       particle: "d",
       crossing-under: 3,
       crossing-gap: 1.5,
+      fermion-arrow-shift: 1.15,
     )
     edge(
       source(<d>),

@@ -110,10 +110,43 @@
     } else {
       // A crossing splits the stroke into several paths. Keep the one fermion
       // arrow on an uncut, invisible overlay instead of repeating it per piece.
+      // A positive `fermion-arrow-shift` places the mark that far beyond the
+      // edge split point along the particle flow. The invisible carrier is a
+      // centered interval twice that long, with the mark on its flow-latter end.
+      let arrow-shift = _number(edge, "fermion-arrow-shift", 0)
       let overlay = style
       let _ = overlay.remove("crossing-under")
       let _ = overlay.remove("crossing-gap")
-      (style, overlay + (stroke: none) + mark-style)
+      let overlay = overlay + (stroke: none)
+      if arrow-shift > 0 {
+        let paired = _has-half(edge, "source") and _has-half(edge, "sink")
+        let orientation = str(_field(edge, "orientation", "default")).trim("\"")
+        let reversed = orientation == "reversed"
+        let mark-half = if paired {
+          if reversed { "source" } else { "sink" }
+        } else {
+          half
+        }
+        overlay += (
+          length: 2 * arrow-shift,
+          resolve-length: "length",
+          mark-position: "end",
+          mark-orientation: "path",
+        )
+        if orientation != "undirected" and half == mark-half {
+          if reversed {
+            overlay += (
+              mark: (start: fermion-mark.end, scale: fermion-mark.scale),
+              mark-direction: "backward",
+            )
+          } else {
+            overlay += (mark: fermion-mark)
+          }
+        }
+      } else {
+        overlay += mark-style
+      }
+      (style, overlay)
     }
   } else {
     (style,)
@@ -173,7 +206,7 @@
 #let node-style(node) = if _hidden(node) {
   (radius: 0, fill: none, stroke: none)
 } else {
-  (radius: 0.38, fill: white, stroke: edge-stroke)
+  (radius: 0.28, fill: white, stroke: edge-stroke)
 }
 
 // Measure labels and nodes before layout. Draw reuses the stored callbacks.
