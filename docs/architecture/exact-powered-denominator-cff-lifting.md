@@ -1259,23 +1259,23 @@ share a generated expression; normalization never replaces a term's
 factor-to-occurrence assignment.
 
 The production-shaped regression
-`dod_one_triangle_keeps_one_uncancelled_exact_source_and_matches_lower_sectors`
+`dod_one_triangle_keeps_separate_denominator_topologies`
 applies the real degree-one UV Taylor operator to the three-edge UV triangle in
-the double-triangle skeleton. The collected coefficient remains one
-common-denominator exact source with owner multiplicities
+the double-triangle skeleton. The coefficient retains its natural denominator
+topologies with owner multiplicities
 
 ```text
-(2,1,2).
+(1,1,1), (2,1,1), (1,1,2).
 ```
 
-The positive typed denominator factors which would algebraically expose the
-base and singly dotted lower sectors remain in the additive factorized
-numerator. No parser-side distribution or cancellation occurs. The source uses
-one canonical generator-cache entry, and the regression verifies that its
-exact CFF orientation sum equals a test-only oracle in which those lower sectors
-are reduced explicitly. The fixed cograph component is part of the canonical
-key, so this reuse does not conflate different surrounding graphs or future
-non-vacuum boundaries.
+The base and singly dotted terms are separate exact sources. No common
+denominator is imposed across them, so denominator clearing does not manufacture
+positive typed factors in their numerators. The parser preserves each original
+factorized numerator and can group terms only when their typed denominators
+already agree. Genuine positive typed denominator factors remain supported;
+their CFF pinches are distinct from artificial factors introduced by regrouping.
+The fixed cograph component is part of each canonical key, so cache reuse does
+not conflate different surrounding graphs or future non-vacuum boundaries.
 
 ## Why `D(Q)=D(-Q)` cannot introduce numerator sign mistakes
 
@@ -1909,20 +1909,20 @@ degree-four bound `(4,0)` by `(2,2)` can materially reduce generation and
 evaluation work. The factorized planner obtains that reduction without
 expanding the numerator.
 
-Third, retaining a collected common denominator avoids repeating the CFF
-recursion for algebraic lower sectors that generalized CFF can generate by
-pinching. Canonical batching reuses expressions only for equal topology and
-normalized per-request capacity, avoiding rank inflation across independent
-terms. The real degree-one triangle coefficient therefore performs one CFF
-generation for its uncancelled source;
-its base and singly dotted lower sectors are internal CFF sectors rather than
-separate upstream graph topologies.
+Third, retaining natural Taylor denominator topologies avoids artificially
+raised propagator powers and compensating numerator factors. Canonical batching
+reuses expressions only for equal topology and normalized per-request capacity,
+avoiding rank inflation across independent terms. The real degree-one triangle
+therefore presents its base and singly dotted terms as separate source
+topologies, each with its own factorized numerator and capacity.
 
-Upstream algebraic cancellation such as `D(Q)/D(Q)^2 -> 1/D(Q)` is deliberately
-not performed. Supplying the proper occurrence bounds lets generalized CFF
-perform the required pinches and lower-sector reconstruction internally. This
-keeps UV orchestration simple and avoids making the production graph topology
-depend on process-specific numerator simplification.
+For genuine numerator factors, upstream algebraic cancellation such as
+`D(Q)/D(Q)^2 -> 1/D(Q)` is deliberately not performed. Supplying the proper
+occurrence bounds lets generalized CFF perform the required pinches and
+lower-sector reconstruction internally. Preserving natural Taylor topologies
+does not require such cancellation: it avoids creating the compensating factors
+in the first place, without making source incidence depend on process-specific
+numerator simplification.
 
 ## Maintained invariants
 
@@ -2071,7 +2071,7 @@ The most relevant focused tests are:
 | Local-4D term parsing | `term_projection_keeps_factorized_numerator_atoms` | Numerator remains factorized |
 | Local-4D term parsing | `term_projection_preserves_dots_and_distinct_same_edge_expressions` | Arbitrary denominator multiplicity survives |
 | Local-4D term parsing | `term_projection_keeps_typed_numerator_factors_uncancelled` | Only the outer Taylor sum is split; nested numerator sums and positive typed denominators remain factorized |
-| Real Taylor projection | `dod_one_triangle_keeps_one_uncancelled_exact_source_and_matches_lower_sectors` | One common-denominator DOD1 source retains `(2,1,2)` owner multiplicities and factorized typed numerator factors, uses one cache topology, and matches the explicitly reduced lower-sector oracle |
+| Real Taylor projection | `dod_one_triangle_keeps_separate_denominator_topologies` | DOD1 retains natural `(1,1,1)`, `(2,1,1)` and `(1,1,2)` denominator topologies with factorized numerators and no manufactured clearing factors |
 | Exact graph | `exact_source_serializes_dotted_same_edge_occurrences` | Same-owner cubic serial chain |
 | Exact graph | `exact_source_owner_relabeling_preserves_residue_rank_and_cut_provenance` | Owner-invariant exact residue and loop rank, distinct energy provenance, and unioned physical cut support |
 | Exact graph | `exact_source_keeps_source_instantiated_domains_and_masses_separate` | Source-component and UV/cograph separation |

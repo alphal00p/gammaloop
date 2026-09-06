@@ -859,12 +859,13 @@ fn t<S: super::ForestNodeLike>(
         log.expr = schoonschip,
         "After gamma schoonschip"
     );
+    // Keep each Taylor term's propagator powers. Collecting factors across the
+    // sum clears denominators and manufactures higher-rank numerator factors.
     let collected = schoonschip
         .collect_chains_and_traces()
         .simplify_metrics()
         .collect_gamma_chains()
-        .collect_color()
-        .collect_factors();
+        .collect_color();
     debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
         log.expr = collected,
         "After gamma collection"
@@ -1389,7 +1390,7 @@ mod tests {
         );
 
         // Expand and cancel only inside this ownership oracle. Production
-        // retains the common denominator and the factorized Taylor numerator.
+        // retains each Taylor topology and its factorized numerator.
         let expanded = tagged.expand();
         let expanded_terms = match expanded.as_view() {
             AtomView::Add(add) => add.iter().map(|term| term.to_owned()).collect(),
@@ -1458,9 +1459,9 @@ mod tests {
     fn gl24_dod_two_q1_quartic_taylor_keeps_owner_local_energy_families() -> Result<()> {
         test_initialise()?;
         // This is the GL24 skeleton and generation LMB used by the scalar LU
-        // acceptance test. The quartic factor is local to e1. Algebraic leaf
-        // extraction below is test-only; production retains one factorized
-        // common-denominator Taylor numerator.
+        // acceptance test. The quartic factor is local to e1. The deliberately
+        // collected common denominator and algebraic leaf extraction below
+        // stress ownership on a test copy; production keeps Taylor topologies separate.
         let graph: Graph = dot!(
             digraph gl24_dod_two_taylor {
                 edge [particle="scalar_0" num=1]
@@ -1694,6 +1695,87 @@ mod tests {
             );
         }
 
+        // Exercise the production tensor/Taylor pipeline as well as the
+        // diagnostic common form. Only the rational Taylor shell may split;
+        // the quartic numerator stays factorized and fixed on e1.
+        let given = OwnedForestNode {
+            spinney: Spinney::empty(&graph),
+            topo_order: 0,
+        };
+        let settings = UVgenerationSettings::default();
+        let (production, _) = t(
+            &integrand,
+            &UVCtx::new(&graph, &settings),
+            &current,
+            &given,
+            &[],
+            0,
+        )?;
+        let scalar_series_oracle = graph
+            .uv_rescaled(
+                current.subgraph(),
+                graph.n_loops(current.subgraph()),
+                current.lmb(),
+                current.lmb(),
+                &integrand,
+            )
+            .series(GS.rescale, Atom::Zero, 0)?
+            .to_atom()
+            .replace(GS.rescale)
+            .with(Atom::one())
+            .simplify_metrics()
+            .to_dots()
+            .normalize_dots();
+        assert!(
+            (&production - scalar_series_oracle)
+                .expand()
+                .together()
+                .is_zero(),
+            "production T must equal the complete scalar Taylor series, including leading and linear layers",
+        );
+        let mut production_numerators = BTreeMap::<[usize; 3], Atom>::new();
+        for term in FourDTerm::from_view(production.as_view())? {
+            assert!(
+                !term.numerator.contains_symbol(GS.den),
+                "natural Taylor numerators must not contain denominator-clearing factors",
+            );
+            let multiplicities = owners.map(|owner| {
+                term.denominators
+                    .iter()
+                    .filter(|denominator| denominator.source_edge == owner)
+                    .count()
+            });
+            assert_eq!(
+                term.denominators.len(),
+                multiplicities.iter().sum::<usize>()
+            );
+            *production_numerators
+                .entry(multiplicities)
+                .or_insert(Atom::Zero) += term.numerator;
+        }
+        let production_bounds = production_numerators
+            .iter()
+            .map(|(powers, numerator)| {
+                Ok((
+                    *powers,
+                    analyzer.analyze_atom(numerator)?.into_generation_bounds(),
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
+        assert_eq!(
+            production_bounds,
+            BTreeMap::from([
+                ([1, 1, 1], vec![(1, 4)]),
+                ([1, 1, 2], vec![(1, 4), (7, 1)]),
+                ([1, 1, 3], vec![(1, 4), (7, 2)]),
+                ([1, 2, 1], vec![(1, 4), (2, 1)]),
+                ([1, 2, 2], vec![(1, 4), (2, 1), (7, 1)]),
+                ([1, 3, 1], vec![(1, 4), (2, 2)]),
+                ([2, 1, 1], vec![(1, 4)]),
+            ]),
+            "production T must retain seven natural topologies with fixed e1 rank four and only derivative-local rank increases",
+        );
+
         let expansion_mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
         for (position, owner) in owners.into_iter().enumerate() {
             let mut constant_leaf = [1, 1, 1];
@@ -1836,7 +1918,7 @@ mod tests {
     }
 
     #[test]
-    fn dod_one_triangle_keeps_one_uncancelled_exact_source() -> Result<()> {
+    fn dod_one_triangle_keeps_separate_denominator_topologies() -> Result<()> {
         test_initialise()?;
         let graph: Graph = dot!(digraph exact_uv_triangle_taylor {
             edge [num=1 mass=1]
@@ -1895,69 +1977,86 @@ mod tests {
             .union(&graph.get_edge_subgraph(EdgeIndex(2)));
         let terms = Full4dCts::from_coefficient(&expanded, &graph, &cograph).terms()?;
 
-        assert_eq!(terms.len(), 1);
-        let owner_multiplicities = owners.map(|owner| {
-            terms[0]
-                .denominators
-                .iter()
-                .filter(|denominator| denominator.source_edge == owner)
-                .count()
-        });
-        assert_eq!(
-            owner_multiplicities,
-            [2, 1, 2],
-            "the common-denominator Taylor coefficient must retain every raised occurrence",
-        );
-        let has_additive_factor = match terms[0].numerator.as_view() {
-            AtomView::Add(_) => true,
-            AtomView::Mul(product) => product
-                .iter()
-                .any(|factor| matches!(factor, AtomView::Add(_))),
-            _ => false,
-        };
+        let mut owner_multiplicities = terms
+            .iter()
+            .map(|term| {
+                owners.map(|owner| {
+                    term.denominators
+                        .iter()
+                        .filter(|denominator| denominator.source_edge == owner)
+                        .count()
+                })
+            })
+            .collect::<Vec<_>>();
+        owner_multiplicities.sort_unstable();
+        assert_eq!(owner_multiplicities, vec![[1, 1, 1], [1, 1, 2], [2, 1, 1]]);
         assert!(
-            has_additive_factor && terms[0].numerator.contains_symbol(GS.den),
-            "the additive Taylor numerator and its positive typed denominator factors must remain factorized and uncancelled: {}",
-            terms[0].numerator,
+            terms
+                .iter()
+                .all(|term| !term.numerator.contains_symbol(GS.den)),
+            "Taylor terms must not acquire denominator-clearing numerator factors",
         );
+        let independent = graph
+            .uv_rescaled(
+                current.subgraph(),
+                graph.n_loops(current.subgraph()),
+                current.lmb(),
+                current.lmb(),
+                &integrand,
+            )
+            .series(GS.rescale, Atom::Zero, 0)?
+            .to_atom()
+            .replace(GS.rescale)
+            .with(Atom::one())
+            .simplify_metrics()
+            .to_dots()
+            .normalize_dots();
+        assert!((expanded - independent).expand().together().is_zero());
 
         let options = graph.denominator_only_cff_3d_expression_options();
         let mut cache = ExactCffGenerationCache::default();
-        let active_denominators = terms[0]
-            .denominators
+        let active_denominators = terms
             .iter()
-            .map(|denominator| {
-                let is_uv = uv_filter.includes(&graph[&denominator.source_edge].1);
-                Ok(denominator
-                    .depends_on_loop(&graph, is_uv)?
-                    .then(|| denominator.clone()))
+            .map(|term| {
+                term.denominators
+                    .iter()
+                    .filter_map(|denominator| {
+                        let is_uv = uv_filter.includes(&graph[&denominator.source_edge].1);
+                        denominator
+                            .depends_on_loop(&graph, is_uv)
+                            .map(|active| active.then(|| denominator.clone()))
+                            .transpose()
+                    })
+                    .collect::<Result<Vec<_>, _>>()
             })
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect::<Vec<FourDDenominator>>();
-        let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
-            &graph,
-            &active_denominators,
-            owners,
-        )?;
-        graph.register_3d_expression_for_4d_term(
-            &source,
-            &options,
-            &terms[0].numerator,
-            &mut cache,
-        )?;
-        let (_, _, plan, _) = graph.generate_3d_expression_for_4d_term(
-            &source,
-            &options,
-            &terms[0].numerator,
-            Some(&mut cache),
-        )?;
-        assert_eq!(
-            cache.len(),
-            1,
-            "the uncancelled Taylor coefficient must generate one common-denominator canonical CFF topology; exact bounds: {:?}",
-            plan.energy_degree_bounds(),
+            .collect::<Result<Vec<_>, _>>()?;
+        let sources = active_denominators
+            .iter()
+            .map(|denominators| {
+                GraphThreeDSource::from_exact_denominators_in_uv_edges(&graph, denominators, owners)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for (source, term) in sources.iter().zip(&terms) {
+            graph.register_3d_expression_for_4d_term(
+                source,
+                &options,
+                &term.numerator,
+                &mut cache,
+            )?;
+        }
+        for (source, term) in sources.iter().zip(&terms) {
+            graph.generate_3d_expression_for_4d_term(
+                source,
+                &options,
+                &term.numerator,
+                Some(&mut cache),
+            )?;
+        }
+        // Undotted and dotted sources have different occurrence counts;
+        // compatible dotted owner relabellings may share a canonical CFF.
+        assert!(
+            (2..=terms.len()).contains(&cache.len()),
+            "natural Taylor sources must preserve distinct powers while allowing canonical cache reuse",
         );
 
         Ok(())

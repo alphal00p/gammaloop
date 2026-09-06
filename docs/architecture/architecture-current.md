@@ -149,11 +149,13 @@ per-request capacity. Every term keeps its own factorized minimax assignment.
 Each request's **total** degree within a repeated algebraic energy channel is
 redistributed by the same minimax rule; its non-repeated bounds stay unchanged.
 Independent requests never contribute a shared capacity maximum.
-The real degree-one triangle regression retains its collected coefficient as
-one common-denominator source with UV-owner multiplicities `(2,1,2)`. Positive
-typed denominator factors stay in its factorized numerator, and generalized
-CFF produces the lower sectors internally. It therefore uses one canonical
-generator entry and agrees with an explicitly reduced test-only oracle.
+The real degree-one triangle regression retains the natural UV-owner
+multiplicities `(1,1,1)`, `(2,1,1)` and `(1,1,2)` as separate denominator
+topologies. Terms with the same denominators may share a factorized additive
+numerator; collecting a common denominator across different topologies would
+manufacture positive denominator factors and inflate the required CFF rank.
+Genuine positive typed denominator factors already present in a numerator
+remain supported, with their original ownership and CFF lower sectors intact.
 Non-vacuum exact sources retain pure-external boundaries as explicit
 source-crown hedges. Future on-shell two-point insertions such as `(m,0,0,0)`
 require an explicit fixed-boundary payload, not topology reconstruction.

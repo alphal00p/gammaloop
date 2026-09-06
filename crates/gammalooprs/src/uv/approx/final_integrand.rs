@@ -284,10 +284,11 @@ impl<'a> FinalIntegrandBuilder<'a> {
             atom = atom
                 .replace(function!(GS.ose, W_.mass_, W_.prop_))
                 .with(W_.prop_);
+            // Preserve the sum of CFF denominators after residue mapping, just
+            // as the Taylor stage preserves its separate propagator topologies.
             atom = atom
                 .replace(GS.dim)
                 .with(4)
-                .collect_factors()
                 .simplify_metrics()
                 .simplify_color_with(
                     ColorSimplifySettings::default().with_cof_dimension_invariants(),

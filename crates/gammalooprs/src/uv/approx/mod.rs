@@ -2359,22 +2359,27 @@ mod tests {
                 let local_terms = child.local(&route_graph)?.terms()?;
                 assert_eq!(
                     local_terms.len(),
-                    1,
-                    "the DOD-one self-energy Taylor sum must retain one factorized outer term"
+                    2,
+                    "the DOD-one self-energy Taylor sum must retain its simple and raised terms"
                 );
-                assert_eq!(
-                    local_terms[0].denominators.len(),
-                    3,
-                    "the collected coefficient must retain one simple and one raised UV denominator"
-                );
-                assert_eq!(
-                    [EdgeIndex(1), EdgeIndex(2)].map(|edge| local_terms[0]
-                        .denominators
-                        .iter()
-                        .filter(|denominator| denominator.source_edge == edge)
-                        .count()),
-                    [1, 2]
-                );
+                // Keep each Taylor term's natural propagator powers while
+                // preserving its factorized numerator and physical edge owners.
+                let mut denominator_inventory = local_terms
+                    .iter()
+                    .map(|term| {
+                        (
+                            [EdgeIndex(1), EdgeIndex(2)].map(|edge| {
+                                term.denominators
+                                    .iter()
+                                    .filter(|denominator| denominator.source_edge == edge)
+                                    .count()
+                            }),
+                            term.denominators.len(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                denominator_inventory.sort_unstable();
+                assert_eq!(denominator_inventory, vec![([1, 1], 2), ([1, 2], 3)]);
                 let reduced = child.reduced_subgraph(&root);
                 let t_arg = route_graph
                     .numerator(&reduced, root.subgraph())
@@ -2410,7 +2415,7 @@ mod tests {
                 );
                 assert!(
                     (local_atom + explicit_taylor_sum).together().is_zero(),
-                    "the collected local counterterm must equal the negative independently reconstructed Taylor sum"
+                    "the local counterterm must equal the negative independently reconstructed Taylor sum"
                 );
                 child.compute_3d(&root, &mut route_graph, localizer, &settings)?;
                 Ok(child.final_integrand(&route_graph)?.iter().collect())

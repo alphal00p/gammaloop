@@ -287,10 +287,12 @@ counterterms. The local subtraction then either:
    expressions are reused only for equal canonical topology and normalized
    capacity. Independent requests do not form a shared maximum, and each
    genuinely outer term evaluates with its own plan.
-   The real DOD1 triangle remains one common-denominator exact source with
-   UV-owner multiplicities `(2,1,2)` and one canonical generator entry. Its
-   positive typed `GS.den` numerator factors remain uncancelled, and generalized
-   CFF supplies the base and singly dotted lower sectors internally. Pure-external
+   The real DOD1 triangle retains separate natural denominator topologies with
+   UV-owner multiplicities `(1,1,1)`, `(2,1,1)` and `(1,1,2)`. Same-denominator
+   terms may retain one factorized additive numerator, but different topologies
+   are not put over a common denominator or padded with positive `GS.den`
+   numerator factors. Genuine positive numerator factors remain uncancelled and
+   generalized CFF still supplies their required lower sectors. Pure-external
    non-vacuum crowns are implemented; a future OS two-point insertion such as
    `(m,0,0,0)` needs only an explicit fixed-boundary payload on the same
    source-built topology. The complete design is in
@@ -651,7 +653,9 @@ Focused passing coverage includes:
 - `exact_cff_handles_opposite_repeated_routing_without_a_sign_bridge`;
 - `term_projection_keeps_typed_numerator_factors_uncancelled`;
 - `exact_source_routes_a_hard_uv_row_modulo_the_soft_cograph_span`;
-- `dod_one_triangle_keeps_one_uncancelled_exact_source_and_matches_lower_sectors`;
+- the historical common-denominator DOD1 triangle regression; its replacement,
+  `dod_one_triangle_keeps_separate_denominator_topologies`, requires fresh
+  validation of the natural Taylor sources;
 - the GammaLoop amplitude standalone export, typed JSON reload, and real eager
   evaluation test;
 - the cross-section archive/loader export smoke test;
