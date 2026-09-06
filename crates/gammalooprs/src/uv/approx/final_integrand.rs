@@ -190,22 +190,15 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 // independently. Keep them independent in the capacity
                 // oracle too, so opposite leading powers cannot cancel
                 // before generalized-CFF generation.
-                let capacity_started = std::time::Instant::now();
-                debug_tags!(#generation, #profile, #uv, #summary;
-                    stage = "outer_cff_capacity_start",
-                    "Constructing factorized rank envelope"
-                );
-                let analysis_numerator = sector.active.factorized_capacity_envelope() * &resnum;
-                debug_tags!(#generation, #profile, #uv, #summary;
-                    stage = "outer_cff_capacity_done",
-                    elapsed_ms = capacity_started.elapsed().as_secs_f64() * 1000.0,
-                    "Constructed factorized rank envelope"
-                );
+                let analysis_numerators = sector
+                    .active
+                    .independent_numerators()
+                    .map(|atom| atom * &resnum);
                 let outer = localizer
                     .projected_cff(
                         graph,
                         current.subgraph(),
-                        &analysis_numerator,
+                        analysis_numerators,
                         CffGenerationContext::EmbeddedCffFactor,
                     )?
                     .map(|atom| atom * &fourddenoms);

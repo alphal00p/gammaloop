@@ -1258,6 +1258,15 @@ no individual numerator needs. Only requests with equal normalized capacity
 share a generated expression; normalization never replaces a term's
 factor-to-occurrence assignment.
 
+Provisioning one outer CFF for independently evaluated residue branches is a
+different boundary. That single source requires the per-edge maximum over the
+factorized branch products, including their common remaining numerator. The
+existing physical-EMR analyzer consumes these products one at a time and merges
+only degree maps, with initial-cut and tree-edge energies excluded. Equal bodies
+can share an analysis, but opposite bodies cannot cancel across branches. No
+tagged symbolic sum or expanded numerator is constructed, and the original
+branch expressions, residue keys and numerator maps remain unchanged.
+
 The production-shaped regression
 `dod_one_triangle_keeps_separate_denominator_topologies`
 applies the real degree-one UV Taylor operator to the three-edge UV triangle in

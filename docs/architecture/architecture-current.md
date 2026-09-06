@@ -167,7 +167,14 @@ are documented in
 
 The production numerator remains factorized. Degree analysis traverses its
 factors without expanding them, each UV step attaches only newly owned factors,
-and final assembly attaches outside and global factors exactly once. For higher
+and final assembly attaches outside and global factors exactly once. When one
+outer CFF serves independently evaluated residue branches, its capacity is the
+per-edge maximum of their separately analyzed factorized products, including
+the common remaining numerator. Equal branch bodies need only one rank analysis;
+opposite bodies remain independent and cannot cancel each other's capacity.
+The analysis streams degree maps without constructing a tagged symbolic sum.
+Initial-cut and tree-edge energies remain outside this internal CFF capacity
+domain; stored production-root CFF reuse retains its existing boundary. For higher
 power projection, the term parser splits only the completed expression's outer
 Taylor sum when its addends carry separate denominator topologies. Nested
 numerator sums and positive typed `GS.den` factors remain factorized and are

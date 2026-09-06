@@ -73,7 +73,7 @@ impl Localizer<'_> {
             .projected_cff(
                 graph,
                 to_contract,
-                &analysis_numerator,
+                [&analysis_numerator],
                 CffGenerationContext::Standalone,
             )?
             .fallible_map(|orientation_id, source_edge_energy_map, localized| {

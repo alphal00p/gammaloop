@@ -290,8 +290,8 @@ impl Graph {
             }
         }
         let physical_energy_degree_bounds = self
-            .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
-                analysis_numerator,
+            .automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
+                [analysis_numerator],
                 excluded_numerator_edges.iter().copied(),
                 1,
             )
@@ -503,8 +503,8 @@ impl Graph {
         let mut source_options = options.clone();
         if let Some(numerator) = analysis_numerator {
             source_options.energy_degree_bounds = Some(
-                self.automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
-                    numerator,
+                self.automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
+                    [numerator],
                     initial_state_cut_edges.iter().chain(&bridge_edges).copied(),
                     1,
                 )?,
@@ -650,8 +650,8 @@ impl Graph {
         // IDs only after extracting its local graph, so a loop-momentum basis
         // never defines numerator ownership.
         let energy_degree_bounds = self
-            .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
-                &numerator,
+            .automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
+                [&numerator],
                 cff_external_edges,
                 1,
             )?;

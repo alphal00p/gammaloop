@@ -1544,8 +1544,8 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let physical_bounds = graph
-            .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
-                &common.numerator,
+            .automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
+                [&common.numerator],
                 excluded_edges.iter().copied(),
                 1,
             )?;
@@ -1989,6 +1989,9 @@ mod tests {
             })
             .collect::<Vec<_>>();
         owner_multiplicities.sort_unstable();
+        // Numerator Taylor layers can share a denominator topology without
+        // being regrouped into one additive term.
+        owner_multiplicities.dedup();
         assert_eq!(owner_multiplicities, vec![[1, 1, 1], [1, 1, 2], [2, 1, 1]]);
         assert!(
             terms

@@ -1,7 +1,8 @@
 use std::ops::Neg;
 
 use color_eyre::Result;
-use symbolica::{atom::Atom, symbol};
+use itertools::Itertools;
+use symbolica::atom::Atom;
 
 use crate::{
     cff::{CutCFFIndex, expression::OrientationID, surface::LinearEnergyExpr},
@@ -207,22 +208,14 @@ impl OrientationIntegrands {
 
     /// Keep independently evaluated production branches algebraically
     /// independent while deriving one conservative outer-CFF capacity.
-    /// Branch tags are analysis-only scalar coefficients: they neither expand
-    /// the factorized atoms nor enter the mapped production numerator.
-    /// Bulk addition avoids repeatedly copying the growing tagged sum.
-    pub(crate) fn factorized_capacity_envelope(&self) -> Atom {
+    /// Analyze the factorized atoms separately instead of copying them into a
+    /// tagged sum. Repeated selector hosts of an identical atom share its rank.
+    pub(crate) fn independent_numerators(&self) -> impl Iterator<Item = &Atom> {
         self.0
             .iter()
             .flat_map(|branch| branch.integrands.iter().map(|(_, atom)| atom))
             .filter(|atom| !atom.is_zero())
-            .enumerate()
-            .map(|(branch, atom)| {
-                let tag = Atom::var(symbol!(format!(
-                    "__gammaloop_outer_cff_capacity_branch_{branch}"
-                )));
-                tag * atom
-            })
-            .sum()
+            .unique()
     }
 
     pub(crate) fn map(&self, mut f: impl FnMut(&Atom) -> Atom) -> Self {

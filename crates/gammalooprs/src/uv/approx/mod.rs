@@ -791,7 +791,7 @@ mod tests {
         let projected = localizer.projected_cff(
             &mut graph,
             &contracted,
-            &analysis_numerator,
+            [&analysis_numerator],
             CffGenerationContext::Standalone,
         )?;
         let projected_lu1_samples = projected
@@ -1240,11 +1240,15 @@ mod tests {
                         .get_single_atom()
                         .expect("the scalar outer numerator is available")
                         * route_graph.global_atom();
-                    let analysis_numerator = sector.active.factorized_capacity_envelope() * &resnum;
+                    let analysis_numerators = sector
+                        .active
+                        .iter_keys()
+                        .flat_map(|(_, integrands)| integrands.iter())
+                        .map(|(_, atom)| atom * &resnum);
                     let outer = localizer.projected_cff(
                         &mut route_graph,
                         child.subgraph(),
-                        &analysis_numerator,
+                        analysis_numerators,
                         CffGenerationContext::Standalone,
                     )?;
                     outer_branches.extend(summarize_projected(&outer));
@@ -1466,9 +1470,23 @@ mod tests {
             ))
         };
         let (direct_expression, direct_root, direct_reports, _) = build(graph.clone(), false)?;
-        let (projected_expression, projected_root, projected_reports, projected_denominator_owners) =
-            build(graph.clone(), true)?;
-        assert_eq!(projected_denominator_owners, vec![vec![1, 1, 2, 2, 2]]);
+        let (
+            projected_expression,
+            projected_root,
+            projected_reports,
+            mut projected_denominator_owners,
+        ) = build(graph.clone(), true)?;
+        // Numerator Taylor layers may share a topology. Compare propagator
+        // multisets without regrouping their factorized production numerators.
+        for owners in &mut projected_denominator_owners {
+            owners.sort_unstable();
+        }
+        projected_denominator_owners.sort_unstable();
+        projected_denominator_owners.dedup();
+        assert_eq!(
+            projected_denominator_owners,
+            vec![vec![1, 1, 2], vec![1, 2], vec![1, 2, 2], vec![1, 2, 2, 2]],
+        );
 
         let direct_bound = direct_reports
             .iter()
@@ -1480,9 +1498,19 @@ mod tests {
         assert_eq!(direct_bound.assigned_cff_source_bounds, vec![(2, 2)]);
         let projected_bound = projected_reports
             .iter()
-            .find(|report| report.source_kind == crate::cff::CffEnergyBoundSourceKind::ExactFourD)
-            .expect("the projected child CFF must report its rank-eight exact source");
-        assert!(!projected_bound.assigned_cff_source_bounds.is_empty());
+            .find(|report| {
+                report.source_kind == crate::cff::CffEnergyBoundSourceKind::ExactFourD
+                    && report.physical_parent_bounds == vec![(2, 4)]
+            })
+            .expect("the quadratic numerator and two denominator derivatives retain e2 rank four");
+        assert_eq!(
+            projected_bound
+                .assigned_cff_source_bounds
+                .iter()
+                .map(|(_, degree)| degree)
+                .sum::<usize>(),
+            4,
+        );
 
         // Component expansion is confined to these test copies. Production
         // keeps the owned-dot numerator factorized throughout construction.

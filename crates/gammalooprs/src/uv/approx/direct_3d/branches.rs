@@ -154,21 +154,6 @@ impl DirectResidueBranches {
             .fold(Atom::Zero, |sum, atom| sum + atom)
     }
 
-    #[cfg(test)]
-    pub(crate) fn factorized_capacity_envelope(&self) -> Atom {
-        self.0
-            .iter()
-            .flat_map(|(_, integrands)| integrands.iter().map(|(_, atom)| atom))
-            .filter(|atom| !atom.is_zero())
-            .enumerate()
-            .fold(Atom::Zero, |sum, (branch, atom)| {
-                let tag = Atom::var(symbolica::symbol!(format!(
-                    "__gammaloop_direct_3d_capacity_branch_{branch}"
-                )));
-                sum + tag * atom
-            })
-    }
-
     pub(crate) fn zip_add(&self, other: &Self) -> Result<Self> {
         Self::from_keyed(
             self.iter_keys()

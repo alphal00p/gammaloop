@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    borrow::Borrow,
+    collections::{BTreeMap, BTreeSet},
+};
 
 use color_eyre::Result;
 use eyre::eyre;
@@ -16,6 +19,7 @@ use crate::{
         orientations::GraphOrientation,
         surface::LinearEnergyExpr,
     },
+    debug_tags,
     graph::{Graph, cuts::CutSet},
     settings::global::OrientationPattern,
     utils::GS,
@@ -52,7 +56,7 @@ impl<'a> Localizer<'a> {
         self,
         graph: &mut Graph,
         to_contract: &SuBitGraph,
-        analysis_numerator: &Atom,
+        analysis_numerators: impl IntoIterator<Item = impl Borrow<Atom>>,
         generation_context: CffGenerationContext,
     ) -> Result<(CutCFF, SuBitGraph)> {
         let contract_subgraph = self.cff_contract_subgraph(graph, to_contract);
@@ -65,30 +69,45 @@ impl<'a> Localizer<'a> {
         // Production exact maps own numerator-energy capacity. Isolated
         // denominator-only tests call graph.cff directly; there is no identity
         // numerator-mapping or legacy export fallback at this boundary.
-        let analysis_numerator = Some(analysis_numerator);
-        let cff = if to_contract.is_empty() {
-            if let Some(root_expression) = self.orientation.root_expression() {
-                graph.cff_from_production_expression(
-                    root_expression,
-                    self.cutset,
-                    orientation_pattern,
-                )?
-            } else {
-                graph.cff(
-                    &contract_subgraph,
-                    self.cutset,
-                    orientation_pattern,
-                    &options,
-                    analysis_numerator,
-                )?
-            }
+        let cff = if to_contract.is_empty()
+            && let Some(root_expression) = self.orientation.root_expression()
+        {
+            graph.cff_from_production_expression(
+                root_expression,
+                self.cutset,
+                orientation_pattern,
+            )?
         } else {
+            let capacity_started = std::time::Instant::now();
+            debug_tags!(#generation, #profile, #uv, #summary;
+                stage = "outer_cff_capacity_start",
+                "Analyzing independent factorized numerator ranks"
+            );
+            // Match the external CFF domain used by graph generation: initial
+            // cuts and tree edges carry no internal numerator-energy capacity.
+            let excluded_edges = graph
+                .iter_edges_of(&graph.initial_state_cut)
+                .chain(graph.iter_edges_of(&graph.tree_edges))
+                .map(|(_, edge, _)| edge);
+            options.energy_degree_bounds = Some(
+                graph.automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
+                    analysis_numerators,
+                    excluded_edges,
+                    1,
+                )?,
+            );
+            debug_tags!(#generation, #profile, #uv, #summary;
+                stage = "outer_cff_capacity_done",
+                elapsed_ms = capacity_started.elapsed().as_secs_f64() * 1000.0,
+                bounds = ?options.energy_degree_bounds,
+                "Analyzed independent factorized numerator ranks"
+            );
             graph.cff(
                 &contract_subgraph,
                 self.cutset,
                 orientation_pattern,
                 &options,
-                analysis_numerator,
+                None,
             )?
         };
         self.orientation
@@ -412,11 +431,11 @@ impl<'a> Localizer<'a> {
         self,
         graph: &mut Graph,
         to_contract: &SuBitGraph,
-        analysis_numerator: &Atom,
+        analysis_numerators: impl IntoIterator<Item = impl Borrow<Atom>>,
         generation_context: CffGenerationContext,
     ) -> Result<OrientationIntegrands> {
         let (cff, contract_subgraph) =
-            self.cff(graph, to_contract, analysis_numerator, generation_context)?;
+            self.cff(graph, to_contract, analysis_numerators, generation_context)?;
         // A generalized source map can have several resolved production
         // extensions, but only some of them support the selected Cutkosky
         // residue. Restrict selector hosts to those admissible production IDs,

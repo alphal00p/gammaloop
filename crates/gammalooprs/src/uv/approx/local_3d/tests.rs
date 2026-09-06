@@ -29,7 +29,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{InternalSubGraph, SubSetOps},
 };
-use std::{collections::BTreeSet, sync::OnceLock};
+use std::{borrow::Borrow, collections::BTreeSet, sync::OnceLock};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     function,
@@ -135,7 +135,7 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
     let powered = localizer.projected_cff(
         &mut graph,
         &contract,
-        &numerator,
+        [&numerator],
         CffGenerationContext::Standalone,
     )?;
     let mut explicit_sum = Atom::Zero;
@@ -163,7 +163,7 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
     let regenerated = regenerated_localizer.projected_cff(
         &mut graph,
         &contract,
-        &numerator,
+        [&numerator],
         CffGenerationContext::Standalone,
     )?;
     let mut regenerated_sum = Atom::Zero;
@@ -1132,10 +1132,13 @@ fn factorized_products_keep_only_shared_production_hosts() -> Result<()> {
     Ok(())
 }
 
-fn energy_bounds(graph: &Graph, atom: &Atom) -> Result<Vec<(usize, usize)>> {
+fn energy_bounds(
+    graph: &Graph,
+    atoms: impl IntoIterator<Item = impl Borrow<Atom>>,
+) -> Result<Vec<(usize, usize)>> {
     Ok(
-        graph.automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
-            atom,
+        graph.automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
+            atoms,
             [],
             1,
         )?,
@@ -1162,13 +1165,34 @@ fn outer_cff_capacity_does_not_cancel_between_selector_branches() -> Result<()> 
     ]);
 
     assert_eq!(
-        energy_bounds(&graph, &branches.factorized_sum())?,
+        energy_bounds(&graph, [&branches.factorized_sum()])?,
         vec![(0, 1)]
     );
     assert_eq!(
-        energy_bounds(&graph, &branches.factorized_capacity_envelope())?,
+        energy_bounds(&graph, branches.independent_numerators())?,
         vec![(0, 2)],
         "mutually exclusive selector branches need the maximum of their separate ranks"
+    );
+    let outside = GS.emr_mom(EdgeIndex(1), GS.cind(0)).pow(3);
+    assert_eq!(
+        energy_bounds(
+            &graph,
+            branches
+                .independent_numerators()
+                .map(|atom| atom * &outside),
+        )?,
+        vec![(0, 2), (1, 3)],
+        "the outer numerator contributes to every independently evaluated branch"
+    );
+    assert!(
+        energy_bounds(
+            &graph,
+            branches
+                .independent_numerators()
+                .map(|atom| atom * Atom::Zero),
+        )?
+        .is_empty(),
+        "a zero outer coefficient needs no numerator-energy capacity"
     );
     assert_eq!(
         branches
@@ -1193,23 +1217,35 @@ fn outer_cff_capacity_does_not_cancel_between_cut_orders() -> Result<()> {
         lu_cut_order: Some(1),
         ..CutCFFIndex::new_all_none()
     };
-    let branches = OrientationIntegrands(vec![OrientationIntegrandBranch {
-        selector_id: OrientationID(0),
-        source_edge_energy_map: None,
-        integrands: [
-            (CutCFFIndex::new_all_none(), cubic.clone()),
-            (raised, -&cubic + &energy),
-        ]
-        .into_iter()
-        .collect(),
-    }]);
+    let branches = OrientationIntegrands(vec![
+        OrientationIntegrandBranch {
+            selector_id: OrientationID(0),
+            source_edge_energy_map: None,
+            integrands: [
+                (CutCFFIndex::new_all_none(), cubic.clone()),
+                (raised, -&cubic + &energy),
+            ]
+            .into_iter()
+            .collect(),
+        },
+        OrientationIntegrandBranch {
+            selector_id: OrientationID(1),
+            source_edge_energy_map: None,
+            integrands: [(CutCFFIndex::new_all_none(), cubic)].into_iter().collect(),
+        },
+    ]);
+    assert_eq!(
+        branches.independent_numerators().count(),
+        2,
+        "identical atoms on different selector hosts need only one rank analysis"
+    );
 
     assert_eq!(
-        energy_bounds(&graph, &branches.factorized_sum())?,
+        energy_bounds(&graph, [&branches.factorized_sum()])?,
         vec![(0, 1)]
     );
     assert_eq!(
-        energy_bounds(&graph, &branches.factorized_capacity_envelope())?,
+        energy_bounds(&graph, branches.independent_numerators())?,
         vec![(0, 3)],
         "separately evaluated CutCFFIndex values need the maximum of their separate ranks"
     );
@@ -1310,7 +1346,7 @@ fn exact_cff_defers_contracted_edge_patterns_to_full_projection() -> Result<()> 
     let projected = localizer.projected_cff(
         &mut graph,
         &to_contract,
-        &analysis_numerator,
+        [&analysis_numerator],
         CffGenerationContext::Standalone,
     )?;
 
@@ -1348,7 +1384,7 @@ fn denominator_only_cff_has_no_localizer_fallback() -> Result<()> {
             .projected_cff(
                 &mut graph,
                 &to_contract,
-                &unsupported_numerator,
+                [&unsupported_numerator],
                 CffGenerationContext::Standalone,
             )
             .expect_err("4D-only context must not silently ignore a 3D numerator")

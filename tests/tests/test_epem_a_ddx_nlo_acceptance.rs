@@ -155,22 +155,26 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
             "{process} must retain the contracted physical-graph GL0 source with exactly its degree-two edge-3 bound: {gl0_reports:?}",
         );
         if project_local_4d_to_cff {
-            let expected_exact_gl0_parents = [(7, 1), (8, 2)];
-            assert!(
-                gl0_reports.iter().any(|report| {
-                    report.source_kind == CffEnergyBoundSourceKind::ExactFourD
-                        && report.physical_parent_bounds == expected_exact_gl0_parents
-                        && {
-                            let mut assigned_degrees = report
-                                .assigned_cff_source_bounds
-                                .iter()
-                                .map(|(_, degree)| *degree)
-                                .collect::<Vec<_>>();
-                            assigned_degrees.sort_unstable();
-                            assigned_degrees == [1, 2]
-                        }
-                }),
-                "{process} must keep each complete projected exact-4D GL0 numerator atom coherent on one deterministic degenerate occurrence, without depending on incidental occurrence IDs: {gl0_reports:?}",
+            // Natural simple and raised Taylor terms keep the original e7
+            // numerator linear; only the raised term adds one derivative
+            // momentum on e8, without common-denominator clearing factors.
+            let exact_gl0_bounds = gl0_reports
+                .iter()
+                .filter(|report| report.source_kind == CffEnergyBoundSourceKind::ExactFourD)
+                .map(|report| {
+                    let mut assigned_degrees = report
+                        .assigned_cff_source_bounds
+                        .iter()
+                        .map(|(_, degree)| *degree)
+                        .collect::<Vec<_>>();
+                    assigned_degrees.sort_unstable();
+                    (report.physical_parent_bounds.clone(), assigned_degrees)
+                })
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                exact_gl0_bounds,
+                BTreeSet::from([(vec![(7, 1)], vec![1]), (vec![(7, 1), (8, 1)], vec![1, 1]),]),
+                "{process} must preserve both natural projected exact-4D GL0 numerator bounds and their occurrence-local degrees, without depending on incidental occurrence IDs: {gl0_reports:?}",
             );
         }
         assert!(

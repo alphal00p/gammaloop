@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     collections::{BTreeMap, BTreeSet},
     ops::MulAssign,
 };
@@ -1214,9 +1215,9 @@ impl Graph {
             .into_generation_bounds())
     }
 
-    pub(crate) fn automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
+    pub(crate) fn automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
         &self,
-        numerator: &Atom,
+        numerators: impl IntoIterator<Item = impl Borrow<Atom>>,
         excluded_edges: impl IntoIterator<Item = EdgeIndex>,
         min_degree: usize,
     ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
@@ -1228,8 +1229,14 @@ impl Graph {
                 (pair.is_paired() && !edge_data.data.is_dummy && !excluded_edges.contains(&edge))
                     .then_some(edge)
             });
-        Ok(EnergyPowerAnalyzer::for_physical_emr_edges(active_edges)
-            .analyze_atom(numerator)?
+        let analyzer = EnergyPowerAnalyzer::for_physical_emr_edges(active_edges);
+        // Branches are evaluated independently. Take the maximum of their
+        // ranks without constructing a sum in which leading powers could cancel.
+        let mut bounds = EnergyPowerCapMap::default();
+        for numerator in numerators {
+            bounds.max_assign(analyzer.analyze_atom(numerator.borrow())?);
+        }
+        Ok(bounds
             .iter()
             .filter_map(|(edge, degree)| (degree >= min_degree).then_some((edge.into(), degree)))
             .collect())

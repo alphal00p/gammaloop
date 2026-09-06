@@ -238,6 +238,12 @@ them while resolving the remaining work.
    by signed integer `a*M`; every evaluator receives this common auxiliary scale,
    defaulting to one, and every process requires it to be nonzero. The result is
    invariant under changing its nonzero value. This substitution never uses LMB variables.
+   Capacity for one outer CFF shared by independent residue branches is computed
+   by streaming their factorized numerator products through the existing analyzer
+   and taking per-edge degree maxima. Equal bodies can share rank analysis;
+   opposite bodies stay independent. This creates no tagged symbolic sum and
+   changes no production numerator, selector or map. Initial-cut and tree-edge
+   energies remain excluded from the internal capacity domain.
 
 4. There are two UV routes. Both retain the complete 4D integrated
 counterterms. The local subtraction then either:
