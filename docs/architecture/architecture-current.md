@@ -288,10 +288,10 @@ demonstrated production-value mismatch.
 ### 3. Evaluation and Integration Flow
 1. Commands (`inspect`, `evaluate`, `integrate`) resolve process + integrand references.
 2. Integrand is warmed up (`ProcessIntegrand::warm_up`) to initialize rotations and caches.
-   Each finalized evaluator persists whether its source expressions (including
-   deferred function bodies) contain the auxiliary numerator sampling scale
-   `M`; warm-up rejects a zero runtime scale only when at least one evaluator
-   in the selected amplitude or cross-section integrand actually uses it. This
+   Every evaluator receives the auxiliary numerator sampling scale `M` as an
+   input, defaulting to one. Warm-up rejects a zero runtime scale for every
+   amplitude or cross-section integrand, including evaluators that do not use
+   `M`. No source-expression scan or serialized usage flag is needed. This
    enforces the EMR-only `a*M` contract above; `M` is not an LMB coordinate.
 3. Sampling path parameterizes points and evaluates graph terms.
 4. Stability checks may escalate precision (`f64 -> f128 -> arbitrary`) and rotate kinematics.

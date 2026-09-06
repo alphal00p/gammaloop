@@ -196,7 +196,7 @@ The four 10x physical measurements below remain historical evidence.
 | Direct-3D raised-energy CFF | **Post-CFF Taylor route restored; curated cases passed, release matrix pending** | Both direct orientation representations now apply every Taylor operator after complete/global CFF energy integration and differ only by selector materialization. Physical EMR/source-edge bounds and the repeated-channel CFF construction are retained. The protected GL11 `Q1^2`/`Q7^2` snapshots remain unchanged; A73 records why their denominator-only cancellation residues are not generalized-CFF value oracles. |
 | 4D-local UV then CFF with raised energy | **Source-backed dotted lifting and minimax EMR dispatch implemented** | A79 carries original edge provenance through the Taylor operator, constructs the UV skeleton from those owners, serially subdivides raised powers, and minimizes factorized numerator-energy rank before canonical CFF batching. Sign-normalized denominator signatures validate channels but never reconstruct incidence or rewrite the sign-sensitive numerator. The empty forest remains the ordinary factorized production root in both routes. |
 | Integration-workspace persistence | **Implemented and focused-validation complete** | Integration workspaces have an independent version-1 manifest checked before both resume decoders. Incompatible workspaces return contextual `integrate --restart` guidance instead of decoding positional bincode or panicking (A60). |
-| Other GammaLoop completeness | **Curated 1994-test pass recorded; complete release matrix pending** | The retained 10x campaign passes direct and converted DD/TT normalization (`4/4`) against the published absolute or inclusive-ratio targets. DD also checks per-graph `M_UV` and localization-scale independence plus opposite GL0/GL2 `mu_r` slopes; its converted graph rows remain targetless closure components. The pre-reversal scalar LU 15-case all-enabled rerun passed `15/15`, with `235` skipped, in `70.438 s` under `dev-optim` / `test_gammaloop`; that is historical evidence, not a current gate result. The selected current-core cases passed in the 1994-test curated run, including the six default direct per-key profiles. The default divergent-only profiler covers amplitude and LU domains. The remaining scalar gate is the complete 166-case `just test_LU_scalar_xs` release target; the partial 117-pass dev-optim run and release compilation cannot satisfy it. Revalidate any later source changes before publication; the old 15-case and shared-crate counts below remain historical. |
+| Other GammaLoop completeness | **Curated 1994-test pass recorded; complete release matrix pending** | The retained 10x campaign passes direct and converted DD/TT normalization (`4/4`) against the published absolute or inclusive-ratio targets. DD also checks per-graph `M_UV` and localization-scale independence plus opposite GL0/GL2 `mu_r` slopes; its converted graph rows remain targetless closure components. The pre-reversal scalar LU 15-case all-enabled rerun passed `15/15`, with `235` skipped, in `70.438 s` under `dev-optim` / `test_gammaloop`; that is historical evidence, not a current gate result. The selected checkpoint-source cases passed in the 1994-test curated run, including the six default direct per-key profiles. The default divergent-only profiler covers amplitude and LU domains. The remaining scalar gate is the complete 166-case `just test_LU_scalar_xs` release target; the partial 117-pass dev-optim run and release compilation cannot satisfy it. Revalidate any later source changes before publication; the old 15-case and shared-crate counts below remain historical. |
 | Computed UV-forest export | **Exact stored-source ownership implemented (2026-09-05); final cleaned gates pending** | The former coarse-only export limitation is superseded. Computed exports use the selected persistent source graph, its complete stored production CFF and recorded generation settings, rejecting missing CFF/settings data or a source/runtime graph-ID/name mismatch. Generation, save/load and persistent selection/regeneration coverage retains all three UV routes; no affine map is reconstructed from physical direction labels. |
 | Proper LTD | **Explicitly deferred** | Keep the `Cff`/`Ltd` selection; `Ltd` must immediately return the typed unsupported error. Port proper LTD later from the sibling reserve onto the finalized CFF plus 4D architecture. |
 | Auxiliary `3Drep` CLI | **Diagnostic only; not a production contract** | Its input normalization, expression preparation, and display may differ from GammaLoop. CLI-only regressions or QoL gaps do not block GammaLoop readiness unless they expose shared CFF mathematics used by production. |
@@ -235,9 +235,9 @@ them while resolving the remaining work.
    must continue to grow it from spinney-owned numerator fragments. Preserve
    parametric energy signs and shifts; do not expand/concretize tensors as a
    shortcut. Higher-power interpolation may substitute the relevant EMR energy
-   by signed integer `a*M`; `M` is one common auxiliary scale, is required to be
-   nonzero only when a finalized evaluator uses it, and the result is invariant
-   under changing its nonzero value. This substitution never uses LMB variables.
+   by signed integer `a*M`; every evaluator receives this common auxiliary scale,
+   defaulting to one, and every process requires it to be nonzero. The result is
+   invariant under changing its nonzero value. This substitution never uses LMB variables.
 
 4. There are two UV routes. Both retain the complete 4D integrated
 counterterms. The local subtraction then either:
@@ -656,8 +656,9 @@ Focused passing coverage includes:
   evaluation test;
 - the cross-section archive/loader export smoke test;
 - integration-workspace version rejection before both resume decoders;
-- conditional zero-`M` rejection and higher-power invariance under two nonzero
-  sampling scales;
+- historical conditional zero-`M` rejection and higher-power invariance under
+  two nonzero sampling scales; current runtime validation rejects zero for
+  every process and retains nonzero-scale invariance;
 - an independent generated amplitude-loader type check.
 
 The latest focused production evidence after the lower-sector CFF repair is:

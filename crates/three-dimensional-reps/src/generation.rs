@@ -5011,19 +5011,22 @@ impl<'a> LowerSectorCffBuilder<'a> {
         } else {
             initial_coeff
         };
-        let mut partials = vec![LowerSectorPartial {
-            coeff: initial_coeff,
-            half_edges: Vec::new(),
-            denominator_edges: Vec::new(),
-            chain: Vec::new(),
-            numerator_surfaces: Vec::new(),
-            denominator_surface_signs: BTreeMap::new(),
-            denominator_edge_support_signs: BTreeMap::new(),
-            uniform_scale_power: 0,
-            origins: Vec::new(),
-            targets: BTreeMap::new(),
-            edge_exprs: BTreeMap::new(),
-        }];
+        // Stream completed products into the shared orientation maps instead of
+        // retaining every Cartesian layer with a separate copy of those maps.
+        let mut partials: Box<dyn Iterator<Item = LowerSectorPartial> + '_> =
+            Box::new(std::iter::once(LowerSectorPartial {
+                coeff: initial_coeff,
+                half_edges: Vec::new(),
+                denominator_edges: Vec::new(),
+                chain: Vec::new(),
+                numerator_surfaces: Vec::new(),
+                denominator_surface_signs: BTreeMap::new(),
+                denominator_edge_support_signs: BTreeMap::new(),
+                uniform_scale_power: 0,
+                origins: Vec::new(),
+                targets: BTreeMap::new(),
+                edge_exprs: BTreeMap::new(),
+            }));
 
         for component in components {
             let edge_map = component
@@ -5038,8 +5041,8 @@ impl<'a> LowerSectorCffBuilder<'a> {
                 .iter()
                 .copied()
                 .collect::<BTreeSet<_>>();
-            let mut next_partials = Vec::new();
-            for partial in &partials {
+            partials = Box::new(partials.flat_map(move |partial| {
+                let mut next_partials = Vec::new();
                 for orientation in &component.expression.orientations {
                     for variant in &orientation.variants {
                         let mut item = partial.clone();
@@ -5102,8 +5105,8 @@ impl<'a> LowerSectorCffBuilder<'a> {
                         }
                     }
                 }
-            }
-            partials = next_partials;
+                next_partials
+            }));
         }
 
         let global_basis = components
