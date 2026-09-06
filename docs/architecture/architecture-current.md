@@ -216,58 +216,46 @@ duplicate-denominator global sign as typed metadata. GammaLoop consumes that
 bridge exactly once for root, reduced, and exact production CFF sources,
 cancelling the shared-core-local uniform convention and retaining GammaLoop's
 established complete-integrand convention.
-The NLO acceptance layer exercises these production boundaries in
-orientation-local direct 3D, explicit-sum direct 3D, and projected local 4D.
-The retained 2026-08-31 10x campaign completes all four physical DD/TT
-acceptances (`4/4`). Pulls below are signed differences from the published
-target in units of the reported Monte Carlo error; ratio pulls include the LO
-uncertainty.
+The NLO acceptance layer independently generates orientation-local direct 3D,
+explicit-sum direct 3D, and projected local 4D with local and integrated UV and
+threshold counterterms. It compares complete GL0/GL2 values at a common native-
+Arb point in all three routes; the fast Monte Carlo tests integrate explicit-sum
+3D. DD acceptance checks the inclusive `(alpha_s/pi) * LO` correction,
+graphwise UV-mass and localization-scale independence, cancellation of total
+renormalization-scale dependence, opposite GL0/GL2 squared-scale logarithms,
+and the physical and projected EMR energy bounds. TT acceptance uses the
+fully-MSbar scheme, without on-shell counterterms.
 
-| Acceptance | 10x LO result | 10x NLO result | Graph and ratio evidence |
-| --- | --- | --- | --- |
-| direct `gamma* -> d d~` | `0.5068703962 +/- 0.0025987972` (`+1.449 sigma`) | `0.01966009810 +/- 0.00053595339` (`+1.424 sigma`) | `GL0=-0.03132123586 +/- 0.00023922726` (`+0.729 sigma`), `GL2=+0.05112479005 +/- 0.00046213299` (`+1.584 sigma`); `alpha_s/pi` pull `+1.141 sigma` |
-| converted `e+e- -> gamma* -> d d~` | `0.1950499744 +/- 0.0010326753 pb` (`+1.479 sigma`) | `0.007824189766 +/- 0.000340601513 pb` (`+1.630 sigma`) | signed MC components `GL0=-0.01996339254 +/- 0.00015479207`, `GL2=+0.02786745983 +/- 0.00028425324`; they have no separate published targets; `alpha_s/pi` pull `+1.453 sigma` |
-| direct `gamma* -> t t~` | `2.901968994 +/- 0.015639978` (`+1.641 sigma`) | `0.2079169992 +/- 0.0042953541` (`+1.489 sigma`) | `GL0=-0.1443600613 +/- 0.0035809931` (`+0.669 sigma`), `GL2=+0.3522770605 +/- 0.0023720361` (`+1.687 sigma`); paper-ratio pull `+1.037 sigma` |
-| converted `e+e- -> gamma* -> t t~` | `0.3307052414 +/- 0.0018004843 pb` (`+1.603 sigma`) | `0.02356890542 +/- 0.00056839205 pb` (`+1.058 sigma`) | summed-graph integration has no persisted GL0/GL2 rows; paper-ratio pull `+0.685 sigma` |
-
-All LO integrations used 100,000 samples. The direct DD NLO used 400,000
-samples, the direct TT graph rows used 400,000 each, and each converted NLO
-central slot used 200,000. The converted DD acceptance also retains its
-pointwise route, scale-law, and EMR-bound checks; its physical graph components
-are closure diagnostics rather than separately published observables.
+Direct-photon benchmarks use the off-shell spin projector `-g^(mu nu)` and no
+picobarn conversion. The inclusive lepton-process targets instead use the
+Eq. (7.1) normalization `2(4 pi alpha)/(3 Ecm^3)` and the conversion to picobarns;
+individual lepton-process graph components are not assigned the unconverted
+published photon targets. Existing signed-component and magnitude tests retain
+the current phase conventions. Resolving the overall phase and the unfinished
+right-hand-side cut conjugation is separate work. Current validation results
+and measured timings belong in the accompanying test evidence and PR.
 
 The scalar local-equivalence matrix is generated from the scalar model rather
 than from hand-built graph data. Its unit-numerator lanes remain unchanged after
 generation, companion probes use only Feynman-rule-local edge factors, and
-there is no graph-specific production branch. The scalar LU 15-case matrix
-enables local UV, integrated UV, and threshold counterterms while comparing
-orientation-local 3D, explicit-sum 3D, and projected local 4D, including native
-Arb checks. As retained pre-reversal evidence, its 2026-08-31 `dev-optim` /
-`test_gammaloop` rerun passed `15/15`, with `235` skipped, in `70.438 s`. The
-matrix must be rerun after restoring the post-CFF direct-local3D construction
-before it is a current merge-readiness gate. For four near-zero cases, the
-authorized f64-input comparison uses the `1e-14` unit-scale fallback; the
-Arb-to-Arb comparison still runs and reports non-scaling. This is test-oracle
-handling only and required no production change. The curated suite selects a
-focused DOD0/1/2
-orientation-local bubble regression and all six base scalar-matrix graphs
-(GL00, GL02, GL04, GL08, GL09, and GL24); each base graph now also invokes
-per-orientation profiling for the localized direct-local3D route. Their current
-post-restoration rerun is pending.
+there is no graph-specific production branch. The matrix enables local UV,
+integrated UV and threshold counterterms while comparing all three local-UV
+routes, including native-Arb checks. `just test_LU_scalar_xs` includes the slow
+cases, uses release compilation by default and stops on the first failure.
+Near-zero route comparisons retain the documented f64-input floor alongside
+native-Arb comparisons; that input floor does not establish arbitrary-precision
+agreement. The curated suite includes the six base scalar graphs GL00, GL02,
+GL04, GL08, GL09 and GL24. Each profiles direct local3D separately for every
+complete residue-map key and projected local4D after the complete residue sum.
 
 UV profiling defaults to `only-divergent`: every expected cycle union with
 DOD >= 0 is tested using the generation LMB when suitable, otherwise the first
 suitable basis in the deterministically sorted complete LMB list. The
 exhaustive `all` mode is opt-in. Amplitude and LU inputs share this behavior,
 with graph and Cutkosky-cut selectors for LU profiling and a colored final
-failure summary. Current end-to-end CLI coverage is `2/2` and lower-level
-API/unit coverage is `15/15`. Per-orientation profiling is defined only for the
-orientation-parametric, localized direct-local3D mode. Selector-free explicit-
-sum direct local3D and projected local4D are summed representations and reject
-that request. The shared CFF crate is currently `98/100`; its
-only failures are the powered-pole fixture contract and the inherited
-mixed-theta origin expectation. Both await test-only cleanup and are not a
-demonstrated production-value mismatch.
+failure summary. Per-key profiling is defined for orientation-parametric,
+localized direct local3D. Selector-free explicit-sum direct local3D and
+projected local4D are summed representations and reject that request.
 
 ## Lifecycle and Data Flow
 
