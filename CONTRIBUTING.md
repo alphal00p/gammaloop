@@ -46,6 +46,77 @@ These rules are intentionally broad and should shape most code changes.
   scratch docs, local example edits, profiling outputs, etc.) unless the task
   clearly requires them.
 
+### Discrepancy Triage
+
+Before investigating an implementation mismatch at a low level, first perform a
+bird's-eye comparison of the two complete pipelines. This step is mandatory: it
+prevents a difference in a shallow representation boundary from being debugged
+as a problem in shared algebra or physics.
+
+1. Write down the inputs, requested modes, and ordered processing stages for
+   both routes. Mark every stage as shared or different, and identify the last
+   shared boundary and the first boundary that can produce different state.
+2. Record the smallest result matrix that distinguishes the routes. Toggle one
+   independent feature at a time, such as empty versus nonempty UV forest,
+   local versus integrated counterterms, threshold subtraction, cut, residue
+   order, LMB channel, orientation, evaluator mode, and numeric precision.
+3. Apply logical exclusions before proposing causes. A mechanism shared by two
+   routes cannot explain a difference between them unless the inputs reaching
+   that mechanism have already diverged. An independently validated downstream
+   engine is not a candidate until its two actual inputs are shown to differ or
+   an identical-input A/B test fails.
+4. Inspect the representation at the first differing boundary before tracing
+   deeper code. Prefer durable artifacts such as `save standalone --json`, UV
+   forest exports, generation reports, and structured debug logs. Compare
+   branch counts, keys, maps, selectors, and factorized coefficients before
+   comparing only final floating-point totals.
+5. Reduce the mismatch hierarchically: total, graph, forest, cut, residue order,
+   LMB, orientation, then individual term. Stop as soon as the first unequal
+   pair is found and make that pair the reproducer.
+6. For selector-local versus explicit-sum representations, compare
+   `sum(selector * body)` with `sum(body)` directly. Evaluate the complete
+   selector truth table and prove that each explicit branch is selected exactly
+   once. Do not investigate contour, residue, reconstruction, or numerator
+   machinery until this shallow partition-of-unity comparison passes.
+
+Diagnostic normalization or expansion may be used in a test harness to compare
+two artifacts, but it must not migrate into a production path that is required
+to preserve a factorized numerator. Each progress report for a discrepancy
+should state: what is shared, what first differs, what has been excluded, the
+smallest current reproducer, and the single next comparison that will reduce it.
+
+#### Projected local-4D UV reconstruction stop rule
+
+For a projected local-4D UV-to-CFF mismatch, reconstruction must be certified
+*before* investigating CFF recursion, contour signs, or residue aggregation.
+This is a mandatory correctness boundary, not an optional diagnostic:
+
+1. Retain the completed post-Taylor numerator in the compatible hard sub-LMB,
+   including the original edge owner on every pre-existing numerator factor.
+2. Construct the factorized UV skeleton only from those original owners. A UV
+   derivative may add serial copies of its own physical line; do not infer a
+   graph from denominator incidence or use momentum conservation across lines
+   to reassign numerator factors.
+3. Keep every original numerator factor on its retained owner. Only new energy
+   factors created by differentiating a denominator may be dispatched, and
+   only among the derivative-created serial copies of that same line.
+4. Apply the exact immutable production assignment plan, including the signed
+   hard/raw/parsed conversion `H = h R`, `P = r R`, and `H^0 = h r P^0`.
+5. Substitute the source post-Taylor numerator and the reconstructed UV-EMR
+   numerator into one neutral set of formal loop four-momenta (and the same
+   fixed external data) and require their exact symbolic difference to vanish.
+6. Independently require equality of denominator momentum, mass, multiplicity,
+   and component domain, using `D(Q) = D(-Q)` only on the denominator side.
+
+Only after both exact certificates pass may a discrepancy be attributed to
+generalized-CFF input normalization, CFF generation, component composition, or
+residue aggregation. The common LMB is only a coordinate chart for this proof;
+it never supplies EMR ownership or CFF rank capacity. Correctness of the EMR
+rewrite precedes minimax rank optimization. Production numerators remain
+factorized; test-only copies may be expanded solely to establish the identity.
+The worked GL04 `1zs/T2` certificate is maintained in
+[`docs/architecture/exact-powered-denominator-cff-lifting.md`](docs/architecture/exact-powered-denominator-cff-lifting.md#worked-live-reproducer-gl04-temporal-square-1zst2).
+
 ## Debug Logging Pattern
 
 - Prefer `debug_tags!` plus the log filter environment variables over ad hoc
@@ -116,7 +187,7 @@ These rules are intentionally broad and should shape most code changes.
 
 ### Tests
 
-- Install `cargo-nextest` 0.9.80 or newer. The repository configuration
+- Install `cargo-nextest` 0.9.115 or newer. The repository configuration
   enforces this minimum; update an existing installation with
   `cargo nextest self update`.
 - Rust integration tests live in `tests/` with shared fixtures in
@@ -128,6 +199,11 @@ These rules are intentionally broad and should shape most code changes.
 - Use broader integration tests only for cross-module behavior.
 - Add tests for edge cases that motivated the change, especially when collapsing
   duplicated logic.
+- Numerators used as Feynman-rule or BPHZ-locality oracles must retain physical
+  locality: an edge factor may depend only on that edge's momentum, and a vertex
+  factor only on momenta incident on that vertex. A deliberately non-local
+  algebraic input must be labelled diagnostic-only and must not support claims
+  about UV subtraction, graph reconstruction, or factor localization.
 
 ### Docs
 

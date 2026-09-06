@@ -46,7 +46,7 @@ use crate::{
     utils::load_generic_model,
 };
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     function, parse,
 };
 
@@ -75,22 +75,24 @@ fn scalar_bubble_root_integrand_reference(
     let woods = CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings.uv);
     let mut forests = woods.unfold(&amplitude_graph.graph);
     let vakint = crate::utils::vakint().unwrap();
-    let valid_orientations: Vec<_> = amplitude_graph
+    let production = amplitude_graph
         .derived_data
         .cff_expression
         .as_ref()
-        .expect("cff_expression should have been created")
-        .orientations
-        .iter()
-        .map(|orientation| orientation.data.orientation.clone())
-        .collect();
+        .expect("cff_expression should have been created");
+    let options = amplitude_graph
+        .graph
+        .production_cff_3d_expression_options(generation_settings)
+        .expect("the reference retains its generated numerator-capacity options");
     forests
         .compute(
             &mut amplitude_graph.graph,
             vakint,
-            OrientationProjection::new(
-                &valid_orientations,
+            OrientationProjection::exact_expression(
+                production,
+                &options,
                 &generation_settings.orientation_pattern,
+                generation_settings.explicit_orientation_sum_only,
             ),
             &reference_settings.uv,
         )
@@ -345,12 +347,13 @@ fn scalars_integrated_cts_compare_legacy_and_hedge_poset() {
     )
     .unwrap();
 
-    amp.generate_cff(&OrientationPattern::default()).unwrap();
+    amp.generate_cff(&GenerationSettings::default()).unwrap();
     let orientation_pattern = OrientationPattern::from_orientation(
         &amp.derived_data
             .cff_expression
             .as_ref()
             .unwrap()
+            .expression
             .orientations[OrientationID(0)],
     );
     let settings = GenerationSettings {
@@ -391,12 +394,13 @@ fn scalars_integrated_banana_hedge_poset() {
     )
     .unwrap();
 
-    amp.generate_cff(&OrientationPattern::default()).unwrap();
+    amp.generate_cff(&GenerationSettings::default()).unwrap();
     let orientation_pattern = OrientationPattern::from_orientation(
         &amp.derived_data
             .cff_expression
             .as_ref()
             .unwrap()
+            .expression
             .orientations[OrientationID(0)],
     );
     let settings = GenerationSettings {
@@ -1601,6 +1605,315 @@ subtraction:
     try_origin: false
     try_origin_all_lmbs: false";
 
+#[test]
+fn loop_energy_dod_replaces_four_dimensional_measure_by_one_power_per_loop() {
+    test_initialise().unwrap();
+
+    let model = load_generic_model("scalars");
+    let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
+    let graph: Graph = source.into_graph(&model).unwrap();
+    let cycle = graph
+        .spinneys(&graph.no_dummy())
+        .into_iter()
+        .find(|cycle| !cycle.is_empty())
+        .expect("the scalar bubble has one loop-active cycle union")
+        .filter;
+
+    assert_eq!(graph.n_loops(&cycle), 1);
+    assert_eq!(graph.compute_dod(&cycle), 2);
+    assert_eq!(graph.compute_energy_dod(&cycle), -1);
+    graph
+        .ensure_energy_convergent_cycles(&graph.no_dummy())
+        .unwrap();
+
+    let marginal_source = source.replacen(
+        "Q(2,spenso::mink(4,edge(2,1)))",
+        "Q(2,spenso::cind(0))*Q(2,spenso::mink(4,edge(2,1)))",
+        1,
+    );
+    let marginal: Graph = marginal_source.into_graph(&model).unwrap();
+    let marginal_cycle = marginal
+        .spinneys(&marginal.no_dummy())
+        .into_iter()
+        .find(|cycle| !cycle.is_empty())
+        .expect("the marginal scalar bubble has one loop-active cycle union")
+        .filter;
+
+    assert_eq!(marginal.compute_dod(&marginal_cycle), 3);
+    assert_eq!(marginal.compute_energy_dod(&marginal_cycle), 0);
+    let error = marginal
+        .ensure_energy_convergent_cycles(&marginal.no_dummy())
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("DOD_4D=3"), "{error}");
+    assert!(error.contains("DOD_E=0"), "{error}");
+
+    let mut amplitude = AmplitudeGraph::new(marginal);
+    let generation_error = amplitude
+        .generate_cff(&GenerationSettings::default())
+        .unwrap_err()
+        .to_string();
+    assert!(generation_error.contains("DOD_E=0"), "{generation_error}");
+}
+
+#[test]
+fn production_energy_gate_includes_factorized_global_numerator() {
+    test_initialise().unwrap();
+
+    let model = load_generic_model("scalars");
+    let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
+    let graph: Graph = source.into_graph(&model).unwrap();
+    let q0 = function!(GS.emr_mom, 2, GS.cind(0));
+    let convergent_numerator = (&q0 + Atom::one()) * (&q0 + Atom::num(2));
+    let convergent = graph.with_global_numerator_only(
+        "factorized_global_quadratic".to_string(),
+        convergent_numerator.clone(),
+    );
+    let cycle = convergent
+        .all_cycle_unions(&convergent.no_dummy())
+        .into_iter()
+        .find(|cycle| !cycle.is_empty())
+        .expect("the scalar bubble has one loop-active cycle union")
+        .filter;
+
+    // The existing UV DOD remains local to edge and vertex rules.  Only the
+    // production gate sees the separately stored factors multiplied at
+    // runtime: the quadratic global numerator leaves DOD_E=-1.
+    assert_eq!(convergent.compute_dod(&cycle), 0);
+    assert_eq!(convergent.compute_energy_dod(&cycle), -3);
+    convergent
+        .ensure_energy_convergent_cycles(&convergent.no_dummy())
+        .unwrap();
+    assert_eq!(convergent.global_prefactor.num, convergent_numerator);
+    assert_eq!(
+        convergent.production_numerator_atom_for_full_3d_expression(),
+        convergent_numerator,
+    );
+
+    let divergent_numerator = convergent_numerator * (&q0 + Atom::num(3));
+    let divergent = graph.with_global_numerator_only(
+        "factorized_global_cubic".to_string(),
+        divergent_numerator.clone(),
+    );
+    let error = divergent
+        .ensure_energy_convergent_cycles(&divergent.no_dummy())
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("DOD_4D=3"), "{error}");
+    assert!(error.contains("DOD_E=0"), "{error}");
+    assert_eq!(divergent.global_prefactor.num, divergent_numerator);
+    let production_numerator = divergent.production_numerator_atom_for_full_3d_expression();
+    assert_eq!(production_numerator, divergent_numerator);
+    assert!(matches!(production_numerator.as_view(), AtomView::Mul(_)));
+
+    let mut amplitude = AmplitudeGraph::new(divergent);
+    let generation_error = amplitude
+        .generate_cff(&GenerationSettings::default())
+        .unwrap_err()
+        .to_string();
+    assert!(generation_error.contains("DOD_E=0"), "{generation_error}");
+}
+
+#[test]
+fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
+    test_initialise().unwrap();
+    let model = load_generic_model("scalars");
+    let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
+    let graph: Graph = source.into_graph(&model).unwrap();
+    let convergent = graph.with_global_numerator_only("four_d_unit_bubble".into(), Atom::one());
+    let q0 = function!(GS.emr_mom, 2, GS.cind(0));
+    let divergent = graph.with_global_numerator_only(
+        "four_d_energy_divergent_bubble".into(),
+        (&q0 + Atom::one()) * (&q0 + Atom::num(2)) * (&q0 + Atom::num(3)),
+    );
+
+    // A 4D forest does not need a stored CFF, but this does not remove the
+    // production source-energy requirement. Reuse the factorized cubic
+    // bubble whose independent gate regression certifies DOD_E=0.
+    let mut common_part = None;
+    for orchestrator in [
+        UVOrchestrator::LegacyDagForest,
+        UVOrchestrator::HedgePoset,
+        UVOrchestrator::Compare,
+    ] {
+        let settings = UVgenerationSettings {
+            orchestrator,
+            softct: false,
+            ..Default::default()
+        };
+        let mut bare = AmplitudeGraph::new(convergent.clone());
+        assert!(bare.derived_data.cff_expression.is_none());
+        let part = bare.renormalization_part(&settings).unwrap();
+        assert!(!part.expression.is_zero());
+        assert!(bare.derived_data.cff_expression.is_none());
+        let mut stored = AmplitudeGraph::new(convergent.clone());
+        stored.generate_cff(&GenerationSettings::default()).unwrap();
+        assert!(stored.derived_data.cff_expression.is_some());
+        let with_cff = stored.renormalization_part(&settings).unwrap();
+        assert_eq!(part.expression.expand(), with_cff.expression.expand());
+        if let Some(expected) = &common_part {
+            assert_eq!(&part.expression.expand(), expected);
+        } else {
+            common_part = Some(part.expression.expand());
+        }
+
+        let mut unsupported = AmplitudeGraph::new(divergent.clone());
+        assert!(unsupported.derived_data.cff_expression.is_none());
+        let error = unsupported
+            .renormalization_part(&settings)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("DOD_4D=3"), "{error}");
+        assert!(error.contains("DOD_E=0"), "{error}");
+        assert!(unsupported.derived_data.cff_expression.is_none());
+    }
+}
+
+#[test]
+fn production_energy_gate_rejects_denominator_cancelling_r_contact() {
+    test_initialise().unwrap();
+
+    // Diagnostic-only version of the former lower-sector derivative fixture:
+    // one r denominator and three q denominators carry the factor q0^2-r0^2.
+    // Along the r-only cycle (q fixed), r0^2/Dr leaves a constant and therefore
+    // has DOD_E=1. It is not a valid finite-pole oracle.
+    let graph: Graph = dot!(
+        digraph energy_divergent_r_contact {
+            edge [particle=scalar_1]
+            node [num=1]
+            e [style=invis]
+            e -> A:0 [id=4]
+            A:1 -> e [id=5]
+            A -> A [id=0]
+            A -> B [id=1]
+            B -> C [id=2]
+            C -> A [id=3]
+        },
+        "scalars"
+    )
+    .unwrap();
+    let r0 = function!(GS.emr_mom, 0, GS.cind(0));
+    let q0 = function!(GS.emr_mom, 1, GS.cind(0));
+    let divergent = graph.with_global_numerator_only(
+        "diagnostic_denominator_cancelling_r_contact".to_string(),
+        q0.pow(2) - r0.pow(2),
+    );
+
+    let error = divergent
+        .ensure_energy_convergent_cycles(&divergent.no_dummy())
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("DOD_E=1"), "{error}");
+
+    let mut amplitude = AmplitudeGraph::new(divergent);
+    let generation_error = amplitude
+        .generate_cff(&GenerationSettings::default())
+        .unwrap_err()
+        .to_string();
+    assert!(generation_error.contains("DOD_E=1"), "{generation_error}");
+}
+
+#[test]
+fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
+    use crate::utils::symbolica_ext::DOD;
+
+    test_initialise().unwrap();
+    let model = load_generic_model("scalars");
+    // Reuse the one-r-denominator/three-q-denominator topology of the
+    // denominator-cancelling-r contact regression. This explicitly imported
+    // numerator is deliberately stored on q edge 1 but depends on r edge 0;
+    // neither the parser nor the public graph source API forbids that input.
+    let source = r#"digraph nonlocal_edge_energy_degree {
+        edge [particle=scalar_1 num=1]
+        node [num=1]
+        e [style=invis]
+        e -> A:0 [id=4]
+        A:1 -> e [id=5]
+        A -> A [id=0]
+        A -> B [id=1 num="Q(0,spenso::cind(0))^2"]
+        B -> C [id=2]
+        C -> A [id=3]
+    }"#;
+    let graph: Graph = source.into_graph(&model).unwrap();
+    let r_squared = function!(GS.emr_mom, 0, GS.cind(0)).pow(2);
+    assert_eq!(graph.underlying[EdgeIndex(1)].num.value, r_squared);
+    assert_eq!(
+        graph.production_numerator_atom_for_full_3d_expression(),
+        r_squared
+    );
+
+    // The ordinary owner-local variant is convergent in both energies:
+    // q0^2/[Dr Dq^3] gives DOD_E(r)=-1 and DOD_E(q)=-3. A factor stored
+    // outside a cycle and depending only on its own momentum is soft there.
+    let owner_local: Graph = source
+        .replace("Q(0,spenso::cind(0))", "Q(1,spenso::cind(0))")
+        .into_graph(&model)
+        .unwrap();
+    owner_local
+        .ensure_energy_convergent_cycles(&owner_local.no_dummy())
+        .unwrap();
+
+    // The same nonlocal input stored globally is already rejected. Rehosting
+    // this factor cannot change convergence of the complete rational source.
+    let global = graph.with_global_numerator_only("global_r_squared".to_string(), r_squared);
+    let global_error = global
+        .ensure_energy_convergent_cycles(&global.no_dummy())
+        .unwrap_err();
+    assert!(
+        global_error.to_string().contains("DOD_E=1"),
+        "{global_error}"
+    );
+
+    let cycles = graph.all_cycle_unions(&graph.no_dummy());
+    let r_cycle = cycles
+        .iter()
+        .find(|cycle| {
+            graph
+                .iter_edges_of(&cycle.filter)
+                .map(|(_, edge, _)| edge)
+                .collect::<Vec<_>>()
+                == [EdgeIndex(0)]
+        })
+        .expect("the r tadpole is one ordinary cycle");
+    let local_degree = graph.compute_energy_dod(&r_cycle.filter);
+    let lmb = graph.lmb_of(&r_cycle.filter);
+    let complete_degree = graph
+        .uv_rescaled(
+            r_cycle.filter.included(),
+            1,
+            &lmb,
+            &lmb,
+            &(graph.production_numerator_atom_for_full_3d_expression()
+                / graph.denominator(&r_cycle.filter, |_| 1)),
+        )
+        .trailing_exponent()
+        - 3;
+    assert_eq!(
+        local_degree, -1,
+        "the r-owned local rules have unit numerator"
+    );
+    assert_eq!(complete_degree, 1, "r0^2/Dr is constant at energy infinity");
+
+    let gate = graph.ensure_energy_convergent_cycles(&graph.no_dummy());
+    let mut amplitude = AmplitudeGraph::new(graph);
+    let production = amplitude.generate_cff(&GenerationSettings::default());
+    println!(
+        "NONLOCAL ENERGY GATE local DOD_E={local_degree}, complete DOD_E={complete_degree}, gate={gate:?}, production={:?}",
+        production.as_ref().map(|_| ())
+    );
+    assert!(
+        gate.as_ref()
+            .is_err_and(|error| error.to_string().contains("DOD_E=1")),
+        "the starting-source gate accepted r0^2/[Dr Dq^3] because its numerator was hosted outside the r cycle: {gate:?}"
+    );
+    assert!(
+        production
+            .as_ref()
+            .is_err_and(|error| error.to_string().contains("DOD_E=1")),
+        "production must reject the same divergent starting source: {production:?}"
+    );
+}
+
 mod failing {
     use super::*;
 
@@ -1622,12 +1935,14 @@ mod failing {
         )
         .unwrap();
 
+        amp.generate_cff(&GenerationSettings::default()).unwrap();
         let set = GenerationSettings {
             orientation_pattern: OrientationPattern::from_orientation(
                 &amp.derived_data
                     .cff_expression
                     .as_ref()
                     .unwrap()
+                    .expression
                     .orientations[OrientationID(0)],
             ),
             uv: UVgenerationSettings {
@@ -1639,7 +1954,6 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff(&OrientationPattern::default()).unwrap();
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
@@ -1663,12 +1977,14 @@ mod failing {
         )
         .unwrap();
 
+        amp.generate_cff(&GenerationSettings::default()).unwrap();
         let set = GenerationSettings {
             orientation_pattern: OrientationPattern::from_orientation(
                 &amp.derived_data
                     .cff_expression
                     .as_ref()
                     .unwrap()
+                    .expression
                     .orientations[OrientationID(0)],
             ),
             uv: UVgenerationSettings {
@@ -1680,7 +1996,6 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff(&OrientationPattern::default()).unwrap();
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);

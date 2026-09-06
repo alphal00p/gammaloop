@@ -259,8 +259,8 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         assert_eq!(selected_term.lmbs.len(), source_term.lmbs.len());
         assert_eq!(selected_term.cuts.len(), source_term.cuts.len());
         assert_eq!(
-            selected_term.threshold_candidate_esurface_ids,
-            source_term.threshold_candidate_esurface_ids
+            selected_term.topological_threshold_esurfaces,
+            source_term.topological_threshold_esurfaces
         );
         assert_eq!(
             selected_term.cut_threshold_associations.len(),

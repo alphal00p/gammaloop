@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -443,7 +443,7 @@ requires-dist = [
     { name = "pytest" },
     { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "symbolica", specifier = ">=0.14.0" },
-    { name = "ufo-model-loader", specifier = ">=0.1.1" },
+    { name = "ufo-model-loader", specifier = ">=0.1.6" },
 ]
 
 [package.metadata.requires-dev]
@@ -453,7 +453,7 @@ dev = [
     { name = "pytest", specifier = ">=8.3.5,<9" },
     { name = "pyyaml", specifier = ">=6.0.1,<7" },
     { name = "symbolica", specifier = ">=0.16.0" },
-    { name = "ufo-model-loader", specifier = ">=0.1.1" },
+    { name = "ufo-model-loader", specifier = ">=0.1.6" },
 ]
 
 [[package]]
@@ -1861,14 +1861,14 @@ wheels = [
 
 [[package]]
 name = "ufo-model-loader"
-version = "0.1.1"
+version = "0.1.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "symbolica" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e1/c5/8d36a9ba7fabca386e6d9b94993a38ec12c746076ca8afed78753a05b06c/ufo_model_loader-0.1.1.tar.gz", hash = "sha256:ebdd072ec4886dd2484b1864d92751f000a789f1e3fef52a1f09f28498a47bd0", size = 88069, upload-time = "2025-09-04T22:53:00.408Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/91/ea/3060478303daa465572f17c0c2550bfbf5d61b6c78b0167a7bcd13b7d5bd/ufo_model_loader-0.1.7.tar.gz", hash = "sha256:79530b7bfb0b63f7c5547bf2a6309dbd162fdb7108800318cb08b93d227fbf67", size = 60941, upload-time = "2026-07-16T10:05:10.28Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4e/26/9ed7a5a6706d2c058db84e6f295d764b91d00bd2700d0847f9aac38da9ea/ufo_model_loader-0.1.1-py3-none-any.whl", hash = "sha256:876418eaf1d3e2f69248da3acc07cc8e931b1a4013e7331e4af969dd53beb700", size = 110955, upload-time = "2025-09-04T22:52:59.126Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/64/eb05d1e04f8353559a10c4184a7749f42955616b146af0f6501c4e3577af/ufo_model_loader-0.1.7-py3-none-any.whl", hash = "sha256:803ae28141ec4be3189cc62469b88da17ca33907791fe99774c2fe756a45edf7", size = 74973, upload-time = "2026-07-16T10:05:09.1Z" },
 ]
 
 [[package]]

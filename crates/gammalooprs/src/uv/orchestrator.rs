@@ -138,7 +138,9 @@ fn legacy_renormalization_part(
 ) -> Result<RenormalizationPart> {
     let mut vk_settings = settings.vakint.true_settings();
     let wood = graph.wood_with_settings(&graph.no_dummy(), settings, &graph.loop_momentum_basis);
-    vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
+    // MUV renormalization extracts the finite term, so retain one term beyond
+    // the maximal pole order, as in the other forest integration paths.
+    vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64 + 1;
 
     let mut forest = wood.unfold(graph, &graph.loop_momentum_basis);
     let vk = (crate::utils::vakint()?, &vk_settings);
@@ -198,10 +200,12 @@ impl ParametricIntegrandsComparison<'_> {
                     cut_index
                 ));
             }
+            let legacy_integrands = legacy.integrands.materialize();
+            let hedge_integrands = hedge.integrands.materialize();
             IntegrandMapComparison {
                 cut_index,
-                legacy: &legacy.integrands,
-                hedge: &hedge.integrands,
+                legacy: &legacy_integrands,
+                hedge: &hedge_integrands,
             }
             .compare()?;
         }

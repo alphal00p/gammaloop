@@ -10,7 +10,7 @@ use std::{
         Arc, Mutex,
     },
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use clap::Args;
@@ -25,7 +25,6 @@ use linnet::half_edge::subgraph::SubGraphLike;
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use symbolica::numerical_integration::Sample;
 use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use toml::Value as TomlValue;
 use tracing::{debug, info, info_span, Span};
@@ -36,7 +35,7 @@ use gammalooprs::{
     feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
-    integrands::{process::ProcessIntegrand, HasIntegrand},
+    integrands::process::ProcessIntegrand,
     is_interrupt_requested,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{
@@ -60,6 +59,7 @@ use gammalooprs::{
 
 use crate::{
     command_parser::{normalize_clap_args, split_command_line},
+    command_template::{contains_placeholder, placeholder_specs, PlaceholderSpec},
     commands::{save::SaveState, Commands},
     integrand_info::{collect_integrand_info, IntegrandInfo},
     model_parameters::{external_model_parameter_type, validate_model_parameter_type},
@@ -686,6 +686,16 @@ pub enum ProcessRef {
     Unqualified(String),
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct GraphImportOptions {
+    pub process_name: Option<String>,
+    pub process_id: Option<usize>,
+    pub process_definition: Option<ProcessDefinition>,
+    pub integrand_name: Option<String>,
+    pub overwrite: bool,
+    pub append: bool,
+}
+
 impl Serialize for ProcessRef {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -1007,6 +1017,14 @@ impl Serialize for CommandHistory {
     where
         S: serde::Serializer,
     {
+        if self.is_template() {
+            return self
+                .raw_string
+                .as_deref()
+                .unwrap_or("__command_template")
+                .serialize(serializer);
+        }
+
         if get_serialize_commands_as_strings() {
             if let Some(ref raw_string) = self.raw_string {
                 raw_string.serialize(serializer)
@@ -1102,6 +1120,26 @@ impl CommandHistory {
         }
     }
 
+    pub fn new_template(raw_string: String) -> Self {
+        Self::new_with_raw(Commands::CommandTemplate, raw_string)
+    }
+
+    pub fn is_template(&self) -> bool {
+        matches!(self.command, Commands::CommandTemplate)
+    }
+
+    pub fn raw_string(&self) -> Option<&str> {
+        self.raw_string.as_deref()
+    }
+
+    pub fn semantically_eq(&self, other: &Self) -> bool {
+        match (self.is_template(), other.is_template()) {
+            (true, true) => self.raw_string == other.raw_string,
+            (false, false) => self.command == other.command,
+            _ => false,
+        }
+    }
+
     /// Create a CommandHistory from a command (alias for new)
     pub fn from_command(command: Commands) -> Self {
         Self::new(command)
@@ -1112,9 +1150,7 @@ impl CommandHistory {
     /// This function attempts to parse the raw string using clap, and if successful,
     /// creates a CommandHistory with both the parsed command and the original string.
     pub fn from_raw_string(raw_string: &str) -> Result<Self, clap::Error> {
-        use crate::Repl;
         use clap::error::ErrorKind;
-        use clap::Parser;
 
         let args = split_command_line(raw_string)
             .map(normalize_clap_args)
@@ -1124,11 +1160,23 @@ impl CommandHistory {
                     "Could not parse command: unmatched quotes or trailing escape",
                 )
             })?;
+
+        match Self::from_args_and_raw(args, raw_string.to_string()) {
+            Ok(command) => Ok(command),
+            Err(_) if contains_placeholder(raw_string) => Ok(Self::new_template(raw_string.into())),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn from_args_and_raw(args: Vec<String>, raw_string: String) -> Result<Self, clap::Error> {
+        use crate::Repl;
+        use clap::Parser;
+
         let cli = Repl::try_parse_from(
             std::iter::once("gammaloop").chain(args.iter().map(String::as_str)),
         )?;
 
-        Ok(Self::new_with_raw(cli.command, raw_string.into()))
+        Ok(Self::new_with_raw(cli.command, raw_string))
     }
 }
 
@@ -1179,7 +1227,7 @@ impl CommandsBlock {
                 .commands
                 .iter()
                 .zip(other.commands.iter())
-                .all(|(left, right)| left.command == right.command)
+                .all(|(left, right)| left.semantically_eq(right))
     }
 }
 
@@ -1242,6 +1290,57 @@ impl RunHistory {
 
     pub fn command_block(&self, name: &str) -> Option<&CommandsBlock> {
         self.command_blocks.iter().find(|block| block.name == name)
+    }
+
+    pub fn command_block_placeholder_names(&self, name: &str) -> BTreeSet<String> {
+        self.command_block_placeholder_specs(name)
+            .into_iter()
+            .map(|spec| spec.name)
+            .collect()
+    }
+
+    pub fn command_block_placeholder_specs(&self, name: &str) -> BTreeSet<PlaceholderSpec> {
+        let mut placeholders = BTreeSet::new();
+        let mut visited = HashSet::new();
+        self.collect_command_block_placeholder_specs(name, &mut visited, &mut placeholders);
+        placeholders
+    }
+
+    fn collect_command_block_placeholder_specs(
+        &self,
+        name: &str,
+        visited: &mut HashSet<String>,
+        placeholders: &mut BTreeSet<PlaceholderSpec>,
+    ) {
+        if !visited.insert(name.to_string()) {
+            return;
+        }
+
+        let Some(block) = self.command_block(name) else {
+            return;
+        };
+
+        for command in &block.commands {
+            if let Some(raw) = command.raw_string() {
+                placeholders.extend(placeholder_specs(raw));
+            }
+            let Commands::Run(run) = &command.command else {
+                continue;
+            };
+            for nested_name in run.selected_block_names() {
+                let mut nested_placeholders = BTreeSet::new();
+                self.collect_command_block_placeholder_specs(
+                    nested_name,
+                    visited,
+                    &mut nested_placeholders,
+                );
+                for defined in &run.defines {
+                    nested_placeholders.retain(|spec| spec.name.as_str() != defined.key.as_str());
+                }
+                placeholders.extend(nested_placeholders);
+            }
+        }
+        visited.remove(name);
     }
 
     pub fn select_command_blocks(
@@ -1343,9 +1442,9 @@ impl RunHistory {
 
     pub(crate) fn filtered_for_save(&self) -> Self {
         let mut filtered = self.clone();
-        filtered
-            .commands
-            .retain(|command_history| should_persist_command(&command_history.command));
+        filtered.commands.retain(|command_history| {
+            command_history.is_template() || should_persist_command(&command_history.command)
+        });
         filtered
     }
 
@@ -1459,11 +1558,14 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 1;
+// Version 5 persists component-local generated-CFF ownership and prefactor
+// metadata. Older states use a previous positional bincode layout and must be
+// regenerated rather than decoded as the new expression type.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 5;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default, deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 struct StateManifest {
     version: u32,
 }
@@ -1477,6 +1579,13 @@ impl Default for StateManifest {
 }
 
 fn ensure_supported_state_manifest_version(manifest: &StateManifest) -> Result<()> {
+    if manifest.version < CURRENT_STATE_MANIFEST_VERSION {
+        return Err(eyre!(
+            "State version {} predates the supported version {} and cannot be migrated. Please regenerate the saved state with this gammaloop binary.",
+            manifest.version,
+            CURRENT_STATE_MANIFEST_VERSION
+        ));
+    }
     if manifest.version > CURRENT_STATE_MANIFEST_VERSION {
         return Err(eyre!(
             "State version {} is newer than this binary supports (max {}). Please upgrade gammaloop.",
@@ -1488,11 +1597,11 @@ fn ensure_supported_state_manifest_version(manifest: &StateManifest) -> Result<(
     Ok(())
 }
 
-fn run_state_migration_checks(manifest: &StateManifest, save_path: &Path) -> Result<()> {
+fn validate_state_layout(manifest: &StateManifest, save_path: &Path) -> Result<()> {
     ensure_supported_state_manifest_version(manifest)?;
 
     match manifest.version {
-        1 => {
+        CURRENT_STATE_MANIFEST_VERSION => {
             if !save_path.join("symbolica_state.bin").exists() {
                 return Err(eyre!(
                     "Saved state at '{}' is missing required file symbolica_state.bin",
@@ -1548,7 +1657,7 @@ pub fn classify_state_folder(save_path: &Path) -> Result<StateFolderKind> {
     let manifest_path = save_path.join(STATE_MANIFEST_FILE);
     if manifest_path.exists() {
         let manifest = load_state_manifest(save_path)?;
-        return Ok(match run_state_migration_checks(&manifest, save_path) {
+        return Ok(match validate_state_layout(&manifest, save_path) {
             Ok(()) => StateFolderKind::Saved,
             Err(err) => StateFolderKind::Invalid(err.to_string()),
         });
@@ -1575,9 +1684,9 @@ fn load_state_manifest(save_path: &Path) -> Result<StateManifest> {
             manifest_path.display()
         )
     })?;
-    let manifest = toml::from_str::<StateManifest>(&raw_manifest).with_context(|| {
-        format!(
-            "Trying to parse state manifest file {}",
+    let manifest = toml::from_str::<StateManifest>(&raw_manifest).map_err(|error| {
+        eyre!(
+            "Trying to parse state manifest file {}: {error}",
             manifest_path.display()
         )
     })?;
@@ -2632,6 +2741,22 @@ impl State {
             let p = &mut state.process_list.processes[process_id];
             let process_name = p.definition.folder_name.clone();
             if let Some(name) = &integrand_name {
+                let _ = p.get_integrand(name)?;
+                // A process has one shared generation history. Do not relabel
+                // a generated sibling with settings which only this target uses.
+                for other in p.get_integrand_names() {
+                    if other != name.as_str()
+                        && p.get_integrand(other)?.integrand.is_some()
+                        && p.settings_history.as_ref().is_none_or(|history| {
+                            history.generation != global_settings.generation
+                        })
+                    {
+                        return Err(eyre!(
+                            "Cannot generate only integrand '{}' in process '{}' with absent or different shared generation settings while sibling '{}' is already generated; regenerate the whole process without --integrand-name",
+                            name, process_name, other
+                        ));
+                    }
+                }
                 let mut reports = Vec::new();
                 match &mut p.collection {
                     ProcessCollection::Amplitudes(a) => {
@@ -2714,6 +2839,9 @@ impl State {
                         }
                     }
                 }
+                // Named generation bypasses Process::preprocess, which normally
+                // records the settings required by persistent source exports.
+                p.settings_history = Some(global_settings.clone());
                 Ok(reports)
             } else {
                 let mut reports = p.preprocess(
@@ -2888,24 +3016,25 @@ impl State {
         Ok(())
     }
 
-    pub fn import_graphs(
-        &mut self,
-        graphs: Vec<Graph>,
-        process_name: Option<String>,
-        process_id: Option<usize>,
-        integrand_name: Option<String>,
-        overwrite: bool,
-        append: bool,
-    ) -> Result<()> {
-        let generation_type = if graphs.iter().all(|g| g.initial_state_cut.nedges(g) == 0) {
-            GenerationType::Amplitude
-        } else if graphs.iter().all(|g| g.initial_state_cut.nedges(g) > 0) {
-            GenerationType::CrossSection
-        } else {
-            return Err(eyre!(
-                "Mix of amplitude and cross section graphs in the same file is not supported"
-            ));
-        };
+    pub fn import_graphs(&mut self, graphs: Vec<Graph>, options: GraphImportOptions) -> Result<()> {
+        let GraphImportOptions {
+            process_name,
+            process_id,
+            process_definition,
+            integrand_name,
+            overwrite,
+            append,
+        } = options;
+        let generation_type = Self::infer_graph_list_generation_type(&graphs)?;
+        if let Some(definition) = &process_definition {
+            if definition.generation_type != generation_type {
+                return Err(eyre!(
+                    "--process-spec describes a {} process, but the imported graph list is {}",
+                    definition.generation_type,
+                    generation_type
+                ));
+            }
+        }
 
         let integrand_base_name = integrand_name.clone().unwrap_or("default".to_string());
         let process = if let Some(proc_id) = process_id {
@@ -2934,15 +3063,20 @@ impl State {
             {
                 Some(existing_proc)
             } else {
-                let process_defintion =
-                    ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?;
+                let mut process_definition = match process_definition.clone() {
+                    Some(definition) => definition,
+                    None => {
+                        ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?
+                    }
+                };
+                process_definition.process_id = self.process_list.processes.len();
                 let process = Process::from_graph_list(
                     p_name,
                     integrand_base_name.clone(),
                     // TODO: avoid clone here
                     graphs.clone(),
                     generation_type,
-                    Some(process_defintion),
+                    Some(process_definition),
                     None,
                     &self.model,
                 )?;
@@ -2952,6 +3086,17 @@ impl State {
             }
         };
         if let Some(p) = process {
+            if let Some(mut imported_definition) = process_definition {
+                imported_definition.folder_name = p.definition.folder_name.clone();
+                imported_definition.process_id = p.definition.process_id;
+                if imported_definition != p.definition {
+                    return Err(eyre!(
+                        "--process-spec does not match existing process '{}'. Import the graphs into a new process or use the same process specification that created this process.",
+                        p.definition.folder_name
+                    ));
+                }
+            }
+
             let existing_names = p.get_integrand_names();
             let integrand_name = if existing_names.contains(&integrand_base_name.as_str()) {
                 if append {
@@ -2995,49 +3140,16 @@ impl State {
         Ok(())
     }
 
-    pub fn bench(
-        &mut self,
-        samples: usize,
-        process_id: usize,
-        integrand_name: String,
-        _n_cores: usize,
-    ) -> Result<()> {
-        let integrand = self
-            .process_list
-            .get_integrand_mut(process_id, integrand_name)?;
-        let name = integrand.name();
-
-        info!(
-            "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
-            name.green(),
-            samples.to_string().blue()
-        );
-
-        let now = Instant::now();
-        for _ in 0..samples {
-            let _ = integrand.evaluate_sample(
-                &Sample::Continuous(
-                    F(1.),
-                    (0..integrand.get_n_dim())
-                        .map(|_| F(rand::random::<f64>()))
-                        .collect(),
-                ),
-                &self.model,
-                F(1.),
-                1,
-                false,
-                Complex::new_zero(),
-            );
+    pub(crate) fn infer_graph_list_generation_type(graphs: &[Graph]) -> Result<GenerationType> {
+        if graphs.iter().all(|g| g.initial_state_cut.nedges(g) == 0) {
+            Ok(GenerationType::Amplitude)
+        } else if graphs.iter().all(|g| g.initial_state_cut.nedges(g) > 0) {
+            Ok(GenerationType::CrossSection)
+        } else {
+            Err(eyre!(
+                "Mix of amplitude and cross section graphs in the same file is not supported"
+            ))
         }
-        let total_time = now.elapsed().as_secs_f64();
-        info!(
-            "\n> Total time: {} s for {} samples, {} ms per sample\n",
-            format!("{:.1}", total_time).blue(),
-            format!("{}", samples).blue(),
-            format!("{:.5}", total_time * 1000. / (samples as f64)).green(),
-        );
-
-        Ok(())
     }
 
     pub fn new(log_dir: impl AsRef<Path>, log_file_name: Option<String>) -> Self {
@@ -3097,13 +3209,15 @@ impl State {
     ) -> Result<Self> {
         // let root_folder = root_folder.join("gammaloop_state");
         let manifest = load_state_manifest(&save_path)?;
-        run_state_migration_checks(&manifest, &save_path)?;
+        validate_state_layout(&manifest, &save_path)?;
         // Install GammaLoop's subscriber before importing Symbolica state. Symbolica warnings
         // initialize its fallback subscriber on first use, which would otherwise claim the global
         // tracing dispatch and escape ANSI styling in all subsequent GammaLoop output.
         let mut loaded_state = State::new(&save_path, trace_logs_filename);
         debug!("Loading state manifest version {}", manifest.version);
 
+        // Load the model before importing Symbolica state so UFO symbols retain their custom print
+        // callbacks; the import then remaps serialized symbol ids onto those definitions.
         let mut model = if let Some(model_path) = &model_path {
             info!("Loading model from {}", model_path.display());
             Model::from_file(model_path)?
@@ -3257,6 +3371,9 @@ impl State {
             }
         }
 
+        if selected_root_folder.join(STATE_MANIFEST_FILE).exists() {
+            load_state_manifest(&selected_root_folder)?;
+        }
         fs::create_dir_all(&selected_root_folder)?;
 
         let mut state_file =
@@ -3284,7 +3401,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, process::Command};
 
     use gammalooprs::{
         graph::Graph,
@@ -3303,6 +3420,8 @@ mod tests {
         },
         utils::{load_generic_model, serde_utils::SHOWDEFAULTS},
     };
+    use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
+    use symbolica::atom::{Atom, AtomCore};
     use tempfile::tempdir;
 
     use crate::commands::{
@@ -3312,6 +3431,53 @@ mod tests {
     };
 
     use super::*;
+
+    const STATE_LOAD_ORDER_CHILD: &str = "GAMMALOOP_STATE_LOAD_ORDER_CHILD";
+    const STATE_LOAD_ORDER_TEST: &str = "state::tests::state_load_preserves_ufo_custom_printer";
+
+    #[test]
+    fn state_load_preserves_ufo_custom_printer() {
+        if let Some(state_path) = std::env::var_os(STATE_LOAD_ORDER_CHILD) {
+            let _state = State::load(state_path.into(), None, None).unwrap();
+            // A one-character symbol is unquoted by Symbolica's default Typst printer, so the
+            // quotes prove that loading the model installed GammaLoop's UFO callback first.
+            let rendered = Atom::from(UFOSymbol::from("G"))
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string();
+            assert_eq!(rendered, r#""G""#);
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        let mut state = State::new(temp.path(), None);
+        state.model = load_generic_model("sm");
+        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.save(temp.path(), true, false).unwrap();
+
+        let output = Command::new(std::env::current_exe().unwrap())
+            .arg(STATE_LOAD_ORDER_TEST)
+            .arg("--exact")
+            .arg("--nocapture")
+            .env(STATE_LOAD_ORDER_CHILD, temp.path())
+            .output()
+            .unwrap();
+        let transcript = format!(
+            "stdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert!(
+            output.status.success(),
+            "child failed: {}\n{transcript}",
+            output.status
+        );
+        assert!(
+            !transcript.contains(
+                "Imported symbol UFO::G was previously defined with user-defined functions"
+            ),
+            "{transcript}"
+        );
+    }
 
     fn build_generated_scalar_bubble_state_with_external_backend() -> State {
         test_initialise().expect("test initialisation should succeed");
@@ -3327,11 +3493,14 @@ mod tests {
         state
             .import_graphs(
                 graphs,
-                Some("scalar_bubble".to_string()),
-                None,
-                Some("default".to_string()),
-                false,
-                false,
+                GraphImportOptions {
+                    process_name: Some("scalar_bubble".to_string()),
+                    process_id: None,
+                    process_definition: None,
+                    integrand_name: Some("default".to_string()),
+                    overwrite: false,
+                    append: false,
+                },
             )
             .expect("graph import should succeed");
 
@@ -3345,6 +3514,177 @@ mod tests {
             .expect("integrand generation should succeed");
 
         state
+    }
+
+    #[test]
+    fn named_generation_records_common_settings_for_persistent_uv_exports() -> Result<()> {
+        use gammalooprs::uv::{export::UVForestExportSettings, UVOrchestrator};
+
+        test_initialise()?;
+        for (folder, source) in [
+            (
+                "amplitudes",
+                include_str!("../../../tests/resources/graphs/scalar_bubble.dot"),
+            ),
+            (
+                "cross_sections",
+                include_str!(
+                    "../../../tests/resources/graphs/mass_approach_scalar_self_energy.dot"
+                ),
+            ),
+        ] {
+            let temp = tempdir()?;
+            let mut state = State::new_test();
+            state.model = load_generic_model("scalars");
+            state.model_parameters = InputParamCard::default_from_model(&state.model);
+            let mut graphs = Graph::from_string(source, &state.model)?;
+            graphs.truncate(1);
+            let graph_name = graphs[0].name.clone();
+            for name in ["first", "second"] {
+                state.import_graphs(
+                    graphs.clone(),
+                    GraphImportOptions {
+                        process_name: Some("named_export".into()),
+                        process_id: None,
+                        process_definition: None,
+                        integrand_name: Some(name.into()),
+                        overwrite: false,
+                        append: false,
+                    },
+                )?;
+            }
+            let mut settings = GlobalSettings::default();
+            settings.n_cores.generate = 1;
+            settings.generation.uv.orchestrator = UVOrchestrator::HedgePoset;
+            assert!(!settings.generation.evaluator.compile);
+            assert!(!settings.generation.evaluator.store_atom);
+            assert!(settings.generation.uv.subtract_uv);
+            assert!(settings.generation.uv.generate_integrated);
+            assert!(settings.generation.uv.softct);
+            assert!(settings.generation.threshold_subtraction.enable_thresholds);
+            let runtime = RuntimeSettings::default();
+            assert!(state.process_list.processes[0].settings_history.is_none());
+            for name in ["first", "second"] {
+                // The second named build must keep the already-generated sibling's
+                // identical source settings, without regenerating the whole process.
+                state.generate_integrand(&settings, (&runtime).into(), 0, Some(name.into()))?;
+                assert_eq!(
+                    state.process_list.processes[0].settings_history.as_ref(),
+                    Some(&settings)
+                );
+                state.process_list.processes[0]
+                    .get_integrand(name)?
+                    .require_generated()?;
+            }
+
+            // This State boundary cannot safely overwrite a generated sibling's
+            // provenance. Check both missing and conflicting process history.
+            let mut changed = settings.clone();
+            changed.generation.explicit_orientation_sum_only = true;
+            for missing_history in [false, true] {
+                if missing_history {
+                    state.process_list.processes[0].settings_history = None;
+                }
+                let before = bincode::encode_to_vec(
+                    &state.process_list.processes[0],
+                    bincode::config::standard(),
+                )?;
+                let error = state
+                    .generate_integrand(
+                        if missing_history { &settings } else { &changed },
+                        (&runtime).into(),
+                        0,
+                        Some("first".into()),
+                    )
+                    .unwrap_err();
+                assert!(
+                    error.to_string().contains("regenerate the whole process"),
+                    "{error:?}"
+                );
+                assert_eq!(
+                    bincode::encode_to_vec(
+                        &state.process_list.processes[0],
+                        bincode::config::standard()
+                    )?,
+                    before
+                );
+                state.process_list.processes[0].settings_history = Some(settings.clone());
+            }
+
+            let mut source_before = None;
+            for loaded in [false, true] {
+                let process = &state.process_list.processes[0];
+                assert_eq!(process.settings_history.as_ref(), Some(&settings));
+                let source = match &process.collection {
+                    ProcessCollection::Amplitudes(amplitudes) => amplitudes["first"].graphs[0]
+                        .derived_data
+                        .cff_expression
+                        .as_ref()
+                        .unwrap(),
+                    ProcessCollection::CrossSections(cross_sections) => cross_sections["first"]
+                        .supergraphs[0]
+                        .derived_data
+                        .global_cff_expression
+                        .as_ref()
+                        .unwrap(),
+                };
+                let source_bytes = bincode::encode_to_vec(source, bincode::config::standard())?;
+                if let Some(before) = &source_before {
+                    assert_eq!(
+                        &source_bytes, before,
+                        "named-generation source maps changed after persistence"
+                    );
+                } else {
+                    source_before = Some(source_bytes);
+                }
+                for computed in [false, true] {
+                    let output = temp.path().join(format!("export-{loaded}-{computed}"));
+                    state.process_list.export_uv_forests(
+                        &output,
+                        0,
+                        "first",
+                        &[0],
+                        &UVForestExportSettings { computed },
+                    )?;
+                    let graph_dir = output
+                        .join("processes")
+                        .join(folder)
+                        .join("named_export/first");
+                    assert!(graph_dir.join(format!("{graph_name}.forest.dot")).is_file());
+                    let nodes = graph_dir.join(format!("{graph_name}_nodes"));
+                    if computed {
+                        let mut node_ids = std::collections::BTreeSet::new();
+                        for forest in fs::read_dir(&nodes)? {
+                            for node in fs::read_dir(forest?.path())? {
+                                let node = node?;
+                                let file_name = node.file_name();
+                                let file_name = file_name.to_string_lossy();
+                                node_ids
+                                    .insert(file_name.split('_').nth(1).unwrap().parse::<usize>()?);
+                                assert!(fs::read_to_string(node.path())?
+                                    .contains("forest_residue_index"));
+                            }
+                        }
+                        assert!(node_ids.len() > 1, "computed export needs a proper UV node");
+                    } else {
+                        assert!(!nodes.exists());
+                    }
+                }
+                if !loaded {
+                    let saved = temp.path().join("saved");
+                    state.save(&saved, true, false)?;
+                    let history_path = saved
+                        .join("processes")
+                        .join(folder)
+                        .join("named_export/settings_history.toml");
+                    let history: GlobalSettings =
+                        toml::from_str(&fs::read_to_string(history_path)?)?;
+                    assert_eq!(history, settings);
+                    state = State::load(saved, None, None)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     #[test]
@@ -3434,6 +3774,7 @@ mod tests {
                 evaluator_spenso_time: Duration::from_secs(1),
                 evaluator_symbolica_time: Duration::from_secs(1),
                 evaluator_compile_time: Duration::ZERO,
+                ..GraphGenerationStats::default()
             },
             None,
         );
@@ -3448,6 +3789,7 @@ mod tests {
                 evaluator_spenso_time: Duration::from_secs(2),
                 evaluator_symbolica_time: Duration::ZERO,
                 evaluator_compile_time: Duration::ZERO,
+                ..GraphGenerationStats::default()
             },
             None,
         );
@@ -3625,11 +3967,14 @@ mod tests {
         state
             .import_graphs(
                 graphs,
-                Some("scalar_bubble".to_string()),
-                None,
-                Some("default".to_string()),
-                false,
-                false,
+                GraphImportOptions {
+                    process_name: Some("scalar_bubble".to_string()),
+                    process_id: None,
+                    process_definition: None,
+                    integrand_name: Some("default".to_string()),
+                    overwrite: false,
+                    append: false,
+                },
             )
             .expect("graph import should succeed");
         state
@@ -4023,6 +4368,7 @@ b = 1.0
         run_history.push_with_raw(
             Commands::Run(Run {
                 block_names: vec!["block_a".to_string()],
+                defines: Vec::new(),
                 commands: None,
             }),
             Some("run block_a".to_string()),
@@ -4324,6 +4670,46 @@ commands = ["quit -n"]
 
         let manifest = load_state_manifest(temp.path()).unwrap();
         assert_eq!(manifest.version, CURRENT_STATE_MANIFEST_VERSION);
+    }
+
+    #[test]
+    fn state_manifest_rejects_legacy_versions() {
+        for version in 0..CURRENT_STATE_MANIFEST_VERSION {
+            let temp = tempdir().unwrap();
+            fs::write(
+                temp.path().join(STATE_MANIFEST_FILE),
+                format!("version = {version}\n"),
+            )
+            .unwrap();
+
+            let err = load_state_manifest(temp.path()).unwrap_err();
+            let message = err.to_string();
+            assert!(message.contains("cannot be migrated"));
+            assert!(message.contains("regenerate the saved state"));
+        }
+    }
+
+    #[test]
+    fn state_manifest_requires_an_explicit_version() {
+        let temp = tempdir().unwrap();
+        fs::write(temp.path().join(STATE_MANIFEST_FILE), "").unwrap();
+
+        let err = load_state_manifest(temp.path()).unwrap_err();
+        assert!(err.to_string().contains("missing field `version`"));
+    }
+
+    #[test]
+    fn state_save_rejects_legacy_target_before_writing() {
+        let temp = tempdir().unwrap();
+        let symbolica_state = temp.path().join("symbolica_state.bin");
+        fs::write(temp.path().join(STATE_MANIFEST_FILE), "version = 1\n").unwrap();
+        fs::write(&symbolica_state, b"legacy sentinel").unwrap();
+        let mut state = State::new_test();
+
+        let err = state.save(temp.path(), true, false).unwrap_err();
+        assert!(err.to_string().contains("cannot be migrated"));
+        assert_eq!(fs::read(symbolica_state).unwrap(), b"legacy sentinel");
+        assert!(!temp.path().join("model.json").exists());
     }
 
     #[test]

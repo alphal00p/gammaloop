@@ -1,6 +1,4 @@
-use super::utils::{
-    assert_complex_approx_eq, assert_complex_approx_eq_precise, decimal_complex, decimal_scalar,
-};
+use super::utils::{assert_complex_approx_eq, assert_complex_approx_eq_precise, decimal_scalar};
 use super::*;
 use gammaloop_api::commands::evaluate_samples::{EvaluateSamplesPrecise, evaluate_sample_precise};
 use gammalooprs::{
@@ -8,7 +6,7 @@ use gammalooprs::{
     utils::{ArbPrec, FloatLike, PrecisionUpgradable, f128},
 };
 use ndarray::Array2;
-use symbolica::domains::float::Float as SymbolicaFloat;
+use symbolica::domains::float::{Float as SymbolicaFloat, Real};
 
 const INSPECT_POINT: [f64; 3] = [
     9.999_986_763_137_556e-1,
@@ -20,30 +18,92 @@ fn bubble_no_integrated_inspect_f64_target() -> Complex<f64> {
     Complex::new(0., 1.580_657_072_640_913e-3)
 }
 
-fn bubble_integrated_inspect_f64_target() -> Complex<f64> {
-    Complex::new(0., 7.646536622408714)
+fn bubble_integrated_inspect_f64_target() -> Result<Complex<f64>> {
+    // Historical half-per-orientation f64 target: 7.646536622408714.
+    let expected = bubble_integrated_inspect_target::<ArbPrec>(0, 20, 3, 1000)?;
+    Ok(Complex::new(
+        expected.re.0.into_f64(),
+        expected.im.0.into_f64(),
+    ))
 }
 
-fn bubble_no_integrated_inspect_arb_target() -> Result<Complex<F<ArbPrec>>> {
-    decimal_complex(
-        "0",
-        "1.58065707259153789178502163142117068526463969013510333564276531480561962745854241380044043667161360949437009469502210362095446423045005192306907814379082388080206628068736848837078345292618746320848779749755287907430238646092292488091093980397229936469812174411521638680368115422804978273334133533394619e-3",
-    )
+fn bubble_local_inspect_target<T>(orientation: usize, m_uv: usize) -> Result<Complex<F<T>>>
+where
+    T: FloatLike + From<SymbolicaFloat>,
+{
+    // Historical Arb local target, whose original parameter vector was not recorded:
+    // 1.58065707259153789178502163142117068526463969013510333564276531480561962745854241380044043667161360949437009469502210362095446423045005192306907814379082388080206628068736848837078345292618746320848779749755287907430238646092292488091093980397229936469812174411521638680368115422804978273334133533394619e-3
+    // The precise API promotes each f64 input's shortest decimal spelling before
+    // recomputing this spherical linear parameterization in the active precision.
+    assert!(orientation < 2);
+    let one = decimal_scalar::<T>("1")?;
+    let two = decimal_scalar::<T>("2")?;
+    let four = decimal_scalar::<T>("4")?;
+    let eight = decimal_scalar::<T>("8")?;
+    let sixteen = decimal_scalar::<T>("16")?;
+    let x = decimal_scalar::<T>(&INSPECT_POINT[0].to_string())?;
+    let radius = &x / (&one - &x);
+    let radius_squared = &radius * &radius;
+    let mass = decimal_scalar::<T>(&m_uv.to_string())?;
+    let w = (&radius_squared + &four).sqrt();
+    let w_uv = (&radius_squared + &mass * &mass).sqrt();
+    let sign = if orientation == 0 {
+        one.clone()
+    } else {
+        -one.clone()
+    };
+    let pi = F(one.0.PI());
+    let jacobian = &four * &pi * &radius_squared / ((&one - &x) * (&one - &x));
+    // Scalar coupling i, symmetry factor 1/2 and p0=1 multiply the elementary
+    // positive-pole bubble and vacuum contours by i/(16*pi^3).
+    let imaginary = jacobian / (sixteen * &pi * &pi * &pi)
+        * (&one / (eight * &w_uv * &w_uv * &w_uv) - &one / (four * &w * &w * (two * &w + sign)));
+    Ok(Complex::new(decimal_scalar("0")?, imaginary))
 }
 
-fn bubble_integrated_inspect_arb_target() -> Result<Complex<F<ArbPrec>>> {
-    decimal_complex(
-        "0",
-        "7.64653662240773309480677686392840290219746984480669154734901768691952015570111012674996544221262052127408967289853050825047370327497584609105765047005207365523919908520241184747302699549322870613657188648439629750071918645085104688836458853591510641295971894891421499189372272150971720917664200220655269e0",
-    )
+fn bubble_integrated_inspect_target<T>(
+    orientation: usize,
+    m_uv: usize,
+    mu_r: usize,
+    localization_scale: usize,
+) -> Result<Complex<F<T>>>
+where
+    T: FloatLike + From<SymbolicaFloat>,
+{
+    // Historical half-per-orientation Arb addback target:
+    // 7.64653662240773309480677686392840290219746984480669154734901768691952015570111012674996544221262052127408967289853050825047370327497584609105765047005207365523919908520241184747302699549322870613657188648439629750071918645085104688836458853591510641295971894891421499189372272150971720917664200220655269e0
+    let mut expected = bubble_local_inspect_target::<T>(orientation, m_uv)?;
+    if orientation == 0 {
+        let one = decimal_scalar::<T>("1")?;
+        let four = decimal_scalar::<T>("4")?;
+        let thirty_two = decimal_scalar::<T>("32")?;
+        let x = decimal_scalar::<T>(&INSPECT_POINT[0].to_string())?;
+        let radius = &x / (&one - &x);
+        let radius_squared = &radius * &radius;
+        let pi = F(one.0.PI());
+        let pi_squared = &pi * &pi;
+        let m_uv = decimal_scalar::<T>(&m_uv.to_string())?;
+        let mu_r = decimal_scalar::<T>(&mu_r.to_string())?;
+        let scale = decimal_scalar::<T>(&localization_scale.to_string())?;
+        let radial_denominator = &radius_squared + &scale * &scale;
+        // rho=L/[pi^2 (r^2+L^2)^2] integrates to one in d^3k. The complete
+        // MS-bar finite addback i*log(m_uv^2/mu_r^2)/(32*pi^2) lives on key 0.
+        let density = scale / (&pi_squared * &radial_denominator * &radial_denominator);
+        let jacobian = four * &pi * radius_squared / ((&one - &x) * (&one - &x));
+        let finite = ((&m_uv * &m_uv) / (&mu_r * &mu_r)).log() / (thirty_two * pi_squared);
+        expected.im += finite * density * jacobian;
+    }
+    Ok(expected)
 }
 
 fn bubble_no_integrated_inspect_quad_target() -> Result<Complex<F<f128>>> {
-    decimal_complex("0", "1.58065707259153789178502133686503e-3")
+    // Historical local Quad target: 1.58065707259153789178502133686503e-3.
+    bubble_local_inspect_target(0, 20)
 }
 
 fn bubble_integrated_inspect_quad_target() -> Result<Complex<F<f128>>> {
-    decimal_complex("0", "7.64653662240773309480677686361011e0")
+    // Historical half-per-orientation Quad target: 7.64653662240773309480677686361011e0.
+    bubble_integrated_inspect_target(0, 20, 3, 1000)
 }
 
 fn bubble_integrated_target() -> Complex<F<f64>> {
@@ -275,7 +335,90 @@ mod important {
     #[test]
     #[serial]
     fn scalar_bubble_inspect() -> Result<()> {
+        use gammalooprs::{
+            cff::orientations::GraphOrientation,
+            processes::{ProcessCollection, amplitude::AmplitudeGraph},
+        };
+        use symbolica::atom::{Atom, AtomCore};
+
         let mut cli = setup_scalar_bubble_uv_cli("scalar_bubble_inspect")?;
+        let graph = |process: &str| -> Result<AmplitudeGraph> {
+            let (id, name) = cli.state.find_integrand_ref(
+                Some(&ProcessRef::Unqualified(process.to_string())),
+                Some(&"scalar_bubble_below_thres".to_string()),
+            )?;
+            let ProcessCollection::Amplitudes(amplitudes) =
+                &cli.state.process_list.processes[id].collection
+            else {
+                return Err(eyre::eyre!("bubble diagnostic requires an amplitude"));
+            };
+            let [graph] = amplitudes[&name].graphs.as_slice() else {
+                return Err(eyre::eyre!("bubble diagnostic requires one graph"));
+            };
+            Ok(graph.clone())
+        };
+        let integrated = graph("bubble")?;
+        let local = graph("bubble_no_integrated_UV")?;
+        assert_eq!(
+            integrated.graph.loop_momentum_basis,
+            local.graph.loop_momentum_basis
+        );
+        let integrated_cff = integrated.derived_data.cff_expression.as_ref().unwrap();
+        let local_cff = local.derived_data.cff_expression.as_ref().unwrap();
+        assert_eq!(
+            integrated_cff.expression.orientations.len(),
+            local_cff.expression.orientations.len()
+        );
+        let runtime_ids = integrated_cff
+            .expression
+            .orientations
+            .iter_enumerated()
+            .filter(|(_, orientation)| {
+                cli.cli_settings
+                    .global
+                    .generation
+                    .orientation_pattern
+                    .filter(*orientation)
+            })
+            .map(|(id, _)| id)
+            .collect::<Vec<_>>();
+        let difference = &integrated.derived_data.all_mighty_integrand
+            - &local.derived_data.all_mighty_integrand;
+        let mut nonzero_hosts = Vec::new();
+        for (id, orientation) in integrated_cff.expression.orientations.iter_enumerated() {
+            let other = &local_cff.expression.orientations[id];
+            assert_eq!(orientation.residue_map_key(), other.residue_map_key());
+            assert_eq!(orientation.edge_energy_map, other.edge_energy_map);
+            assert_eq!(orientation.loop_energy_map, other.loop_energy_map);
+            for selected in &runtime_ids {
+                assert_eq!(
+                    selected.select(id.atom()),
+                    Atom::num(i64::from(*selected == id))
+                );
+            }
+            let delta = orientation
+                .data
+                .orientation
+                .select(id.select(difference.as_view()))
+                .expand();
+            if !delta.is_zero() {
+                nonzero_hosts.push(id);
+            }
+        }
+        // The vacuum addback has no remaining denominator contour. Its normalized
+        // kernel belongs to one deterministic complete-map host, so an individual
+        // orientation snapshot need not preserve the former half-per-host value.
+        assert_eq!(
+            nonzero_hosts.len(),
+            1,
+            "the complete integrated addback must have one host"
+        );
+        assert_eq!(runtime_ids.len(), 2);
+        assert_eq!(
+            nonzero_hosts,
+            vec![runtime_ids[0]],
+            "the canonical visible key 0 must carry the complete addback"
+        );
 
         set_single_precision_level(
             &mut cli,
@@ -297,10 +440,10 @@ mod important {
 
         set_single_precision_level(&mut cli, "bubble", "scalar_bubble_below_thres", "Double")?;
         let bubble_integrated_f64 =
-            inspect_bubble_process(&mut cli, "bubble", "scalar_bubble_below_thres", vec![0, 1])?;
+            inspect_bubble_process(&mut cli, "bubble", "scalar_bubble_below_thres", vec![0, 0])?;
         assert_complex_approx_eq(
             bubble_integrated_f64,
-            bubble_integrated_inspect_f64_target(),
+            bubble_integrated_inspect_f64_target()?,
             "bubble integrated inspect f64 benchmark",
         );
 
@@ -335,7 +478,7 @@ mod important {
             &mut cli,
             "bubble",
             "scalar_bubble_below_thres",
-            vec![0, 1],
+            vec![0, 0],
             false,
         )?)?;
         assert_complex_approx_eq_precise(
@@ -366,7 +509,7 @@ mod important {
         )?)?;
         assert_complex_approx_eq_precise(
             &bubble_no_integrated_arb,
-            &bubble_no_integrated_inspect_arb_target()?,
+            &bubble_local_inspect_target::<ArbPrec>(0, 20)?,
             &decimal_scalar("1.0e-60")?,
             "bubble_no_integrated_UV inspect ArbPrec benchmark",
         );
@@ -382,12 +525,12 @@ mod important {
             &mut cli,
             "bubble",
             "scalar_bubble_below_thres",
-            vec![0, 1],
+            vec![0, 0],
             true,
         )?)?;
         assert_complex_approx_eq_precise(
             &bubble_integrated_arb,
-            &bubble_integrated_inspect_arb_target()?,
+            &bubble_integrated_inspect_target::<ArbPrec>(0, 20, 3, 1000)?,
             &decimal_scalar("1.0e-60")?,
             "bubble integrated inspect ArbPrec benchmark",
         );
@@ -397,6 +540,45 @@ mod important {
             &arb_vs_quad_tolerance()?,
             "bubble integrated inspect ArbPrec compatible with Quad",
         );
+
+        // Check each actual orientation at two scale triples against the same
+        // elementary contours; all original baseline precision checks stay above.
+        for (m_uv, mu_r, localization_scale) in [(20, 3, 1000), (13, 5, 700)] {
+            for process in ["bubble", "bubble_no_integrated_UV"] {
+                cli.run_command(&format!(
+                    "set process -p {process} -i scalar_bubble_below_thres kv general.m_uv={m_uv} general.mu_r={mu_r} general.renormalization_localization_scale={localization_scale}"
+                ))?;
+            }
+            for orientation in 0..2 {
+                for process in ["bubble", "bubble_no_integrated_UV"] {
+                    let actual = arb_result(precise_inspect_bubble_process(
+                        &mut cli,
+                        process,
+                        "scalar_bubble_below_thres",
+                        vec![0, orientation],
+                        true,
+                    )?)?;
+                    let expected = if process == "bubble" {
+                        bubble_integrated_inspect_target::<ArbPrec>(
+                            orientation,
+                            m_uv,
+                            mu_r,
+                            localization_scale,
+                        )?
+                    } else {
+                        bubble_local_inspect_target::<ArbPrec>(orientation, m_uv)?
+                    };
+                    assert_complex_approx_eq_precise(
+                        &actual,
+                        &expected,
+                        &decimal_scalar("1.0e-60")?,
+                        &format!(
+                            "{process} key {orientation} independent contour at m_uv={m_uv}, mu_r={mu_r}, L={localization_scale}"
+                        ),
+                    );
+                }
+            }
+        }
 
         clean_test(&cli.cli_settings.state.folder);
         Ok(())

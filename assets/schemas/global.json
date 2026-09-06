@@ -265,6 +265,9 @@
         "evaluator": {
           "$ref": "#/$defs/EvaluatorSettings"
         },
+        "explicit_orientation_sum_only": {
+          "type": "boolean"
+        },
         "feyngen": {
           "$ref": "#/$defs/FeyGenSettings"
         },
@@ -288,6 +291,9 @@
         },
         "tropical_subgraph_table": {
           "$ref": "#/$defs/TropicalSubgraphTableSettings"
+        },
+        "uniform_numerator_sampling_scale": {
+          "$ref": "#/$defs/UniformNumeratorSamplingScale"
         },
         "uv": {
           "$ref": "#/$defs/UVgenerationSettings"
@@ -520,6 +526,9 @@
         "keep_marker": {
           "type": "boolean"
         },
+        "local_uv_cts_from_expanded_4d_integrands": {
+          "type": "boolean"
+        },
         "orchestrator": {
           "$ref": "#/$defs/UVOrchestrator"
         },
@@ -537,6 +546,14 @@
         }
       },
       "additionalProperties": false
+    },
+    "UniformNumeratorSamplingScale": {
+      "type": "string",
+      "enum": [
+        "none",
+        "beyond_quadratic",
+        "all"
+      ]
     },
     "VakintSettings": {
       "type": "object",

@@ -7,12 +7,12 @@
 //! gammalooprs = { path = "../../../../crates/gammalooprs" }
 //!
 //! [patch.crates-io]
-//! #graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-//! #numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-//! #symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-//! graphica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
-//! numerica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
+//! #graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
+//! #numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
+//! #symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03" }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03" }
 //!
 //! ```
 //!

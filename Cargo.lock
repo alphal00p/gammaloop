@@ -1587,6 +1587,7 @@ dependencies = [
  "tabled",
  "tempfile",
  "thiserror 2.0.18",
+ "three-dimensional-reps",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "tracing-indicatif",
@@ -1600,6 +1601,7 @@ dependencies = [
 name = "gammaloop-integration-tests"
 version = "0.1.0"
 dependencies = [
+ "bincode 2.0.1",
  "cc",
  "color-eyre",
  "colored 3.1.1",
@@ -1609,6 +1611,7 @@ dependencies = [
  "gammalooprs",
  "insta",
  "itertools 0.14.0",
+ "linnet",
  "momtrop",
  "ndarray",
  "rand 0.9.4",
@@ -1619,6 +1622,7 @@ dependencies = [
  "symbolica",
  "symbolica-utils",
  "tabled",
+ "three-dimensional-reps",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "vakint",
@@ -1659,6 +1663,7 @@ name = "gammaloop-workspace-hack"
 version = "0.1.0"
 dependencies = [
  "ahash 0.8.12",
+ "aho-corasick",
  "anstream",
  "arrayvec",
  "bincode 2.0.1",
@@ -1694,6 +1699,7 @@ dependencies = [
  "regex-automata",
  "regex-syntax",
  "rug",
+ "rust-embed-utils",
  "rustix 1.1.4",
  "serde",
  "serde_core",
@@ -1774,6 +1780,7 @@ dependencies = [
  "symbolica-utils",
  "tabled",
  "thiserror 2.0.18",
+ "three-dimensional-reps",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "tracing-appender",
@@ -4999,6 +5006,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f60246a4944f24f6e018aa17cdeffb7818b76356965d03b07d6a9886e8962185"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "three-dimensional-reps"
+version = "0.1.0"
+dependencies = [
+ "bincode 2.0.1",
+ "bincode-trait-derive",
+ "itertools 0.14.0",
+ "linnet",
+ "nu-ansi-term",
+ "serde",
+ "serde_json",
+ "symbolica",
+ "tabled",
+ "thiserror 2.0.18",
+ "typed-index-collections",
 ]
 
 [[package]]

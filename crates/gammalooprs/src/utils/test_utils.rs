@@ -9,7 +9,10 @@ use linnet::half_edge::{
 };
 use momtrop::assert_approx_eq;
 use spenso::structure::abstract_index::AIND_SYMBOLS;
-use symbolica::{atom::AtomCore, parse_lit};
+use symbolica::{
+    atom::{AtomCore, AtomView},
+    parse_lit,
+};
 
 use crate::{
     momentum::ThreeMomentum,
@@ -43,6 +46,14 @@ fn normalization() {
     assert_snapshot!(a.to_canonical_string(),@"0");
     assert_snapshot!(b.to_canonical_string(),@"gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(1))");
 
+    let abstract_index = parse_lit!(spenso::mink(4, 1));
+    let b = GS.emr_vec_index(EdgeIndex(1), abstract_index.as_view());
+    let AtomView::Fun(b) = b.as_view() else {
+        panic!("Q3 with an abstract Minkowski index should remain indexed");
+    };
+    assert_eq!(b.get_symbol(), GS.emr_vec);
+    assert_eq!(b.get(1), abstract_index.as_view());
+
     let c = GS.energy_delta(GS.cind(1));
     assert_snapshot!(c.to_canonical_string(),@"0");
     let c = GS.energy_delta(GS.cind(0));
@@ -50,6 +61,24 @@ fn normalization() {
 
     let expr = parse_lit!(f(a + p + r));
     assert_snapshot!(GS.linearize.call_args([expr]).to_canonical_string(),@"gammalooprs::{}::f(gammalooprs::{}::a)+gammalooprs::{}::f(gammalooprs::{}::p)+gammalooprs::{}::f(gammalooprs::{}::r)");
+}
+
+#[test]
+fn spatial_emr_rescaling_covers_abstract_and_concrete_indices() {
+    let edge = EdgeIndex(1);
+    let abstract_index = parse_lit!(spenso::mink(4, 1));
+    let abstract_momentum = GS.emr_vec_index(edge, abstract_index.as_view());
+    let concrete_momentum = GS.emr_vec_index(edge, GS.cind(1));
+    let rescale = |momentum: &symbolica::atom::Atom| {
+        momentum
+            .replace(GS.emr_vec_index(edge, crate::utils::W_.x___))
+            .with(GS.emr_vec_index(edge, crate::utils::W_.x___) * GS.rescale)
+            .replace(GS.emr_mom(edge, crate::utils::W_.x___))
+            .with(GS.emr_mom(edge, crate::utils::W_.x___) * GS.rescale)
+    };
+
+    assert_eq!(rescale(&abstract_momentum), abstract_momentum * GS.rescale);
+    assert_eq!(rescale(&concrete_momentum), concrete_momentum * GS.rescale);
 }
 
 #[test]

@@ -4456,15 +4456,7 @@ pub(crate) fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
             }
         }
     } else {
-        let pref;
-        let tau;
-        if p < 0.5 {
-            pref = -1.0;
-            tau = p;
-        } else {
-            pref = 1.0;
-            tau = q;
-        }
+        let (pref, tau) = if p < 0.5 { (-1.0, p) } else { (1.0, q) };
         let t = (-2.0 * tau.ln()).sqrt();
 
         let a_0 = 3.31125922108741;

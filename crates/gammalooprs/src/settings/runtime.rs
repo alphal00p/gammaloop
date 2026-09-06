@@ -238,6 +238,8 @@ pub struct GeneralSettings {
     pub renormalization_localization_scale: f64,
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub mu_r: f64,
+    #[serde(skip_serializing_if = "is_float::<1>")]
+    pub numerator_sampling_scale: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub additional_param_values: Vec<f64>,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -262,6 +264,7 @@ impl Default for GeneralSettings {
             m_uv: 1000.0,
             renormalization_localization_scale: 1000.0,
             mu_r: 1000.0,
+            numerator_sampling_scale: 1.0,
 
             additional_param_values: vec![],
             integral_unit: IntegralUnit::Auto,

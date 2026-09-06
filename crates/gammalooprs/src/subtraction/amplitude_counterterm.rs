@@ -107,7 +107,7 @@ impl AmplitudeCountertermAtom {
 
     pub(crate) fn zero_like(&self) -> Self {
         Self {
-            parametric: self.parametric.map(|_| symbolica::atom::Atom::Zero),
+            parametric: self.parametric.zero_like(),
         }
     }
 
@@ -116,6 +116,7 @@ impl AmplitudeCountertermAtom {
         &self,
         param_builder: &ParamBuilder,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+        production_orientation_ids: &[OrientationID],
         global_settings: &GlobalSettings,
     ) -> (AmplitudeCountertermEvaluator, EvaluatorBuildTimings) {
         let _progress_guard =
@@ -126,14 +127,39 @@ impl AmplitudeCountertermAtom {
         for (index, integrand) in self.parametric.iter() {
             let dual_shape = shape_from_cut_cff_index(index);
 
-            let (evaluator_stack, evaluator_timings) = EvaluatorStack::new_with_timings(
-                slice::from_ref(integrand),
-                param_builder,
-                orientations.as_slice().as_ref(),
-                dual_shape,
-                &global_settings.generation.evaluator,
-            )
-            .unwrap();
+            // In explicit mode the atom already contains the complete
+            // orientation sum, so selecting orientations again would double count it.
+            let (evaluator_stack, evaluator_timings) =
+                if let Some(bodies) = self.parametric.deferred_terms(index) {
+                    assert!(
+                        global_settings.generation.explicit_orientation_sum_only,
+                        "deferred projected-CFF terms require an explicit orientation sum"
+                    );
+                    EvaluatorStack::new_deferred_explicit_sum_with_timings(
+                        integrand,
+                        bodies,
+                        param_builder,
+                        dual_shape,
+                        &global_settings.generation.evaluator,
+                    )
+                } else if global_settings.generation.explicit_orientation_sum_only {
+                    EvaluatorStack::new_explicit_sum_with_timings(
+                        slice::from_ref(integrand),
+                        param_builder,
+                        dual_shape,
+                        &global_settings.generation.evaluator,
+                    )
+                } else {
+                    EvaluatorStack::new_with_timings(
+                        slice::from_ref(integrand),
+                        param_builder,
+                        orientations.as_slice().as_ref(),
+                        production_orientation_ids,
+                        dual_shape,
+                        &global_settings.generation.evaluator,
+                    )
+                }
+                .unwrap();
             timings += evaluator_timings;
             evaluator_stacks.insert(*index, evaluator_stack);
         }

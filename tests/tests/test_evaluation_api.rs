@@ -431,6 +431,10 @@ fn lu_rust_get_integrand_info_reports_groups_orientations_lmbs_and_cuts() -> Res
                 .map(|threshold| threshold.esurface_id)
                 .collect::<Vec<_>>()
         );
+        assert_eq!(
+            group.threshold_esurface_ids,
+            (0..group.threshold_esurfaces.len()).collect::<Vec<_>>()
+        );
         for threshold in &group.threshold_esurfaces {
             assert_eq!(threshold.representative_graph_id, master_graph_id);
             assert_eq!(threshold.classification, None);

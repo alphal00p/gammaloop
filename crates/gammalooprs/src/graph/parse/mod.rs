@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    cff::generation::SurfaceCache,
+    cff::surface::SurfaceCache,
     feyngen::{
         GenerationType,
         diagram_generator::{EdgeColor, NodeColorWithVertexRule},

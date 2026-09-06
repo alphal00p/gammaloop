@@ -157,7 +157,9 @@ define_gamma_loop_pairs! {
     m_uv,
     renormalization_localization_scale,
     mu_r_sq,
-    orientations,
+    numerator_sampling_scale,
+    pub(crate) residue_map_id,
+    pub(crate) orientations,
     pub model_parameters,
     pub external_energies,
     external_spatial,
@@ -195,6 +197,10 @@ impl GammaLoopPairs {
     pub fn validate(&self) {
         debug!("Validating mu_r_sq");
         self.mu_r_sq.validate();
+        debug!("Validating numerator_sampling_scale");
+        self.numerator_sampling_scale.validate();
+        debug!("Validating residue_map_id");
+        self.residue_map_id.validate();
         debug!("Validating model_parameters");
         self.model_parameters.validate();
         debug!("Validating external_energies");
@@ -250,6 +256,10 @@ impl GammaLoopPairs {
                 GS.renormalization_localization_scale,
             ),
             mu_r_sq: ParamValuePairs::default_from_symbol(GS.mu_r_sq),
+            numerator_sampling_scale: ParamValuePairs::default_from_symbol(
+                GS.numerator_sampling_scale,
+            ),
+            residue_map_id: ParamValuePairs::default_from_symbol(GS.residue_map_id),
             tstar: ParamValuePairs::default_from_symbol(GS.rescale_star),
             radius_left: ParamValuePairs::default_from_symbol(GS.radius_left),
             radius_right: ParamValuePairs::default_from_symbol(GS.radius_right),
@@ -811,6 +821,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         InputParams {
             values: SliceMut::Borrowed(&mut self.values[value_index]),
             multiplicative_offset,
+            residue_map_id_start: self.pairs.residue_map_id.value_range.start,
             orientations_start: self.pairs.orientations.value_range.start,
         }
     }
@@ -905,6 +916,7 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         InputParams {
             values: SliceMut::Owned(values),
             multiplicative_offset,
+            residue_map_id_start: self.pairs.residue_map_id.value_range.start,
             orientations_start: self.pairs.orientations.value_range.start,
         }
     }
@@ -935,7 +947,12 @@ impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
 
         let mut values: Vec<Complex<F<ArbPrec>>> = self.values[value_index]
             .iter()
-            .map(|v| v.higher().higher())
+            .map(|value| {
+                Complex::new(
+                    F::<ArbPrec>::from_ff64(value.re),
+                    F::<ArbPrec>::from_ff64(value.im),
+                )
+            })
             .collect();
 
         let flattened_loop_momenta = if let Some(dual_loop_moms) = &sample.sample.dual_loop_moms {
@@ -1002,6 +1019,7 @@ impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
         InputParams {
             values: SliceMut::Owned(values),
             multiplicative_offset,
+            residue_map_id_start: self.pairs.residue_map_id.value_range.start,
             orientations_start: self.pairs.orientations.value_range.start,
         }
     }
@@ -1246,10 +1264,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             symbol!("x").to_atom(),
         )
         .unwrap();
-        let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
-
         // new.fn_map.add_conditional(GS.orientation_if);
-        new.add_constant(GS.pi.into(), pi_rational.into());
         new.add_constant(CS.cf.into(), Rational::new(4, 3).into());
         new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
         new.add_constant(CS.nc.into(), Rational::new(3, 1).into());
@@ -1306,6 +1321,19 @@ impl<T: FloatLike> ParamBuilder<T> {
         for (index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = index + 1;
             values[self.pairs.mu_r_sq.value_range.start * multiplicative_offset] = mu_r_sq.clone();
+        }
+    }
+
+    pub(crate) fn numerator_sampling_scale_value(
+        &mut self,
+        numerator_sampling_scale: Complex<F<T>>,
+    ) {
+        debug_assert!(self.pairs.numerator_sampling_scale.value_range.len() == 1);
+
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self.pairs.numerator_sampling_scale.value_range.start * multiplicative_offset] =
+                numerator_sampling_scale.clone();
         }
     }
 
@@ -1699,6 +1727,13 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        dot,
+        graph::parse::from_dot::IntoGraph,
+        initialisation::test_initialise,
+        momentum::sample::{BareMomentumSample, LoopMomenta},
+        utils::PrecisionUpgradable,
+    };
 
     #[test]
     fn initialize_duals_extends_value_buffers_by_requested_size() {
@@ -1731,6 +1766,55 @@ mod tests {
 
         param_builder.initialize_duals(4);
         assert_eq!(param_builder.values.len(), 4);
+    }
+
+    #[test]
+    fn arb_parameter_baseline_does_not_pass_through_quad_precision() {
+        test_initialise().unwrap();
+        let graph = dot!(
+            digraph arb_parameter_baseline {
+                edge [num=1 mass=0]
+                node [num=1]
+                A -> B [id=0]
+            }
+        )
+        .unwrap();
+        let mut param_builder = ParamBuilder::<f64>::new_empty();
+        param_builder.values = vec![vec![Complex::new(F(0.1_f64), F(-0.3_f64))]];
+        let sample = MomentumSample {
+            sample: BareMomentumSample {
+                loop_moms: LoopMomenta(Vec::new()),
+                dual_loop_moms: None,
+                loop_mom_cache_id: 0,
+                loop_mom_base_cache_id: 0,
+                external_moms: Vec::new().into(),
+                external_mom_cache_id: 0,
+                external_mom_base_cache_id: 0,
+                jacobian: F::<ArbPrec>::from_f64(1.0),
+                orientation: None,
+                parameterization_branch: None,
+            },
+        };
+        let through_quad = param_builder.values[0][0].higher().higher();
+
+        let lifted = <ParamBuilder<f64> as UpdateAndGetParams<ArbPrec>>::update_emr_and_get_params(
+            &mut param_builder,
+            (false, false),
+            &sample,
+            &graph,
+            &[],
+            &[],
+            None,
+            None,
+            None,
+        );
+        let direct = Complex::new(
+            F::<ArbPrec>::from_ff64(F(0.1_f64)),
+            F::<ArbPrec>::from_ff64(F(-0.3_f64)),
+        );
+
+        assert_eq!(lifted.as_slice(), &[direct]);
+        assert_ne!(lifted.as_slice(), &[through_quad]);
     }
 }
 

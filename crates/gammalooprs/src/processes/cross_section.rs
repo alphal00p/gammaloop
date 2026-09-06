@@ -5,9 +5,9 @@ use std::{
     io::Write,
     ops::{Index, IndexMut},
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
-use ahash::HashMap;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -23,15 +23,18 @@ use vakint::Vakint;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        CutCFFIndex,
+        CffEnergyDegreeBoundReport, CutCFFIndex,
         esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
-        expression::{CFFExpression, OrientationID},
+        expression::{
+            OrientationID, normalize_cut_edge_support_with_raised_edge_groups,
+            normalize_three_d_expression_cut_support_with_raised_edge_groups,
+        },
     },
     debug_tags, define_index,
     graph::{
         GraphGroup, GroupId, LMBext, LmbChannelFallback, LmbIndex, LoopMomentumBasis,
         ThresholdPinchStatus,
-        cuts::{CutSet, ResidueSelector},
+        cuts::{CutSet, LuCutSelection, ResidueSelector},
         edge::EdgeMass,
         parse::complete_group_parsing,
     },
@@ -72,6 +75,7 @@ use linnet::half_edge::{
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{domains::dual::HyperDual, prelude::*};
+use three_dimensional_reps::GeneratedThreeDExpression;
 use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -181,6 +185,7 @@ fn max_dual_size_for_cut_cff_indices<'a>(
 define_index! {pub struct RightThresholdId;}
 define_index! {pub struct LeftThresholdId;}
 define_index! {pub struct CutGroupId;}
+define_index! {pub struct TopologicalThresholdId;}
 
 /// Eligibility of one threshold E-surface relative to one side of one physical cut.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -211,7 +216,7 @@ impl ThresholdCountertermStatus {
 #[derive(Clone, Debug, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ThresholdCountertermAssociation {
-    pub esurface_id: EsurfaceID,
+    pub topological_threshold_id: TopologicalThresholdId,
     pub cut_boundary_edges: Vec<EdgeIndex>,
     pub threshold_boundary_edges: Vec<EdgeIndex>,
     pub invariant_bound_is_applicable: bool,
@@ -412,7 +417,7 @@ struct TopologicalThresholdCandidate {
     left: SuBitGraph,
     cut: OrientedCut,
     right: SuBitGraph,
-    esurface_id: EsurfaceID,
+    id: TopologicalThresholdId,
 }
 
 use derive_more::{From, Into};
@@ -1025,6 +1030,9 @@ impl CrossSection {
                 graph_to_group_id: graph_to_group_id_for_group_structure(
                     &self.graph_group_structure,
                 ),
+                explicit_orientation_sum_only: global_settings
+                    .generation
+                    .explicit_orientation_sum_only,
             },
             event_processing_runtime: Default::default(),
             active_f64_backend: Default::default(),
@@ -1320,6 +1328,14 @@ pub struct CrossSectionGraph {
     pub derived_data: CrossSectionDerivedData,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CutkoskyCutCount {
+    pub candidate_st_cuts: usize,
+    pub multi_edge_candidate_cuts: usize,
+    pub process_compatible_cuts: usize,
+    pub selected_cuts: usize,
+}
+
 impl CrossSectionGraph {
     pub(crate) fn new(graph: Graph) -> Self {
         let (source_node, target_node) = graph.get_source_and_target();
@@ -1414,16 +1430,13 @@ impl CrossSectionGraph {
 
         let vk = crate::utils::vakint()?;
         debug_tags!(#generation; "building parametric integrand");
-        self.build_parametric_integrand(settings, vk)?;
+        let cff_energy_degree_bound_reports = Mutex::new(Vec::new());
+        self.build_parametric_integrand(settings, vk, &cff_energy_degree_bound_reports)?;
         //self.build_parametric_integrand_cut_groups(settings)?;
 
-        let threshold_candidates = self.topological_threshold_candidates()?;
-        self.derived_data.threshold_candidate_esurface_ids = threshold_candidates
-            .iter()
-            .map(|candidate| candidate.esurface_id)
-            .sorted()
-            .dedup()
-            .collect();
+        let (threshold_candidates, topological_threshold_esurfaces) =
+            self.topological_threshold_candidates();
+        self.derived_data.topological_threshold_esurfaces = topological_threshold_esurfaces;
         self.derived_data.cut_threshold_associations =
             ti_vec![CutThresholdCountertermAssociations::default(); self.cuts.len()];
 
@@ -1437,8 +1450,13 @@ impl CrossSectionGraph {
                 &runtime_settings,
                 &threshold_candidates,
                 vk,
+                &cff_energy_degree_bound_reports,
             )?;
         }
+
+        stats.cff_energy_degree_bound_reports = cff_energy_degree_bound_reports
+            .into_inner()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         stats.total_time += preprocess_started.elapsed();
         Ok(stats)
@@ -1462,6 +1480,13 @@ impl CrossSectionGraph {
     }
 
     fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<GraphGenerationStats> {
+        settings.validate_explicit_orientation_sum_options()?;
+        self.graph.ensure_energy_convergent_cycles(
+            &self
+                .graph
+                .no_dummy()
+                .subtract(&self.graph.initial_state_cut),
+        )?;
         let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
@@ -1477,41 +1502,58 @@ impl CrossSectionGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        let global_cff = self.graph.generate_cff(
+        // The options provision maps from the complete factorized numerator.
+        // The numerator itself remains caller-owned and is mapped only when
+        // the corresponding orientation integrand is assembled.
+        let options = self.graph.production_cff_3d_expression_options(settings)?;
+        let mut global_cff = self.graph.generate_3d_expression_for_integrand(
             &contract_edges,
             &canonize_esurface,
-            &settings.orientation_pattern,
+            &options,
+            None,
         )?;
+        let raised_edge_groups = self.graph.get_raised_edge_groups();
+        normalize_three_d_expression_cut_support_with_raised_edge_groups(
+            &mut global_cff.expression,
+            &raised_edge_groups,
+        );
 
+        let generated_esurfaces = &global_cff.expression.surfaces.esurface_cache;
+        let normalized_generated_esurfaces = generated_esurfaces
+            .iter()
+            .map(|esurface| {
+                Graph::normalize_esurface_with_raised_edge_groups(esurface, &raised_edge_groups)
+            })
+            .collect::<TiVec<EsurfaceID, _>>();
         let cut_esurface_map = self
             .cut_esurface
             .iter()
             .map(|esurface| {
-                if let Some(pos) = self
-                    .graph
-                    .surface_cache
-                    .esurface_cache
+                let normalized =
+                    Graph::normalize_esurface_with_raised_edge_groups(esurface, &raised_edge_groups);
+                generated_esurfaces
                     .iter()
-                    .position(|e_sf| e_sf == esurface)
-                    .map(Into::<EsurfaceID>::into)
-                {
-                    pos
-                } else {
-                    let pos = self.graph.surface_cache.esurface_cache.len();
-                    self.graph
-                        .surface_cache
-                        .esurface_cache
-                        .push(esurface.clone());
-                    EsurfaceID(pos)
-                }
+                    .position(|candidate| candidate == esurface)
+                    .or_else(|| {
+                        normalized_generated_esurfaces
+                            .iter()
+                            .position(|candidate| candidate == &normalized)
+                    })
+                    .map(EsurfaceID)
+                    .ok_or_else(|| {
+                        eyre!(
+                            "Cutkosky-cut E-surface {esurface:?} for graph {} is absent from its generated CFF expression catalogue (normalized: {normalized:?})",
+                            self.graph.name
+                        )
+                    })
             })
-            .collect();
+            .collect::<Result<_>>()?;
 
         self.cut_esurface_id_map = cut_esurface_map;
 
         let esurface_raised_data = self
             .graph
-            .determine_raised_esurfaces_from_expression(&global_cff);
+            .determine_raised_esurfaces_from_expression(&global_cff.expression);
 
         let (cut_group_data, cut_group_stats) = CutGroupData::new_from_esurface(
             &esurface_raised_data,
@@ -1538,23 +1580,38 @@ impl CrossSectionGraph {
             .map(|(_, cuts)| cuts)
     }
 
+    pub fn cutkosky_cut_count_for_process(
+        &self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        settings: &GenerationSettings,
+    ) -> Result<CutkoskyCutCount> {
+        self.compute_process_valid_cuts(model, process_definition, settings)
+            .map(|(cut_count, _)| cut_count)
+    }
+
     fn compute_process_valid_cuts(
         &self,
         model: &Model,
         process_definition: &ProcessDefinition,
         settings: &GenerationSettings,
-    ) -> Result<(usize, TiVec<CutId, CrossSectionCut>)> {
+    ) -> Result<(CutkoskyCutCount, TiVec<CutId, CrossSectionCut>)> {
         let all_st_cuts = self.graph.all_st_cuts_for_cs(
             self.source_nodes.clone(),
             self.target_nodes.clone(),
             &self.graph.get_initial_state_tree().0,
         );
-        let num_st_cuts = all_st_cuts.len();
+        let candidate_st_cuts = all_st_cuts.len();
 
-        let mut cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
+        let multi_edge_cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
             .into_iter()
             .map(|(left, cut, right)| CrossSectionCut { cut, left, right })
             .filter(|cut| cut.cut.nedges(&self.graph) > 1)
+            .collect();
+        let multi_edge_candidate_cuts = multi_edge_cuts.len();
+
+        let mut cuts: TiVec<CutId, CrossSectionCut> = multi_edge_cuts
+            .into_iter()
             .filter_map(
                 |cut| match cut.is_valid_for_process(self, process_definition, model) {
                     Ok(true) => Some(Ok(cut)),
@@ -1563,6 +1620,7 @@ impl CrossSectionGraph {
                 },
             )
             .collect::<Result<_>>()?;
+        let process_compatible_cuts = cuts.len();
 
         cuts.sort_by(|a, b| a.cut.cmp(&b.cut));
 
@@ -1586,7 +1644,13 @@ impl CrossSectionGraph {
             });
         }
 
-        Ok((num_st_cuts, cuts))
+        let cut_count = CutkoskyCutCount {
+            candidate_st_cuts,
+            multi_edge_candidate_cuts,
+            process_compatible_cuts,
+            selected_cuts: cuts.len(),
+        };
+        Ok((cut_count, cuts))
     }
 
     fn generate_cuts(
@@ -1601,18 +1665,23 @@ impl CrossSectionGraph {
             "Cut discovery timing milestone"
         );
         let started = std::time::Instant::now();
-        let (num_st_cuts, cuts) =
+        let (cut_count, cuts) =
             self.compute_process_valid_cuts(model, process_definition, settings)?;
         self.cuts = cuts;
         debug_tags!(#generation, #profile, #graph;
             stage = "cross_section_generate_cuts_done",
             graph = %self.graph.name,
-            st_cut_count = num_st_cuts,
+            st_cut_count = cut_count.candidate_st_cuts,
             valid_cut_count = self.cuts.len(),
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Cut discovery timing milestone"
         );
-        generation_progress::cuts_discovered("", &self.graph.name, num_st_cuts, self.cuts.len());
+        generation_progress::cuts_discovered(
+            "",
+            &self.graph.name,
+            cut_count.candidate_st_cuts,
+            self.cuts.len(),
+        );
 
         Ok(())
     }
@@ -1641,8 +1710,10 @@ impl CrossSectionGraph {
         &mut self,
         settings: &GenerationSettings,
         vakint: &Vakint,
+        cff_energy_degree_bound_reports: &Mutex<Vec<CffEnergyDegreeBoundReport>>,
     ) -> Result<()> {
-        self.derived_data.cut_paramatric_integrand = self.build_integrand(settings, vakint)?;
+        self.derived_data.cut_paramatric_integrand =
+            self.build_integrand(settings, vakint, cff_energy_degree_bound_reports)?;
         Ok(())
     }
 
@@ -1650,6 +1721,7 @@ impl CrossSectionGraph {
         &mut self,
         settings: &GenerationSettings,
         vakint: &Vakint,
+        cff_energy_degree_bound_reports: &Mutex<Vec<CffEnergyDegreeBoundReport>>,
     ) -> Result<TiVec<CutGroupId, ParametricIntegrands>> {
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -1684,7 +1756,7 @@ impl CrossSectionGraph {
             .iter()
             .map(|cuts| CutSet {
                 residue_selector: ResidueSelector {
-                    lu_cut: Some(cuts.related_esurface_group.clone()),
+                    lu: Some(cuts.lu_cut_selection(&self.graph, &self.cuts)),
                     left_th_cut: None,
                     right_th_cut: None,
                 },
@@ -1707,15 +1779,12 @@ impl CrossSectionGraph {
             "Generation timing milestone"
         );
 
-        let valid_orientations: Vec<_> = self
+        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
+        let production_expression = self
             .derived_data
             .global_cff_expression
             .as_ref()
-            .expect("global_cff_expression should have been created")
-            .orientations
-            .iter()
-            .map(|orientation| orientation.data.orientation.clone())
-            .collect();
+            .expect("global_cff_expression should have been created");
 
         let lu_prefactor = self.lu_prefactor_helper();
 
@@ -1724,7 +1793,13 @@ impl CrossSectionGraph {
             &mut self.graph,
             cut_structure,
             vakint,
-            OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
+            OrientationProjection::exact_expression(
+                production_expression,
+                &cff_options,
+                &settings.orientation_pattern,
+                settings.explicit_orientation_sum_only,
+            )
+            .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
             &settings.uv,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -1886,11 +1961,7 @@ impl CrossSectionGraph {
         product
     }
 
-    fn single_th_prefactor_helper_params(
-        order: u8,
-        _subspace_loop_count: usize,
-        is_on_right: bool,
-    ) -> Vec<Atom> {
+    pub(crate) fn single_th_prefactor_helper_params(order: u8, is_on_right: bool) -> Vec<Atom> {
         let radius_star = if is_on_right {
             Atom::var(GS.radius_star_right)
         } else {
@@ -1932,7 +2003,10 @@ impl CrossSectionGraph {
         params
     }
 
-    fn iterated_th_prefactor_helper_params(left_order: u8, right_order: u8) -> Vec<Atom> {
+    pub(crate) fn iterated_th_prefactor_helper_params(
+        left_order: u8,
+        right_order: u8,
+    ) -> Vec<Atom> {
         let mut iterated_params = params_for_iterated_threshold_ct(left_order, right_order);
         let left_radius_star = Atom::var(GS.radius_star_left);
         let right_radius_star = Atom::var(GS.radius_star_right);
@@ -1975,16 +2049,9 @@ impl CrossSectionGraph {
             is_on_right,
             include_integrated,
         );
-        let params =
-            Self::single_th_prefactor_helper_params(order, subspace_loop_count, is_on_right);
+        let params = Self::single_th_prefactor_helper_params(order, is_on_right);
 
-        let mut fn_map = FunctionMap::new();
-        fn_map
-            .add_aliases([(
-                GS.pi.into(),
-                Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
-            )])
-            .unwrap();
+        let fn_map = FunctionMap::new();
 
         let evaluator = GenericEvaluator::new_from_raw_params(
             [atom],
@@ -2022,13 +2089,7 @@ impl CrossSectionGraph {
 
         let params = Self::iterated_th_prefactor_helper_params(left_order, right_order);
 
-        let mut fn_map = FunctionMap::new();
-        fn_map
-            .add_aliases([(
-                GS.pi.into(),
-                Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
-            )])
-            .unwrap();
+        let fn_map = FunctionMap::new();
 
         let evaluator = GenericEvaluator::new_from_raw_params(
             [atom],
@@ -2499,7 +2560,7 @@ impl CrossSectionGraph {
             boundary_edges(&threshold_candidate.cut);
 
         ThresholdCountertermAssociation {
-            esurface_id: threshold_candidate.esurface_id,
+            topological_threshold_id: threshold_candidate.id,
             cut_boundary_edges,
             threshold_boundary_edges,
             invariant_bound_is_applicable: cut_bound_is_applicable && threshold_bound_is_applicable,
@@ -2518,13 +2579,14 @@ impl CrossSectionGraph {
         runtime_settings: &RuntimeSettings,
         settings: &GenerationSettings,
     ) -> ThresholdCountertermStatus {
-        let esurface = &self.graph.surface_cache.esurface_cache[association.esurface_id];
+        let esurface = &self.derived_data.topological_threshold_esurfaces
+            [association.topological_threshold_id];
         if !esurface.has_radial_dependence_in_subspace(subspace, all_lmbs, &self.graph) {
             debug!(
                 "Skipping graph '{}' cut {} threshold E-surface {} after cut-relative classification {:?}",
                 self.graph.name,
                 cut_id.0,
-                association.esurface_id.0,
+                association.topological_threshold_id.0,
                 ThresholdCountertermStatus::NoRadialDependence,
             );
             return ThresholdCountertermStatus::NoRadialDependence;
@@ -2543,7 +2605,7 @@ impl CrossSectionGraph {
                 "Skipping graph '{}' cut {} threshold E-surface {} after cut-relative classification {:?}",
                 self.graph.name,
                 cut_id.0,
-                association.esurface_id.0,
+                association.topological_threshold_id.0,
                 ThresholdCountertermStatus::AlwaysPinched,
             );
             return ThresholdCountertermStatus::AlwaysPinched;
@@ -2572,13 +2634,18 @@ impl CrossSectionGraph {
         {
             debug!(
                 "Skipping graph '{}' cut {} threshold E-surface {} after cut-relative classification {:?}",
-                self.graph.name, cut_id.0, association.esurface_id.0, status,
+                self.graph.name, cut_id.0, association.topological_threshold_id.0, status,
             );
         }
         status
     }
 
-    fn topological_threshold_candidates(&self) -> Result<Vec<TopologicalThresholdCandidate>> {
+    fn topological_threshold_candidates(
+        &self,
+    ) -> (
+        Vec<TopologicalThresholdCandidate>,
+        TiVec<TopologicalThresholdId, Esurface>,
+    ) {
         let mut candidates = self.graph.all_st_cuts_for_cs(
             self.source_nodes.clone(),
             self.target_nodes.clone(),
@@ -2587,7 +2654,8 @@ impl CrossSectionGraph {
         candidates.retain(|(_left, cut, _right)| cut.nedges(&self.graph) > 1);
         candidates.sort_by(|a, b| a.1.cmp(&b.1));
 
-        candidates
+        let mut topological_threshold_esurfaces = TiVec::new();
+        let candidates = candidates
             .into_iter()
             .map(|(left, cut, right)| {
                 let threshold_esurface = Esurface::new_from_cut_left(
@@ -2599,26 +2667,24 @@ impl CrossSectionGraph {
                     },
                     Some(&self.graph.initial_state_cut),
                 );
-                let esurface_id = self
-                    .graph
-                    .surface_cache
-                    .esurface_cache
+                let id = topological_threshold_esurfaces
+                    .iter()
                     .position(|esurface| esurface == &threshold_esurface)
-                    .ok_or_else(|| {
-                        eyre!(
-                            "Topology-discovered threshold surface {:?} is missing from graph '{}' CFF surface cache",
-                            threshold_esurface.energies,
-                            self.graph.name,
-                        )
-                    })?;
-                Ok(TopologicalThresholdCandidate {
+                    .map(TopologicalThresholdId)
+                    .unwrap_or_else(|| {
+                        let id = TopologicalThresholdId(topological_threshold_esurfaces.len());
+                        topological_threshold_esurfaces.push(threshold_esurface);
+                        id
+                    });
+                TopologicalThresholdCandidate {
                     left,
                     cut,
                     right,
-                    esurface_id,
-                })
+                    id,
+                }
             })
-            .collect()
+            .collect();
+        (candidates, topological_threshold_esurfaces)
     }
 
     fn build_threshold_counterterm(
@@ -2628,6 +2694,7 @@ impl CrossSectionGraph {
         runtime_settings: &RuntimeSettings,
         all_possible_thresholds: &[TopologicalThresholdCandidate],
         vakint: &Vakint,
+        cff_energy_degree_bound_reports: &Mutex<Vec<CffEnergyDegreeBoundReport>>,
     ) -> Result<()> {
         // Thresholds are topology-discovered independently of whether a CT association survives
         // the structural and optional current-model checks below.
@@ -2650,8 +2717,113 @@ impl CrossSectionGraph {
             .lmbs
             .as_ref()
             .expect("threshold generation requires loop-momentum bases");
+        let root_expression = self
+            .derived_data
+            .global_cff_expression
+            .as_ref()
+            .expect("global_cff_expression should have been created");
+        let expression_esurfaces = &root_expression.expression.surfaces.esurface_cache;
+        let raised_edge_groups = self.graph.get_raised_edge_groups();
+        let normalized_expression_esurfaces = expression_esurfaces
+            .iter()
+            .map(|esurface| {
+                Graph::normalize_esurface_with_raised_edge_groups(esurface, &raised_edge_groups)
+            })
+            .collect::<TiVec<EsurfaceID, _>>();
+        let esurface_canonization = self
+            .graph
+            .get_esurface_canonization(&self.graph.loop_momentum_basis);
+        let threshold_raised_data = self
+            .graph
+            .determine_raised_esurfaces_from_expression(&root_expression.expression);
+        let mut raised_threshold_ids: TiVec<EsurfaceID, Option<RaisedEsurfaceId>> =
+            ti_vec![None; expression_esurfaces.len()];
 
-        // Keep topology-discovered E-surfaces in the graph inventory, but do not generate a
+        for (raised_threshold_id, raised_group) in
+            threshold_raised_data.raised_groups.iter_enumerated()
+        {
+            for &esurface_id in &raised_group.esurface_ids {
+                raised_threshold_ids[esurface_id] = Some(raised_threshold_id);
+            }
+        }
+
+        let raised_threshold_ids: TiVec<EsurfaceID, RaisedEsurfaceId> = raised_threshold_ids
+            .into_iter()
+            .map(|raised_threshold_id| {
+                raised_threshold_id
+                    .expect("every expression esurface should belong to one raised threshold group")
+            })
+            .collect();
+        let topology_to_raised_threshold = self
+            .derived_data
+            .topological_threshold_esurfaces
+            .iter()
+            .map(|topological_esurface| -> Result<Option<RaisedEsurfaceId>> {
+                let mut expression_topological_esurface = topological_esurface.clone();
+                if let Some(canonization) = &esurface_canonization {
+                    expression_topological_esurface.canonicalize_shift(canonization);
+                }
+                let normalized_topological_esurface =
+                    Graph::normalize_esurface_with_raised_edge_groups(
+                        &expression_topological_esurface,
+                        &raised_edge_groups,
+                    );
+                let exact_matches = expression_esurfaces
+                    .iter_enumerated()
+                    .filter_map(|(esurface_id, esurface)| {
+                        (esurface == &expression_topological_esurface).then_some(esurface_id)
+                    })
+                    .collect_vec();
+                let matching_esurfaces = if exact_matches.is_empty() {
+                    normalized_expression_esurfaces
+                        .iter_enumerated()
+                        .filter_map(|(esurface_id, esurface)| {
+                            (esurface == &normalized_topological_esurface).then_some(esurface_id)
+                        })
+                        .collect_vec()
+                } else {
+                    exact_matches
+                };
+                let matching_raised_thresholds = matching_esurfaces
+                    .into_iter()
+                    .map(|esurface_id| raised_threshold_ids[esurface_id])
+                    .filter(|raised_threshold_id| {
+                        threshold_raised_data.raised_groups[*raised_threshold_id].max_occurence > 0
+                    })
+                    .sorted()
+                    .dedup()
+                    .collect_vec();
+                match matching_raised_thresholds.as_slice() {
+                    [] => Ok(None),
+                    [raised_threshold_id] => Ok(Some(*raised_threshold_id)),
+                    _ => Err(eyre!(
+                        "Topology E-surface {:?} maps to multiple active raised groups {:?} in graph '{}' production CFF expression",
+                        topological_esurface,
+                        matching_raised_thresholds,
+                        self.graph.name,
+                    )),
+                }
+            })
+            .collect::<Result<TiVec<TopologicalThresholdId, _>>>()?;
+        let raised_threshold_for_topology = |topological_threshold_id: TopologicalThresholdId| {
+            topology_to_raised_threshold[topological_threshold_id].ok_or_else(|| {
+                    let topological_esurface = &self
+                        .derived_data
+                        .topological_threshold_esurfaces[topological_threshold_id];
+                    eyre!(
+                        "Eligible topology threshold {} with E-surface {:?} has no exact or raised-normalized member in graph '{}' production CFF expression",
+                        topological_threshold_id.0,
+                        topological_esurface,
+                        self.graph.name,
+                    )
+                })
+        };
+        let mut left_cut_threshold_data: TiVec<CutId, Vec<RaisedEsurfaceId>> =
+            ti_vec![Vec::new(); self.cuts.len()];
+        let mut right_cut_threshold_data: TiVec<CutId, Vec<RaisedEsurfaceId>> =
+            ti_vec![Vec::new(); self.cuts.len()];
+
+        // Keep topology-discovered E-surfaces in the exact topology inventory, but do not generate a
         // threshold CT association for any E-surface that is also one of this graph's physical
         // Cutkosky cuts when the corresponding generation setting is enabled. This comparison
         // must cover every physical cut, not only the cut currently being processed below.
@@ -2702,6 +2874,9 @@ impl CrossSectionGraph {
                         if status.is_eligible_for_generation(
                             settings.threshold_subtraction.check_esurface_at_generation,
                         ) {
+                            left_cut_threshold_data[cut_id].push(raised_threshold_for_topology(
+                                association.topological_threshold_id,
+                            )?);
                             cut_threshold_associations[cut_id].left.push(association);
                         }
                     }
@@ -2731,6 +2906,9 @@ impl CrossSectionGraph {
                         if status.is_eligible_for_generation(
                             settings.threshold_subtraction.check_esurface_at_generation,
                         ) {
+                            right_cut_threshold_data[cut_id].push(raised_threshold_for_topology(
+                                association.topological_threshold_id,
+                            )?);
                             cut_threshold_associations[cut_id].right.push(association);
                         }
                     }
@@ -2738,63 +2916,17 @@ impl CrossSectionGraph {
             }
         }
 
-        let left_cut_threshold_data: TiVec<CutId, Vec<EsurfaceID>> = cut_threshold_associations
-            .iter()
-            .map(|associations| {
-                associations
-                    .left
-                    .iter()
-                    .map(|association| association.esurface_id)
-                    .collect()
-            })
-            .collect();
-        let right_cut_threshold_data: TiVec<CutId, Vec<EsurfaceID>> = cut_threshold_associations
-            .iter()
-            .map(|associations| {
-                associations
-                    .right
-                    .iter()
-                    .map(|association| association.esurface_id)
-                    .collect()
-            })
-            .collect();
         self.derived_data.cut_threshold_associations = cut_threshold_associations;
 
-        let threshold_raised_data = self.graph.determine_raised_esurfaces_from_expression(
-            self.derived_data
-                .global_cff_expression
-                .as_ref()
-                .expect("global_cff_expression should have been created"),
-        );
-        let mut raised_threshold_ids: TiVec<EsurfaceID, Option<RaisedEsurfaceId>> =
-            ti_vec![None; self.graph.surface_cache.esurface_cache.len()];
-
-        for (raised_threshold_id, raised_group) in
-            threshold_raised_data.raised_groups.iter_enumerated()
-        {
-            for &esurface_id in &raised_group.esurface_ids {
-                raised_threshold_ids[esurface_id] = Some(raised_threshold_id);
-            }
-        }
-
-        let raised_threshold_ids: TiVec<EsurfaceID, RaisedEsurfaceId> = raised_threshold_ids
-            .into_iter()
-            .map(|raised_threshold_id| {
-                raised_threshold_id
-                    .expect("every esurface should belong to exactly one raised threshold group")
-            })
-            .collect();
-
-        let collect_raised_threshold_groups = |threshold_ids: Vec<EsurfaceID>| {
-            let mut groups = Vec::new();
-            for esurface_id in threshold_ids.into_iter().sorted().dedup() {
-                let raised_threshold_id = raised_threshold_ids[esurface_id];
-                let raised_group = threshold_raised_data.raised_groups[raised_threshold_id].clone();
-                if !groups.contains(&raised_group) {
-                    groups.push(raised_group);
-                }
-            }
-            groups
+        let collect_raised_threshold_groups = |threshold_ids: Vec<RaisedEsurfaceId>| {
+            threshold_ids
+                .into_iter()
+                .sorted()
+                .dedup()
+                .map(|raised_threshold_id| {
+                    threshold_raised_data.raised_groups[raised_threshold_id].clone()
+                })
+                .collect_vec()
         };
 
         let mut left_cut_group_threshold_data: TiVec<
@@ -2840,6 +2972,7 @@ impl CrossSectionGraph {
         {
             let left_thresholds = &left_cut_group_threshold_data[cut_group_id];
             let right_thresholds = &right_cut_group_threshold_data[cut_group_id];
+            let lu_cut_selection = cut_group.lu_cut_selection(&self.graph, &self.cuts);
 
             let cutkosky_cut_union = cut_group
                 .cuts
@@ -2851,7 +2984,7 @@ impl CrossSectionGraph {
             let add_threshold_group_to_union =
                 |base: SuBitGraph, raised_group: &RaisedEsurfaceGroup| {
                     let representative_esurface =
-                        &self.graph.surface_cache.esurface_cache[raised_group.esurface_ids[0]];
+                        &expression_esurfaces[raised_group.esurface_ids[0]];
 
                     representative_esurface
                         .energies
@@ -2866,7 +2999,7 @@ impl CrossSectionGraph {
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
-                        lu_cut: Some(cut_group.related_esurface_group.clone()),
+                        lu: Some(lu_cut_selection.clone()),
                         left_th_cut: Some(raised_esurface_group.clone()),
                         right_th_cut: None,
                     },
@@ -2881,7 +3014,7 @@ impl CrossSectionGraph {
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
-                        lu_cut: Some(cut_group.related_esurface_group.clone()),
+                        lu: Some(lu_cut_selection.clone()),
                         left_th_cut: None,
                         right_th_cut: Some(raised_esurface_group.clone()),
                     },
@@ -2904,7 +3037,7 @@ impl CrossSectionGraph {
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
-                        lu_cut: Some(cut_group.related_esurface_group.clone()),
+                        lu: Some(lu_cut_selection.clone()),
                         left_th_cut: Some(left_raised_esurface_group.clone()),
                         right_th_cut: Some(right_raised_esurface_group.clone()),
                     },
@@ -2918,15 +3051,12 @@ impl CrossSectionGraph {
             cuts: cut_structure,
         };
 
-        let valid_orientations: Vec<_> = self
+        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
+        let production_expression = self
             .derived_data
             .global_cff_expression
             .as_ref()
-            .expect("global_cff_expression should have been created")
-            .orientations
-            .iter()
-            .map(|orientation| orientation.data.orientation.clone())
-            .collect();
+            .expect("global_cff_expression should have been created");
 
         let mut threshold_counterterms = settings
             .uv
@@ -2935,7 +3065,13 @@ impl CrossSectionGraph {
                 &mut self.graph,
                 cut_structure,
                 vakint,
-                OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
+                OrientationProjection::exact_expression(
+                    production_expression,
+                    &cff_options,
+                    &settings.orientation_pattern,
+                    settings.explicit_orientation_sum_only,
+                )
+                .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
                 &settings.uv,
             )?
             .into_iter();
@@ -3166,13 +3302,15 @@ impl CrossSectionGraph {
 pub struct CrossSectionDerivedData {
     pub orientations: Option<TiVec<OrientationID, EdgeVec<Orientation>>>,
     pub cut_paramatric_integrand: TiVec<CutGroupId, ParametricIntegrands>,
-    pub global_cff_expression: Option<CFFExpression<OrientationID>>,
+    pub global_cff_expression: Option<
+        GeneratedThreeDExpression<crate::cff::esurface::Esurface, crate::cff::hsurface::Hsurface>,
+    >,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub threshold_counterterms: TiVec<CutGroupId, LUCounterTermData>,
     /// Graph-level inventory of every topology-discovered threshold E-surface. This remains
     /// independent of whether a counterterm is generated for any particular physical cut.
-    pub threshold_candidate_esurface_ids: Vec<EsurfaceID>,
+    pub topological_threshold_esurfaces: TiVec<TopologicalThresholdId, Esurface>,
     /// Exact generated left/right threshold associations for each physical cut. Runtime
     /// evaluators aggregate these into cut groups, but display and model reclassification
     /// must retain the physical-cut-relative eligibility information.
@@ -3198,6 +3336,31 @@ pub struct CutGroup {
     pub related_esurface_group: RaisedEsurfaceGroup,
 }
 
+impl CutGroup {
+    pub(crate) fn lu_cut_selection(
+        &self,
+        graph: &Graph,
+        cuts: &TiVec<CutId, CrossSectionCut>,
+    ) -> LuCutSelection {
+        let raised_edge_groups = graph.get_raised_edge_groups();
+        let cut_edge_alternatives = self
+            .cuts
+            .iter()
+            .map(|cut_id| {
+                let cut_edges = graph
+                    .iter_edges_of(&cuts[*cut_id].cut.as_subgraph())
+                    .map(|(_, edge_id, _)| edge_id)
+                    .collect_vec();
+                normalize_cut_edge_support_with_raised_edge_groups(&cut_edges, &raised_edge_groups)
+            })
+            .collect();
+        LuCutSelection {
+            raised_group: self.related_esurface_group.clone(),
+            cut_edge_alternatives,
+        }
+    }
+}
+
 impl Default for CutGroupData {
     fn default() -> Self {
         Self::new()
@@ -3219,32 +3382,29 @@ impl CutGroupData {
         evaluator_settings: &EvaluatorSettings,
     ) -> (Self, GraphGenerationStats) {
         let mut stats = GraphGenerationStats::default();
-        let reversed_map = cut_esurface_map
-            .iter_enumerated()
-            .map(|(cut_id, &esurface_id)| (esurface_id, cut_id))
-            .collect::<HashMap<EsurfaceID, CutId>>();
-
         let mut groups = TiVec::new();
 
         for (_raised_esurface_id, raised_esurface_group) in
             raised_esurface_data.raised_groups.iter_enumerated()
         {
-            if cut_esurface_map.contains(&raised_esurface_group.esurface_ids[0]) {
-                let cuts = raised_esurface_group
-                    .esurface_ids
-                    .iter()
-                    .map(|esurface_id| reversed_map[esurface_id])
-                    .collect::<Vec<_>>();
+            let cuts = cut_esurface_map
+                .iter_enumerated()
+                .filter_map(|(cut_id, esurface_id)| {
+                    raised_esurface_group
+                        .esurface_ids
+                        .contains(esurface_id)
+                        .then_some(cut_id)
+                })
+                .collect::<Vec<_>>();
 
-                let cut_group = CutGroup {
-                    cuts,
-                    related_esurface_group: raised_esurface_group.clone(),
-                };
-
-                groups.push(cut_group);
-            } else {
+            if cuts.is_empty() {
                 continue;
             }
+
+            groups.push(CutGroup {
+                cuts,
+                related_esurface_group: raised_esurface_group.clone(),
+            });
         }
 
         let global_max_occurence = groups
@@ -3290,7 +3450,7 @@ impl CrossSectionDerivedData {
             lmbs: None,
             multi_channeling_setup: None,
             threshold_counterterms: TiVec::new(),
-            threshold_candidate_esurface_ids: Vec::new(),
+            topological_threshold_esurfaces: TiVec::new(),
             cut_threshold_associations: TiVec::new(),
             subspace_data: TiVec::new(),
             cut_group_data: CutGroupData::new(),
@@ -3496,7 +3656,13 @@ mod tests {
     use symbolica::{atom::AtomCore, function, symbol};
 
     use crate::{
-        cff::CutCFFIndex, dot, graph::parse::from_dot::IntoGraph, initialisation::test_initialise,
+        cff::{
+            CutCFFIndex,
+            esurface::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
+        },
+        dot,
+        graph::parse::from_dot::IntoGraph,
+        initialisation::test_initialise,
         utils::GS,
     };
     use linnet::half_edge::{
@@ -3509,13 +3675,46 @@ mod tests {
         threshold_boundary_size: usize,
     ) -> super::ThresholdCountertermAssociation {
         super::ThresholdCountertermAssociation {
-            esurface_id: crate::cff::esurface::EsurfaceID(0),
+            topological_threshold_id: super::TopologicalThresholdId(0),
             cut_boundary_edges: (0..cut_boundary_size).map(EdgeIndex::from).collect(),
             threshold_boundary_edges: (0..threshold_boundary_size)
                 .map(|index| EdgeIndex::from(cut_boundary_size + index))
                 .collect(),
             invariant_bound_is_applicable: true,
         }
+    }
+
+    #[test]
+    fn cut_groups_include_all_physical_cuts_in_a_raised_group() {
+        test_initialise().unwrap();
+        let raised_esurface_data = RaisedEsurfaceData {
+            raised_groups: [
+                RaisedEsurfaceGroup {
+                    esurface_ids: vec![EsurfaceID(1), EsurfaceID(0)],
+                    max_occurence: 1,
+                },
+                RaisedEsurfaceGroup {
+                    esurface_ids: vec![EsurfaceID(2)],
+                    max_occurence: 1,
+                },
+            ]
+            .into_iter()
+            .collect(),
+            pass_two_evaluator: None,
+        };
+        let cut_esurface_map = [EsurfaceID(0), EsurfaceID(0)].into_iter().collect();
+
+        let (cut_group_data, _) = super::CutGroupData::new_from_esurface(
+            &raised_esurface_data,
+            &cut_esurface_map,
+            &super::EvaluatorSettings::default(),
+        );
+
+        assert_eq!(cut_group_data.cut_groups.len(), 1);
+        assert_eq!(
+            cut_group_data.cut_groups[super::CutGroupId(0)].cuts,
+            vec![super::CutId(0), super::CutId(1)],
+        );
     }
 
     #[test]
@@ -3742,7 +3941,7 @@ mod tests {
             right: empty,
         };
         let association = super::ThresholdCountertermAssociation {
-            esurface_id: crate::cff::esurface::EsurfaceID(0),
+            topological_threshold_id: super::TopologicalThresholdId(0),
             cut_boundary_edges: vec![EdgeIndex::from(4)],
             threshold_boundary_edges: vec![EdgeIndex::from(2)],
             invariant_bound_is_applicable: true,
@@ -3925,13 +4124,7 @@ mod tests {
     fn iterated_threshold_helper_atom_matches_its_left_right_parameter_families() {
         test_initialise().unwrap();
 
-        let mut fn_map = super::FunctionMap::new();
-        fn_map
-            .add_aliases([(
-                GS.pi.into(),
-                super::Atom::num(super::Rational::try_from(std::f64::consts::PI).unwrap()),
-            )])
-            .unwrap();
+        let fn_map = super::FunctionMap::new();
 
         for left_order in 1..=3 {
             for right_order in 1..=3 {
