@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-use super::branches::DirectResidueKey;
+use super::{branches::DirectResidueKey, forest::Direct3dApproximation};
 
 /// One independently framed connected part of a direct forest sector.
 /// Disconnected replay keeps these frames separate until an enclosing Taylor
@@ -33,12 +33,6 @@ use super::branches::DirectResidueKey;
 pub(crate) struct DirectCoordinateFrame {
     pub(crate) active_subgraph: SuBitGraph,
     pub(crate) lmb: LoopMomentumBasis,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(super) enum Local3DLoopRescaling {
-    FullSubgraph,
-    ReducedSubgraph,
 }
 
 static OSE_FOR_LOCAL_3D_SERIES: LazyLock<Symbol> = LazyLock::new(|| {
@@ -240,8 +234,11 @@ pub(super) fn coordinate_lmb<S: ForestNodeLike>(
 /// Apply one local-3D Taylor operation to a complete generalized residue-map
 /// branch. The selector remains outside the atom, and every newly attached
 /// factor uses the branch's one authoritative energy substitution.
+/// This kernel does not add the current operation's subtraction minus;
+/// forest composition supplies it once, retaining signs already in the branch.
+// Keep the forest operation, coordinate frame, and residue branch explicit.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn apply_taylor<S: ForestNodeLike>(
-    rescaling: Local3DLoopRescaling,
     ctx: &UVCtx<'_>,
     orientation: OrientationProjection<'_>,
     current: &S,
@@ -307,7 +304,7 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
                 output_byte_size = started.as_view().get_byte_size(),
                 "Direct local-3D kernel size checkpoint"
             );
-            rescaling.t(ctx, current, given, &started, active_subgraph.as_ref(), lmb)
+            Direct3dApproximation::t(ctx, current, given, &started, lmb)
         }
         ApproximationType::IR => {
             let t_tilde = t_tilde(
@@ -321,7 +318,7 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
                 active_subgraph.as_ref(),
                 lmb,
             )?;
-            Ok(rescaling.t(
+            Ok(Direct3dApproximation::t(
                 ctx,
                 current,
                 given,
@@ -333,10 +330,9 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
                     active_subgraph.as_ref(),
                     lmb,
                 )?,
-                active_subgraph.as_ref(),
                 lmb,
             )? + &t_tilde
-                - rescaling.t(ctx, current, given, &t_tilde, active_subgraph.as_ref(), lmb)?)
+                - Direct3dApproximation::t(ctx, current, given, &t_tilde, lmb)?)
         }
         ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
         ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
@@ -553,19 +549,17 @@ fn start<S: ForestNodeLike>(
     Ok(atomarg)
 }
 
-impl Local3DLoopRescaling {
+impl Direct3dApproximation<'_> {
     // #[debug_instrument(
     //     current = %current.log_display(),
     //     given = %given.log_display(),
     //     reduced,
     // )]
     fn t<S: ForestNodeLike>(
-        self,
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
         integrand: &Atom,
-        _active_subgraph: Option<&SuBitGraph>,
         lmb: &LoopMomentumBasis,
     ) -> Result<Atom> {
         let graph = ctx.graph;
@@ -596,14 +590,19 @@ impl Local3DLoopRescaling {
         );
 
         // Rescale every loop momentum still active in this sector, including
-        // cycles expanded by earlier local operations.
+        // cycles expanded by earlier local operations. Retaining their carriers
+        // can require a different basis, but every branch of this enclosing
+        // Taylor operation must keep the same soft external routing.
         for e in &lmb.loop_edges {
             // println!("Rescale {}", e);
-            atomarg = atomarg
-                .replace(GS.emr_vec_index(*e, W_.x___))
-                .with(GS.emr_vec_index(*e, W_.x___) * GS.rescale)
-                .replace(GS.emr_mom(*e, W_.x___))
-                .with(GS.emr_mom(*e, W_.x___) * GS.rescale);
+            for momentum_symbol in [GS.emr_vec, GS.emr_mom] {
+                let momentum = function!(momentum_symbol, usize::from(*e) as i64, W_.x___);
+                let soft = current
+                    .lmb()
+                    .ext_atom(*e, momentum_symbol, &[W_.x___], true);
+                let rescaled = (&momentum - &soft) * GS.rescale + soft;
+                atomarg = atomarg.replace(momentum).with(rescaled);
+            }
         }
         debug_tags!(#generation, #profile, #uv, #local, #summary;
             stage = "local_3d_t_after_loop_rescale",
@@ -633,7 +632,10 @@ impl Local3DLoopRescaling {
             "Local 3D T size checkpoint"
         );
 
-        atomarg = (atomarg * self.measure_scaling(lmb))
+        // The supplied LMB is the integration-space authority. In particular,
+        // a remainder which is a tree in the original incidence can become a
+        // loop after its frozen UV prefix is contracted.
+        atomarg = (atomarg * Atom::var(GS.rescale).pow(3 * lmb.loop_edges.len() as i64))
             .replace(GS.rescale)
             .with(Atom::num(1) / GS.rescale);
         debug_tags!(#generation, #profile, #uv, #local, #summary;
@@ -663,12 +665,5 @@ impl Local3DLoopRescaling {
         );
         debug_tags!(#uv, #local; log.expr = a, "Local 3D approximation");
         Ok(a)
-    }
-
-    fn measure_scaling(self, lmb: &LoopMomentumBasis) -> Atom {
-        // The supplied LMB is the integration-space authority. In particular,
-        // a remainder which is a tree in the original incidence can become a
-        // loop after its frozen UV prefix is contracted.
-        Atom::var(GS.rescale).pow(3 * lmb.loop_edges.len() as i64)
     }
 }

@@ -290,3 +290,6 @@ log.glog/
 output.svg
 crates/gammaloop-api/test_path.toml
 .codex
+
+# The process-budget owner serializes guarded pipelines through this runtime lock.
+/bin/heavy-run.lock

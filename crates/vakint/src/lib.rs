@@ -63,8 +63,10 @@ use symbolica::{
         Condition, Match, MatchSettings, Pattern, PatternRestriction, Replacement,
         WildcardRestriction,
     },
+    parser::{ParseSettings, Token as SymbolicaToken},
     poly::series::Series,
     printer::{AtomPrinter, PrintOptions},
+    state::Workspace,
     transformer::Transformer,
 };
 use utils::simplify_real;
@@ -1981,10 +1983,12 @@ pub enum LoopNormalizationFactor {
 
 impl LoopNormalizationFactor {
     pub fn to_expression(&self) -> String {
+        // Numeric imaginary coefficients are independent of user-symbol
+        // registrations, which can change how a bare imaginary symbol parses.
         match self {
-            LoopNormalizationFactor::pySecDec => "(𝑖*(𝜋^((4-2*eps)/2)))^(-n_loops)".into(),
+            LoopNormalizationFactor::pySecDec => "(1𝑖*(𝜋^((4-2*eps)/2)))^(-n_loops)".into(),
             LoopNormalizationFactor::FMFTandMATAD => {
-                "( 𝑖*(𝜋^((4-2*eps)/2)) * (exp(-EulerGamma))^(eps) )^(-n_loops)".into()
+                "( 1𝑖*(𝜋^((4-2*eps)/2)) * (exp(-EulerGamma))^(eps) )^(-n_loops)".into()
             }
             LoopNormalizationFactor::MSbar => {
                 // We must include the 1/(2*𝜋)^D factor per loop which accompanies the text-book definition of MSbar
@@ -4034,7 +4038,7 @@ Evaluated (n_loops=1, mu_r=1) :
 
         let pysecdec_normalization_correction = vk_parse!(
             format!(
-                "(  𝑖*(𝜋^((4-2*{eps})/2))\
+                "(  1𝑖*(𝜋^((4-2*{eps})/2))\
                 )^{n_loops}",
                 eps = settings.epsilon_symbol,
                 n_loops = integral.n_loops
@@ -4394,7 +4398,7 @@ Evaluated (n_loops=1, mu_r=1) :
         let alphaloop_normalization_correction = vk_parse!(
             format!(
                 "(\
-                    𝑖*(𝜋^((4-2*{eps})/2))\
+                    1𝑖*(𝜋^((4-2*{eps})/2))\
                  * (exp(-EulerGamma))^({eps})\
                  * (exp(-logmUVmu-log_mu_sq))^({eps})\
                  )^{n_loops}",
@@ -4510,6 +4514,7 @@ Evaluated (n_loops=1, mu_r=1) :
                     }
                 }
                 dummy += 1;
+                let first_new_dummy = dummy;
 
                 let mut a = a.to_owned();
                 loop {
@@ -4590,7 +4595,46 @@ Evaluated (n_loops=1, mu_r=1) :
                     a = new;
                     dummy += 1;
                 }
-                a
+                // Each copy of a powered scalar sum owns independent dummy
+                // contractions. Keep those copies factorized: expanding the
+                // numerator before conversion would hide index capture.
+                a.replace_map_bottom_up(|view, _, out| {
+                    let AtomView::Pow(power) = view else {
+                        return;
+                    };
+                    let (base, exponent) = power.get_base_exp();
+                    let Ok(exponent) = i64::try_from(exponent) else {
+                        return;
+                    };
+                    let copies = exponent.unsigned_abs();
+                    if copies < 2 || !matches!(base, AtomView::Add(_) | AtomView::Mul(_)) {
+                        return;
+                    }
+                    let mut indices = base
+                        .replace(&dummy_pat)
+                        .match_iter()
+                        .filter_map(|m| usize::try_from(&m[&S.a_]).ok())
+                        // Existing indexed tensors keep their contractions;
+                        // only dots converted in this call introduce copies.
+                        .filter(|index| *index >= first_new_dummy)
+                        .collect::<Vec<_>>();
+                    indices.sort_unstable();
+                    indices.dedup();
+                    if indices.is_empty() {
+                        return;
+                    }
+                    let mut product = Atom::one();
+                    for _ in 0..copies {
+                        let replacements = indices.iter().map(|index| {
+                            let replacement =
+                                Replacement::new(S.dot_dummy_ind(*index), S.dot_dummy_ind(dummy));
+                            dummy += 1;
+                            replacement
+                        });
+                        product *= base.replace_multiple(replacements);
+                    }
+                    **out = product.pow(exponent.signum());
+                })
             })
     }
 
@@ -4879,8 +4923,9 @@ Evaluated (n_loops=1, mu_r=1) :
             HashMap::default();
         for user_f in user_functions.iter() {
             let litteral_form_name = format!("[{}]", get_full_name(user_f));
-            if user_f.get_namespace() == NAMESPACE || user_f.get_namespace() == "symbolica" {
-                //            if (user_f.get_namespace() == NAMESPACE || user_f.get_namespace() == "symbolica") && user_f.get_attributes().is_empty() {
+            if user_f.get_namespace() == NAMESPACE {
+                // Only Vakint names were stripped from the canonical expression;
+                // user functions in every other namespace retain their full name.
                 string_replacements.insert(
                     user_f.get_stripped_name().into(),
                     litteral_form_name.clone(),
@@ -4893,8 +4938,9 @@ Evaluated (n_loops=1, mu_r=1) :
         }
         for user_v in user_variables.iter() {
             let litteral_form_name = format!("[{}]", get_full_name(user_v));
-            if user_v.get_namespace() == NAMESPACE || user_v.get_namespace() == "symbolica" {
-                //            if (user_v.get_namespace() == NAMESPACE || user_v.get_namespace() == "symbolica") && user_v.get_attributes().is_empty() {
+            if user_v.get_namespace() == NAMESPACE {
+                // Match the same Vakint-only stripping used for functions above;
+                // other user variables retain their canonical namespace prefix.
                 string_replacements.insert(
                     user_v.get_stripped_name().into(),
                     litteral_form_name.clone(),
@@ -4993,8 +5039,23 @@ Evaluated (n_loops=1, mu_r=1) :
         //         .collect::<Vec<_>>()
         //         .join("\n")
         // );
+        // Restore stripped Vakint names before parsing can resolve them through
+        // Symbolica's process-wide built-in names. Canonical user names remain explicit.
+        let parsed_form_output = Workspace::get_local().with(|ws| {
+            let input = symbolica::with_default_namespace!(processed_form_str.as_str(), NAMESPACE);
+            let mut name_map = SYMBOL_REGISTRY
+                .iter()
+                .map(|symbol| (symbol.get_stripped_name().into(), *symbol))
+                .collect();
+            let token = SymbolicaToken::parse_with_atom_info(
+                input.data,
+                ParseSettings::default(),
+                Some((&input, &mut name_map, ws)),
+            )?;
+            token.to_atom(&input, &mut name_map, ws)
+        });
         // Map back the integer indices to the original expressions if substitutions took place
-        match vk_parse!(processed_form_str.as_str()) {
+        match parsed_form_output {
             Ok(mut processed) => {
                 processed = processed
                     .replace(vk_parse!("rat(x_,y_)").unwrap().to_pattern())

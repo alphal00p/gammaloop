@@ -23,7 +23,7 @@ impl Localizer<'_> {
             let indices = self.cutset.residue_selector.generate_allowed_keys();
             return Ok(FrozenActiveCt {
                 active: OrientationIntegrands::from_ids_and_indices(
-                    self.orientation.orientation_ids(),
+                    self.orientation.orientation_ids()?,
                     &indices,
                 ),
                 frozen_integrands: indices
@@ -65,7 +65,11 @@ impl Localizer<'_> {
         let analysis_numerator = expr * &outside_numerator;
 
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());
+        // Integration replaces the contracted spinney by an independent
+        // coefficient. Its cograph residue maps need not extend to a complete
+        // production map, but each still belongs to the finite addback once.
         let active = self
+            .with_independent_source_sum()
             .projected_cff(
                 graph,
                 to_contract,

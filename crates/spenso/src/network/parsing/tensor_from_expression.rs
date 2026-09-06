@@ -1,12 +1,16 @@
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    ops::AddAssign,
+};
 
 use symbolica::atom::{Atom, AtomView};
 
 use super::{ParseSettings, ShorthandParsing, StructureFromAtom};
 use crate::{
+    algebra::ScalarMul,
     network::{
-        ContractionStrategy, ExecuteOp, ExecutionResult, Network, Sequential, SmallestDegree,
-        TensorNetworkError, TensorOrScalarOrKey,
+        ContractionStrategy, ExecuteOp, ExecutionResult, FastTensorSum, Network, Ref, Sequential,
+        SmallestDegree, TensorNetworkError, TensorOrScalarOrKey,
         library::{FunctionLibrary, Library, LibraryTensor},
         store::NetworkStore,
     },
@@ -93,7 +97,11 @@ where
         + TensorStructure
         + Clone
         + ScalarTensor
-        + PermuteTensor<Permuted = T>,
+        + PermuteTensor<Permuted = T>
+        + Ref
+        + FastTensorSum
+        + ScalarMul<Sc, Output = T>
+        + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     Sc: for<'r> TryFrom<AtomView<'r>> + Clone + Into<T::Scalar>,
     for<'r> TensorNetworkError<K, symbolica::atom::Symbol>:
         From<<Sc as TryFrom<AtomView<'r>>>::Error>,

@@ -22,7 +22,7 @@ use crate::{
 
 use super::{
     branches::{DirectResidueBranches, DirectResidueKey},
-    kernel::{DirectCoordinateFrame, Local3DLoopRescaling, apply_taylor, coordinate_lmb},
+    kernel::{DirectCoordinateFrame, apply_taylor, coordinate_lmb},
 };
 
 fn extend_coordinate_frames(
@@ -118,11 +118,10 @@ impl Direct3dCts {
             .orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
         let indices = cff.terms.keys().copied().collect::<Vec<_>>();
+        // Bridge this source's CFF energy-factor convention once at the root.
+        // Forest Taylor subtraction signs are applied separately below.
         let production_prefactor = Atom::num(cff.production_prefactor_factor());
-        let exact_orientations = localizer
-            .orientation
-            .exact_orientations()
-            .expect("a stored production expression has exact residue maps");
+        let exact_orientations = localizer.orientation.exact_orientations()?;
         let mut branches: BTreeMap<OrientationID, BTreeMap<CutCFFIndex, Atom>> = BTreeMap::new();
 
         for (index, term) in cff.terms {
@@ -329,7 +328,6 @@ impl<'a> Direct3dApproximation<'a> {
             // frozen localizing kernel outside the series.
             let active = -active.fallible_map(|key, atom| {
                 apply_taylor(
-                    Local3DLoopRescaling::FullSubgraph,
                     &ctx,
                     self.localizer.orientation,
                     current,
@@ -353,7 +351,6 @@ impl<'a> Direct3dApproximation<'a> {
                 coordinate_lmb(&ctx, current, given, None, &[], &reduced_subgraph)?;
             let active = -active.fallible_map(|key, atom| {
                 apply_taylor(
-                    Local3DLoopRescaling::ReducedSubgraph,
                     &ctx,
                     self.localizer.orientation,
                     current,
@@ -442,7 +439,6 @@ impl<'a> Direct3dApproximation<'a> {
                         coordinate_frames,
                         active: -active.fallible_map(|key, atom| {
                             apply_taylor(
-                                Local3DLoopRescaling::FullSubgraph,
                                 &ctx,
                                 self.localizer.orientation,
                                 current,
@@ -488,7 +484,6 @@ impl<'a> Direct3dApproximation<'a> {
         let coordinate_lmb = coordinate_lmb(&ctx, current, given, None, &[], &active_subgraph)?;
         let active = -active.fallible_map(|key, atom| {
             apply_taylor(
-                Local3DLoopRescaling::ReducedSubgraph,
                 &ctx,
                 self.localizer.orientation,
                 current,

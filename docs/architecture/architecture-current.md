@@ -172,9 +172,9 @@ never cancelled against denominator occurrences upstream; generalized CFF owns
 the resulting pinches and lower sectors. For higher powers,
 interpolation may replace an EMR energy by `a*M`, where `a` is a signed
 integer and `M` is the common auxiliary CFF numerator-sampling scale. This is an
-EMR substitution, never an LMB rewrite. Only finalized evaluators that use `M`
-require `M != 0`, and the physical result is invariant under changing its
-nonzero value.
+EMR substitution, never an LMB rewrite. Production evaluator parameter lists
+always include `M`, and runtime settings require `M != 0` for every process.
+The physical result is invariant under changing its nonzero value.
 
 The signed sampling coefficient is neither a physical edge-direction sign nor
 the runtime residue-map-key selector `sigma(map_id)`. Pole signs enter the generation-time affine map, after which an

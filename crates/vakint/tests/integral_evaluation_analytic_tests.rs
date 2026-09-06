@@ -56,24 +56,25 @@ fn test_integrate_1l_a() {
 
     let mut targets: HashMap<Atom, Atom> = HashMap::default();
 
+    // The common phase is Symbolica's exact imaginary unit, not a namespaced variable.
     for (eps_term, trgt) in [
-        ("ε^-1", "1/64*vakint::𝑖*vakint::muvsq^2*vakint::g(1,2)/𝜋^2"),
+        ("ε^-1", "1/64*vakint::muvsq^2*vakint::g(1,2)/𝜋^2"),
         (
             "1",
-            "-1/64*vakint::𝑖*vakint::muvsq^2*log(vakint::muvsq)*vakint::g(1,2)/𝜋^2+1/64*vakint::𝑖*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+3/128*vakint::𝑖*vakint::muvsq^2*vakint::g(1,2)/𝜋^2",
+            "-1/64*vakint::muvsq^2*log(vakint::muvsq)*vakint::g(1,2)/𝜋^2+1/64*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+3/128*vakint::muvsq^2*vakint::g(1,2)/𝜋^2",
         ),
         (
             "ε",
-            "-(1/64*vakint::𝑖*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+3/128*vakint::𝑖*vakint::muvsq^2*vakint::g(1,2)/𝜋^2)*log(vakint::muvsq)+1/16*vakint::𝑖*(7/16*vakint::muvsq^2*vakint::g(1,2)+1/48*𝜋^2*vakint::muvsq^2*vakint::g(1,2))/𝜋^2+3/128*vakint::𝑖*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+1/128*vakint::𝑖*vakint::muvsq^2*log(vakint::muvsq)^2*vakint::g(1,2)/𝜋^2+1/128*vakint::𝑖*vakint::muvsq^2*log(vakint::mursq)^2*vakint::g(1,2)/𝜋^2",
+            "-(1/64*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+3/128*vakint::muvsq^2*vakint::g(1,2)/𝜋^2)*log(vakint::muvsq)+1/16*(7/16*vakint::muvsq^2*vakint::g(1,2)+1/48*𝜋^2*vakint::muvsq^2*vakint::g(1,2))/𝜋^2+3/128*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+1/128*vakint::muvsq^2*log(vakint::muvsq)^2*vakint::g(1,2)/𝜋^2+1/128*vakint::muvsq^2*log(vakint::mursq)^2*vakint::g(1,2)/𝜋^2",
         ),
         (
             "ε^2",
-            "1/2*(1/64*vakint::𝑖*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+3/128*vakint::𝑖*vakint::muvsq^2*vakint::g(1,2)/𝜋^2)*log(vakint::muvsq)^2-(1/16*vakint::𝑖*(7/16*vakint::muvsq^2*vakint::g(1,2)+1/48*𝜋^2*vakint::muvsq^2*vakint::g(1,2))/𝜋^2+3/128*vakint::𝑖*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+1/128*vakint::𝑖*vakint::muvsq^2*log(vakint::mursq)^2*vakint::g(1,2)/𝜋^2)*log(vakint::muvsq)+1/16*vakint::𝑖*(7/16*vakint::muvsq^2*vakint::g(1,2)+1/48*𝜋^2*vakint::muvsq^2*vakint::g(1,2))*log(vakint::mursq)/𝜋^2+1/16*vakint::𝑖*(-1/12*vakint::muvsq^2*vakint::z3*vakint::g(1,2)+15/32*vakint::muvsq^2*vakint::g(1,2)+1/32*𝜋^2*vakint::muvsq^2*vakint::g(1,2))/𝜋^2-1/384*vakint::𝑖*vakint::muvsq^2*log(vakint::muvsq)^3*vakint::g(1,2)/𝜋^2+3/256*vakint::𝑖*vakint::muvsq^2*log(vakint::mursq)^2*vakint::g(1,2)/𝜋^2+1/384*vakint::𝑖*vakint::muvsq^2*log(vakint::mursq)^3*vakint::g(1,2)/𝜋^2",
+            "1/2*(1/64*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+3/128*vakint::muvsq^2*vakint::g(1,2)/𝜋^2)*log(vakint::muvsq)^2-(1/16*(7/16*vakint::muvsq^2*vakint::g(1,2)+1/48*𝜋^2*vakint::muvsq^2*vakint::g(1,2))/𝜋^2+3/128*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+1/128*vakint::muvsq^2*log(vakint::mursq)^2*vakint::g(1,2)/𝜋^2)*log(vakint::muvsq)+1/16*(7/16*vakint::muvsq^2*vakint::g(1,2)+1/48*𝜋^2*vakint::muvsq^2*vakint::g(1,2))*log(vakint::mursq)/𝜋^2+1/16*(-1/12*vakint::muvsq^2*vakint::z3*vakint::g(1,2)+15/32*vakint::muvsq^2*vakint::g(1,2)+1/32*𝜋^2*vakint::muvsq^2*vakint::g(1,2))/𝜋^2-1/384*vakint::muvsq^2*log(vakint::muvsq)^3*vakint::g(1,2)/𝜋^2+3/256*vakint::muvsq^2*log(vakint::mursq)^2*vakint::g(1,2)/𝜋^2+1/384*vakint::muvsq^2*log(vakint::mursq)^3*vakint::g(1,2)/𝜋^2",
         ),
     ] {
         targets.insert(
             vakint_parse!(eps_term).unwrap(),
-            vakint_parse!(trgt).unwrap(),
+            Atom::i() * vakint_parse!(trgt).unwrap(),
         );
     }
     for (v, c) in evaluated_integral

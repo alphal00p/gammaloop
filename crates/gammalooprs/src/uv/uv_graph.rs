@@ -357,8 +357,8 @@ impl Graph {
     where
         S: SubGraphLike<Base = SuBitGraph>,
     {
-        let global_atom = self.global_atom();
-        if global_atom.is_zero() {
+        let numerator = self.production_numerator_atom_for_full_3d_expression();
+        if numerator.is_zero() {
             return Ok(());
         }
         let mut failures = self
@@ -368,19 +368,20 @@ impl Graph {
             .filter_map(|cycle| {
                 let loop_count = self.n_loops(&cycle.filter);
                 // `compute_dod` deliberately covers only the edge and vertex
-                // rules used by UV classification.  Production evaluation
-                // additionally multiplies the still-factorized graph-global
-                // atom, whose cycle-local energy degree must therefore enter
-                // this source-convergence check without changing UV DOD
-                // semantics or expanding the numerator.
+                // rules used by UV classification. Source convergence instead
+                // sees the complete factorized production numerator, including
+                // graph-global factors and momentum dependence stored outside
+                // this cycle. The production helper excludes initial-cut
+                // factors without changing UV DOD semantics or expanding the
+                // numerator.
                 let lmb = self.lmb_of(&cycle.filter);
-                let global_dod = self
-                    // The local DOD already contains the loop measure, so this
-                    // pass scales only the separately stored numerator factor.
-                    .uv_rescaled(cycle.filter.included(), 0, &lmb, &global_atom)
+                let integrand = &numerator / self.denominator(&cycle.filter, |_| 1);
+                let four_d_dod = self
+                    .uv_rescaled(cycle.filter.included(), loop_count, &lmb, &lmb, &integrand)
                     .trailing_exponent();
-                let energy_dod = self.compute_energy_dod(&cycle.filter) + global_dod;
-                let four_d_dod = energy_dod + 3 * loop_count as i32;
+                // The rescaled source already contains the four-dimensional
+                // loop measure; retain one energy measure per loop instead.
+                let energy_dod = four_d_dod - 3 * loop_count as i32;
                 (energy_dod >= 0)
                     .then(|| (cycle.string_label(), loop_count, four_d_dod, energy_dod))
             })
@@ -492,7 +493,7 @@ impl UltravioletGraph for Graph {
             .unwrap()
             / self.denominator(subgraph, |_| 1);
         let nloops: usize = self.n_loops(subgraph);
-        self.uv_rescaled(subgraph.included(), nloops, &lmb, &integrand)
+        self.uv_rescaled(subgraph.included(), nloops, &lmb, &lmb, &integrand)
             .trailing_exponent()
     }
 

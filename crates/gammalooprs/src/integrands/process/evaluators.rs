@@ -460,15 +460,7 @@ impl EvaluatorStack {
                     .fold(Atom::Zero, |acc, n| acc + n)
             })
             .collect::<Vec<_>>();
-        let source_replacements = param_builder
-            .reps
-            .iter()
-            .chain(&entries)
-            .map(FnMapEntry::replacement)
-            .collect::<Vec<_>>();
-        let uses_numerator_sampling_scale =
-            GenericEvaluator::source_atoms_use_numerator_sampling_scale(&sum, &source_replacements);
-        let mut evaluator = GenericEvaluator::new_from_raw_params(
+        GenericEvaluator::new_from_raw_params(
             sum,
             &params,
             &fn_map,
@@ -476,9 +468,7 @@ impl EvaluatorStack {
             settings.optimization_settings(),
             dual_shape.clone(),
             settings,
-        )?;
-        evaluator.uses_numerator_sampling_scale = uses_numerator_sampling_scale;
-        Ok(evaluator)
+        )
     }
 
     #[instrument(skip_all)]
@@ -1397,7 +1387,6 @@ pub struct GenericEvaluator {
     pub exprs: Option<Vec<Atom>>,
     pub fn_map_entries: Vec<FnMapEntry>,
     pub exprs_len: usize,
-    uses_numerator_sampling_scale: bool,
     pub backend_policy: EvaluatorBackendPolicy,
     pub rational: Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>,
     pub f64_compiled: Option<CompiledCode<Complex<f64>>>,
@@ -1411,30 +1400,6 @@ pub struct GenericEvaluator {
 }
 
 impl GenericEvaluator {
-    fn source_atoms_use_numerator_sampling_scale(
-        atoms: &[Atom],
-        source_replacements: &[Replacement],
-    ) -> bool {
-        atoms.iter().any(|atom| {
-            let mut expanded = atom.clone();
-            for _ in 0..=source_replacements.len() {
-                if expanded.contains_symbol(GS.numerator_sampling_scale) {
-                    return true;
-                }
-                let next = expanded.replace_multiple(source_replacements);
-                if next == expanded {
-                    return false;
-                }
-                expanded = next;
-            }
-            expanded.contains_symbol(GS.numerator_sampling_scale)
-        })
-    }
-
-    pub(crate) fn uses_numerator_sampling_scale(&self) -> bool {
-        self.uses_numerator_sampling_scale
-    }
-
     pub(crate) fn into_eager_only(mut self) -> Self {
         self.backend_policy = EvaluatorBackendPolicy::EagerOnly;
         self.activate_eager_only();
@@ -1596,14 +1561,13 @@ impl GenericEvaluator {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
-        let source_replacements = fn_map_entries
-            .iter()
-            .map(FnMapEntry::replacement)
-            .collect::<Vec<_>>();
         let evaluator_replacements = if settings.do_fn_map_replacements {
-            source_replacements.as_slice()
+            fn_map_entries
+                .iter()
+                .map(FnMapEntry::replacement)
+                .collect::<Vec<_>>()
         } else {
-            &[]
+            Vec::new()
         };
 
         // Vakint and older Symbolica states represent the imaginary unit as a
@@ -1617,24 +1581,20 @@ impl GenericEvaluator {
             ])
             .map_err(|e| eyre!("Failed to register the imaginary-unit constant: {e}"))?;
 
-        for r in evaluator_replacements {
+        for r in &evaluator_replacements {
             println!("Reps!!{:#}", r)
         }
 
         let exprs: Vec<Atom> = atoms
             .into_iter()
             .map(|a| {
-                a.replace_multiple(evaluator_replacements)
-                    .replace_multiple(evaluator_replacements)
+                a.replace_multiple(&evaluator_replacements)
+                    .replace_multiple(&evaluator_replacements)
             })
             .collect();
-        // Keep this fact even when `store_atom` is disabled: runtime settings
-        // must be validated against the finalized evaluator sources, not the
-        // generation mode that may or may not have left M in them. Follow only
-        // function bodies reachable from an emitted expression; unrelated
-        // entries in its shared function map do not make that evaluator use M.
-        let uses_numerator_sampling_scale =
-            Self::source_atoms_use_numerator_sampling_scale(&exprs, &source_replacements);
+        // M remains an ordinary runtime input even when `store_atom` is disabled
+        // or the emitted sources do not use it. Runtime validation requires a
+        // nonzero value without inspecting or expanding shared function bodies.
 
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
         for n in exprs.iter() {
@@ -1700,7 +1660,6 @@ impl GenericEvaluator {
             } else {
                 None
             },
-            uses_numerator_sampling_scale,
             backend_policy: EvaluatorBackendPolicy::FollowIntegrand,
             rational: Some(rational),
             f64_compiled: None,
@@ -2099,7 +2058,7 @@ mod tests {
         let [DualOrNot::NonDual(value)] = result.as_slice() else {
             panic!("expected one scalar evaluator output")
         };
-        value.clone()
+        *value
     }
 
     #[test]
@@ -2133,9 +2092,25 @@ mod tests {
             + production_ids[1].atom() * Atom::num(3)
             + production_ids[2].atom() * Atom::num(5)
             + production_ids[3].atom() * Atom::num(7);
-        let mut evaluator_settings = EvaluatorSettings::default();
-        evaluator_settings.summed = true;
-        evaluator_settings.summed_function_map = true;
+        for ((production_id, orientation), expected) in production_ids
+            .iter()
+            .zip(orientations.iter())
+            .zip([2, 3, 5, 7])
+        {
+            let legacy_selected = atom
+                .replace(production_id.atom())
+                .with(Atom::one())
+                .replace(function!(OrientationID::symbol(), W_.a_))
+                .with(Atom::Zero);
+            let selected = production_id.select(&atom);
+            assert_eq!(selected, legacy_selected);
+            assert_eq!(orientation.select(&selected), Atom::num(expected));
+        }
+        let evaluator_settings = EvaluatorSettings {
+            summed: true,
+            summed_function_map: true,
+            ..Default::default()
+        };
         let (mut stack, _) = EvaluatorStack::new_with_timings(
             &[atom],
             &builder,
@@ -2399,7 +2374,7 @@ mod tests {
     }
 
     #[test]
-    fn evaluator_archives_sampling_scale_usage_without_stored_atoms() {
+    fn evaluator_archives_numerator_sampling_scale_input_without_stored_atoms() {
         test_initialise().unwrap();
         let source_function = symbol!("evaluator_test::sampled_source");
         let source_call = FunctionBuilder::new(source_function).finish();
@@ -2419,7 +2394,7 @@ mod tests {
             args: Vec::new(),
             tags: Vec::new(),
         };
-        let evaluator = GenericEvaluator::new_from_raw_params(
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
             [source_call.clone()],
             std::slice::from_ref(&scale),
             &function_map,
@@ -2430,14 +2405,21 @@ mod tests {
         )
         .unwrap();
         assert!(evaluator.exprs.is_none());
-        assert!(evaluator.uses_numerator_sampling_scale());
+        assert_eq!(evaluator.f64_eager.get_input_len(), 1);
+        for value in [1.0, -2.0] {
+            let input = [Complex::new_re(F(value))];
+            assert_eq!(
+                <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut evaluator)(&input),
+                Complex::new_re(F(value + 1.0)),
+            );
+        }
 
         let encoded = bincode::encode_to_vec(&evaluator, bincode::config::standard()).unwrap();
         let mut state = Vec::new();
         State::export(&mut state).unwrap();
         let state_map = State::import(&mut Cursor::new(state), None).unwrap();
         let model = Model::default();
-        let (decoded, _): (GenericEvaluator, _) = bincode::decode_from_slice_with_context(
+        let (mut decoded, _): (GenericEvaluator, _) = bincode::decode_from_slice_with_context(
             &encoded,
             bincode::config::standard(),
             GammaLoopContextContainer {
@@ -2448,9 +2430,21 @@ mod tests {
         .unwrap();
 
         assert!(decoded.exprs.is_none());
-        assert!(decoded.uses_numerator_sampling_scale());
+        assert_eq!(decoded.f64_eager.get_input_len(), 1);
+        for value in [1.0, -2.0] {
+            let input = [Complex::new_re(F(value))];
+            assert_eq!(
+                <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut decoded)(&input),
+                Complex::new_re(F(value + 1.0)),
+            );
+        }
 
-        let independent = GenericEvaluator::new_from_raw_params(
+        // Argument substitution cannot introduce an absent symbol, but a custom
+        // normalizer can introduce M when a formal argument becomes concrete.
+        // Reachable bodies can also cancel M during substitution. Neither case
+        // changes the registered M input, including for an evaluator with only
+        // an unrelated M-bearing shared function body.
+        let mut independent = GenericEvaluator::new_from_raw_params(
             [Atom::num(1)],
             std::slice::from_ref(&scale),
             &function_map,
@@ -2460,7 +2454,15 @@ mod tests {
             &EvaluatorSettings::default(),
         )
         .unwrap();
-        assert!(!independent.uses_numerator_sampling_scale());
+        assert!(independent.exprs.is_none());
+        assert_eq!(independent.f64_eager.get_input_len(), 1);
+        for value in [1.0, -2.0] {
+            let input = [Complex::new_re(F(value))];
+            assert_eq!(
+                <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut independent)(&input),
+                Complex::new_re(F(1.0)),
+            );
+        }
     }
 
     #[test]

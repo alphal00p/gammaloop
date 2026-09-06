@@ -318,8 +318,26 @@ each of its EMRs as
 \]
 
 For an MSbar vacuum counterterm the fixed-external part is absent,
-\(C_a=0\). A future on-shell counterterm may retain a fixed insertion such as
-\((m,0,0,0)\); it is simply included on both sides of the same check.
+\(C_a=0\), in a centered hard chart. A compatible chart built from retained
+physical edge momenta may instead represent the same vacuum integral by a
+balanced affine loop translation. Their signed incidence sum must vanish at
+every UV vertex; they do not represent momentum entering the vacuum graph.
+The exact source certificate retains them on both sides rather than rejecting each
+shifted denominator separately. A future on-shell counterterm may retain a
+fixed insertion such as \((m,0,0,0)\); it is simply included on both sides of
+the same check.
+
+For nested Taylor operators, the enclosing UV node fixes the hard/soft split.
+If a compatible carrier \(Q\) has soft part \(S\) in that node's reference
+LMB, its rescaling in the projected route's inverse-hard scale is
+\(Q\mapsto (Q-S)/t+S\). The same affine transport
+applies to a retained child's hard-momentum payload; its owner and provenance
+role remain fixed. Literal external-coordinate carriers stay soft even when
+their out-of-domain LMB rows vanish. At the vacuum-integration boundary these
+external coordinates must also stay fixed when solving for canonical loop
+momenta. Finite MUV integration retains one Laurent term beyond the maximal
+pole order; the legacy forest owner requests `wood.max_loops + 1`, matching
+its finite-term extraction contract.
 
 The mapper proposes a factorized UV-graph numerator
 \(\widehat N(\{\widehat Q_a\})\). Correctness means
@@ -464,9 +482,9 @@ separately embedded component product at the tested points to approximately
 This worked sector therefore passes the pre-CFF common-LMB certificate, the
 generalized-CFF component-product diagnostic, and a static trace of the
 GammaLoop host/prefactor/outer-factor coefficient. It is not the first unequal
-boundary in the enclosing forest. The next mandatory comparison is therefore
-the derivative-bearing `1zs/T2` sector. Changing this fixed numerator
-assignment would violate the exact certificate and cannot be a valid repair.
+boundary in the enclosing forest. The isolated `1zs/T2` comparison below
+locates the remaining discrepancy. Changing this fixed numerator assignment
+would violate the exact certificate and cannot be a valid repair.
 
 ### Worked live reproducer: GL04 temporal-square `1zs/T2`
 
@@ -487,8 +505,9 @@ For the `1zs` Taylor component, set
  x=p\mathbin{\cdot}(-q),\qquad U=M_{\mathrm{UV,exp}}^2.
 \]
 
-The completed order-two Taylor trace has the exact denominator occurrence
-multiset
+The frozen reconstruction fixture represents the complete truncation
+`T0+T1+T2`, rather than the isolated `T2` coefficient. Its exact denominator
+occurrence multiset is
 
 ```text
 owner 5: +q, +q       (production occurrence ids 9 and 12)
@@ -498,14 +517,15 @@ owner 6: -q, -q, -q   (production occurrence ids 10, 11, and 13)
 and the still-factorized numerator is algebraically
 
 \[
- N_T=-g^2(q^0)^2
+ N_{\leq 2}=-g^2(q^0)^2
  \left[
    -A B^2 +(U+p^2)A B-4x^2A+U B^2+2xA B
  \right].
 \]
 
-This is the authoritative left-hand side.  It is obtained before any CFF call,
-and no numerator/denominator cancellation is performed or needed.  The
+This is the authoritative full-truncation left-hand side. It is obtained
+before any CFF call, and no numerator/denominator cancellation is performed
+or needed.  The
 original factor \((q^0)^2\) retains `TaylorFixed(owner=5, hard=+q)` provenance.
 The occurrences beyond the first copy of each owner and every factor generated
 by differentiating a denominator retain `DenominatorDerived` provenance.
@@ -548,7 +568,7 @@ mapped dot becomes $x$, and the candidate numerator becomes
 \[
  \widehat N\big|_{P_j=q}=-g^2(q^0)^2
  \left[-A B^2 +(U+p^2)A B-4x^2A+U B^2+2xA B\right]
- =N_T.
+ =N_{\leq 2}.
 \]
 
 That last zero-difference identity is the required numerator certificate.  The
@@ -598,7 +618,7 @@ After applying the common-LMB diagonal $P_9=P_{10}=P_{11}=P_{12}=q$,
 and therefore
 
 \[
- \widehat N-N_T=0
+ \widehat N-N_{\leq 2}=0
 \]
 
 exactly.  This is the real post-plan certificate: it includes every selected
@@ -619,133 +639,176 @@ distinct and proves that the mapper produced the documented term-by-term
 assignment.  It then imposes the common chart and proves the numerator identity
 above.  Its final exact-zero assertion compares the source multiset
 `D(+q)^2 D(-q)^3` with the five reconstructed occurrences.  The focused test
-passed on 2026-09-03.  This is a frozen executable certificate of the live
-trace, not a replacement for the enclosing three-route acceptance: the latter
-is still needed to detect downstream CFF composition or evaluator defects.
+passed on 2026-09-03. Despite its `t2` name, it certifies reconstruction of
+the full truncation; it cannot certify that a diagnostic extracted `T2`
+correctly. Isolated coefficient extraction and the complete three-route
+comparison require the additional checks below.
 
-### Reconstruction correctness does not determine the CFF consumer boundary
+### Isolated coefficient and complete-source certificate
 
-The two certificates above end before GammaLoop converts a generated CFF into
-its historical evaluator convention. This separation matters: a perfectly
-reconstructed numerator can still acquire an overall wrong sign at that later
-boundary.
-
-Generalized variants retain occurrence-local positive half-edge factors
+Writing $D=q^2-M^2$ and stripping the common numerator coupling, the actual
+second Taylor coefficient of the child is
 
 \[
-  \prod_{j\in c}\frac{1}{2E_j},
+ I_2(q,p)=(q^0)^2\left[
+   -\frac{p^2+2M^2}{D^3}
+   +\frac{4(q\cdot p)^2}{D^4}
+ \right].
 \]
 
-while the ordinary GammaLoop CFF path removes those factors from each variant
-and appends the source-global convention
+This equality is a diagnostic expression for the coefficient, not a production
+cancellation or expansion. The production source retains its factorized
+numerator and owner-backed occurrences. The recorded 2026-09-05 diagnostic
+extraction separately certified the child and the complete child-plus-outer source after applying
+all immutable occurrence assignments and the signed $H=hR$, $P=rR$ maps.
+Both numerator differences vanished exactly in independent neutral
+four-vectors, and both denominator multisets matched. The complete source has
+physical occurrence counts
+
+```text
+{1:1, 2:1, 3:1, 4:1, 5:2, 6:3, 7:1, 8:1}.
+```
+
+The proof must resolve every EMR component, retain independent crown
+momenta, and never install a replacement for `emr_vec_index(edge,cind(0))`:
+that spatial temporal component is already literal zero. Replacing it would
+silently turn every zero in the diagnostic into an energy variable.
+
+An independent child contour uses $E=\sqrt{|\boldsymbol q|^2+M^2}$ and
+$a=\boldsymbol q\cdot\boldsymbol p$. Its positive-pole residue sums are
 
 \[
-  \prod_{j\in c}\frac{1}{-2E_j}.
+ R_0=\frac{1}{4E},\qquad
+ R_1=\frac{a}{8E^3},\qquad
+ R_2=\frac{2M^2-|\boldsymbol p|^2-(p^0)^2}{16E^3}
+       +\frac{a^2}{8E^5}.
 \]
 
-For one independently generated exact rational component `c`, the fresh-source
-conversion is therefore
+Each real-axis energy integral contributes $-iR_k$ with the usual Below
+closure. Expanding the exact energy-integrated two-propagator child gives the
+same coefficients. For the complete cut `[1,2]`, the additional moving child
+pole in the outer contour begins at order $t^8$ before the $t^{-3}$ spatial
+measure, so it cannot change these three coefficients.
+
+At the rational sample
 
 \[
-  (-1)^{N_c}\,B_{\mathrm{den},c}\,B_{\mathrm{core},c},
+ P_0=(1,\boldsymbol 0),\quad
+ \boldsymbol K_0=(3,4,0)/10,\quad
+ \boldsymbol K_1=(1,2,3)/10,\quad
+ \boldsymbol K_2=(-2,1,1)/10,
 \]
 
-where `N_c` is the number of source denominator occurrences, `B_den` is the
-scalar-denominator frame recorded by the generator, and `B_core` cancels the
-generated causal core's uniform convention. This conversion is
-component-local but **generation-context invariant**. Marking a source as an
-`EmbeddedCffFactor` may select one equivalent terminal residue; it cannot
-change the value or sign of the same rational energy integral.
-
-This is not the contract for an already persisted production root. The stored
-root already represents the complete production residue functional; changing
-between global and variant-local energy-factor ownership only changes where
-those factors are stored. Materializing that root consumes `B_core` once and
-must not apply `(-1)^N B_den` again. Thus the two adapters are deliberately
-separate:
+with $M=0$, physical masses one on edges 0 and 8 and zero on every other
+edge, and all graph numerator factors one except $(Q_5^0)^2$, the complete isolated `T2` contour evaluates in GammaLoop's
+normalization to
 
 \[
-  B_{\rm fresh\ exact}=\prod_c(-1)^{N_c}B_{{\rm den},c}B_{{\rm core},c},
-  \qquad
-  B_{\rm stored\ root}=B_{\rm core}.
+ -1.8354223786936939047533107951846543304391732719501496
+ \times10^{-6}\,i.
 \]
 
-The minimal clean-tree oracle is an uncancelled, still-factorized quotient
+Before the scalar-base correction, the complete one-call exact CFF agreed
+with projected local-4D at approximately 300 digits, giving
+$-2.79328040709378476003397681050696066768826159163\times10^{-6}i$.
+The independent analytic contour agreed with direct local-3D. Thus the
+reconstruction and factorized child/outer composition passed before the
+shared generalized scalar contact was changed. In that recorded post-correction diagnostic, direct,
+projected, and one-call results agree with the analytic value: one-call
+minus direct is numerically zero at 1024-bit precision, and projected minus
+direct is about $-1.25\times10^{-306}i$. The unchanged production GL04
+`q5_temporal_square` acceptance also passed with the complete Taylor
+truncation, integrated UV counterterms, and thresholds enabled.
+
+### One source convention across recursive scalar bases
+
+Reconstruction correctness ends before CFF normalization. Let $G_c$ denote a
+raw independently generated component, including positive local $1/(2E_j)$
+factors. Its target source-frame coefficient is
 
 \[
-  \frac{D(Q)(Q^0+c)}{D(Q)^3}
-  =\frac{Q^0+c}{D(Q)^2}.
+ \beta_c=(-1)^{N_c}
+ \begin{cases}
+ B_{\mathrm{core},c},&\text{ordinary component},\\
+ B_{\mathrm{den},c},&\text{generalized component}.
+ \end{cases}
 \]
 
-At `|q|=0`, `E=1`, and `c=2`, the historical core-only fresh-source adapter at
-`c8e763173` returned exact Arb values `+2.015720902074968...e-3 i` and
-`-2.015720902074968...e-3 i`, respectively. The raw generalized-CFF identity
-was already correct; only the production values were opposite. The typed
-component conversion above makes this oracle and its scalar, reversed-routing,
-quintic-to-quartic, and raised-residue extensions agree. This is decisive
-evidence that the gross sign is not caused by the EMR reconstruction and does
-not justify modifying generalized-CFF residue recursion.
+For generalized and ordinary public components, the signed contour is
+$J_c=\beta_c G_c$, using $dq^0/(2\pi i)$ for each loop. Internal pure-CFF
+catalogues retain their native orientation normalization, distinguished below.
+Here $N_c$ counts denominator occurrences and $B_{\mathrm{den},c}$ is the
+numerator-bound-independent scalar denominator frame. The generalized core
+sign is already encoded in its Laurent functional; multiplying it again
+would let an unused degree allowance change a scalar integral. In the
+ordinary GammaLoop path, surface conversion removes the positive half-edge
+factors and restores $1/\prod_j(-2E_j)$, which already supplies $(-1)^{N_c}$.
+A generalized expression retains its positive factors on each variant, so its
+typed adapter supplies that parity. More precisely, the actual GammaLoop
+adapter is `product_c [(-1)^(rho*N_c) * frame_c]`: `rho` is one when the whole
+expression retains variant-local positive factors, while each component chooses
+its own core or denominator frame. Thus mixed expressions also apply this parity
+to their ordinary components. Fresh exact sources and stored production roots
+obey the same rule; they do not require separate fresh-versus-stored formulas.
 
-The complementary stored-root oracle uses a scalar self-energy `T0` child and
-the factorized outer numerator `Q3^0 Q4^0`. The child reconstructed from 4D is
-exactly `-1/[D(q)D(-q)]`, its generated CFF agrees with the analytic
-lower-contour integral of `-1/D(q)^2`, and the outer LU energy map is coherent.
-The root metadata are `N=5`, `B_den=+1`, `B_core=-1`. Reusing the fresh-source
-formula at the stored-root boundary changes `-1` to `+1` and flips the complete
-direct result. Consuming only `B_core` makes direct post-CFF Taylor,
-projected-child-times-outer, and whole exact-source calculations agree for the
-complete selected-cut functional. In this deliberately canonical `T0` oracle,
-the separately stored LU-order pieces also happen to agree bit-for-bit at
-1000-bit Arb precision, including the first Taylor derivative. That stronger
-fixture-specific result must not be generalized into a per-order route
-contract. Since the generated residues, numerator map, and projected assembly
-are held fixed in this one-line A/B, the gross sign is a GammaLoop
-double-conversion defect, not a `generalized_3drep` contact sign.
+The same convention must survive denominator deletion *inside* a generalized
+functional. `BoundedCffBuilder` and `KnownFactorCffBuilder` carry the original
+source prefactor through every remainder, contact, and recursive reentry.
+`LowerSectorCffBuilder` converts a scalar base by
+$\beta_{\mathrm{native}}/\beta_{\mathrm{source}}$ once, at its embedding
+boundary. It derives the native factor from the base that was actually built:
 
-The plan supplies bounds `(9,2),(10,2),(11,2),(12,2)`.  Keeping each positive
-`GS.den` wrapper wholly on one same-owner occurrence is a conservative lifting
-convention, but the stable residue-summed A/B remains numerically unchanged by
-it.  A component-only exact audit subsequently proved that all five occurrences
-form one repeated channel with one mass key and that its eight `+/- n`,
-`n=1,...,4`, generalized-CFF families reproduce the analytic `d^-2`, `d^-3`,
-and `d^-4` lower-sector moments term by term.  Both standalone and
-`EmbeddedCffFactor` generation give the same `3/8` total at the rational audit
-point.  The first unequal boundary is therefore later still: attachment and
-mapping of this certified child CFF into the outer factor, final GammaLoop
-aggregation/evaluation, or the corresponding direct-side Taylor term.  A
-former diagnostic which compared numerators before applying the plan was
-removed: it could pass without testing the object actually sampled by CFF, and
-its unconditional symbolic expansion violated the factorized production
-boundary.
+- A connected nonterminal pure component with $n$ denominator occurrences,
+  rank $r$, and repeated-channel excess $d$ has native factor
+  $(-1)^{n+r-1+d}$.
+- A free one-line pure component contains both scalar orientations and evaluates
+  to $1/E$. Its signed Below contour is $-1/(2E)$, so its native factor is
+  $-1/2$. Both generalized scalar bases and public ordinary sources apply
+  this conversion once. The public standalone source retains both maps with
+  half weight; the embedded source retains one complete Below residue.
+- A selected residue basis already includes its contour closure. Its additional
+  stored inherited coordinate-Jacobian sign must be removed on conversion.
+  For $w=p-q$, reversal of the real integration limits cancels $dq=-dw$;
+  the residue generator already accounts for the reversed closure.
 
-A trace of that next boundary has excluded three further false leads.  The
-three observed `216 -> 60` projection waves are the three distinct physical LU
-Cutkosky-cut invocations, not three copies of one Taylor sector.  With
-integrated counterterms disabled, the first-level `1zs` sector has no frozen
-LMB and its frozen localizer is exactly one.  Finally, on a concrete selector-0
-branch the outer source map replaces only unwrapped cograph/soft energies.  It
-leaves all 24 owner-5 and all 32 owner-6 provenance-wrapped child atoms
-unchanged, so the already sampled child numerator is not being sampled a
-second time.  The 216 child entries are production-host selector ids carrying
-the same already-residue-summed child coefficient and no child source map; they
-are not 216 independent residue families.  Matching them to the 60 outer source
-maps broadcasts exactly one complete child coefficient into every surviving
-outer host, so the `216 -> 60` boundary neither drops nor multiplies a child
-residue.
+Component products use their actual native factors and their assembly sign,
+not metadata inferred from an unrelated fresh child source. This requires a
+rational prefactor, not merely a sign. Energy convergence of the starting
+source is part of this contour contract: a surviving free one-denominator
+component can act only on a scalar quotient in that energy variable.
+Public ordinary sources also require their denominator rows to span every
+loop energy; initial-state cut aliases cannot supply missing denominator
+rank. Formal lower-sector contacts keep their internal rank-reduction path.
 
-The smallest unresolved comparison is consequently one physical cut: sum its
-projected `outer CFF * mapped child T2` branches and compare that exact
-expression with the sum of its direct post-CFF `T2` branches.  Raw branch counts
-cannot be paired.  Every projected wave materializes 60 Cartesian host records,
-of which 40 are exactly zero for physical cut `[1,2]` and 48 are exactly zero
-for each of `[3,4]` and `[1,7,8]`; the direct lane instead prunes and coalesces
-its generalized residue keys to 56, 48, and 32 records.  For cut `[1,2]`, the 20
-nonzero projected records split further into 14 ordinary `Q3^0 = +/- E3`
-source-map branches and six pure `Q3^0 = 0` contact branches.  Here `lu_cut_1`
-denotes a first-order Cutkosky residue, not physical cut id 1.  The only valid
-next oracle is therefore equality of that complete 20-term projected outer
-functional and the complete 56-term direct functional after exact summation,
-not equality of individual keys or branch counts.
+The GL04 outer graph exposes the missing conversion particularly clearly.
+Edges 3 and 8 carry the same momentum with different masses, so they remain
+distinct denominator channels. The complete physical cut obeys both
+
+\[
+ (p^0)^2=D_3+E_3^2,\qquad
+ \frac{(p^0)^2}{D_3D_8}
+ =\frac{E_3^2}{E_3^2-E_8^2}\frac1{D_3}
+  -\frac{E_8^2}{E_3^2-E_8^2}\frac1{D_8}.
+\]
+
+Deleting edge 3 changes the denominator-count parity while leaving the
+nonterminal core metadata unchanged. Before the fix, ordinary scalar and
+both lower-topology contours passed independently, but the generalized
+quadratic differed by minus twice the physical edge-3 contact. The coefficient
+of $(p^0)^2$ in $R_2$ is $-1/(16E^3)$, giving exactly the full live `T2`
+discrepancy without fitting a sign to the UV result.
+
+The permanent regressions
+`gl04_outer_unequal_mass_quadratic_obeys_complete_cut_identity`,
+`mixed_carrier_contact_matches_independent_convergent_contour`, and
+`attached_tadpole_repeated_bubble_matches_independent_convergent_contour`
+compare against literal pole residues in both generation contexts. Their
+scalar, lowered, and terminal controls distinguish a source-frame error from
+an incorrect contour oracle. Complete physical-cut sums are the comparison
+boundary; branch counts and individual generalized keys are not route
+invariants. The recorded initial-cut repeated-spectator contour check also
+passed unchanged, checking the inherited-closure sign needed by the original
+root contact.
 
 ## Stage 1: retain denominator multiplicity without expanding the numerator
 
@@ -869,9 +932,11 @@ the later projection back from the owner-free `ParsedGraph`, it is used to:
 
 The rule is therefore:
 
-> Use source provenance to recover the known skeleton and all physical maps;
-> use normalized denominator algebra to define the owner-independent rational
-> occurrence graph on that skeleton.
+> Use the original source graph and retained owners to recover the known
+> skeleton and all physical maps. Add only derivative-created serial copies
+> of those same lines. Normalized denominator algebra classifies channels on
+> that certified scaffold; it never supplies incidence or reassigns original
+> numerator owners.
 
 ## Stage 3: instantiate the source-minor scaffold and lift powers
 
@@ -1868,9 +1933,10 @@ Future changes to this path should preserve all of the following:
 3. Source owners and the original graph determine the contracted cograph/UV
    scaffold and physical attachments; signatures never reconstruct that
    skeleton or choose original endpoints.
-4. The owner-free rational occurrence graph, loop rank, and CFF residue are
-   invariant under compatible owner relabeling of denominators with the same
-   topology domain, mass, and `D(Q)=D(-Q)` channel.
+4. Compatible owner-relabeling comparisons require valid source-backed lifts
+   on both sides, with the same topology domain, mass and `D(Q)=D(-Q)` channel.
+   Their equal rational residue is not permission to infer incidence from
+   denominators or to move an original numerator factor off its retained owner.
 5. Raising one source wrapper produces the requested occurrence multiplicity
    through minimal serial subdivision; the owner's label is not subsequently
    part of rational CFF identity.
@@ -1909,6 +1975,11 @@ Future changes to this path should preserve all of the following:
     signatures; an inconsistent source-backed graph fails validation.
 24. Unsupported mappings fail explicitly rather than choosing a convenient
     edge.
+25. Public initial-state cut slots carry the canonical `Default` direction;
+    their signed fixed energies remain in the exact energy maps. This label
+    normalization occurs after fusion and preserves unfiltered residue IDs and
+    their order; it cannot supply missing denominator rank or re-sign a
+    numerator factor.
 
 ## Code map
 
@@ -1962,7 +2033,11 @@ The retained 2026-08-31 10x campaign passes all four physical DD/TT
 acceptances (`4/4`) after exercising orientation-local 3D, explicit-sum 3D, and
 projected local 4D where the acceptance compares routes. Pulls are signed
 differences from the published target in units of the Monte Carlo error; ratio
-pulls include the LO uncertainty.
+pulls include the LO uncertainty. These are historical measurements, not a
+fresh validation of the current tree. The converted `epem_a_ttx` acceptance
+compares complex magnitudes, so its pass alone does not certify the signed
+result or overall phase. The direct `gamma* -> t t~` test separately retains
+fixed signed LO and graph-NLO component checks.
 
 | Acceptance | 10x LO result | 10x NLO result | Graph and ratio evidence |
 | --- | --- | --- | --- |

@@ -707,11 +707,13 @@ impl Amplitude {
 
                     let esurfaces = &amplitude_graph.graph.surface_cache.esurface_cache;
 
+                    // Cached surfaces without a surviving pole are not threshold candidates.
                     for (raised_esurface_id, raised_group) in amplitude_graph
                         .derived_data
                         .raised_data
                         .raised_groups
                         .iter_enumerated()
+                        .filter(|(_, raised_group)| raised_group.max_occurence > 0)
                     {
                         let esurface = &esurfaces[raised_group.esurface_ids[0]];
                         let esurface_atom = esurface.lmb_atom(&amplitude_graph.graph, &lmb_reps);
@@ -784,24 +786,20 @@ impl AmplitudeGraph {
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
         if self.derived_data.cff_expression.is_none() {
-            self.generate_cff(&GenerationSettings::default())?;
+            // Preserve the source-energy gate formerly run by generate_cff,
+            // without requiring energy integration for this 4D-only operation.
+            self.graph.ensure_energy_convergent_cycles(
+                &self
+                    .graph
+                    .no_dummy()
+                    .subtract(&self.graph.initial_state_cut),
+            )?;
         }
-        let valid_orientations: Vec<_> = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .expect("cff_expression should have been created")
-            .expression
-            .orientations
-            .iter()
-            .map(|orientation| orientation.data.orientation.clone())
-            .collect();
-
         settings.orchestrator.renormalization_part(
             &mut self.graph,
-            // RenormalizationPart forces a 4D forest, so this projector is
-            // never used to build a CFF or attach 3D numerator factors.
-            OrientationProjection::new(&valid_orientations, &OrientationPattern::default()),
+            // RenormalizationPart forces a 4D forest: it never builds a CFF
+            // or attaches 3D numerator factors and needs no stored source.
+            OrientationProjection::four_d(&OrientationPattern::default()),
             settings,
         )
     }
@@ -1167,6 +1165,7 @@ impl AmplitudeGraph {
             &self.graph,
             &self.graph.full_filter(),
             &self.graph.empty_subgraph::<SuBitGraph>(),
+            &component_lmb,
             config.settings,
             false,
         )?;
@@ -1361,7 +1360,12 @@ impl AmplitudeGraph {
             }
         }
 
-        for raised_data in esurface_raising.raised_groups.iter().cloned() {
+        for raised_data in esurface_raising
+            .raised_groups
+            .iter()
+            .filter(|raised_group| raised_group.max_occurence > 0)
+            .cloned()
+        {
             let esurface_id = raised_data.esurface_ids[0];
             let esurface = &global_cff.expression.surfaces.esurface_cache[esurface_id];
 

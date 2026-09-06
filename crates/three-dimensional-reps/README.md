@@ -27,8 +27,9 @@ CLI/state layer.
 - `eval`: optional eager f64 diagnostic evaluator and oracle tests.
 
 The compiled Symbolica runtime evaluator from the Python prototype is not part
-of this library crate. Neither GammaLoop nor the normal workspace test suite
-enables `eval`; run its diagnostic inventory manually and serially with:
+of this library crate. The normal workspace test suite enables `eval` through
+its integration-test dependency. Run its diagnostic inventory directly and
+serially with:
 
 ```bash
 cargo nextest run -p three-dimensional-reps --features eval \

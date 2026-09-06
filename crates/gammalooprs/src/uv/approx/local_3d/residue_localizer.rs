@@ -33,10 +33,10 @@ impl<'a> Localizer<'a> {
         }
     }
 
-    /// Projected local-4D pieces carry independent CFF sums. Their temporary
-    /// production host never becomes a selector and cannot discard a
-    /// source-local residue map merely because it has no complete physical
-    /// extension.
+    /// Projected local-4D pieces and integrated finite addbacks carry independent
+    /// CFF sums. Their source maps own evaluation; a production key only hosts
+    /// each contribution once. A missing complete physical extension cannot
+    /// discard a source-local residue map.
     pub(in crate::uv::approx) fn with_independent_source_sum(mut self) -> Self {
         self.source_selector_hosting = SourceSelectorHosting::IndependentSum;
         self
@@ -56,25 +56,16 @@ impl<'a> Localizer<'a> {
         generation_context: CffGenerationContext,
     ) -> Result<(CutCFF, SuBitGraph)> {
         let contract_subgraph = self.cff_contract_subgraph(graph, to_contract);
-        let mut options = self.orientation.cff_options(graph);
+        let mut options = self.orientation.cff_options()?;
         options.cff_generation_context = generation_context;
         // Exact projection applies the user pattern to full production maps.
         // Contracted edges are undirected in the reduced CFF and cannot be
         // filtered against a pattern that still constrains those edges.
-        let unfiltered = OrientationPattern::default();
-        let orientation_pattern = if self.orientation.exact_orientations().is_some() {
-            &unfiltered
-        } else {
-            self.orientation.orientation_pattern
-        };
-        // Only production exact maps own numerator-energy capacity. Coarse
-        // projectors retain their denominator-only CFF and identity numerator
-        // mapping, as used by legacy exports and isolated UV tests.
-        let analysis_numerator = self
-            .orientation
-            .exact_orientations()
-            .is_some()
-            .then_some(analysis_numerator);
+        let orientation_pattern = &OrientationPattern::default();
+        // Production exact maps own numerator-energy capacity. Isolated
+        // denominator-only tests call graph.cff directly; there is no identity
+        // numerator-mapping or legacy export fallback at this boundary.
+        let analysis_numerator = Some(analysis_numerator);
         let cff = if to_contract.is_empty() {
             if let Some(root_expression) = self.orientation.root_expression() {
                 graph.cff_from_production_expression(
@@ -111,10 +102,7 @@ impl<'a> Localizer<'a> {
         reduced: &OrientationExpression,
         contract_subgraph: &SuBitGraph,
     ) -> Result<Vec<OrientationID>> {
-        let production = self
-            .orientation
-            .exact_orientations()
-            .expect("exact representatives are only requested for an exact projector");
+        let production = self.orientation.exact_orientations()?;
         let contracted_edges = graph.paired_edges(contract_subgraph);
         // A UV source's contracted-edge orientations resolve its internal
         // energy residues; they are not outer production-map directions.
@@ -239,10 +227,7 @@ impl<'a> Localizer<'a> {
         reduced: &OrientationExpression,
         contract_subgraph: &SuBitGraph,
     ) -> Result<Vec<OrientationID>> {
-        let production = self
-            .orientation
-            .exact_orientations()
-            .expect("source selectors are only requested for an exact projector");
+        let production = self.orientation.exact_orientations()?;
         let contracted_edges = graph.paired_edges(contract_subgraph);
         // The reduced source map owns numerator energies. Production maps only
         // host its surviving physical graph-edge directions. Exact denominator
@@ -304,33 +289,6 @@ impl<'a> Localizer<'a> {
             .collect())
     }
 
-    fn coarse_representatives(
-        self,
-        reduced_orientation: &EdgeVec<Orientation>,
-    ) -> Result<Vec<OrientationID>> {
-        let ids = self.orientation.orientation_ids();
-        if ids.len() == 1 && self.orientation.orientation(ids[0]).is_none() {
-            return Ok(ids);
-        }
-        let compatible = ids
-            .into_iter()
-            .filter(|id| {
-                self.orientation
-                    .orientation(*id)
-                    .is_some_and(|orientation| orientation.is_compatible_with(reduced_orientation))
-            })
-            .collect::<Vec<_>>();
-
-        if compatible.is_empty() {
-            Err(eyre!(
-                "no valid global orientation matches reduced orientation {}",
-                GS.orientation_delta(reduced_orientation)
-            ))
-        } else {
-            Ok(compatible)
-        }
-    }
-
     /// Assign a reduced CFF map to one complete production-map key. Ordinary
     /// 3D evaluation carries that key as the opaque sparse selector; explicit-
     /// sum evaluation keeps the same reduced residue once with the key used as
@@ -347,6 +305,7 @@ impl<'a> Localizer<'a> {
         production_orientation_id: Option<OrientationID>,
         source_edge_energy_map: Option<&[LinearEnergyExpr]>,
     ) -> Result<Vec<(OrientationID, Atom)>> {
+        let production = self.orientation.exact_orientations()?;
         if let Some(id) = production_orientation_id {
             if valid_production_ids.is_some_and(|valid| !valid.contains(&id)) {
                 return Ok(Vec::new());
@@ -358,9 +317,9 @@ impl<'a> Localizer<'a> {
             // mistaking the coarser physical edge directions for the selector.
             // Reduced/new CFF terms have no stored production ID and continue
             // through representative reconstruction below.
-            return Ok(self
-                .orientation
-                .orientation(id)
+            return Ok(production
+                .get(id)
+                .map(|map| &map.data.orientation)
                 .filter(|orientation| {
                     self.orientation
                         .orientation_pattern
@@ -369,29 +328,24 @@ impl<'a> Localizer<'a> {
                 .map(|_| vec![(id, reduced_expression.clone())])
                 .unwrap_or_default());
         }
-        let candidate_representatives = if self.orientation.exact_orientations().is_some() {
-            if source_edge_energy_map.is_none() {
-                self.exact_representatives(graph, reduced, contract_subgraph)?
-            } else {
-                match self.source_selector_representatives(graph, reduced, contract_subgraph) {
-                    Ok(representatives) if !representatives.is_empty() => representatives,
-                    Ok(_) | Err(_)
-                        if self.source_selector_hosting
-                            == SourceSelectorHosting::IndependentSum =>
-                    {
-                        // A compatible physical-prefix host is the most stable
-                        // mapping frame. Some generalized numerator samples do
-                        // not define a complete production orientation at all;
-                        // the projected local-4D lane must still keep them once
-                        // under a permitted deterministic bookkeeping host.
-                        self.orientation.orientation_ids()
-                    }
-                    Ok(representatives) => representatives,
-                    Err(error) => return Err(error),
-                }
-            }
+        let candidate_representatives = if source_edge_energy_map.is_none() {
+            self.exact_representatives(graph, reduced, contract_subgraph)?
         } else {
-            self.coarse_representatives(&reduced.data.orientation)?
+            match self.source_selector_representatives(graph, reduced, contract_subgraph) {
+                Ok(representatives) if !representatives.is_empty() => representatives,
+                Ok(_) | Err(_)
+                    if self.source_selector_hosting == SourceSelectorHosting::IndependentSum =>
+                {
+                    // A compatible physical-prefix host is the most stable
+                    // mapping frame. Some generalized numerator samples do
+                    // not define a complete production orientation at all;
+                    // an independently summed source must keep them once
+                    // under a permitted deterministic bookkeeping host.
+                    self.orientation.orientation_ids()?
+                }
+                Ok(representatives) => representatives,
+                Err(error) => return Err(error),
+            }
         };
         let mut representatives = candidate_representatives
             .iter()
@@ -411,7 +365,7 @@ impl<'a> Localizer<'a> {
             // dropping that residue-map sample.
             representatives = self
                 .orientation
-                .orientation_ids()
+                .orientation_ids()?
                 .into_iter()
                 .filter(|id| valid_production_ids.is_none_or(|valid| valid.contains(id)))
                 .collect();
@@ -429,7 +383,8 @@ impl<'a> Localizer<'a> {
             }
         }
         let representative_score = |id: &OrientationID| {
-            self.orientation.orientation(*id).map(|orientation| {
+            production.get(*id).map(|map| {
+                let orientation = &map.data.orientation;
                 // Generalized numerator sampling can add under-resolved maps
                 // to the CFF carrier. They own numerator values, but are not
                 // additional physical orientation channels, so resolve as many
@@ -442,71 +397,15 @@ impl<'a> Localizer<'a> {
                 (directed_count, orientation.score(&selector_edges))
             })
         };
-        if self.orientation.explicit_orientation_sum_only {
-            let Some(representative) = representatives
-                .iter()
-                .copied()
-                .max_by_key(representative_score)
-            else {
-                return Ok(Vec::new());
-            };
-            return Ok(vec![(representative, reduced_expression.clone())]);
-        }
-        let representatives = representatives
-            .iter()
-            .copied()
-            .max_by_key(representative_score)
-            .into_iter()
-            .collect::<Vec<_>>();
         // Exact production maps keep their complete selector key in the sparse
-        // sidecar. Coarse diagnostic/export projectors have no such key and
-        // retain their historical physical-theta selector in the atom.
-        let exact_map_selector = self.orientation.exact_orientations().is_some();
+        // sidecar. Physical-theta selectors are tested at the graph-orientation
+        // owner; they are not a fallback for an opaque runtime residue key.
         Ok(representatives
             .into_iter()
-            .map(|representative| {
-                let selector = if exact_map_selector {
-                    Atom::one()
-                } else {
-                    self.orientation
-                        .orientation(representative)
-                        .map(|orientation| orientation.orientation_thetas())
-                        .unwrap_or_else(Atom::one)
-                };
-                (representative, reduced_expression.clone() * selector)
-            })
-            .collect())
-    }
-
-    #[cfg(test)]
-    pub(super) fn localized_orientation_term(
-        self,
-        reduced_expression: &Atom,
-        reduced_orientation: &EdgeVec<Orientation>,
-        internal_edges: &[EdgeIndex],
-    ) -> Result<Atom> {
-        let representative = self
-            .coarse_representatives(reduced_orientation)?
+            .max_by_key(representative_score)
+            .map(|representative| (representative, reduced_expression.clone()))
             .into_iter()
-            .max_by_key(|id| {
-                self.orientation
-                    .orientation(*id)
-                    .map(|orientation| orientation.score(internal_edges))
-            });
-        let reduced_selector = reduced_orientation.orientation_thetas();
-        Ok(representative
-            .map(|id| {
-                reduced_expression.clone()
-                    * reduced_selector
-                    * self
-                        .orientation
-                        .orientation(id)
-                        .map(|orientation| {
-                            orientation.internal_orientation_selector(internal_edges)
-                        })
-                        .unwrap_or_else(Atom::one)
-            })
-            .unwrap_or(Atom::Zero))
+            .collect())
     }
 
     pub(crate) fn projected_cff(
@@ -566,8 +465,10 @@ impl<'a> Localizer<'a> {
         };
         let no_valid_production_ids = BTreeSet::new();
         let indices = cff.terms.keys().copied().collect::<Vec<_>>();
+        // Convert this reduced CFF's energy-factor convention once. Any
+        // localized finite coefficient keeps its existing forest signs.
         let production_prefactor = Atom::num(cff.production_prefactor_factor());
-        let ids = self.orientation.orientation_ids();
+        let ids = self.orientation.orientation_ids()?;
         if ids.is_empty() {
             return Err(eyre!(
                 "orientation pattern selects no production energy maps"
@@ -579,14 +480,10 @@ impl<'a> Localizer<'a> {
             Option<Vec<LinearEnergyExpr>>,
             BTreeMap<CutCFFIndex, Atom>,
         )> = Vec::new();
-        let internal_edges = if self.orientation.exact_orientations().is_some() {
-            // Exact full maps must also recover selectors for graph tree edges
-            // contracted by the CFF source, not only the explicit UV subgraph.
-            graph.paired_edges(&contract_subgraph)
-        } else {
-            // Preserve the ordinary coarse-localization convention.
-            graph.paired_edges(to_contract)
-        };
+        // Full maps recover selectors for graph tree edges contracted by the
+        // CFF source, not only the explicit UV subgraph. The former coarse
+        // convention at to_contract alone is not a production projection.
+        let internal_edges = graph.paired_edges(&contract_subgraph);
         for (index, cff_term) in cff.terms {
             let valid_production_ids = valid_production_ids.as_ref().map(|valid_by_index| {
                 valid_by_index
@@ -598,11 +495,7 @@ impl<'a> Localizer<'a> {
                 // stored root residue. Keep that branch-owned numerator map
                 // separate from the resolved production orientation selected
                 // solely to partition the ordinary runtime orientation sum.
-                let source_edge_energy_map = self
-                    .orientation
-                    .exact_orientations()
-                    .is_some()
-                    .then(|| reduced.orientation.edge_energy_map.clone());
+                let source_edge_energy_map = Some(reduced.orientation.edge_energy_map.clone());
                 let reduced_expression = &reduced.expression * &production_prefactor;
                 let localized = self.localized_orientation_terms(
                     graph,
@@ -660,15 +553,11 @@ impl<'a> Localizer<'a> {
             .map_numerator(graph, orientation_id, source_edge_energy_map, numerator)
     }
 
-    pub(crate) fn uses_exact_maps(self) -> bool {
-        self.orientation.exact_orientations().is_some()
-    }
-
     /// Materialize the opaque selector carried by an exact production-map
-    /// branch. Explicit sums and coarse projectors have no runtime map key.
+    /// branch. Explicit sums omit its runtime selector.
     #[cfg(test)]
     pub(crate) fn residue_map_key_selector(self, id: OrientationID) -> Atom {
-        if self.uses_exact_maps() && !self.orientation.explicit_orientation_sum_only {
+        if !self.orientation.explicit_orientation_sum_only {
             id.atom()
         } else {
             Atom::one()

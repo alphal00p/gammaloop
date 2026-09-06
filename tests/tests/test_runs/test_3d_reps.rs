@@ -226,10 +226,7 @@ fn cff_cli_validate_and_build_use_gammaloop_graph_state() -> Result<()> {
     assert_eq!(artifact["backend"].as_str(), Some("gammaloop-3Drep"));
     assert_eq!(artifact["family"].as_str(), Some("cff"));
     assert_eq!(artifact["validation"]["ok"].as_bool(), Some(true));
-    assert_eq!(
-        artifact["numerator_energy_support"]["monomials"],
-        serde_json::json!([[]])
-    );
+    assert_eq!(artifact["energy_degree_bounds"], serde_json::json!([]));
     assert_eq!(
         artifact["numerator_sampling_scale_mode"].as_str(),
         Some("All")

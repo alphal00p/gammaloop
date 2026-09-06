@@ -506,14 +506,13 @@ impl Rooted for Local4dCts {
     }
 }
 
-pub struct Local4d;
-
 impl Graph {
     pub(crate) fn uv_rescaled(
         &self,
         expansion_subgraph: &SuBitGraph,
         n_loops: usize,
         lmb: &LoopMomentumBasis,
+        reference_lmb: &LoopMomentumBasis,
         atom: &Atom,
     ) -> Atom {
         let scaled_edges = self
@@ -552,8 +551,9 @@ impl Graph {
                 }
                 let source_momentum = function!(GS.emr_mom, edge.as_view());
                 // Role two is transient and distinguishes a denominator which
-                // belongs to this Taylor operation from a persistent role-zero
-                // or role-one tag left by a nested child operation.
+                // belongs to this Taylor operation from persistent role-zero or
+                // role-one tags retained by a nested child, or role-three tags
+                // fixing physical-source momenta.
                 let tag = GS.uv_momentum_provenance.call_args([
                     edge.as_view(),
                     Atom::num(2).as_view(),
@@ -572,11 +572,11 @@ impl Graph {
                             AtomView::Fun(provenance)
                                 if provenance.get_symbol() == GS.uv_momentum_provenance
                         ) {
-                            // Existing child provenance is immutable metadata.
-                            // Re-emitting the complete momentum also makes this
+                            // Existing child provenance retains its owner and
+                            // role. Re-emitting the complete momentum makes this
                             // node opaque to the top-down traversal, so the outer
                             // operation cannot tag a literal Q inside its stored
-                            // hard-momentum payload.
+                            // hard-momentum payload before affine transport.
                             **output = Atom::from(momentum.to_owned());
                             return;
                         }
@@ -599,56 +599,91 @@ impl Graph {
             });
 
         // Scale the hard part of every momentum in the complete current UV
-        // subgraph while retaining both its immutable source owner and its
-        // complete child-LMB hard projection in the Q tag. Thus
-        // Q_e(t) = H_e/t + S_e. Keeping H_e as one tagged rank-one momentum is
-        // essential: a derivative of D_e must not lose its owner when the LMB
-        // happens to spell H_e with another physical edge ID.
+        // subgraph while retaining its immutable source owner. The compatible
+        // LMB supplies the carrier coordinates, while the current UV node fixes
+        // the soft routing: Q_e(t) = (Q_e - S_current(e))/t + S_current(e).
+        // Keeping the hard part as one tagged rank-one momentum is essential:
+        // a derivative of D_e must not lose its owner when the LMB happens to
+        // spell its hard momentum with another physical edge ID.
         let inverse_rescale = Atom::one() / GS.rescale;
-        let mut derivative_replacements = Vec::new();
-        let mut fixed_replacements = Vec::new();
-        for edge in scaled_edges {
-            let edge_atom = Atom::num(usize::from(edge) as i64);
-            let soft = lmb.ext_atom(edge, GS.emr_mom, &[W_.x___], true);
-            let hard = lmb.loop_atom::<Atom>(edge, GS.emr_mom, &[], true);
-            let ordinary = function!(GS.emr_mom, edge_atom.as_view(), W_.x___);
-            let fixed_tag =
-                GS.uv_momentum_provenance_tag(edge_atom.as_view(), false, hard.as_view());
-            let fixed_hard = function!(GS.emr_mom, fixed_tag.as_view(), W_.x___);
-            fixed_replacements.push(Replacement::new(
-                ordinary.to_pattern(),
-                (&fixed_hard * &inverse_rescale + &soft).to_pattern(),
-            ));
-
-            let preliminary_tag = GS.uv_momentum_provenance.call_args([
-                edge_atom.as_view(),
-                Atom::num(2).as_view(),
-                function!(GS.emr_mom, edge_atom.as_view()).as_view(),
-            ]);
-            let derivative = function!(GS.emr_mom, preliminary_tag.as_view(), W_.x___);
-            let derivative_tag =
-                GS.uv_momentum_provenance_tag(edge_atom.as_view(), true, hard.as_view());
-            let derivative_hard = function!(GS.emr_mom, derivative_tag.as_view(), W_.x___);
-            derivative_replacements.push(Replacement::new(
-                derivative.to_pattern(),
-                (&derivative_hard * &inverse_rescale + &soft).to_pattern(),
-            ));
-        }
-        // A nested child tag already stores its complete frozen hard
-        // projection. The compatible outer LMB scales every carrier of that
-        // projection, so the whole tagged momentum is homogeneous and acquires
-        // one scalar 1/t without any soft shift or metadata rewrite.
-        let persistent = function!(
-            GS.emr_mom,
-            function!(GS.uv_momentum_provenance, W_.a_, W_.b_, W_.mom_),
-            W_.x___
-        );
-        derivative_replacements.push(Replacement::new(
-            persistent.to_pattern(),
-            (&persistent * &inverse_rescale).to_pattern(),
-        ));
-        derivative_replacements.extend(fixed_replacements);
-        let mut atomarg = tagged.replace_multiple(&derivative_replacements);
+        let mut atomarg = tagged.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() == 0 {
+                return;
+            }
+            let (owner, role, routed) =
+                if let Some(provenance) = GS.uv_momentum_provenance_data(momentum.get(0)) {
+                    // A nested child tag stores its complete frozen hard projection.
+                    // Transport that projection into the enclosing hard/soft split;
+                    // retained carriers can have a soft shift in the current LMB.
+                    // Only its hard payload changes: owner and provenance role stay
+                    // fixed until the completed Taylor source is assigned to CFF.
+                    provenance
+                } else {
+                    let (owner, derived) = match momentum.get(0) {
+                        AtomView::Fun(provenance)
+                            if provenance.get_symbol() == GS.uv_momentum_provenance
+                                && provenance.get_nargs() == 3
+                                && provenance.get(1) == Atom::num(2).as_view() =>
+                        {
+                            (usize::try_from(provenance.get(0)), true)
+                        }
+                        edge => (usize::try_from(edge), false),
+                    };
+                    let Ok(owner) = owner.map(EdgeIndex) else {
+                        return;
+                    };
+                    if !scaled_edges.contains(&owner) {
+                        return;
+                    }
+                    (
+                        owner,
+                        derived.into(),
+                        lmb.loop_atom::<Atom>(owner, GS.emr_mom, &[], true)
+                            + lmb.ext_atom::<Atom>(owner, GS.emr_mom, &[], true),
+                    )
+                };
+            let soft = routed.replace_map(|view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                    && momentum.get_nargs() == 1
+                    && let Ok(edge) = usize::try_from(momentum.get(0))
+                    && !reference_lmb.ext_edges.contains(&EdgeIndex(edge))
+                {
+                    // External-coordinate carriers are fixed literally. A
+                    // paired crown edge can have a zero row outside this UV
+                    // subgraph even though it names one of these coordinates.
+                    **output =
+                        reference_lmb.ext_atom::<Atom>(EdgeIndex(edge), GS.emr_mom, &[], true);
+                }
+            });
+            let hard = (&routed - &soft).expand();
+            let tag = GS.uv_momentum_provenance_tag(
+                Atom::num(usize::from(owner) as i64).as_view(),
+                role,
+                hard.as_view(),
+            );
+            let mut tagged_hard = FunctionBuilder::new(GS.emr_mom).add_arg(tag);
+            for index in momentum.iter().skip(1) {
+                tagged_hard = tagged_hard.add_arg(index.to_owned());
+            }
+            let soft = soft.replace_map(|view, _, output| {
+                if let AtomView::Fun(soft_momentum) = view
+                    && soft_momentum.get_symbol() == GS.emr_mom
+                    && soft_momentum.get_nargs() == 1
+                {
+                    let mut component =
+                        FunctionBuilder::new(GS.emr_mom).add_arg(soft_momentum.get(0));
+                    for index in momentum.iter().skip(1) {
+                        component = component.add_arg(index.to_owned());
+                    }
+                    **output = component.finish();
+                }
+            });
+            **output = tagged_hard.finish() * &inverse_rescale + soft;
+        });
 
         // Free `mUVexp` occurrences are left untouched here: with the
         // inverse loop-momentum expansion, soft dependence is generated by
@@ -795,7 +830,7 @@ fn t<S: super::ForestNodeLike>(
         &generated_lmb
     };
 
-    let rescaled = graph.uv_rescaled(current.subgraph(), n_loops, lmb, integrand);
+    let rescaled = graph.uv_rescaled(current.subgraph(), n_loops, lmb, current.lmb(), integrand);
     debug_tags!(#uv,#integrated,#rescaled;log.res = rescaled, n_loops=%n_loops,"Rescaled expanded");
 
     let series = rescaled
@@ -995,6 +1030,8 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                     active_components = ?active_components,
                     "Framed local-4D Taylor sector"
                 );
+                // Store the forest factor -T here. Later CFF projection acts
+                // on this signed coefficient without another subtraction minus.
                 Ok(FourDSector::new(
                     marker.apply(
                         UvOperation::Approx,
@@ -1156,7 +1193,13 @@ mod tests {
         let derived = tagged(true);
         let factorized = (&fixed + Atom::one()) * (&derived + Atom::num(2));
 
-        let rescaled = graph.uv_rescaled(&filter, 0, &graph.loop_momentum_basis, &factorized);
+        let rescaled = graph.uv_rescaled(
+            &filter,
+            0,
+            &graph.loop_momentum_basis,
+            &graph.loop_momentum_basis,
+            &factorized,
+        );
         let expected = (&fixed / GS.rescale + Atom::one()) * (&derived / GS.rescale + Atom::num(2));
         assert_eq!(rescaled, expected);
         assert_eq!(
@@ -1164,6 +1207,7 @@ mod tests {
             GS.erase_uv_momentum_provenance(&graph.uv_rescaled(
                 &filter,
                 0,
+                &graph.loop_momentum_basis,
                 &graph.loop_momentum_basis,
                 &GS.erase_uv_momentum_provenance(&factorized),
             )),
@@ -1254,6 +1298,7 @@ mod tests {
         let tagged = taylor(graph.uv_rescaled(
             current.subgraph(),
             graph.n_loops(current.subgraph()),
+            current.lmb(),
             current.lmb(),
             &input,
         ))?;
@@ -1462,6 +1507,7 @@ mod tests {
             .uv_rescaled(
                 current.subgraph(),
                 graph.n_loops(current.subgraph()),
+                current.lmb(),
                 current.lmb(),
                 &integrand,
             )
@@ -1997,6 +2043,143 @@ mod tests {
             product.atom(),
             &((&local_a + &finite_a) * (&local_b + &finite_b))
         );
+        Ok(())
+    }
+
+    #[test]
+    fn affine_uv_rescaling_preserves_enclosing_chart_and_owner() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph affine_enclosing_taylor_chart {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            a -> b [id=0]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2 lmb_id=1]
+            incoming -> a [id=3]
+            b -> outgoing [id=4]
+        })?;
+        let filter = (0..3)
+            .map(|edge| graph.get_edge_subgraph(EdgeIndex(edge)))
+            .reduce(|left, right| left.union(&right))
+            .unwrap();
+        let reference = &graph.loop_momentum_basis;
+        let chosen = graph
+            .generate_loop_momentum_bases_of(&filter)
+            .into_iter()
+            .find(|lmb| {
+                lmb.loop_edges.contains(&EdgeIndex(0)) && lmb.loop_edges.contains(&EdgeIndex(1))
+            })
+            .expect("the retained child carrier has a compatible enclosing basis");
+        assert!(
+            !reference
+                .ext_atom::<Atom>(EdgeIndex(0), GS.emr_mom, &[], true)
+                .is_zero()
+        );
+        for index in [GS.cind(0), GS.cind(1)] {
+            let indices = std::slice::from_ref(&index);
+            for owner in [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)] {
+                let original = GS.emr_mom(owner, &index);
+                let expected = reference.loop_atom(owner, GS.emr_mom, indices, true) / GS.rescale
+                    + reference.ext_atom(owner, GS.emr_mom, indices, true);
+                for role in [None, Some(false), Some(true)] {
+                    let input = role.map_or_else(
+                        || original.clone(),
+                        |derived| {
+                            FunctionBuilder::new(GS.emr_mom)
+                                .add_arg(
+                                    GS.uv_momentum_provenance_tag(
+                                        Atom::num(usize::from(owner) as i64).as_view(),
+                                        derived,
+                                        FunctionBuilder::new(GS.emr_mom)
+                                            .add_arg(usize::from(owner))
+                                            .finish()
+                                            .as_view(),
+                                    ),
+                                )
+                                .add_arg(index.as_view())
+                                .finish()
+                        },
+                    );
+                    let actual = graph.uv_rescaled(&filter, 0, &chosen, reference, &input);
+                    let erased = GS.erase_uv_momentum_provenance(&actual).replace_multiple(
+                        graph.uv_wrapped_replacement(&filter, reference, indices),
+                    );
+                    assert!(
+                        (erased - &expected).expand().is_zero(),
+                        "ordinary and retained hard momenta must implement the same enclosing Taylor operator"
+                    );
+                    let _ = actual.replace_map(|view, _, _| {
+                        if let AtomView::Fun(momentum) = view
+                            && momentum.get_symbol() == GS.emr_mom
+                            && momentum.get_nargs() > 0
+                            && let Some((actual_owner, actual_role, _)) =
+                                GS.uv_momentum_provenance_data(momentum.get(0))
+                        {
+                            assert_eq!(actual_owner, owner);
+                            assert_eq!(actual_role, role.unwrap_or(false).into());
+                        }
+                    });
+                }
+            }
+        }
+        // A proper child also has paired crown edges. Their literal external
+        // coordinates remain soft even when their out-of-domain LMB rows vanish.
+        let child_filter = graph
+            .get_edge_subgraph(EdgeIndex(1))
+            .union(&graph.get_edge_subgraph(EdgeIndex(2)));
+        let child_subgraph =
+            InternalSubGraph::cleaned_filter_optimist(child_filter.clone(), graph.as_ref());
+        let child_lmb = graph.try_compatible_sub_lmb(
+            &child_subgraph,
+            graph.dummy_stripped_external_flows_of(&child_subgraph),
+            reference,
+        )?;
+        let crown = child_lmb
+            .ext_edges
+            .iter()
+            .copied()
+            .find(|edge| {
+                graph[edge].1.is_paired()
+                    && child_lmb
+                        .ext_atom::<Atom>(*edge, GS.emr_mom, &[], true)
+                        .is_zero()
+            })
+            .expect("the bubble has an external paired carrier with a zero local row");
+        for owner in [EdgeIndex(1), EdgeIndex(2)] {
+            let expected = child_lmb.loop_atom(owner, GS.emr_mom, &[GS.cind(0)], true) / GS.rescale
+                + child_lmb.ext_atom(owner, GS.emr_mom, &[GS.cind(0)], true);
+            let ordinary = GS.emr_mom(owner, GS.cind(0));
+            let actual = graph.uv_rescaled(&child_filter, 0, &child_lmb, &child_lmb, &ordinary);
+            assert!(
+                (GS.erase_uv_momentum_provenance(&actual) - &expected)
+                    .expand()
+                    .is_zero()
+            );
+            for derived in [false, true] {
+                let hard = child_lmb.loop_atom::<Atom>(owner, GS.emr_mom, &[], true)
+                    + child_lmb.ext_atom::<Atom>(owner, GS.emr_mom, &[], true)
+                    - FunctionBuilder::new(GS.emr_mom)
+                        .add_arg(usize::from(crown))
+                        .finish();
+                let tagged = FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(GS.uv_momentum_provenance_tag(
+                        Atom::num(usize::from(owner) as i64).as_view(),
+                        derived,
+                        hard.as_view(),
+                    ))
+                    .add_arg(GS.cind(0))
+                    .finish();
+                let actual = graph.uv_rescaled(&child_filter, 0, &child_lmb, &child_lmb, &tagged);
+                assert!(
+                    (GS.erase_uv_momentum_provenance(&actual) - &expected
+                        + GS.emr_mom(crown, GS.cind(0)))
+                    .expand()
+                    .is_zero()
+                );
+            }
+        }
         Ok(())
     }
 }

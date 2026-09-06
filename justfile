@@ -330,6 +330,7 @@ test_gammaloop *args:
     gammaloop_module_classes=(important slow failing)
     gammaloop_base_excluded_classes=(slow failing)
     raw_args=({{ args }})
+    cargo_profile_args=(--cargo-profile dev-optim)
     selected_classes=()
     nextest_args=()
     passthrough_mode=0
@@ -360,7 +361,10 @@ test_gammaloop *args:
             --allow-warnings|--no-warnings-as-errors)
                 enforce_warnings_as_errors=0
                 ;;
-            --fail-fast|--ff|--no-fail-fast|--nff)
+            --release)
+                cargo_profile_args=(--release)
+                ;;
+            --test=*|--fail-fast|--ff|--no-fail-fast|--nff)
                 nextest_args+=("$arg")
                 ;;
             *)
@@ -435,13 +439,13 @@ test_gammaloop *args:
             env
             "RUSTFLAGS=$compile_rustflags"
             cargo nextest run
-            --cargo-profile dev-optim
+            "${cargo_profile_args[@]}"
             -P test_gammaloop
         )
     else
         cmd=(
             cargo nextest run
-            --cargo-profile dev-optim
+            "${cargo_profile_args[@]}"
             -P test_gammaloop
         )
     fi
@@ -475,6 +479,27 @@ test_gammaloop *args:
     printf ' %q' "${cmd[@]}"
     printf '\n'
     "${cmd[@]}"
+
+# Run all 166 scalar LU cross-section cases, including slow cases, in release mode.
+test_LU_scalar_xs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export CARGO_BUILD_JOBS=1 NEXTEST_TEST_THREADS=1 NEXTEST_RETRIES=0
+    export NEXTEST_STATUS_LEVEL="${NEXTEST_STATUS_LEVEL:-pass}"
+    export RUST_MIN_STACK=67108864 INSTA_UPDATE=no
+    # Keep the matrix on its normal assertion, cleanup and evaluator paths.
+    unset GL_ALL_LOG_FILTER INSTA_FORCE_PASS GAMMALOOP_TESTS_NO_CLEAN_STATE
+    unset GAMMALOOP_DUMP_EVALUATOR_PRE_NETWORK_PARSE GAMMALOOP_STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE
+    unset SPENSO_NETWORK_PROFILE SPENSO_NETWORK_PROFILE_VERBOSE SPENSO_NETWORK_PROFILE_ATOM_BYTES
+    unset SPENSO_NETWORK_LAZY_TENSOR_SUMS SPENSO_NETWORK_MAX_LAZY_DISTRIBUTED_TERMS
+    export GL_DISPLAY_FILTER=off GL_LOGFILE_FILTER=off
+    mkdir -p target/test_LU_scalar_xs
+    run_dir="$(mktemp -d target/test_LU_scalar_xs/run.XXXXXX)"
+    exec python3 bin/ram_watchdog.py --limit-gb 30 \
+        --log "$run_dir/watchdog.jsonl" -- \
+        just test_gammaloop base slow --release --test=test_runs --fail-fast -- \
+        scalar_3l_cross_section_inspects::default_scalar_3l_cross_section_inspects:: \
+        scalar_3l_cross_section_inspects::slow::
 
 test-all:
     cargo nextest run --workspace --cargo-profile release -P local_test_all

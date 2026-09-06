@@ -1363,14 +1363,6 @@ impl GammaloopSymbols {
         )
     }
 
-    pub(crate) fn add_parametric_sign(&self, e: EdgeIndex) -> Replacement {
-        Replacement::new(
-            self.emr_mom(e, AIND_SYMBOLS.cind.call_args([Atom::Zero]))
-                .to_pattern(),
-            sign_atom(e) * self.ose(e),
-        )
-    }
-
     pub(crate) fn ose(&self, e: EdgeIndex) -> Atom {
         function!(GS.ose, usize::from(e) as i64)
     }

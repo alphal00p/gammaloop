@@ -17,7 +17,7 @@ digraph {
   1:2:s	-> 2:3:s	 [id=1  color="red:blue;0.5" label="Q(1)"];
   2:4:s	-> 0:5:s	 [id=2  color="red:blue;0.5" label="Q(1)"];
   3:6	-> 4:7	 [id=3  color="gray" label="Q(3)"];
-  4:8:s	-> 5:9:s	 [id=4  color="red:blue;0.5" label="0"];
-  5:10:s	-> 3:11:s	 [id=5  color="red:blue;0.5" label="0"];
+  4:8:s	-> 5:9:s	 [id=4  color="red:blue;0.5" label="Q(4)"];
+  5:10:s	-> 3:11:s	 [id=5  color="red:blue;0.5" label="Q(4)"];
   2:12:s	-> 3:13:s	 [id=6  color="red:blue;0.5" label="0"];
 }

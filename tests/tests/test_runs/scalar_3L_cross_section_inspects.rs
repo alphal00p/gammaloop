@@ -257,11 +257,15 @@ fn assert_scalar_uv_profile(
         mode.label(),
     );
 
-    // Individual keyed terms reach their asymptotic regime later than the
-    // summed projected expression. Profile each representation in the window
-    // where its expected power law can be distinguished from transients.
+    // Some individual keyed terms reach their asymptotic regime later than
+    // the summed projected expression. Profile each representation in the
+    // window where its expected power law can be distinguished from transients.
+    // GL02's validated fixed ray crosses a zero inside 8..12; its original
+    // 4..8 window retains every key and selected limit. The complete direct,
+    // explicit and projected residues agree across both windows.
     let (min_scale_exponent, max_scale_exponent, n_points) = match mode {
-        ScalarUvProfileMode::PerResidueMapKey => (4.0, 8.0, 6),
+        ScalarUvProfileMode::PerResidueMapKey if case.graph == "GL02" => (4.0, 8.0, 6),
+        ScalarUvProfileMode::PerResidueMapKey => (8.0, 12.0, 6),
         ScalarUvProfileMode::CompleteResidueSum => (3.0, 6.0, 10),
     };
     let started = Instant::now();
@@ -292,28 +296,38 @@ fn assert_scalar_uv_profile(
         mode.label(),
     );
 
-    let mut initial_dods = subsets
-        .iter()
-        .map(|subset| subset.initial_dod)
-        .collect::<Vec<_>>();
-    initial_dods.sort_unstable();
-    initial_dods.dedup();
-    let expected_initial_dods = match case.graph {
-        "GL00" => vec![0, 1],
-        "GL04" => vec![0, 2],
-        graph => unreachable!("unexpected profiled scalar graph {graph}"),
-    };
-    assert_eq!(
-        initial_dods, expected_initial_dods,
-        "scalar {} numerator must retain its intended divergent Taylor orders",
-        case.graph,
-    );
     assert!(
-        subsets.iter().any(|subset| subset.free.len() == 1)
-            && subsets.iter().any(|subset| subset.free.len() > 1),
-        "scalar {} numerator must profile both component and multi-cycle UV limits",
+        subsets.iter().all(|subset| subset.initial_dod >= 0),
+        "scalar {} only-divergent UV profile selected a convergent limit",
         case.graph,
     );
+    // These two probes also lock the distinct Taylor orders and the presence
+    // of both component and multi-cycle limits; the other selected topologies
+    // retain the same finiteness and non-vacuity checks below.
+    if matches!(case.graph, "GL00" | "GL04") {
+        let mut initial_dods = subsets
+            .iter()
+            .map(|subset| subset.initial_dod)
+            .collect::<Vec<_>>();
+        initial_dods.sort_unstable();
+        initial_dods.dedup();
+        let expected_initial_dods = match case.graph {
+            "GL00" => vec![0, 1],
+            "GL04" => vec![0, 2],
+            graph => unreachable!("unexpected profiled scalar graph {graph}"),
+        };
+        assert_eq!(
+            initial_dods, expected_initial_dods,
+            "scalar {} numerator must retain its intended divergent Taylor orders",
+            case.graph,
+        );
+        assert!(
+            subsets.iter().any(|subset| subset.free.len() == 1)
+                && subsets.iter().any(|subset| subset.free.len() > 1),
+            "scalar {} numerator must profile both component and multi-cycle UV limits",
+            case.graph,
+        );
+    }
 
     let fitted_subsets = subsets
         .iter()
@@ -402,7 +416,7 @@ fn setup_scalar_3l_cross_section_cli(
             "import model scalars-default.json",
             "remove processes",
             &format!(
-                "set global kv global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.evaluator.compile=false global.generation.evaluator.store_atom=false global.generation.evaluator.summed={summed_evaluator} global.generation.uv.subtract_uv=true global.generation.uv.generate_integrated=true global.generation.uv.local_uv_cts_from_expanded_4d_integrands={local_uv_from_expanded_4d} global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=false"
+                "set global kv global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.evaluator.compile=false global.generation.evaluator.store_atom=false global.generation.evaluator.summed={summed_evaluator} global.generation.evaluator.summed_function_map=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.uv.subtract_uv=true global.generation.uv.generate_integrated=true global.generation.uv.local_uv_cts_from_expanded_4d_integrands={local_uv_from_expanded_4d} global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=false"
             ),
             &format!(
                 r#"set default-runtime string '
@@ -517,7 +531,7 @@ fn run_scalar_3l_cross_section_numerator_only_case(
     test_scope: &str,
     case: Scalar3LGraphCase,
 ) -> Result<()> {
-    run_scalar_3l_cross_section_case_impl(test_scope, case, false, false)
+    run_scalar_3l_cross_section_case_impl(test_scope, case, false, true)
 }
 
 fn run_scalar_3l_cross_section_case_impl(
@@ -611,15 +625,140 @@ fn run_scalar_3l_cross_section_case_impl(
         }
     };
 
+    let certify_zero = |cli: &gammaloop_integration_tests::CLIState,
+                        process: &str,
+                        integrand: &str|
+     -> Result<bool> {
+        use gammalooprs::{utils::GS, uv::uv_graph::UVE};
+        use linnet::half_edge::{involution::EdgeIndex, subgraph::Inclusion};
+        use symbolica::atom::{Atom, AtomCore};
+        use three_dimensional_reps::ThreeDGraphSource;
+
+        if integrand != "numerator" {
+            return Ok(false);
+        }
+        let edge = match case.numerator {
+            NumeratorChoice::SquaredEdge { edge, .. }
+            | NumeratorChoice::QuarticEdge { edge, .. } => EdgeIndex(edge),
+            _ => return Ok(false),
+        };
+        let (id, name) = cli.state.find_integrand_ref(
+            Some(&ProcessRef::Unqualified(process.to_string())),
+            Some(&integrand.to_string()),
+        )?;
+        let ProcessCollection::CrossSections(cross_sections) =
+            &cli.state.process_list.processes[id].collection
+        else {
+            return Err(eyre::eyre!(
+                "scalar zero certificate requires a cross section"
+            ));
+        };
+        let [source] = cross_sections[&name].supergraphs.as_slice() else {
+            return Err(eyre::eyre!(
+                "scalar zero certificate requires one actual source graph"
+            ));
+        };
+        let graph = &source.graph;
+        let expected = case
+            .numerator
+            .owned_edge_factors()
+            .into_iter()
+            .filter(|(owner, _)| *owner == edge.0)
+            .fold(Atom::one(), |product, (_, factor)| product * factor);
+        let original = &graph.underlying[edge].num.value;
+        let coefficient = (original / &expected).expand();
+        // Check the stored original owner, not just the requested probe label.
+        // Its Lorentz square(s) may carry a momentum-independent source factor.
+        if coefficient.is_zero()
+            || [GS.emr_mom, GS.loop_mom, GS.external_mom]
+                .into_iter()
+                .any(|momentum| coefficient.contains_symbol(momentum))
+            || !graph.underlying[edge].mass_atom().is_zero()
+        {
+            return Ok(false);
+        }
+        assert!((original - &expected * coefficient).expand().is_zero());
+        let parsed = graph.to_three_d_parsed_graph()?;
+        let edge_map = graph
+            .energy_edge_index_map(&parsed)
+            .expect("the actual source must expose original edge ownership");
+        let Some((&local, _)) = edge_map
+            .internal
+            .iter()
+            .find(|(_, physical)| **physical == edge.0)
+        else {
+            return Ok(false);
+        };
+        let denominator_ids = parsed.denominator_internal_edge_ids();
+        let Some(denominator) = parsed
+            .internal_edges
+            .iter()
+            .find(|line| line.edge_id == local && denominator_ids.contains(&local))
+        else {
+            return Ok(false);
+        };
+        // The full affine momentum and mass must define a unique simple pole.
+        // Comparing only loop rows would incorrectly merge shifted propagators.
+        let simple = !denominator.had_pow
+            && graph.underlying[edge]
+                .extra_data
+                .vakint_edge_power
+                .is_none_or(|power| power == 1)
+            && parsed
+                .internal_edges
+                .iter()
+                .filter(|line| {
+                    denominator_ids.contains(&line.edge_id)
+                        && line.mass_key == denominator.mass_key
+                        && line.signature.canonical_up_to_sign().0
+                            == denominator.signature.canonical_up_to_sign().0
+                })
+                .count()
+                == 1;
+        if !simple
+            || source.cuts.is_empty()
+            || !source
+                .cuts
+                .iter()
+                .all(|cut| cut.cut.as_subgraph().includes(&graph[&edge].1))
+        {
+            return Ok(false);
+        }
+        let cff = source
+            .derived_data
+            .global_cff_expression
+            .as_ref()
+            .expect("a zero source still requires its generated CFF");
+        assert!(!cff.expression.orientations.is_empty());
+        assert!(
+            cff.expression
+                .orientations
+                .iter()
+                .any(|orientation| !orientation.variants.is_empty())
+        );
+        // Every physical cut crosses this simple massless denominator. Its
+        // original numerator vanishes on that cut, so the complete source is zero.
+        Ok(true)
+    };
+
     let total_started = Instant::now();
     let owned_numerators = [(numerator_process.as_str(), "numerator", case.numerator)];
-    // The complete 15-case matrix keeps its three-way local comparison, while
-    // the per-orientation profile is concentrated on the two default probes
-    // that span the relevant Taylor orders and UV-forest structure.
+    // The complete scalar matrix keeps its three-way local comparison, while
+    // the per-orientation and summed profiles cover the six default probes
+    // that span the relevant Taylor orders and UV-forest structure. Reuse the
+    // generated numerator states so profiling needs no additional generation.
     let profile_scalar_uv_routes = include_no_numerator
-        && matches!(case.graph, "GL00" | "GL04")
+        && matches!(
+            case.graph,
+            "GL00" | "GL02" | "GL04" | "GL08" | "GL09" | "GL24"
+        )
         && exercise_orientation_local_3d;
-    let use_parametric_orientation_local_3d = profile_scalar_uv_routes;
+    // This rank-four GL16 probe still sums every complete residue-map key.
+    // Other quartics and GL16 rank two retain the pre-summed evaluator coverage.
+    let use_parametric_orientation_local_3d = profile_scalar_uv_routes
+        || (case.graph == "GL16"
+            && !include_no_numerator
+            && matches!(case.numerator, NumeratorChoice::QuarticEdge { edge: 7, .. }));
     // Keep every route in a fresh graph and evaluator state. Regenerating the
     // explicit route in the orientation-local state would retain route-local caches.
     let localized_3d_results = if exercise_orientation_local_3d {
@@ -666,7 +805,8 @@ fn run_scalar_3l_cross_section_case_impl(
                 case.graph,
                 arb_started.elapsed()
             );
-            results.push((result, arb_result));
+            let zero_source = certify_zero(&localized_3d, process, integrand)?;
+            results.push((result, arb_result, zero_source));
         }
         if profile_scalar_uv_routes {
             assert_scalar_uv_profile(
@@ -715,6 +855,13 @@ fn run_scalar_3l_cross_section_case_impl(
         &integrand_command_refs,
         exercise_orientation_local_3d,
     )?;
+    if exercise_orientation_local_3d {
+        println!(
+            "scalar {} local-UV route projected local-4D: setup and generation {:?}",
+            case.graph,
+            generation_started.elapsed()
+        );
+    }
     if profile_scalar_uv_routes {
         assert_scalar_uv_profile(
             &mut cff_4d,
@@ -723,13 +870,6 @@ fn run_scalar_3l_cross_section_case_impl(
             "numerator",
             ScalarUvProfileMode::CompleteResidueSum,
         )?;
-    }
-    if exercise_orientation_local_3d {
-        println!(
-            "scalar {} local-UV route projected local-4D: setup and generation {:?}",
-            case.graph,
-            generation_started.elapsed()
-        );
     }
     for (evaluation_index, (process, integrand, label)) in evaluations.into_iter().enumerate() {
         let evaluation_started = Instant::now();
@@ -763,7 +903,10 @@ fn run_scalar_3l_cross_section_case_impl(
             );
         }
         if let Some(localized_3d_results) = &localized_3d_results {
-            let (localized_3d_result, localized_3d_arb) = &localized_3d_results[evaluation_index];
+            let (localized_3d_result, localized_3d_arb, zero_source) =
+                &localized_3d_results[evaluation_index];
+            assert_eq!(*zero_source, certify_zero(&cff_3d, &process, &integrand)?);
+            assert_eq!(*zero_source, certify_zero(&cff_4d, &process, &integrand)?);
             let route_totals = [
                 (
                     "orientation-local local-3D",
@@ -780,14 +923,30 @@ fn run_scalar_3l_cross_section_case_impl(
             ];
             for (route, total) in route_totals {
                 assert!(
-                    total.re.is_finite() && total.im.is_finite() && total.re.hypot(total.im) > 0.0,
-                    "scalar {} {label} {route} total must be finite and nonzero, got {total:e}",
+                    total.re.is_finite()
+                        && total.im.is_finite()
+                        && (*zero_source || total.re.hypot(total.im) > 0.0),
+                    "scalar {} {label} {route} total must be finite and nonzero unless the source certifies a vanishing cut, got {total:e}",
                     case.graph
                 );
             }
             let arb_started = Instant::now();
             let explicit_3d_arb = evaluate_arb(&mut cff_3d, &process, &integrand)?;
             let projected_4d_arb = evaluate_arb(&mut cff_4d, &process, &integrand)?;
+            if *zero_source {
+                let zero_tolerance = F(localized_3d_arb.re.0.epsilon()).sqrt();
+                for (route, actual) in [
+                    ("orientation-local local-3D", localized_3d_arb),
+                    ("explicit-sum local-3D", &explicit_3d_arb),
+                    ("projected local-4D", &projected_4d_arb),
+                ] {
+                    assert!(
+                        actual.norm().re <= zero_tolerance,
+                        "scalar {} {label} {route} has an exact source-zero certificate but evaluates to {actual:e}, tolerance={zero_tolerance:e}",
+                        case.graph
+                    );
+                }
+            }
             let precision_tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
             let f64_input_tolerance = F::<ArbPrec>::from_f64(1.0e-14);
             for (route, actual) in [
@@ -825,7 +984,7 @@ fn run_scalar_3l_cross_section_case_impl(
                 );
             }
             println!(
-                "scalar {} local-UV three-route Arb comparison: {:?}",
+                "scalar {} local-UV three-route Arb comparison: {:?}, exact source zero={zero_source}",
                 case.graph,
                 arb_started.elapsed()
             );
@@ -1780,10 +1939,11 @@ mod slow {
     mod quartic_energy_numerators {
         use super::*;
 
-        // This all-routes rank-four stress remains valuable, but its first
-        // orientation-local generation alone can exceed ten minutes. The base
-        // suite covers the same retained-cut component bridge with a fast
-        // exact-residue oracle and keeps GL16 rank two in all three routes.
+        // This all-routes rank-four stress remains valuable. Historically its
+        // pre-summed orientation-local generation alone exceeded ten minutes;
+        // this case now sums the complete keys with the parametric evaluator.
+        // The base suite covers the same retained-cut component bridge with a
+        // fast exact-residue oracle and keeps GL16 rank two in all three routes.
         mod scalar_3l_cross_section_gl16_quartic_energy_inspects_match {
             use super::*;
 

@@ -1715,6 +1715,8 @@ mod tests {
 
     #[test]
     fn union_terms_replay_component_paths_from_typed_roots() -> Result<()> {
+        use crate::graph::feynman_graph::FeynmanGraph;
+
         test_initialise().unwrap();
         let mut graph: Graph = dot!(
             digraph G{
@@ -1781,9 +1783,26 @@ mod tests {
         }
 
         let orientation_pattern = crate::settings::global::OrientationPattern::default();
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let contract_edges = graph
+            .iter_edges_of(&graph.tree_edges)
+            .map(|(_, edge, _)| edge)
+            .collect_vec();
+        let production = graph.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &canonization,
+            &options,
+            Some(&Atom::one()),
+        )?;
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::new(&[], &orientation_pattern),
+            OrientationProjection::exact_expression(
+                &production,
+                &options,
+                &orientation_pattern,
+                false,
+            ),
         );
         let seed =
             forests.local_3d_for_node(forests.root, &mut graph, &cutset, localizer, &settings)?;
@@ -2395,6 +2414,8 @@ mod tests {
 
     #[test]
     fn spectacles() -> Result<()> {
+        use crate::graph::feynman_graph::FeynmanGraph;
+
         test_initialise().unwrap();
 
         let mut spectacles: Graph = dot!(
@@ -2442,9 +2463,30 @@ mod tests {
             })
             .expect("spectacles has a connected child above its disconnected union");
         let orientation_pattern = crate::settings::global::OrientationPattern::default();
+        // The replay fixture keeps its synthetic unit branch, while the
+        // existing exact source supplies a valid energy map for that key.
+        let options = spectacles.denominator_only_cff_3d_expression_options();
+        let canonization = spectacles.get_esurface_canonization(&spectacles.loop_momentum_basis);
+        let contract_edges = spectacles.paired_edges(
+            &spectacles
+                .tree_edges
+                .subtract(&spectacles.initial_state_cut),
+        );
+        let production = spectacles.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &canonization,
+            &options,
+            None,
+        )?;
+        assert!(!production.expression.orientations.is_empty());
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::new(&[], &orientation_pattern),
+            OrientationProjection::exact_expression(
+                &production,
+                &options,
+                &orientation_pattern,
+                false,
+            ),
         );
         let union_active = f
             .union_replay_states(union)?

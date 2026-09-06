@@ -88,7 +88,8 @@ pub(crate) struct GraphThreeDSource<'a> {
 /// Incidence frame used by an exact proper-UV source in sub-LMB coordinates.
 /// A physical shell source retains the complete source-graph crown. A Taylor
 /// vacuum keeps the same owner incidence and sub-LMB provenance after the UV
-/// operator has set every external denominator shift to zero.
+/// operator has removed external flow at every vertex. A compatible carrier
+/// chart may retain an affine loop translation in individual denominators.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ExactUvSubLmbFrame {
     RetainedPhysicalCrown,
@@ -936,32 +937,6 @@ impl<'a> GraphThreeDSource<'a> {
                     .collect::<three_dimensional_reps::graph_io::Result<Vec<_>>>()
             })
             .transpose()?;
-        if matches!(sub_lmb_frame, Some(ExactUvSubLmbFrame::TaylorVacuum))
-            && let Some(signatures) = &coordinate_signatures
-        {
-            let shifted = denominators
-                .iter()
-                .zip(signatures)
-                .filter(|(_, signature)| {
-                    signature
-                        .external_signature
-                        .iter()
-                        .any(|coefficient| *coefficient != 0)
-                })
-                .map(|(denominator, signature)| {
-                    (
-                        denominator.source_edge,
-                        denominator.momentum.clone(),
-                        signature.external_signature.clone(),
-                    )
-                })
-                .collect::<Vec<_>>();
-            if !shifted.is_empty() {
-                return Err(GraphIoError::Source(format!(
-                    "an exact Taylor-vacuum UV sub-LMB source must have zero external denominator shifts; shifted (owner, momentum, signature): {shifted:?}"
-                )));
-            }
-        }
         // Exact 4D sources must use the same coordinate frame as the ordinary
         // production CFF. The configured graph LMB is not necessarily the
         // canonical carrier basis selected by `GraphThreeDSource::new`.
@@ -1661,33 +1636,12 @@ impl<'a> GraphThreeDSource<'a> {
             })
             .map(|(_, edge_id, _)| {
                 let signature = &coordinate_lmb.edge_signatures[edge_id];
-                let taylor_signature = (self.exact_sub_lmb_frame
-                    == Some(ExactUvSubLmbFrame::TaylorVacuum))
-                .then(|| {
-                    self.exact_denominators
-                        .expect("a Taylor-vacuum source has exact denominators")
-                        .iter()
-                        .enumerate()
-                        .find_map(|(occurrence, denominator)| {
-                            (denominator.source_edge == edge_id)
-                                .then(|| &self.exact_signatures[occurrence])
-                        })
-                })
-                .flatten();
-                let mut coordinates = taylor_signature.map_or_else(
-                    || self.edge_loop_coordinates[&edge_id].clone(),
-                    |signature| {
-                        signature
-                            .loop_signature
-                            .iter()
-                            .copied()
-                            .map(Rational::from)
-                            .collect()
-                    },
-                );
-                let external_terms = if taylor_signature.is_some() {
-                    Vec::new()
-                } else if self.initial_state_cut_edges.contains(&edge_id) {
+                // Tagged Taylor-hard factors use their certified denominator
+                // occurrence directly. Untagged Q_e retains its physical affine
+                // coordinates, including for a pinched owner; it must not inherit
+                // a rewritten denominator's sign or lose an external shift.
+                let mut coordinates = self.edge_loop_coordinates[&edge_id].clone();
+                let external_terms = if self.initial_state_cut_edges.contains(&edge_id) {
                     let alias_signature = MomentumSignature {
                         loop_signature: Vec::new(),
                         external_signature: (&signature.external)
@@ -2350,7 +2304,12 @@ impl<'a> GraphThreeDSource<'a> {
         // absolutely zero. Contracted production nodes inherit the sum of their
         // source-node residuals. A proper UV source instead retains its complete
         // crown and restores original owner signatures on the same incidence;
-        // serial dotted copies then cancel on their auxiliary nodes.
+        // serial dotted copies then cancel on their auxiliary nodes. A Taylor
+        // vacuum must have zero external flow at every vertex. Individual
+        // denominator shifts may form a balanced loop circulation: an affine
+        // carrier chart need not set every external denominator shift to zero.
+        // This incidence check rejects physical crown flow without excluding
+        // such translations of the same vacuum integral.
         let mut source_external_balance = BTreeMap::<usize, Vec<i32>>::new();
         if self.uv_edges.is_empty() {
             let production_parsed =
@@ -3237,6 +3196,13 @@ fn accumulate_momentum_signature(
                     .position(|loop_edge| *loop_edge == edge)
             {
                 loop_signature[loop_index] += coefficient;
+                return Ok(());
+            }
+            if use_uv_loop_basis && let Some(external_index) = lmb.ext_from(edge) {
+                // These are literal sub-LMB coordinates. A paired crown carrier
+                // can have a zero physical row outside the internal UV domain;
+                // that row must not erase an affine denominator translation.
+                external_signature[usize::from(external_index)] += coefficient;
                 return Ok(());
             }
             let signature = lmb
@@ -6476,7 +6442,7 @@ mod tests {
         assert!(!soft.is_zero());
         let tag = GS.uv_momentum_provenance_tag(
             Atom::num(usize::from(uv_edges[1]) as i64).as_view(),
-            true,
+            false,
             hard.as_view(),
         );
         let tagged_hard = FunctionBuilder::new(GS.emr_mom)
@@ -6849,6 +6815,199 @@ mod tests {
             };
             assert!(!denominator.depends_on_loop(&graph, false)?);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_taylor_vacuum_affine_circulation_preserves_energy_mapping() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph exact_affine_taylor_vacuum {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2]
+            b -> c [id=3]
+            c -> outgoing [id=4]
+        })?;
+        let owners = [EdgeIndex(1), EdgeIndex(2)];
+        let filter = graph
+            .get_edge_subgraph(owners[0])
+            .union(&graph.get_edge_subgraph(owners[1]));
+        let subgraph = InternalSubGraph::cleaned_filter_optimist(filter, graph.as_ref());
+        let lmb = graph.try_compatible_sub_lmb(
+            &subgraph,
+            graph.dummy_stripped_external_flows_of(&subgraph),
+            &graph.loop_momentum_basis,
+        )?;
+        let external = *lmb.ext_edges.iter().next().unwrap();
+        let hard = FunctionBuilder::new(GS.emr_mom).add_arg(1).finish()
+            - FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(external))
+                .finish();
+        let denominators = owners
+            .into_iter()
+            .enumerate()
+            .map(|(position, owner)| FourDDenominator {
+                source_edge: owner,
+                momentum: Atom::num(if position == 0 { 1 } else { -1 }) * &hard,
+                mass_squared: Atom::var(GS.m_uv_expansion).pow(2),
+                full_expr: Atom::one(),
+            })
+            .collect::<Vec<_>>();
+        let signature = denominators[0].momentum_signature_in_lmb(&lmb, true)?;
+        assert_eq!(
+            signature.external_signature[0], -1,
+            "the literal crown coordinate must survive before topology construction"
+        );
+        let source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+            &graph,
+            &denominators,
+            owners,
+            [],
+            &lmb,
+            ExactUvSubLmbFrame::TaylorVacuum,
+        )?;
+        let parsed = source.to_three_d_parsed_graph()?;
+        assert!(parsed.external_edges.is_empty());
+        assert!(parsed.internal_edges.iter().any(|edge| {
+            edge.signature
+                .external_signature
+                .iter()
+                .any(|coefficient| *coefficient != 0)
+        }));
+        assert!(
+            validate_parsed_graph(&parsed)
+                .vertex_external_balance_info
+                .values()
+                .all(|coefficients| coefficients.iter().all(|coefficient| *coefficient == 0))
+        );
+        let mapper = source.energy_mapper(0, source.exact_ose_replacements().unwrap());
+        let energy = Atom::var(symbolica::symbol!("three_d_source_test::affine_pole"));
+        let external_energy = crate::utils::external_energy_atom_from_index(external);
+        let loop_map = [LinearEnergyExpr {
+            constant: &energy + &external_energy,
+            ..LinearEnergyExpr::zero()
+        }];
+        let max_occurrence = mapper
+            .source_edge_occurrences
+            .values()
+            .flatten()
+            .map(|occurrence| occurrence.energy_edge_id)
+            .max()
+            .unwrap();
+        let mut edge_map = vec![LinearEnergyExpr::zero(); max_occurrence + 1];
+        let external_replacements = lmb
+            .ext_edges
+            .iter()
+            .map(|edge| {
+                Replacement::new(
+                    GS.emr_mom(*edge, GS.cind(0)).to_pattern(),
+                    crate::utils::external_energy_atom_from_index(*edge).to_pattern(),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (position, owner) in owners.into_iter().enumerate() {
+            let occurrence = &mapper.source_edge_occurrences[&owner][0];
+            let raw_sign = if position == 0 { 1 } else { -1 };
+            edge_map[occurrence.energy_edge_id].constant =
+                Atom::num(raw_sign * occurrence.raw_to_parsed_sign) * &energy;
+            let assignments = BTreeMap::from([(owner, occurrence.energy_edge_id)]);
+            for derived in [false, true] {
+                let tagged = FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(GS.uv_momentum_provenance_tag(
+                        Atom::num(usize::from(owner) as i64).as_view(),
+                        derived,
+                        denominators[position].momentum.as_view(),
+                    ))
+                    .add_arg(GS.cind(0))
+                    .finish();
+                assert_eq!(
+                    mapper.map_numerator_factor(&loop_map, &edge_map, &tagged, &assignments)?,
+                    Atom::num(raw_sign) * &energy
+                );
+                let mut contact_map = edge_map.clone();
+                contact_map[occurrence.energy_edge_id] = LinearEnergyExpr::zero();
+                assert!(
+                    mapper
+                        .map_numerator_factor(&loop_map, &contact_map, &tagged, &assignments)?
+                        .is_zero(),
+                    "an affine shift must not turn a zero contact sample into a nonzero numerator"
+                );
+                let spatial = tagged.replace(GS.cind(0)).with(GS.cind(1));
+                assert_eq!(
+                    mapper.map_numerator_factor(&loop_map, &edge_map, &spatial, &assignments)?,
+                    GS.erase_uv_momentum_provenance(&spatial)
+                );
+            }
+            let literal = GS.emr_mom(owner, GS.cind(0));
+            let expected = (lmb.loop_atom(owner, GS.emr_mom, &[GS.cind(0)], true)
+                + lmb.ext_atom(owner, GS.emr_mom, &[GS.cind(0)], true))
+            .replace(GS.emr_mom(owners[0], GS.cind(0)))
+            .with(&energy + &external_energy)
+            .replace_multiple(&external_replacements);
+            assert!(
+                (mapper.map_numerator_factor(&loop_map, &edge_map, &literal, &assignments)?
+                    - &expected)
+                    .expand()
+                    .is_zero(),
+                "untagged Q retains its physical affine coordinates"
+            );
+            assert_eq!(
+                crate::utils::ose_atom_from_index(EdgeIndex(occurrence.energy_edge_id))
+                    .replace_multiple(mapper.exact_ose_replacements()),
+                denominators[position].on_shell_energy()
+            );
+        }
+        let pinched = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+            &graph,
+            &denominators[..1],
+            owners,
+            [],
+            &lmb,
+            ExactUvSubLmbFrame::TaylorVacuum,
+        )?;
+        let pinched_mapper = pinched.energy_mapper(0, pinched.exact_ose_replacements().unwrap());
+        let literal = GS.emr_mom(owners[1], GS.cind(0));
+        assert_eq!(
+            pinched_mapper.map_numerator_factor(&loop_map, &[], &literal, &BTreeMap::new())?,
+            mapper.map_numerator_factor(&loop_map, &edge_map, &literal, &BTreeMap::new())?
+        );
+        let missing_tag = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(GS.uv_momentum_provenance_tag(
+                Atom::num(2).as_view(),
+                false,
+                denominators[1].momentum.as_view(),
+            ))
+            .add_arg(GS.cind(0))
+            .finish();
+        assert!(
+            pinched_mapper
+                .map_numerator_factor(&loop_map, &[], &missing_tag, &BTreeMap::new())
+                .unwrap_err()
+                .to_string()
+                .contains("no planned exact occurrence")
+        );
+        let mut unbalanced = denominators.clone();
+        unbalanced[1].momentum += FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(external))
+            .finish();
+        assert!(
+            GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+                &graph,
+                &unbalanced,
+                owners,
+                [],
+                &lmb,
+                ExactUvSubLmbFrame::TaylorVacuum,
+            )
+            .err()
+            .expect("a Taylor vacuum cannot retain unbalanced crown flow")
+            .to_string()
+            .contains("external momentum imbalance")
+        );
         Ok(())
     }
 }

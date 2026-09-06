@@ -1549,10 +1549,12 @@ fn apply_full_event_multiplicative_factor_precise<T: FloatLike>(
             event.weight *= full_factor.clone();
 
             if !event.additional_weights.weights.is_empty() {
-                event.additional_weights.weights.insert(
-                    AdditionalWeightKey::FullMultiplicativeFactor,
-                    full_factor.clone(),
-                );
+                event
+                    .additional_weights
+                    .weights
+                    .entry(AdditionalWeightKey::FullMultiplicativeFactor)
+                    .and_modify(|value| *value *= full_factor.clone())
+                    .or_insert_with(|| full_factor.clone());
             }
         }
     }
@@ -2544,7 +2546,6 @@ pub trait ProcessIntegrandImpl {
 pub(crate) fn validate_process_runtime_settings(
     settings: &RuntimeSettings,
     explicit_orientation_sum_only: bool,
-    uses_numerator_sampling_scale: bool,
 ) -> Result<()> {
     if settings.general.use_ltd {
         return Err(eyre!(
@@ -2552,9 +2553,10 @@ pub(crate) fn validate_process_runtime_settings(
         ));
     }
 
-    if uses_numerator_sampling_scale && settings.general.numerator_sampling_scale == 0.0 {
+    // The shared process parameter layout always includes M, even when unused.
+    if settings.general.numerator_sampling_scale == 0.0 {
         return Err(eyre!(
-            "`runtime.general.numerator_sampling_scale` must be nonzero because the generated CFF evaluators use the auxiliary sampling scale M"
+            "`runtime.general.numerator_sampling_scale` must be nonzero for the auxiliary sampling scale M"
         ));
     }
 
@@ -4217,31 +4219,90 @@ mod tests {
     use typed_index_collections::TiVec;
 
     #[test]
+    fn precise_event_normalization_preserves_prior_factors_and_partial_weights() {
+        use crate::{
+            observables::{
+                AdditionalWeightKey, GenericEvent, GenericEventGroup, GenericEventGroupList,
+            },
+            utils::ArbPrec,
+        };
+        use spenso::algebra::complex::Complex;
+
+        let one = F::<ArbPrec>::default().one();
+        let original = Complex::new_re(one.from_usize(3));
+        let counterterm = Complex::new_re(-one.clone());
+        let prior_factor = Complex::new_re(one.from_usize(5));
+        let mut event = GenericEvent::<ArbPrec> {
+            weight: (&original + &counterterm) * &prior_factor,
+            ..Default::default()
+        };
+        event.additional_weights.weights.extend([
+            (AdditionalWeightKey::Original, original.clone()),
+            (
+                AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+                counterterm.clone(),
+            ),
+            (
+                AdditionalWeightKey::FullMultiplicativeFactor,
+                prior_factor.clone(),
+            ),
+        ]);
+        let mut events = GenericEventGroupList(vec![GenericEventGroup(vec![event])]);
+        let final_factor = super::full_event_multiplicative_factor_precise(
+            Some(one.from_usize(7)),
+            one.from_usize(11),
+        );
+        super::apply_full_event_multiplicative_factor_precise(&mut events, &final_factor);
+        let event = &events[0][0];
+        let weights = &event.additional_weights.weights;
+        assert_eq!(weights[&AdditionalWeightKey::Original], original);
+        assert_eq!(
+            weights[&AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 }],
+            counterterm
+        );
+        assert_eq!(
+            weights[&AdditionalWeightKey::FullMultiplicativeFactor],
+            &prior_factor * &final_factor
+        );
+        assert_eq!(
+            event.weight,
+            (&original + &counterterm) * &weights[&AdditionalWeightKey::FullMultiplicativeFactor]
+        );
+        assert_eq!(event.weight, Complex::new_re(one.from_usize(770)));
+    }
+
+    #[test]
     fn explicit_orientation_sum_rejects_runtime_filters_and_ltd() {
         let mut settings = RuntimeSettings::default();
         settings.general.orientation_pat = OrientationPattern::from_user_pattern("(+)").unwrap();
-        let error = validate_process_runtime_settings(&settings, true, false).unwrap_err();
+        let error = validate_process_runtime_settings(&settings, true).unwrap_err();
         assert!(error.to_string().contains("orientation_pat` must be unset"));
 
-        validate_process_runtime_settings(&settings, false, false).unwrap();
+        validate_process_runtime_settings(&settings, false).unwrap();
 
         settings.general.orientation_pat = OrientationPattern::default();
         settings.general.use_ltd = true;
-        let error = validate_process_runtime_settings(&settings, false, false).unwrap_err();
+        let error = validate_process_runtime_settings(&settings, false).unwrap_err();
         assert!(error.to_string().contains("deferred proper-LTD support"));
     }
 
     #[test]
-    fn zero_numerator_sampling_scale_is_rejected_only_when_an_evaluator_uses_it() {
+    fn numerator_sampling_scale_requires_nonzero_runtime_value() {
         let mut settings = RuntimeSettings::default();
-        settings.general.numerator_sampling_scale = 0.0;
+        validate_process_runtime_settings(&settings, false).unwrap();
 
-        validate_process_runtime_settings(&settings, false, false).unwrap();
-        let error = validate_process_runtime_settings(&settings, false, true).unwrap_err();
-        assert!(error.to_string().contains("sampling scale M"));
+        for scale in [0.0, -0.0] {
+            settings.general.numerator_sampling_scale = scale;
+            for explicit_orientation_sum_only in [false, true] {
+                let error =
+                    validate_process_runtime_settings(&settings, explicit_orientation_sum_only)
+                        .unwrap_err();
+                assert!(error.to_string().contains("sampling scale M"));
+            }
+        }
 
         settings.general.numerator_sampling_scale = -2.0;
-        validate_process_runtime_settings(&settings, false, true).unwrap();
+        validate_process_runtime_settings(&settings, false).unwrap();
     }
 
     #[test]

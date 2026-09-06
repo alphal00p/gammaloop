@@ -26,7 +26,6 @@ use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
-    id::Replacement,
 };
 use three_dimensional_reps::CffGenerationContext;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -121,28 +120,9 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // evaluator boundary, after every branch-owned numerator map has been
         // applied. An explicit sum simply replaces every sigma by one; physical
         // edge directions are separate sign metadata.
-        let selected = final_branches.materialize(
-            self.localizer.uses_exact_maps()
-                && !self.localizer.orientation.explicit_orientation_sum_only,
-        )?;
-        let coarse_energy_replacements = if self.localizer.uses_exact_maps() {
-            None
-        } else {
-            let bridgeless_reduced = reduced.subtract(&graph.tree_edges);
-            let mut replacements = Vec::new();
-            for (pair, edge_id, _) in graph.as_ref().iter_edges_of(&bridgeless_reduced) {
-                if pair.is_paired() {
-                    replacements.push(GS.add_parametric_sign(edge_id));
-                }
-            }
-            Some(replacements)
-        };
-        Self::simplify_final(
-            graph,
-            &reduced,
-            selected,
-            coarse_energy_replacements.as_deref(),
-        )
+        let selected = final_branches
+            .materialize(!self.localizer.orientation.explicit_orientation_sum_only)?;
+        Self::simplify_final(graph, &reduced, selected)
     }
 
     #[debug_instrument(
@@ -210,7 +190,17 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 // independently. Keep them independent in the capacity
                 // oracle too, so opposite leading powers cannot cancel
                 // before generalized-CFF generation.
+                let capacity_started = std::time::Instant::now();
+                debug_tags!(#generation, #profile, #uv, #summary;
+                    stage = "outer_cff_capacity_start",
+                    "Constructing factorized rank envelope"
+                );
                 let analysis_numerator = sector.active.factorized_capacity_envelope() * &resnum;
+                debug_tags!(#generation, #profile, #uv, #summary;
+                    stage = "outer_cff_capacity_done",
+                    elapsed_ms = capacity_started.elapsed().as_secs_f64() * 1000.0,
+                    "Constructed factorized rank envelope"
+                );
                 let outer = localizer
                     .projected_cff(
                         graph,
@@ -241,9 +231,9 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let localized_local = localized_local
             .ok_or_else(|| eyre::eyre!("factorized local term has no active UV sectors"))?
             .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
-        // The integrated addback is shared with the direct route and keeps its
-        // physical-prefix host. Independent source hosting applies only to the
-        // projected local-4D Taylor coefficient assembled above.
+        // The integrated addback is shared with the direct route. Its localizer
+        // hosts the independent cograph sum in both routes, retaining every
+        // source map even when no compatible physical-prefix host survives.
         let localized_integrated = self
             .localizer
             .localize(
@@ -271,7 +261,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
         for (_, _, integrands) in hosted {
             selector_free = selector_free.zip_add(integrands.clone())?;
         }
-        Self::simplify_final(graph, &reduced, selector_free, None)
+        Self::simplify_final(graph, &reduced, selector_free)
     }
 
     /// Normalize an already mapped and selector-assembled final integrand. This
@@ -280,7 +270,6 @@ impl<'a> FinalIntegrandBuilder<'a> {
         graph: &Graph,
         reduced: &SuBitGraph,
         integrands: Integrands,
-        coarse_energy_replacements: Option<&[Replacement]>,
     ) -> Result<FinalIntegrands> {
         let simplified = integrands.fallible_map(|atom| {
             let mut atom = atom.clone();
@@ -305,13 +294,9 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 )
                 .expand_dots()?;
 
-            // Coarse export projectors still introduce parametric signs at
-            // this legacy boundary. Exact production branches have already
-            // mapped every owned numerator fragment and must not fall back
-            // to a second coarse replacement here.
-            if let Some(replacements) = coarse_energy_replacements {
-                atom = atom.replace_multiple(replacements);
-            }
+            // Exact production branches have already mapped every owned
+            // numerator fragment. The former coarse export sign replacement
+            // has no role here and must not remap these factors a second time.
             Ok(atom
                 .replace(GS.m_uv_expansion)
                 .with(GS.m_uv_vacuum)

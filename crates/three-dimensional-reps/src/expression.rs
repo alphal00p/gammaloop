@@ -148,12 +148,26 @@ impl OrientationID {
     }
 
     pub fn select<'a>(self, atom: impl Into<AtomOrView<'a>>) -> Atom {
+        let symbol = Self::symbol();
+        let selected = self.atom();
+        // Keep the two normalization boundaries: select the exact key first,
+        // then erase other unary selectors. Structural traversal avoids the
+        // wildcard matcher without changing nested or singular expressions.
         atom.into()
             .as_view()
-            .replace(self.atom())
-            .with(Atom::num(1))
-            .replace(function!(Self::symbol(), symbol!("x_")))
-            .with(Atom::Zero)
+            .replace_map(|view, _, out| {
+                if view == selected.as_view() {
+                    **out = Atom::one();
+                }
+            })
+            .replace_map(|view, _, out| {
+                if let AtomView::Fun(selector) = view
+                    && selector.get_symbol() == symbol
+                    && selector.get_nargs() == 1
+                {
+                    **out = Atom::Zero;
+                }
+            })
     }
 }
 
@@ -1298,6 +1312,43 @@ mod tests {
             numerator_surfaces: Vec::new(),
             denominator: Tree::from_root(HybridSurfaceID::Unit),
         }
+    }
+
+    #[test]
+    fn orientation_id_selection_preserves_selector_shapes_and_factorized_bodies() {
+        let sigma = OrientationID::symbol();
+        let selected = OrientationID(4).atom();
+        let unknown = OrientationID(99).atom();
+        let x = Atom::var(symbol!("selector_shape_x"));
+        let body = (&x + Atom::one()).pow(4);
+        let cases = [
+            selected.clone(),
+            unknown.clone(),
+            function!(sigma, -1),
+            function!(sigma, &x),
+            Atom::var(sigma),
+            function!(sigma),
+            function!(sigma, &selected, &unknown),
+            function!(sigma, &selected),
+            function!(sigma, OrientationID(0).atom()),
+            function!(sigma, OrientationID(1).atom()),
+            (&selected * &body + &unknown * &x) / (Atom::one() + &unknown * &x),
+        ];
+        for id in [0, 1, 4, 9, 99].map(OrientationID) {
+            for input in &cases {
+                let expected = input
+                    .replace(id.atom())
+                    .with(Atom::one())
+                    .replace(function!(sigma, symbol!("x_")))
+                    .with(Atom::Zero);
+                assert_eq!(id.select(input), expected, "id={id:?}, input={input}");
+            }
+        }
+        // Selecting the numerator's key makes this zero before the second
+        // pass can turn its remaining denominator into zero.
+        let key = OrientationID(0).atom();
+        let quotient = (&key - Atom::one()) / (&key + OrientationID(1).atom() - Atom::one());
+        assert_eq!(OrientationID(0).select(&quotient), Atom::Zero);
     }
 
     #[test]

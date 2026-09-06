@@ -18,7 +18,7 @@ use tracing_indicatif::{filter::IndicatifFilter, style::ProgressStyle, Indicatif
 use tracing_subscriber::field::RecordFields;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{
-    filter::Filtered,
+    filter::{filter_fn, FilterExt, Filtered},
     fmt::FormattedFields,
     fmt::{
         self,
@@ -539,7 +539,11 @@ pub(crate) fn init_tracing(dir: impl AsRef<Path>, log_file_name: Option<String>)
 
         let subscriber = tracing_subscriber::registry()
             .with(Filtered::new(status_layer, stderr_filter_layer))
-            .with(indicatif_layer.with_filter(IndicatifFilter::new(false)));
+            // Reject event callsites statically: the progress filter's dynamic
+            // interest otherwise makes suppressed log payloads get constructed.
+            .with(indicatif_layer.with_filter(
+                filter_fn(|metadata| metadata.is_span()).and(IndicatifFilter::new(false)),
+            ));
 
         let init_result = if file_state.hard_disabled() {
             subscriber.try_init()

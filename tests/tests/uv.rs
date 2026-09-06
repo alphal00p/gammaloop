@@ -1633,6 +1633,9 @@ fn scalar_spectacles_integrated_uv_factorizes_over_bridge() -> Result<()> {
         true,
     )?;
     cli.run_command("run generate")?;
+    // The normalized localization density integrates to one at any positive scale.
+    // Match its radial support to mu_r instead of the default scale 1000.
+    cli.run_command("set process kv general.renormalization_localization_scale=3.0")?;
     let bubble_accuracy_floor =
         required_stability_accuracy_floor(&mut cli, "bubble", "scalar_bubble")?;
     let spectacles_accuracy_floor =

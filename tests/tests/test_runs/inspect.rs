@@ -312,9 +312,16 @@ fn bare_raised_scalar_self_energy_has_the_reported_uv_degree() -> Result<()> {
             .collect_vec();
         assert_eq!(subsets.len(), 1);
         assert_eq!(subsets[0].initial_dod, expected_dod);
-        if subsets[0].estimated_dod() != Some(i64::from(expected_dod)) {
+        // The leading odd-energy term cancels in the complete temporal pole sum.
+        // Its superficial graph bound stays one; the observed degree is zero.
+        let expected_observed_dod = if graph_name == "raised_se_q1_temporal" {
+            0
+        } else {
+            expected_dod
+        };
+        if subsets[0].estimated_dod() != Some(i64::from(expected_observed_dod)) {
             failures.push(format!(
-                "{graph_name}: graph DOD {expected_dod}, observed {:?}",
+                "{graph_name}: graph DOD {expected_dod}, expected observed {expected_observed_dod}, observed {:?}",
                 subsets[0].estimated_dod()
             ));
         }

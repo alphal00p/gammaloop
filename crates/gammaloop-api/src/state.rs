@@ -2741,6 +2741,22 @@ impl State {
             let p = &mut state.process_list.processes[process_id];
             let process_name = p.definition.folder_name.clone();
             if let Some(name) = &integrand_name {
+                let _ = p.get_integrand(name)?;
+                // A process has one shared generation history. Do not relabel
+                // a generated sibling with settings which only this target uses.
+                for other in p.get_integrand_names() {
+                    if other != name.as_str()
+                        && p.get_integrand(other)?.integrand.is_some()
+                        && p.settings_history.as_ref().is_none_or(|history| {
+                            history.generation != global_settings.generation
+                        })
+                    {
+                        return Err(eyre!(
+                            "Cannot generate only integrand '{}' in process '{}' with absent or different shared generation settings while sibling '{}' is already generated; regenerate the whole process without --integrand-name",
+                            name, process_name, other
+                        ));
+                    }
+                }
                 let mut reports = Vec::new();
                 match &mut p.collection {
                     ProcessCollection::Amplitudes(a) => {
@@ -2823,6 +2839,9 @@ impl State {
                         }
                     }
                 }
+                // Named generation bypasses Process::preprocess, which normally
+                // records the settings required by persistent source exports.
+                p.settings_history = Some(global_settings.clone());
                 Ok(reports)
             } else {
                 let mut reports = p.preprocess(
@@ -3495,6 +3514,177 @@ mod tests {
             .expect("integrand generation should succeed");
 
         state
+    }
+
+    #[test]
+    fn named_generation_records_common_settings_for_persistent_uv_exports() -> Result<()> {
+        use gammalooprs::uv::{export::UVForestExportSettings, UVOrchestrator};
+
+        test_initialise()?;
+        for (folder, source) in [
+            (
+                "amplitudes",
+                include_str!("../../../tests/resources/graphs/scalar_bubble.dot"),
+            ),
+            (
+                "cross_sections",
+                include_str!(
+                    "../../../tests/resources/graphs/mass_approach_scalar_self_energy.dot"
+                ),
+            ),
+        ] {
+            let temp = tempdir()?;
+            let mut state = State::new_test();
+            state.model = load_generic_model("scalars");
+            state.model_parameters = InputParamCard::default_from_model(&state.model);
+            let mut graphs = Graph::from_string(source, &state.model)?;
+            graphs.truncate(1);
+            let graph_name = graphs[0].name.clone();
+            for name in ["first", "second"] {
+                state.import_graphs(
+                    graphs.clone(),
+                    GraphImportOptions {
+                        process_name: Some("named_export".into()),
+                        process_id: None,
+                        process_definition: None,
+                        integrand_name: Some(name.into()),
+                        overwrite: false,
+                        append: false,
+                    },
+                )?;
+            }
+            let mut settings = GlobalSettings::default();
+            settings.n_cores.generate = 1;
+            settings.generation.uv.orchestrator = UVOrchestrator::HedgePoset;
+            assert!(!settings.generation.evaluator.compile);
+            assert!(!settings.generation.evaluator.store_atom);
+            assert!(settings.generation.uv.subtract_uv);
+            assert!(settings.generation.uv.generate_integrated);
+            assert!(settings.generation.uv.softct);
+            assert!(settings.generation.threshold_subtraction.enable_thresholds);
+            let runtime = RuntimeSettings::default();
+            assert!(state.process_list.processes[0].settings_history.is_none());
+            for name in ["first", "second"] {
+                // The second named build must keep the already-generated sibling's
+                // identical source settings, without regenerating the whole process.
+                state.generate_integrand(&settings, (&runtime).into(), 0, Some(name.into()))?;
+                assert_eq!(
+                    state.process_list.processes[0].settings_history.as_ref(),
+                    Some(&settings)
+                );
+                state.process_list.processes[0]
+                    .get_integrand(name)?
+                    .require_generated()?;
+            }
+
+            // This State boundary cannot safely overwrite a generated sibling's
+            // provenance. Check both missing and conflicting process history.
+            let mut changed = settings.clone();
+            changed.generation.explicit_orientation_sum_only = true;
+            for missing_history in [false, true] {
+                if missing_history {
+                    state.process_list.processes[0].settings_history = None;
+                }
+                let before = bincode::encode_to_vec(
+                    &state.process_list.processes[0],
+                    bincode::config::standard(),
+                )?;
+                let error = state
+                    .generate_integrand(
+                        if missing_history { &settings } else { &changed },
+                        (&runtime).into(),
+                        0,
+                        Some("first".into()),
+                    )
+                    .unwrap_err();
+                assert!(
+                    error.to_string().contains("regenerate the whole process"),
+                    "{error:?}"
+                );
+                assert_eq!(
+                    bincode::encode_to_vec(
+                        &state.process_list.processes[0],
+                        bincode::config::standard()
+                    )?,
+                    before
+                );
+                state.process_list.processes[0].settings_history = Some(settings.clone());
+            }
+
+            let mut source_before = None;
+            for loaded in [false, true] {
+                let process = &state.process_list.processes[0];
+                assert_eq!(process.settings_history.as_ref(), Some(&settings));
+                let source = match &process.collection {
+                    ProcessCollection::Amplitudes(amplitudes) => amplitudes["first"].graphs[0]
+                        .derived_data
+                        .cff_expression
+                        .as_ref()
+                        .unwrap(),
+                    ProcessCollection::CrossSections(cross_sections) => cross_sections["first"]
+                        .supergraphs[0]
+                        .derived_data
+                        .global_cff_expression
+                        .as_ref()
+                        .unwrap(),
+                };
+                let source_bytes = bincode::encode_to_vec(source, bincode::config::standard())?;
+                if let Some(before) = &source_before {
+                    assert_eq!(
+                        &source_bytes, before,
+                        "named-generation source maps changed after persistence"
+                    );
+                } else {
+                    source_before = Some(source_bytes);
+                }
+                for computed in [false, true] {
+                    let output = temp.path().join(format!("export-{loaded}-{computed}"));
+                    state.process_list.export_uv_forests(
+                        &output,
+                        0,
+                        "first",
+                        &[0],
+                        &UVForestExportSettings { computed },
+                    )?;
+                    let graph_dir = output
+                        .join("processes")
+                        .join(folder)
+                        .join("named_export/first");
+                    assert!(graph_dir.join(format!("{graph_name}.forest.dot")).is_file());
+                    let nodes = graph_dir.join(format!("{graph_name}_nodes"));
+                    if computed {
+                        let mut node_ids = std::collections::BTreeSet::new();
+                        for forest in fs::read_dir(&nodes)? {
+                            for node in fs::read_dir(forest?.path())? {
+                                let node = node?;
+                                let file_name = node.file_name();
+                                let file_name = file_name.to_string_lossy();
+                                node_ids
+                                    .insert(file_name.split('_').nth(1).unwrap().parse::<usize>()?);
+                                assert!(fs::read_to_string(node.path())?
+                                    .contains("forest_residue_index"));
+                            }
+                        }
+                        assert!(node_ids.len() > 1, "computed export needs a proper UV node");
+                    } else {
+                        assert!(!nodes.exists());
+                    }
+                }
+                if !loaded {
+                    let saved = temp.path().join("saved");
+                    state.save(&saved, true, false)?;
+                    let history_path = saved
+                        .join("processes")
+                        .join(folder)
+                        .join("named_export/settings_history.toml");
+                    let history: GlobalSettings =
+                        toml::from_str(&fs::read_to_string(history_path)?)?;
+                    assert_eq!(history, settings);
+                    state = State::load(saved, None, None)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     #[test]

@@ -39,7 +39,9 @@ use symbolica::{
     function,
 };
 
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use linnet::half_edge::involution::EdgeIndex;
+#[cfg(test)]
+use linnet::half_edge::involution::{EdgeVec, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 #[cfg(test)]
 use three_dimensional_reps::CffGenerationContext;
@@ -270,7 +272,7 @@ enum OrientationProjectionSource<'a> {
         orientations: &'a TiVec<OrientationID, OrientationExpression>,
         root_expression: Option<&'a GeneratedThreeDExpression<Esurface, Hsurface>>,
     },
-    Coarse(&'a [EdgeVec<Orientation>]),
+    FourDOnly,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -283,14 +285,12 @@ pub(crate) struct OrientationProjection<'a> {
 }
 
 impl<'a> OrientationProjection<'a> {
-    /// Construct the ordinary coarse-orientation projector used by legacy
-    /// exports and isolated UV tests. Production 3D UV uses [`Self::exact`].
-    pub(crate) fn new(
-        valid_orientations: &'a [EdgeVec<Orientation>],
-        orientation_pattern: &'a OrientationPattern,
-    ) -> Self {
+    /// Four-dimensional renormalization has no energy projection. It needs
+    /// neither a production CFF nor coarse orientation metadata. Computed
+    /// exports and production 3D UV use the stored exact source below.
+    pub(crate) fn four_d(orientation_pattern: &'a OrientationPattern) -> Self {
         Self {
-            source: OrientationProjectionSource::Coarse(valid_orientations),
+            source: OrientationProjectionSource::FourDOnly,
             options: None,
             energy_degree_bound_reports: None,
             orientation_pattern,
@@ -358,43 +358,32 @@ impl<'a> OrientationProjection<'a> {
         }
     }
 
-    pub(crate) fn cff_options(self, graph: &Graph) -> Generate3DExpressionOptions {
-        self.options
-            .cloned()
-            .unwrap_or_else(|| graph.denominator_only_cff_3d_expression_options())
+    pub(crate) fn cff_options(self) -> Result<Generate3DExpressionOptions> {
+        self.options.cloned().ok_or_else(|| {
+            eyre!("four-dimensional-only renormalization has no 3D projection options")
+        })
     }
 
-    pub(crate) fn orientation_ids(self) -> Vec<OrientationID> {
-        match self.source {
-            OrientationProjectionSource::Exact { orientations, .. } => orientations
-                .iter_enumerated()
-                .filter_map(|(id, orientation)| {
-                    self.orientation_pattern
-                        .filter_orientation(&orientation.data.orientation)
-                        .then_some(id)
-                })
-                .collect(),
-            OrientationProjectionSource::Coarse([]) => {
-                vec![OrientationID(0)]
-            }
-            OrientationProjectionSource::Coarse(orientations) => orientations
-                .iter()
-                .enumerate()
-                .filter_map(|(id, orientation)| {
-                    self.orientation_pattern
-                        .filter_orientation(orientation)
-                        .then_some(OrientationID(id))
-                })
-                .collect(),
-        }
+    pub(crate) fn orientation_ids(self) -> Result<Vec<OrientationID>> {
+        Ok(self
+            .exact_orientations()?
+            .iter_enumerated()
+            .filter_map(|(id, orientation)| {
+                self.orientation_pattern
+                    .filter_orientation(&orientation.data.orientation)
+                    .then_some(id)
+            })
+            .collect())
     }
 
     pub(crate) fn exact_orientations(
         self,
-    ) -> Option<&'a TiVec<OrientationID, OrientationExpression>> {
+    ) -> Result<&'a TiVec<OrientationID, OrientationExpression>> {
         match self.source {
-            OrientationProjectionSource::Exact { orientations, .. } => Some(orientations),
-            OrientationProjectionSource::Coarse(_) => None,
+            OrientationProjectionSource::Exact { orientations, .. } => Ok(orientations),
+            OrientationProjectionSource::FourDOnly => Err(eyre!(
+                "four-dimensional-only renormalization has no 3D residue maps"
+            )),
         }
     }
 
@@ -405,16 +394,7 @@ impl<'a> OrientationProjection<'a> {
             OrientationProjectionSource::Exact {
                 root_expression, ..
             } => root_expression,
-            OrientationProjectionSource::Coarse(_) => None,
-        }
-    }
-
-    pub(crate) fn orientation(self, id: OrientationID) -> Option<&'a EdgeVec<Orientation>> {
-        match self.source {
-            OrientationProjectionSource::Exact { orientations, .. } => orientations
-                .get(id)
-                .map(|orientation| &orientation.data.orientation),
-            OrientationProjectionSource::Coarse(orientations) => orientations.get(id.0),
+            OrientationProjectionSource::FourDOnly => None,
         }
     }
 
@@ -428,27 +408,17 @@ impl<'a> OrientationProjection<'a> {
         source_edge_energy_map: Option<&[LinearEnergyExpr]>,
         numerator: &Atom,
     ) -> Result<Atom> {
-        match self.source {
-            OrientationProjectionSource::Exact { orientations, .. } => {
-                let orientation = orientations.get(selector_id).ok_or_else(|| {
-                    eyre!(
-                        "missing production energy map for orientation {}",
-                        selector_id.0
-                    )
-                })?;
-                let replacements = source_edge_energy_map.map_or_else(
-                    || orientation.energy_replacements_gs(graph),
-                    |edge_energy_map| energy_map_replacements_gs(edge_energy_map, graph),
-                );
-                Ok(numerator.replace_multiple(replacements))
-            }
-            OrientationProjectionSource::Coarse(_) if source_edge_energy_map.is_some() => {
-                Err(eyre!(
-                    "a source-local exact energy map cannot be carried by a coarse orientation projector"
-                ))
-            }
-            OrientationProjectionSource::Coarse(_) => Ok(numerator.clone()),
-        }
+        let orientation = self.exact_orientations()?.get(selector_id).ok_or_else(|| {
+            eyre!(
+                "missing production energy map for orientation {}",
+                selector_id.0
+            )
+        })?;
+        let replacements = source_edge_energy_map.map_or_else(
+            || orientation.energy_replacements_gs(graph),
+            |edge_energy_map| energy_map_replacements_gs(edge_energy_map, graph),
+        );
+        Ok(numerator.replace_multiple(replacements))
     }
 }
 
@@ -631,20 +601,33 @@ mod tests {
     #[test]
     fn expanded_4d_setting_does_not_change_the_empty_forest_root() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph root_identity {
+        let mut graph: Graph = dot!(digraph root_identity {
             edge [num=1 mass=1]
             node [num=1]
 
             a -> b [id=0 lmb_id=0]
             a -> b [id=1]
         })?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &options,
+            Some(&Atom::one()),
+        )?;
         let mut direct_graph = graph.clone();
         let mut projected_graph = graph;
         let cutset = CutSet::empty(direct_graph.n_hedges());
         let orientation_pattern = OrientationPattern::default();
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::new(&[], &orientation_pattern),
+            OrientationProjection::exact_expression(
+                &production,
+                &options,
+                &orientation_pattern,
+                false,
+            ),
         );
         let mut direct = Approximation::new(Spinney::empty(&direct_graph));
         let mut projected = Approximation::new(Spinney::empty(&projected_graph));
@@ -1101,7 +1084,7 @@ mod tests {
                     );
                 }
                 assert!(
-                    usize::from(key.selector_host.0) < production.expression.orientations.len(),
+                    key.selector_host.0 < production.expression.orientations.len(),
                     "the sparse branch selector host must be a production residue-map key"
                 );
             }
@@ -1118,16 +1101,33 @@ mod tests {
         assert!(ordinary_count > 0);
         assert!(explicit_count > 0);
 
-        let production_map_ids = production
+        let selector_atoms = production
             .expression
             .orientations
             .iter_enumerated()
-            .map(|(id, _)| id)
+            .map(|(id, _)| id.atom())
             .collect::<Vec<_>>();
-        let ordinary_sum = production_map_ids
-            .iter()
-            .map(|id| id.select(ordinary_integrand.as_view()))
-            .fold(Atom::Zero, |sum, atom| sum + atom);
+        // Prove that every nonzero selector monomial is one production key.
+        // Then summing its one-hot selections is exactly sigma=1, without
+        // expanding 240 separately selected rational representations.
+        for (key, coefficient) in ordinary_integrand.coefficient_list::<u8>(&selector_atoms) {
+            if !coefficient.is_zero() {
+                assert!(
+                    selector_atoms.contains(&key),
+                    "the final integrand must be homogeneous of degree one in its production selectors"
+                );
+                assert!(
+                    !coefficient.contains_symbol(OrientationID::symbol()),
+                    "selector coefficients must not contain uncatalogued production keys"
+                );
+            }
+        }
+        let ordinary_sum = ordinary_integrand
+            .replace(function!(
+                OrientationID::symbol(),
+                symbolica::symbol!("gl24_selector_")
+            ))
+            .with(Atom::one());
         assert!(
             (ordinary_sum - explicit_integrand).expand().is_zero(),
             "summing the orientation-local final integrand must recover the explicit final integrand"
@@ -1172,14 +1172,7 @@ mod tests {
             add_marker: false,
             ..Default::default()
         };
-        let build = |mut route_graph: Graph,
-                     explicit_orientation_sum_only|
-         -> Result<(
-            Vec<OrientationID>,
-            Vec<(OrientationID, Atom)>,
-            Vec<(OrientationID, Atom)>,
-            Atom,
-        )> {
+        let build = |mut route_graph: Graph, explicit_orientation_sum_only| -> Result<_> {
             let cutset = CutSet::empty(route_graph.n_hedges());
             let localizer = Localizer::new(
                 &cutset,
@@ -1383,98 +1376,95 @@ mod tests {
         assert_eq!(child_spinney.dod, 2);
         let cutset = CutSet::empty(graph.n_hedges());
         let orientation_pattern = OrientationPattern::default();
-        let build =
-            |mut route_graph: Graph,
-             from_expanded_4d|
-             -> Result<(Atom, Atom, Vec<CffEnergyDegreeBoundReport>, Vec<Vec<usize>>)> {
-                let settings = UVgenerationSettings {
-                    generate_integrated: false,
-                    local_uv_cts_from_expanded_4d_integrands: from_expanded_4d,
-                    ..Default::default()
-                };
-                let bound_reports = Mutex::new(Vec::new());
-                let localizer = Localizer::new(
-                    &cutset,
-                    OrientationProjection::exact_expression(
-                        &production,
-                        &options,
-                        &orientation_pattern,
-                        true,
-                    )
-                    .with_energy_degree_bound_reports(&bound_reports),
-                );
-                let mut root = Approximation::new(Spinney::empty(&route_graph));
-                root.root(&mut route_graph, localizer, &settings)?;
-                let root_integrand = root
-                    .final_integrand(&route_graph)?
-                    .iter()
-                    .find(|(index, _)| *index == CutCFFIndex::new_all_none())
-                    .expect("the uncut root has one residue sector")
-                    .1;
-                let mut child = Approximation::new(child_spinney.clone());
-                child.simple_approx = Some(
-                    root.simple_approx
-                        .as_ref()
-                        .expect("the root approximation is initialized")
-                        .dependent(child.spinney.subgraph.clone()),
-                );
-                let vakint_settings = vakint::VakintSettings::default();
-                child.compute_4d(
-                    &route_graph,
-                    (crate::utils::vakint()?, &vakint_settings),
-                    &root,
-                    &settings,
-                )?;
-                let projected_denominator_owners = if from_expanded_4d {
-                    child
-                        .local(&route_graph)?
-                        .active_sectors()
-                        .iter()
-                        .map(|sector| sector.physical_terms())
-                        .collect::<Result<Vec<_>>>()?
-                        .into_iter()
-                        .flatten()
-                        .map(|term| {
-                            term.denominators
-                                .into_iter()
-                                .map(|denominator| usize::from(denominator.source_edge))
-                                .collect()
-                        })
-                        .collect()
-                } else {
-                    Vec::new()
-                };
-                child.compute_3d(&root, &mut route_graph, localizer, &settings)?;
-                match (from_expanded_4d, child.local_3d(&route_graph)?) {
-                    (false, Local3DCts::Direct(_)) | (true, Local3DCts::Projected4d(_)) => {}
-                    (false, _) => {
-                        return Err(eyre!(
-                            "the direct self-energy must retain complete-CFF sectors"
-                        ));
-                    }
-                    (true, _) => {
-                        return Err(eyre!(
-                            "the projected self-energy must retain factorized local-4D coefficients"
-                        ));
-                    }
-                }
-                let integrand = child
-                    .final_integrand(&route_graph)?
-                    .iter()
-                    .find(|(index, _)| *index == CutCFFIndex::new_all_none())
-                    .expect("the uncut self-energy has one residue sector")
-                    .1;
-                let reports = bound_reports
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .clone();
-                Ok((
-                    integrand,
-                    root_integrand,
-                    reports,
-                    projected_denominator_owners,
-                ))
+        let build = |mut route_graph: Graph, from_expanded_4d| -> Result<_> {
+            let settings = UVgenerationSettings {
+                generate_integrated: false,
+                local_uv_cts_from_expanded_4d_integrands: from_expanded_4d,
+                ..Default::default()
             };
+            let bound_reports = Mutex::new(Vec::new());
+            let localizer = Localizer::new(
+                &cutset,
+                OrientationProjection::exact_expression(
+                    &production,
+                    &options,
+                    &orientation_pattern,
+                    true,
+                )
+                .with_energy_degree_bound_reports(&bound_reports),
+            );
+            let mut root = Approximation::new(Spinney::empty(&route_graph));
+            root.root(&mut route_graph, localizer, &settings)?;
+            let root_integrand = root
+                .final_integrand(&route_graph)?
+                .iter()
+                .find(|(index, _)| *index == CutCFFIndex::new_all_none())
+                .expect("the uncut root has one residue sector")
+                .1;
+            let mut child = Approximation::new(child_spinney.clone());
+            child.simple_approx = Some(
+                root.simple_approx
+                    .as_ref()
+                    .expect("the root approximation is initialized")
+                    .dependent(child.spinney.subgraph.clone()),
+            );
+            let vakint_settings = vakint::VakintSettings::default();
+            child.compute_4d(
+                &route_graph,
+                (crate::utils::vakint()?, &vakint_settings),
+                &root,
+                &settings,
+            )?;
+            let projected_denominator_owners: Vec<Vec<usize>> = if from_expanded_4d {
+                child
+                    .local(&route_graph)?
+                    .active_sectors()
+                    .iter()
+                    .map(|sector| sector.physical_terms())
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .flatten()
+                    .map(|term| {
+                        term.denominators
+                            .into_iter()
+                            .map(|denominator| usize::from(denominator.source_edge))
+                            .collect()
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            child.compute_3d(&root, &mut route_graph, localizer, &settings)?;
+            match (from_expanded_4d, child.local_3d(&route_graph)?) {
+                (false, Local3DCts::Direct(_)) | (true, Local3DCts::Projected4d(_)) => {}
+                (false, _) => {
+                    return Err(eyre!(
+                        "the direct self-energy must retain complete-CFF sectors"
+                    ));
+                }
+                (true, _) => {
+                    return Err(eyre!(
+                        "the projected self-energy must retain factorized local-4D coefficients"
+                    ));
+                }
+            }
+            let integrand = child
+                .final_integrand(&route_graph)?
+                .iter()
+                .find(|(index, _)| *index == CutCFFIndex::new_all_none())
+                .expect("the uncut self-energy has one residue sector")
+                .1;
+            let reports = bound_reports
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone();
+            Ok((
+                integrand,
+                root_integrand,
+                reports,
+                projected_denominator_owners,
+            ))
+        };
         let (direct_expression, direct_root, direct_reports, _) = build(graph.clone(), false)?;
         let (projected_expression, projected_root, projected_reports, projected_denominator_owners) =
             build(graph.clone(), true)?;
@@ -2396,6 +2386,7 @@ mod tests {
                     .uv_rescaled(
                         &reduced,
                         route_graph.n_loops(child.subgraph()),
+                        child.lmb(),
                         child.lmb(),
                         &t_arg,
                     )

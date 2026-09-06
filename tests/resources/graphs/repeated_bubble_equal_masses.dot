@@ -1,7 +1,7 @@
 digraph repeated_bubble_equal_masses {
     num = 1
     // Match the split-mass limiting convention for the scalar two-point insertion.
-    overall_factor = -1
+    overall_factor = 1
     params = "m1;m2"
     edge [
         pdg = 1001

@@ -1611,6 +1611,7 @@ dependencies = [
  "gammalooprs",
  "insta",
  "itertools 0.14.0",
+ "linnet",
  "momtrop",
  "ndarray",
  "rand 0.9.4",

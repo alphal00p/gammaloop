@@ -209,18 +209,20 @@ impl OrientationIntegrands {
     /// independent while deriving one conservative outer-CFF capacity.
     /// Branch tags are analysis-only scalar coefficients: they neither expand
     /// the factorized atoms nor enter the mapped production numerator.
+    /// Bulk addition avoids repeatedly copying the growing tagged sum.
     pub(crate) fn factorized_capacity_envelope(&self) -> Atom {
         self.0
             .iter()
             .flat_map(|branch| branch.integrands.iter().map(|(_, atom)| atom))
             .filter(|atom| !atom.is_zero())
             .enumerate()
-            .fold(Atom::Zero, |sum, (branch, atom)| {
+            .map(|(branch, atom)| {
                 let tag = Atom::var(symbol!(format!(
                     "__gammaloop_outer_cff_capacity_branch_{branch}"
                 )));
-                sum + tag * atom
+                tag * atom
             })
+            .sum()
     }
 
     pub(crate) fn map(&self, mut f: impl FnMut(&Atom) -> Atom) -> Self {

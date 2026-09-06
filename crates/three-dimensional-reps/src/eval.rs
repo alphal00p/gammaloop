@@ -2543,6 +2543,9 @@ mod tests {
 
     #[test]
     fn lower_sector_powered_pole_contact_reconstructs_numerator_derivatives() {
+        // Extract the constant Euclidean quotient in z, C_z[z²/D_z]=1,
+        // then integrate only the retained convergent denominator coordinates.
+        // This does not assign a value to the divergent real-energy integral.
         let edge = |edge_id: usize,
                     tail: usize,
                     head: usize,
@@ -2703,6 +2706,35 @@ mod tests {
         .unwrap()
         .value;
 
+        let source = generate_3d_expression(
+            &parsed,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(0, 2), (1, 2), (2, 2)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let parent_frame = crate::CffGlobalPrefactorSign::from_exponent(
+            parsed.denominator_internal_edge_ids().len(),
+        )
+        .product(source.denominator_only_global_prefactor_sign)
+        .factor() as f64;
+        let residual_source =
+            generate_3d_expression(&residual, &Generate3DExpressionOptions::default()).unwrap();
+        let residual_frame = crate::CffGlobalPrefactorSign::from_exponent(
+            residual.denominator_internal_edge_ids().len(),
+        )
+        .product(residual_source.core_global_prefactor_sign)
+        .factor() as f64;
+        assert_eq!(parent_frame, -1.0);
+        assert_eq!(residual_frame, -1.0);
+        let actual = parent_frame * actual;
+        let actual_q_squared = parent_frame * actual_q_squared;
+        let actual_r_squared = parent_frame * actual_r_squared;
+        let parent_scalar = parent_frame * parent_scalar;
+        let residual_scalar = residual_frame * residual_scalar;
+        // The quotient functional uses dr dq; the retained half-coefficient
+        // maps are algebraic and do not assert dr dq = dk0 dk1.
         // At z contact, k0*k1=(q^2-r^2)/4. Three ordinary denominators in
         // each of the r and q channels keep every energy subcycle convergent,
         // while both quadratic source factors retain their sampled value and
@@ -2720,9 +2752,9 @@ mod tests {
         let expected_r_squared = (i2_r + er.powi(2) * i3_r) * i3_q;
 
         assert!(parent_scalar.is_sign_positive());
-        assert!(residual_scalar.is_sign_negative());
-        assert!((parent_scalar + residual_scalar).abs() < 1.0e-13);
-        assert!((residual_scalar + i3_r * i3_q).abs() < 1.0e-13);
+        assert!(residual_scalar.is_sign_positive());
+        assert!((parent_scalar - residual_scalar).abs() < 1.0e-13);
+        assert!((residual_scalar - i3_r * i3_q).abs() < 1.0e-13);
         assert!(sampled_value.is_sign_negative());
         assert!(numerator_derivative.is_sign_positive());
         assert!(
@@ -2741,6 +2773,9 @@ mod tests {
 
     #[test]
     fn rank_projected_constant_contact_preserves_even_duplicate_parity() {
+        // Extract the constant Euclidean quotient in z, C_z[z²/D_z]=1,
+        // then integrate only the retained convergent denominator coordinates.
+        // This does not assign a value to the divergent real-energy integral.
         let edge = |edge_id: usize,
                     tail: usize,
                     head: usize,
@@ -2817,6 +2852,12 @@ mod tests {
                 .retain(|orientation| !orientation.variants.is_empty());
             expression
         };
+        let parent_frame = crate::CffGlobalPrefactorSign::from_exponent(
+            parent.denominator_internal_edge_ids().len(),
+        )
+        .product(generated.denominator_only_global_prefactor_sign)
+        .factor() as f64;
+        assert_eq!(parent_frame, 1.0);
         let projected = contact_terms(generated.expression);
         let parent_input = EvaluationInput {
             external_momenta: Vec::new(),
@@ -2855,6 +2896,17 @@ mod tests {
         )
         .unwrap()
         .value;
+        let residual_source =
+            generate_3d_expression(&residual, &Generate3DExpressionOptions::default()).unwrap();
+        let residual_frame = crate::CffGlobalPrefactorSign::from_exponent(
+            residual.denominator_internal_edge_ids().len(),
+        )
+        .product(residual_source.core_global_prefactor_sign)
+        .factor() as f64;
+        assert_eq!(residual_frame, -1.0);
+        let projected_value = parent_frame * projected_value;
+        let residual_value = residual_frame * residual_value;
+        assert!((residual_value - 1.0 / (4.0 * 0.89_f64.powi(3))).abs() < 1.0e-13);
         assert!(residual_value.abs() > 1.0e-12);
         assert!((projected_value - residual_value).abs() < 1.0e-13);
     }
@@ -2935,18 +2987,10 @@ mod tests {
             masses: vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
             uniform_scale: None,
         };
-        let production_frame = |generated: &crate::GeneratedThreeDExpression| {
-            generated.core_global_prefactor_sign.factor() as f64
+        let residual_input = EvaluationInput {
+            masses: parent_input.masses[1..].to_vec(),
+            ..parent_input.clone()
         };
-        let parent_raw_value = evaluate_expression(
-            &parent,
-            &parent_generated.expression,
-            "dot(edges[0],edges[0])**2",
-            &parent_input,
-        )
-        .unwrap()
-        .value;
-        let parent_value = parent_raw_value * production_frame(&parent_generated);
         let quadratic_parent_generated = generate_3d_expression(
             &parent,
             &Generate3DExpressionOptions {
@@ -2955,84 +2999,257 @@ mod tests {
             },
         )
         .unwrap();
-        let quadratic_parent_raw_value = evaluate_expression(
-            &parent,
-            &quadratic_parent_generated.expression,
-            "dot(edges[0],edges[0])",
-            &parent_input,
-        )
-        .unwrap()
-        .value;
-        let quadratic_parent_value =
-            quadratic_parent_raw_value * production_frame(&quadratic_parent_generated);
-        let residual_input = EvaluationInput {
-            masses: parent_input.masses[1..].to_vec(),
-            ..parent_input.clone()
+        // Evaluation already includes positive 1/(2E) factors. Each rational
+        // component needs (-1)^N and its ordinary or generalized source frame,
+        // exactly as in the typed GammaLoop source adapter.
+        let source_conversion = |generated: &crate::GeneratedThreeDExpression| {
+            generated
+                .energy_factor_components
+                .iter()
+                .fold(1.0, |factor, component| {
+                    let frame = match component.ownership {
+                        crate::CffEnergyFactorOwnership::GlobalSourceProduct => {
+                            component.core_global_prefactor_sign
+                        }
+                        crate::CffEnergyFactorOwnership::VariantLocal => {
+                            component.denominator_only_global_prefactor_sign
+                        }
+                    };
+                    factor
+                        * crate::CffGlobalPrefactorSign::from_exponent(
+                            component.internal_edge_ids.len(),
+                        )
+                        .product(frame)
+                        .factor() as f64
+                })
         };
-        let scalar_residual_raw_value = evaluate_expression(
-            &residual,
-            &residual_generated.expression,
-            "1",
-            &residual_input,
-        )
-        .unwrap()
-        .value;
-        let scalar_residual_value =
-            scalar_residual_raw_value * production_frame(&residual_generated);
-        let residual_value = evaluate_expression(
-            &residual,
-            &residual_generated.expression,
-            "(-loops[0][0]+loops[1][0]-ext[0][0])**2\
-             -(-loops[0][1]+loops[1][1]-ext[0][1])**2\
-             -(-loops[0][2]+loops[1][2]-ext[0][2])**2\
-             -(-loops[0][3]+loops[1][3]-ext[0][3])**2",
-            &residual_input,
-        )
-        .unwrap()
-        .value
-            * production_frame(&residual_generated);
-        let bounded_residual_raw_value = evaluate_expression(
-            &residual,
-            &bounded_residual_generated.expression,
-            "(-loops[0][0]+loops[1][0]-ext[0][0])**2\
-             -(-loops[0][1]+loops[1][1]-ext[0][1])**2\
-             -(-loops[0][2]+loops[1][2]-ext[0][2])**2\
-             -(-loops[0][3]+loops[1][3]-ext[0][3])**2",
-            &residual_input,
-        )
-        .unwrap()
-        .value;
-        let bounded_residual_value =
-            bounded_residual_raw_value * production_frame(&bounded_residual_generated);
-        let quadratic_scale = quadratic_parent_value
-            .abs()
-            .max(scalar_residual_value.abs())
-            .max(f64::MIN_POSITIVE);
-        assert!(
-            (quadratic_parent_value - scalar_residual_value).abs() <= 1.0e-11 * quadratic_scale,
-            "the quadratic D0/D0 control must reproduce the scalar lower sector: parent={quadratic_parent_value:e} (raw={quadratic_parent_raw_value:e}, frame={}), residual={scalar_residual_value:e} (raw={scalar_residual_raw_value:e}, frame={})",
-            production_frame(&quadratic_parent_generated),
-            production_frame(&residual_generated),
+        let energies = residual
+            .internal_edges
+            .iter()
+            .enumerate()
+            .map(|(id, edge)| {
+                let spatial = edge_spatial_momentum(
+                    &edge.signature,
+                    &residual_input.loop_spatial_momenta,
+                    &residual_input.external_momenta,
+                );
+                (spatial.iter().map(|x| x * x).sum::<f64>() + residual_input.masses[id].powi(2))
+                    .sqrt()
+            })
+            .collect::<Vec<_>>();
+        let p = parent_input.external_momenta[0][0];
+        let spatial = edge_spatial_momentum(
+            &parent.internal_edges[0].signature,
+            &parent_input.loop_spatial_momenta,
+            &parent_input.external_momenta,
         );
-        let residual_scale = bounded_residual_value
-            .abs()
-            .max(residual_value.abs())
-            .max(f64::MIN_POSITIVE);
-        assert!(
-            (bounded_residual_value - residual_value).abs() <= 1.0e-11 * residual_scale,
-            "the bounded quadratic residual must agree with its convergent pure CFF: bounded={bounded_residual_value:e} (raw={bounded_residual_raw_value:e}, frame={}), pure={residual_value:e}",
-            production_frame(&bounded_residual_generated),
-        );
-        let scale = parent_value
-            .abs()
-            .max(residual_value.abs())
-            .max(f64::MIN_POSITIVE);
+        let spatial_squared = spatial.iter().map(|x| x * x).sum::<f64>();
+        assert!((spatial_squared - 0.4025).abs() < 1.0e-15);
+        // Cancelling the massless D0 once leaves the independent x and y
+        // denominators with shifts [P,0] and [0,-P,0]. For n=0,1,2, sum
+        // z^n/[2E_i product_{j!=i}((z+s_j)^2-E_j^2)] at z=E_i-s_i.
+        // All these one-energy moments converge. Two signed Below contours
+        // have positive combined orientation, so their residues multiply.
+        let moments = |poles: &[(f64, f64)]| -> [f64; 3] {
+            std::array::from_fn(|power| {
+                poles
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &(energy, shift))| {
+                        let pole = energy - shift;
+                        let other_denominators = poles
+                            .iter()
+                            .enumerate()
+                            .filter(|(j, _)| *j != i)
+                            .map(|(_, &(other_energy, other_shift))| {
+                                (pole + other_shift).powi(2) - other_energy.powi(2)
+                            })
+                            .product::<f64>();
+                        pole.powi(power as i32) / (2.0 * energy * other_denominators)
+                    })
+                    .sum()
+            })
+        };
+        let x = moments(&[(energies[1], p), (energies[2], 0.0)]);
+        let y = moments(&[(energies[0], 0.0), (energies[3], -p), (energies[4], 0.0)]);
+        let scalar_contour = x[0] * y[0];
+        let quartic_contour = x[2] * y[0] + x[0] * y[2] - 2.0 * x[1] * y[1]
+            + 2.0 * p * (x[1] * y[0] - x[0] * y[1])
+            + (p * p - spatial_squared) * scalar_contour;
+        // The quartic parent leaves D0=(Q1-Q0)^2 in the five-edge quotient.
+        // Its bounded numerator must use sampled edge energies: interpolation
+        // does not update the loop-energy maps used by an unbounded scalar CFF.
+        let residual_numerator = "(edges[1][0]-edges[0][0])**2\
+            -(edges[1][1]-edges[0][1])**2\
+            -(edges[1][2]-edges[0][2])**2\
+            -(edges[1][3]-edges[0][3])**2";
+        let mut values = Vec::new();
+        for (label, graph, generated, numerator, input, expected) in [
+            (
+                "quadratic parent",
+                &parent,
+                &quadratic_parent_generated,
+                "dot(edges[0],edges[0])",
+                &parent_input,
+                scalar_contour,
+            ),
+            (
+                "ordinary scalar quotient",
+                &residual,
+                &residual_generated,
+                "1",
+                &residual_input,
+                scalar_contour,
+            ),
+            (
+                "quartic parent",
+                &parent,
+                &parent_generated,
+                "dot(edges[0],edges[0])**2",
+                &parent_input,
+                quartic_contour,
+            ),
+            (
+                "bounded quadratic quotient",
+                &residual,
+                &bounded_residual_generated,
+                residual_numerator,
+                &residual_input,
+                quartic_contour,
+            ),
+        ] {
+            let actual = source_conversion(generated)
+                * evaluate_expression(graph, &generated.expression, numerator, input)
+                    .unwrap()
+                    .value;
+            let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+            assert!(
+                (actual - expected).abs() <= 1.0e-11 * scale,
+                "{label}: actual={actual:.17e}, independent contour={expected:.17e}"
+            );
+            values.push(actual);
+        }
+        for (label, parent, quotient) in [
+            ("D0/D0", values[0], values[1]),
+            ("D0^2/D0", values[2], values[3]),
+        ] {
+            let scale = parent.abs().max(quotient.abs()).max(f64::MIN_POSITIVE);
+            assert!(
+                (parent - quotient).abs() <= 1.0e-11 * scale,
+                "{label}: parent={parent:.17e}, quotient={quotient:.17e}"
+            );
+        }
+    }
 
-        assert!(
-            (parent_value - residual_value).abs() <= 1.0e-11 * scale,
-            "D0^2/D0 rank-four contact failed to reproduce the residual D0 numerator: parent={parent_value:e} (raw={parent_raw_value:e}, frame={}), residual={residual_value:e}",
-            production_frame(&parent_generated),
-        );
+    #[test]
+    fn conservative_d5_capacity_preserves_independent_scalar_contour() {
+        // This is the denominator topology of the convergent d5 ghost source.
+        // Its repeated outer channel and both bubble channels can all receive
+        // quadratic capacity, even when the actual numerator is constant.
+        let parsed = ParsedGraph {
+            internal_edges: [
+                (0, 1, [1, 0], 0, "mx"),
+                (0, 2, [-1, 0], 1, "ma"),
+                (1, 3, [1, 0], -1, "ma"),
+                (2, 3, [0, 1], 0, "mb"),
+                (2, 3, [-1, -1], 1, "mc"),
+            ]
+            .into_iter()
+            .enumerate()
+            .map(|(edge_id, (tail, head, loop_signature, external, mass))| {
+                ParsedGraphInternalEdge {
+                    edge_id,
+                    tail,
+                    head,
+                    label: format!("q{edge_id}"),
+                    mass_key: Some(mass.to_string()),
+                    signature: MomentumSignature {
+                        loop_signature: loop_signature.to_vec(),
+                        external_signature: vec![external],
+                    },
+                    had_pow: false,
+                }
+            })
+            .collect(),
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["x".to_string(), "y".to_string()],
+            external_names: vec!["p".to_string()],
+            node_name_to_internal: (0..4).map(|node| (format!("v{node}"), node)).collect(),
+        };
+        let input = EvaluationInput {
+            external_momenta: vec![[1.0, 0.0, 0.0, 0.0]],
+            loop_spatial_momenta: vec![[0.0; 3]; 2],
+            masses: vec![2.0, 3.0, 3.0, 5.0, 7.0],
+            uniform_scale: None,
+        };
+        let (p, ex, ea, eb, ec) = (1.0_f64, 2.0_f64, 3.0_f64, 5.0_f64, 7.0_f64);
+        let s = eb + ec;
+        // With dq0/(2*pi*i), the y Below contour of Dy^-1 D(p-x-y)^-1
+        // is -s/[2 Eb Ec ((x-p)^2-s^2)]. The remaining x Below contour
+        // supplies a second minus. Sum its simple poles at Ex and p+s,
+        // and the derivative of the double pole at p+Ea independently.
+        let pole = p + ea;
+        let dx_at_double = pole * pole - ex * ex;
+        let ds_at_double = ea * ea - s * s;
+        let double_residue = (1.0 / (dx_at_double * (2.0 * ea).powi(2) * ds_at_double))
+            * (-2.0 * pole / dx_at_double - 1.0 / ea - 2.0 * ea / ds_at_double);
+        let simple_x =
+            1.0 / (2.0 * ex * ((ex - p).powi(2) - ea * ea).powi(2) * ((ex - p).powi(2) - s * s));
+        let simple_s = 1.0 / (2.0 * s * ((p + s).powi(2) - ex * ex) * (s * s - ea * ea).powi(2));
+        let expected = s / (2.0 * eb * ec) * (simple_x + double_residue + simple_s);
+        assert!(expected.abs() > 1.0e-8);
+
+        for context in [
+            crate::CffGenerationContext::Standalone,
+            crate::CffGenerationContext::EmbeddedCffFactor,
+        ] {
+            for bounds in [
+                Vec::new(),
+                vec![(0, 1), (1, 1), (2, 1), (3, 2), (4, 1)],
+                vec![(0, 1), (1, 1), (2, 1), (3, 1), (4, 2)],
+                vec![(0, 1), (1, 1), (2, 1), (3, 2), (4, 2)],
+            ] {
+                let generated = generate_3d_expression(
+                    &parsed,
+                    &Generate3DExpressionOptions {
+                        cff_generation_context: context,
+                        energy_degree_bounds: Some(bounds.clone()),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                let source_conversion =
+                    generated
+                        .energy_factor_components
+                        .iter()
+                        .fold(1.0, |factor, component| {
+                            let frame = match component.ownership {
+                                crate::CffEnergyFactorOwnership::GlobalSourceProduct => {
+                                    component.core_global_prefactor_sign
+                                }
+                                crate::CffEnergyFactorOwnership::VariantLocal => {
+                                    component.denominator_only_global_prefactor_sign
+                                }
+                            };
+                            factor
+                                * crate::CffGlobalPrefactorSign::from_exponent(
+                                    component.internal_edge_ids.len(),
+                                )
+                                .product(frame)
+                                .factor() as f64
+                        });
+                let actual = source_conversion
+                    * evaluate_expression(&parsed, &generated.expression, "1", &input)
+                        .unwrap()
+                        .value;
+                let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+                assert!(
+                    (actual - expected).abs() <= 2.0e-12 * scale,
+                    "{context:?}, bounds={bounds:?}: actual={actual:.17e}, contour={expected:.17e}",
+                );
+            }
+        }
     }
 
     #[test]
@@ -3185,8 +3402,28 @@ mod tests {
         );
 
         let mut failures = Vec::new();
+        // Raw evaluation already includes the half-edge factors. Convert each
+        // independent source once using its declared ownership and parity.
         let frame = |generated: &crate::GeneratedThreeDExpression| {
-            generated.core_global_prefactor_sign.factor() as f64
+            generated
+                .energy_factor_components
+                .iter()
+                .fold(1.0, |factor, component| {
+                    let convention = match component.ownership {
+                        crate::CffEnergyFactorOwnership::GlobalSourceProduct => {
+                            component.core_global_prefactor_sign
+                        }
+                        crate::CffEnergyFactorOwnership::VariantLocal => {
+                            component.denominator_only_global_prefactor_sign
+                        }
+                    };
+                    factor
+                        * crate::CffGlobalPrefactorSign::from_exponent(
+                            component.internal_edge_ids.len(),
+                        )
+                        .product(convention)
+                        .factor() as f64
+                })
         };
         for seed in [17, 1337, 9100] {
             let input = EvaluationInput::deterministic(
@@ -3213,6 +3450,40 @@ mod tests {
                 masses: input.masses[2..].to_vec(),
                 uniform_scale: input.uniform_scale,
             };
+            // For a bubble D(q) D(q+shift), the Below poles are q=a
+            // and q=b-shift. The signed contour is minus their residue sum.
+            // Degrees zero through two converge and give an independent
+            // product oracle for both numerators exercised below.
+            let energies = parsed
+                .internal_edges
+                .iter()
+                .enumerate()
+                .map(|(id, edge)| {
+                    let spatial = edge_spatial_momentum(
+                        &edge.signature,
+                        &input.loop_spatial_momenta,
+                        &input.external_momenta,
+                    );
+                    (spatial.iter().map(|value| value * value).sum::<f64>()
+                        + input.masses[id].powi(2))
+                    .sqrt()
+                })
+                .collect::<Vec<_>>();
+            let p = input.external_momenta[0][0];
+            let moments = [
+                (energies[0], energies[1], p),
+                (energies[2], energies[3], -p),
+            ]
+            .map(|(a, b, shift)| {
+                [0, 1, 2].map(|degree| {
+                    -(a.powi(degree) / (2.0 * a * ((a + shift).powi(2) - b * b))
+                        + (b - shift).powi(degree) / (2.0 * b * ((b - shift).powi(2) - a * a)))
+                })
+            });
+            let component_contour = moments[0][2] * moments[1][0];
+            let cross_contour = component_contour
+                + 2.0 * moments[0][1] * moments[1][1]
+                + moments[0][0] * moments[1][2];
             let x_raw = evaluate_expression(
                 &x_bubble,
                 &x_bounded.expression,
@@ -3246,6 +3517,21 @@ mod tests {
                     (isolated_product - full_component_framed).abs() / scale,
                 ));
             }
+            for (label, actual, expected) in [
+                ("quadratic x bubble", x_framed, moments[0][2]),
+                ("scalar y bubble", y_framed, moments[1][0]),
+                (
+                    "complete component source",
+                    full_component_framed,
+                    component_contour,
+                ),
+            ] {
+                let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+                assert!(
+                    (actual - expected).abs() <= 1.0e-11 * scale,
+                    "seed {seed} {label} differs from the independent pole contour: actual={actual:.17e}, expected={expected:.17e}",
+                );
+            }
             let mut expanded_generated = 0.0;
             for numerator in [
                 "edges[0][0]*edges[0][0]",
@@ -3267,6 +3553,16 @@ mod tests {
             .unwrap()
             .value
                 * frame(&cross_component);
+            for (label, actual) in [
+                ("expanded source", expanded_generated),
+                ("factorized source", factorized_generated),
+            ] {
+                let scale = actual.abs().max(cross_contour.abs()).max(f64::MIN_POSITIVE);
+                assert!(
+                    (actual - cross_contour).abs() <= 1.0e-11 * scale,
+                    "seed {seed} {label} differs from the independent quadratic product contour: actual={actual:.17e}, contour={cross_contour:.17e}",
+                );
+            }
             let scale = expanded_generated
                 .abs()
                 .max(factorized_generated.abs())
@@ -3366,19 +3662,54 @@ mod tests {
         )
         .unwrap()
         .value;
-        // This is a raw generalized-3D-representation identity: both sides
-        // still own their variant-local half-edge factors, so GammaLoop's
-        // downstream production-frame metadata must not be applied here.
-        let scale = parent_raw
+        // Both native expressions own their half-edge factors. Their source
+        // conventions differ, so convert each complete result to the signed
+        // contour J = integral dx dy/(2*pi*i)^2 before comparing them.
+        let parent_frame = crate::CffGlobalPrefactorSign::from_exponent(
+            parent.denominator_internal_edge_ids().len(),
+        )
+        .product(parent_generated.denominator_only_global_prefactor_sign)
+        .factor() as f64;
+        let residual_frame = crate::CffGlobalPrefactorSign::from_exponent(
+            residual.denominator_internal_edge_ids().len(),
+        )
+        .product(residual_generated.core_global_prefactor_sign)
+        .factor() as f64;
+        let parent_value = parent_frame * parent_raw;
+        let residual_value = residual_frame * residual_raw;
+        let scale = parent_value
             .abs()
-            .max(residual_raw.abs())
+            .max(residual_value.abs())
             .max(f64::MIN_POSITIVE);
         assert!(
-            (parent_raw - residual_raw).abs() <= 1.0e-12 * scale,
-            "D(Q2)/D(Q2) must reproduce the contracted scalar graph: parent={parent_raw:.17e} (frame={}), residual={residual_raw:.17e} (frame={})",
-            parent_generated.core_global_prefactor_sign.factor(),
-            residual_generated.core_global_prefactor_sign.factor(),
+            (parent_value - residual_value).abs() <= 1.0e-12 * scale,
+            "D(Q2)/D(Q2) must reproduce the contracted scalar graph: parent={parent_value:.17e} (frame={parent_frame}), residual={residual_value:.17e} (frame={residual_frame})",
         );
+
+        // Exact cancellation leaves 1/[D(x) D(y)^2 D(y-P)]. The y=Ey
+        // double pole contributes the derivative of
+        // 1/[(y+Ey)^2 ((y-P)^2-Ey^2)]; the other Below pole is y=P+Ey.
+        // The x tadpole contributes 1/(2Ex), with two Below signs in total.
+        let [ex, ey] = [0, 1].map(|index| {
+            (1.0 + parent_input.loop_spatial_momenta[index]
+                .iter()
+                .map(|value| value * value)
+                .sum::<f64>())
+            .sqrt()
+        });
+        let p = parent_input.external_momenta[0][0];
+        let shifted_denominator = p * p - 2.0 * p * ey;
+        let double_pole = -1.0 / (4.0 * ey.powi(3) * shifted_denominator)
+            - (ey - p) / (2.0 * ey.powi(2) * shifted_denominator.powi(2));
+        let simple_pole = 1.0 / (2.0 * ey * (p * p + 2.0 * p * ey).powi(2));
+        let contour = (double_pole + simple_pole) / (2.0 * ex);
+        for (label, actual) in [("parent", parent_value), ("quotient", residual_value)] {
+            let scale = actual.abs().max(contour.abs()).max(f64::MIN_POSITIVE);
+            assert!(
+                (actual - contour).abs() <= 1.0e-12 * scale,
+                "{label} differs from the independent mixed-carrier contour: actual={actual:.17e}, contour={contour:.17e}",
+            );
+        }
     }
 
     #[test]

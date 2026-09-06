@@ -21,6 +21,7 @@ gammaloop-api = { workspace = true }
 gammalooprs = { workspace = true }
 insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
 itertools = { workspace = true }
+linnet = { workspace = true }
 momtrop = { workspace = true }
 ndarray = { workspace = true }
 rand = { workspace = true, features = ["small_rng"] }

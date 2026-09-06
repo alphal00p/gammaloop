@@ -104,7 +104,6 @@ impl Localizer<'_> {
         self,
         graph: &mut Graph,
         sector: &FourDSector,
-        numerator_factor: &Atom,
     ) -> Result<Atom> {
         if sector.active_components.is_empty() {
             return Err(eyre!(
@@ -114,11 +113,12 @@ impl Localizer<'_> {
 
         let child_cutset = CutSet::empty(graph.n_hedges());
         // Each Taylor component is an independently closed contour which is
-        // multiplied into the outer CFF afterwards.  Keep every causal term
-        // when finite-pole denominators remain, but do not reopen the two
-        // equivalent closure records of a terminal D=L contour: there one
-        // deterministic Below representative is the complete integral.
-        let mut options = self.orientation.cff_options(graph);
+        // multiplied into the outer CFF afterwards. EmbeddedCffFactor keeps
+        // every causal term when finite-pole denominators remain. Only for a
+        // connected, nonrepeated, full-rank terminal residue basis does it avoid
+        // reopening equivalent closures: one deterministic Below representative
+        // is then the complete integral.
+        let mut options = self.orientation.cff_options()?;
         options.cff_generation_context = CffGenerationContext::EmbeddedCffFactor;
         let mut terms = Vec::new();
         for term in sector.physical_terms()? {
@@ -249,6 +249,9 @@ impl Localizer<'_> {
                     )?;
                     self.orientation
                         .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
+                    // The sector already carries its forest subtraction sign.
+                    // This bridge only converts this independent component's
+                    // CFF energy-factor convention to the production convention.
                     let production_prefactor = Atom::num(cff.production_prefactor_factor());
                     for (index, cff_term) in cff.terms {
                         if index != CutCFFIndex::new_all_none() {
@@ -294,7 +297,7 @@ impl Localizer<'_> {
             .into_iter()
             .flat_map(|(_, states)| states)
             .fold(Atom::Zero, |sum, (carrier, numerator)| {
-                sum + carrier * numerator * numerator_factor
+                sum + carrier * numerator
             });
         Ok(active)
     }
@@ -330,7 +333,7 @@ impl Projected4dApproximation<'_> {
             .cutset
             .residue_selector
             .generate_allowed_keys();
-        let orientation_ids = self.localizer.orientation.orientation_ids();
+        let orientation_ids = self.localizer.orientation.orientation_ids()?;
         if orientation_ids.is_empty() {
             return Err(eyre!(
                 "orientation pattern selects no production energy maps"
@@ -345,11 +348,9 @@ impl Projected4dApproximation<'_> {
                 .fold(Atom::one(), |product, lmb| {
                     product * GS.localizing_integrand(lmb)
                 });
-            let active = self.localizer.project_factorized_taylor_sector(
-                self.graph,
-                sector,
-                &Atom::one(),
-            )?;
+            let active = self
+                .localizer
+                .project_factorized_taylor_sector(self.graph, sector)?;
 
             let integrands: Integrands = indices
                 .iter()
@@ -514,24 +515,19 @@ mod tests {
 
         let pattern = OrientationPattern::default();
         let cutset = CutSet::empty(graph.n_hedges());
-        let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
-        let powered = localizer.project_factorized_taylor_sector(
-            &mut graph,
-            &powered_sector,
-            &Atom::one(),
-        )?;
-        let cancelled = localizer.project_factorized_taylor_sector(
-            &mut graph,
-            &cancelled_sector,
-            &Atom::one(),
-        )?;
-        let dotted =
-            localizer.project_factorized_taylor_sector(&mut graph, &dotted_sector, &Atom::one())?;
-        let one_pole = localizer.project_factorized_taylor_sector(
-            &mut graph,
-            &one_pole_sector,
-            &Atom::one(),
-        )?;
+        // This isolated typed-sector projection consumes options, not a
+        // production selector set; the sector carries its own exact sources.
+        let production = Default::default();
+        let projection_options = graph.denominator_only_cff_3d_expression_options();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &projection_options, &pattern, false),
+        );
+        let powered = localizer.project_factorized_taylor_sector(&mut graph, &powered_sector)?;
+        let cancelled =
+            localizer.project_factorized_taylor_sector(&mut graph, &cancelled_sector)?;
+        let dotted = localizer.project_factorized_taylor_sector(&mut graph, &dotted_sector)?;
+        let one_pole = localizer.project_factorized_taylor_sector(&mut graph, &one_pole_sector)?;
 
         // D/D^2 = 1/D, while the repeated-pole remainder obeys
         // CFF[1/D^2] = -CFF[1/D]/(2 E^2). Compare each term directly to the
@@ -653,7 +649,14 @@ mod tests {
 
         let pattern = OrientationPattern::default();
         let cutset = CutSet::empty(graph.n_hedges());
-        let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
+        // This isolated typed-sector projection consumes options, not a
+        // production selector set; the sector carries its own exact sources.
+        let production = Default::default();
+        let projection_options = graph.denominator_only_cff_3d_expression_options();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &projection_options, &pattern, false),
+        );
         let options = graph.denominator_only_cff_3d_expression_options();
         let uv_edges = graph
             .iter_edges_of(&full)
@@ -697,8 +700,7 @@ mod tests {
             "owner relabelling must reuse one canonical exact CFF in the component wave"
         );
 
-        let batched =
-            localizer.project_factorized_taylor_sector(&mut graph, &sector, &Atom::one())?;
+        let batched = localizer.project_factorized_taylor_sector(&mut graph, &sector)?;
         let mut sequential = Atom::Zero;
         for term in sector.physical_terms()? {
             let (cff, _) = graph.cff_from_4d_denominators_in_uv_sub_lmb(
@@ -733,8 +735,7 @@ mod tests {
             sector.taylor_lmb.clone(),
             Vec::new(),
         );
-        let permuted =
-            localizer.project_factorized_taylor_sector(&mut graph, &permuted, &Atom::one())?;
+        let permuted = localizer.project_factorized_taylor_sector(&mut graph, &permuted)?;
         assert_eq!(
             permuted, batched,
             "component-wave registration and output must be invariant under term permutation"
@@ -826,9 +827,15 @@ mod tests {
 
         let pattern = OrientationPattern::default();
         let cutset = CutSet::empty(graph.n_hedges());
-        let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
-        let batched =
-            localizer.project_factorized_taylor_sector(&mut graph, &sector, &Atom::one())?;
+        // This isolated typed-sector projection consumes options, not a
+        // production selector set; the sector carries its own exact sources.
+        let production = Default::default();
+        let projection_options = graph.denominator_only_cff_3d_expression_options();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &projection_options, &pattern, false),
+        );
+        let batched = localizer.project_factorized_taylor_sector(&mut graph, &sector)?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let [term] = sector
             .physical_terms()?

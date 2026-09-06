@@ -147,10 +147,10 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
     }
     // The two parallel physical edges carry opposite routing signs. Their
     // acyclic production sectors are therefore (+,-) and (-,+); (+,+) is
-    // not a production orientation. The cancellation contacts have zero
-    // numerator sampling maps, but their opposite loop lifts still host
-    // one matching lower residue in each sector.
-    let mut selected_production = edgevec([1, -1]).select(&explicit_sum);
+    // not a production orientation. Cancellation contacts can instead have
+    // zero numerator sampling maps and undirected physical provenance. Keep
+    // them in the complete sum: their loop lifts need not match one physical
+    // direction sector of the independently generated lower source.
     let regenerated_localizer = Localizer::new(
         &cutset,
         OrientationProjection::exact(
@@ -174,7 +174,6 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
             .iter()
             .fold(Atom::Zero, |sum, (_, term)| sum + term * &mapped);
     }
-    let mut selected_regenerated = edgevec([1, -1]).select(&regenerated_sum);
     let momentum = FunctionBuilder::new(GS.emr_mom)
         .add_arg(usize::from(edge))
         .finish();
@@ -216,26 +215,20 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
     let (exact_lower, _) =
         graph.cff_from_4d_denominators(&denominators[1..], &cutset, &options, &Atom::one())?;
     // The exact one-denominator source enumerates both contour directions.
-    // Compare the remaining-edge direction selected by the (+,-)
-    // production sector. Denominator-routing signs and physical selector
-    // signs are separate conventions.
-    let remaining_lower_occurrence = EdgeIndex(graph.underlying.n_edges());
+    // Sum both to compare the same complete residue as the powered source.
+    // Denominator-routing signs and physical selector signs are separate
+    // conventions; a single direction would omit part of this reference.
     let mut exact_lower_sum = exact_lower
         .terms
         .values()
         .flat_map(|term| &term.orientations)
-        .find(|orientation| {
-            orientation.orientation.data.orientation[remaining_lower_occurrence]
-                == Orientation::Default
-        })
-        .expect("the lower source has the selected remaining-edge direction")
-        .expression
-        .clone()
+        .map(|orientation| orientation.expression.clone())
+        .sum::<Atom>()
         * Atom::num(exact_lower.production_prefactor_factor());
     let mass = graph.underlying[edge].particle.mass_atom();
     for expression in [
-        &mut selected_production,
-        &mut selected_regenerated,
+        &mut explicit_sum,
+        &mut regenerated_sum,
         &mut exact_powered_sum,
         &mut exact_lower_sum,
     ] {
@@ -254,17 +247,17 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
     let exact_difference = (&exact_powered_sum - &exact_lower_sum).together();
     assert!(
         exact_difference.is_zero(),
-        "summed exact-source powered and selected lower channels differ: powered={exact_powered_sum}, lower={exact_lower_sum}, difference={exact_difference}"
+        "complete exact-source powered and lower residue sums differ: powered={exact_powered_sum}, lower={exact_lower_sum}, difference={exact_difference}"
     );
-    let production_difference = (&selected_production - &exact_lower_sum).together();
+    let production_difference = (&explicit_sum - &exact_lower_sum).together();
     assert!(
         production_difference.is_zero(),
-        "production EMR mapping does not cancel the powered denominator: production={selected_production}, lower={exact_lower_sum}, difference={production_difference}"
+        "production EMR mapping does not cancel the powered denominator: production={explicit_sum}, lower={exact_lower_sum}, difference={production_difference}"
     );
-    let regenerated_difference = (&selected_regenerated - &exact_lower_sum).together();
+    let regenerated_difference = (&regenerated_sum - &exact_lower_sum).together();
     assert!(
         regenerated_difference.is_zero(),
-        "regenerated graph CFF does not cancel the powered denominator: regenerated={selected_regenerated}, lower={exact_lower_sum}, difference={regenerated_difference}"
+        "regenerated graph CFF does not cancel the powered denominator: regenerated={regenerated_sum}, lower={exact_lower_sum}, difference={regenerated_difference}"
     );
     Ok(())
 }
@@ -311,7 +304,7 @@ fn direct_root_preserves_powered_production_entries() -> Result<()> {
                 explicit_orientation_sum_only,
             ),
         );
-        let localized = Direct3dCts::root(&mut graph, localizer)?.branches()?;
+        let localized = Direct3dCts::root(&graph, localizer)?.branches()?;
         let expected_keys = raw_root
             .terms
             .values()
@@ -371,13 +364,18 @@ fn direct_root_preserves_powered_production_entries() -> Result<()> {
 fn orientation_term_keeps_external_selectors_and_adds_internal_ones() {
     let reduced_expression = function!(GS.ose, 0);
     let reduced_orientation = edgevec([1, 0, -1]);
-    let valid = vec![edgevec([1, 1, -1]), edgevec([1, -1, -1])];
-    let pat = OrientationPattern::default();
-    let cutset = CutSet::empty(1);
-    let loc = Localizer::new(&cutset, OrientationProjection::new(&valid, &pat));
-    let localized = loc
-        .localized_orientation_term(&reduced_expression, &reduced_orientation, &edges([1]))
-        .unwrap();
+    let valid = [edgevec([1, 1, -1]), edgevec([1, -1, -1])];
+    let internal_edges = edges([1]);
+    // Physical-theta composition belongs to graph-orientation metadata. It is
+    // diagnostic algebra, not a fallback for complete runtime residue keys.
+    let representative = valid
+        .iter()
+        .filter(|orientation| orientation.is_compatible_with(&reduced_orientation))
+        .max_by_key(|orientation| orientation.score(&internal_edges))
+        .expect("the reduced directions have a compatible physical extension");
+    let localized = reduced_expression.clone()
+        * reduced_orientation.orientation_thetas()
+        * representative.internal_orientation_selector(&internal_edges);
 
     let expected = reduced_expression
         * GS.sign_theta(GS.sign(EdgeIndex(0)))
@@ -652,7 +650,7 @@ fn projected_source_sum_falls_back_when_the_cut_excludes_compatible_hosts() -> R
     let cutset = CutSet::empty(graph.n_hedges());
     let direct = Localizer::new(
         &cutset,
-        OrientationProjection::exact(&production, &options, &pattern, true),
+        OrientationProjection::exact(&production, &options, &pattern, false),
     );
     let valid_host = BTreeSet::from([OrientationID(1)]);
     let direct_hosted = direct.localized_orientation_terms(
@@ -680,6 +678,21 @@ fn projected_source_sum_falls_back_when_the_cut_excludes_compatible_hosts() -> R
             Some(&reduced.edge_energy_map),
         )?;
     assert_eq!(projected_hosted, vec![(OrientationID(1), Atom::one())]);
+    let explicit = Localizer::new(
+        &cutset,
+        OrientationProjection::exact(&production, &options, &pattern, true),
+    );
+    let explicit_hosted = explicit.localized_orientation_terms(
+        &graph,
+        &reduced,
+        &Atom::one(),
+        &graph.empty_subgraph(),
+        &[],
+        Some(&valid_host),
+        None,
+        Some(&reduced.edge_energy_map),
+    )?;
+    assert_eq!(explicit_hosted, projected_hosted);
     Ok(())
 }
 
@@ -1026,19 +1039,18 @@ fn source_energy_map_owns_factorized_contact_branch() -> Result<()> {
         localizer.map_numerator(&graph, OrientationID(0), None, &numerator)?,
         mapped
     );
-    let coarse = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
-    assert!(
-        coarse
-            .map_numerator(
-                &graph,
-                OrientationID(0),
-                Some(&reduced.edge_energy_map),
-                &numerator,
-            )
-            .expect_err("a coarse projector cannot consume an exact source map")
-            .to_string()
-            .contains("cannot be carried by a coarse orientation projector")
-    );
+    let four_d = Localizer::new(&cutset, OrientationProjection::four_d(&pattern));
+    assert!(four_d.orientation.orientation_ids().is_err());
+    assert!(four_d.orientation.cff_options().is_err());
+    for source_map in [None, Some(reduced.edge_energy_map.as_slice())] {
+        assert!(
+            four_d
+                .map_numerator(&graph, OrientationID(0), source_map, &numerator)
+                .expect_err("a 4D-only context cannot silently map a 3D numerator")
+                .to_string()
+                .contains("four-dimensional-only renormalization has no 3D residue maps")
+        );
+    }
 
     let index = CutCFFIndex::new_all_none();
     let source = OrientationIntegrands(vec![OrientationIntegrandBranch {
@@ -1314,22 +1326,35 @@ fn exact_cff_defers_contracted_edge_patterns_to_full_projection() -> Result<()> 
 }
 
 #[test]
-fn coarse_cff_keeps_denominator_only_capacity() -> Result<()> {
+fn denominator_only_cff_has_no_localizer_fallback() -> Result<()> {
     let mut graph = two_edge_graph()?;
     let pattern = OrientationPattern::default();
     let cutset = CutSet::empty(graph.n_hedges());
-    let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
-    let to_contract = graph.empty_subgraph();
+    let to_contract = graph.tree_edges.subtract(&graph.initial_state_cut);
+    let options = graph.denominator_only_cff_3d_expression_options();
+    // Denominator-only capacity is an explicit graph-generation request, not
+    // identity numerator mapping through a coarse localizer.
+    let cff = graph.cff(&to_contract, &cutset, &pattern, &options, None)?;
+    assert!(cff.terms.values().any(|term| {
+        term.orientations
+            .iter()
+            .any(|orientation| !orientation.expression.is_zero())
+    }));
+
+    let four_d = Localizer::new(&cutset, OrientationProjection::four_d(&pattern));
     let unsupported_numerator = (GS.emr_mom(EdgeIndex(0), GS.cind(0)) + Atom::one()).pow(-1);
-
-    let projected = localizer.projected_cff(
-        &mut graph,
-        &to_contract,
-        &unsupported_numerator,
-        CffGenerationContext::Standalone,
-    )?;
-
-    assert!(projected.iter().any(|(_, atom)| !atom.is_zero()));
+    assert!(
+        four_d
+            .projected_cff(
+                &mut graph,
+                &to_contract,
+                &unsupported_numerator,
+                CffGenerationContext::Standalone,
+            )
+            .expect_err("4D-only context must not silently ignore a 3D numerator")
+            .to_string()
+            .contains("four-dimensional-only renormalization has no 3D projection options")
+    );
     Ok(())
 }
 

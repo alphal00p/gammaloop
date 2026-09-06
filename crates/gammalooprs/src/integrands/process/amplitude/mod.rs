@@ -1825,16 +1825,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
           )
     )]
     fn warm_up(&mut self, model: &Model) -> Result<()> {
-        let mut uses_numerator_sampling_scale = false;
-        self.for_each_generic_evaluator_mut(|evaluator| {
-            uses_numerator_sampling_scale |= evaluator.uses_numerator_sampling_scale();
-            Ok(())
-        })?;
-        validate_process_runtime_settings(
-            &self.settings,
-            self.data.explicit_orientation_sum_only,
-            uses_numerator_sampling_scale,
-        )?;
+        validate_process_runtime_settings(&self.settings, self.data.explicit_orientation_sum_only)?;
 
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))

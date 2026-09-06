@@ -49,10 +49,10 @@ pub(crate) struct OrientationIntegrands(pub(super) Vec<OrientationIntegrandBranc
 pub(super) enum SourceSelectorHosting {
     /// Direct 3D branches inherit one compatible complete production key.
     PhysicalPrefix,
-    /// Projected local-4D sources are summed independently. Prefer a compatible
-    /// production key as stable mapping metadata, but fall back to any
-    /// permitted deterministic host when a generalized source has no complete
-    /// physical extension. The source-local energy map owns evaluation.
+    /// Projected local-4D sources and integrated finite addbacks are independent
+    /// sums. Prefer a compatible production key as stable mapping metadata,
+    /// but fall back to any permitted deterministic host when a generalized
+    /// source has no complete physical extension. Its energy map owns evaluation.
     IndependentSum,
 }
 

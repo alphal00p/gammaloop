@@ -16,7 +16,7 @@ use idenso::{
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
-    involution::HedgePair,
+    involution::{EdgeIndex, HedgePair},
     subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike},
 };
 use spenso::{
@@ -38,7 +38,7 @@ use vakint::{Vakint, VakintExpression, vakint_symbol};
 
 use crate::{
     debug_tags,
-    graph::LMBext,
+    graph::{LMBext, LoopMomentumBasis},
     numerator::aind::Aind,
     utils::{GS, W_},
     uv::{
@@ -302,6 +302,7 @@ impl Integrated<'_> {
             graph,
             current.subgraph(),
             given.subgraph(),
+            current.lmb(),
             &settings.vakint,
             true,
         )?;
@@ -490,6 +491,7 @@ pub(crate) fn to_vakint_integrand<
     graph: &HedgeGraph<E, V, H>,
     reduced: &S,
     dependent_subgraph: &SS,
+    source_lmb: &LoopMomentumBasis,
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
 ) -> Result<VakintExpression> {
@@ -902,6 +904,15 @@ pub(crate) fn to_vakint_integrand<
                     .mom
                     .pattern_match(&mom_pat, None, None)
                     .for_each(|m| {
+                        // An affine vacuum routing can contain fixed source
+                        // external momenta. Solve only for hard coordinates;
+                        // otherwise H=Q-P can solve for P and leave Q in the
+                        // integrated numerator as a spurious external variable.
+                        if usize::try_from(m[&W_.a_].as_view())
+                            .is_ok_and(|edge| source_lmb.ext_from(EdgeIndex(edge)).is_some())
+                        {
+                            return;
+                        }
                         let var = mom_pat.replace_wildcards(&m).unwrap();
                         if !momentum_variables.iter().any(|existing| existing == &var) {
                             momentum_variables.push(var);
@@ -1392,5 +1403,92 @@ mod tests {
 
         assert!(no_variables.free_variables.is_empty());
         assert_eq!(free_variable.free_variables, vec![q0]);
+    }
+
+    #[test]
+    fn affine_vakint_routing_keeps_external_momenta_fixed() {
+        use crate::{
+            dot,
+            graph::{Graph, parse::IntoGraph},
+        };
+
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph affine_vakint_tadpole {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            a -> a [id=1 lmb_id=0]
+            a -> outgoing [id=2]
+        })
+        .unwrap();
+        let hard = function!(GS.emr_mom, 1) - function!(GS.emr_mom, 0);
+        let minkowski = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
+        let indexed_hard =
+            function!(GS.emr_mom, 1, &minkowski) - function!(GS.emr_mom, 0, &minkowski);
+        let numerator = function!(
+            SPENSO_TAG.dot,
+            function!(GS.emr_mom, 0, &minkowski),
+            &indexed_hard
+        ) * function!(
+            SPENSO_TAG.dot,
+            function!(GS.emr_mom, 2, &minkowski),
+            &indexed_hard
+        );
+        let settings = VakintSettings {
+            additional_normalization: "1".to_string(),
+            ..Default::default()
+        };
+        for sign in [-1, 1] {
+            let denominator = function!(
+                GS.den,
+                1,
+                Atom::num(sign) * &hard,
+                Atom::var(GS.m_uv_vacuum).pow(2),
+                function!(SPENSO_TAG.dot, &indexed_hard, &indexed_hard)
+                    - Atom::var(GS.m_uv_vacuum).pow(2)
+            );
+            let actual = to_vakint_integrand(
+                &(&numerator / denominator.pow(3)),
+                &graph,
+                &graph.full_filter(),
+                &graph.empty_subgraph::<SuBitGraph>(),
+                &graph.loop_momentum_basis,
+                &settings,
+                true,
+            )
+            .unwrap();
+            assert_eq!(actual.0.len(), 1);
+            let expected_numerator = function!(
+                vakint::symbols::S.dot,
+                function!(vakint::symbols::S.p, 0),
+                function!(vakint::symbols::S.k, 0)
+            ) * function!(
+                vakint::symbols::S.dot,
+                function!(vakint::symbols::S.p, 2),
+                function!(vakint::symbols::S.k, 0)
+            );
+            assert!(
+                (&actual.0[0].numerator - expected_numerator)
+                    .expand()
+                    .is_zero(),
+                "the tensor numerator must retain the fixed external momenta for either D(H) spelling"
+            );
+            assert_eq!(
+                actual.0[0].integral,
+                function!(
+                    vakint::symbols::S.topo,
+                    function!(
+                        vakint::symbols::S.prop,
+                        1,
+                        function!(vakint::symbols::S.edge, 0, 0),
+                        function!(vakint::symbols::S.k, 0),
+                        Atom::var(GS.m_uv_vacuum).pow(2),
+                        3
+                    )
+                )
+            );
+        }
     }
 }

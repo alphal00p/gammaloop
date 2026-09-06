@@ -5,7 +5,10 @@ use std::{
 
 use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use linnet::half_edge::{
+    involution::{EdgeIndex, EdgeVec, Orientation},
+    swap::Swap,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -390,45 +393,75 @@ pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
         });
     }
     let parsed = graph.to_three_d_parsed_graph()?;
-    let Some(edge_map) = graph.energy_edge_index_map(&parsed) else {
-        let mut generated = generate_3d_expression_from_parsed_generated(&parsed, options)?;
-        generated.source_energy_degree_bounds =
-            options.energy_degree_bounds.clone().unwrap_or_default();
-        return Ok(generated);
-    };
+    let edge_map = graph.energy_edge_index_map(&parsed);
     let mut local_options = options.clone();
-    local_options.energy_degree_bounds = options
-        .energy_degree_bounds
-        .as_deref()
-        .map(|bounds| -> Result<Vec<(usize, usize)>> {
-            edge_map
-                .remap_bounds_to_local(bounds)
-                .map_err(|edge_id| GenerationError::UnknownEnergyDegreeBoundEdge { edge_id })
-        })
-        .transpose()?;
-    let reverse_internal = edge_map.internal_to_local();
-    local_options.preserve_internal_edges_as_four_d_denominators = options
-        .preserve_internal_edges_as_four_d_denominators
-        .iter()
-        .map(|edge_id| {
-            reverse_internal
-                .get(edge_id)
-                .copied()
-                .ok_or(GenerationError::UnknownCffPreservedInternalEdge { edge_id: *edge_id })
-        })
-        .collect::<Result<Vec<_>>>()?;
+    if let Some(edge_map) = &edge_map {
+        local_options.energy_degree_bounds = options
+            .energy_degree_bounds
+            .as_deref()
+            .map(|bounds| -> Result<Vec<(usize, usize)>> {
+                edge_map
+                    .remap_bounds_to_local(bounds)
+                    .map_err(|edge_id| GenerationError::UnknownEnergyDegreeBoundEdge { edge_id })
+            })
+            .transpose()?;
+        let reverse_internal = edge_map.internal_to_local();
+        local_options.preserve_internal_edges_as_four_d_denominators = options
+            .preserve_internal_edges_as_four_d_denominators
+            .iter()
+            .map(|edge_id| {
+                reverse_internal
+                    .get(edge_id)
+                    .copied()
+                    .ok_or(GenerationError::UnknownCffPreservedInternalEdge { edge_id: *edge_id })
+            })
+            .collect::<Result<Vec<_>>>()?;
+    }
     let mut generated = generate_3d_expression_from_parsed_generated(&parsed, &local_options)?;
-    generated.expression = generated
-        .expression
-        .remap_energy_edge_indices(&edge_map)
-        .fuse_compatible_variants();
-    generated.energy_factor_components = generated
-        .energy_factor_components
-        .iter()
-        .map(|component| component.remap_internal_edges(&edge_map.internal))
-        .collect();
+    if let Some(edge_map) = &edge_map {
+        generated.expression = generated
+            .expression
+            .remap_energy_edge_indices(edge_map)
+            .fuse_compatible_variants();
+        generated.energy_factor_components = generated
+            .energy_factor_components
+            .iter()
+            .map(|component| component.remap_internal_edges(&edge_map.internal))
+            .collect();
+    }
     generated.source_energy_degree_bounds =
         options.energy_degree_bounds.clone().unwrap_or_default();
+    // Initial-state cuts carry fixed external energies, not selectable poles.
+    // Keep the ordinary CFF direction convention on every public source path;
+    // the signed external energy remains in the unchanged energy maps. Do this
+    // after fusion so normalization cannot merge or reorder opaque residue IDs.
+    if !parsed.initial_state_cut_edges.is_empty() {
+        for orientation in &mut generated.expression.orientations {
+            for cut_edge in &parsed.initial_state_cut_edges {
+                let edge_id = edge_map
+                    .as_ref()
+                    .and_then(|edge_map| edge_map.internal.get(&cut_edge.edge_id))
+                    .copied()
+                    .unwrap_or(cut_edge.edge_id);
+                orientation.data.orientation[EdgeIndex(edge_id)] = Orientation::Default;
+                if let Some(label) = &mut orientation.data.label {
+                    let prefix_len = label.find('|').unwrap_or(label.len());
+                    if prefix_len == orientation.data.orientation.len().0
+                        && label[..prefix_len]
+                            .bytes()
+                            .all(|value| matches!(value, b'+' | b'-' | b'0' | b'x'))
+                    {
+                        // Preserve non-cut zero/affine display distinctions.
+                        label.replace_range(edge_id..edge_id + 1, "+");
+                    } else {
+                        // A named scalar/tree prefix has no edge positions;
+                        // let the existing label assignment encode this source.
+                        orientation.data.label = None;
+                    }
+                }
+            }
+        }
+    }
     assign_numerator_map_labels(&mut generated.expression.orientations);
     Ok(generated)
 }
@@ -506,12 +539,34 @@ fn generate_3d_expression_from_parsed_generated(
                 CffGlobalPrefactorSign::from_exponent(parsed.loop_names.len().saturating_sub(1)),
             )
         } else {
+            let core_global_prefactor_sign = CffGlobalPrefactorSign::from_exponent(
+                parsed.loop_names.len().saturating_sub(1) + duplicate_excess,
+            );
+            // Public ordinary sources represent the complete energy integral in
+            // their emitted scalar convention. Internal pure CFFs remain native
+            // orientation catalogues: a free terminal has two equal closures.
+            // Convert each scalar leaf once, retaining its orientation maps and
+            // the ordinary source's existing energy-factor and sign metadata.
+            let mut scalar = LowerSectorCffBuilder::new(parsed);
+            // A public source must close every loop-energy contour on its
+            // denominators. External cut aliases cannot supply missing rank;
+            // rank-deficient contacts remain internal to the lower-sector path.
+            let basis = LowerSectorCffBuilder::component_basis_edges(
+                &scalar.signatures(),
+                &denominator_edge_ids,
+            );
+            if basis.len() != parsed.loop_names.len() {
+                return Err(GenerationError::SingularBasis);
+            }
+            scalar.source_prefactor = Some(Rational::from(
+                CffGlobalPrefactorSign::from_exponent(denominator_edge_ids.len())
+                    .product(core_global_prefactor_sign)
+                    .factor(),
+            ));
             (
-                generate_pure_cff_expression_from_parsed(parsed)?,
+                scalar.build()?,
                 CffEnergyFactorOwnership::GlobalSourceProduct,
-                CffGlobalPrefactorSign::from_exponent(
-                    parsed.loop_names.len().saturating_sub(1) + duplicate_excess,
-                ),
+                core_global_prefactor_sign,
             )
         };
     let mut expression = expression.fuse_compatible_variants();
@@ -542,9 +597,18 @@ fn generate_3d_expression_from_parsed_generated(
 /// embedded as one independently integrated factor of a larger product. A nonterminal or
 /// repeated source still represents an ordinary generalized CFF sum.
 fn denominator_set_is_complete_residue_basis(parsed: &ParsedGraph) -> bool {
-    parsed.denominator_internal_edge_ids().len() == parsed.loop_names.len()
-        && denominator_connected_components(parsed).len() == 1
-        && repeated_groups(parsed).is_empty()
+    let denominator_edge_ids = parsed.denominator_internal_edge_ids();
+    if denominator_edge_ids.len() != parsed.loop_names.len()
+        || denominator_connected_components(parsed).len() != 1
+        || !repeated_groups(parsed).is_empty()
+    {
+        return false;
+    }
+    // Contacts retain the source's loop-coordinate names after losing rank.
+    // Equal counts alone cannot make the surviving denominators a residue basis.
+    let signatures = LowerSectorCffBuilder::new(parsed).signatures();
+    LowerSectorCffBuilder::component_basis_edges(&signatures, &denominator_edge_ids).len()
+        == parsed.loop_names.len()
 }
 
 fn generate_pure_cff_expression_from_parsed(
@@ -2375,6 +2439,9 @@ impl<'a> LinearSurfaceInterner<'a> {
 
 struct BoundedCffBuilder<'a> {
     parsed: &'a ParsedGraph,
+    // J = source_prefactor * raw, with J using dq0/(2*pi*i) per loop.
+    // Every recursive scalar base retains this original source convention.
+    source_prefactor: Rational,
     bounds: Vec<usize>,
     inherited_contour_rows: Vec<Vec<i32>>,
     sampling_scale_mode: NumeratorSamplingScaleMode,
@@ -2405,6 +2472,11 @@ impl<'a> BoundedCffBuilder<'a> {
         }
         Self {
             parsed,
+            source_prefactor: Rational::from(
+                CffGlobalPrefactorSign::from_exponent(parsed.denominator_internal_edge_ids().len())
+                    .product(denominator_contour_frame_sign(parsed))
+                    .factor(),
+            ),
             bounds,
             inherited_contour_rows: Vec::new(),
             sampling_scale_mode: NumeratorSamplingScaleMode::None,
@@ -2422,7 +2494,10 @@ impl<'a> BoundedCffBuilder<'a> {
         let needs_generalized_expression =
             cff_bounds_need_generalized_expression(self.parsed, &self.bounds);
         if !needs_generalized_expression {
-            return generate_pure_cff_expression_from_parsed(self.parsed);
+            let mut lower = LowerSectorCffBuilder::new(self.parsed);
+            lower.source_prefactor = Some(self.source_prefactor.clone());
+            lower.inherited_contour_rows = self.inherited_contour_rows.clone();
+            return lower.build();
         }
         let uniform_sampling_for_nonlinear_degree = self
             .bounds
@@ -2442,8 +2517,10 @@ impl<'a> BoundedCffBuilder<'a> {
                         > 2
                 });
         if repeated_channel_needs_known_factor {
-            return KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode)
-                .build_with_inherited_contours(false, &self.inherited_contour_rows);
+            let mut known =
+                KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode);
+            known.source_prefactor = self.source_prefactor;
+            return known.build_with_inherited_contours(false, &self.inherited_contour_rows);
         }
         if !uniform_sampling_for_nonlinear_degree && self.supports_quadratic_e_surface_only() {
             self.build_quadratic_e_surface_only()?;
@@ -2454,8 +2531,10 @@ impl<'a> BoundedCffBuilder<'a> {
             return self.build_quadratic_recursive(false);
         }
         if self.supports_known_factor_recursive() {
-            return KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode)
-                .build_with_inherited_contours(false, &self.inherited_contour_rows);
+            let mut known =
+                KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode);
+            known.source_prefactor = self.source_prefactor;
+            return known.build_with_inherited_contours(false, &self.inherited_contour_rows);
         }
         Err(GenerationError::CffHigherEnergyPowerNotImplemented)
     }
@@ -2518,13 +2597,17 @@ impl<'a> BoundedCffBuilder<'a> {
                 // sector. Its duplicate-line parity is therefore part of the
                 // Hermite functional itself, rather than a child-to-parent
                 // core convention to consume at the embedding boundary.
-                generate_pure_cff_expression_from_parsed(self.parsed)
+                let mut lower = LowerSectorCffBuilder::new(self.parsed);
+                lower.source_prefactor = Some(self.source_prefactor.clone());
+                lower.inherited_contour_rows = self.inherited_contour_rows.clone();
+                lower.build()
             };
         };
 
         let mut remainder_bounds = self.bounds.clone();
         remainder_bounds[active_edge] = 1;
         let mut remainder_builder = BoundedCffBuilder::for_bounds(self.parsed, remainder_bounds);
+        remainder_builder.source_prefactor = self.source_prefactor.clone();
         remainder_builder.inherited_contour_rows = self.inherited_contour_rows.clone();
         remainder_builder.sampling_scale_mode = self.sampling_scale_mode;
         let remainder = remainder_builder.build_quadratic_recursive(lower_sector_base)?;
@@ -2538,6 +2621,7 @@ impl<'a> BoundedCffBuilder<'a> {
             .map(|orig_id| self.bounds[*orig_id])
             .collect::<Vec<_>>();
         let mut contact_builder = BoundedCffBuilder::for_bounds(&subparsed, sub_bounds);
+        contact_builder.source_prefactor = self.source_prefactor.clone();
         contact_builder.inherited_contour_rows = self.inherited_contour_rows.clone();
         contact_builder.inherited_contour_rows.push(
             self.parsed.internal_edges[active_edge]
@@ -2546,27 +2630,7 @@ impl<'a> BoundedCffBuilder<'a> {
                 .clone(),
         );
         contact_builder.sampling_scale_mode = self.sampling_scale_mode;
-        let mut contact = contact_builder.build_quadratic_recursive(true)?;
-        let active_is_repeated_denominator = repeated_groups(self.parsed)
-            .iter()
-            .any(|group| group.edge_ids.contains(&active_edge));
-        if active_is_repeated_denominator
-            && subparsed.denominator_internal_edge_ids().len() == subparsed.loop_names.len()
-            && denominator_connected_components(&subparsed).len() == 1
-            && repeated_groups(&subparsed).is_empty()
-        {
-            // Removing one occurrence of an exact repeated denominator leaves
-            // its terminal pole in the duplicate-channel frame. Consume that
-            // frame transition; unequal-mass parallel lines are not repeated.
-            for variant in contact
-                .orientations
-                .iter_mut()
-                .flat_map(|orientation| &mut orientation.variants)
-            {
-                variant.prefactor =
-                    rational_to_coefficient(-rational_from_coefficient(&variant.prefactor))?;
-            }
-        }
+        let contact = contact_builder.build_quadratic_recursive(true)?;
         self.append_recursive_contact_terms(
             active_edge,
             &contact,
@@ -2582,19 +2646,31 @@ impl<'a> BoundedCffBuilder<'a> {
         // Once a recursive contact leaves exactly one denominator basis, its
         // pole inherits the parent's ordered Below contour. Retain that signed
         // residue instead of reopening the terminal with both free directions.
-        // A powered or nonterminal lower sector keeps the standard component
-        // construction; exact rational normalization remains encoded directly
-        // in the generated expression coefficients.
-        if self.parsed.denominator_internal_edge_ids().len() == self.parsed.loop_names.len()
-            && denominator_connected_components(self.parsed).len() == 1
-            && repeated_groups(self.parsed).is_empty()
-        {
-            generate_simple_residue_basis_expression_from_parsed(
+        // Removing one occurrence of an exact repeated denominator leaves its
+        // terminal pole in the duplicate-channel frame. The source conversion
+        // below consumes that transition, while unequal-mass parallel lines
+        // retain their distinct denominator frame.
+        if denominator_set_is_complete_residue_basis(self.parsed) {
+            let mut terminal = generate_simple_residue_basis_expression_from_parsed(
                 self.parsed,
                 &vec![ContourClosure::Below; self.parsed.loop_names.len()],
-            )
+            )?;
+            for variant in terminal
+                .orientations
+                .iter_mut()
+                .flat_map(|orientation| &mut orientation.variants)
+            {
+                variant.prefactor = rational_to_coefficient(
+                    rational_from_coefficient(&variant.prefactor) / self.source_prefactor.clone(),
+                )?;
+            }
+            Ok(terminal)
         } else {
+            // A powered or nonterminal lower sector keeps the component
+            // construction. Its native normalization is converted into the
+            // immutable original source frame at the scalar base, exactly once.
             let mut lower = LowerSectorCffBuilder::new(self.parsed);
+            lower.source_prefactor = Some(self.source_prefactor.clone());
             lower.inherited_contour_rows = self.inherited_contour_rows.clone();
             lower.build()
         }
@@ -2681,7 +2757,8 @@ impl<'a> BoundedCffBuilder<'a> {
         weight_polys: &BTreeMap<i32, Vec<Rational>>,
     ) -> Result<()> {
         // Lower-sector variants already carry their complete scalar
-        // normalization in their coefficients.
+        // normalization in the original source frame. Quotient interpolation
+        // is algebraic and introduces no additional contour conversion.
         let edge_map = sub_to_orig
             .iter()
             .enumerate()
@@ -2822,7 +2899,9 @@ impl<'a> BoundedCffBuilder<'a> {
             let &[edge_id] = pinched_edges else {
                 return Err(GenerationError::CffHigherEnergyPowerNotImplemented);
             };
-            let scalar = LowerSectorCffBuilder::new(&subparsed).build()?;
+            let mut lower = LowerSectorCffBuilder::new(&subparsed);
+            lower.source_prefactor = Some(self.source_prefactor.clone());
+            let scalar = lower.build()?;
             return self.append_recursive_contact_terms(
                 edge_id,
                 &scalar,
@@ -2831,15 +2910,26 @@ impl<'a> BoundedCffBuilder<'a> {
             );
         }
 
-        let use_terminal_residue_basis =
-            subparsed.internal_edges.len() == self.parsed.loop_names.len();
+        let use_terminal_residue_basis = denominator_set_is_complete_residue_basis(&subparsed);
         let sub_expression = if use_terminal_residue_basis {
-            generate_simple_residue_basis_expression_from_parsed(
+            let mut terminal = generate_simple_residue_basis_expression_from_parsed(
                 &subparsed,
                 &vec![ContourClosure::Below; subparsed.loop_names.len()],
-            )?
+            )?;
+            for variant in terminal
+                .orientations
+                .iter_mut()
+                .flat_map(|orientation| &mut orientation.variants)
+            {
+                variant.prefactor = rational_to_coefficient(
+                    rational_from_coefficient(&variant.prefactor) / self.source_prefactor.clone(),
+                )?;
+            }
+            terminal
         } else {
-            generate_pure_cff_expression_from_parsed(&subparsed)?
+            let mut lower = LowerSectorCffBuilder::new(&subparsed);
+            lower.source_prefactor = Some(self.source_prefactor.clone());
+            lower.build()?
         };
         let edge_map = sub_to_orig
             .iter()
@@ -2939,15 +3029,10 @@ impl<'a> BoundedCffBuilder<'a> {
                             ));
                         }
                     }
-                    // A residue-basis lower sector already carries the contact
-                    // quotient's algebraic sign; only a pure-CFF recursive
-                    // pinch needs the extra residue-orientation sign.
-                    if !pinched_edges.is_empty()
-                        && !use_terminal_residue_basis
-                        && !pinched_edges.len().is_multiple_of(2)
-                    {
-                        prefactor = -prefactor;
-                    }
+                    // The scalar-base conversion already consumes the pure-CFF
+                    // pinch's residue-orientation sign. A residue-basis lower
+                    // sector keeps its explicit signed contour; neither gets a
+                    // second conversion at the interpolation boundary.
                     if prefactor.is_zero() {
                         continue;
                     }
@@ -3241,6 +3326,7 @@ impl<'a> BoundedCffBuilder<'a> {
 
 struct KnownFactorCffBuilder<'a> {
     original: &'a ParsedGraph,
+    source_prefactor: Rational,
     bounds: Vec<usize>,
     sampling_scale_mode: NumeratorSamplingScaleMode,
     contact_only: bool,
@@ -3256,6 +3342,13 @@ impl<'a> KnownFactorCffBuilder<'a> {
     ) -> Self {
         Self {
             original,
+            source_prefactor: Rational::from(
+                CffGlobalPrefactorSign::from_exponent(
+                    original.denominator_internal_edge_ids().len(),
+                )
+                .product(denominator_contour_frame_sign(original))
+                .factor(),
+            ),
             bounds,
             sampling_scale_mode,
             contact_only: false,
@@ -3523,8 +3616,8 @@ impl<'a> KnownFactorCffBuilder<'a> {
         // interpolation step. Exact factors introduced by an earlier step do
         // so only on a genuinely powered denominator channel, where their
         // derivatives enter the raised residue. On ordinary edges they stay
-        // factorized and are completed by the lower-sector polynomial normal
-        // form below, rather than resampling the black-box numerator.
+        // factorized and are completed by the bounded lower-sector CFF below,
+        // rather than resampling the black-box numerator.
         let repeated_edges = Self::logical_channels(parsed)
             .into_iter()
             .flat_map(|channel| channel.members)
@@ -3818,6 +3911,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         // through the same lower-sector CFF path as every other quotient; no
         // independent contour or residue-frame oracle is introduced.
         let mut lower_sector = LowerSectorCffBuilder::new(&branch_parsed);
+        lower_sector.source_prefactor = Some(self.source_prefactor.clone());
         lower_sector.inherited_contour_rows = branch_contour_rows;
         let base_expression = lower_sector.build()?;
         let branch_prefactor = prefactor;
@@ -4000,10 +4094,13 @@ impl<'a> KnownFactorCffBuilder<'a> {
         }
         let total_bounds =
             self.known_total_bounds(parsed, local_to_orig, replacements, known_factors);
-        let bounded_lower = if repeated_channel_normal_form_consumed
-            && cff_bounds_need_generalized_expression(parsed, &total_bounds)
-        {
+        // Exact factors from an ordinary contact can also exceed the affine
+        // scalar-CFF numerator class. Complete their remaining degree with
+        // bounded lower-sector maps, independent of repeated-channel history.
+        // The original black-box samples stay fixed in `replacements`.
+        let bounded_lower = if cff_bounds_need_generalized_expression(parsed, &total_bounds) {
             let mut bounded = BoundedCffBuilder::for_bounds(parsed, total_bounds.clone());
+            bounded.source_prefactor = self.source_prefactor.clone();
             bounded.inherited_contour_rows = inherited_contour_rows.to_vec();
             bounded.sampling_scale_mode = self.sampling_scale_mode;
             Some(bounded.build()?)
@@ -4012,6 +4109,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         };
         let lower_sector_base_expression = || {
             let mut lower = LowerSectorCffBuilder::new(parsed);
+            lower.source_prefactor = Some(self.source_prefactor.clone());
             lower.inherited_contour_rows = inherited_contour_rows.to_vec();
             lower.build()
         };
@@ -4022,12 +4120,32 @@ impl<'a> KnownFactorCffBuilder<'a> {
             // component reconstruction. Keep its duplicate-line parity on the
             // direct variants in the inherited parent functional.
             let duplicate_excess = cff_duplicate_signature_excess(parsed);
-            generate_pure_cff_expression_from_parsed_with_duplicate_excess(parsed, duplicate_excess)
+            let mut direct = generate_pure_cff_expression_from_parsed_with_duplicate_excess(
+                parsed,
+                duplicate_excess,
+            )?;
+            let native_prefactor = Rational::from(
+                CffGlobalPrefactorSign::from_exponent(
+                    parsed.denominator_internal_edge_ids().len()
+                        + parsed.loop_names.len().saturating_sub(1)
+                        + duplicate_excess,
+                )
+                .factor(),
+            );
+            for variant in direct
+                .orientations
+                .iter_mut()
+                .flat_map(|orientation| &mut orientation.variants)
+            {
+                variant.prefactor = rational_to_coefficient(
+                    rational_from_coefficient(&variant.prefactor) * native_prefactor.clone()
+                        / self.source_prefactor.clone(),
+                )?;
+            }
+            Ok(direct)
         };
-        let uses_terminal_residue_basis = lower_sector_base
-            && parsed.denominator_internal_edge_ids().len() == parsed.loop_names.len()
-            && denominator_connected_components(parsed).len() == 1
-            && repeated_groups(parsed).is_empty();
+        let uses_terminal_residue_basis =
+            lower_sector_base && denominator_set_is_complete_residue_basis(parsed);
         let base = if let Some(base) = bounded_lower {
             base
         } else if lower_sector_base
@@ -4042,40 +4160,29 @@ impl<'a> KnownFactorCffBuilder<'a> {
         } else if uses_terminal_residue_basis {
             // A fully reduced denominator basis inherits the ordered Below
             // contour which produced this contact. Retain that single residue
-            // instead of reopening both standalone CFF directions. A root
-            // factorized pole and the reduction of an exact repeated channel
-            // consume the one-minus bridge to their public/duplicate core;
-            // an ordinary unequal-mass contact already carries the signed
-            // inherited residue in the parent frame.
-            let root_factorized_pole = inherited_contour_rows.is_empty();
-            let reduced_repeated_channel = repeated_groups(self.original).iter().any(|group| {
-                let surviving = group
-                    .edge_ids
-                    .iter()
-                    .filter(|edge_id| local_to_orig.contains(edge_id))
-                    .count();
-                surviving != 0 && surviving != group.edge_ids.len()
-            });
-            let needs_terminal_bridge = root_factorized_pole || reduced_repeated_channel;
-            let mut terminal = if root_factorized_pole {
-                generate_simple_residue_basis_expression_from_parsed(
+            // instead of reopening both standalone CFF directions. Root poles
+            // and reductions of exact repeated channels use the same native
+            // residue-to-source conversion; its value follows the immutable
+            // source denominator frame, not a repeated-channel predicate.
+            if inherited_contour_rows.is_empty() {
+                let mut terminal = generate_simple_residue_basis_expression_from_parsed(
                     parsed,
                     &vec![ContourClosure::Below; parsed.loop_names.len()],
-                )?
-            } else {
-                lower_sector_base_expression()?
-            };
-            if needs_terminal_bridge {
+                )?;
                 for variant in terminal
                     .orientations
                     .iter_mut()
                     .flat_map(|orientation| &mut orientation.variants)
                 {
-                    variant.prefactor =
-                        rational_to_coefficient(-rational_from_coefficient(&variant.prefactor))?;
+                    variant.prefactor = rational_to_coefficient(
+                        rational_from_coefficient(&variant.prefactor)
+                            / self.source_prefactor.clone(),
+                    )?;
                 }
+                terminal
+            } else {
+                lower_sector_base_expression()?
             }
-            terminal
         } else if lower_sector_base {
             lower_sector_base_expression()?
         } else if !known_factors.is_empty() || !replacements.is_empty() {
@@ -4089,7 +4196,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 lower_sector_base_expression()?
             }
         } else {
-            generate_pure_cff_expression_from_parsed(parsed)?
+            lower_sector_base_expression()?
         };
         let base_expression = base;
         let edge_map = local_to_orig
@@ -4739,6 +4846,7 @@ struct LowerSectorComponent {
     basis_edges: Vec<usize>,
     local_to_sub: Vec<usize>,
     expression: ThreeDExpression<OrientationID>,
+    native_prefactor: Rational,
     requires_inherited_component_bridge: bool,
 }
 
@@ -4759,6 +4867,8 @@ struct LowerSectorPartial {
 
 struct LowerSectorCffBuilder<'a> {
     parsed: &'a ParsedGraph,
+    // None exposes the native CFF; Some embeds it in J = source_prefactor * raw.
+    source_prefactor: Option<Rational>,
     force_component_factorization: bool,
     inherited_contour_rows: Vec<Vec<i32>>,
     expression: ThreeDExpression<OrientationID>,
@@ -4769,6 +4879,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
     fn new(parsed: &'a ParsedGraph) -> Self {
         Self {
             parsed,
+            source_prefactor: None,
             force_component_factorization: false,
             inherited_contour_rows: Vec::new(),
             expression: ThreeDExpression::new_empty(),
@@ -4783,6 +4894,13 @@ impl<'a> LowerSectorCffBuilder<'a> {
             let mut data = OrientationData::new(EdgeVec::new());
             data.label = Some("lower_sector_unit".to_string());
             let mut orientation = OrientationExpression::lower_sector_unit(data);
+            if let Some(source_prefactor) = &self.source_prefactor {
+                for variant in &mut orientation.variants {
+                    variant.prefactor = rational_to_coefficient(
+                        rational_from_coefficient(&variant.prefactor) / source_prefactor.clone(),
+                    )?;
+                }
+            }
             orientation.loop_energy_map =
                 vec![LinearEnergyExpr::zero(); self.parsed.loop_names.len()];
             self.expression.orientations.push(orientation);
@@ -4811,6 +4929,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
             && repeated_groups(self.parsed).is_empty()
             && !self.force_component_factorization
             && self.inherited_contour_rows.is_empty()
+            && self.vector_matroid_components(&signatures).len() == 1
         {
             // A connected, unraised full-rank lower sector is already an
             // ordinary affine CFF problem. Keep it intact: vector-matroid
@@ -4818,7 +4937,31 @@ impl<'a> LowerSectorCffBuilder<'a> {
             // component into incomplete external boundary data. Disconnected
             // sectors and powered channels stay on the component path below
             // for their shared core sign and numerator derivatives.
-            return generate_pure_cff_expression_from_parsed(self.parsed);
+            let mut expression = generate_pure_cff_expression_from_parsed(self.parsed)?;
+            if let Some(source_prefactor) = &self.source_prefactor {
+                let native_prefactor =
+                    Rational::from(
+                        CffGlobalPrefactorSign::from_exponent(
+                            denominator_edge_ids.len() + denominator_rank.saturating_sub(1),
+                        )
+                        .factor(),
+                    ) / Rational::from(if denominator_edge_ids.len() == denominator_rank {
+                        2
+                    } else {
+                        1
+                    });
+                for variant in expression
+                    .orientations
+                    .iter_mut()
+                    .flat_map(|orientation| &mut orientation.variants)
+                {
+                    variant.prefactor = rational_to_coefficient(
+                        rational_from_coefficient(&variant.prefactor) * native_prefactor.clone()
+                            / source_prefactor.clone(),
+                    )?;
+                }
+            }
+            return Ok(expression);
         }
         let components = self.component_bundles(&signatures)?;
         let needs_inherited_component_bridge = components
@@ -4853,6 +4996,21 @@ impl<'a> LowerSectorCffBuilder<'a> {
         initial_coeff: Rational,
     ) -> Result<ThreeDExpression<OrientationID>> {
         let signatures = self.signatures();
+        // The native product carries initial_coeff times its components. Its
+        // conversion to the signed contour contains that same sign, so the two
+        // cancel when embedding in one original source frame. Each selected
+        // terminal also converts its stored coordinate Jacobian to the real
+        // contour convention at this boundary.
+        let initial_coeff = if let Some(source_prefactor) = &self.source_prefactor {
+            components
+                .iter()
+                .fold(Rational::one(), |prefactor, component| {
+                    prefactor * component.native_prefactor.clone()
+                })
+                / source_prefactor.clone()
+        } else {
+            initial_coeff
+        };
         let mut partials = vec![LowerSectorPartial {
             coeff: initial_coeff,
             half_edges: Vec::new(),
@@ -4885,7 +5043,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
                 for orientation in &component.expression.orientations {
                     for variant in &orientation.variants {
                         let mut item = partial.clone();
-                        item.coeff = item.coeff * rational_from_coefficient(&variant.prefactor);
+                        item.coeff *= rational_from_coefficient(&variant.prefactor);
                         item.half_edges.extend(
                             variant
                                 .half_edges
@@ -5169,10 +5327,33 @@ impl<'a> LowerSectorCffBuilder<'a> {
                     rational_to_coefficient(-rational_from_coefficient(&variant.prefactor))?;
             }
         }
+        // Pure CFF has positive local half-edge factors and its own connected
+        // core/duplicate parity. An unselected one-line terminal has two equal
+        // scalar orientations, while a signed residue basis already contains
+        // its single physical contour. Under w=p-q the contour closure reverses
+        // and the real integration limits cancel dq=-dw. The residue generator
+        // accounts for the closure, so remove the additionally stored signed
+        // coordinate Jacobian when converting to the physical integral.
+        // Starting-source energy convergence is
+        // required: a surviving one-denominator component can then act only on
+        // a scalar quotient in its energy variable.
+        let native_prefactor = if uses_simple_residue_basis {
+            Rational::from(inherited_jacobian_sign)
+        } else {
+            Rational::from(
+                CffGlobalPrefactorSign::from_exponent(
+                    denominator_count
+                        + rank.saturating_sub(1)
+                        + cff_duplicate_signature_excess(&component_parsed),
+                )
+                .factor(),
+            ) / Rational::from(if denominator_count == rank { 2 } else { 1 })
+        };
         Ok(LowerSectorComponent {
             basis_edges,
             local_to_sub,
             expression,
+            native_prefactor,
             requires_inherited_component_bridge: inherited_component_bridge,
         })
     }
@@ -6265,21 +6446,27 @@ mod causal_generation_tests {
             external_names: Vec::new(),
             node_name_to_internal: BTreeMap::from([("n0".to_string(), 0)]),
         };
-        let expression = BoundedCffBuilder::for_bounds(&parsed, vec![1])
-            .build_quadratic_recursive(true)
-            .unwrap();
+        let builder = BoundedCffBuilder::for_bounds(&parsed, vec![1]);
+        let source_prefactor = builder.source_prefactor.clone();
+        let expression = builder.build_quadratic_recursive(true).unwrap();
 
         let orientation = expression.orientations.iter().exactly_one().unwrap();
         let variant = orientation.variants.iter().exactly_one().unwrap();
         assert_eq!(variant.origin.as_deref(), Some("residue_basis"));
+        // Closing dq0/(2*pi*i)/(q0^2-E^2+i0) Below gives -1/(2E).
+        // The private base is source-normalized: beta=(-1)^N*chi=-1
+        // for this one-line source. Chi alone is +1 and misses that conversion.
+        assert_eq!(source_prefactor, Rational::from(-1));
         assert_eq!(
-            rational_from_coefficient(&variant.prefactor),
+            rational_from_coefficient(&variant.prefactor) * source_prefactor,
             Rational::from(-1)
         );
     }
 
     #[test]
     fn embedded_full_rank_factor_keeps_single_below_residue() {
+        use symbolica::atom::{Atom, AtomCore};
+
         let parsed = ParsedGraph {
             internal_edges: vec![ParsedGraphInternalEdge {
                 edge_id: 0,
@@ -6326,12 +6513,38 @@ mod causal_generation_tests {
                 .expression
                 .orientations
                 .iter()
-                .any(|orientation| orientation.to_atom() == factorized_orientation.to_atom()),
-            "the factorized Below residue must be one existing standalone routing, not a new normalization"
+                .any(|orientation| {
+                    orientation.data.orientation == factorized_orientation.data.orientation
+                        && orientation.loop_energy_map == factorized_orientation.loop_energy_map
+                        && orientation.edge_energy_map == factorized_orientation.edge_energy_map
+                }),
+            "the factorized Below residue must retain an existing standalone routing"
         );
         assert_eq!(
             factorized.core_global_prefactor_sign,
             standalone.core_global_prefactor_sign
+        );
+
+        // The standalone catalogue has two half-weight closures; its complete
+        // sum equals the one embedded Below contour. This scalar numerator
+        // converges even though the routing envelope also permits degree one.
+        let standalone_sum = standalone
+            .expression
+            .to_atom(crate::expression::AllOrientations);
+        let factorized_sum = factorized
+            .expression
+            .to_atom(crate::expression::AllOrientations);
+        assert!((standalone_sum.clone() - factorized_sum).expand().is_zero());
+        let source_frame =
+            CffGlobalPrefactorSign::from_exponent(parsed.denominator_internal_edge_ids().len())
+                .product(standalone.core_global_prefactor_sign);
+        let energy = crate::symbols::ose_atom_from_index(EdgeIndex(0));
+        assert!(
+            (Atom::num(source_frame.factor()) * standalone_sum
+                + Atom::num(1) / (Atom::num(2) * energy))
+                .expand()
+                .is_zero(),
+            "the complete scalar tadpole contour must be -1/(2E)"
         );
     }
 
@@ -6547,6 +6760,552 @@ mod causal_generation_tests {
             "same-routing unequal-mass quadratic partial fractions failed: {}",
             failures.join("; "),
         );
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn gl04_outer_unequal_mass_quadratic_obeys_complete_cut_identity() {
+        // Contract precisely the e5/e6 child in the sewn physical GL04 graph.
+        // Local IDs 0..6 denote physical edges [0,1,2,3,4,7,8]; e3/e8 carry
+        // the same p=k0-k1-P momentum but distinct mass keys and denominators.
+        let parent = ParsedGraph {
+            internal_edges: [
+                (0, 1, 0, [0, 0], 1, "m1"),
+                (1, 0, 3, [1, 0], 0, "m0"),
+                (2, 0, 4, [-1, 0], 1, "m0"),
+                (3, 1, 2, [1, -1], -1, "m0"),
+                (4, 1, 3, [-1, 1], 0, "m0"),
+                (7, 3, 4, [0, 1], 0, "m0"),
+                (8, 2, 4, [1, -1], -1, "m1"),
+            ]
+            .into_iter()
+            .enumerate()
+            .map(|(edge_id, (physical, tail, head, loops, external, mass))| {
+                ParsedGraphInternalEdge {
+                    edge_id,
+                    tail,
+                    head,
+                    label: format!("e{physical}"),
+                    mass_key: Some(mass.to_string()),
+                    signature: MomentumSignature {
+                        loop_signature: loops.to_vec(),
+                        external_signature: vec![external],
+                    },
+                    had_pow: false,
+                }
+            })
+            .collect(),
+            external_edges: Vec::new(),
+            initial_state_cut_edges: vec![ParsedGraphInitialStateCutEdge {
+                edge_id: 0,
+                external_id: 0,
+                external_sign: 1,
+            }],
+            loop_names: vec!["e1".to_string(), "e7".to_string()],
+            external_names: vec!["P".to_string()],
+            node_name_to_internal: (0..5).map(|node| (format!("v{node}"), node)).collect(),
+        };
+        assert!(repeated_groups(&parent).is_empty());
+        let builder = BoundedCffBuilder::for_bounds(&parent, vec![0; 7]);
+        let (without_3, map_without_3) = builder.project_parsed_edges(&[3]);
+        let (without_8, map_without_8) = builder.project_parsed_edges(&[6]);
+        let generate = |parsed: &ParsedGraph, context, bounds| {
+            generate_3d_expression_from_parsed_generated(
+                parsed,
+                &Generate3DExpressionOptions {
+                    cff_generation_context: context,
+                    energy_degree_bounds: Some(bounds),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        };
+        // The raw generator retains linear surfaces. Consume the simple
+        // positive physical surface E1+E2-P directly, preserving every branch
+        // and all numerator maps supported by the complete physical cut.
+        let select_cut = |mut expression: ThreeDExpression<OrientationID>| {
+            expression =
+                expression.restrict_to_cut_alternatives(&[vec![EdgeIndex(1), EdgeIndex(2)]]);
+            let target = (LinearEnergyExpr::ose(EdgeIndex(1), 1)
+                + LinearEnergyExpr::ose(EdgeIndex(2), 1)
+                + LinearEnergyExpr::external(EdgeIndex(0), -1))
+            .canonical();
+            let target_id = expression
+                .surfaces
+                .linear_surface_cache
+                .iter_enumerated()
+                .filter_map(|(id, surface)| (surface.expression == target).then_some(id))
+                .exactly_one()
+                .expect("one positive E1+E2-P surface belongs to the physical cut");
+            let target_id = HybridSurfaceID::Linear(target_id);
+            for orientation in &mut expression.orientations {
+                orientation.variants.retain_mut(|variant| {
+                    assert!(!variant.numerator_surfaces.contains(&target_id));
+                    variant
+                        .denominator
+                        .keep_branches_with_value_count_mut(&target_id, 1);
+                    variant.denominator.map_mut(|surface| {
+                        if *surface == target_id {
+                            *surface = HybridSurfaceID::Unit;
+                        }
+                    });
+                    variant.denominator.get_num_nodes() != 0
+                });
+            }
+            expression
+        };
+        // The raw evaluator includes positive 1/(2E) factors. Reproduce the
+        // documented GammaLoop source conversion independently of the values:
+        // (-1)^N times the scalar/ordinary frame of each rational component.
+        let source_conversion = |generated: &GeneratedThreeDExpression| {
+            generated
+                .energy_factor_components
+                .iter()
+                .fold(1.0, |factor, component| {
+                    let frame = match component.ownership {
+                        CffEnergyFactorOwnership::GlobalSourceProduct => {
+                            component.core_global_prefactor_sign
+                        }
+                        CffEnergyFactorOwnership::VariantLocal => {
+                            component.denominator_only_global_prefactor_sign
+                        }
+                    };
+                    factor
+                        * CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
+                            .product(frame)
+                            .factor() as f64
+                })
+        };
+        for context in [
+            CffGenerationContext::Standalone,
+            CffGenerationContext::EmbeddedCffFactor,
+        ] {
+            let quadratic = generate(&parent, context, vec![(3, 2)]);
+            let scalar = generate(&parent, context, Vec::new());
+            let lower_3 = generate(&without_3, context, Vec::new());
+            let lower_8 = generate(&without_8, context, Vec::new());
+            // Rank, connected rational component count, and repeated-mass
+            // excess stay unchanged. This metadata alone does not include
+            // the (-1)^N converting positive 1/(2E) factors to the physical
+            // scalar-denominator source frame; the lowered graphs change N.
+            for generated in [&scalar, &lower_3, &lower_8] {
+                assert_eq!(
+                    quadratic.denominator_only_global_prefactor_sign,
+                    generated.denominator_only_global_prefactor_sign
+                );
+                assert_eq!(
+                    quadratic.core_global_prefactor_sign,
+                    generated.core_global_prefactor_sign
+                );
+            }
+            for seed in [11, 29, 47] {
+                let mut input = crate::eval::EvaluationInput::deterministic(
+                    &parent,
+                    seed,
+                    &BTreeMap::from([("m0".to_string(), 0.0), ("m1".to_string(), 0.1)]),
+                    None,
+                )
+                .unwrap();
+                input.external_momenta[0] = [
+                    2.0 * input.loop_spatial_momenta[0]
+                        .iter()
+                        .map(|x| x * x)
+                        .sum::<f64>()
+                        .sqrt(),
+                    0.0,
+                    0.0,
+                    0.0,
+                ];
+                let e3_squared = input.loop_spatial_momenta[0]
+                    .iter()
+                    .zip(&input.loop_spatial_momenta[1])
+                    .map(|(k0, k1)| (k0 - k1).powi(2))
+                    .sum::<f64>();
+                let e8_squared = e3_squared + input.masses[6].powi(2);
+                let lower_input = |map: &[usize]| crate::eval::EvaluationInput {
+                    external_momenta: input.external_momenta.clone(),
+                    loop_spatial_momenta: input.loop_spatial_momenta.clone(),
+                    masses: map.iter().map(|original| input.masses[*original]).collect(),
+                    uniform_scale: None,
+                };
+                let value = |parsed, generated: &GeneratedThreeDExpression, numerator, input| {
+                    crate::eval::evaluate_expression(
+                        parsed,
+                        &select_cut(generated.expression.clone()),
+                        numerator,
+                        input,
+                    )
+                    .unwrap()
+                    .value
+                };
+                let actual = value(&parent, &quadratic, "edges[3][0]**2", &input);
+                let scalar_value = value(&parent, &scalar, "1", &input);
+                let input_without_3 = lower_input(&map_without_3);
+                let input_without_8 = lower_input(&map_without_8);
+                let without_3_value = value(&without_3, &lower_3, "1", &input_without_3);
+                let without_8_value = value(&without_8, &lower_8, "1", &input_without_8);
+                // Cut e1/e2 fixes k0^0=E1 and P^0=E1+E2, with E2=E1
+                // here. The surviving z=k7^0 integral is a one-loop box.
+                // Sum its literal four positive-energy pole residues, with
+                // no CFF generation, energy maps, or contour metadata.
+                let e1 = input.external_momenta[0][0] / 2.0;
+                let e7 = input.loop_spatial_momenta[1]
+                    .iter()
+                    .map(|x| x * x)
+                    .sum::<f64>()
+                    .sqrt();
+                let denominators = [
+                    (e1, e3_squared.sqrt()),
+                    (-e1, e3_squared.sqrt()),
+                    (0.0, e7),
+                    (e1, e8_squared.sqrt()),
+                ];
+                let contour = |power: i32, removed: Option<usize>| {
+                    let mut residues = 0.0;
+                    for (i, (shift, energy)) in denominators.iter().enumerate() {
+                        if Some(i) == removed {
+                            continue;
+                        }
+                        let z = -shift + energy;
+                        let mut residue = (z + e1).powi(power) / (2.0 * energy);
+                        for (j, (other_shift, other_energy)) in denominators.iter().enumerate() {
+                            if i != j && Some(j) != removed {
+                                residue /= (z + other_shift).powi(2) - other_energy.powi(2);
+                            }
+                        }
+                        residues += residue;
+                    }
+                    // At the e1 positive pole, D2=(P-E1)^2-E2^2
+                    // =-2E2*eta+O(eta^2), eta=E1+E2-P. Thus the selected
+                    // full two-energy residue, stripped of (-i)^2, is this
+                    // remaining contour sum times -1/(4E1E2).
+                    -residues / (4.0 * e1 * e1)
+                };
+                let physical_quadratic = source_conversion(&quadratic) * actual;
+                let physical_scalar = source_conversion(&scalar) * scalar_value;
+                let physical_without_3 = source_conversion(&lower_3) * without_3_value;
+                let physical_without_8 = source_conversion(&lower_8) * without_8_value;
+                // Compare q0^2=E3^2+D3 and unequal-mass partial fractions in
+                // the same physical source frame as the literal pole integral.
+                for (label, obtained, expected) in [
+                    ("scalar contour control", physical_scalar, contour(0, None)),
+                    (
+                        "lower3 contour control",
+                        physical_without_3,
+                        contour(0, Some(0)),
+                    ),
+                    (
+                        "lower8 contour control",
+                        physical_without_8,
+                        contour(0, Some(3)),
+                    ),
+                    ("quadratic contour", physical_quadratic, contour(2, None)),
+                    (
+                        "physical lowering",
+                        physical_quadratic,
+                        e3_squared * physical_scalar + physical_without_3,
+                    ),
+                    (
+                        "physical partial fractions",
+                        physical_quadratic,
+                        (e3_squared * physical_without_8 - e8_squared * physical_without_3)
+                            / (e3_squared - e8_squared),
+                    ),
+                ] {
+                    let scale = obtained.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+                    assert!(
+                        (obtained - expected).abs() < 1.0e-9 * scale,
+                        "{context:?} seed {seed} {label}: actual={obtained:.17e}, expected={expected:.17e}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn attached_tadpole_repeated_bubble_matches_independent_convergent_contour() {
+        let parsed = ParsedGraph {
+            internal_edges: [
+                (0, 0, 0, vec![1, 0], "mx"),
+                (1, 0, 1, vec![0, 1], "my"),
+                (2, 0, 1, vec![0, -1], "my"),
+            ]
+            .into_iter()
+            .map(
+                |(edge_id, tail, head, loop_signature, mass)| ParsedGraphInternalEdge {
+                    edge_id,
+                    tail,
+                    head,
+                    label: format!("q{edge_id}"),
+                    mass_key: Some(mass.to_string()),
+                    signature: MomentumSignature {
+                        loop_signature,
+                        external_signature: Vec::new(),
+                    },
+                    had_pow: false,
+                },
+            )
+            .collect(),
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["x".to_string(), "y".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: (0..2).map(|node| (format!("v{node}"), node)).collect(),
+        };
+        assert_eq!(denominator_connected_components(&parsed).len(), 1);
+        for context in [
+            CffGenerationContext::Standalone,
+            CffGenerationContext::EmbeddedCffFactor,
+        ] {
+            for owner in [1, 2] {
+                let generated = generate_3d_expression_from_parsed_generated(
+                    &parsed,
+                    &Generate3DExpressionOptions {
+                        cff_generation_context: context,
+                        energy_degree_bounds: Some(vec![(owner, 2)]),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                let source_factor =
+                    generated
+                        .energy_factor_components
+                        .iter()
+                        .fold(1.0, |factor, component| {
+                            let frame = match component.ownership {
+                                CffEnergyFactorOwnership::GlobalSourceProduct => {
+                                    component.core_global_prefactor_sign
+                                }
+                                CffEnergyFactorOwnership::VariantLocal => {
+                                    component.denominator_only_global_prefactor_sign
+                                }
+                            };
+                            factor
+                                * CffGlobalPrefactorSign::from_exponent(
+                                    component.internal_edge_ids.len(),
+                                )
+                                .product(frame)
+                                .factor() as f64
+                        });
+                assert_eq!(source_factor, 1.0);
+                for (mx, my) in [(0.7, 1.1), (1.3, 0.4)] {
+                    let input = crate::eval::EvaluationInput {
+                        external_momenta: Vec::new(),
+                        loop_spatial_momenta: vec![[0.31, -0.47, 0.83], [-0.19, 0.37, 0.61]],
+                        masses: vec![mx, my, my],
+                        uniform_scale: None,
+                    };
+                    let a = (mx * mx
+                        + input.loop_spatial_momenta[0]
+                            .iter()
+                            .map(|x| x * x)
+                            .sum::<f64>())
+                    .sqrt();
+                    let b = (my * my
+                        + input.loop_spatial_momenta[1]
+                            .iter()
+                            .map(|x| x * x)
+                            .sum::<f64>())
+                    .sqrt();
+                    // Literal signed Below residues give S[1/Dx]=-1/(2a),
+                    // S[1/Dy^2]=+1/(4b^3), S[y^2/Dy^2]=-1/(4b).
+                    // The rational source and each factor converge in energy.
+                    for (numerator, expected) in [
+                        ("1", -1.0 / (8.0 * a * b.powi(3))),
+                        ("edges[1][0]**2", 1.0 / (8.0 * a * b)),
+                    ] {
+                        let actual = source_factor
+                            * powered_identity_test_value(&parsed, &generated, numerator, &input);
+                        assert!(
+                            (actual - expected).abs() < 1.0e-11 * expected.abs(),
+                            "{context:?} owner {owner} {numerator}: actual={actual:.17e}, expected={expected:.17e}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn mixed_carrier_contact_matches_independent_convergent_contour() {
+        let edge = |edge_id, tail, head, loops: [i32; 2], external| ParsedGraphInternalEdge {
+            edge_id,
+            tail,
+            head,
+            label: format!("q{edge_id}"),
+            mass_key: Some("m".to_string()),
+            signature: MomentumSignature {
+                loop_signature: loops.to_vec(),
+                external_signature: vec![external],
+            },
+            had_pow: false,
+        };
+        let parent = ParsedGraph {
+            internal_edges: vec![
+                edge(0, 0, 1, [1, 0], 0),
+                edge(1, 0, 1, [-1, 1], 0),
+                edge(2, 3, 0, [0, 1], 0),
+                edge(3, 1, 2, [0, 1], 0),
+                edge(4, 2, 3, [0, 1], -1),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["x".to_string(), "y".to_string()],
+            external_names: vec!["P".to_string()],
+            node_name_to_internal: (0..4).map(|node| (format!("v{node}"), node)).collect(),
+        };
+        // The local edge numerator is D(y-x). Exact cancellation gives the
+        // independent diagnostic contour
+        // 1/[D(x) D(y)^2 D(y-P)]. Both original and quotient converge in x,
+        // y, their joint scaling, and the correlated y-x direction.
+        let x_graph = powered_identity_test_graph(
+            vec![MomentumSignature {
+                loop_signature: vec![1],
+                external_signature: Vec::new(),
+            }],
+            1,
+            0,
+        );
+        let x_pure = generate_pure_cff_expression_from_parsed(&x_graph).unwrap();
+        let x_signed = generate_simple_residue_basis_expression_from_parsed(
+            &x_graph,
+            &[ContourClosure::Below],
+        )
+        .unwrap();
+        let y_graph = powered_identity_test_graph(
+            [0, 0, -1]
+                .into_iter()
+                .map(|external| MomentumSignature {
+                    loop_signature: vec![1],
+                    external_signature: vec![external],
+                })
+                .collect(),
+            1,
+            1,
+        );
+        let y_pure = generate_pure_cff_expression_from_parsed(&y_graph).unwrap();
+        for context in [
+            CffGenerationContext::Standalone,
+            CffGenerationContext::EmbeddedCffFactor,
+        ] {
+            let generated = generate_3d_expression_from_parsed_generated(
+                &parent,
+                &Generate3DExpressionOptions {
+                    cff_generation_context: context,
+                    energy_degree_bounds: Some(vec![(1, 2)]),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let source_factor =
+                generated
+                    .energy_factor_components
+                    .iter()
+                    .fold(1.0, |factor, component| {
+                        let frame = match component.ownership {
+                            CffEnergyFactorOwnership::GlobalSourceProduct => {
+                                component.core_global_prefactor_sign
+                            }
+                            CffEnergyFactorOwnership::VariantLocal => {
+                                component.denominator_only_global_prefactor_sign
+                            }
+                        };
+                        factor
+                            * CffGlobalPrefactorSign::from_exponent(
+                                component.internal_edge_ids.len(),
+                            )
+                            .product(frame)
+                            .factor() as f64
+                    });
+            for external_energy in [2.4, 0.7] {
+                let input = crate::eval::EvaluationInput {
+                    external_momenta: vec![[external_energy, 0.0, 0.0, 0.0]],
+                    loop_spatial_momenta: vec![[0.31, -0.47, 0.83], [-0.19, 0.37, 0.61]],
+                    masses: vec![1.0; 5],
+                    uniform_scale: None,
+                };
+                let ex = (1.0
+                    + input.loop_spatial_momenta[0]
+                        .iter()
+                        .map(|x| x * x)
+                        .sum::<f64>())
+                .sqrt();
+                let ey = (1.0
+                    + input.loop_spatial_momenta[1]
+                        .iter()
+                        .map(|x| x * x)
+                        .sum::<f64>())
+                .sqrt();
+                let p = external_energy;
+                // For F(y)=1/[(y^2-Ey^2)^2((y-P)^2-Ey^2)], the residue at
+                // y=Ey is d/dy[1/((y+Ey)^2((y-P)^2-Ey^2))]. The only other
+                // Below pole is simple, y=P+Ey. These are literal derivatives
+                // and poles of the source rational function, independent of CFF.
+                let shifted_denominator = p * p - 2.0 * p * ey;
+                let double_pole = -1.0 / (4.0 * ey.powi(3) * shifted_denominator)
+                    - (ey - p) / (2.0 * ey.powi(2) * shifted_denominator.powi(2));
+                let simple_pole = 1.0 / (2.0 * ey * (p * p + 2.0 * p * ey).powi(2));
+                let y_positive_residues = double_pole + simple_pole;
+                // The x pole is 1/(2Ex). Two clockwise Below integrations
+                // carry (-i)^2, leaving this real coefficient in production.
+                let exact_contour = y_positive_residues / (2.0 * ex);
+                let parent_raw = powered_identity_test_value(
+                    &parent,
+                    &generated,
+                    "dot(edges[1],edges[1])-1",
+                    &input,
+                );
+                let x_input = crate::eval::EvaluationInput {
+                    external_momenta: Vec::new(),
+                    loop_spatial_momenta: vec![input.loop_spatial_momenta[0]],
+                    masses: vec![1.0],
+                    uniform_scale: None,
+                };
+                let y_input = crate::eval::EvaluationInput {
+                    external_momenta: input.external_momenta.clone(),
+                    loop_spatial_momenta: vec![input.loop_spatial_momenta[1]],
+                    masses: vec![1.0; 3],
+                    uniform_scale: None,
+                };
+                let x_pure_raw = crate::eval::evaluate_expression(&x_graph, &x_pure, "1", &x_input)
+                    .unwrap()
+                    .value;
+                let x_signed_raw =
+                    crate::eval::evaluate_expression(&x_graph, &x_signed, "1", &x_input)
+                        .unwrap()
+                        .value;
+                let y_raw = crate::eval::evaluate_expression(&y_graph, &y_pure, "1", &y_input)
+                    .unwrap()
+                    .value;
+                // The existing signed terminal constructor includes the Below
+                // closure sign. The free pure terminal contains both samples,
+                // hence its conversion is -1/2. The repeated y scalar already
+                // has the signed Below frame. Certify both scalar contours
+                // independently before their product in the generalized parent.
+                for (label, actual, expected) in [
+                    ("signed terminal", x_signed_raw, -1.0 / (2.0 * ex)),
+                    (
+                        "pure terminal contour",
+                        -x_pure_raw / 2.0,
+                        -1.0 / (2.0 * ex),
+                    ),
+                    ("repeated y native +1", y_raw, -y_positive_residues),
+                    (
+                        "generalized source contour",
+                        source_factor * parent_raw,
+                        exact_contour,
+                    ),
+                ] {
+                    let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+                    assert!(
+                        (actual - expected).abs() < 1.0e-11 * scale,
+                        "{context:?} P={p} {label}: actual={actual:.17e}, expected={expected:.17e}"
+                    );
+                }
+            }
+        }
     }
 
     #[cfg(feature = "eval")]
@@ -6854,6 +7613,14 @@ mod causal_generation_tests {
             &parent_input,
         );
         let child_value = powered_identity_test_value(&child, &child_generated, "1", &child_input);
+        let parent_value = parent_value
+            * CffGlobalPrefactorSign::from_exponent(parent.denominator_internal_edge_ids().len())
+                .product(parent_generated.denominator_only_global_prefactor_sign)
+                .factor() as f64;
+        let child_value = child_value
+            * CffGlobalPrefactorSign::from_exponent(child.denominator_internal_edge_ids().len())
+                .product(child_generated.core_global_prefactor_sign)
+                .factor() as f64;
         let scale = parent_value
             .abs()
             .max(child_value.abs())
@@ -6862,6 +7629,29 @@ mod causal_generation_tests {
             (parent_value - child_value).abs() <= 1.0e-11 * scale,
             "D(q)^2/[D(q)^2 D(q+p) D(q+r)] did not reduce to 1/[D(q+p) D(q+r)]: parent={parent_value:e}, child={child_value:e}",
         );
+
+        // After cancellation, independent Below residues of the shifted bubble
+        // give (a+b)/[2ab ((a+b)^2-(p0-r0)^2)] for these actual input energies.
+        let [a, b] = std::array::from_fn(|index| {
+            (child_input.masses[index].powi(2)
+                + (0..3)
+                    .map(|axis| {
+                        (child_input.loop_spatial_momenta[0][axis]
+                            + child_input.external_momenta[index][axis + 1])
+                            .powi(2)
+                    })
+                    .sum::<f64>())
+            .sqrt()
+        });
+        let shift = child_input.external_momenta[0][0] - child_input.external_momenta[1][0];
+        let contour = (a + b) / (2.0 * a * b * ((a + b).powi(2) - shift.powi(2)));
+        for (label, actual) in [("parent", parent_value), ("quotient", child_value)] {
+            let scale = actual.abs().max(contour.abs()).max(f64::MIN_POSITIVE);
+            assert!(
+                (actual - contour).abs() <= 1.0e-11 * scale,
+                "{label} differs from the independent shifted-bubble contour: actual={actual:e}, contour={contour:e}"
+            );
+        }
     }
 
     #[cfg(feature = "eval")]
@@ -8579,6 +9369,114 @@ mod causal_generation_tests {
                     == LinearEnergyExpr::external(EdgeIndex(1), 1)
         }));
     }
+    #[cfg(feature = "eval")]
+    #[test]
+    fn ordinary_terminal_sources_match_signed_contours() {
+        let tadpole = powered_identity_test_graph(
+            vec![MomentumSignature {
+                loop_signature: vec![1],
+                external_signature: Vec::new(),
+            }],
+            1,
+            0,
+        );
+        let mut attached = powered_identity_test_graph(
+            [vec![1, 0], vec![0, 1], vec![0, -1]]
+                .into_iter()
+                .map(|loop_signature| MomentumSignature {
+                    loop_signature,
+                    external_signature: Vec::new(),
+                })
+                .collect(),
+            2,
+            0,
+        );
+        for (edge, head) in attached.internal_edges.iter_mut().zip([0, 1, 1]) {
+            edge.tail = 0;
+            edge.head = head;
+            edge.mass_key = Some(format!("m{}", edge.edge_id));
+        }
+        attached.node_name_to_internal = (0..2).map(|node| (format!("n{node}"), node)).collect();
+        let mut failures = Vec::new();
+        for (label, parsed, masses) in [
+            ("unit tadpole", tadpole, vec![2.0_f64]),
+            (
+                "attached tadpole and nonrepeated bubble",
+                attached,
+                vec![2.0, 3.0, 5.0],
+            ),
+        ] {
+            assert!(repeated_groups(&parsed).is_empty());
+            assert_eq!(denominator_connected_components(&parsed).len(), 1);
+            let input = crate::eval::EvaluationInput {
+                external_momenta: Vec::new(),
+                loop_spatial_momenta: vec![[0.0; 3]; parsed.loop_names.len()],
+                masses,
+                uniform_scale: None,
+            };
+            // Literal signed Below residues for J = integral dq0/(2*pi*i).
+            // Both starting sources converge in every energy, with unit numerator.
+            let mut contour = -1.0 / (2.0 * input.masses[0]);
+            if input.masses.len() == 3 {
+                let (eb, ec) = (input.masses[1], input.masses[2]);
+                contour *= -(1.0 / (2.0 * eb * (eb * eb - ec * ec))
+                    + 1.0 / (2.0 * ec * (ec * ec - eb * eb)));
+            }
+            let native = generate_pure_cff_expression_from_parsed(&parsed).unwrap();
+            let native_raw = crate::eval::evaluate_expression(&parsed, &native, "1", &input)
+                .unwrap()
+                .value;
+            for context in [
+                CffGenerationContext::Standalone,
+                CffGenerationContext::EmbeddedCffFactor,
+            ] {
+                let generated = generate_3d_expression_from_parsed_generated(
+                    &parsed,
+                    &Generate3DExpressionOptions {
+                        cff_generation_context: context,
+                        energy_degree_bounds: Some(Vec::new()),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                assert_eq!(
+                    generated.energy_factor_ownership,
+                    CffEnergyFactorOwnership::GlobalSourceProduct
+                );
+                let source_factor =
+                    generated
+                        .energy_factor_components
+                        .iter()
+                        .fold(1.0, |factor, component| {
+                            assert_eq!(
+                                component.ownership,
+                                CffEnergyFactorOwnership::GlobalSourceProduct
+                            );
+                            factor
+                                * CffGlobalPrefactorSign::from_exponent(
+                                    component.internal_edge_ids.len(),
+                                )
+                                .product(component.core_global_prefactor_sign)
+                                .factor() as f64
+                        });
+                let public_signed =
+                    source_factor * powered_identity_test_value(&parsed, &generated, "1", &input);
+                let native_signed = source_factor * native_raw;
+                eprintln!(
+                    "RAW_ORDINARY_TERMINAL label={label} context={context:?} orientations={} source_factor={source_factor} native_signed={native_signed:.17e} public_signed={public_signed:.17e} contour={contour:.17e}",
+                    generated.expression.orientations.len()
+                );
+                if (public_signed - contour).abs() > 1.0e-12 * contour.abs() {
+                    failures.push(format!("{label} {context:?}: public={public_signed:.17e}, native={native_signed:.17e}, contour={contour:.17e}"));
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "ordinary terminal contour mismatches:\n{}",
+            failures.join("\n")
+        );
+    }
 }
 
 #[cfg(test)]
@@ -8602,6 +9500,199 @@ mod graph_source_tests {
 
         fn energy_edge_index_map(&self, _parsed: &ParsedGraph) -> Option<EnergyEdgeIndexMap> {
             Some(self.edge_map.clone())
+        }
+    }
+
+    #[test]
+    fn public_initial_cut_labels_preserve_complete_residue_maps() {
+        for external_sign in [1, -1] {
+            for mode in [
+                "ordinary",
+                "repeated",
+                "bounded_repeated",
+                "component",
+                "preserved",
+                "preserved_only",
+            ] {
+                let mut parsed =
+                    crate::graph_io::test_graphs::initial_state_cut_line_graph(external_sign);
+                let mut options = Generate3DExpressionOptions {
+                    energy_degree_bounds: Some(Vec::new()),
+                    ..Default::default()
+                };
+                if matches!(mode, "repeated" | "bounded_repeated") {
+                    let mut repeated = parsed.internal_edges[1].clone();
+                    repeated.edge_id = 2;
+                    repeated.tail = 2;
+                    repeated.label = "q0_duplicate".to_string();
+                    parsed.internal_edges[1].head = 2;
+                    parsed.internal_edges.push(repeated);
+                    parsed.node_name_to_internal.insert("n2".to_string(), 2);
+                    assert_eq!(repeated_groups(&parsed)[0].edge_ids, vec![1, 2]);
+                    if mode == "bounded_repeated" {
+                        options.energy_degree_bounds = Some(vec![(1, 2)]);
+                    }
+                } else if mode == "component" {
+                    for edge in &mut parsed.internal_edges {
+                        edge.signature.loop_signature.push(0);
+                    }
+                    let mut component = parsed.internal_edges[1].clone();
+                    component.edge_id = 2;
+                    component.tail = 2;
+                    component.head = 2;
+                    component.label = "q1".to_string();
+                    component.signature.loop_signature = vec![0, 1];
+                    parsed.internal_edges.push(component);
+                    parsed.loop_names.push("k2".to_string());
+                    parsed.node_name_to_internal.insert("n2".to_string(), 2);
+                    assert_eq!(denominator_connected_components(&parsed).len(), 2);
+                } else if mode == "preserved_only" {
+                    parsed.loop_names.clear();
+                    for edge in &mut parsed.internal_edges {
+                        edge.signature.loop_signature.clear();
+                        edge.signature.external_signature = vec![external_sign];
+                    }
+                    options.preserve_internal_edges_as_four_d_denominators = vec![1];
+                } else if mode == "preserved" {
+                    let mut tree = parsed.internal_edges[0].clone();
+                    tree.edge_id = 2;
+                    tree.tail = 1;
+                    tree.head = 2;
+                    tree.label = "external_tree".to_string();
+                    parsed.internal_edges.push(tree);
+                    parsed.node_name_to_internal.insert("n2".to_string(), 2);
+                    options.preserve_internal_edges_as_four_d_denominators = vec![2];
+                }
+                for remapped in [false, true] {
+                    let edge_map = EnergyEdgeIndexMap {
+                        internal: (0..parsed.internal_edges.len())
+                            .map(|edge| (edge, if edge == 0 { 10 } else { edge }))
+                            .collect(),
+                        external: BTreeMap::from([(0, 20)]),
+                        orientation_edge_count: 16,
+                    };
+                    let mut original =
+                        generate_3d_expression_from_parsed_generated(&parsed, &options).unwrap();
+                    let generated = if remapped {
+                        original.expression = original
+                            .expression
+                            .remap_energy_edge_indices(&edge_map)
+                            .fuse_compatible_variants();
+                        assign_numerator_map_labels(&mut original.expression.orientations);
+                        original.energy_factor_components = original
+                            .energy_factor_components
+                            .iter()
+                            .map(|component| component.remap_internal_edges(&edge_map.internal))
+                            .collect();
+                        generate_3d_expression(
+                            &RemappedSource {
+                                parsed: parsed.clone(),
+                                edge_map,
+                            },
+                            &options,
+                        )
+                        .unwrap()
+                    } else {
+                        generate_3d_expression(&parsed, &options).unwrap()
+                    };
+                    let cut_edge = if remapped { 10 } else { 0 };
+                    let external_edge = if remapped { 20 } else { 0 };
+                    assert!(!generated.expression.orientations.is_empty(), "{mode}");
+                    assert_eq!(
+                        generated.expression.orientations.len(),
+                        original.expression.orientations.len(),
+                        "{mode}: canonical labels must not merge complete residue keys"
+                    );
+                    assert_eq!(
+                        generated.energy_factor_ownership,
+                        original.energy_factor_ownership
+                    );
+                    assert_eq!(
+                        generated.energy_factor_components,
+                        original.energy_factor_components
+                    );
+                    assert_eq!(
+                        generated.core_global_prefactor_sign,
+                        original.core_global_prefactor_sign
+                    );
+                    assert_eq!(
+                        generated.denominator_only_global_prefactor_sign,
+                        original.denominator_only_global_prefactor_sign
+                    );
+                    assert_eq!(
+                        generated.source_energy_degree_bounds,
+                        options.energy_degree_bounds.clone().unwrap()
+                    );
+                    let mut restored = generated.expression;
+                    for (old, new) in original
+                        .expression
+                        .orientations
+                        .iter()
+                        .zip(&mut restored.orientations)
+                    {
+                        assert_eq!(
+                            new.data.orientation[EdgeIndex(cut_edge)],
+                            Orientation::Default,
+                            "{mode}"
+                        );
+                        assert_eq!(
+                            new.data.label.as_deref().unwrap().as_bytes()[cut_edge],
+                            b'+',
+                            "{mode}: public label retained the old initial-cut prefix"
+                        );
+                        assert_eq!(
+                            new.edge_energy_map[cut_edge],
+                            LinearEnergyExpr::external(
+                                EdgeIndex(external_edge),
+                                i64::from(external_sign)
+                            ),
+                            "{mode}"
+                        );
+                        for (edge, direction) in &old.data.orientation {
+                            if edge.0 != cut_edge {
+                                assert_eq!(new.data.orientation[edge], *direction, "{mode}");
+                            }
+                        }
+                        let old_prefix = old
+                            .data
+                            .label
+                            .as_deref()
+                            .unwrap()
+                            .split('|')
+                            .next()
+                            .unwrap();
+                        if old_prefix.len() == old.data.orientation.len().0
+                            && old_prefix
+                                .bytes()
+                                .all(|value| matches!(value, b'+' | b'-' | b'0' | b'x'))
+                        {
+                            for (edge, value) in old_prefix.bytes().enumerate() {
+                                if edge != cut_edge {
+                                    assert_eq!(
+                                        new.data.label.as_deref().unwrap().as_bytes()[edge],
+                                        value,
+                                        "{mode}: a non-cut display label changed"
+                                    );
+                                }
+                            }
+                            assert_eq!(
+                                new.data.numerator_map_index, old.data.numerator_map_index,
+                                "{mode}: the unchanged energy maps changed their N indices"
+                            );
+                        }
+                        // Restore only public labels and the certified cut slot.
+                        // Exact serialization then checks every map, surface,
+                        // factor, sign, denominator and variant in the old order.
+                        new.data = old.data.clone();
+                    }
+                    assert_eq!(
+                        bincode::encode_to_vec(&restored, bincode::config::standard()).unwrap(),
+                        bincode::encode_to_vec(&original.expression, bincode::config::standard())
+                            .unwrap(),
+                        "{mode}: cut-label normalization changed the complete source expression"
+                    );
+                }
+            }
         }
     }
 

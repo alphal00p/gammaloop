@@ -677,6 +677,7 @@ impl Graph {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn denominator_only_cff_3d_expression_options(&self) -> Generate3DExpressionOptions {
         Generate3DExpressionOptions {
             representation: RepresentationMode::Cff,

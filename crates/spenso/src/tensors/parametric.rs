@@ -2014,17 +2014,16 @@ fn grouped_atom_sum(terms: Vec<Atom>) -> Atom {
     }
 }
 
-fn grouped_sparse_atom_contract<I>(
+fn grouped_atom_contract<I>(
     left: &DataTensor<Atom, I>,
     right: &DataTensor<Atom, I>,
 ) -> Result<Option<DataTensor<Atom, I>>, ContractionError>
 where
     I: TensorStructure + Clone + StructureContract,
 {
-    let (DataTensor::Sparse(left), DataTensor::Sparse(right)) = (left, right) else {
-        return Ok(None);
-    };
-    if !left.zero.as_view().is_zero() || !right.zero.as_view().is_zero() {
+    if [left, right].into_iter().any(
+        |tensor| matches!(tensor, DataTensor::Sparse(sparse) if !sparse.zero.as_view().is_zero()),
+    ) {
         return Ok(None);
     }
 
@@ -2035,6 +2034,9 @@ where
     match (common_count, merge_info) {
         (0, _) | (_, MergeInfo::Interleaved(_)) => Ok(None),
         (1, MergeInfo::FirstBeforeSecond) => {
+            let (DataTensor::Sparse(left), DataTensor::Sparse(right)) = (left, right) else {
+                return Ok(None);
+            };
             let left_axis = pos_left
                 .included_iter()
                 .next()
@@ -2053,6 +2055,9 @@ where
             .map(|tensor| Some(DataTensor::Sparse(tensor)))
         }
         (1, MergeInfo::SecondBeforeFirst) => {
+            let (DataTensor::Sparse(left), DataTensor::Sparse(right)) = (left, right) else {
+                return Ok(None);
+            };
             let left_axis = pos_left
                 .included_iter()
                 .next()
@@ -2071,20 +2076,18 @@ where
             .map(|tensor| Some(DataTensor::Sparse(tensor)))
         }
         (_, MergeInfo::FirstBeforeSecond) => {
-            grouped_sparse_atom_multi_contract(left, right, resulting_structure)
-                .map(|tensor| Some(DataTensor::Sparse(tensor)))
+            grouped_atom_multi_contract(left, right, resulting_structure).map(Some)
         }
         (_, MergeInfo::SecondBeforeFirst) => {
-            grouped_sparse_atom_multi_contract(right, left, resulting_structure)
-                .map(|tensor| Some(DataTensor::Sparse(tensor)))
+            grouped_atom_multi_contract(right, left, resulting_structure).map(Some)
         }
     }
 }
 
-// Finishing grouped sparse Atom contractions has remained slower with Rayon in
-// the measured workload range. Adaptive mode therefore stays serial until a
-// reproducible crossover is found; explicit Parallel still exercises the path.
-const GROUPED_SPARSE_ATOM_SUM_AUTO_PARALLEL: bool = false;
+// Finishing grouped Atom contractions has remained slower with Rayon in
+// the measured sparse workload range. Adaptive mode therefore stays serial until
+// a reproducible crossover is found; explicit Parallel still exercises the path.
+const GROUPED_ATOM_SUM_AUTO_PARALLEL: bool = false;
 
 fn grouped_sparse_atom_single_contract<I>(
     left: &SparseTensor<Atom, I>,
@@ -2156,7 +2159,7 @@ where
         (!value.as_view().is_zero()).then_some((index, value))
     };
     let elements = if crate::symbolic_parallelism::SymbolicParallelism::rayon_enabled_for(|| {
-        GROUPED_SPARSE_ATOM_SUM_AUTO_PARALLEL
+        GROUPED_ATOM_SUM_AUTO_PARALLEL
     }) {
         grouped.into_par_iter().filter_map(finish_group).collect()
     } else {
@@ -2170,11 +2173,11 @@ where
     })
 }
 
-fn grouped_sparse_atom_multi_contract<I>(
-    left: &SparseTensor<Atom, I>,
-    right: &SparseTensor<Atom, I>,
+fn grouped_atom_multi_contract<I>(
+    left: &DataTensor<Atom, I>,
+    right: &DataTensor<Atom, I>,
     final_structure: I,
-) -> Result<SparseTensor<Atom, I>, ContractionError>
+) -> Result<DataTensor<Atom, I>, ContractionError>
 where
     I: TensorStructure + Clone + StructureContract,
 {
@@ -2190,42 +2193,21 @@ where
 
     for mut fiber_a in self_iter {
         for mut fiber_b in other_iter.by_ref() {
-            let mut items = fiber_a
-                .next()
-                .map(|(a, skip, (neg, _))| (a, skip, neg))
-                .zip(fiber_b.next().map(|(b, skip, _)| (b, skip)));
-            let mut terms = Vec::new();
-
-            while let Some(((a, skip_a, neg), (b, skip_b))) = items {
-                if skip_a > skip_b {
-                    let b = fiber_b
-                        .by_ref()
-                        .next()
-                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
-                    items = Some((a, skip_a, neg)).zip(b);
-                } else if skip_b > skip_a {
-                    let a = fiber_a
-                        .by_ref()
-                        .next()
-                        .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
-                    items = a.zip(Some((b, skip_b)));
-                } else {
-                    let mut product = a.mul_fallible(b).unwrap();
-                    if neg {
-                        product = -product;
+            // Batch each component sum without expanding its factorized products.
+            let terms = fiber_a
+                .iter
+                .by_ref()
+                .zip(fiber_b.iter.by_ref())
+                .filter_map(|(left_index, right_index)| {
+                    let a = left.get_ref_linear(left_index.item)?;
+                    let b = right.get_ref_linear(right_index)?;
+                    if a.is_zero() || b.is_zero() {
+                        return None;
                     }
-                    terms.push(product);
-                    let b = fiber_b
-                        .by_ref()
-                        .next()
-                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
-                    let a = fiber_a
-                        .by_ref()
-                        .next()
-                        .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
-                    items = a.zip(b);
-                }
-            }
+                    let product = a.mul_fallible(b).unwrap();
+                    Some(if left_index.neg { -product } else { product })
+                })
+                .collect::<Vec<_>>();
 
             if !terms.is_empty() {
                 grouped.push((result_index.into(), terms));
@@ -2241,17 +2223,21 @@ where
         (!value.as_view().is_zero()).then_some((index, value))
     };
     let elements = if crate::symbolic_parallelism::SymbolicParallelism::rayon_enabled_for(|| {
-        GROUPED_SPARSE_ATOM_SUM_AUTO_PARALLEL
+        GROUPED_ATOM_SUM_AUTO_PARALLEL
     }) {
         grouped.into_par_iter().filter_map(finish_group).collect()
     } else {
         grouped.into_iter().filter_map(finish_group).collect()
     };
 
-    Ok(SparseTensor {
+    let result = SparseTensor {
         zero: Atom::Zero,
         elements,
         structure: final_structure,
+    };
+    Ok(match (left, right) {
+        (DataTensor::Sparse(_), DataTensor::Sparse(_)) => DataTensor::Sparse(result),
+        _ => DataTensor::Dense(result.to_dense()),
     })
 }
 
@@ -2268,7 +2254,7 @@ where
     {
         let s = if let Some(s) = self.one_hot_selector_contract(other)? {
             s
-        } else if let Some(s) = grouped_sparse_atom_contract(&self.tensor, &other.tensor)? {
+        } else if let Some(s) = grouped_atom_contract(&self.tensor, &other.tensor)? {
             s
         } else {
             self.tensor.contract(&other.tensor)?
@@ -3246,6 +3232,136 @@ pub mod test {
     };
 
     use super::MixedTensor;
+
+    #[test]
+    fn grouped_atom_multi_contraction_preserves_metric_permutations_and_factors() {
+        use crate::{
+            contraction::Contract,
+            structure::{
+                representation::{Euclidean, Lorentz},
+                slot::{DualSlotTo, IsAbstractSlot},
+            },
+            tensors::data::{DenseTensor, SetTensorData},
+        };
+        use symbolica::{atom::AtomCore, function, parse, symbol};
+
+        use super::{ParamTensor, grouped_atom_contract};
+
+        let metric = Minkowski {}.new_slot(4, 10).to_lib();
+        let first = Lorentz {}.new_slot(2, 12).to_lib();
+        let second = Lorentz {}.new_slot(2, 14).to_lib();
+        let left_structure: PermutedStructure<OrderedStructure> = PermutedStructure::from_iter([
+            Euclidean {}.new_slot(2, 0).to_lib(),
+            metric,
+            first,
+            second.dual(),
+        ]);
+        let right_structure: PermutedStructure<OrderedStructure> = PermutedStructure::from_iter([
+            Euclidean {}.new_slot(2, 2).to_lib(),
+            metric,
+            first.dual(),
+            second,
+        ]);
+        let (permutation, left_matches, right_matches) = left_structure
+            .structure
+            .match_indices(&right_structure.structure)
+            .unwrap();
+        assert!(!permutation.is_identity());
+        assert_eq!(left_matches.iter().filter(|matched| **matched).count(), 3);
+        assert_eq!(right_matches.iter().filter(|matched| **matched).count(), 3);
+
+        let mut left = DenseTensor::repeat(left_structure.structure.clone(), Atom::Zero);
+        let mut right = DenseTensor::repeat(right_structure.structure.clone(), Atom::Zero);
+        for free in 0..2 {
+            for i in 0..4 {
+                for j in 0..2 {
+                    for k in 0..2 {
+                        let n = (i * 2 + j) * 2 + k;
+                        let factors = (parse!("x") + function!(symbol!("a"), Atom::num(n)))
+                            * (parse!("y") + function!(symbol!("b"), Atom::num(n)));
+                        let a = if n % 5 == 0 {
+                            Atom::Zero
+                        } else {
+                            factors * Atom::num((free + 1) * (n + 1))
+                        };
+                        let b = if n % 7 == 0 {
+                            Atom::Zero
+                        } else {
+                            Atom::num((free + 2) * (n % 3 - 1))
+                        };
+                        // Apply the structure's existing permutations to the data too.
+                        let mut indices = [free, i, j, k].map(|index| index as usize);
+                        left_structure
+                            .rep_permutation
+                            .apply_slice_in_place(&mut indices);
+                        left_structure
+                            .index_permutation
+                            .apply_slice_in_place(&mut indices);
+                        left.set(&indices, a).unwrap();
+                        let mut indices = [free, i, j, k].map(|index| index as usize);
+                        right_structure
+                            .rep_permutation
+                            .apply_slice_in_place(&mut indices);
+                        right_structure
+                            .index_permutation
+                            .apply_slice_in_place(&mut indices);
+                        right.set(&indices, b).unwrap();
+                    }
+                }
+            }
+        }
+
+        // Independently enumerate physical coordinates with the Minkowski sign.
+        // This reference does not use contraction fibers or their permutation.
+        let expected = (0..2)
+            .flat_map(|a| (0..2).map(move |b| (a, b)))
+            .map(|(a, b)| {
+                (0..16).fold(Atom::Zero, |sum, n| {
+                    if n % 5 == 0 || n % 7 == 0 {
+                        return sum;
+                    }
+                    let sign = if n / 4 == 0 { 1 } else { -1 };
+                    let weight = sign * (a + 1) * (n + 1) * (b + 2) * (n % 3 - 1);
+                    sum + Atom::num(weight)
+                        * (parse!("x") + function!(symbol!("a"), Atom::num(n)))
+                        * (parse!("y") + function!(symbol!("b"), Atom::num(n)))
+                })
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            expected
+                .iter()
+                .any(|atom| atom.expand().nterms() > atom.nterms())
+        );
+
+        let mut left_sparse = left.to_sparse();
+        let mut right_sparse = right.to_sparse();
+        // Keep explicit zero entries as well as absent sparse entries.
+        left_sparse.set_flat(0.into(), Atom::Zero).unwrap();
+        right_sparse.set_flat(0.into(), Atom::Zero).unwrap();
+        let left_inputs = [DataTensor::Dense(left), DataTensor::Sparse(left_sparse)];
+        let right_inputs = [DataTensor::Dense(right), DataTensor::Sparse(right_sparse)];
+        for left in &left_inputs {
+            for right in &right_inputs {
+                for (left, right) in [(left, right), (right, left)] {
+                    let reference = left.contract(right).unwrap();
+                    let grouped = grouped_atom_contract(left, right)
+                        .unwrap()
+                        .expect("multi-index Atom contractions must use grouped summation");
+                    assert_eq!(
+                        std::mem::discriminant(&grouped),
+                        std::mem::discriminant(&reference)
+                    );
+                    assert_eq!(reference.to_bare_dense().data, expected);
+                    assert_eq!(grouped.to_bare_dense().data, expected);
+                    let actual = ParamTensor::composite(left.clone())
+                        .contract(&ParamTensor::composite(right.clone()))
+                        .unwrap();
+                    assert_eq!(actual.tensor.to_bare_dense().data, expected);
+                }
+            }
+        }
+    }
 
     #[test]
     fn tensor_structure() {

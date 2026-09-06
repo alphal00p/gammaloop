@@ -1,6 +1,6 @@
 digraph repeated_bubble_equal_model_masses {
     num = 1
-    overall_factor = -1
+    overall_factor = 1
     ext0 [style = invis]
     ext1 [style = invis]
     ext0 -> v1:0 [id = 0, particle = "scalar_1"]

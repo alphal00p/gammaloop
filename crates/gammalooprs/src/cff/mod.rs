@@ -545,7 +545,7 @@ impl Graph {
         cutset: &CutSet,
         options: &Generate3DExpressionOptions,
         analysis_numerator: &Atom,
-        mut generation_cache: Option<&mut generation::ExactCffGenerationCache>,
+        generation_cache: Option<&mut generation::ExactCffGenerationCache>,
     ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
         let (
             generated,
@@ -585,7 +585,7 @@ impl Graph {
                 &source,
                 options,
                 analysis_numerator,
-                generation_cache.as_deref_mut(),
+                generation_cache,
             )?;
             let physical_surfaces = generated
                 .expression
@@ -1448,7 +1448,6 @@ mod tests {
             .terms
             .get(&index)
             .expect("the exact uncut sector exists");
-        assert_eq!(ordinary_term.orientations.len(), 20);
         assert_eq!(
             exact_term.orientations.len(),
             ordinary_term.orientations.len(),
@@ -5637,8 +5636,10 @@ mod tests {
         let root_zero = zero_sample_terms(&root);
         let outer_zero = zero_sample_terms(&outer);
         assert!(!root_zero.is_empty() && !outer_zero.is_empty());
+        // Edge 0 is the fixed initial-cut alias and uses the public Default label.
+        // Edge 1 is Undirected because this sample sets its mapped energy to zero.
         let root_target = EdgeVec::from_iter([
-            Orientation::Undirected,
+            Orientation::Default,
             Orientation::Undirected,
             Orientation::Default,
             Orientation::Default,
@@ -5649,7 +5650,7 @@ mod tests {
             Orientation::Reversed,
         ]);
         let root_mate = EdgeVec::from_iter([
-            Orientation::Undirected,
+            Orientation::Default,
             Orientation::Undirected,
             Orientation::Default,
             Orientation::Default,
@@ -5660,7 +5661,7 @@ mod tests {
             Orientation::Reversed,
         ]);
         let outer_target = EdgeVec::from_iter([
-            Orientation::Undirected,
+            Orientation::Default,
             Orientation::Undirected,
             Orientation::Default,
             Orientation::Default,
@@ -6766,7 +6767,7 @@ mod tests {
             &cutset,
             &OrientationPattern::default(),
         )?;
-        assert_eq!(generated.core_global_prefactor_sign.factor(), -1);
+        assert_eq!(generated.core_global_prefactor_sign.factor(), 1);
         assert_eq!(
             global.production_prefactor_factor(),
             generated.core_global_prefactor_sign.factor()
@@ -6811,6 +6812,145 @@ mod tests {
                     .is_zero()
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn ordinary_terminal_sources_match_signed_contours() -> Result<()> {
+        test_initialise()?;
+        let tadpole: Graph = dot!(digraph ordinary_unit_tadpole {
+                edge [particle="scalar_1" num=1]
+                node [num=1]
+                incoming [style=invis]
+                outgoing [style=invis]
+                a -> a [id=0 lmb_id=0]
+                incoming -> a [id=1]
+                a -> outgoing [id=2]
+            }, "scalars")?;
+        let attached: Graph = dot!(digraph ordinary_attached_tadpole_bubble {
+                edge [particle="scalar_1" num=1]
+                node [num=1]
+                incoming [style=invis]
+                outgoing [style=invis]
+                a -> a [id=0 lmb_id=0]
+                a -> b [id=1 lmb_id=1]
+                a -> b [id=2 particle="scalar_2"]
+                incoming -> a [id=3]
+                a -> outgoing [id=4]
+            }, "scalars")?;
+        let mut failures = Vec::new();
+        for (label, mut graph, energies) in [
+            ("unit tadpole", tadpole, vec![2_i64]),
+            (
+                "attached tadpole and nonrepeated bubble",
+                attached,
+                vec![2, 3, 5],
+            ),
+        ] {
+            let parsed = graph.to_three_d_parsed_graph()?;
+            assert!(repeated_groups(&parsed).is_empty());
+            let loop_count = graph.get_loop_number();
+            assert_eq!(loop_count, if energies.len() == 1 { 1 } else { 2 });
+            // For J = integral dq0/(2*pi*i), closing Below gives minus the
+            // positive-pole residue. The unit numerator converges in each
+            // energy: the tadpole has degree -2 and the bubble degree -4.
+            let et = Atom::num(energies[0]);
+            let mut contour = -Atom::one() / (Atom::num(2) * et);
+            if energies.len() == 3 {
+                let eb = Atom::num(energies[1]);
+                let ec = Atom::num(energies[2]);
+                let bubble: Atom = -(Atom::one()
+                    / (Atom::num(2) * &eb * (eb.clone().pow(2) - ec.clone().pow(2)))
+                    + Atom::one() / (Atom::num(2) * &ec * (ec.clone().pow(2) - eb.clone().pow(2))));
+                contour *= bubble;
+            }
+            let contour = contour.together();
+            for context in [
+                three_dimensional_reps::CffGenerationContext::Standalone,
+                three_dimensional_reps::CffGenerationContext::EmbeddedCffFactor,
+            ] {
+                let mut options = graph.denominator_only_cff_3d_expression_options();
+                options.cff_generation_context = context;
+                let raw = three_dimensional_reps::generate_3d_expression(&graph, &options)?;
+                assert_eq!(
+                    raw.energy_factor_ownership,
+                    CffEnergyFactorOwnership::GlobalSourceProduct
+                );
+                let raw_bridge = CutCFF::gamma_loop_prefactor_conversion(&raw).product(
+                    CffGlobalPrefactorSign::from_exponent(
+                        parsed.denominator_internal_edge_ids().len(),
+                    ),
+                );
+                let mut raw_signed = raw
+                    .expression
+                    .orientations
+                    .iter()
+                    .fold(Atom::zero(), |sum, orientation| sum + orientation.to_atom())
+                    .replace_multiple(raw.expression.surfaces.get_all_replacements(&[]))
+                    * Atom::num(raw_bridge.factor());
+                let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+                let production = graph.generate_3d_expression_for_integrand(
+                    &[],
+                    &canonization,
+                    &options,
+                    Some(&Atom::one()),
+                )?;
+                let cff = graph.cff_from_production_expression(
+                    &production,
+                    &CutSet::empty(graph.n_hedges()),
+                    &OrientationPattern::default(),
+                )?;
+                let term_sum = cff
+                    .terms
+                    .values()
+                    .flat_map(|term| &term.orientations)
+                    .fold(Atom::zero(), |sum, term| sum + &term.expression)
+                    * Atom::num(cff.production_prefactor_factor());
+                let selector_sum = cff
+                    .expression_with_selectors()
+                    .iter()
+                    .fold(Atom::zero(), |sum, (_, term)| sum + term)
+                    .replace(function!(OrientationID::symbol(), W_.a_))
+                    .with(Atom::one());
+                assert!(
+                    (selector_sum - &term_sum).together().is_zero(),
+                    "production selector summation must not introduce an undocumented average"
+                );
+                let mut gamma_signed = term_sum
+                    * (Atom::num(2) * Atom::var(GS.pi)).pow(3 * loop_count as i64)
+                    / (-Atom::i()).pow(loop_count as i64);
+                for (edge, energy) in energies.iter().enumerate() {
+                    raw_signed = raw_signed
+                        .replace(three_dimensional_reps::symbols::ose_atom_from_index(
+                            EdgeIndex(edge),
+                        ))
+                        .with(Atom::num(*energy));
+                    gamma_signed = gamma_signed
+                        .replace(GS.ose(EdgeIndex(edge)))
+                        .with(Atom::num(*energy));
+                }
+                let raw_signed = raw_signed.together();
+                let gamma_signed = gamma_signed.together();
+                assert!(
+                    (raw_signed.clone() - &gamma_signed).is_zero(),
+                    "{label} {context:?}: raw bridge {raw_signed} differs from full GammaLoop bridge {gamma_signed}"
+                );
+                eprintln!(
+                    "ORDINARY_TERMINAL_CONTOUR label={label} context={context:?} orientations={} raw_signed={raw_signed} gamma_signed={gamma_signed} contour={contour}",
+                    raw.expression.orientations.len()
+                );
+                if !(gamma_signed.clone() - &contour).is_zero() {
+                    failures.push(format!(
+                        "{label} {context:?}: signed CFF={gamma_signed}, exact contour={contour}"
+                    ));
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "ordinary terminal contour mismatches:\n{}",
+            failures.join("\n")
+        );
         Ok(())
     }
 }

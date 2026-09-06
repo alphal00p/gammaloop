@@ -111,7 +111,9 @@ signs is not this certificate.  Nor is equality of only the numerical final
 answer.  Algebraic expansion is permitted for a disposable test/debug copy at
 step 4; the production numerator must remain factorized throughout.
 
-Last updated: 2026-09-03
+Original continuation checkpoint: 2026-09-03. Scoped normalization, persistence,
+export, and acceptance-command review: 2026-09-05. Recorded numerical campaigns
+below remain historical unless a dated result explicitly says otherwise.
 
 This is the machine-independent continuation note for the raised-energy CFF
 work. The detailed chronological record, evidence, and decision history remain
@@ -126,8 +128,8 @@ from a historical checkpoint alone.
 
 ## Checkout and canonical revisions
 
-The published remote bookmark `raised_energy_cff_wip` now points at commit
-`5c3e7f`. This is the current recoverable remote checkpoint. A working tree may
+The recorded remote bookmark `raised_energy_cff_wip` checkpoint is commit
+`5c3e7f`. Verify the current remote tip before continuation. A working tree may
 still contain newer validation or test-contract cleanup, so compare it with
 that checkpoint before assuming the local tree is fully published. Use the
 bookmark rather than reviving one of the old conflicted source revisions:
@@ -167,8 +169,9 @@ finite-UV localization (`opmnpruw`), and the full typed CFF global-prefactor
 bridge (`kypmvxsq`). Those early focused checks have since been superseded by
 direct-`gamma*` DDx and TTX acceptances, three-route scalar coverage, and
 end-to-end UV-profile tests described below. The current local workspace also
-contains validation newer than the `5c3e7f` remote checkpoint; publish it only
-after the remaining test-contract and final-suite gates are resolved.
+contains validation newer than the recorded historical `5c3e7f` checkpoint;
+verify the current remote rather than assuming that old tip is still published.
+Publication still requires the complete release-matrix and final review gates.
 
 Before editing, read `AGENTS.md`, `CONTRIBUTING.md`, this handoff, and the full
 decision ledger. Use Jujutsu and start a new described change for each approved
@@ -176,18 +179,34 @@ unit of work.
 
 ## Status at a glance
 
+At the recorded 2026-09-05 attempt07 checkpoint, literal `just test_gammaloop`
+passed 1994/1994 selected tests with zero selected skips, failures or retries
+and normal RAM-guard completion, including the six default scalar per-key UV
+profiles. The following dev-optim 166-case run completed 117 passing cases
+before the whole-system memory cap stopped it; no assertion failure was
+recorded, but the run is incomplete. The requested release target started
+compiling and has no completed verdict after the restart. These facts do not
+constitute a release 166-case pass or validation of later source changes.
+The four 10x physical measurements below remain historical evidence.
+
 | Area | Status | Continuation meaning |
 | --- | --- | --- |
 | Rebase onto current `main` | **Complete** | Fourteen retained changes are replayed directly onto `39561014`; the selected ancestry is conflict-free. The obsolete `kysvnqlq` pin was abandoned because it only downgraded main's Symbolica stack. |
 | Latest-main evaluator/archive overlap | **Resolved and validated** | Main's Symbolica, native-code, O2, evaluator construction, and command ordering are retained. Deferred explicit CFF orientation sums are layered onto that architecture. |
-| Direct-3D raised-energy CFF | **Post-CFF Taylor route restored; matrix rerun pending** | Both direct orientation representations now apply every Taylor operator after complete/global CFF energy integration and differ only by selector materialization. Physical EMR/source-edge bounds and the repeated-channel CFF construction are retained. The protected GL11 `Q1^2`/`Q7^2` snapshots remain unchanged; A73 records why their denominator-only cancellation residues are not generalized-CFF value oracles. |
+| Direct-3D raised-energy CFF | **Post-CFF Taylor route restored; curated cases passed, release matrix pending** | Both direct orientation representations now apply every Taylor operator after complete/global CFF energy integration and differ only by selector materialization. Physical EMR/source-edge bounds and the repeated-channel CFF construction are retained. The protected GL11 `Q1^2`/`Q7^2` snapshots remain unchanged; A73 records why their denominator-only cancellation residues are not generalized-CFF value oracles. |
 | 4D-local UV then CFF with raised energy | **Source-backed dotted lifting and minimax EMR dispatch implemented** | A79 carries original edge provenance through the Taylor operator, constructs the UV skeleton from those owners, serially subdivides raised powers, and minimizes factorized numerator-energy rank before canonical CFF batching. Sign-normalized denominator signatures validate channels but never reconstruct incidence or rewrite the sign-sensitive numerator. The empty forest remains the ordinary factorized production root in both routes. |
 | Integration-workspace persistence | **Implemented and focused-validation complete** | Integration workspaces have an independent version-1 manifest checked before both resume decoders. Incompatible workspaces return contextual `integrate --restart` guidance instead of decoding positional bincode or panicking (A60). |
-| Other GammaLoop completeness | **Physical acceptances retained; restored-route scalar matrix pending** | The retained 10x campaign passes direct and converted DD/TT normalization (`4/4`) against the published absolute or inclusive-ratio targets. DD also checks per-graph `M_UV` and localization-scale independence plus opposite GL0/GL2 `mu_r` slopes; its converted graph rows remain targetless closure components. The pre-reversal scalar LU 15-case all-enabled rerun passed `15/15`, with `235` skipped, in `70.438 s` under `dev-optim` / `test_gammaloop`; that is historical evidence, not a current gate result. The restored post-CFF direct route must complete the matrix rerun before merge readiness. The default divergent-only profiler covers amplitude and LU domains. Remaining gates are that rerun, stale shared-CFF test-contract cleanup, final curated tests, and latest-main synchronization. |
-| Computed UV-forest export | **Deferred; not exact yet** | Persisted graph terms retain only coarse orientations. Production generation/evaluation already uses exact maps, but export must regenerate the production catalogue or persist exact map IDs before it can claim exact affine-map identity. |
+| Other GammaLoop completeness | **Curated 1994-test pass recorded; complete release matrix pending** | The retained 10x campaign passes direct and converted DD/TT normalization (`4/4`) against the published absolute or inclusive-ratio targets. DD also checks per-graph `M_UV` and localization-scale independence plus opposite GL0/GL2 `mu_r` slopes; its converted graph rows remain targetless closure components. The pre-reversal scalar LU 15-case all-enabled rerun passed `15/15`, with `235` skipped, in `70.438 s` under `dev-optim` / `test_gammaloop`; that is historical evidence, not a current gate result. The selected current-core cases passed in the 1994-test curated run, including the six default direct per-key profiles. The default divergent-only profiler covers amplitude and LU domains. The remaining scalar gate is the complete 166-case `just test_LU_scalar_xs` release target; the partial 117-pass dev-optim run and release compilation cannot satisfy it. Revalidate any later source changes before publication; the old 15-case and shared-crate counts below remain historical. |
+| Computed UV-forest export | **Exact stored-source ownership implemented (2026-09-05); final cleaned gates pending** | The former coarse-only export limitation is superseded. Computed exports use the selected persistent source graph, its complete stored production CFF and recorded generation settings, rejecting missing CFF/settings data or a source/runtime graph-ID/name mismatch. Generation, save/load and persistent selection/regeneration coverage retains all three UV routes; no affine map is reconstructed from physical direction labels. |
 | Proper LTD | **Explicitly deferred** | Keep the `Cff`/`Ltd` selection; `Ltd` must immediately return the typed unsupported error. Port proper LTD later from the sibling reserve onto the finalized CFF plus 4D architecture. |
 | Auxiliary `3Drep` CLI | **Diagnostic only; not a production contract** | Its input normalization, expression preparation, and display may differ from GammaLoop. CLI-only regressions or QoL gaps do not block GammaLoop readiness unless they expose shared CFF mathematics used by production. |
 | Other split material | **Preserved outside this WIP** | The NNLO example-card delta and proper-LTD comparisons are still source material. Review them against the final architecture instead of copying their historical revisions wholesale. |
+
+Generation settings history is process-wide. Successful named generation
+records its settings and rejects missing or different generation settings when
+another integrand is already generated. This is a guard at that State boundary,
+not a claim that arbitrary cross-process copies or source mutations establish
+global provenance.
 
 The phrase “rebase complete” refers to the conflict-free replay. It does not
 mean the raised-energy feature branch is ready to merge.
@@ -375,6 +394,39 @@ per original EMR edge.
 
 ## GammaLoop CFF normalization boundaries
 
+The current typed GammaLoop adapter uses one componentwise contract for stored
+production roots, reduced sources, and freshly generated exact sources:
+
+\[
+B_{\Gamma} = \prod_c (-1)^{\rho N_c}
+\begin{cases}
+B_{\mathrm{core},c}, & \text{component owns a global source product},\\
+B_{\mathrm{den},c}, & \text{component owns variant-local factors},
+\end{cases}
+\qquad
+\rho=\mathbf 1[\text{whole expression ownership is VariantLocal}].
+\]
+
+The generalized Laurent functional already contains its core convention;
+multiplying `B_core` again would make an unused numerator-degree allowance
+change the integral. The parity switch `rho` belongs to the whole generated
+expression, not to each component. In a mixed expression with retained positive
+energy factors it therefore applies to ordinary components too; the component's
+own ownership chooses only its core or denominator frame. Recursive generalized
+scalar bases additionally convert their actual native rational prefactor to
+the enclosing source frame exactly once,
+including the free one-line half weight and inherited contour-coordinate sign.
+The implementation owners are `CutCFF::gamma_loop_prefactor_conversion` and
+`LowerSectorCffBuilder`. See the current worked proof in
+[One source convention across recursive scalar bases](exact-powered-denominator-cff-lifting.md#one-source-convention-across-recursive-scalar-bases).
+
+### Historical normalization diagnosis, superseded
+
+The following investigation is retained as history. Its extra generalized core
+factor and separate fresh-versus-stored formulas are superseded by the current
+contract above; its imperative wording must not be used as implementation
+instructions. The recorded A/B values characterize those older adapters.
+
 The inherited-contour rule above is internal to generalized CFF. A separate,
 typed boundary converts each **freshly generated source-local rational
 component** to GammaLoop's source-denominator convention. For a component `c`
@@ -498,7 +550,10 @@ acceptances (`4/4`). Direct-current tests use the summed Feynman-gauge projector
 `-g^{mu nu}` and no unit conversion; the `e+e-` tests use the published
 direct-current conversion and inclusive ratio. Pulls are signed differences
 from the published target in units of the Monte Carlo error, with LO uncertainty
-included in ratio pulls.
+included in ratio pulls. These measurements are retained history. The converted
+`epem_a_ttx` test compares complex magnitudes and therefore does not independently
+certify an overall phase or signed result. The direct-current TT test does
+retain fixed signed LO and graph-NLO checks; those requirements remain active.
 
 | Acceptance | 10x LO result | 10x NLO result | Graph and ratio evidence |
 | --- | --- | --- | --- |
@@ -648,26 +703,31 @@ the integrated finite UV addback and its exact source-local EMR carrier. The
 default `local_uv_cts_from_expanded_4d_integrands = false` means this does
 **not** validate the alternate 4D-local-to-CFF route.
 
-The current full shared-CFF crate inventory is `98/100`. Its two remaining
-failures are stale test-contract assertions rather than a demonstrated
-GammaLoop numerical regression:
+The historical shared-CFF checkpoint recorded `98/100`, with these two
+private-selector/fixture failures. This is not the current selected inventory
+or a current failure report:
 
 - `eval::tests::lower_sector_powered_pole_contact_reconstructs_numerator_derivatives`;
 - `generation::causal_generation_tests::inherited_mixed_theta_basis_uses_correlated_parent_residues`.
 
-The powered-pole fixture needs a physical/unimodular value-oracle redesign; the
-mixed-theta assertion still names a superseded private selector origin while
-its retained value comparison agrees. Change those tests only after confirming
-their intended contract, as required by repository policy.
+At that checkpoint the powered-pole fixture required a physical/unimodular
+value-oracle redesign, and the mixed-theta assertion named a superseded private
+selector origin despite an agreeing value comparison. Preserve the approved
+replacement contracts and use the current test inventory for validation; do not
+reopen those historical failures solely from this record.
 
 ## Safe continuation sequence
 
-1. Treat remote commit `5c3e7f` as the published checkpoint, confirm
-   `jj log -r 'conflicts() & ancestors(@)'` is empty and inspect the complete
-   local continuation above that checkpoint and its `main` base.
+1. Verify the current remote bookmark and local divergence before choosing a
+   continuation base. Use `5c3e7f` only as the recorded historical checkpoint,
+   not an assumed current remote tip. Confirm
+   `jj log -r 'conflicts() & ancestors(@)'` is empty and inspect the retained
+   local continuation and its `main` base.
 2. Preserve the four passing DD/TT three-route normalization acceptances, their
-   pointwise local-3D/local-4D equivalence checks, and the DD scale invariants;
-   leave phase and overall sign outside the criterion for now.
+   pointwise local-3D/local-4D equivalence checks, and the DD scale invariants.
+   Preserve every fixed global prefactor and existing signed component oracle;
+   phase probes select a component and never authorize a sign change or rotation.
+   Retain raw signed converted-TT results alongside its magnitude-based oracle.
 3. Keep every higher-power capacity, finite-pole sample, and integer-multiple
    `a*M` substitution inside EMR. Preserve the factorized numerator and do not
    reproduce the diagnostic `3Drep` input/evaluation pipeline in GammaLoop.
@@ -682,16 +742,16 @@ their intended contract, as required by repository policy.
      -- --test-threads=1
    ```
 
-5. Rerun the scalar LU 15-case all-enabled matrix as a final gate for the
-   restored post-CFF direct route. Its pre-reversal 2026-08-31 run passed
-   `15/15`, with `235` skipped, in `70.438 s` under `dev-optim` /
-   `test_gammaloop`; retain that result as historical evidence. If the current
-   matrix regresses, first deconstruct the
-   generated expressions and use the generalized `3Drep` CLI only as the
-   independent 3D diagnostic lane; do not use a handwritten higher-loop contour
-   calculation as an oracle.
-   Resolve the two shared-CFF stale test contracts, then rerun the physical
-   acceptances plus `just test_gammaloop`.
+5. Run `just test_LU_scalar_xs`, the complete 166-case scalar LU matrix with
+   release compilation, fail-fast behavior and the durable RAM guard. Its old
+   pre-reversal 2026-08-31 `15/15` run with `235` skipped in `70.438 s` remains
+   historical evidence; it cannot substitute for the current complete matrix.
+   If a case regresses, identify the last shared route boundary and first
+   compare the actual source and selector partitions. Use the generalized
+   `3Drep` CLI only as the independent diagnostic lane. Preserve the approved
+   shared-CFF oracle repairs and physical acceptances. Retain the recorded
+   1994-test curated pass for its exact core source and rerun the required gates
+   after subsequent source changes. A resource-aborted or partial run is not a pass.
 6. Record every architectural finding, approval, test, and remaining failure in
    `kysvnqlq-rebase-review.md`, then refresh this operational summary if its
    status changes.
