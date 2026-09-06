@@ -8000,6 +8000,7 @@ mod causal_generation_tests {
         }
     }
 
+    #[cfg(feature = "eval")]
     #[test]
     fn quadratic_hermite_remainder_retains_powered_denominator_parity() {
         let repeated_cycle = |power: usize| ParsedGraph {

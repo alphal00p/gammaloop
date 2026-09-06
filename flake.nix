@@ -805,6 +805,8 @@
 
       craneTestExtraFeatureSets = {
         "spenso-macros" = ["spenso/shadowing"];
+        # Isolated CFF tests must retain their numerical evaluation oracles.
+        "three-dimensional-reps" = ["eval"];
       };
 
       craneTestFeaturesFor = package:
