@@ -511,9 +511,11 @@ fn generate_3d_expression_from_parsed_generated(
         && denominator_set_is_complete_residue_basis(parsed);
     let (expression, energy_factor_ownership, core_global_prefactor_sign) =
         if embedded_terminal_basis {
+            let mut known =
+                KnownFactorCffBuilder::new(parsed, bounds, options.numerator_sampling_scale);
+            known.normalize_public_output = true;
             (
-                KnownFactorCffBuilder::new(parsed, bounds, options.numerator_sampling_scale)
-                    .build(true)?,
+                known.build(true)?,
                 if uses_generalized_expression {
                     CffEnergyFactorOwnership::VariantLocal
                 } else {
@@ -2445,6 +2447,9 @@ struct BoundedCffBuilder<'a> {
     bounds: Vec<usize>,
     inherited_contour_rows: Vec<Vec<i32>>,
     sampling_scale_mode: NumeratorSamplingScaleMode,
+    // Private child bases retain zero-map carriers for their later append;
+    // only a complete output expression may fuse its root samples early.
+    normalize_public_output: bool,
     expression: ThreeDExpression<OrientationID>,
     surface_index: HashMap<(LinearSurfaceKind, LinearEnergyExpr), HybridSurfaceID>,
 }
@@ -2455,7 +2460,9 @@ impl<'a> BoundedCffBuilder<'a> {
             options.energy_degree_bounds.as_deref().unwrap_or(&[]),
             parsed.internal_edges.len(),
         )?;
-        Ok(Self::for_bounds(parsed, bounds).with_options(options))
+        let mut builder = Self::for_bounds(parsed, bounds).with_options(options);
+        builder.normalize_public_output = true;
+        Ok(builder)
     }
 
     fn for_bounds(parsed: &'a ParsedGraph, mut bounds: Vec<usize>) -> Self {
@@ -2480,6 +2487,7 @@ impl<'a> BoundedCffBuilder<'a> {
             bounds,
             inherited_contour_rows: Vec::new(),
             sampling_scale_mode: NumeratorSamplingScaleMode::None,
+            normalize_public_output: false,
             expression: ThreeDExpression::new_empty(),
             surface_index: HashMap::new(),
         }
@@ -2520,6 +2528,7 @@ impl<'a> BoundedCffBuilder<'a> {
             let mut known =
                 KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode);
             known.source_prefactor = self.source_prefactor;
+            known.normalize_public_output = self.normalize_public_output;
             return known.build_with_inherited_contours(false, &self.inherited_contour_rows);
         }
         if !uniform_sampling_for_nonlinear_degree && self.supports_quadratic_e_surface_only() {
@@ -2534,6 +2543,7 @@ impl<'a> BoundedCffBuilder<'a> {
             let mut known =
                 KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode);
             known.source_prefactor = self.source_prefactor;
+            known.normalize_public_output = self.normalize_public_output;
             return known.build_with_inherited_contours(false, &self.inherited_contour_rows);
         }
         Err(GenerationError::CffHigherEnergyPowerNotImplemented)
@@ -3332,8 +3342,15 @@ struct KnownFactorCffBuilder<'a> {
     source_prefactor: Rational,
     bounds: Vec<usize>,
     sampling_scale_mode: NumeratorSamplingScaleMode,
+    // Enabled only for complete output, never a private child base.
+    normalize_public_output: bool,
     contact_only: bool,
     expression: ThreeDExpression<OrientationID>,
+    // The plain lower constructor depends on this exact graph and ordered
+    // inherited contours. Its source prefactor is fixed for this builder.
+    lower_sector_cache: HashMap<(ParsedGraph, Vec<Vec<i32>>), ThreeDExpression<OrientationID>>,
+    // Direct CFF uses its own sign conversion and no inherited contour rows.
+    direct_base_cache: HashMap<ParsedGraph, ThreeDExpression<OrientationID>>,
     surface_index: HashMap<(LinearSurfaceKind, LinearEnergyExpr), HybridSurfaceID>,
 }
 
@@ -3354,8 +3371,11 @@ impl<'a> KnownFactorCffBuilder<'a> {
             ),
             bounds,
             sampling_scale_mode,
+            normalize_public_output: false,
             contact_only: false,
             expression: ThreeDExpression::new_empty(),
+            lower_sector_cache: HashMap::new(),
+            direct_base_cache: HashMap::new(),
             surface_index: HashMap::new(),
         }
     }
@@ -3579,6 +3599,13 @@ impl<'a> KnownFactorCffBuilder<'a> {
                         )?;
                     }
                     Err(error) => return Err(error),
+                }
+            }
+            // Keep completed root samples compact while retaining every map,
+            // including any zero map whose variants cancel at this boundary.
+            if self.normalize_public_output && depth == 0 {
+                for orientation in &mut self.expression.orientations {
+                    orientation.fuse_compatible_variants();
                 }
             }
         }
@@ -4110,13 +4137,24 @@ impl<'a> KnownFactorCffBuilder<'a> {
         } else {
             None
         };
-        let lower_sector_base_expression = || {
+        let mut lower_sector_base_expression = || -> Result<ThreeDExpression<OrientationID>> {
+            // Bounded lower sectors keep precedence above; their total bounds
+            // and known factors do not enter this plain constructor.
+            let key = (parsed.clone(), inherited_contour_rows.to_vec());
+            if let Some(expression) = self.lower_sector_cache.get(&key) {
+                return Ok(expression.clone());
+            }
             let mut lower = LowerSectorCffBuilder::new(parsed);
             lower.source_prefactor = Some(self.source_prefactor.clone());
             lower.inherited_contour_rows = inherited_contour_rows.to_vec();
-            lower.build()
+            let expression = lower.build()?;
+            self.lower_sector_cache.insert(key, expression.clone());
+            Ok(expression)
         };
-        let direct_base = || -> Result<ThreeDExpression<OrientationID>> {
+        let mut direct_base = || -> Result<ThreeDExpression<OrientationID>> {
+            if let Some(expression) = self.direct_base_cache.get(parsed) {
+                return Ok(expression.clone());
+            }
             // Interpolation has already separated every powered channel before
             // reaching this base.  What remains is the ordinary rational CFF
             // of this exact denominator product, not another lower-sector
@@ -4145,6 +4183,8 @@ impl<'a> KnownFactorCffBuilder<'a> {
                         / self.source_prefactor.clone(),
                 )?;
             }
+            self.direct_base_cache
+                .insert(parsed.clone(), direct.clone());
             Ok(direct)
         };
         let uses_terminal_residue_basis =
@@ -5179,6 +5219,10 @@ impl<'a> LowerSectorCffBuilder<'a> {
                 },
             );
         }
+        // Compress shared chains before embedding this completed component
+        // product. Contributions to the same component map have the same sign,
+        // so every map survives; bounded lower sums can instead carry zero maps.
+        self.expression = self.expression.fuse_compatible_variants();
         self.finalize_numerator_map_labels();
         Ok(self.expression)
     }
