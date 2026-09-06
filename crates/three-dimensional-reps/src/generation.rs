@@ -2612,6 +2612,9 @@ impl<'a> BoundedCffBuilder<'a> {
         remainder_builder.sampling_scale_mode = self.sampling_scale_mode;
         let remainder = remainder_builder.build_quadratic_recursive(lower_sector_base)?;
         self.append_recursive_remainder_terms(active_edge, &remainder)?;
+        // The destination now owns the remapped remainder. Release its source
+        // before recursively constructing the independent contact branch.
+        drop(remainder);
 
         let (subparsed, sub_to_orig) = self.project_parsed_edges(&[active_edge]);
         // Projection consumes only the active edge's contact. Every surviving
@@ -4207,7 +4210,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         let surface_map = self.copy_expression_surfaces(&base_expression, &edge_map);
         let n_original = self.original.internal_edges.len();
 
-        for orientation in &base_expression.orientations {
+        for orientation in base_expression.orientations {
             let local_edge_exprs = orientation
                 .edge_energy_map
                 .iter()
@@ -4228,7 +4231,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 full_edge_exprs[*orig_id] = expr.clone();
             }
 
-            for variant in &orientation.variants {
+            for variant in orientation.variants {
                 let coeff = rational_from_coefficient(&variant.prefactor) * prefactor.clone();
                 if coeff.is_zero() {
                     continue;
@@ -4271,7 +4274,6 @@ impl<'a> KnownFactorCffBuilder<'a> {
                     .collect::<Vec<_>>();
                 let denominator = variant
                     .denominator
-                    .clone()
                     .map(|surface_id| map_surface_id(surface_id, &surface_map));
                 self.push_variant_for_maps(
                     loop_exprs.clone(),
@@ -4288,10 +4290,8 @@ impl<'a> KnownFactorCffBuilder<'a> {
                         prefactor: rational_to_coefficient(coeff)?,
                         half_edges: half_edges.into_iter().map(EdgeIndex).collect(),
                         denominator_edges,
-                        denominator_surface_signs: variant.denominator_surface_signs.clone(),
-                        denominator_edge_support_signs: variant
-                            .denominator_edge_support_signs
-                            .clone(),
+                        denominator_surface_signs: variant.denominator_surface_signs,
+                        denominator_edge_support_signs: variant.denominator_edge_support_signs,
                         uniform_scale_power: variant.uniform_scale_power
                             + extra_uniform_scale_power,
                         numerator_surfaces,
@@ -5011,8 +5011,29 @@ impl<'a> LowerSectorCffBuilder<'a> {
         } else {
             initial_coeff
         };
+        let component_maps = components
+            .iter()
+            .map(|component| {
+                let edge_map = component
+                    .local_to_sub
+                    .iter()
+                    .enumerate()
+                    .map(|(local_id, sub_id)| (local_id, *sub_id))
+                    .collect::<BTreeMap<_, _>>();
+                let surface_map = self.copy_expression_surfaces(&component.expression, &edge_map);
+                let basis_sub = component
+                    .basis_edges
+                    .iter()
+                    .copied()
+                    .collect::<BTreeSet<_>>();
+                (edge_map, surface_map, basis_sub)
+            })
+            .collect::<Vec<_>>();
+
         // Stream completed products into the shared orientation maps instead of
         // retaining every Cartesian layer with a separate copy of those maps.
+        // Keep each parent's orientation/variant fanout lazy as well; the shared
+        // component maps above outlive all borrowed branch iterators.
         let mut partials: Box<dyn Iterator<Item = LowerSectorPartial> + '_> =
             Box::new(std::iter::once(LowerSectorPartial {
                 coeff: initial_coeff,
@@ -5028,23 +5049,21 @@ impl<'a> LowerSectorCffBuilder<'a> {
                 edge_exprs: BTreeMap::new(),
             }));
 
-        for component in components {
-            let edge_map = component
-                .local_to_sub
-                .iter()
-                .enumerate()
-                .map(|(local_id, sub_id)| (local_id, *sub_id))
-                .collect::<BTreeMap<_, _>>();
-            let surface_map = self.copy_expression_surfaces(&component.expression, &edge_map);
-            let basis_sub = component
-                .basis_edges
-                .iter()
-                .copied()
-                .collect::<BTreeSet<_>>();
+        for (component, (edge_map, surface_map, basis_sub)) in
+            components.iter().zip(&component_maps)
+        {
             partials = Box::new(partials.flat_map(move |partial| {
-                let mut next_partials = Vec::new();
-                for orientation in &component.expression.orientations {
-                    for variant in &orientation.variants {
+                component
+                    .expression
+                    .orientations
+                    .iter()
+                    .flat_map(|orientation| {
+                        orientation
+                            .variants
+                            .iter()
+                            .map(move |variant| (orientation, variant))
+                    })
+                    .flat_map(move |(orientation, variant)| {
                         let mut item = partial.clone();
                         item.coeff *= rational_from_coefficient(&variant.prefactor);
                         item.half_edges.extend(
@@ -5063,15 +5082,15 @@ impl<'a> LowerSectorCffBuilder<'a> {
                             variant
                                 .numerator_surfaces
                                 .iter()
-                                .map(|surface| map_surface_id(*surface, &surface_map)),
+                                .map(|surface| map_surface_id(*surface, surface_map)),
                         );
                         for (surface, sign) in &variant.denominator_surface_signs {
-                            let surface = map_surface_id(*surface, &surface_map);
+                            let surface = map_surface_id(*surface, surface_map);
                             *item.denominator_surface_signs.entry(surface).or_insert(1) *= sign;
                         }
                         for (support, sign) in map_edge_support_signs(
                             &variant.denominator_edge_support_signs,
-                            &edge_map,
+                            edge_map,
                         ) {
                             *item
                                 .denominator_edge_support_signs
@@ -5085,27 +5104,27 @@ impl<'a> LowerSectorCffBuilder<'a> {
                                 .clone()
                                 .unwrap_or_else(|| "anonymous".to_string()),
                         );
-                        for chain in denominator_tree_chains(&variant.denominator) {
-                            let mut branched = item.clone();
-                            branched.chain.extend(
-                                chain
-                                    .into_iter()
-                                    .map(|sid| map_surface_id(sid, &surface_map)),
-                            );
-                            for (local_id, sub_id) in &edge_map {
-                                let lifted = orientation.edge_energy_map[*local_id]
-                                    .clone()
-                                    .remap_internal_edges(&edge_map);
-                                branched.edge_exprs.insert(*sub_id, lifted.clone());
-                                if basis_sub.contains(sub_id) {
-                                    branched.targets.insert(*sub_id, lifted);
+                        denominator_tree_chains(&variant.denominator)
+                            .into_iter()
+                            .map(move |chain| {
+                                let mut branched = item.clone();
+                                branched.chain.extend(
+                                    chain
+                                        .into_iter()
+                                        .map(|sid| map_surface_id(sid, surface_map)),
+                                );
+                                for (local_id, sub_id) in edge_map {
+                                    let lifted = orientation.edge_energy_map[*local_id]
+                                        .clone()
+                                        .remap_internal_edges(edge_map);
+                                    branched.edge_exprs.insert(*sub_id, lifted.clone());
+                                    if basis_sub.contains(sub_id) {
+                                        branched.targets.insert(*sub_id, lifted);
+                                    }
                                 }
-                            }
-                            next_partials.push(branched);
-                        }
-                    }
-                }
-                next_partials
+                                branched
+                            })
+                    })
             }));
         }
 

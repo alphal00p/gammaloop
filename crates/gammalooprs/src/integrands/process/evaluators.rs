@@ -1475,14 +1475,15 @@ impl GenericEvaluator {
             return Ok(());
         }
 
-        let rational = self
-            .rational
-            .as_ref()
-            .ok_or_else(|| eyre!("Cannot build symjit backend without the rational evaluator"))?;
+        // Use the same numeric program as eager and external compilation. Rational
+        // constant slots (such as pi) remain placeholders until domain mapping.
         // SymJIT 2.21 supports optimization levels up to O2 and cannot compact some complex
         // temporary layouts.
-        let evaluator = rational
-            .jit_compile::<SymComplex<f64>>(
+        let evaluator = self
+            .f64_eager
+            .clone()
+            .map_coeff(&|c| SymComplex::new(c.re.0, c.im.0))
+            .jit_compile(
                 JITCompilationSettings::new()
                     .optimization_level(usize::from(optimization_level).min(2) as u8)
                     .with_option("compact", "false"),
@@ -2500,6 +2501,45 @@ mod tests {
             let actual = <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut evaluator)(&[]);
 
             assert_eq!(actual, Complex::new(F(0.0), F(2.0)));
+        }
+    }
+
+    #[test]
+    fn symjit_resolves_builtin_constant_slots() {
+        test_initialise().unwrap();
+        let pi = Atom::var(Symbol::PI);
+        for (source, expected) in [
+            (pi.clone(), std::f64::consts::PI),
+            (pi.pow(-3), std::f64::consts::PI.powi(-3)),
+        ] {
+            let mut evaluator = GenericEvaluator::new_from_raw_params(
+                [source],
+                &[],
+                &FunctionMap::default(),
+                vec![],
+                OptimizationSettings::default(),
+                None,
+                &EvaluatorSettings::default(),
+            )
+            .unwrap();
+            evaluator.activate_eager();
+            let eager = scalar_value(<f64 as GenericEvaluatorFloat>::get_evaluator(
+                &mut evaluator,
+            )(&[]));
+            evaluator
+                .activate_symjit(CompilationOptimizationLevel::O0)
+                .unwrap();
+            let jit = scalar_value(<f64 as GenericEvaluatorFloat>::get_evaluator(
+                &mut evaluator,
+            )(&[]));
+            for actual in [eager, jit] {
+                assert!(actual.re.0.is_finite() && actual.im.0.is_finite());
+                assert!(
+                    (actual.re.0 - expected).abs() <= 4.0 * f64::EPSILON * expected.abs(),
+                    "actual={actual:?}, expected={expected}"
+                );
+                assert_eq!(actual.im.0, 0.0);
+            }
         }
     }
 
