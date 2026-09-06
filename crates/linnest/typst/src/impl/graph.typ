@@ -12,11 +12,16 @@
   hedges: (),
 )
 
-#let _is-graph(value) = type(value) == dictionary and value.at("linnest-kind", default: none) == _graph-kind
+#let _is-graph(value) = (
+  type(value) == dictionary
+    and value.at("linnest-kind", default: none) == _graph-kind
+)
 
 #let _assert-graph(graph) = {
   if not _is-graph(graph) {
-    panic("graph: expected a Linnest graph object returned by graph.build or graph.parse")
+    panic(
+      "graph: expected a Linnest graph object returned by graph.build or graph.parse",
+    )
   }
   graph
 }
@@ -33,7 +38,10 @@
   native-data: native-data,
 )
 
-#let with-bytes(graph, graph-bytes) = _graph-object(graph-bytes, _native-data(graph))
+#let with-bytes(graph, graph-bytes) = _graph-object(
+  graph-bytes,
+  _native-data(graph),
+)
 
 #let _array-at(values, index) = if index == none {
   none
@@ -52,11 +60,16 @@
   result
 }
 
-#let _with-native-data(graph, native-data) = _graph-object(_assert-graph(graph).bytes, native-data)
+#let _with-native-data(graph, native-data) = _graph-object(
+  _assert-graph(graph).bytes,
+  native-data,
+)
 
 #let _payload(value) = if value == none { none } else { cbor.encode(value) }
 
-#let _decode-payload(value) = if value == none { none } else { cbor(_as-bytes(value)) }
+#let _decode-payload(value) = if value == none { none } else {
+  cbor(_as-bytes(value))
+}
 
 #let _payload-field(payload, key) = if type(payload) == dictionary {
   payload.at(key, default: none)
@@ -120,19 +133,36 @@
   } else if type(value) == int or type(value) == float or type(value) == bool {
     str(value).replace("−", "-")
   } else {
-    panic(context_ + ": statement values must be flat scalars; use data for nested data or Typst content")
+    panic(
+      context_
+        + ": statement values must be flat scalars; use data for nested data or Typst content",
+    )
   }
 }
 
 #let _point-statement(point) = {
   if type(point) == str {
     point
-  } else if type(point) == dictionary and point.keys().contains("x") and point.keys().contains("y") {
-    _statement-value(point.x, "graph position x") + "," + _statement-value(point.y, "graph position y")
+  } else if (
+    type(point) == dictionary
+      and point.keys().contains("x")
+      and point.keys().contains("y")
+  ) {
+    (
+      _statement-value(point.x, "graph position x")
+        + ","
+        + _statement-value(point.y, "graph position y")
+    )
   } else if type(point) == array and point.len() == 2 {
-    _statement-value(point.at(0), "graph position x") + "," + _statement-value(point.at(1), "graph position y")
+    (
+      _statement-value(point.at(0), "graph position x")
+        + ","
+        + _statement-value(point.at(1), "graph position y")
+    )
   } else {
-    panic("graph position values must be strings, (x:, y:) dictionaries, or two-item arrays")
+    panic(
+      "graph position values must be strings, (x:, y:) dictionaries, or two-item arrays",
+    )
   }
 }
 
@@ -166,7 +196,9 @@
   result
 }
 
-#let _kind(item) = if type(item) == dictionary { item.at("linnest-kind", default: none) } else { none }
+#let _kind(item) = if type(item) == dictionary {
+  item.at("linnest-kind", default: none)
+} else { none }
 
 #let _is-label(value) = type(value) == label
 
@@ -283,7 +315,14 @@
 }
 
 #let _node-spec(node) = {
-  let statements = _statements-with-point(_flat-statements(node.at("statements", default: (:)), "graph.node statements"), "shift", node.at("shift", default: none))
+  let statements = _statements-with-point(
+    _flat-statements(
+      node.at("statements", default: (:)),
+      "graph.node statements",
+    ),
+    "shift",
+    node.at("shift", default: none),
+  )
   let clean = node
   let name = clean.at("name", default: none)
   let payload = clean.at("payload", default: none)
@@ -307,7 +346,9 @@
 
 #let _resolved-node-spec(node, node-keys) = {
   let index = node.at("id", default: none)
-  let item = node + (pos: _resolve-pos(node.at("pos", default: none), node-keys))
+  let item = (
+    node + (pos: _resolve-pos(node.at("pos", default: none), node-keys))
+  )
   if index != none {
     item.insert("index", index)
   }
@@ -319,7 +360,10 @@
     _statements-with-value(
       _statements-with-point(
         _statements-with-point(
-          _flat-statements(edge.at("statements", default: (:)), "graph.edge statements"),
+          _flat-statements(
+            edge.at("statements", default: (:)),
+            "graph.edge statements",
+          ),
           "shift",
           edge.at("shift", default: none),
         ),
@@ -373,10 +417,16 @@
     result.insert("id", id)
   }
   if half.at("statement", default: none) != none {
-    result.insert("statement", _statement-value(half.statement, context_ + ".statement"))
+    result.insert("statement", _statement-value(
+      half.statement,
+      context_ + ".statement",
+    ))
   }
   if half.at("compass", default: none) != none {
-    result.insert("compass", _statement-value(half.compass, context_ + ".compass"))
+    result.insert("compass", _statement-value(
+      half.compass,
+      context_ + ".compass",
+    ))
   }
   result
 }
@@ -385,18 +435,21 @@
   edge,
   node-keys,
 ) = {
-  let item = edge + (
-    source: _resolved-half-spec(
-      edge.at("source", default: none),
-      node-keys,
-      "graph.source",
-    ),
-    sink: _resolved-half-spec(
-      edge.at("sink", default: none),
-      node-keys,
-      "graph.sink",
-    ),
-    pos: _resolve-pos(edge.at("pos", default: none), node-keys),
+  let item = (
+    edge
+      + (
+        source: _resolved-half-spec(
+          edge.at("source", default: none),
+          node-keys,
+          "graph.source",
+        ),
+        sink: _resolved-half-spec(
+          edge.at("sink", default: none),
+          node-keys,
+          "graph.sink",
+        ),
+        pos: _resolve-pos(edge.at("pos", default: none), node-keys),
+      )
   )
   _edge-spec(item)
 }
@@ -411,19 +464,34 @@
     } else if kind == "edge" {
       resolved-edges.push(item)
     } else {
-      panic("graph.build: expected graph.node(..) or graph.edge(..), got " + repr(item))
+      panic(
+        "graph.build: expected graph.node(..) or graph.edge(..), got "
+          + repr(item),
+      )
     }
   }
   (nodes: resolved-nodes, edges: resolved-edges)
 }
 #let group(name, side, start) = {
-  if side != none and not (side == "+" or side == "-" or side == "positive" or side == "negative") {
-    panic("graph.group: side must be none, \"+\", \"-\", \"positive\", or \"negative\"")
+  if (
+    side != none
+      and not (
+        side == "+" or side == "-" or side == "positive" or side == "negative"
+      )
+  ) {
+    panic(
+      "graph.group: side must be none, \"+\", \"-\", \"positive\", or \"negative\"",
+    )
   }
   if start != none and type(start) != int and type(start) != float {
     panic("graph.group: start must be none, an integer, or a float")
   }
-  (kind: "group", name: _statement-value(name, "graph.group name"), side: side, start: start)
+  (
+    kind: "group",
+    name: _statement-value(name, "graph.group name"),
+    side: side,
+    start: start,
+  )
 }
 #let _axis-placement-kind = "axis-placement"
 #let _axis-placement(mode, value, context_) = {
@@ -435,7 +503,10 @@
 #let pin(value) = _axis-placement("pin", value, "graph.pin")
 #let start(value) = _axis-placement("start", value, "graph.start")
 #let _axis-value(value, context_) = {
-  if type(value) == dictionary and value.at("kind", default: none) == _axis-placement-kind {
+  if (
+    type(value) == dictionary
+      and value.at("kind", default: none) == _axis-placement-kind
+  ) {
     let mode = value.at("mode", default: none)
     if mode != "start" and mode != "pin" {
       panic(context_ + ": axis mode must be \"start\" or \"pin\"")
@@ -653,18 +724,29 @@
 #let _node-style-data(record, style-record) = {
   let record-label = _data-label(record)
   let statement-label = record.statements.at("label", default: none)
-  let data-label = if record-label == none { statement-label } else { record-label }
+  let data-label = if record-label == none { statement-label } else {
+    record-label
+  }
+  let core = (
+    vid: record.node,
+    node: record,
+    name: record.name,
+    data: record.at("data", default: none),
+    label: data-label,
+  )
+  let fields = (
+    record.at(
+      "fields",
+      default: record.statements + _data-fields(record),
+    )
+      + core
+  )
   (
     style-record.at("scope", default: (:))
       + record.statements
       + _data-fields(record)
-      + (
-        vid: record.node,
-        node: record,
-        name: record.name,
-        data: record.at("data", default: none),
-        label: data-label,
-      )
+      + core
+      + (fields: fields)
   )
 }
 
@@ -672,23 +754,43 @@
   let node-data = _node-style-data(record, style-record)
   let default-label-value = node-data.at("label", default: record.name)
   let default-label = _as-content(default-label-value)
-  let label = _content(style-record.at("node-label", default: auto), node-data, default-label)
-  let content-style = _style(style-record.at("node-label-style", default: (:)), node-data)
-  let draw-style = _style(style-record.at("node-style", default: (:)), node-data)
+  let label = _content(
+    style-record.at("node-label", default: auto),
+    node-data,
+    default-label,
+  )
+  let content-style = _style(
+    style-record.at("node-label-style", default: (:)),
+    node-data,
+  )
+  let draw-style = _style(
+    style-record.at("node-style", default: (:)),
+    node-data,
+  )
   let unit = style-record.at("unit", default: 1)
   let length = _canvas-length(unit)
 
   let width = 0.0
   let height = 0.0
   if label != none {
-    let size = measure(text(top-edge: "cap-height", bottom-edge: "bounds", label))
+    let size = measure(text(
+      top-edge: "cap-height",
+      bottom-edge: "bounds",
+      label,
+    ))
     width = calc.abs(size.width.to-absolute() / length.to-absolute())
     height = calc.abs(size.height.to-absolute() / length.to-absolute())
   }
 
   let padding = content-style.at("padding", default: 0)
-  width += _numeric(_padding-side(padding, "left")) + _numeric(_padding-side(padding, "right"))
-  height += _numeric(_padding-side(padding, "top")) + _numeric(_padding-side(padding, "bottom"))
+  width += (
+    _numeric(_padding-side(padding, "left"))
+      + _numeric(_padding-side(padding, "right"))
+  )
+  height += (
+    _numeric(_padding-side(padding, "top"))
+      + _numeric(_padding-side(padding, "bottom"))
+  )
   if type(padding) in (int, float) {
     width += 2 * padding
     height += 2 * padding
@@ -710,28 +812,43 @@
 #let _edge-style-data(record, style-record) = {
   let source-half-edge = record.at("source", default: none)
   let sink-half-edge = record.at("sink", default: none)
-  let source-statement = if source-half-edge == none { none } else { source-half-edge.statement }
-  let sink-statement = if sink-half-edge == none { none } else { sink-half-edge.statement }
+  let source-statement = if source-half-edge == none { none } else {
+    source-half-edge.statement
+  }
+  let sink-statement = if sink-half-edge == none { none } else {
+    sink-half-edge.statement
+  }
   let ext = source-half-edge == none or sink-half-edge == none
   let record-label = _data-label(record)
   let statement-label = record.statements.at("label", default: none)
-  let data-label = if record-label == none { statement-label } else { record-label }
+  let data-label = if record-label == none { statement-label } else {
+    record-label
+  }
+  let core = (
+    eid: record.edge,
+    edge: record,
+    source-statement: source-statement,
+    sink-statement: sink-statement,
+    source-half-edge: source-half-edge,
+    sink-half-edge: sink-half-edge,
+    data: record.at("data", default: none),
+    label: data-label,
+    orientation: record.orientation,
+    ext: ext,
+  )
+  let fields = (
+    record.at(
+      "fields",
+      default: record.statements + _data-fields(record),
+    )
+      + core
+  )
   (
     style-record.at("scope", default: (:))
       + record.statements
       + _data-fields(record)
-      + (
-        eid: record.edge,
-        edge: record,
-        source-statement: source-statement,
-        sink-statement: sink-statement,
-        source-half-edge: source-half-edge,
-        sink-half-edge: sink-half-edge,
-        data: record.at("data", default: none),
-        label: data-label,
-        orientation: record.orientation,
-        ext: ext,
-      )
+      + core
+      + (fields: fields)
   )
 }
 
@@ -746,14 +863,23 @@
     return none
   }
 
-  let content-style = _style(style-record.at("edge-label-style", default: (:)), edge-data)
+  let content-style = _style(
+    style-record.at("edge-label-style", default: (:)),
+    edge-data,
+  )
   let length = _canvas-length(style-record.at("unit", default: 1))
   let size = measure(text(top-edge: "cap-height", bottom-edge: "bounds", label))
   let padding = content-style.at("padding", default: 0)
   let width = calc.abs(size.width.to-absolute() / length.to-absolute())
   let height = calc.abs(size.height.to-absolute() / length.to-absolute())
-  width += _numeric(_padding-side(padding, "left")) + _numeric(_padding-side(padding, "right"))
-  height += _numeric(_padding-side(padding, "top")) + _numeric(_padding-side(padding, "bottom"))
+  width += (
+    _numeric(_padding-side(padding, "left"))
+      + _numeric(_padding-side(padding, "right"))
+  )
+  height += (
+    _numeric(_padding-side(padding, "top"))
+      + _numeric(_padding-side(padding, "bottom"))
+  )
   if type(padding) in (int, float) {
     width += 2 * padding
     height += 2 * padding
@@ -804,7 +930,10 @@
   for key in structural-keys {
     if result.keys().contains(key) {
       if key == "statements" {
-        structural.insert(key, _flat-statements(result.at(key), context_ + " statements"))
+        structural.insert(key, _flat-statements(
+          result.at(key),
+          context_ + " statements",
+        ))
       } else {
         structural.insert(key, result.at(key))
       }
@@ -846,7 +975,16 @@
   }
 }
 
-#let _native-data-from-build(graph-bytes_, graph-data, nodes, edges, default-node-data, default-edge-data, default-source-data, default-sink-data) = {
+#let _native-data-from-build(
+  graph-bytes_,
+  graph-data,
+  nodes,
+  edges,
+  default-node-data,
+  default-edge-data,
+  default-source-data,
+  default-sink-data,
+) = {
   let native-data = _empty-native-data()
   native-data.graph = graph-data
 
@@ -857,7 +995,11 @@
       let node = nodes.at(key)
       let data = _merge-data(default-node-data, node.at("data", default: none))
       if data != none {
-        native-data.nodes = _array-set(native-data.nodes, node-record.node, data)
+        native-data.nodes = _array-set(
+          native-data.nodes,
+          node-record.node,
+          data,
+        )
       }
     }
   }
@@ -869,24 +1011,42 @@
       let edge = edges.at(key)
       let data = _merge-data(default-edge-data, edge.at("data", default: none))
       if data != none {
-        native-data.edges = _array-set(native-data.edges, edge-record.edge, data)
+        native-data.edges = _array-set(
+          native-data.edges,
+          edge-record.edge,
+          data,
+        )
       }
 
       let source-record = edge-record.at("source", default: none)
       let source-item = edge.at("source", default: none)
       if source-record != none and source-item != none {
-        let source-data = _merge-data(default-source-data, source-item.at("data", default: none))
+        let source-data = _merge-data(default-source-data, source-item.at(
+          "data",
+          default: none,
+        ))
         if source-data != none {
-          native-data.hedges = _array-set(native-data.hedges, source-record.hedge, source-data)
+          native-data.hedges = _array-set(
+            native-data.hedges,
+            source-record.hedge,
+            source-data,
+          )
         }
       }
 
       let sink-record = edge-record.at("sink", default: none)
       let sink-item = edge.at("sink", default: none)
       if sink-record != none and sink-item != none {
-        let sink-data = _merge-data(default-sink-data, sink-item.at("data", default: none))
+        let sink-data = _merge-data(default-sink-data, sink-item.at(
+          "data",
+          default: none,
+        ))
         if sink-data != none {
-          native-data.hedges = _array-set(native-data.hedges, sink-record.hedge, sink-data)
+          native-data.hedges = _array-set(
+            native-data.hedges,
+            sink-record.hedge,
+            sink-data,
+          )
         }
       }
     }
@@ -925,7 +1085,12 @@
   for side in ("source", "sink") {
     let endpoint = result.at(side, default: none)
     if endpoint != none {
-      result.insert(side, _native-record-data(endpoint, native-data, "hedge", endpoint.hedge))
+      result.insert(side, _native-record-data(
+        endpoint,
+        native-data,
+        "hedge",
+        endpoint.hedge,
+      ))
     }
   }
   result
@@ -938,7 +1103,12 @@
   } else {
     cbor(_plugin.graph_nodes_of_subgraph(graph-bytes(graph), bytes(subgraph)))
   }
-  records.map(record => _native-record-data(record, native-data, "node", record.node))
+  records.map(record => _native-record-data(
+    record,
+    native-data,
+    "node",
+    record.node,
+  ))
 }
 
 #let _edge-records(graph, subgraph) = {
@@ -961,8 +1131,17 @@
   let structural-patches = (nodes: (), edges: (), hedges: ())
   let native-data = _native-data(graph_)
   let info = _info-record(graph_)
-  let graph-record = _record-with-fields(info + (statements: info.at("global-statements", default: (:))), (:), (:))
-  let graph-patch = _mapped-patch(graph, graph-record, "graph", "graph.map graph")
+  let graph-record = _record-with-fields(
+    info + (statements: info.at("global-statements", default: (:))),
+    (:),
+    (:),
+  )
+  let graph-patch = _mapped-patch(
+    graph,
+    graph-record,
+    "graph",
+    "graph.map graph",
+  )
   if graph-patch.data != none {
     native-data.graph = graph-patch.data
     changed = true
@@ -973,7 +1152,11 @@
       let node-record = _record-with-fields(node-record, (:), (:))
       let patch = _mapped-patch(node, node-record, "node", "graph.map node")
       if patch.data != none {
-        native-data.nodes = _array-set(native-data.nodes, node-record.node, patch.data)
+        native-data.nodes = _array-set(
+          native-data.nodes,
+          node-record.node,
+          patch.data,
+        )
         changed = true
       }
       if patch.structural != none {
@@ -990,7 +1173,11 @@
       let edge-fields = edge-record.fields
       let patch = _mapped-patch(edge, edge-record, "edge", "graph.map edge")
       if patch.data != none {
-        native-data.edges = _array-set(native-data.edges, edge-source.edge, patch.data)
+        native-data.edges = _array-set(
+          native-data.edges,
+          edge-source.edge,
+          patch.data,
+        )
         changed = true
       }
       if patch.structural != none {
@@ -1008,11 +1195,17 @@
           "graph.map source",
         )
         if source-patch.data != none {
-          native-data.hedges = _array-set(native-data.hedges, source-record.hedge, source-patch.data)
+          native-data.hedges = _array-set(
+            native-data.hedges,
+            source-record.hedge,
+            source-patch.data,
+          )
           changed = true
         }
         if source-patch.structural != none {
-          let structural = source-patch.structural + (index: source-record.hedge)
+          let structural = (
+            source-patch.structural + (index: source-record.hedge)
+          )
           structural-patches.hedges.push(structural)
           structural-changed = true
         }
@@ -1027,7 +1220,11 @@
           "graph.map sink",
         )
         if sink-patch.data != none {
-          native-data.hedges = _array-set(native-data.hedges, sink-record.hedge, sink-patch.data)
+          native-data.hedges = _array-set(
+            native-data.hedges,
+            sink-record.hedge,
+            sink-patch.data,
+          )
           changed = true
         }
         if sink-patch.structural != none {
@@ -1041,7 +1238,10 @@
 
   if structural-changed {
     graph_ = _graph-object(
-      _plugin.graph_apply_structural_patches(graph-bytes(graph_), cbor.encode(structural-patches)),
+      _plugin.graph_apply_structural_patches(
+        graph-bytes(graph_),
+        cbor.encode(structural-patches),
+      ),
       native-data,
     )
   }
@@ -1095,7 +1295,13 @@
 }
 
 
-#let _apply-default-data(graph_, default-node-data, default-edge-data, default-source-data, default-sink-data) = {
+#let _apply-default-data(
+  graph_,
+  default-node-data,
+  default-edge-data,
+  default-source-data,
+  default-sink-data,
+) = {
   if (
     default-node-data == none
       and default-edge-data == none
@@ -1128,7 +1334,13 @@
   let edge-fields = _eval-field-list(eval-edge-fields, "graph.eval-fields")
   let source-fields = _eval-field-list(eval-source-fields, "graph.eval-fields")
   let sink-fields = _eval-field-list(eval-sink-fields, "graph.eval-fields")
-  if graph-fields.len() == 0 and node-fields.len() == 0 and edge-fields.len() == 0 and source-fields.len() == 0 and sink-fields.len() == 0 {
+  if (
+    graph-fields.len() == 0
+      and node-fields.len() == 0
+      and edge-fields.len() == 0
+      and source-fields.len() == 0
+      and sink-fields.len() == 0
+  ) {
     return graph_
   }
   map(
@@ -1174,8 +1386,16 @@
   let edge-fields = _eval-field-list(eval-edge-fields, "graph.parse")
   let source-fields = _eval-field-list(eval-source-fields, "graph.parse")
   let sink-fields = _eval-field-list(eval-sink-fields, "graph.parse")
-  let graphs = cbor(_plugin.parse_graph(bytes(input))).map(graph => _graph-object(graph, _empty-native-data()))
-  let needs-eval = graph-fields.len() != 0 or node-fields.len() != 0 or edge-fields.len() != 0 or source-fields.len() != 0 or sink-fields.len() != 0
+  let graphs = cbor(_plugin.parse_graph(bytes(input))).map(
+    graph => _graph-object(graph, _empty-native-data()),
+  )
+  let needs-eval = (
+    graph-fields.len() != 0
+      or node-fields.len() != 0
+      or edge-fields.len() != 0
+      or source-fields.len() != 0
+      or sink-fields.len() != 0
+  )
   let needs-defaults = (
     default-node-data != none
       or default-edge-data != none
@@ -1237,8 +1457,14 @@
       name: name,
       data: none,
       statements: _flat-statements(statements, "graph.build statements"),
-      default-edge-statements: _flat-statements(default-edge-statements, "graph.build default-edge-statements"),
-      default-node-statements: _flat-statements(default-node-statements, "graph.build default-node-statements"),
+      default-edge-statements: _flat-statements(
+        default-edge-statements,
+        "graph.build default-edge-statements",
+      ),
+      default-node-statements: _flat-statements(
+        default-node-statements,
+        "graph.build default-node-statements",
+      ),
       nodes: keyed-nodes.map(node => _resolved-node-spec(
         node,
         node-keys,
@@ -1292,15 +1518,17 @@
   }
   _check-name(resolved-name, "graph.node")
   _check-id(id, "graph.node")
-  ((
-    linnest-kind: "node",
-    id: id,
-    name: resolved-name,
-    data: resolved-data,
-    pos: pos,
-    shift: shift,
-    statements: statements,
-  ),)
+  (
+    (
+      linnest-kind: "node",
+      id: id,
+      name: resolved-name,
+      data: resolved-data,
+      pos: pos,
+      shift: shift,
+      statements: statements,
+    ),
+  )
 }
 #let source(node, options, ..args) = {
   let name = options.name
@@ -1313,7 +1541,15 @@
   let data = _data-from-args("graph.source", args)
   _check-name(name, "graph.source")
   _check-id(id, "graph.source")
-  (linnest-kind: "source", node: node, name: name, id: id, data: data, statement: statement, compass: compass)
+  (
+    linnest-kind: "source",
+    node: node,
+    name: name,
+    id: id,
+    data: data,
+    statement: statement,
+    compass: compass,
+  )
 }
 #let sink(node, options, ..args) = {
   let name = options.name
@@ -1326,7 +1562,15 @@
   let data = _data-from-args("graph.sink", args)
   _check-name(name, "graph.sink")
   _check-id(id, "graph.sink")
-  (linnest-kind: "sink", node: node, name: name, id: id, data: data, statement: statement, compass: compass)
+  (
+    linnest-kind: "sink",
+    node: node,
+    name: name,
+    id: id,
+    data: data,
+    statement: statement,
+    compass: compass,
+  )
 }
 #let edge(options, ..args) = {
   let name = options.name
@@ -1337,8 +1581,15 @@
   let label-pos = options.label-pos
   let label-angle = options.label-angle
   let bend = options.bend
+  let style = options.style
   let statements = options.statements
   let resolved-data = _data-from-args("graph.edge", args)
+  if style != auto {
+    if resolved-data == none {
+      resolved-data = (:)
+    }
+    resolved-data.insert("edge-style", style)
+  }
   let resolved-id = id
   let resolved-name = name
   let resolved-source = none
@@ -1361,7 +1612,9 @@
       }
       resolved-name = arg
     } else {
-      panic("graph.edge: positional arguments must be graph.source(..), graph.sink(..), or an edge name")
+      panic(
+        "graph.edge: positional arguments must be graph.source(..), graph.sink(..), or an edge name",
+      )
     }
   }
   _check-name(resolved-name, "graph.edge")
@@ -1376,22 +1629,24 @@
   } else {
     none
   }
-  ((
-    linnest-kind: "edge",
-    source: resolved-source,
-    sink: resolved-sink,
-    orientation: orientation,
-    flow: flow,
-    name: resolved-name,
-    id: resolved-id,
-    data: resolved-data,
-    pos: pos,
-    shift: shift,
-    label-pos: label-pos,
-    label-angle: label-angle,
-    bend: bend,
-    statements: statements,
-  ),)
+  (
+    (
+      linnest-kind: "edge",
+      source: resolved-source,
+      sink: resolved-sink,
+      orientation: orientation,
+      flow: flow,
+      name: resolved-name,
+      id: resolved-id,
+      data: resolved-data,
+      pos: pos,
+      shift: shift,
+      label-pos: label-pos,
+      label-angle: label-angle,
+      bend: bend,
+      statements: statements,
+    ),
+  )
 }
 #let info(graph) = _info-record(graph)
 #let dot(graph) = cbor(_plugin.graph_dot(graph-bytes(graph)))
@@ -1477,7 +1732,14 @@
   ))
 }
 #let join(left, right, key) = {
-  _graph-object(_plugin.graph_join_by_hedge_key(graph-bytes(left), graph-bytes(right), cbor.encode((key: key))), _empty-native-data())
+  _graph-object(
+    _plugin.graph_join_by_hedge_key(
+      graph-bytes(left),
+      graph-bytes(right),
+      cbor.encode((key: key)),
+    ),
+    _empty-native-data(),
+  )
 }
 #let cycles(graph) = cbor(_plugin.graph_cycle_basis(graph-bytes(graph)))
 #let forests(graph) = cbor(_plugin.graph_spanning_forests(graph-bytes(graph)))
