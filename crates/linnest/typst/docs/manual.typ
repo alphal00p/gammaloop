@@ -1,7 +1,8 @@
 #import "@preview/tidy:0.4.3"
-#import "../src/lib.typ": draw, graph, layout, subgraph
+#import "../src/lib.typ": draw, graph, layout, layouts, subgraph
 #import graph: (
-  build, dot, edge, edge-data, edges, node, node-data, nodes, parse, sink, source, update-edge-data, update-node-data,
+  build, dot, edge, edge-data, edges, node, node-data, nodes, parse, sink,
+  source, update-edge-data, update-node-data,
 )
 
 
@@ -29,139 +30,95 @@
 #let crown = $star$
 
 #let linnest-guide = [
-== Linnet
+  == Linnet
 
-The `linnet` crate wrapped by this package is built around a half-edge graph data structure.
-This means that instead of a graph being represented as a set of nodes and edges, it is represented as a set of half-edges $H$, and a set of vertices $V$.
-The graph structure is then encoded through two maps.
-The first map, $partial : H --> V$ maps each half-edge to its corresponding vertex.
-The preimage of any vertex $v$ is the set of half-edges that map to it, called the crown of $v$.
-The second map, $iota : H --> H$, is an involution that _glues_ half-edges together to form edges.
-If a half-edge is glued to itself, we call that an external half-edge. This means that linnet graphs are strictly more capable than normal edge and vertex graphs.
+  The `linnet` crate wrapped by this package is built around a half-edge graph data structure.
+  This means that instead of a graph being represented as a set of nodes and edges, it is represented as a set of half-edges $H$, and a set of vertices $V$.
+  The graph structure is then encoded through two maps.
+  The first map, $partial : H --> V$ maps each half-edge to its corresponding vertex.
+  The preimage of any vertex $v$ is the set of half-edges that map to it, called the crown of $v$.
+  The second map, $iota : H --> H$, is an involution that _glues_ half-edges together to form edges.
+  If a half-edge is glued to itself, we call that an external half-edge. This means that linnet graphs are strictly more capable than normal edge and vertex graphs.
 
-#let g = build({
-  node(<a>, label: [$v$])
-  node(<b>)
-  edge(source(<a>), <a-b>, sink(<b>), label: [e])
-  edge(source(<a>), <in-a1>, label: [e])
-  edge(source(<a>), <in-a2>, label: [e])
-})
-// #edges(g)
-#context if target() == "paged" {
-  figure(draw(layout(g, g-center: 0.005, length-scale: .3)))
-}
-
-
-Native half-edges also make subgraphs more granular because they can be encoded
-as sets of half-edges. This directly supports vertex-induced subgraphs: the
-union of the crowns of a set of vertices.
+  #let g = build({
+    node(<a>, label: [$v$])
+    node(<b>)
+    edge(source(<a>), <a-b>, sink(<b>), label: [e])
+    edge(source(<a>), <in-a1>, label: [e])
+    edge(source(<a>), <in-a2>, label: [e])
+  })
+  // #edges(g)
+  #context if target() == "paged" {
+    figure(draw(layout(g, g-center: 0.005, length-scale: .3)))
+  }
 
 
-== Linnest
-
-Linnest is the Typst and WebAssembly interface to Linnet. It provides layout
-algorithms, DOT parsing, and selected graph algorithms without a separate
-runtime process.
-
-Graphs can be constructed in two ways: parse a DOT string with `parse`:
-```typ
-#let g = parse("digraph { a -> b }")
-```
-or build from edges and nodes with `build`, using a Fletcher-inspired syntax:
-```typ
-#let g = build({
-  node(<a>, label: [$v$])
-  node(<b>)
-  edge(source(<a>), <a-b>, sink(<b>), label: [e])
-  edge(source(<a>), <in-a1>, label: [e])
-  edge(source(<a>), <in-a2>, label: [e])
-})```
-
-In either case, `type(g)` is `dictionary`: graph values wrap an archived Linnet
-graph together with native Typst data. Rust owns topology, layout state,
-statement metadata, and internal opaque payload bytes. User data captured from
-Typst stays in Typst and is merged back into query records.
-
-The main use case is to place nodes and edges on a canvas with the `layout`
-function and render the result with `draw`.
+  Native half-edges also make subgraphs more granular because they can be encoded
+  as sets of half-edges. This directly supports vertex-induced subgraphs: the
+  union of the crowns of a set of vertices.
 
 
+  == Linnest
 
-- `graph` for construction, parsing, inspection, joins, and graph algorithms.
-- `subgraph` for subgraph object construction and inspection.
-- `layout` for the separate layout pass.
-- `draw` for rendering a laid-out graph object with CeTZ.
+  Linnest is the Typst and WebAssembly interface to Linnet. It provides layout
+  algorithms, DOT parsing, and selected graph algorithms without a separate
+  runtime process.
 
-Domain-specific styles are ordinary Typst data and callbacks composed with
-`graph.style` and `draw`; Linnest does not reserve a domain or export a physics
-module.
+  Graphs can be constructed in two ways: parse a DOT string with `parse`:
+  ```typ
+  #let g = parse("digraph { a -> b }")
+  ```
+  or build from edges and nodes with `build`, using a Fletcher-inspired syntax:
+  ```typ
+  #let g = build({
+    node(<a>, label: [$v$])
+    node(<b>)
+    edge(source(<a>), <a-b>, sink(<b>), label: [e])
+    edge(source(<a>), <in-a1>, label: [e])
+    edge(source(<a>), <in-a2>, label: [e])
+  })```
 
-=== Choose an import path
+  In either case, `type(g)` is `dictionary`: graph values wrap an archived Linnet
+  graph together with native Typst data. Rust owns topology, layout state,
+  statement metadata, and internal opaque payload bytes. User data captured from
+  Typst stays in Typst and is merged back into query records.
 
-Linnest and Kurvst are currently bundled source packages, not Typst Universe
-packages. A Clinnet run writes both package trees below `build/templates/`.
-From a custom template in that directory, import Linnest with:
+  The main use case is to place nodes and edges on a canvas with the `layout`
+  function and render the result with `draw`.
 
-```typ
-#import "crates/linnest/typst/src/lib.typ": draw, graph, layout, subgraph
-```
 
-From this repository's `crates/linnest/typst/examples/` directory, the equivalent
-checkout-relative import is `../src/lib.typ`. Keep the package directory and its
-`linnest.wasm` file together when copying it elsewhere. The examples below use
-the checkout-relative form because they are also compiled as repository tests.
 
-=== Minimal Build Example
+  - `graph` for construction, parsing, inspection, joins, and graph algorithms.
+  - `subgraph` for subgraph object construction and inspection.
+  - `layout` for the separate layout pass.
+  - `draw` for rendering a laid-out graph object with CeTZ.
 
-```typ
-#import "../src/lib.typ": draw, graph, layout, subgraph
-#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
+  Domain-specific styles are ordinary Typst data and callbacks composed with
+  `graph.style` and `draw`; Linnest does not reserve a domain or export a physics
+  module.
 
-#let g = build({
-  node(<a>)
-  node(<c>)
-  edge(
-    source(<a>, compass: "e"),
-    <a-c>,
-    sink(<c>, compass: "w"),
-    label: [a-c],
-    statements: (
-      color: "0055ff",
-      source-color: "d72638",
-      sink-color: "1b7f4c",
-    ),
-  )
-},
-  name: "demo",
-)
-#let g = layout(g)
-#let east = subgraph.compass(g, "e")
-#let edge-records = edges(g, subgraph: east)
-#let dot-text = dot(g)
-#let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
-#let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
-#let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
-#context if target() == "paged" {
-  draw(
-    g,
-    subgraph: east,
-    edge-label: edge-label,
-    edge-label-style: (anchor: "south"),
-    source-style: source-style,
-    sink-style: sink-style,
-  )
-} else {
-  [The downloadable PDF renders this CeTZ result. The HTML manual keeps the
-  copyable source because Typst's experimental HTML target does not yet emit
-  the drawing content.]
-}
-```
+  === Choose an import path
 
-#import "../src/lib.typ": draw, graph, layout, subgraph
-#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
+  Linnest and Kurvst are currently bundled source packages, not Typst Universe
+  packages. A Clinnet run writes both package trees below `build/templates/`.
+  From a custom template in that directory, import Linnest with:
 
-#let g = build(
-  {
+  ```typ
+  #import "crates/linnest/typst/src/lib.typ": draw, graph, layout, subgraph
+  ```
+
+  From this repository's `crates/linnest/typst/examples/` directory, the equivalent
+  checkout-relative import is `../src/lib.typ`. Keep the package directory and its
+  `linnest.wasm` file together when copying it elsewhere. The examples below use
+  the checkout-relative form because they are also compiled as repository tests.
+
+  === Minimal Build Example
+
+  ```typ
+  #import "../src/lib.typ": draw, graph, layout, subgraph
+  #import graph: build, dot, edge, edges, node, nodes, parse, sink, source
+
+  #let g = build({
     node(<a>)
     node(<c>)
     edge(
@@ -176,668 +133,759 @@ the checkout-relative form because they are also compiled as repository tests.
       ),
     )
   },
-  name: "demo",
-)
-#let g = layout(g)
-#let east = subgraph.compass(g, "e")
-#let edge-records = edges(g, subgraph: east)
-#let dot-text = dot(g)
-#let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
-#let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
-#let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
-#draw(
-  g,
-  subgraph: east,
-  edge-label: edge-label,
-  edge-label-style: (anchor: "south"),
-  source-style: source-style,
-  sink-style: sink-style,
-)
+    name: "demo",
+  )
+  #let g = layout(g)
+  #let east = subgraph.compass(g, "e")
+  #let edge-records = edges(g, subgraph: east)
+  #let dot-text = dot(g)
+  #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
+  #let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
+  #let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
+  #context if target() == "paged" {
+    draw(
+      g,
+      subgraph: east,
+      edge-label: edge-label,
+      edge-label-style: (anchor: "south"),
+      source-style: source-style,
+      sink-style: sink-style,
+    )
+  } else {
+    [The downloadable PDF renders this CeTZ result. The HTML manual keeps the
+    copyable source because Typst's experimental HTML target does not yet emit
+    the drawing content.]
+  }
+  ```
 
-=== Graph Objects
+  #import "../src/lib.typ": draw, graph, layout, subgraph
+  #import graph: build, dot, edge, edges, node, nodes, parse, sink, source
 
-Graph values combine archived Linnet topology with native Typst data. The
-#link("reference/typst/graph/#graph-object-api")[focused graph reference]
-documents their constructors, transforms, queries, and update operations.
+  #let g = build(
+    {
+      node(<a>)
+      node(<c>)
+      edge(
+        source(<a>, compass: "e"),
+        <a-c>,
+        sink(<c>, compass: "w"),
+        label: [a-c],
+        statements: (
+          color: "0055ff",
+          source-color: "d72638",
+          sink-color: "1b7f4c",
+        ),
+      )
+    },
+    name: "demo",
+  )
+  #let g = layout(g)
+  #let east = subgraph.compass(g, "e")
+  #let edge-records = edges(g, subgraph: east)
+  #let dot-text = dot(g)
+  #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
+  #let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
+  #let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
+  #draw(
+    g,
+    subgraph: east,
+    edge-label: edge-label,
+    edge-label-style: (anchor: "south"),
+    source-style: source-style,
+    sink-style: sink-style,
+  )
+
+  === Graph Objects
+
+  Graph values combine archived Linnet topology with native Typst data. The
+  #link("reference/typst/graph/#graph-object-api")[focused graph reference]
+  documents their constructors, transforms, queries, and update operations.
 ]
 
 #let graph-objects = [
-=== Graph object API
+  === Graph object API
 
-Graph objects are Typst dictionaries wrapping archived Rust graph bytes plus
-native Typst data arrays for graph, node, edge, source, and sink data. The Rust
-graph may also carry an internal opaque payload, but that payload is used only
-by the Typst wrapper and is not exposed in public records. Build or parse graph
-objects with `graph`, transform graph objects with `layout`, and pass objects
-back to `graph` or `subgraph` for inspection. Subgraph objects are still opaque
-zero-copy values.
+  Graph objects are Typst dictionaries wrapping archived Rust graph bytes plus
+  native Typst data arrays for graph, node, edge, source, and sink data. The Rust
+  graph may also carry an internal opaque payload, but that payload is used only
+  by the Typst wrapper and is not exposed in public records. Build or parse graph
+  objects with `graph`, transform graph objects with `layout`, and pass objects
+  back to `graph` or `subgraph` for inspection. Subgraph objects are still opaque
+  zero-copy values.
 
-- `graph.parse(input)` parses one or more DOT digraphs and returns an array of
-  graph objects. Its `eval-graph-fields`, `eval-node-fields`,
-  `eval-edge-fields`, `eval-source-fields`, and `eval-sink-fields` arguments
-  are convenience arguments for `graph.eval-fields`.
-- `graph.build(..)` constructs one graph object from a stream of node and edge
-  items.
-- `graph.map(graph, ..)` maps graph, node, edge, source, and sink records to
-  new native data without changing topology.
-- `graph.node-data(graph, <name>)` and `graph.edge-data(graph, <name>)` return
-  one named node or edge data.
-- `graph.update-node-data(graph, <name>, data)` and
-  `graph.update-edge-data(graph, <name>, data)` update one named node or edge
-  data. Direct replacements and callbacks run in Typst with `(data, record)`.
-- `graph.eval-fields(graph, ..)` evaluates selected record fields into data
-  entries. It works on parsed and built graph objects.
-- `node(..)` returns a node item.
-- `source(..)` and `sink(..)` return half-edge endpoints.
-- `edge(..)` returns an edge item built from source/sink endpoints and an
-  optional edge name.
-- `layout(graph, ..)` runs layout as an explicit
-  second step. Its settings are named parameters so calls stay descriptive and
-  Tidy can document each field.
-- `draw(graph, ..)` draws a laid-out graph object with CeTZ.
-- `dot(graph)` returns a DOT string for inspection or export.
+  - `graph.parse(input)` parses one or more DOT digraphs and returns an array of
+    graph objects. Its `eval-graph-fields`, `eval-node-fields`,
+    `eval-edge-fields`, `eval-source-fields`, and `eval-sink-fields` arguments
+    are convenience arguments for `graph.eval-fields`.
+  - `graph.build(..)` constructs one graph object from a stream of node and edge
+    items.
+  - `graph.map(graph, ..)` maps graph, node, edge, source, and sink records to
+    new native data without changing topology.
+  - `graph.node-data(graph, <name>)` and `graph.edge-data(graph, <name>)` return
+    one named node or edge data.
+  - `graph.update-node-data(graph, <name>, data)` and
+    `graph.update-edge-data(graph, <name>, data)` update one named node or edge
+    data. Direct replacements and callbacks run in Typst with `(data, record)`.
+  - `graph.eval-fields(graph, ..)` evaluates selected record fields into data
+    entries. It works on parsed and built graph objects.
+  - `node(..)` returns a node item.
+  - `source(..)` and `sink(..)` return half-edge endpoints.
+  - `edge(..)` returns an edge item built from source/sink endpoints and an
+    optional edge name.
+  - `layout(graph, ..)` runs layout as an explicit
+    second step. Its settings are named parameters so calls stay descriptive and
+    Tidy can document each field.
+  - `draw(graph, ..)` draws a laid-out graph object with CeTZ.
+  - `dot(graph)` returns a DOT string for inspection or export.
 ]
 
 #let graph-concepts = [
-=== Graph Specs
+  === Graph Specs
 
-The Typst construction API is half-edge first: create node items, create source
-and sink half-edge endpoints, then pass edge items to `graph.build`.
-`graph.build` accepts both comma-separated items and ordinary Typst code
-blocks. Typst labels such as `<a>`, `<h1>`, and `<e1>` are API names; node and
-edge names are emitted back from `nodes(g)` and `edges(g)` as Typst labels.
-They are resolved before the wire format is sent to the Rust plugin. Numeric `id`
-arguments choose graph indexes or ordering: on nodes, `id` fixes the resulting
-node index and must be unique and in bounds. On nodes, edges, sources, and
-sinks, extra named arguments are captured as opaque Typst data fields:
-`edge(source(<a>, style: (stroke: red + 0.7pt)), sink(<b>), kind: "link")`
-stores `(style: ..)` in the source data and `(kind: "link")` in the edge
-data. These user data values are not sent through the Rust plugin boundary.
-Typst sends an internal opaque payload with correlation data, asks Rust to
-resolve the graph indexes, then stores user data in arrays at those resolved
-graph, node, edge, and half-edge ids. `graph.info`, `graph.nodes`, and
-`graph.edges` merge those native values into the returned records. A captured
-`label` data field on nodes
-and edges is display content used by the default drawing style; use
-`statements: (label: "...")` when a flat metadata label string is needed.
-Statements are flat metadata used by DOT; they cannot nest. Values are scalar
-strings/numbers/booleans. Use data fields for structured Typst data or
-content.
+  The Typst construction API is half-edge first: create node items, create source
+  and sink half-edge endpoints, then pass edge items to `graph.build`.
+  `graph.build` accepts both comma-separated items and ordinary Typst code
+  blocks. Typst labels such as `<a>`, `<h1>`, and `<e1>` are API names; node and
+  edge names are emitted back from `nodes(g)` and `edges(g)` as Typst labels.
+  They are resolved before the wire format is sent to the Rust plugin. Numeric `id`
+  arguments choose graph indexes or ordering: on nodes, `id` fixes the resulting
+  node index and must be unique and in bounds. On nodes, edges, sources, and
+  sinks, extra named arguments are captured as opaque Typst data fields:
+  `edge(source(<a>, style: (stroke: red + 0.7pt)), sink(<b>), kind: "link")`
+  stores `(style: ..)` in the source data and `(kind: "link")` in the edge
+  data. These user data values are not sent through the Rust plugin boundary.
+  Typst sends an internal opaque payload with correlation data, asks Rust to
+  resolve the graph indexes, then stores user data in arrays at those resolved
+  graph, node, edge, and half-edge ids. `graph.info`, `graph.nodes`, and
+  `graph.edges` merge those native values into the returned records. A captured
+  `label` data field on nodes
+  and edges is display content used by the default drawing style; use
+  `statements: (label: "...")` when a flat metadata label string is needed.
+  Statements are flat metadata used by DOT; they cannot nest. Values are scalar
+  strings/numbers/booleans. Use data fields for structured Typst data or
+  content.
 
-`graph.build` and `graph.parse` also accept `default-node-data`,
-`default-edge-data`, `default-source-data`, and `default-sink-data`.
-These defaults are merged into the corresponding data; captured data
-fields on nodes, edges, sources, and sinks override the defaults. Drawing
-callbacks decide how those fields affect the result. For example, endpoint
-styles can read `data.style` from the source and sink half-edge records:
+  `graph.build` and `graph.parse` also accept `default-node-data`,
+  `default-edge-data`, `default-source-data`, and `default-sink-data`.
+  These defaults are merged into the corresponding data; captured data
+  fields on nodes, edges, sources, and sinks override the defaults. Drawing
+  callbacks decide how those fields affect the result. For example, endpoint
+  styles can read `data.style` from the source and sink half-edge records:
 
-```typ
-#let g = build({
-  node(<a>, label: [a])
-  node(<b>, label: [b])
-  edge(
-    source(<a>, style: (stroke: red + 0.7pt)),
-    <e>,
-    sink(<b>, style: (stroke: blue + 0.7pt)),
-    label: [connection],
-    kind: "dependency",
+  ```typ
+  #let g = build({
+    node(<a>, label: [a])
+    node(<b>, label: [b])
+    edge(
+      source(<a>, style: (stroke: red + 0.7pt)),
+      <e>,
+      sink(<b>, style: (stroke: blue + 0.7pt)),
+      label: [connection],
+      kind: "dependency",
+    )
+  },
+    default-edge-data: (kind: "propagator"),
   )
-},
-  default-edge-data: (kind: "propagator"),
-)
-#let endpoint-style(edge, side) = {
-  let endpoint = edge.at(side + "-half-edge", default: none)
-  if endpoint == none { return (:) }
-  endpoint.data.at("style", default: (:))
-}
-#draw(
-  layout(g),
-  source-style: edge => endpoint-style(edge, "source"),
-  sink-style: edge => endpoint-style(edge, "sink"),
-  edge-label: edge => edge.at("label", default: none),
-)
-```
-
-When parsing DOT, the same native data arrays can be filled from selected
-string fields. Rust parses DOT into topology and statement metadata; Typst
-applies defaults and evaluates selected fields afterward. The selected fields
-are evaluated with the record's merged `fields` dictionary in scope. Since node
-names are labels, use `#str(name)` when a name should become visible text:
-
-```typ
-#let g = parse(
-  "digraph g { a [label=\"A\"]; a -> b [label=\"$p$\", source=\"out\", sink=\"in\"] }",
-  eval-node-fields: ("label",),
-  eval-edge-fields: ("label",),
-  eval-source-fields: ("statement",),
-  eval-sink-fields: ("statement",),
-).first()
-#nodes(g).first().data.label
-#edges(g).first().data.label
-```
-
-The same transform can run after construction. This is useful for global edge
-statements that should apply to every edge while still seeing local edge
-fields:
-
-```typ
-#let g = build({
-  node(<a>)
-  node(<b>)
-  edge(source(<a>), sink(<b>), statements: (mom: "p"))
-}, default-edge-statements: (display-label: "$#mom$"))
-#let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
-#edges(g).first().data.at("display-label")
-```
-
-```typ
-#let g = build({
-  node(<a>)
-  node(<c>)
-  edge(source(<a>), <e1>, sink(<c>))
-})
-```
-
-Named nodes and edges can be updated after construction without scanning in the
-caller. The update replaces the native data, or it can be a callback receiving
-`(data, record)`:
-
-```typ
-#let g = build({
-  node(<a>)
-  node(<c>)
-  edge(source(<a>), <e1>, sink(<c>))
-})
-#let g = update-node-data(g, <a>, (label: [A]))
-#let g = update-edge-data(g, <e1>, (data, edge) => (
-  label: [$p$],
-  source: edge.source.node,
-))
-#node-data(g, <a>).label
-#edge-data(g, <e1>).label
-```
-
-`source(..)` and `sink(..)` accept a node reference plus optional `name`, `id`,
-`statement`, and `compass`. `name` is a Typst label name for the half-edge;
-`id` is numeric:
-
-```typ
-edge(source(<a>, name: <h1>, id: 0), <e1>, sink(<c>, id: 2), label: [a-c])
-```
-
-One half-edge creates an external edge. The side is determined by the
-constructor, so there is no public `flow` argument:
-
-```typ
-edge(<incoming>, sink(<a>))
-edge(source(<c>), <outgoing>)
-```
-
-`graph.build` does not interpolate statement strings on the Rust side. Use
-`graph.eval-fields` or `graph.map` when a default statement should turn into
-Typst content or structured data. The evaluation scope includes the
-record's merged fields, so default edge statements can still refer to local edge
-fields:
-
-```typ
-#let g = build({
-  node(<a>)
-  node(<c>)
-  edge(
-    source(<a>),
-    <a-c>,
-    sink(<c>),
-    label: [a-c],
-    statements: (color: "0055ff", label: "a-c"),
+  #let endpoint-style(edge, side) = {
+    let endpoint = edge.at(side + "-half-edge", default: none)
+    if endpoint == none { return (:) }
+    endpoint.data.at("style", default: (:))
+  }
+  #draw(
+    layout(g),
+    source-style: edge => endpoint-style(edge, "source"),
+    sink-style: edge => endpoint-style(edge, "sink"),
+    edge-label: edge => edge.at("label", default: none),
   )
-},
-  default-edge-statements: (
-    color: "000000",
-    display-label: "$#label$",
-  ),
-)
-#let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
-```
+  ```
+
+  When parsing DOT, the same native data arrays can be filled from selected
+  string fields. Rust parses DOT into topology and statement metadata; Typst
+  applies defaults and evaluates selected fields afterward. The selected fields
+  are evaluated with the record's merged `fields` dictionary in scope. Since node
+  names are labels, use `#str(name)` when a name should become visible text:
+
+  ```typ
+  #let g = parse(
+    "digraph g { a [label=\"A\"]; a -> b [label=\"$p$\", source=\"out\", sink=\"in\"] }",
+    eval-node-fields: ("label",),
+    eval-edge-fields: ("label",),
+    eval-source-fields: ("statement",),
+    eval-sink-fields: ("statement",),
+  ).first()
+  #nodes(g).first().data.label
+  #edges(g).first().data.label
+  ```
+
+  The same transform can run after construction. This is useful for global edge
+  statements that should apply to every edge while still seeing local edge
+  fields:
+
+  ```typ
+  #let g = build({
+    node(<a>)
+    node(<b>)
+    edge(source(<a>), sink(<b>), statements: (mom: "p"))
+  }, default-edge-statements: (display-label: "$#mom$"))
+  #let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
+  #edges(g).first().data.at("display-label")
+  ```
+
+  ```typ
+  #let g = build({
+    node(<a>)
+    node(<c>)
+    edge(source(<a>), <e1>, sink(<c>))
+  })
+  ```
+
+  Named nodes and edges can be updated after construction without scanning in the
+  caller. The update replaces the native data, or it can be a callback receiving
+  `(data, record)`:
+
+  ```typ
+  #let g = build({
+    node(<a>)
+    node(<c>)
+    edge(source(<a>), <e1>, sink(<c>))
+  })
+  #let g = update-node-data(g, <a>, (label: [A]))
+  #let g = update-edge-data(g, <e1>, (data, edge) => (
+    label: [$p$],
+    source: edge.source.node,
+  ))
+  #node-data(g, <a>).label
+  #edge-data(g, <e1>).label
+  ```
+
+  `source(..)` and `sink(..)` accept a node reference plus optional `name`, `id`,
+  `statement`, and `compass`. `name` is a Typst label name for the half-edge;
+  `id` is numeric:
+
+  ```typ
+  edge(source(<a>, name: <h1>, id: 0), <e1>, sink(<c>, id: 2), label: [a-c])
+  ```
+
+  One half-edge creates an external edge. The side is determined by the
+  constructor, so there is no public `flow` argument:
+
+  ```typ
+  edge(<incoming>, sink(<a>))
+  edge(source(<c>), <outgoing>)
+  ```
+
+  `graph.build` does not interpolate statement strings on the Rust side. Use
+  `graph.eval-fields` or `graph.map` when a default statement should turn into
+  Typst content or structured data. The evaluation scope includes the
+  record's merged fields, so default edge statements can still refer to local edge
+  fields:
+
+  ```typ
+  #let g = build({
+    node(<a>)
+    node(<c>)
+    edge(
+      source(<a>),
+      <a-c>,
+      sink(<c>),
+      label: [a-c],
+      statements: (color: "0055ff", label: "a-c"),
+    )
+  },
+    default-edge-statements: (
+      color: "000000",
+      display-label: "$#label$",
+    ),
+  )
+  #let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
+  ```
 ]
 
 #let placement-concepts = [
-=== Placements
+  === Placements
 
-`graph.pos` creates a first-class placement. The default `mode: "pin"` turns a
-coordinate into a fixed layout constraint and a drawable position. Use
-`mode: "start"` when the coordinate should only seed the layout:
+  `graph.pos` creates a first-class placement. The default `mode: "pin"` turns a
+  coordinate into a fixed layout constraint and a drawable position. Use
+  `mode: "start"` when the coordinate should only seed the layout:
 
-```typ
-#let g = build({
-  node(<a>, pos: graph.pos(x: -2, y: 0))
-  node(<c>, pos: graph.pos(ref: <a>, dx: 4, dy: 0))
-  edge(source(<a>), <a-c>, sink(<c>), pos: graph.pos(x: 0, y: 1.2))
-})
-```
+  ```typ
+  #let g = build({
+    node(<a>, pos: graph.pos(x: -2, y: 0))
+    node(<c>, pos: graph.pos(ref: <a>, dx: 4, dy: 0))
+    edge(source(<a>), <a-c>, sink(<c>), pos: graph.pos(x: 0, y: 1.2))
+  })
+  ```
 
-`graph.group` links one coordinate across several nodes or edge control points.
-A `side` of `"+"` keeps the coordinate positive, and `"-"` keeps it negative.
-Use `start` to seed the shared coordinate without fixing it. Matching node and
-edge groups are one degree of freedom during force and annealing layouts, so
-repulsion and springs act on their combined force rather than being reconciled
-afterward. If several members supply starts for one group, their mean initializes
-the shared coordinate.
-GammaLoop external-edge columns use this to keep incoming and outgoing external
-legs on opposite sides while pairing rows by a shared `y` group:
+  `graph.group` links one coordinate across several nodes or edge control points.
+  A `side` of `"+"` keeps the coordinate positive, and `"-"` keeps it negative.
+  Use `start` to seed the shared coordinate without fixing it. Matching node and
+  edge groups are one degree of freedom during force and annealing layouts, so
+  repulsion and springs act on their combined force rather than being reconciled
+  afterward. If several members supply starts for one group, their mean initializes
+  the shared coordinate.
+  GammaLoop external-edge columns use this to keep incoming and outgoing external
+  legs on opposite sides while pairing rows by a shared `y` group:
 
-```typ
-#let edge-items = (
-  edge(
-    source(<right-ext>),
-    sink(<center>),
-    pos: graph.pos(x: graph.group("right", side: "+", start: 4), y: graph.group("edgee0")),
-  ),
-  edge(
-    source(<center>),
-    sink(<left-ext>),
-    pos: graph.pos(x: graph.group("left", side: "-"), y: graph.group("edgee0")),
-  ),
-)
-```
+  ```typ
+  #let edge-items = (
+    edge(
+      source(<right-ext>),
+      sink(<center>),
+      pos: graph.pos(x: graph.group("right", side: "+", start: 4), y: graph.group("edgee0")),
+    ),
+    edge(
+      source(<center>),
+      sink(<left-ext>),
+      pos: graph.pos(x: graph.group("left", side: "-"), y: graph.group("edgee0")),
+    ),
+  )
+  ```
 
-Raw DOT input uses the same placement model through the `pos` attribute. The
-standard Graphviz subset is preserved: `pos="x,y"` is a starting coordinate and
-`pos="x,y!"` is pinned. Linnest extends the value with explicit id references
-and axis entries. In axis entries, `!` belongs to that axis: numeric entries
-without `!` are starting coordinates, numeric entries with `!` are fixed
-constraints, and grouped entries must use `!` because groups are constraints.
+  Raw DOT input uses the same placement model through the `pos` attribute. The
+  standard Graphviz subset is preserved: `pos="x,y"` is a starting coordinate and
+  `pos="x,y!"` is pinned. Linnest extends the value with explicit id references
+  and axis entries. In axis entries, `!` belongs to that axis: numeric entries
+  without `!` are starting coordinates, numeric entries with `!` are fixed
+  constraints, and grouped entries must use `!` because groups are constraints.
 
-```dot
-digraph {
-  a [id=0 pos="0,0!"]
-  b [id=1 pos="ref(node:0)+4,0!"]
-  a -> b [id=0 pos="ref(node:1)+0,1!"]
-  b -> c [id=1 pos="ref(edge:0)+1,0!"]
-  c [id=2 pos="x:2!"]
-  d [id=3 pos="x:2!,y:1"]
-  ext -> a [id=2 pos="x:@-left!,y:@edge0!"]
-}
-```
+  ```dot
+  digraph {
+    a [id=0 pos="0,0!"]
+    b [id=1 pos="ref(node:0)+4,0!"]
+    a -> b [id=0 pos="ref(node:1)+0,1!"]
+    b -> c [id=1 pos="ref(edge:0)+1,0!"]
+    c [id=2 pos="x:2!"]
+    d [id=3 pos="x:2!,y:1"]
+    ext -> a [id=2 pos="x:@-left!,y:@edge0!"]
+  }
+  ```
 
-The DOT grammar is intentionally id-based: `ref(node:0)` uses a node `id` and
-`ref(edge:0)` uses an edge `id`. Bare names and implicit edge order are not
-placement references. The `@` syntax denotes grouped coordinate constraints;
-`@+name` and `@-name` keep the grouped coordinate on the positive or negative
-side respectively.
+  The DOT grammar is intentionally id-based: `ref(node:0)` uses a node `id` and
+  `ref(edge:0)` uses an edge `id`. Bare names and implicit edge order are not
+  placement references. The `@` syntax denotes grouped coordinate constraints;
+  `@+name` and `@-name` keep the grouped coordinate on the positive or negative
+  side respectively.
 
-```text
-pos="x,y"                   // start x and y
-pos="x,y!"                  // pin x and y
-pos="x:<coord>"             // start numeric x
-pos="x:<coord>!"            // pin x
-pos="y:<coord>!"            // pin y
-pos="x:<coord>!,y:<coord>"  // pin x, start numeric y
-pos="x:<coord>,y:<coord>!"  // start numeric x, pin y
-```
+  ```text
+  pos="x,y"                   // start x and y
+  pos="x,y!"                  // pin x and y
+  pos="x:<coord>"             // start numeric x
+  pos="x:<coord>!"            // pin x
+  pos="y:<coord>!"            // pin y
+  pos="x:<coord>!,y:<coord>"  // pin x, start numeric y
+  pos="x:<coord>,y:<coord>!"  // start numeric x, pin y
+  ```
 ]
 
 #let drawing-concepts = [
-=== Drawing
+  === Drawing
 
-Draw styling is Typst-native. Pass dictionaries or callbacks to `draw`; edge
-callbacks receive the merged `scope`, edge statements, source/sink half-edge
-records, and the edge index:
+  Draw styling is Typst-native. Pass dictionaries or callbacks to `draw`; edge
+  callbacks receive the merged `scope`, edge statements, source/sink half-edge
+  records, and the edge index:
 
-```typ
-#let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.display-label]
-#let source-style(edge) = (stroke: red + 0.5pt)
-#let sink-style(edge) = (stroke: blue + 0.5pt)
-#draw(layout(g), edge-label: edge-label, source-style: source-style, sink-style: sink-style)
-```
+  ```typ
+  #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.display-label]
+  #let source-style(edge) = (stroke: red + 0.5pt)
+  #let sink-style(edge) = (stroke: blue + 0.5pt)
+  #draw(layout(g), edge-label: edge-label, source-style: source-style, sink-style: sink-style)
+  ```
 
-Edge labels are drawn with CeTZ content at the layout label position. Use
-`edge-label-style: (anchor: "south")`, or an edge-data callback returning a
-style dictionary, to choose which point of the label is anchored there.
+  Edge labels are drawn with CeTZ content at the layout label position. Use
+  `edge-label-style: (anchor: "south")`, or an edge-data callback returning a
+  style dictionary, to choose which point of the label is anchored there.
 
-Marks can follow graph orientation as a first-class draw option. Put the same
-mark layer on both halves and set `mark-orientation: "edge"`; default-oriented
-edges mark the source half, reversed edges mark the sink half with the marker
-flipped, and undirected edges suppress the mark.
+  Marks can follow graph orientation as a first-class draw option. Put the same
+  mark layer on both halves and set `mark-orientation: "edge"`; default-oriented
+  edges mark the source half, reversed edges mark the sink half with the marker
+  flipped, and undirected edges suppress the mark.
+  Use `mark-position: "center"` or a numeric ratio from `0` to `1`, then
+  `mark-shift` for a signed arc-length adjustment along the derived path. This
+  positioning is independent of whether the layer is straight or patterned.
+  `"center-if-dangling"` centers a dangling mark but keeps an orientation-selected
+  paired mark at the source/sink split point.
 
-```typ
-#let oriented-arrow = (
-  stroke: black + 0.7pt,
-  mark: (end: (symbol: ">", fill: black, anchor: "center", shorten-to: auto), scale: 0.75),
-  mark-position: "center-if-dangling",
-  mark-orientation: "edge",
-)
-#draw(layout(g), source-style: oriented-arrow, sink-style: oriented-arrow)
-```
+  ```typ
+  #let oriented-arrow = (
+    stroke: black + 0.7pt,
+    mark: (end: (symbol: ">", fill: black, anchor: "center", shorten-to: auto), scale: 0.75),
+    mark-position: "center-if-dangling",
+    mark-orientation: "edge",
+  )
+  #draw(layout(g), source-style: oriented-arrow, sink-style: oriented-arrow)
+  ```
 ]
 
 #let domain-style-concepts = [
-=== Domain Styles And Templates
+  === Domain Styles And Templates
 
-Linnest's drawing layer is domain-neutral. A caller can map arbitrary node,
-edge, and half-edge data to ordinary `graph.style` or `draw` callbacks without
-changing topology or adding a domain-specific core option. The following map
-uses an application-defined `kind` field; the names and styles have no meaning
-to Linnest itself:
+  Linnest's drawing layer is domain-neutral. A caller can map arbitrary node,
+  edge, and half-edge data to reusable `draw` callbacks without changing topology
+  or adding a domain-specific core option. The following map uses an
+  application-defined `kind` field; the names and styles have no meaning to
+  Linnest itself:
 
-```typ
-#import "../src/lib.typ": draw, graph, layout
-#import graph: build, edge, node, sink, source
+  ```typ
+  #import "../src/lib.typ": draw, graph, layout
+  #import graph: build, edge, node, sink, source
 
-#let kinds = (
-  dependency: (
-    source: (stroke: rgb("#315f9f") + 0.8pt),
-    sink: (stroke: rgb("#6f96c8") + 0.8pt),
-  ),
-  event: (
-    source: (stroke: rgb("#a24b36") + 0.8pt, mark: (end: ">")),
-    sink: (stroke: rgb("#d18b76") + 0.8pt, mark: (end: ">")),
-  ),
-)
-#let entry(edge) = kinds.at(edge.at("kind", default: "dependency"))
-#let g = build({
-  node(<queued>, label: [queued])
-  node(<running>, label: [running])
-  node(<done>, label: [done])
-  edge(source(<queued>), <starts>, sink(<running>), kind: "event", label: [starts])
-  edge(source(<running>), <needs>, sink(<done>), kind: "dependency", label: [needs])
-})
-#let g = graph.style(g, edge-label: edge => edge.at("label", default: none))
-#draw(
-  layout(g),
-  source-style: edge => entry(edge).source,
-  sink-style: edge => entry(edge).sink,
-)
-```
-
-Custom templates can package the same policy behind their mandatory
-`render(config)` export. The selected application owns the meaning and schema
-of any extra options. GammaLoop follows that boundary: its particle, momentum,
-and diagram-mode callbacks live in its own `physics-edge-style.typ` drawing
-template, not in Linnest's `lib.typ`.
-
-Set `edge-offset` on `draw`, or `offset` in a `source-style`/`sink-style`
-dictionary, to draw a fitted parallel path. Style callbacks may also return an
-array of dictionaries; the layers are drawn in order on the same graph edge, so
-parallel strokes do not require duplicate graph edges.
-
-```typ
-#let base-style(edge) = (
-  stroke: (paint: gray, thickness: 0.7pt, cap: "round"),
-)
-#let offset-style(edge) = (
-  offset: 0.18,
-  length: 1.4,
-  ratio: 0.5,
-  resolve-length: "min",
-  stroke: (paint: rgb("#2f6f4e"), thickness: 1pt, cap: "round"),
-)
-#let source-style(edge) = (base-style(edge), offset-style(edge))
-#let sink-style(edge) = (base-style(edge), offset-style(edge) + (mark: (end: ">")))
-```
-
-The parallel path is applied to the base edge geometry before patterns and other
-decorations; node outsets then trim the shifted path, so shifted paths still
-start and end outside fitted node circles. Add `edge-length` or `length` to
-center-trim the shifted path to a fixed arc length, and add `edge-ratio` or
-`ratio` to cap it by a fraction of the base edge length. `edge-resolve-length`
-/ `resolve-length` decides how to combine both limits: `"min"`/`"shorter"` (default), `"max"`/`"longer"`,
-`"length"`/`"fixed"`, `"ratio"`/`"relative"`, `"none"`/`"full"`, or a function
-receiving `(base-length, length, ratio)`.
-Set `offset-side: "label"` on an offset layer to choose the sign of `offset`
-so the layer is drawn on the same side of the curve as the edge label.
-
-Paired edges are Kurvst paths split at their edge layout point. Set
-`edge-split-gap` on `draw` to open a centered arc-length gap there, or set
-`split-gap` on an individual source/sink style layer to override the global
-value for only that layer. Wave and coil phases continue across the hidden
-span. `edge-halves` and `to-cetz-edge-halves` accept the same `split-gap`
-control and report the effective gap if either half is too short. This cuts at
-`edge.pos`; it does not detect arbitrary crossings.
-
-For a known centerline crossing, put `crossing-under: 5` (using the target's
-integer edge id) or `crossing-under: <bridge>` (using its Typst edge name), and
-optionally `crossing-gap` (default `0.55`) on the style layer that should be
-interrupted. Targets are resolved independently of edge order.
-Kurvst locates proper intersections and trims the current path by arc length;
-wave and coil phases continue across every hidden span. This works for
-dangling layers and for paired layers whose source and sink have one continuous
-style. Both paired half styles must name the same target and gap. A cut layer
-cannot itself carry a mark or participate in a subgraph underlay; keep those on
-a separate layer. Self, unknown, and invisible references are reported as
-errors. A valid edge pair with no proper interior intersection, including one
-that only shares an endpoint, is left unchanged.
-
-```typ
-#let crossed-style(edge) = if edge.eid == 7 {
-  (stroke: black, pattern: "coil", crossing-under: 5, crossing-gap: 0.55)
-} else {
-  (stroke: black)
-}
-```
-
-For dangling edges, `edge-dangling-tangent: "horizontal"` or `"vertical"`
-constrains the tangent at the free edge position while retaining the edge's
-`bend`; the per-layer override is `dangling-tangent`. `auto` keeps the ordinary
-bent route, and `anchor-control-distance` controls the constrained handle
-length. `bend` affects dangling edges only. A paired edge instead follows its
-source node, `edge.pos`, and sink node, with `edge-omega` controlling its Hobby
-curve.
-
-```typ
-#draw(
-  g,
-  edge-split-gap: 0.28,
-  edge-dangling-tangent: "horizontal",
-  source-style: edge => (stroke: black, split-gap: 0.4),
-  sink-style: edge => (stroke: black, split-gap: 0.4),
-)
-```
-
-Data defaults are also the global styling hook for all sources, sinks,
-nodes, and edges. More specific data can be added with captured named arguments
-on node, edge, source, and sink items, or by running
-`graph.map`/`graph.eval-fields` after construction. This keeps evaluated Typst
-values in the native data channel instead of adding renderer-specific eval
-fields to the Rust topology spec:
-
-```typ
-#let g = build({
-  node(<a>)
-  node(<c>)
-  edge(
-    source(<a>),
-    <a-c>,
-    sink(<c>),
-    label: [a-c],
-    kind: "highlight",
+  #let kinds = (
+    dependency: (stroke: rgb("#315f9f") + 0.8pt),
+    event: (
+      stroke: rgb("#a24b36") + 0.8pt,
+      mark: (end: ">"),
+      mark-position: "center",
+      mark-orientation: "edge",
+    ),
   )
-},
-  name: "demo",
-  default-source-data: (style: (stroke: red + 0.5pt)),
-  default-sink-data: (style: (stroke: blue + 0.5pt)),
-)
-#let endpoint-style(edge, side) = {
-  let endpoint = edge.at(side + "-half-edge", default: none)
-  if endpoint == none { return (:) }
-  endpoint.data.at("style", default: (:))
-}
-#draw(
-  layout(g),
-  source-style: edge => endpoint-style(edge, "source"),
-  sink-style: edge => endpoint-style(edge, "sink"),
-)
-```
+  #let edge-style(edge) = kinds.at(edge.fields.at("kind", default: "dependency"))
+  #let g = build({
+    node(<queued>, label: [queued])
+    node(<running>, label: [running])
+    node(<done>, label: [done])
+    edge(source(<queued>), <starts>, sink(<running>), kind: "event", label: [starts])
+    edge(source(<running>), <needs>, sink(<done>), kind: "dependency", label: [needs])
+  })
+  #let g = graph.style(g, edge-label: edge => edge.label)
+  #draw(layout(g, layout-algo: "stable-layered"), edge-style: edge-style)
+  ```
 
-`graph.build` also accepts comma-separated items:
+  An edge can sparsely patch the `edge-style` passed to `draw` with
+  `style: (...)`, compute the patch with a callback, use `auto` to delegate, or
+  use `none` to hide its paint while
+  retaining topology. Local style callbacks receive the complete post-layout
+  drawing record. Custom templates can package the same policy behind their
+  mandatory `render(config)` export; the selected application owns the meaning
+  and schema of any extra options.
 
-```typ
-#let g = build(
-  node(<a>),
-  node(<b>),
-  edge(
-    source(<a>, compass: "e"),
-    <ab>,
-    sink(<b>, compass: "w"),
-    label: [ab],
-    statements: (color: "0055ff", label: "ab"),
-  ),
-  name: "demo",
-  statements: (full_num: "x + y"),
-  default-node-statements: (shape: "circle"),
-  default-edge-statements: (
-    color: "000000",
-    display-label: "$#label$",
-  ),
-)
-```
+  Set `edge-offset` on `draw`, or `offset` in a `source-style`/`sink-style`
+  dictionary, to draw a fitted parallel path. Style callbacks may also return an
+  array of dictionaries; the layers are drawn in order on the same graph edge, so
+  parallel strokes do not require duplicate graph edges.
+
+  ```typ
+  #let base-style(edge) = (
+    stroke: (paint: gray, thickness: 0.7pt, cap: "round"),
+  )
+  #let offset-style(edge) = (
+    offset: 0.18,
+    length: 1.4,
+    ratio: 0.5,
+    resolve-length: "min",
+    shift: 0.2,
+    stroke: (paint: rgb("#2f6f4e"), thickness: 1pt, cap: "round"),
+    label: [active],
+    label-side: "left",
+    label-gap: 0.12,
+  )
+  #let source-style(edge) = (base-style(edge), offset-style(edge))
+  #let sink-style(edge) = (base-style(edge), offset-style(edge) + (mark: (end: ">")))
+  ```
+
+  The parallel path is applied to the base edge geometry before patterns and other
+  decorations; node outsets then trim the shifted path, so shifted paths still
+  start and end outside fitted node circles. Add `edge-length` or `length` to
+  center-trim the shifted path to a fixed arc length, and add `edge-ratio` or
+  `ratio` to cap it by a fraction of the base edge length. `edge-resolve-length`
+  / `resolve-length` decides how to combine both limits: `"min"`/`"shorter"` (default), `"max"`/`"longer"`,
+  `"length"`/`"fixed"`, `"ratio"`/`"relative"`, `"none"`/`"full"`, or a function
+  receiving `(base-length, length, ratio)`.
+  For a finite layer, `shift` is an arc-length displacement along the complete
+  logical edge: positive values move toward the path end and values that would
+  cross an endpoint are clamped. A layer can attach `label` content to its own
+  path. `label-side` chooses `"left"` or `"right"` relative to the local path
+  direction; `auto` follows the side selected by ordinary edge-label layout.
+  `label-gap` is
+  measured from the label box rather than its center, and `label-style` is
+  forwarded to CeTZ content drawing. This local measurement keeps the label clear
+  of its own path layer. The attached label replaces the ordinary painted edge
+  label, while that ordinary label may still supply the pre-layout size used by
+  label layout and side selection; attached labels do not add a second collision
+  constraint.
+  When compatible source and sink layers request a centered mark, Linnest emits
+  that mark once on the complete derived layer. The mark therefore follows
+  `shift` instead of being centered separately on either half-edge.
+  Set `offset-side: "label"` on an offset layer to choose the sign of `offset`
+  so the layer is drawn on the same side of the curve as the edge label.
+
+  Paired edges are Kurvst paths split at their edge layout point. Set
+  `edge-split-gap` on `draw` to open a centered arc-length gap there, or set
+  `split-gap` on an individual source/sink style layer to override the global
+  value for only that layer. Wave and coil phases continue across the hidden
+  span. `edge-halves` and `to-cetz-edge-halves` accept the same `split-gap`
+  control and report the effective gap if either half is too short. This cuts at
+  `edge.pos`; it does not detect arbitrary crossings.
+
+  For a known centerline crossing, put `crossing-under: 5` (using the target's
+  integer edge id) or `crossing-under: <bridge>` (using its Typst edge name), and
+  optionally `crossing-gap` (default `0.55`) on the style layer that should be
+  interrupted. Targets are resolved independently of edge order.
+  Kurvst locates proper intersections and trims the current path by arc length;
+  wave and coil phases continue across every hidden span. This works for
+  dangling layers and for paired layers whose source and sink have one continuous
+  style. Both paired half styles must name the same target and gap. A cut layer's
+  mark is placed once on the original uncut carrier, while only its painted path
+  is split; this keeps the mark present without duplicating it on every fragment.
+  A cut layer cannot participate in a subgraph underlay. Self, unknown, and invisible references are reported as
+  errors. A valid edge pair with no proper interior intersection, including one
+  that only shares an endpoint, is left unchanged.
+
+  ```typ
+  #let crossed-style(edge) = if edge.eid == 7 {
+    (stroke: black, pattern: "coil", crossing-under: 5, crossing-gap: 0.55)
+  } else {
+    (stroke: black)
+  }
+  ```
+
+  For dangling edges, `edge-dangling-tangent: "horizontal"` or `"vertical"`
+  constrains the tangent at the free edge position while retaining the edge's
+  `bend`; the per-layer override is `dangling-tangent`. `auto` keeps the ordinary
+  bent route, and `anchor-control-distance` controls the constrained handle
+  length. `bend` affects dangling edges only. A paired edge instead follows its
+  source node, `edge.pos`, and sink node, with `edge-omega` controlling its Hobby
+  curve.
+
+  ```typ
+  #draw(
+    g,
+    edge-split-gap: 0.28,
+    edge-dangling-tangent: "horizontal",
+    source-style: edge => (stroke: black, split-gap: 0.4),
+    sink-style: edge => (stroke: black, split-gap: 0.4),
+  )
+  ```
+
+  Data defaults are also the global styling hook for all sources, sinks,
+  nodes, and edges. More specific data can be added with captured named arguments
+  on node, edge, source, and sink items, or by running
+  `graph.map`/`graph.eval-fields` after construction. This keeps evaluated Typst
+  values in the native data channel instead of adding renderer-specific eval
+  fields to the Rust topology spec:
+
+  ```typ
+  #let g = build({
+    node(<a>)
+    node(<c>)
+    edge(
+      source(<a>),
+      <a-c>,
+      sink(<c>),
+      label: [a-c],
+      kind: "highlight",
+    )
+  },
+    name: "demo",
+    default-source-data: (style: (stroke: red + 0.5pt)),
+    default-sink-data: (style: (stroke: blue + 0.5pt)),
+  )
+  #let endpoint-style(edge, side) = {
+    let endpoint = edge.at(side + "-half-edge", default: none)
+    if endpoint == none { return (:) }
+    endpoint.data.at("style", default: (:))
+  }
+  #draw(
+    layout(g),
+    source-style: edge => endpoint-style(edge, "source"),
+    sink-style: edge => endpoint-style(edge, "sink"),
+  )
+  ```
+
+  `graph.build` also accepts comma-separated items:
+
+  ```typ
+  #let g = build(
+    node(<a>),
+    node(<b>),
+    edge(
+      source(<a>, compass: "e"),
+      <ab>,
+      sink(<b>, compass: "w"),
+      label: [ab],
+      statements: (color: "0055ff", label: "ab"),
+    ),
+    name: "demo",
+    statements: (full_num: "x + y"),
+    default-node-statements: (shape: "circle"),
+    default-edge-statements: (
+      color: "000000",
+      display-label: "$#label$",
+    ),
+  )
+  ```
 ]
 
 #let graph-query-concepts = [
-=== Graph Queries
+  === Graph Queries
 
-`graph.info(g)` returns graph metadata. `nodes(g)` returns node records,
-and `edges(g)` returns edge records. Node and edge record `name` values are
-Typst labels when present. Pass `subgraph: sg` to filter nodes
-or edges by a subgraph object.
+  `graph.info(g)` returns graph metadata. `nodes(g)` returns node records,
+  and `edges(g)` returns edge records. Node and edge record `name` values are
+  Typst labels when present. Pass `subgraph: sg` to filter nodes
+  or edges by a subgraph object.
 
-`graph.join(left, right, key: "statement")` joins matching dangling half edges.
-The key is read from half-edge statements or numeric ids and can be
-`"statement"`, `"compass"`, or `"id"`.
+  `graph.join(left, right, key: "statement")` joins matching dangling half edges.
+  The key is read from half-edge statements or numeric ids and can be
+  `"statement"`, `"compass"`, or `"id"`.
 
-`graph.cycles(g)` returns subgraph objects for a cycle basis.
-`graph.forests(g)` returns subgraph objects for spanning forests.
+  `graph.cycles(g)` returns subgraph objects for a cycle basis.
+  `graph.forests(g)` returns subgraph objects for spanning forests.
 ]
 
 #let layout-concepts = [
-=== Layout Model
+  === Layout Model
 
-`layout` starts from a traversal-tree placement, then optimizes the positions of
-graph nodes and edge control points. The initial tree spacing is
+  `layout` starts from a traversal-tree placement, then optimizes the positions of
+  graph nodes and edge control points. The initial tree spacing is
 
-$ L = lambda sqrt((W H) / max(n, 1)) $,
+  $ L = lambda sqrt((W H) / max(n, 1)) $,
 
-with horizontal spacing $tau_x L$ and vertical spacing $tau_y L$. Here
-$lambda$ is `length-scale`, $W$ is `viewport-w`, $H$ is `viewport-h`, $tau_x$
-is `tree-dx`, and $tau_y$ is `tree-dy`. These fields set the geometry scale for
-both layout modes.
+  with horizontal spacing $tau_x L$ and vertical spacing $tau_y L$. Here
+  $lambda$ is `length-scale`, $W$ is `viewport-w`, $H$ is `viewport-h`, $tau_x$
+  is `tree-dx`, and $tau_y$ is `tree-dy`. These fields set the geometry scale for
+  both layout modes.
 
-For deterministic, non-iterative placement, use `layout-algo: "tree"` or
-`layout-algo: "dot"`. `"tree"` places a traversal forest by levels. `"dot"`
-uses a directed layered placement for acyclic inputs, falling back to tree
-placement when the selected edges contain a cycle. Both modes also work on a
-subgraph:
+  For deterministic, non-iterative placement, use `layout-algo: "tree"` or
+  `layout-algo: "dot"`. `"tree"` places a traversal forest by levels. `"dot"`
+  uses a directed layered placement for acyclic inputs, falling back to tree
+  placement when the selected edges contain a cycle. Both modes also work on a
+  subgraph:
 
-```typ
-#let g = parse("digraph partial { a -> b; b -> c; c -> d; d -> a }").at(0)
-#let tree = graph.forests(g).at(0)
-#let g = layout(g, layout-algo: "tree", subgraph: tree)
-#draw(g)
-```
+  ```typ
+  #let g = parse("digraph partial { a -> b; b -> c; c -> d; d -> a }").at(0)
+  #let tree = graph.forests(g).at(0)
+  #let g = layout(g, layout-algo: "tree", subgraph: tree)
+  #draw(g)
+  ```
 
-Only nodes touched by the selected subgraph are placed. Edge control points are
-then resolved from the current node positions, so edges outside the selected
-subgraph are drawn as straight lines unless their own position constraints say
-otherwise.
+  Only nodes touched by the selected subgraph are placed. Edge control points are
+  then resolved from the current node positions, so edges outside the selected
+  subgraph are drawn as straight lines unless their own position constraints say
+  otherwise.
 
-`layout-algo: "force"` and `layout-algo: "anneal"` also accept `subgraph`.
-For these iterative modes, nodes and edge control points outside the selected
-subgraph stay fixed and act as boundary points while the selected subgraph is
-optimized.
+  `layout-algo: "force"` and `layout-algo: "anneal"` also accept `subgraph`.
+  For these iterative modes, nodes and edge control points outside the selected
+  subgraph stay fixed and act as boundary points while the selected subgraph is
+  optimized.
 
-Set `layout-nodes: "fixed"` to keep every node at its current `pos` for this
-layout pass and move only edge control points. With `subgraph`, only edges in
-the selected subgraph are moved; all other edge control points keep their
-current positions. The fixed-node policy is temporary; the returned graph stores
-the resulting coordinates as `pos`, but it does not turn them into persistent
-`pin` constraints. This is useful after one node-placement pass when a later pass
-should route or relax selected edges without disturbing the node layout:
+  Set `layout-nodes: "fixed"` to keep every node at its current `pos` for this
+  layout pass and move only edge control points. With `subgraph`, only edges in
+  the selected subgraph are moved; all other edge control points keep their
+  current positions. The fixed-node policy is temporary; the returned graph stores
+  the resulting coordinates as `pos`, but it does not turn them into persistent
+  `pin` constraints. This is useful after one node-placement pass when a later pass
+  should route or relax selected edges without disturbing the node layout:
 
-```typ
-#let g = parse("digraph partial { a [pos=\"0,0\"]; b [pos=\"4,0\"]; c [pos=\"8,0\"]; a -> b; b -> c }").at(0)
-#let first = subgraph.bits(g, (true, true, false, false))
-#let g = layout(g, layout-algo: "tree", layout-nodes: "fixed", subgraph: first)
-#draw(g)
-```
+  ```typ
+  #let g = parse("digraph partial { a [pos=\"0,0\"]; b [pos=\"4,0\"]; c [pos=\"8,0\"]; a -> b; b -> c }").at(0)
+  #let first = subgraph.bits(g, (true, true, false, false))
+  #let g = layout(g, layout-algo: "tree", layout-nodes: "fixed", subgraph: first)
+  #draw(g)
+  ```
 
-The shared spring/charge model uses the following coefficients:
+  Related controls can be supplied as shallow semantic records. These records
+  only name graph-layout concepts; they do not select a drawing domain or style:
 
-$ c_("vv") = beta L^3 $
-$ c_("ev") = beta gamma_("ev") L^3 $
-$ c_("ee") = beta gamma_("ee") L^3 $
-$ c_("center") = beta g_("center") $
-$ c_("dangling") = beta gamma_("dangling") L^3 $
-$ c_("dangling-centroid") = beta gamma_("dangling-centroid") L^3 $
+  ```typ
+  #let common = layouts.options(
+    spring: (strength: 8, length: 0.5),
+    repulsion: (edge-node: 0.05, dangling: 2),
+    constraints: (side-strength: 5),
+    labels: (steps: 0),
+    solver: (algorithm: "force", steps: 50),
+  )
+  #let spacious = layouts.options(
+    base: common,
+    spring: (length: 0.7),
+    repulsion: (dangling-centroid: 3),
+  )
+  #let g = layout(g, ..spacious)
+  ```
 
-The Typst parameter names are `beta` for $beta$, `gamma-ev` for
-$gamma_("ev")$, `gamma-ee` for $gamma_("ee")$, `g-center` for $g_("center")$,
-`gamma-dangling` for $gamma_("dangling")$, and
-`gamma-dangling-centroid` for $gamma_("dangling-centroid")$. The spring
-stiffness $k$ is `k-spring`, and the softening constant $epsilon$ is `eps`.
+  `layouts.options` performs a sparse update: the second spring record above
+  changes `length` without losing the inherited `strength`. Grouped fields
+  override their corresponding flat arguments. Flat arguments remain useful for
+  numerical experiments and controls that do not have a semantic grouping.
 
-In `layout-algo: "anneal"`, linnest minimizes an energy:
+  The shared spring/charge model uses the following coefficients:
 
-$ E =
-sum_(i < j) 1/2 c_("vv") / (d(v_i, v_j) + epsilon)
-+ sum_(i, e) c_("ev") / (d(v_i, e) + epsilon)
-+ sum_((v, e) " incident") 1/2 k (ell_e - d(v, e))^2
-\ + sum_("local edge pairs") 1/2 c_("ee") / (d(e_i, e_j) + epsilon)
-+ sum_("dangling pairs") 1/2 c_("dangling") / (d(e_i, e_j) + epsilon)
-+ sum_("dangling" e) c_("dangling-centroid") / (d(e, overline(v)) + epsilon)
-+ sum_(i) 1/2 c_("center") d(v_i, 0)^2
-+ p_("cross") N_("cross") $.
+  $ c_("vv") = beta L^3 $
+  $ c_("ev") = beta gamma_("ev") L^3 $
+  $ c_("ee") = beta gamma_("ee") L^3 $
+  $ c_("center") = beta g_("center") $
+  $ c_("dangling") = beta gamma_("dangling") L^3 $
+  $ c_("dangling-centroid") = beta gamma_("dangling-centroid") L^3 $
 
-Here $overline(v)$ is the mean node position. The centroid term pushes every
-dangling endpoint away from that mean; its equal-and-opposite reaction is
-shared over the nodes so it introduces no net force. $p_("cross")$ is
-`crossing-penalty` and $N_("cross")$ is the number of detected edge crossings.
-The quadratic center term pulls nodes toward the origin at every radius.
-`temp`, `step`, `seed`, `steps`, `epochs`, `cool`,
-`accept-floor`, `step-shrink`, and `incremental-energy` belong to this
-simulated annealing mode. `crossing-penalty` is also anneal-only; force mode
-does not currently add a crossing force.
+  The Typst parameter names are `beta` for $beta$, `gamma-ev` for
+  $gamma_("ev")$, `gamma-ee` for $gamma_("ee")$, `g-center` for $g_("center")$,
+  `gamma-dangling` for $gamma_("dangling")$, and
+  `gamma-dangling-centroid` for $gamma_("dangling-centroid")$. The spring
+  stiffness $k$ is `k-spring`, and the softening constant $epsilon$ is `eps`.
 
-In `layout-algo: "force"`, linnest applies the direct forces corresponding to
-the same vertex-vertex, edge-vertex, incidence spring, local edge-edge,
-dangling-edge, dangling-centroid, and center terms. `step` is the integration
-step, `delta` clamps per-step movement, `steps` and `epochs` set the iteration
-budget, `cool` shrinks
-the step after each epoch, and `early-tol` stops when movement is small.
-`z-spring` and `z-spring-growth` are force-only helpers: the integrator gives
-points temporary z coordinates to break overlaps and pulls them back toward the
-2D plane.
+  In `layout-algo: "anneal"`, linnest minimizes an energy:
 
-`directional-force` is applied in both modes as an extra bias derived from
-pin/port direction constraints.
+  $ E =
+  sum_(i < j) 1/2 c_("vv") / (d(v_i, v_j) + epsilon)
+  + sum_(i, e) c_("ev") / (d(v_i, e) + epsilon)
+  + sum_((v, e) " incident") 1/2 k (ell_e - d(v, e))^2
+  \ + sum_("local edge pairs") 1/2 c_("ee") / (d(e_i, e_j) + epsilon)
+  + sum_("dangling pairs") 1/2 c_("dangling") / (d(e_i, e_j) + epsilon)
+  + sum_("dangling" e) c_("dangling-centroid") / (d(e, overline(v)) + epsilon)
+  + sum_(i) 1/2 c_("center") d(v_i, 0)^2
+  + p_("cross") N_("cross") $.
 
-After either graph layout mode, labels are relaxed separately. If $L_l$ is the
-label target distance and $q_l$ is the label repulsion strength, then
-$L_l = alpha_l L$ and $q_l = beta_l L^2$. The Typst names are
-`label-length-scale` for $alpha_l$ and `label-charge` for $beta_l$.
-`label-spring` is the spring constant pulling each label toward its target.
-`label-layout: "normal"` uses a perpendicular offset target. With
-`label-layout: "dangling-tangent"`, paired edges still use that perpendicular
-target, but dangling half-edge labels are offset along the edge direction away
-from the attached node. With `label-layout: "fixed-length"`, the label remains
-at distance $L_l$ from the edge point and only rotates around it under repulsive
-forces. `label-steps`, `label-step`, `label-early-tol`, and
-`label-max-delta-scale` control the label relaxation iteration.
+  Here $overline(v)$ is the mean node position. The centroid term pushes every
+  dangling endpoint away from that mean; its equal-and-opposite reaction is
+  shared over the nodes so it introduces no net force. $p_("cross")$ is
+  `crossing-penalty` and $N_("cross")$ is the number of detected edge crossings.
+  The quadratic center term pulls nodes toward the origin at every radius.
+  `temp`, `step`, `seed`, `steps`, `epochs`, `cool`,
+  `accept-floor`, `step-shrink`, and `incremental-energy` belong to this
+  simulated annealing mode. `crossing-penalty` is also anneal-only; force mode
+  does not currently add a crossing force.
+
+  In `layout-algo: "force"`, linnest applies the direct forces corresponding to
+  the same vertex-vertex, edge-vertex, incidence spring, local edge-edge,
+  dangling-edge, dangling-centroid, and center terms. `step` is the integration
+  step, `delta` clamps per-step movement, `steps` and `epochs` set the iteration
+  budget, `cool` shrinks
+  the step after each epoch, and `early-tol` stops when movement is small.
+  `z-spring` and `z-spring-growth` are force-only helpers: the integrator gives
+  points temporary z coordinates to break overlaps and pulls them back toward the
+  2D plane.
+
+  `directional-force` is applied in both modes as an extra bias derived from
+  pin/port direction constraints.
+
+  After either graph layout mode, labels are relaxed separately. If $L_l$ is the
+  label target distance and $q_l$ is the label repulsion strength, then
+  $L_l = alpha_l L$ and $q_l = beta_l L^2$. The Typst names are
+  `label-length-scale` for $alpha_l$ and `label-charge` for $beta_l$.
+  `label-spring` is the spring constant pulling each label toward its target.
+  `label-layout: "normal"` uses a perpendicular offset target. With
+  `label-layout: "dangling-tangent"`, paired edges still use that perpendicular
+  target, but dangling half-edge labels are offset along the edge direction away
+  from the attached node. With `label-layout: "fixed-length"`, the label remains
+  at distance $L_l$ from the edge point and only rotates around it under repulsive
+  forces. `label-steps`, `label-step`, `label-early-tol`, and
+  `label-max-delta-scale` control the label relaxation iteration.
 ]
 
 #let subgraph-concepts = [
-=== Subgraphs
+  === Subgraphs
 
-Subgraph objects are opaque zero-copy values.
+  Subgraph objects are opaque zero-copy values.
 
-- `subgraph.label(g, label)` constructs a subgraph from a base62 label.
-- `subgraph.bits(g, bits)` constructs a subgraph from a boolean hedge array.
-- `subgraph.compass(g, compass)` selects half edges with a DOT compass point.
-- `subgraph.to-label(sg)` returns the base62 label.
-- `subgraph.hedges(sg)` returns included hedge indices.
-- `subgraph.contains(sg, hedge)` tests hedge membership.
+  - `subgraph.label(g, label)` constructs a subgraph from a base62 label.
+  - `subgraph.bits(g, bits)` constructs a subgraph from a boolean hedge array.
+  - `subgraph.compass(g, compass)` selects half edges with a DOT compass point.
+  - `subgraph.to-label(sg)` returns the base62 label.
+  - `subgraph.hedges(sg)` returns included hedge indices.
+  - `subgraph.contains(sg, hedge)` tests hedge membership.
 ]
 
 #let _show-example-source(code, ..args) = {
-  let displayed-code = code.text
+  let displayed-code = code
+    .text
     .split("\n")
     .filter(line => not line.starts-with(">>>"))
     .map(line => line.trim("<<<", at: start))
@@ -863,7 +911,12 @@ Subgraph objects are opaque zero-copy values.
   subgraph: subgraph,
 )
 
-#let _show-reference(source, name, preamble: "", function-aliases: (:)) = context {
+#let _show-reference(
+  source,
+  name,
+  preamble: "",
+  function-aliases: (:),
+) = context {
   let style = dictionary(tidy.styles.default)
   let _ = style.insert("show-example", _show-example-source)
   let _ = style.insert("show-variable", _show-variable)
@@ -898,25 +951,28 @@ Subgraph objects are opaque zero-copy values.
   function-aliases: (sequence: "layout-sequence"),
 )
 #let drawing-reference = _show-reference(read("../src/draw.typ"), "Reference")
-#let subgraph-reference = _show-reference(read("../src/subgraph.typ"), "subgraph")
+#let subgraph-reference = _show-reference(
+  read("../src/subgraph.typ"),
+  "subgraph",
+)
 
 #let manual = [
-#linnest-guide
-#graph-objects
-#graph-concepts
-#placement-concepts
-#drawing-concepts
-#domain-style-concepts
-#graph-query-concepts
-#layout-concepts
-#subgraph-concepts
+  #linnest-guide
+  #graph-objects
+  #graph-concepts
+  #placement-concepts
+  #drawing-concepts
+  #domain-style-concepts
+  #graph-query-concepts
+  #layout-concepts
+  #subgraph-concepts
 
-== Generated Reference
+  == Generated Reference
 
-#graph-reference
-#layout-reference
-#drawing-reference
-#subgraph-reference
+  #graph-reference
+  #layout-reference
+  #drawing-reference
+  #subgraph-reference
 ]
 
 #manual

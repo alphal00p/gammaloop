@@ -5,6 +5,8 @@
 
 #import "impl/draw.typ" as _impl
 
+#let _overlay-style = _impl._overlay-style
+
 /// Split a laid-out graph edge into source and sink half-edge paths.
 ///
 /// The returned dictionary has `source`, `sink`, `curve`, and `split-gap`. The
@@ -249,11 +251,13 @@
 /// Typst label name and `crossing-gap` (default `0.55`) to the total arc length
 /// hidden around each proper centerline intersection. References are resolved
 /// independently of edge order. The current layer is split with Kurvst, so
-/// patterned phases continue across the hidden spans. Dangling layers and
-/// paired layers with one continuous source/sink style are supported. On a
+/// patterned phases continue across the hidden spans. A mark on the same layer
+/// is emitted once on its uncut carrier, so splitting the painted path neither
+/// removes nor duplicates it. Dangling layers and paired layers with one
+/// continuous source/sink paint style are supported. On a
 /// paired layer both half styles must specify the same target and gap. The cut
-/// layer cannot itself carry a mark or subgraph underlay; put those decorations
-/// on another layer. References to self, unknown, or invisible edges are errors.
+/// layer cannot participate in a subgraph underlay. References to self,
+/// unknown, or invisible edges are errors.
 /// A valid pair with no proper interior intersection is left unchanged.
 /// -> content
 #let draw(
@@ -308,6 +312,10 @@
   draw-node: auto,
   /// Default CeTZ edge stroke. -> any
   edge-stroke: 0.1em,
+  /// Default logical-edge style dictionary, layers, or callback. An edge's
+  /// `style:` value patches this default; `auto` delegates and `none` hides the
+  /// edge without changing its topology. -> dictionary | array | function | none
+  edge-style: (:),
   /// Default normal offset for edge paths. Applied to the base edge geometry
   /// before patterns; node outsets then trim the shifted path. -> int | float
   edge-offset: 0,
@@ -336,8 +344,14 @@
   /// -> auto | string
   edge-dangling-tangent: auto,
   /// Source half-edge style dictionary, array of layer dictionaries, or
-  /// callback. `mark-position: "center-if-dangling"` keeps an end marker at the
-  /// paired-edge split point while centering it on dangling half edges.
+  /// callback. A `"center"` or numeric mark on a common source/sink paint layer
+  /// is placed once on the complete derived layer, so it follows `shift`.
+  /// `mark-position` also accepts a numeric path-length ratio from `0` to `1`;
+  /// `mark-shift` moves a centered or numeric mark by signed arc length, with
+  /// positive values moving toward the derived path's end. This also works on
+  /// patterned dangling and asymmetric paired layers without resetting pattern
+  /// phase. `mark-position: "center-if-dangling"` centers dangling marks while
+  /// retaining the paired-edge split point selected by `mark-orientation`.
   /// `mark-orientation: "edge"` makes a mark follow `edge.orientation` instead
   /// of raw path direction; reversed edges move the mark to the sink half and
   /// flip it, while undirected edges suppress it.
@@ -354,6 +368,16 @@
   /// points through that same Hobby path.
   /// `route: "straight-through"` draws the two straight force springs from
   /// source to edge position and from edge position to sink.
+  /// A finite layer can set `shift` to move along the logical edge, with
+  /// positive values moving toward its end. `label` attaches content near the
+  /// layer midpoint. `label-side` is `auto`, `"left"`, `"right"`, or a signed
+  /// number; `auto` follows the side selected by ordinary edge-label layout.
+  /// `label-gap` adds
+  /// path-relative clearance beyond the measured label box and `label-style` is
+  /// forwarded to `cetz.draw.content`. An attached
+  /// label replaces the ordinary painted edge label, which may still provide
+  /// its pre-layout measurement and side. Attached labels do not add separate
+  /// pre-layout collision constraints.
   /// -> dictionary | array | function | none
   source-style: (:),
   /// Sink half-edge style dictionary, array of layer dictionaries, or callback.
@@ -419,6 +443,7 @@
       node-label: node-label,
       draw-node: draw-node,
       edge-stroke: edge-stroke,
+      edge-style: edge-style,
       edge-offset: edge-offset,
       edge-length: edge-length,
       edge-ratio: edge-ratio,

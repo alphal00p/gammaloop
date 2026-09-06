@@ -609,7 +609,11 @@
   /// DOT compass point such as `"n"`, `"s"`, `"e"`, or `"w"`. -> none | string
   compass: none,
 ) = {
-  _impl.source(node, (name: name, id: id, statement: statement, compass: compass), ..args)
+  _impl.source(
+    node,
+    (name: name, id: id, statement: statement, compass: compass),
+    ..args,
+  )
 }
 
 /// Create a sink half-edge endpoint.
@@ -632,7 +636,11 @@
   /// DOT compass point such as `"n"`, `"s"`, `"e"`, or `"w"`. -> none | string
   compass: none,
 ) = {
-  _impl.sink(node, (name: name, id: id, statement: statement, compass: compass), ..args)
+  _impl.sink(
+    node,
+    (name: name, id: id, statement: statement, compass: compass),
+    ..args,
+  )
 }
 
 /// Create a graph edge item for @build.
@@ -640,9 +648,11 @@
 /// Positional arguments may contain one @source, one @sink, and optionally one
 /// Typst label used as the edge name. The numeric `id` chooses the edge order.
 /// Extra named arguments are captured as edge data fields, so
-/// `edge(source(<a>), sink(<b>), particle: "g")` stores
-/// `(particle: "g")`. The default draw style uses `data.label` as the
-/// visible edge label when present.
+/// `edge(source(<a>), sink(<b>), weight: 3)` stores `(weight: 3)`. `style` is
+/// first-class drawing metadata: `auto` asks `draw` for its configured/default
+/// style, a dictionary or callback patches that style, and `none` hides the
+/// painted edge. The default draw style uses
+/// `data.label` as the visible edge label when present.
 /// -> array
 #let edge(
   /// Source/sink half-edges and optional edge name; extra named arguments become data fields. -> any
@@ -663,6 +673,8 @@
   label-angle: none,
   /// Edge bend stored as a statement. -> none | int | float | string
   bend: none,
+  /// Static logical-edge style, callback, `auto` fallback, or `none` to hide. -> auto | dictionary | array | function | none
+  style: auto,
   /// Additional flat edge statements. Used by DOT; values cannot nest. -> dictionary
   statements: (:),
 ) = _impl.edge(
@@ -675,6 +687,7 @@
     label-pos: label-pos,
     label-angle: label-angle,
     bend: bend,
+    style: style,
     statements: statements,
   ),
   ..args,
@@ -776,7 +789,13 @@
   /// Callback for sink half-edge records. -> none | function
   sink: none,
 ) = {
-  _impl.map(graph_, (graph: graph, node: node, edge: edge, source: source, sink: sink))
+  _impl.map(graph_, (
+    graph: graph,
+    node: node,
+    edge: edge,
+    source: source,
+    sink: sink,
+  ))
 }
 
 /// Attach layout-relevant drawing style to a graph.

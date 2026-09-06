@@ -25,6 +25,7 @@
   length: none,
   ratio: none,
   resolve-length: "min",
+  shift: 0,
   start-outset: 0,
   end-outset: 0,
   side-point: none,
@@ -117,7 +118,11 @@
   ),
 )
 
-#let _resolve-pattern(pattern, samples-per-period: 16, coil-longitudinal-scale: 1.25) = {
+#let _resolve-pattern(
+  pattern,
+  samples-per-period: 16,
+  coil-longitudinal-scale: 1.25,
+) = {
   if type(pattern) != str {
     pattern
   } else {
@@ -127,7 +132,10 @@
     } else if name == "zigzag" or name == "zig-zag" or name == "triangle" {
       zigzag()
     } else if name == "coil" or name == "helix" or name == "spring" {
-      coil(samples-per-period: samples-per-period, longitudinal-scale: coil-longitudinal-scale)
+      coil(
+        samples-per-period: samples-per-period,
+        longitudinal-scale: coil-longitudinal-scale,
+      )
     } else {
       panic("Unsupported path pattern: " + pattern)
     }
@@ -213,7 +221,9 @@
 
 #let _part-elements(part) = {
   let value = _path-value(part)
-  let elements = if type(value) == dictionary and value.keys().contains("elements") {
+  let elements = if (
+    type(value) == dictionary and value.keys().contains("elements")
+  ) {
     value.elements
   } else if type(value) == dictionary and value.keys().contains("kind") {
     (value,)
@@ -228,10 +238,15 @@
 #let _path-state-after(state, element) = {
   if element.kind == "move" {
     (current: element.start, subpath: element.start)
-  } else if element.kind == "line" or element.kind == "quad" or element.kind == "cubic" {
+  } else if (
+    element.kind == "line" or element.kind == "quad" or element.kind == "cubic"
+  ) {
     (current: element.end, subpath: state.subpath)
   } else if element.kind == "close" {
-    (current: if state.subpath == none { _origin } else { state.subpath }, subpath: state.subpath)
+    (
+      current: if state.subpath == none { _origin } else { state.subpath },
+      subpath: state.subpath,
+    )
   } else {
     state
   }
@@ -250,11 +265,24 @@
   let state = _path-state(result)
   for part in parts {
     for element in _part-elements(part) {
-      if element.kind == "move" and state.current != none and _same-point(state.current, element.start) {
+      if (
+        element.kind == "move"
+          and state.current != none
+          and _same-point(state.current, element.start)
+      ) {
         ()
       } else {
-        if state.current == none and (element.kind == "line" or element.kind == "quad" or element.kind == "cubic") {
-          panic("Path segment elements need a current point; use line(start, end), quad(start, control, end), cubic(start, control-start, control-end, end), or move-to(start) first")
+        if (
+          state.current == none
+            and (
+              element.kind == "line"
+                or element.kind == "quad"
+                or element.kind == "cubic"
+            )
+        ) {
+          panic(
+            "Path segment elements need a current point; use line(start, end), quad(start, control, end), cubic(start, control-start, control-end, end), or move-to(start) first",
+          )
         }
         result.push(element)
         state = _path-state-after(state, element)
@@ -284,7 +312,10 @@
 /// `move` is skipped. If it starts elsewhere, the `move` begins a new subpath.
 ///
 /// -> dictionary
-#let append(path, ..parts) = from-elements(_append-elements(_elements(path), parts.pos()))
+#let append(path, ..parts) = from-elements(_append-elements(
+  _elements(path),
+  parts.pos(),
+))
 
 /// Build a straight-line path fragment.
 ///
@@ -363,7 +394,9 @@
 #let _path-element-end(element, current, subpath-start) = {
   if element.kind == "move" {
     element.start
-  } else if element.kind == "line" or element.kind == "quad" or element.kind == "cubic" {
+  } else if (
+    element.kind == "line" or element.kind == "quad" or element.kind == "cubic"
+  ) {
     element.end
   } else if element.kind == "close" {
     if subpath-start == none { _origin } else { subpath-start }
@@ -391,7 +424,11 @@
       points.push(element.start)
       current = element.start
       subpath-start = element.start
-    } else if element.kind == "line" or element.kind == "quad" or element.kind == "cubic" {
+    } else if (
+      element.kind == "line"
+        or element.kind == "quad"
+        or element.kind == "cubic"
+    ) {
       points.push(element.end)
       current = element.end
     } else if element.kind == "close" {
@@ -537,9 +574,16 @@
 /// `"none"`/`"full"`, or a function receiving
 /// `(base-length, length, ratio)`.
 /// -> none | int | float
-#let _resolve-length-target(base-length, length: none, ratio: none, method: "min") = {
+#let _resolve-length-target(
+  base-length,
+  length: none,
+  ratio: none,
+  method: "min",
+) = {
   let fixed = if length != none and length > 0 { length } else { none }
-  let relative = if ratio != none and ratio > 0 { base-length * ratio } else { none }
+  let relative = if ratio != none and ratio > 0 { base-length * ratio } else {
+    none
+  }
   if type(method) == function {
     method((base-length: base-length, length: fixed, ratio: relative))
   } else if fixed == none {
@@ -560,7 +604,12 @@
 }
 
 #let resolve-length(base-length, length: none, ratio: none, method: "min") = {
-  _resolve-length-target(base-length, length: length, ratio: ratio, method: method)
+  _resolve-length-target(
+    base-length,
+    length: length,
+    ratio: ratio,
+    method: method,
+  )
 }
 
 /// Compute the symmetric trim needed to center a shorter path layer.
@@ -574,7 +623,12 @@
   start-outset: 0,
   end-outset: 0,
 ) = {
-  let target = _resolve-length-target(base-length, length: length, ratio: ratio, method: resolve-length)
+  let target = _resolve-length-target(
+    base-length,
+    length: length,
+    ratio: ratio,
+    method: resolve-length,
+  )
   if target == none {
     0
   } else {
@@ -585,7 +639,9 @@
 
 #let _side-segment(path) = {
   let segments = segments(path)
-  if segments.len() == 0 { none } else { segments.at(calc.quo(segments.len(), 2)) }
+  if segments.len() == 0 { none } else {
+    segments.at(calc.quo(segments.len(), 2))
+  }
 }
 
 #let _offset-toward-side-point(path, offset, side-point) = {
@@ -787,8 +843,9 @@
 /// Build a derived visible path layer.
 ///
 /// `layer` combines the common operations needed by drawing packages:
-/// optional side-aware offsetting, endpoint trimming, and centered shortening by
-/// a fixed `length`, a relative `ratio`, or both. The return value is a normal
+/// optional side-aware offsetting, endpoint trimming, and shortening by a fixed
+/// `length`, a relative `ratio`, or both. `shift` moves a shortened layer along
+/// the path, with positive values moving toward the end. The return value is a normal
 /// Kurvst path dictionary that can be passed to @pattern, @parallel,
 /// @trim, or @to-cetz.
 ///
@@ -819,6 +876,7 @@
   length: none,
   ratio: none,
   resolve-length: "min",
+  shift: 0,
   start-outset: 0,
   end-outset: 0,
   side-point: none,
@@ -834,10 +892,16 @@
     start-outset: start-outset,
     end-outset: end-outset,
   )
-  let start-outset = start-outset + center-trim
-  let end-outset = end-outset + center-trim
+  let shift = calc.max(-center-trim, calc.min(center-trim, shift))
+  let start-outset = start-outset + center-trim + shift
+  let end-outset = end-outset + center-trim - shift
   if distance == none or distance == 0 {
-    trim(path, start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
+    trim(
+      path,
+      start-outset: start-outset,
+      end-outset: end-outset,
+      accuracy: accuracy,
+    )
   } else {
     parallel(
       path,
@@ -861,7 +925,10 @@
     } else if element.kind == "line" {
       components.push(curve.line(_point(element.end, unit: unit)))
     } else if element.kind == "quad" {
-      components.push(curve.quad(_point(element.control, unit: unit), _point(element.end, unit: unit)))
+      components.push(curve.quad(_point(element.control, unit: unit), _point(
+        element.end,
+        unit: unit,
+      )))
     } else if element.kind == "cubic" {
       components.push(curve.cubic(
         _point(element.control-start, unit: unit),
@@ -869,7 +936,10 @@
         _point(element.end, unit: unit),
       ))
     } else if element.kind == "close" {
-      components.push(curve.close(mode: element.at("mode", default: "straight")))
+      components.push(curve.close(mode: element.at(
+        "mode",
+        default: "straight",
+      )))
     }
   }
 
@@ -914,7 +984,11 @@
         segments.push(("l", _point(element.end, unit: unit)))
         current = element.end
       } else if element.kind == "quad" {
-        let cubic = _quad-cubic-segment(_path-cursor(current), element.control, element.end)
+        let cubic = _quad-cubic-segment(
+          _path-cursor(current),
+          element.control,
+          element.end,
+        )
         segments.push((
           "c",
           _point(cubic.control-start, unit: unit),
@@ -963,22 +1037,25 @@
   if subpaths.len() == 0 {
     ()
   } else {
-    cetz.draw.merge-path({
-      for (origin, closed, segments) in subpaths {
-        let current = origin
-        for (kind, ..args) in segments {
-          if kind == "l" {
-            cetz.draw.line(current, args.last())
-          } else if kind == "c" {
-            cetz.draw.bezier(current, args.last(), args.at(0), args.at(1))
+    cetz.draw.merge-path(
+      {
+        for (origin, closed, segments) in subpaths {
+          let current = origin
+          for (kind, ..args) in segments {
+            if kind == "l" {
+              cetz.draw.line(current, args.last())
+            } else if kind == "c" {
+              cetz.draw.bezier(current, args.last(), args.at(0), args.at(1))
+            }
+            current = args.last()
           }
-          current = args.last()
+          if closed and current != origin {
+            cetz.draw.line(current, origin)
+          }
         }
-        if closed and current != origin {
-          cetz.draw.line(current, origin)
-        }
-      }
-    }, ..style)
+      },
+      ..style,
+    )
   }
 }
 
@@ -1002,7 +1079,13 @@
 /// ```
 ///
 /// -> dictionary
-#let split-through(points, omega: 1.0, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
+#let split-through(
+  points,
+  omega: 1.0,
+  start-outset: 0,
+  end-outset: 0,
+  accuracy: 0.001,
+) = {
   if points.len() < 2 {
     panic("split-through expects at least two points")
   }

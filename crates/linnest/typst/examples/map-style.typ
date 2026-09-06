@@ -1,27 +1,6 @@
-#import "../src/lib.typ": graph
-
 #let massless = 0.5mm
 #let massive = 1pt
-#let dashed = (0.1em, 0.45em)
 #let edge-stroke = (paint: black, thickness: massless, cap: "round")
-#let straight = (stroke: edge-stroke)
-#let wave = (
-  stroke: edge-stroke,
-  pattern: "wave",
-  pattern-amplitude: 0.20,
-  pattern-wavelength: 0.50,
-)
-#let coil = (
-  stroke: edge-stroke,
-  pattern: "coil",
-  pattern-amplitude: 0.25,
-  pattern-wavelength: 0.60,
-  pattern-coil-longitudinal-scale: 1.60,
-)
-#let scalar = (
-  source: (stroke: edge-stroke + (thickness: massive, dash: dashed)),
-  sink: (stroke: edge-stroke + (thickness: massive, dash: dashed)),
-)
 
 #let fermion-mark = (
   end: (
@@ -33,126 +12,6 @@
   ),
   scale: 1.20,
 )
-
-#let fermion = (source: straight, sink: straight, fermion: true)
-#let photon = (source: wave, sink: wave)
-#let gluon = (source: coil, sink: coil)
-
-#let particle-map = (
-  "a": photon,
-  "mu+": fermion + (label: [$mu^+$]),
-  "mu-": fermion + (label: [$mu^-$]),
-  "e+": fermion + (label: [$e^+$]),
-  "e-": fermion + (label: [$e^-$]),
-  "q": fermion + (label: [$q$]),
-  "d": fermion,
-  "t": fermion + (label: [$t$]),
-  "photon": photon,
-  "g": gluon,
-  "gluon": gluon,
-  "fermion": fermion + (label: [$f$]),
-  "scalar": scalar + (label: [$s$]),
-  "ghG": scalar + (label: [$s$]),
-)
-
-#let _field(record, key, default) = {
-  let data = record.at("data", default: none)
-  let statements = record.at("statements", default: (:))
-  if type(data) == dictionary and data.keys().contains(key) {
-    data.at(key)
-  } else if type(statements) == dictionary and statements.keys().contains(key) {
-    statements.at(key)
-  } else {
-    record.at(key, default: default)
-  }
-}
-
-#let _number(record, key, default) = {
-  let value = _field(record, key, default)
-  if type(value) in (int, float) { value } else { float(str(value).trim("\"")) }
-}
-
-#let _particle(edge) = str(_field(edge, "particle", "")).trim("\"")
-#let _entry(edge) = particle-map.at(
-  _particle(edge),
-  default: (source: straight, sink: straight),
-)
-#let _has-half(edge, half) = {
-  edge.at(half + "-half-edge", default: edge.at(half, default: none)) != none
-}
-#let _momentum-mark-half(edge) = if _has-half(edge, "sink") { "sink" } else {
-  "source"
-}
-
-#let _particle-styles(edge, half) = {
-  let entry = _entry(edge)
-  let style = entry.at(half, default: entry.source)
-  if _field(edge, "cut", false) == true {
-    style += (split-gap: _number(edge, "cut-gap", 0.55))
-  }
-  let route = _field(edge, "route", none)
-  if route != none { style += (route: route) }
-  let crossing-under = _field(edge, "crossing-under", none)
-  if crossing-under != none {
-    style += (
-      crossing-under: crossing-under,
-      crossing-gap: _number(edge, "crossing-gap", 0.55),
-    )
-  }
-  if entry.at("fermion", default: false) {
-    let mark-style = (
-      mark: fermion-mark,
-      mark-position: "center-if-dangling",
-      mark-orientation: "edge",
-    )
-    if crossing-under == none {
-      (style + mark-style,)
-    } else {
-      // A crossing splits the stroke into several paths. Keep the one fermion
-      // arrow on an uncut, invisible overlay instead of repeating it per piece.
-      // A positive `fermion-arrow-shift` places the mark that far beyond the
-      // edge split point along the particle flow. The invisible carrier is a
-      // centered interval twice that long, with the mark on its flow-latter end.
-      let arrow-shift = _number(edge, "fermion-arrow-shift", 0)
-      let overlay = style
-      let _ = overlay.remove("crossing-under")
-      let _ = overlay.remove("crossing-gap")
-      let overlay = overlay + (stroke: none)
-      if arrow-shift > 0 {
-        let paired = _has-half(edge, "source") and _has-half(edge, "sink")
-        let orientation = str(_field(edge, "orientation", "default")).trim("\"")
-        let reversed = orientation == "reversed"
-        let mark-half = if paired {
-          if reversed { "source" } else { "sink" }
-        } else {
-          half
-        }
-        overlay += (
-          length: 2 * arrow-shift,
-          resolve-length: "length",
-          mark-position: "end",
-          mark-orientation: "path",
-        )
-        if orientation != "undirected" and half == mark-half {
-          if reversed {
-            overlay += (
-              mark: (start: fermion-mark.end, scale: fermion-mark.scale),
-              mark-direction: "backward",
-            )
-          } else {
-            overlay += (mark: fermion-mark)
-          }
-        }
-      } else {
-        overlay += mark-style
-      }
-      (style, overlay)
-    }
-  } else {
-    (style,)
-  }
-}
-
 #let momentum-mark = (
   end: (
     symbol: ")>",
@@ -164,134 +23,134 @@
   scale: 0.90,
 )
 
-#let _momentum-style(edge, half) = {
-  let length = _number(edge, "momentum-arrow-length", 1.70)
-  let shift = _number(edge, "momentum-arrow-shift", 0)
-  let paired = _has-half(edge, "source") and _has-half(edge, "sink")
-  // Opposite per-half lengths translate the visible interval along a paired
-  // edge: positive shifts toward the sink and negative shifts toward source.
-  let shifted-length = if paired {
-    length + (if half == "source" { -2 * shift } else { 2 * shift })
-  } else {
-    length
+#let fermion = (
+  stroke: edge-stroke,
+  mark: fermion-mark,
+  mark-position: "center-if-dangling",
+  mark-orientation: "edge",
+)
+#let photon = (
+  stroke: edge-stroke,
+  pattern: "wave",
+  pattern-amplitude: 0.20,
+  pattern-wavelength: 0.50,
+)
+#let gluon = (
+  stroke: edge-stroke,
+  pattern: "coil",
+  pattern-amplitude: 0.25,
+  pattern-wavelength: 0.60,
+  pattern-coil-longitudinal-scale: 1.60,
+)
+#let scalar = (
+  stroke: edge-stroke + (thickness: massive, dash: (0.1em, 0.45em)),
+)
+#let particles = (
+  "a": photon,
+  "photon": photon,
+  "g": gluon,
+  "gluon": gluon,
+  "scalar": scalar,
+  "ghG": scalar,
+)
+
+#let _value(element, key, default) = element.fields.at(key, default: default)
+#let _text(element, key, default) = str(_value(element, key, default)).trim(
+  "\"",
+)
+#let _number(element, key, default) = {
+  let value = _value(element, key, default)
+  if type(value) in (int, float) { value } else { float(str(value).trim("\"")) }
+}
+#let _enabled(element, key) = (
+  _value(element, key, false) in (true, "true", "\"true\"")
+)
+#let _route(edge) = {
+  let route = _value(edge, "route", none)
+  if route == none { (:) } else { (route: str(route).trim("\"")) }
+}
+
+#let _particle-layer(edge) = {
+  let particle = _text(edge, "particle", "d")
+  let style = particles.at(particle, default: fermion) + _route(edge)
+  if _enabled(edge, "cut") {
+    style.split-gap = _number(edge, "cut-gap", 0.55)
   }
-  let style = (
-    offset: _number(edge, "momentum-arrow-offset", 0.62),
-    offset-side: "label",
-    length: calc.max(0.02, shifted-length),
-    ratio: none,
-    resolve-length: "length",
-    stroke: (paint: black, thickness: 1.2pt, cap: "round"),
+  let under = _value(edge, "crossing-under", none)
+  if under != none {
+    style.crossing-under = under
+    style.crossing-gap = _number(edge, "crossing-gap", 0.55)
+  }
+  // Crossing cuts split only the paint, so one carrier mark can move freely.
+  style.mark-shift = _number(edge, "fermion-arrow-shift", 0)
+  style
+}
+
+#let _momentum-layers(edge) = {
+  let shift = _number(edge, "momentum-arrow-shift", 0)
+  let label-shift = _number(edge, "momentum-label-shift", shift)
+  let offset = _number(edge, "momentum-arrow-offset", 0.62)
+  let label = [$p_(#edge.eid)$]
+  let arrow = (
+    _route(edge)
+      + (
+        offset: offset,
+        offset-side: "label",
+        length: _number(edge, "momentum-arrow-length", 1.70),
+        shift: shift,
+        ratio: none,
+        resolve-length: "length",
+        stroke: (paint: black, thickness: 1.2pt, cap: "round"),
+        mark: momentum-mark,
+        mark-position: "end",
+        mark-orientation: "edge",
+      )
   )
-  let route = _field(edge, "route", none)
-  if route != none { style += (route: route) }
-  if half == _momentum-mark-half(edge) {
-    style + (mark: momentum-mark)
+  // Put the complete measured label box beyond the momentum shaft. Normally
+  // it follows that shaft; an explicit label shift gets a tiny invisible path.
+  if label-shift == shift {
+    arrow += (label: label, label-gap: 0.45)
+    (arrow,)
   } else {
-    style
+    (
+      arrow,
+      _route(edge)
+        + (
+          stroke: none,
+          offset: offset,
+          offset-side: "label",
+          length: 0.02,
+          shift: label-shift,
+          resolve-length: "length",
+          label: label,
+          label-gap: 0.45,
+        ),
+    )
   }
 }
 
-#let _half-style(edge, half) = (
-  .._particle-styles(edge, half),
-  _momentum-style(edge, half),
+#let edge-style(edge) = (
+  _particle-layer(edge),
+  .._momentum-layers(edge),
 )
 
-#let source-style(edge) = _half-style(edge, "source")
-#let sink-style(edge) = _half-style(edge, "sink")
-#let edge-label(edge) = [$p_#(edge.eid)$]
-#let edge-label-style(edge) = (anchor: "center", padding: 0.05)
-
-#let _hidden(node) = _field(node, "hidden", false) == true
-#let node-style(node) = if _hidden(node) {
+#let node-style(node) = if _enabled(node, "hidden") {
   (radius: 0, fill: none, stroke: none)
 } else {
   (radius: 0.28, fill: white, stroke: edge-stroke)
 }
 
-// Measure labels and nodes before layout. Draw reuses the stored callbacks.
-#let style(graph_, unit: 1.35) = graph.style(
-  graph_,
-  unit: unit,
+// The hidden ordinary label participates in layout and selects the side; the
+// visible label is attached to the momentum layer and follows its geometry.
+#let graph-style = (
+  unit: 1.35,
   node-label: none,
   node-style: node-style,
-  edge-label: edge-label,
-  edge-label-style: edge-label-style,
+  edge-label: edge => hide([$p_(#edge.eid)$]),
+  edge-label-style: (anchor: "center", padding: 0.05),
 )
-
-#let _x(point) = if type(point) == array { point.at(0) } else { point.x }
-#let _y(point) = if type(point) == array { point.at(1) } else { point.y }
-#let _add(left, right) = (_x(left) + _x(right), _y(left) + _y(right))
-#let _sub(left, right) = (_x(left) - _x(right), _y(left) - _y(right))
-#let _scale(point, value) = (_x(point) * value, _y(point) * value)
-#let _dot(left, right) = _x(left) * _x(right) + _y(left) * _y(right)
-#let _unit(point) = {
-  let length = calc.sqrt(_dot(point, point))
-  if length <= 1e-9 { (1, 0) } else { _scale(point, 1 / length) }
-}
-
-#let _edge-tangent(edge, nodes) = {
-  let source = edge.at("source", default: none)
-  let sink = edge.at("sink", default: none)
-  if source != none and sink != none {
-    _sub(nodes.at(sink.node).pos, nodes.at(source.node).pos)
-  } else if source != none {
-    _sub(edge.pos, nodes.at(source.node).pos)
-  } else {
-    _sub(nodes.at(sink.node).pos, edge.pos)
-  }
-}
-
-#let _edge-center(edge, nodes) = {
-  let source = edge.at("source", default: none)
-  let sink = edge.at("sink", default: none)
-  if source != none and sink != none {
-    edge.pos
-  } else {
-    let node = if source != none { source.node } else { sink.node }
-    _scale(_add(nodes.at(node).pos, edge.pos), 0.5)
-  }
-}
-
-// Put the complete label box beyond the offset momentum shaft, with a fixed
-// gap. Its center follows `momentum-arrow-shift` on paired edges unless an
-// explicit `momentum-label-shift` overrides it. Keeping the collision-selected
-// side avoids moving several nearby labels together.
-#let position-labels(graph_, gap: 0.32) = {
-  let nodes = graph.nodes(graph_)
-  graph.map(graph_, edge: edge => {
-    let center = _edge-center(edge, nodes)
-    let label = edge.at("label-pos", default: none)
-    if label == none { label = center }
-    let tangent = _unit(_edge-tangent(edge, nodes))
-    let normal = (-_y(tangent), _x(tangent))
-    let displacement = _sub(label, center)
-    let radial = _dot(displacement, normal)
-    let side = if radial < 0 { -1 } else { 1 }
-    let paired = _has-half(edge, "source") and _has-half(edge, "sink")
-    let arrow-shift = if paired {
-      _number(edge, "momentum-arrow-shift", 0)
-    } else { 0 }
-    let shift = _number(edge, "momentum-label-shift", arrow-shift)
-    let label-extent = (
-      (
-        calc.abs(_x(normal)) * _number(edge, "label-width", 0)
-          + calc.abs(_y(normal)) * _number(edge, "label-height", 0)
-      )
-        / 2
-    )
-    let clearance = (
-      calc.abs(_number(edge, "momentum-arrow-offset", 0.62))
-        + label-extent
-        + gap
-    )
-    let shifted = _add(
-      center,
-      _add(
-        _scale(tangent, shift),
-        _scale(normal, side * clearance),
-      ),
-    )
-    (label-pos: shifted)
-  })
-}
+#let draw-style = (
+  edge-style: edge-style,
+  padding: 1.5,
+  edge-dangling-tangent: "horizontal",
+)

@@ -37,7 +37,10 @@
   /// Horizontal scale of the coil before it is mapped onto a path. -> int | float
   longitudinal-scale: 1.25,
 ) = {
-  _impl.coil(samples-per-period: samples-per-period, longitudinal-scale: longitudinal-scale)
+  _impl.coil(
+    samples-per-period: samples-per-period,
+    longitudinal-scale: longitudinal-scale,
+  )
 }
 
 /// Return `from` moved toward `toward` by `distance`.
@@ -235,7 +238,12 @@
   /// Resolution strategy for fixed and relative targets. -> string | function
   method: "min",
 ) = {
-  _impl.resolve-length(base-length, length: length, ratio: ratio, method: method)
+  _impl.resolve-length(
+    base-length,
+    length: length,
+    ratio: ratio,
+    method: method,
+  )
 }
 
 /// Compute the symmetric trim needed to center a shorter path layer.
@@ -274,7 +282,12 @@
   /// Arc-length approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
 ) = {
-  _impl.trim(path, start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
+  _impl.trim(
+    path,
+    start-outset: start-outset,
+    end-outset: end-outset,
+    accuracy: accuracy,
+  )
 }
 
 /// Construct a cubic Hobby path through three points.
@@ -382,6 +395,8 @@
   ratio: none,
   /// Resolution strategy for fixed and relative targets. -> string | function
   resolve-length: "min",
+  /// Arc-length displacement of a shortened layer; positive moves toward the path end. -> int | float
+  shift: 0,
   /// Arc length removed from the start. -> int | float
   start-outset: 0,
   /// Arc length removed from the end. -> int | float
@@ -398,6 +413,7 @@
   length: length,
   ratio: ratio,
   resolve-length: resolve-length,
+  shift: shift,
   start-outset: start-outset,
   end-outset: end-outset,
   side-point: side-point,

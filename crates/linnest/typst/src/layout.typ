@@ -3,6 +3,224 @@
 
 #let _plugin = plugin("../linnest.wasm")
 
+#let _option-rules = (
+  spring: (strength: "number", length: "number"),
+  repulsion: (
+    strength: "number",
+    centering: "number",
+    "edge-node": "number",
+    "edge-edge": "number",
+    dangling: "number",
+    "dangling-centroid": "number",
+    softening: "number",
+  ),
+  constraints: (
+    "side-strength": "number",
+    "node-movement": ("fixed", "layout"),
+    direction: ("down", "right", "left-to-right", "left-right", "lr"),
+    "rank-alignment": (
+      "center",
+      "start",
+      "end",
+      "top",
+      "north",
+      "left",
+      "west",
+      "bottom",
+      "south",
+      "right",
+      "east",
+    ),
+    roots: "indices",
+    "same-rank": "rank-groups",
+  ),
+  labels: (
+    distance: "number",
+    spring: "number",
+    repulsion: "number",
+    steps: "integer",
+    model: ("normal", "dangling-tangent", "fixed-length"),
+    step: "number",
+    tolerance: "number",
+    "max-movement": "number",
+  ),
+  solver: (
+    algorithm: ("force", "anneal", "tree", "dot", "stable-layered", "railroad"),
+    steps: "integer",
+    epochs: "integer",
+    seed: "integer",
+    step: "number",
+    "step-shrink": "number",
+    cooling: "number",
+    "acceptance-floor": "number",
+    tolerance: "number",
+    temperature: "number",
+    "max-movement": "number",
+    "incremental-energy": "boolean",
+    "crossing-penalty": "number",
+    "z-spring": "number",
+    "z-spring-growth": "number",
+  ),
+)
+
+#let _option-error(group, field, expected, value) = panic(
+  "layout "
+    + group
+    + "."
+    + field
+    + " must be "
+    + expected
+    + ", got "
+    + repr(value),
+)
+
+#let _check-option-value(group, field, value, rule) = {
+  if rule == "number" and type(value) not in (int, float) {
+    _option-error(group, field, "a number", value)
+  } else if rule == "integer" and (type(value) != int or value < 0) {
+    _option-error(group, field, "a non-negative integer", value)
+  } else if rule == "boolean" and type(value) != bool {
+    _option-error(group, field, "a boolean", value)
+  } else if (
+    rule == "indices"
+      and (
+        type(value) != array
+          or not value.all(index => type(index) == int and index >= 0)
+      )
+  ) {
+    _option-error(group, field, "an array of non-negative node indices", value)
+  } else if (
+    rule == "rank-groups"
+      and (
+        type(value) != array
+          or not value.all(group => (
+            type(group) in (bytes, function)
+              or (
+                type(group) == array
+                  and group.all(index => type(index) == int and index >= 0)
+              )
+          ))
+      )
+  ) {
+    _option-error(
+      group,
+      field,
+      "an array of subgraphs, node-index arrays, or module functions",
+      value,
+    )
+  } else if type(rule) == array and (type(value) != str or value not in rule) {
+    _option-error(group, field, "one of " + rule.map(repr).join(", "), value)
+  }
+}
+
+#let _checked-group(name, value) = {
+  if name not in _option-rules {
+    panic("layout options do not have a " + repr(name) + " group")
+  }
+  if value == none {
+    return (:)
+  }
+  if type(value) != dictionary {
+    panic("layout " + name + " options must be a dictionary")
+  }
+  let rules = _option-rules.at(name)
+  for key in value.keys() {
+    if key not in rules {
+      panic(
+        "layout "
+          + name
+          + " options do not have a "
+          + repr(key)
+          + " field; expected one of "
+          + rules.keys().map(repr).join(", "),
+      )
+    }
+    let _ = _check-option-value(name, key, value.at(key), rules.at(key))
+  }
+  value
+}
+
+#let _rank-subgraph(graph, value) = {
+  if type(value) == bytes {
+    return value
+  }
+  if type(value) == function {
+    return value(graph)
+  }
+  if type(value) != array or not value.all(item => type(item) == int) {
+    panic(
+      "layout rank-same entries must be subgraphs, node-index arrays, or module functions",
+    )
+  }
+  let nodes = graph-module.nodes(graph)
+  let count = 0
+  for edge in graph-module.edges(graph) {
+    for endpoint in (edge.source, edge.sink) {
+      if endpoint != none {
+        count = calc.max(count, endpoint.hedge + 1)
+      }
+    }
+  }
+  let bits = range(count).map(_ => false)
+  for index in value {
+    if index < 0 or index >= nodes.len() {
+      panic("layout rank-same node index is out of bounds")
+    }
+    for edge in graph-module.edges(graph) {
+      for endpoint in (edge.source, edge.sink) {
+        if endpoint != none and endpoint.node == index {
+          bits.at(endpoint.hedge) = true
+        }
+      }
+    }
+  }
+  subgraph-module.bits(graph, bits)
+}
+
+/// Construct reusable semantic layout options or sparsely update existing ones.
+///
+/// Each option group is a plain dictionary. Supplying `base` preserves every
+/// field not mentioned by a patch, including fields inside a patched group.
+/// Pass the result to @layout with argument spreading.
+///
+/// ```example
+/// #let common = options(
+///   spring: (strength: 8, length: 0.5),
+///   repulsion: (edge-node: 0.05, dangling: 2),
+///   solver: (algorithm: "force", steps: 50),
+/// )
+/// #let spacious = options(
+///   base: common,
+///   spring: (length: 0.7),
+///   repulsion: (dangling-centroid: 3),
+/// )
+/// #let g = layout(g, ..spacious)
+/// ```
+/// -> dictionary
+#let options(
+  /// Semantic option-group patches. -> arguments
+  ..patches,
+  /// Existing option dictionary to update. -> dictionary
+  base: (:),
+) = {
+  if type(base) != dictionary {
+    panic("layout options base must be a dictionary")
+  }
+  let result = base
+  if patches.pos().len() > 0 {
+    panic("layout options only accepts named group patches")
+  }
+  for (name, patch) in patches.named() {
+    let patch = _checked-group(name, patch)
+    let previous = result.at(name, default: (:))
+    if type(previous) != dictionary {
+      panic("layout options base " + name + " field must be a dictionary")
+    }
+    result.insert(name, previous + patch)
+  }
+  result
+}
+
 /// Apply the linnest layout pass to a graph object.
 ///
 /// This is intentionally a second step: construct or parse a graph first, then
@@ -32,6 +250,32 @@
   /// Graph object returned by `graph.build` or `graph.parse`.
   /// -> dictionary
   graph,
+  /// Semantic incidence-spring options. Supported fields are `strength` and
+  /// `length`. These override the corresponding flat parameters below.
+  /// -> none | dictionary
+  spring: none,
+  /// Semantic repulsion options. Supported fields are `strength`, `centering`,
+  /// `edge-node`, `edge-edge`, `dangling`, `dangling-centroid`, and
+  /// `softening`. These override the corresponding flat parameters below.
+  /// -> none | dictionary
+  repulsion: none,
+  /// Semantic constraint options. Supported fields are `side-strength`,
+  /// `node-movement`, `direction`, `rank-alignment`, `roots`, and `same-rank`.
+  /// These override the corresponding flat parameters below.
+  /// -> none | dictionary
+  constraints: none,
+  /// Semantic label-layout options. Supported fields are `distance`, `spring`,
+  /// `repulsion`, `steps`, `model`, `step`, `tolerance`, and `max-movement`.
+  /// These override the corresponding flat parameters below.
+  /// -> none | dictionary
+  labels: none,
+  /// Semantic solver options. Supported fields are `algorithm`, `steps`,
+  /// `epochs`, `seed`, `step`, `step-shrink`, `cooling`, `acceptance-floor`,
+  /// `tolerance`, `temperature`, `max-movement`, `incremental-energy`,
+  /// `crossing-penalty`, `z-spring`, and `z-spring-growth`. These override the
+  /// corresponding flat parameters below.
+  /// -> none | dictionary
+  solver: none,
   /// Optional subgraph object to lay out. With `"tree"`, other edges are drawn
   /// from the resulting node positions. With `"dot"` and `"stable-layered"`,
   /// the subgraph determines rank constraints, while all paired edges between
@@ -208,58 +452,89 @@
   /// both modes. -> float
   length-scale: 0.35,
 ) = {
+  spring = _checked-group("spring", spring)
+  repulsion = _checked-group("repulsion", repulsion)
+  constraints = _checked-group("constraints", constraints)
+  labels = _checked-group("labels", labels)
+  solver = _checked-group("solver", solver)
+  let rank-groups = constraints.at("same-rank", default: rank-same)
+  if type(rank-groups) != array {
+    panic("layout rank-same/constraints.same-rank must be an array")
+  }
   let settings = (
     viewport-w: str(viewport-w),
     viewport-h: str(viewport-h),
     tree-dx: str(tree-dx),
     tree-dy: str(tree-dy),
-    steps: str(steps),
-    seed: str(seed),
-    step: str(step),
-    step-shrink: str(step-shrink),
-    cool: str(cool),
-    accept-floor: str(accept-floor),
-    early-tol: str(early-tol),
-    temp: str(temp),
-    delta: str(delta),
-    beta: str(beta),
-    k-spring: str(k-spring),
-    g-center: str(g-center),
-    epochs: str(epochs),
-    crossing-penalty: str(crossing-penalty),
-    gamma-dangling: str(gamma-dangling),
-    gamma-dangling-centroid: str(gamma-dangling-centroid),
-    gamma-ee: str(gamma-ee),
-    directional-force: str(directional-force),
-    label-length-scale: str(label-length-scale),
-    label-spring: str(label-spring),
-    label-charge: str(label-charge),
-    label-steps: str(label-steps),
-    label-layout: label-layout,
-    label-step: str(label-step),
-    label-early-tol: str(label-early-tol),
-    label-max-delta-scale: str(label-max-delta-scale),
-    gamma-ev: str(gamma-ev),
-    eps: str(eps),
-    incremental-energy: incremental-energy,
-    layout-algo: layout-algo,
-    layout-nodes: layout-nodes,
-    layout-direction: layout-direction,
-    rank-align: rank-align,
-    layout-roots: layout-roots,
-    rank-same: rank-same.map(subgraph-module.to-label),
+    steps: str(solver.at("steps", default: steps)),
+    seed: str(solver.at("seed", default: seed)),
+    step: str(solver.at("step", default: step)),
+    step-shrink: str(solver.at("step-shrink", default: step-shrink)),
+    cool: str(solver.at("cooling", default: cool)),
+    accept-floor: str(solver.at("acceptance-floor", default: accept-floor)),
+    early-tol: str(solver.at("tolerance", default: early-tol)),
+    temp: str(solver.at("temperature", default: temp)),
+    delta: str(solver.at("max-movement", default: delta)),
+    beta: str(repulsion.at("strength", default: beta)),
+    k-spring: str(spring.at("strength", default: k-spring)),
+    g-center: str(repulsion.at("centering", default: g-center)),
+    epochs: str(solver.at("epochs", default: epochs)),
+    crossing-penalty: str(solver.at(
+      "crossing-penalty",
+      default: crossing-penalty,
+    )),
+    gamma-dangling: str(repulsion.at("dangling", default: gamma-dangling)),
+    gamma-dangling-centroid: str(
+      repulsion.at("dangling-centroid", default: gamma-dangling-centroid),
+    ),
+    gamma-ee: str(repulsion.at("edge-edge", default: gamma-ee)),
+    directional-force: str(constraints.at(
+      "side-strength",
+      default: directional-force,
+    )),
+    label-length-scale: str(labels.at("distance", default: label-length-scale)),
+    label-spring: str(labels.at("spring", default: label-spring)),
+    label-charge: str(labels.at("repulsion", default: label-charge)),
+    label-steps: str(labels.at("steps", default: label-steps)),
+    label-layout: labels.at("model", default: label-layout),
+    label-step: str(labels.at("step", default: label-step)),
+    label-early-tol: str(labels.at("tolerance", default: label-early-tol)),
+    label-max-delta-scale: str(
+      labels.at("max-movement", default: label-max-delta-scale),
+    ),
+    gamma-ev: str(repulsion.at("edge-node", default: gamma-ev)),
+    eps: str(repulsion.at("softening", default: eps)),
+    incremental-energy: solver.at(
+      "incremental-energy",
+      default: incremental-energy,
+    ),
+    layout-algo: solver.at("algorithm", default: layout-algo),
+    layout-nodes: constraints.at("node-movement", default: layout-nodes),
+    layout-direction: constraints.at("direction", default: layout-direction),
+    rank-align: constraints.at("rank-alignment", default: rank-align),
+    layout-roots: constraints.at("roots", default: layout-roots),
+    rank-same: rank-groups.map(group => subgraph-module.to-label(_rank-subgraph(
+      graph,
+      group,
+    ))),
     route-edge-weight: str(route-edge-weight),
     route-exit-weight: str(route-exit-weight),
     route-label-width-scale: str(route-label-width-scale),
     route-label-width-cap: str(route-label-width-cap),
-    z-spring: str(z-spring),
-    z-spring-growth: str(z-spring-growth),
-    length-scale: str(length-scale),
+    z-spring: str(solver.at("z-spring", default: z-spring)),
+    z-spring-growth: str(solver.at(
+      "z-spring-growth",
+      default: z-spring-growth,
+    )),
+    length-scale: str(spring.at("length", default: length-scale)),
   )
   if subgraph != none {
     settings.insert("subgraph", subgraph-module.to-label(subgraph))
   }
-  let graph-bytes = _plugin.layout_parsed_graph(graph-module.graph-bytes(graph), cbor.encode(settings))
+  let graph-bytes = _plugin.layout_parsed_graph(
+    graph-module.graph-bytes(graph),
+    cbor.encode(settings),
+  )
   graph-module.with-bytes(graph, graph-bytes)
 }
 

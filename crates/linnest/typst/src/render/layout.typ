@@ -1,6 +1,7 @@
-#import "../lib.typ": (
-  draw, graph, layout as apply-layout, subgraph,
-)
+#import "../draw.typ": _overlay-style, draw
+#import "../graph.typ" as graph
+#import "../layout.typ": _rank-subgraph, layout as apply-layout
+#import "../subgraph.typ" as subgraph
 
 #let _dictionary(value, context_) = if value == none {
   (:)
@@ -63,35 +64,14 @@
   )
 }
 
-#let _call(value, record) = if type(value) == function { value(record) } else { value }
+#let _call(value, record) = if type(value) == function { value(record) } else {
+  value
+}
 #let _style(value, record) = {
   let value = _call(value, record)
   if value == none { (:) } else { value }
 }
 #let _record-style(record, key) = _style(record.at(key, default: (:)), record)
-#let _overlay-style(base, patch) = {
-  if patch == none or (type(patch) == dictionary and patch.len() == 0) {
-    base
-  } else if base == none {
-    patch
-  } else if type(patch) == array {
-    let base = if type(base) == array {
-      if base.len() > 0 { base } else { ((:),) }
-    } else {
-      (base,)
-    }
-    patch.enumerate().map(((index, layer)) => (
-      _dictionary(base.at(index, default: base.last()), "style layer")
-        + _dictionary(layer, "style layer")
-    ))
-  } else if type(base) == array {
-    base.map(layer => _dictionary(layer, "style layer") + patch)
-  } else if type(base) == dictionary {
-    base + patch
-  } else {
-    patch
-  }
-}
 #let _record-drawing-style(record, key) = _record-style(record, key)
 #let _record-data(record) = {
   let data = record.at("data", default: none)
@@ -145,8 +125,14 @@
   if value == none {
     return none
   }
-  if (integer and type(value) != int) or (not integer and type(value) not in (int, float)) {
-    panic(context_ + if integer { " must be an integer" } else { " must be a number" })
+  if (
+    (integer and type(value) != int)
+      or (not integer and type(value) not in (int, float))
+  ) {
+    panic(
+      context_
+        + if integer { " must be an integer" } else { " must be a number" },
+    )
   }
   if value < 0 {
     panic(context_ + " must be non-negative")
@@ -207,14 +193,21 @@
   },
   edge: edge => {
     let data = _record-data(edge)
-    if not data.keys().contains("minimum-length") or data.at("minimum-length") == none {
+    if (
+      not data.keys().contains("minimum-length")
+        or data.at("minimum-length") == none
+    ) {
       none
     } else {
-      (statements: (minlen: _constraint-number(
-        data.at("minimum-length"),
-        "EdgeDrawing.minimum_length",
-        integer: true,
-      )))
+      (
+        statements: (
+          minlen: _constraint-number(
+            data.at("minimum-length"),
+            "EdgeDrawing.minimum_length",
+            integer: true,
+          ),
+        ),
+      )
     }
   },
   source: none,
@@ -258,7 +251,10 @@
   let direction = radial
   if length <= 1e-9 {
     let tangent = if edge.source != none and edge.sink != none {
-      _point-difference(nodes.at(edge.sink.node).pos, nodes.at(edge.source.node).pos)
+      _point-difference(
+        nodes.at(edge.sink.node).pos,
+        nodes.at(edge.source.node).pos,
+      )
     } else if edge.source != none {
       _point-difference(edge.pos, nodes.at(edge.source.node).pos)
     } else if edge.sink != none {
@@ -291,7 +287,10 @@
     node: none,
     edge: edge => {
       let data = _record-data(edge)
-      if not data.keys().contains("label-offset") or data.at("label-offset") == none {
+      if (
+        not data.keys().contains("label-offset")
+          or data.at("label-offset") == none
+      ) {
         none
       } else {
         let offset = data.at("label-offset")
@@ -306,7 +305,9 @@
   )
 }
 
-#let _bool-array(value) = type(value) == array and value.all(item => type(item) == bool)
+#let _bool-array(value) = (
+  type(value) == array and value.all(item => type(item) == bool)
+)
 
 #let _subgraph-bits(g, value, context_) = {
   if type(value) == bytes {
@@ -321,78 +322,82 @@
   subgraph.bits(g, value)
 }
 
-#let _rank-subgraph(g, value) = {
-  if type(value) == bytes {
-    return value
-  }
-  if type(value) == function {
-    return value(g)
-  }
-  if type(value) != array or not value.all(item => type(item) == int) {
-    panic("config.layouts rank-same entries must be node-index arrays or module functions")
-  }
-  let nodes = graph.nodes(g)
-  let count = 0
-  for edge in graph.edges(g) {
-    for endpoint in (edge.source, edge.sink) {
-      if endpoint != none {
-        count = calc.max(count, endpoint.hedge + 1)
-      }
-    }
-  }
-  let bits = range(count).map(_ => false)
-  for index in value {
-    if index < 0 or index >= nodes.len() {
-      panic("config.layouts rank-same node index is out of bounds")
-    }
-    for edge in graph.edges(g) {
-      for endpoint in (edge.source, edge.sink) {
-        if endpoint != none and endpoint.node == index {
-          bits.at(endpoint.hedge) = true
-        }
-      }
-    }
-  }
-  subgraph.bits(g, bits)
-}
-
 #let _layout-pass(g, value) = {
   let pass = _dictionary(value, "config.layouts entry")
   if pass.keys().contains("subgraph") and pass.subgraph != none {
     pass.subgraph = _subgraph-bits(g, pass.subgraph, "config.layouts subgraph")
   }
-  let groups = pass.at("rank-same", default: ())
+  let constraints = _dictionary(
+    pass.at("constraints", default: (:)),
+    "config.layouts constraints",
+  )
+  let groups = if constraints.keys().contains("same-rank") {
+    constraints.at("same-rank")
+  } else {
+    pass.at("rank-same", default: ())
+  }
   if type(groups) != array {
-    panic("config.layouts rank-same must be an array")
+    panic("config.layouts rank-same/constraints.same-rank must be an array")
   }
   groups += _edge-rank-same(g)
   if groups.len() > 0 {
     pass.insert("rank-same", groups.map(group => _rank-subgraph(g, group)))
   }
+  if constraints.keys().contains("same-rank") {
+    let _ = constraints.remove("same-rank")
+    pass.insert("constraints", constraints)
+  }
   pass
+}
+
+#let _layout-passes(value) = if value == none {
+  ()
+} else if type(value) == dictionary {
+  (value,)
+} else if type(value) == array {
+  value
+} else {
+  panic(
+    "config.layouts must be one layout dictionary, an array of passes, or none",
+  )
 }
 
 #let _draw-subgraph(g, value) = {
   if value == none or type(value) == bytes or type(value) == function {
     if type(value) == function { value(g) } else { value }
   } else if _bool-array(value) {
-    if value.len() == 0 { () } else { _subgraph-bits(g, value, "config.draw subgraph") }
+    if value.len() == 0 { () } else {
+      _subgraph-bits(g, value, "config.draw subgraph")
+    }
   } else if type(value) == array {
     value.map(item => {
       if type(item) == dictionary and item.keys().contains("subgraph") {
-        item + (subgraph: _subgraph-bits(g, item.subgraph, "config.draw subgraph entry"),)
+        (
+          item
+            + (
+              subgraph: _subgraph-bits(
+                g,
+                item.subgraph,
+                "config.draw subgraph entry",
+              ),
+            )
+        )
       } else {
         _subgraph-bits(g, item, "config.draw subgraph entry")
       }
     })
   } else {
-    panic("config.draw subgraph must be a boolean half-edge array or an array of them")
+    panic(
+      "config.draw subgraph must be a boolean half-edge array or an array of them",
+    )
   }
 }
 
 #let _half-edge-style(record, side) = {
   let half-edge = record.at(side + "-half-edge", default: none)
-  if half-edge == none or type(half-edge.at("data", default: none)) != dictionary {
+  if (
+    half-edge == none or type(half-edge.at("data", default: none)) != dictionary
+  ) {
     (:)
   } else {
     let data = half-edge.data
@@ -417,12 +422,11 @@
   record,
   side,
 ) = {
-  let style = if has-configured { _call(configured, record) } else { (:) }
+  let style = if has-configured { _style(configured, record) } else { (:) }
   let data = record.at("data", default: none)
   if type(data) == dictionary and data.keys().contains("routing") {
     style = _overlay-style(style, (route: data.at("routing")))
   }
-  style = _overlay-style(style, _record-drawing-style(record, "edge-style"))
   style = _overlay-style(style, _record-style(record, side + "-style"))
   style = _overlay-style(style, _half-edge-style(record, side))
   _element-edge-style(style, record)
@@ -453,7 +457,10 @@
   let edge-label = options.at("edge-label", default: none)
   let edge-label-style = options.at("edge-label-style", default: (:))
   (
-    node-label: node => _label(node-label, node, node.at("name", default: none)),
+    node-label: node => _label(node-label, node, node.at(
+      "name",
+      default: none,
+    )),
     node-label-style: node => (
       _style(node-label-style, node) + _record-style(node, "node-label-style")
     ),
@@ -489,8 +496,8 @@
   if not options.keys().contains("title") {
     options.title = config.at("title", default: auto)
   }
-  // graph.style stores the final callbacks. `draw` uses these sentinel values
-  // to retrieve them without applying the local layer a second time.
+  // graph.style stores the final callbacks. `draw` retrieves them through these
+  // sentinel values without applying the element-local layer a second time.
   options.node-label = auto
   options.node-label-style = (:)
   options.node-style = (:)
@@ -502,19 +509,16 @@
 // Apply final style before layout so native labels, custom node shapes and
 // label padding contribute to the measured layout dimensions.
 #let layout-graph(config, g) = {
-  let style-options = _dictionary(config.at("style", default: (:)), "config.style")
+  let style-options = _dictionary(
+    config.at("style", default: (:)),
+    "config.style",
+  )
   let draw-options = _dictionary(config.at("draw", default: (:)), "config.draw")
-  let passes = if config.keys().contains("layouts") {
+  let passes = _layout-passes(if config.keys().contains("layouts") {
     config.at("layouts")
   } else {
     ((:),)
-  }
-  if passes == none {
-    passes = ()
-  }
-  if type(passes) != array {
-    panic("config.layouts must be an array")
-  }
+  })
 
   let g = _attach-elements(g, config.at("elements", default: (:)))
   let defaults = (
