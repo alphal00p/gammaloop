@@ -3,7 +3,8 @@
 
 # Required for emulated libtest `--skip` and `--exact` arguments used by the
 # test recipes. Older versions fail before running the selected tests.
-nextest-version = "0.9.80"
+# Custom profile inheritance additionally requires nextest 0.9.115.
+nextest-version = "0.9.115"
 
 [profile.default]
 # Slow tests get extra time
@@ -138,12 +139,30 @@ threads-required = 10
 slow-timeout = { period = "15m", terminate-after = 2 }
 
 [[profile.ci.overrides]]
+# These six gg->hhh fixture users and the aa->aa backend comparison construct
+# large evaluators. Reserve the complete CI budget as in the local suite so
+# their allocations cannot overlap, regardless of the runner's CPU count.
+filter = '''
+binary(=test_runs) and (
+    test(=approach::approach_amplitude_json_has_synthetic_cut_and_threshold_weights)
+    or test(=events::amplitude_events_surface_threshold_counterterms_and_reproduce_weight)
+    or test(=events::amplitude_threshold_counterterms_follow_lmb_channel_normalization)
+    or test(=events::amplitude_selectors_generate_internal_events_without_surfacing_them)
+    or test(=events::amplitude_observables_accumulate_without_returning_events)
+    or test(=inspect::inspect_x_space_reports_missing_discrete_dimensions_cleanly)
+    or test(=aa_aa::important::aa_aa_local_inspect_backend_consistency)
+)
+'''
+threads-required = "num-test-threads"
+
+[[profile.ci.overrides]]
 # Benchmark tests get even more time in CI
 filter = "test(bench) or test(benchmark)"
 
 [[profile.ci.overrides]]
 # Keep the production GL20 event snapshot under the same explicit bound in CI.
 filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/)"
+threads-required = "num-test-threads"
 slow-timeout = { period = "5m", terminate-after = 2 }
 
 [profile.partition]

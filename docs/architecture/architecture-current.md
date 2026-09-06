@@ -143,11 +143,12 @@ external-balance synthesis. The raw `+/-Q` sign remains available to the
 numerator mapper, while a post-construction Graphica pass canonically relabels
 nodes and exact edges for deterministic cache keys.
 
-Projection first plans every genuinely outer additive Taylor term, then
-generates once per canonical topology. Every term keeps its own factorized
-minimax assignment. A shared generator envelope takes the maximum **total**
-degree within each repeated algebraic energy channel and redistributes that
-total by the same minimax rule; non-repeated bounds use componentwise maxima.
+Projection first plans every genuinely outer additive Taylor term, then reuses
+generated expressions only for equal canonical topology and normalized
+per-request capacity. Every term keeps its own factorized minimax assignment.
+Each request's **total** degree within a repeated algebraic energy channel is
+redistributed by the same minimax rule; its non-repeated bounds stay unchanged.
+Independent requests never contribute a shared capacity maximum.
 The real degree-one triangle regression retains its collected coefficient as
 one common-denominator source with UV-owner multiplicities `(2,1,2)`. Positive
 typed denominator factors stay in its factorized numerator, and generalized

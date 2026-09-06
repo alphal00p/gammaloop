@@ -54,14 +54,14 @@ struct RemappedDenominatorTree {
 
 type ExactCffGenerationKey = (ParsedGraph, EnergyEdgeIndexMap, Generate3DExpressionOptions);
 
-struct ExactCffCapacityEnvelope {
+struct ExactCffCapacity {
     repeated_channels: Vec<Vec<usize>>,
     bounds: Vec<(usize, usize)>,
 }
 
 #[derive(Default)]
 pub(crate) struct ExactCffGenerationCache {
-    required_bounds: BTreeMap<ExactCffGenerationKey, ExactCffCapacityEnvelope>,
+    required_bounds: BTreeMap<ExactCffGenerationKey, ExactCffCapacity>,
     entries: BTreeMap<ExactCffGenerationKey, GeneratedThreeDExpression>,
 }
 
@@ -70,7 +70,7 @@ impl ExactCffGenerationCache {
         self.entries.len()
     }
 
-    fn topology_key(
+    fn generation_key(
         parsed: &ParsedGraph,
         energy_edges: &EnergyEdgeIndexMap,
         options: &Generate3DExpressionOptions,
@@ -90,9 +90,7 @@ impl ExactCffGenerationCache {
             .into_iter()
             .map(|node| (format!("__gammaloop_exact_node_{node}"), node))
             .collect();
-        let mut topology_options = options.clone();
-        topology_options.energy_degree_bounds = None;
-        (topology, energy_edges.clone(), topology_options)
+        (topology, energy_edges.clone(), options.clone())
     }
 
     fn source_repeated_channels(
@@ -130,14 +128,12 @@ impl ExactCffGenerationCache {
         Ok(repeated_channels)
     }
 
-    fn join_local_bounds(
+    fn normalize_local_bounds(
         parsed: &ParsedGraph,
         repeated_channels: &[Vec<usize>],
-        current: &[(usize, usize)],
         requested: &[(usize, usize)],
     ) -> Result<Vec<(usize, usize)>> {
-        let mut joined = normalize_energy_degree_bounds(current, parsed.internal_edges.len())?;
-        let requested = normalize_energy_degree_bounds(requested, parsed.internal_edges.len())?;
+        let mut bounds = normalize_energy_degree_bounds(requested, parsed.internal_edges.len())?;
         let mut repeated = vec![false; parsed.internal_edges.len()];
         let mut repeated_channels = repeated_channels.to_vec();
         for channel in &mut repeated_channels {
@@ -146,15 +142,15 @@ impl ExactCffGenerationCache {
         repeated_channels.sort();
 
         // Source provenance certifies which occurrence-local edges are one
-        // algebraic on-shell-energy channel. Join only the largest requested
-        // total on that channel, then redistribute it deterministically over
-        // canonical local-edge order. Per-term assignments remain untouched.
+        // algebraic on-shell-energy channel. Normalize this request's total
+        // on that channel by redistributing it deterministically over canonical
+        // local-edge order. Per-term assignments remain untouched; independent
+        // terms must not combine into a larger Cartesian capacity.
         for channel in repeated_channels {
             if channel.len() <= 1 {
                 continue;
             }
-            let mut current_total = 0usize;
-            let mut requested_total = 0usize;
+            let mut total = 0usize;
             for edge in &channel {
                 let Some(was_repeated) = repeated.get_mut(*edge) else {
                     return Err(eyre::eyre!(
@@ -166,22 +162,15 @@ impl ExactCffGenerationCache {
                         "exact CFF local edge {edge} belongs to overlapping repeated channels"
                     ));
                 }
-                current_total += joined[*edge];
-                requested_total += requested[*edge];
+                total += bounds[*edge];
             }
-            let total = current_total.max(requested_total);
             let quotient = total / channel.len();
             let remainder = total % channel.len();
             for (position, edge) in channel.into_iter().enumerate() {
-                joined[edge] = quotient + usize::from(position < remainder);
+                bounds[edge] = quotient + usize::from(position < remainder);
             }
         }
-        for edge in 0..joined.len() {
-            if !repeated[edge] {
-                joined[edge] = joined[edge].max(requested[edge]);
-            }
-        }
-        Ok(joined
+        Ok(bounds
             .into_iter()
             .enumerate()
             .filter_map(|(edge, degree)| (degree != 0).then_some((edge, degree)))
@@ -203,30 +192,23 @@ impl ExactCffGenerationCache {
         let requested = energy_edges
             .remap_bounds_to_local(options.energy_degree_bounds.as_deref().unwrap_or(&[]))
             .map_err(|edge| eyre::eyre!("unknown exact CFF energy-bound edge {edge}"))?;
-        let key = Self::topology_key(parsed, energy_edges, options);
+        let key = Self::generation_key(parsed, energy_edges, options);
         match self.required_bounds.entry(key) {
             std::collections::btree_map::Entry::Vacant(entry) => {
-                let bounds = Self::join_local_bounds(parsed, &repeated_channels, &[], &requested)?;
-                entry.insert(ExactCffCapacityEnvelope {
+                let bounds = Self::normalize_local_bounds(parsed, &repeated_channels, &requested)?;
+                entry.insert(ExactCffCapacity {
                     repeated_channels,
                     bounds,
                 });
             }
-            std::collections::btree_map::Entry::Occupied(mut entry) => {
+            std::collections::btree_map::Entry::Occupied(entry) => {
                 if entry.get().repeated_channels != repeated_channels {
                     return Err(eyre::eyre!(
-                        "canonically equal exact CFF topologies have incompatible source-certified repeated channels: registered {:?}, requested {:?}",
+                        "canonically equal exact CFF requests have incompatible source-certified repeated channels: registered {:?}, requested {:?}",
                         entry.get().repeated_channels,
                         repeated_channels,
                     ));
                 }
-                let bounds = Self::join_local_bounds(
-                    parsed,
-                    &repeated_channels,
-                    &entry.get().bounds,
-                    &requested,
-                )?;
-                entry.get_mut().bounds = bounds;
             }
         }
         Ok(())
@@ -241,7 +223,7 @@ impl ExactCffGenerationCache {
         let mut options = requested.clone();
         let bounds = self
             .required_bounds
-            .get(&Self::topology_key(parsed, energy_edges, requested))
+            .get(&Self::generation_key(parsed, energy_edges, requested))
             .ok_or_else(|| {
                 eyre::eyre!("exact CFF topology was not registered before batched generation")
             })?;
@@ -424,10 +406,17 @@ impl Graph {
             source_options.clone()
         };
         let generate = || {
+            crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #profile;
+                graph = %self.name,
+                term_local_bounds = ?source_options.energy_degree_bounds,
+                chosen_bounds = ?generation_options.energy_degree_bounds,
+                file.parsed_source = ?parsed,
+                "Generating exact CFF at its term-local capacity"
+            );
             three_dimensional_reps::generate_3d_expression(source, &generation_options).map_err(
                 |error| {
                     eyre::eyre!(
-                        "generalized CFF expression generation failed for exact 4D source in graph `{}` with physical EMR bounds {:?}, term-local exact-occurrence bounds {:?}, and batched capacity {:?}: {error}\n{}",
+                        "generalized CFF expression generation failed for exact 4D source in graph `{}` with physical EMR bounds {:?}, term-local exact-occurrence bounds {:?}, and generation capacity {:?}: {error}\n{}",
                         self.name,
                         physical_energy_degree_bounds,
                         source_options.energy_degree_bounds,
@@ -438,10 +427,13 @@ impl Graph {
             )
         };
         let generated = if let Some(cache) = cache {
-            // Registration has already joined every term's requested degree
-            // into one capacity for this canonical topology.
-            let key =
-                ExactCffGenerationCache::topology_key(&parsed, &energy_edges, &generation_options);
+            // Registration normalizes each term's requested capacity separately.
+            // Reuse requires both canonical topology and identical capacity.
+            let key = ExactCffGenerationCache::generation_key(
+                &parsed,
+                &energy_edges,
+                &generation_options,
+            );
             if let Some(generated) = cache.entries.get(&key) {
                 generated.clone()
             } else {
@@ -1346,7 +1338,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_cff_batch_joins_channel_totals_and_singleton_maxima() -> Result<()> {
+    fn exact_cff_batch_preserves_term_local_channel_capacities() -> Result<()> {
         let parsed = ParsedGraph {
             internal_edges: (0..3)
                 .map(|edge_id| ParsedGraphInternalEdge {
@@ -1369,18 +1361,35 @@ mod tests {
             node_name_to_internal: BTreeMap::new(),
         };
 
+        let energy_edges = EnergyEdgeIndexMap::identity(3, 0);
+        let requests = [vec![(0, 4)], vec![(2, 4)]].map(|bounds| Generate3DExpressionOptions {
+            energy_degree_bounds: Some(bounds),
+            ..Default::default()
+        });
+        let mut cache = ExactCffGenerationCache::default();
+        for request in &requests {
+            cache.register(&parsed, &energy_edges, vec![vec![1, 0]], request)?;
+        }
+        assert_eq!(cache.required_bounds.len(), 2);
+        let capacities = requests
+            .iter()
+            .map(|request| cache.generation_options(&parsed, &energy_edges, request))
+            .collect::<Result<Vec<_>>>()?;
         assert_eq!(
-            ExactCffGenerationCache::join_local_bounds(
-                &parsed,
-                &[vec![1, 0]],
-                &[(0, 2), (2, 1)],
-                &[(1, 2), (2, 3)],
-            )?,
-            vec![(0, 1), (1, 1), (2, 3)],
-            "a repeated channel keeps only its maximum total degree, while a singleton keeps its componentwise maximum",
+            capacities
+                .iter()
+                .map(|options| &options.energy_degree_bounds)
+                .collect::<Vec<_>>(),
+            vec![&Some(vec![(0, 2), (1, 2)]), &Some(vec![(2, 4)])],
+            "independent degree-four requests must not form a degree-eight Cartesian envelope",
+        );
+        assert_ne!(
+            ExactCffGenerationCache::generation_key(&parsed, &energy_edges, &capacities[0]),
+            ExactCffGenerationCache::generation_key(&parsed, &energy_edges, &capacities[1]),
+            "different generation capacities must not share a cached expression",
         );
         assert_eq!(
-            ExactCffGenerationCache::join_local_bounds(&parsed, &[vec![1, 0]], &[(1, 3)], &[],)?,
+            ExactCffGenerationCache::normalize_local_bounds(&parsed, &[vec![1, 0]], &[(1, 3)])?,
             vec![(0, 2), (1, 1)],
             "odd channel capacity is minimax-redistributed in canonical local-edge order",
         );
@@ -1448,8 +1457,8 @@ mod tests {
             "compatible owner relabelling must preserve the canonical channel partition",
         );
         assert_eq!(
-            ExactCffGenerationCache::topology_key(&parsed, &energy_edges, &options),
-            ExactCffGenerationCache::topology_key(
+            ExactCffGenerationCache::generation_key(&parsed, &energy_edges, &options),
+            ExactCffGenerationCache::generation_key(
                 &relabelled_parsed,
                 &relabelled_energy_edges,
                 &options,

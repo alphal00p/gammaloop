@@ -3,7 +3,7 @@
 `just test_LU_scalar_xs` runs all 166 scalar LU cross-section cases in release
 mode with fail-fast, one Cargo worker, one test at a time and zero retries. A
 watchdog covers compilation and every test descendant with a 30 GB process-tree
-RSS limit. Unrelated applications cannot trigger this limit.
+memory limit. Unrelated applications cannot trigger this limit.
 
 To guard another command on macOS:
 
@@ -12,16 +12,25 @@ python3 bin/ram_watchdog.py --limit-gb 30 \
   --log target/ram_watchdog/run-unique/watchdog.jsonl -- COMMAND ARGUMENTS
 ```
 
-The helper requires Python 3, `ps` reporting RSS in KiB, POSIX locks and signals.
-It has been validated on macOS; failed process monitoring stops the command.
+The helper requires Python 3, `ps`, POSIX locks and signals. On macOS it uses
+the native libproc `proc_pid_rusage` API with `RUSAGE_INFO_V2`; on Linux it uses
+`ps` RSS in KiB. Failed measurement of a live owned process stops the command;
+confirmed exits and zombies are omitted. There is no macOS RSS fallback.
 The scalar recipe creates a fresh log directory automatically. For a manual
 invocation, choose a fresh log path: the helper creates parents and appends JSONL
 records, so reusing a filename combines multiple runs.
 
-The limit uses decimal GB and sums RSS over tracked descendants and process
-groups. Shared resident pages can appear in more than one process's RSS;
-compressed or swapped-out pages are not resident and are not included.
-Whole-machine memory is not monitored.
+The limit uses decimal GB (1 GB = 10^9 bytes) and sums memory over tracked
+descendants and process groups. On macOS, `ri_phys_footprint` includes the
+process's charged compressed memory, including compressor-backed pages moved
+to swap; a falling RSS therefore cannot hide that charge. This kernel accounting
+metric is neither virtual address-space size nor a count of currently resident
+pages. See Apple's [task-ledger definition](https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/kern/task.c).
+
+Linux retains an RSS-only limit: shared resident pages can be counted in more
+than one process, and compressed or swapped-out pages are excluded. It does not
+provide the macOS footprint guarantee. Whole-machine memory is not monitored.
+Each start record names the metric; `tree_bytes` and `peak_tree_bytes` use it.
 
 The default and maximum cap is 30 GB. The helper defaults `CARGO_BUILD_JOBS`
 and `NEXTEST_TEST_THREADS` to 2 when unset; the

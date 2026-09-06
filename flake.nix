@@ -452,8 +452,15 @@
       };
 
       workspacePackageTestCompileTimeExtraSourceRoots = {
+        # Unit and integration tests embed these shared graph fixtures with include_str!.
+        "gammaloop-api" = [
+          "tests/resources/graphs"
+        ];
         gammalooprs = [
-          "tests/resources/graphs/scalar/dod2_bubble.dot"
+          "tests/resources/graphs"
+        ];
+        "gammaloop-integration-tests" = [
+          "tests/resources/graphs"
         ];
       };
 

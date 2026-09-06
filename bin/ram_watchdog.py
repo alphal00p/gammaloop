@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Guard one pipeline with a process-tree resident-memory (RSS) cap."""
+"""Guard one pipeline with a process-tree memory cap (macOS footprint, Linux RSS)."""
 
 import argparse
+import ctypes
 import fcntl
 import json
 import os
@@ -12,7 +13,34 @@ import time
 from pathlib import Path
 
 
-def snapshot(known, groups):
+class RusageInfoV2(ctypes.Structure):
+    # Darwin sys/resource.h: the versioned libproc ABI, including its UUID prefix.
+    _fields_ = [("ri_uuid", ctypes.c_uint8 * 16)] + [
+        (name, ctypes.c_uint64)
+        for name in (
+            "ri_user_time",
+            "ri_system_time",
+            "ri_pkg_idle_wkups",
+            "ri_interrupt_wkups",
+            "ri_pageins",
+            "ri_wired_size",
+            "ri_resident_size",
+            "ri_phys_footprint",
+            "ri_proc_start_abstime",
+            "ri_proc_exit_abstime",
+            "ri_child_user_time",
+            "ri_child_system_time",
+            "ri_child_pkg_idle_wkups",
+            "ri_child_interrupt_wkups",
+            "ri_child_pageins",
+            "ri_child_elapsed_abstime",
+            "ri_diskio_bytesread",
+            "ri_diskio_byteswritten",
+        )
+    ]
+
+
+def snapshot(known, groups, proc_pid_rusage):
     rows = subprocess.check_output(
         ["ps", "-axo", "pid=,ppid=,pgid=,rss="], text=True, timeout=2
     )
@@ -34,12 +62,37 @@ def snapshot(known, groups):
         known.update(descendants)
     live = {pid: processes[pid] for pid in known if pid in processes}
     groups.update(row[1] for row in live.values())
-    # Count resident pages only for this tree, without adding whole-machine
-    # anonymous, wired or compressed memory from unrelated applications.
+    # Count only this tree, without adding whole-machine anonymous, wired or
+    # compressed memory from unrelated applications. Darwin's footprint retains
+    # its compressed/paged-out charge; Linux's ps RSS counts resident pages only.
+    if proc_pid_rusage is not None:
+        for pid, (parent, group, _) in list(live.items()):
+            usage = RusageInfoV2()
+            if proc_pid_rusage(pid, 2, ctypes.byref(usage)) != 0:  # RUSAGE_INFO_V2
+                error = ctypes.get_errno()
+                status = subprocess.run(
+                    ["ps", "-p", str(pid), "-o", "stat="],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                # A process may exit between enumeration and measurement.
+                # Omit only confirmed exits/zombies; any live failure is fatal.
+                if not status.stderr.strip() and (
+                    (status.returncode == 1 and not status.stdout.strip())
+                    or (
+                        status.returncode == 0 and status.stdout.strip().startswith("Z")
+                    )
+                ):
+                    del live[pid]
+                    known.discard(pid)
+                    continue
+                raise OSError(error, f"cannot measure physical footprint for PID {pid}")
+            live[pid] = (parent, group, usage.ri_phys_footprint)
     return live, sum(row[2] for row in live.values())
 
 
-def stop_tree(known, groups):
+def stop_tree(known, groups, proc_pid_rusage):
     # Nextest can put tests in separate process groups. Track descendants as
     # well as the initial group so the entire pipeline is stopped at the cap.
     if not known and not groups:
@@ -49,7 +102,7 @@ def stop_tree(known, groups):
     stopped = set()
     while True:
         try:
-            live, _ = snapshot(known, groups)
+            live, _ = snapshot(known, groups, proc_pid_rusage)
         except (OSError, ValueError, KeyError, subprocess.SubprocessError):
             # Even failed monitoring must stop every process last observed. The
             # initial child also owns a process group because it starts a session.
@@ -95,7 +148,7 @@ def main():
         "--limit-gb",
         type=float,
         default=30.0,
-        help="process-tree RSS cap in decimal GB (1 GB = 10^9 bytes)",
+        help="process-tree memory cap in decimal GB (macOS footprint, Linux RSS)",
     )
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -114,6 +167,8 @@ def main():
     known = set()
     groups = set()
     child = None
+    proc_pid_rusage = None
+    metric = "phys_footprint" if sys.platform == "darwin" else "rss"
     started = time.monotonic()
     peak_tree = 0
     with args.log.open("a", buffering=1) as log:
@@ -135,8 +190,21 @@ def main():
             "start",
             command=command,
             tree_limit_bytes=int(args.limit_gb * 1e9),
+            memory_metric=metric,
         )
         try:
+            if sys.platform == "darwin":
+                libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+                proc_pid_rusage = libproc.proc_pid_rusage
+                proc_pid_rusage.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
+                proc_pid_rusage.restype = ctypes.c_int
+                usage = RusageInfoV2()
+                if proc_pid_rusage(os.getpid(), 2, ctypes.byref(usage)) != 0:
+                    raise OSError(
+                        ctypes.get_errno(), "physical-footprint preflight failed"
+                    )
+            elif not sys.platform.startswith("linux"):
+                raise OSError(f"unsupported memory accounting platform: {sys.platform}")
             env = os.environ.copy()
             env.setdefault("CARGO_BUILD_JOBS", "2")
             env.setdefault("NEXTEST_TEST_THREADS", "2")
@@ -145,7 +213,7 @@ def main():
             groups.add(child.pid)
             last_record = -5.0
             while True:
-                live, tree_bytes = snapshot(known, groups)
+                live, tree_bytes = snapshot(known, groups, proc_pid_rusage)
                 peak_tree = max(peak_tree, tree_bytes)
                 elapsed = time.monotonic() - started
                 if tree_bytes >= args.limit_gb * 1e9:
@@ -155,11 +223,11 @@ def main():
                         tree_bytes=tree_bytes,
                         peak_tree_bytes=peak_tree,
                     )
-                    stop_tree(known, groups)
+                    stop_tree(known, groups, proc_pid_rusage)
                     child.wait(timeout=5)
                     print(
                         "RAM watchdog: stopped the entire pipeline; "
-                        f"process-tree RSS {tree_bytes / 1e9:.2f}/{args.limit_gb:.2f} GB "
+                        f"process-tree {metric} {tree_bytes / 1e9:.2f}/{args.limit_gb:.2f} GB "
                         "(decimal GB); this is not a test verdict",
                         file=sys.stderr,
                     )
@@ -182,6 +250,7 @@ def main():
                 time.sleep(0.25)
         except (
             OSError,
+            AttributeError,
             ValueError,
             KeyError,
             subprocess.SubprocessError,
@@ -195,7 +264,7 @@ def main():
             return 125
         finally:
             if child is not None:
-                stop_tree(known, groups)
+                stop_tree(known, groups, proc_pid_rusage)
                 child.wait(timeout=5)
 
 

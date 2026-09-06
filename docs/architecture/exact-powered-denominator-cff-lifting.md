@@ -150,9 +150,9 @@ the production projection performs the following operations:
     directed. Connected rational-routing components then receive one
     deterministic coherent direction. This supplies deterministic equality and
     cache keys without inferring topology.
-12. All additive Taylor terms are planned before CFF generation. Terms with the
-    same canonical topology share one channel-wise maximal capacity envelope,
-    while each term retains its own immutable minimax numerator assignment.
+12. All additive Taylor terms are planned before CFF generation. Cache reuse
+    requires the same canonical topology and normalized per-request capacity;
+    each term retains its own immutable minimax numerator assignment.
 
 The resulting graph is therefore a source-backed occurrence representation of
 the rewritten rational function. Provenance is not discarded: it supplies the
@@ -278,13 +278,12 @@ boundary: the expression which is eventually sampled is the expression whose
 bounds were supplied to CFF.
 
 Projection is a two-pass batch. The first pass constructs every canonical exact
-source and joins the required degrees of equal topologies. The join is performed
-in canonical occurrence coordinates and by algebraically repeated energy
-channel: it takes the maximum total degree requested on that channel and
-redistributes that total by the same quotient/remainder minimax rule. The second
-pass generates one CFF expression per topology with that envelope and maps each
-term with its original plan. Thus batching can increase available capacity but
-can neither change a term's factor assignment nor understate its rank.
+source and normalizes each request's capacity separately. Within a repeated
+energy channel, that request's total degree is redistributed over canonical
+occurrences by the same quotient/remainder minimax rule. The second pass reuses
+an expression only when canonical topology, normalized capacity, and generation
+options match, and maps each term with its original plan. Independent requests
+never combine into a larger Cartesian capacity.
 
 ## Non-negotiable common-LMB commutative reconstruction invariant
 
@@ -1239,24 +1238,25 @@ map remains authoritative even if an equivalent dotted occurrence survives.
 The numerator is not silently reassigned to the surviving occurrence after the
 pinch.
 
-## Stage 8: batch canonical topologies without weakening numerator bounds
+## Stage 8: cache exact topology and per-request capacity
 
 Completed Taylor coefficients are prepared in two passes. The first pass builds
 each source-backed exact graph, computes that term's immutable minimax plan, and
 registers its requested capacity under a key consisting of the complete
-canonical `ParsedGraph` and all non-bound generation options. The second pass
-generates CFF once for each key and evaluates every term with its own original
-plan.
+canonical `ParsedGraph`, energy-edge map, and generation options including that
+request's bounds. The second pass keys generated expressions by the same
+structural data and normalized capacity, and evaluates every term with its own
+original plan.
 
-Capacity is joined in the algebraic coordinates understood by generalized CFF.
-For a repeated on-shell-energy channel, the relevant invariant is the **total**
-degree across all equivalent occurrences. The batch therefore takes the
-largest channel total requested by any term and redistributes only that total
-over the canonical occurrences with quotient/remainder minimax balancing. It
-does not take a pointwise maximum which could inflate `(1,0)` and `(0,1)` into
-the unnecessary channel rank `(1,1)`. Bounds on non-repeated occurrences use
-the ordinary componentwise maximum. The shared envelope is generator capacity
-only: it never replaces a term's factor-to-occurrence assignment.
+Capacity normalization uses the algebraic coordinates understood by generalized
+CFF. For a repeated on-shell-energy channel, each request retains its **total**
+degree across equivalent occurrences and redistributes that total over canonical
+occurrences with quotient/remainder minimax balancing. Non-repeated occurrence
+bounds remain unchanged. No maximum is taken across independent requests: such
+a join can manufacture combinations of high ranks on different channels which
+no individual numerator needs. Only requests with equal normalized capacity
+share a generated expression; normalization never replaces a term's
+factor-to-occurrence assignment.
 
 The production-shaped regression
 `dod_one_triangle_keeps_one_uncancelled_exact_source_and_matches_lower_sectors`
@@ -1852,11 +1852,11 @@ One assignment object drives both generalized-CFF bounds and later numerator
 substitutions. Generic future terms cannot accidentally take a different
 mapping path after their bounds have been certified.
 
-Batching does not weaken this statement. A shared topology is generated with a
-channel-total envelope which dominates every registered term, while each term
-still evaluates through its own factor-local plan. Canonical topology identity
-includes external edges and affine boundary data, so reuse remains valid for
-disconnected and non-vacuum exact sources as well as vacuum UV factors.
+Batching does not weaken this statement. Reuse requires equal canonical
+topology and normalized per-request capacity, while each term still evaluates
+through its own factor-local plan. Canonical topology identity includes
+external edges and affine boundary data, so reuse remains valid for disconnected
+and non-vacuum exact sources as well as vacuum UV factors.
 
 ### 7. Routing signs are first-class data
 
@@ -1911,9 +1911,10 @@ expanding the numerator.
 
 Third, retaining a collected common denominator avoids repeating the CFF
 recursion for algebraic lower sectors that generalized CFF can generate by
-pinching. Canonical batching still joins genuinely outer additive terms without
-the rank inflation of a pointwise maximum. The real degree-one triangle
-coefficient therefore performs one CFF generation for its uncancelled source;
+pinching. Canonical batching reuses expressions only for equal topology and
+normalized per-request capacity, avoiding rank inflation across independent
+terms. The real degree-one triangle coefficient therefore performs one CFF
+generation for its uncancelled source;
 its base and singly dotted lower sectors are internal CFF sectors rather than
 separate upstream graph topologies.
 
@@ -1960,9 +1961,9 @@ Future changes to this path should preserve all of the following:
 15. LMB coordinates never own an energy bound or serve as an identity fallback.
 16. The numerator remains factorized through analysis and mapping.
 17. The same immutable per-term plan owns bounds and substitutions.
-18. A shared CFF batch envelope uses the maximum total degree of each repeated
-    algebraic energy channel and componentwise maxima only for non-repeated
-    occurrences; it never replaces a term's plan.
+18. CFF cache reuse requires equal topology and normalized per-request bounds.
+    Each repeated channel retains that request's total degree; independent
+    terms never contribute a shared maximum or replace another term's plan.
 19. Additive branches reuse capacity; multiplicative and multilinear slots
     consume capacity.
 20. Lower-sector pinching does not reassign a factor away from its certified
@@ -2012,10 +2013,10 @@ The principal implementation sites are:
   - physical degree extraction;
   - physical-to-exact planning;
   - canonical topology registration;
-  - channel-total batch-envelope joining and exact occurrence bounds passed to
-    the shared CFF generator.
-- `crates/gammalooprs/src/uv/approx/local_3d.rs`
-  - in the projected-local4D branch only, two-pass registration then generation
+  - per-request repeated-channel normalization and cache keys retaining the
+    exact occurrence bounds passed to the shared CFF generator.
+- `crates/gammalooprs/src/uv/approx/projected_4d.rs`
+  - two-pass registration then generation
     of completed local-4D Taylor terms;
   - in that branch, retention of each term's original exact numerator plan.
 - `crates/gammalooprs/src/cff/mod.rs`

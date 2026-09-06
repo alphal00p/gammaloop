@@ -187,7 +187,7 @@ The worked GL04 `1zs/T2` certificate is maintained in
 
 ### Tests
 
-- Install `cargo-nextest` 0.9.80 or newer. The repository configuration
+- Install `cargo-nextest` 0.9.115 or newer. The repository configuration
   enforces this minimum; update an existing installation with
   `cargo nextest self update`.
 - Rust integration tests live in `tests/` with shared fixtures in

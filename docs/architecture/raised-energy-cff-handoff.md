@@ -282,10 +282,11 @@ counterterms. The local subtraction then either:
    remain available for cuts, physical surfaces, and parent-graph mapping. One
    immutable minimax plan owns both occurrence-local CFF bounds and factorized
    numerator substitutions. Projection plans every Taylor term before
-   generation. Equal canonical topologies share a capacity envelope formed by
-   the maximum total degree of each repeated algebraic energy channel, followed
-   by minimax redistribution; non-repeated occurrence bounds use componentwise
-   maxima. Each genuinely outer term nevertheless evaluates with its own plan.
+   generation. Each request's repeated-channel total is normalized by minimax
+   redistribution; its non-repeated occurrence bounds stay unchanged. Generated
+   expressions are reused only for equal canonical topology and normalized
+   capacity. Independent requests do not form a shared maximum, and each
+   genuinely outer term evaluates with its own plan.
    The real DOD1 triangle remains one common-denominator exact source with
    UV-owner multiplicities `(2,1,2)` and one canonical generator entry. Its
    positive typed `GS.den` numerator factors remain uncancelled, and generalized

@@ -174,7 +174,8 @@ impl Localizer<'_> {
         // Each Taylor component owns an independent energy contour. Every
         // state entering one component is a genuine term in the same wave:
         // register all of their term-local capacities before generating any
-        // shared topology. The next component starts a fresh cache because its
+        // cached expression. Reuse requires equal topology and capacity.
+        // The next component starts a fresh cache because its
         // numerators are immutable outputs of this wave's exact residue maps.
         for (component, (_, source_scope, coordinate_lmb)) in
             sector.active_components.iter().enumerate()
@@ -288,8 +289,8 @@ impl Localizer<'_> {
 
             debug_tags!(#generation, #uv, #local, #four_d, #cff, #summary;
                 component,
-                distinct_exact_topologies = generation_cache.len(),
-                "Reused exact CFF topologies across one local-4D component wave"
+                cached_exact_cff_expressions = generation_cache.len(),
+                "Cached exact CFF expressions by topology and capacity in one local-4D component wave"
             );
         }
 
