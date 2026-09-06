@@ -9,4 +9,5 @@ The canonical API and usage manual is
 [Kurvst curve and path guide](https://alphal00p.github.io/gammaloop/products/gammaloop/latest/guides/kurvst/). Compile-checked
 drawings live under [`examples/`](examples/).
 
-Contributor policy is in [`CONTRIBUTING.typ`](../../../CONTRIBUTING.typ).
+Contributor policy is in GammaLoop's
+[`CONTRIBUTING.typ`](https://github.com/alphal00p/gammaloop/blob/main/CONTRIBUTING.typ).

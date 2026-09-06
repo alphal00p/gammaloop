@@ -2,7 +2,7 @@
 set -euo pipefail
 
 bench_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "$bench_dir/../../../.." && pwd)"
+package_root="$(cd "$bench_dir/.." && pwd)"
 out_dir="${OUT_DIR:-/tmp/kurvst-coil-bench}"
 count="${COUNT:-250}"
 repeats="${REPEATS:-5}"
@@ -13,7 +13,7 @@ mkdir -p "$out_dir"
 
 cetz_cmd=(
   typst compile
-  --root "$repo_root/crates/kurvst/typst"
+  --root "$package_root"
   --input "count=$count"
   --input "turns=$turns"
   --input "samples-per-period=$samples"
@@ -23,7 +23,7 @@ cetz_cmd=(
 
 kurvst_cmd=(
   typst compile
-  --root "$repo_root/crates/kurvst/typst"
+  --root "$package_root"
   --input "count=$count"
   --input "turns=$turns"
   --input "samples-per-period=$samples"
@@ -43,9 +43,9 @@ else
     printf '\n%s\n' "$name"
     for run in $(seq 1 "$repeats"); do
       if [ "$name" = "cetz coil" ]; then
-        /usr/bin/time -p "${cetz_cmd[@]}"
+        time -p "${cetz_cmd[@]}"
       else
-        /usr/bin/time -p "${kurvst_cmd[@]}"
+        time -p "${kurvst_cmd[@]}"
       fi 2>&1 | sed "s/^/run $run: /"
     done
   done
