@@ -213,7 +213,6 @@ pub struct GammaloopSymbols {
     pub sign: Symbol,
     pub theta: Symbol,
     pub broadcasting_sqrt: Symbol,
-    pub tanh: Symbol,
     pub heaviside: Symbol,
     ///for selecting orientations at generation
     pub selected: Symbol,
@@ -878,7 +877,6 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             **out = Atom::num(1) / (Atom::num(2) * a);
         }
     ),
-    tanh: symbol!("tanh"),
     heaviside: symbol!("heaviside"),
     expansion: symbol!("expansion"),
     rescale_star: symbol!("t⃰"),
@@ -1213,11 +1211,6 @@ impl GammaloopSymbols {
                 }
             }
         })
-    }
-
-    pub(crate) fn tanh<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
-        let a = arg.into();
-        function!(self.tanh, a.as_view())
     }
 
     pub(crate) fn heaviside<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
