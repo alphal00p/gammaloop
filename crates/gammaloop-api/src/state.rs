@@ -730,7 +730,18 @@ impl<'de> Deserialize<'de> for ProcessRef {
             where
                 E: de::Error,
             {
-                Ok(ProcessRef::Id(value as usize))
+                usize::try_from(value)
+                    .map(ProcessRef::Id)
+                    .map_err(E::custom)
+            }
+
+            fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                usize::try_from(value)
+                    .map(ProcessRef::Id)
+                    .map_err(E::custom)
             }
 
             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
@@ -1558,10 +1569,12 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
+// Version 6 removes obsolete deferred-integrand fields from the positional
+// amplitude and cut-integrand layouts.
 // Version 5 persists component-local generated-CFF ownership and prefactor
 // metadata. Older states use a previous positional bincode layout and must be
 // regenerated rather than decoded as the new expression type.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 5;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 6;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -4453,6 +4466,31 @@ b = 1.0
 
     #[test]
     fn command_history_parses_hash_process_refs() {
+        // TOML reports positive integer IDs through the signed visitor, while
+        // JSON uses the unsigned visitor. Both must round-trip numeric IDs.
+        for process in [
+            ProcessRef::Id(0),
+            ProcessRef::Id(12),
+            ProcessRef::Name("12".into()),
+            ProcessRef::Unqualified("scalar_bubble".into()),
+        ] {
+            let refs = BTreeMap::from([("process".to_string(), process)]);
+            let toml = toml::to_string(&refs).unwrap();
+            assert_eq!(
+                toml::from_str::<BTreeMap<String, ProcessRef>>(&toml).unwrap(),
+                refs
+            );
+            let json = serde_json::to_string(&refs).unwrap();
+            assert_eq!(
+                serde_json::from_str::<BTreeMap<String, ProcessRef>>(&json).unwrap(),
+                refs
+            );
+        }
+        for invalid in ["process = -1", "process = 1.5"] {
+            assert!(toml::from_str::<BTreeMap<String, ProcessRef>>(invalid).is_err());
+        }
+        assert!(serde_json::from_str::<ProcessRef>("-1").is_err());
+
         let cmd = CommandHistory::from_raw_string("display integrand -p #12").unwrap();
         match cmd.command {
             Commands::Display(Display::Integrands {

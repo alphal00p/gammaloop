@@ -97,9 +97,12 @@ This is a mandatory correctness boundary, not an optional diagnostic:
    derivative may add serial copies of its own physical line; do not infer a
    graph from denominator incidence or use momentum conservation across lines
    to reassign numerator factors.
-3. Keep every original numerator factor on its retained owner. Only new energy
-   factors created by differentiating a denominator may be dispatched, and
-   only among the derivative-created serial copies of that same line.
+3. Keep every original numerator factor on its retained owner. New hard energy
+   factors created by differentiating a denominator may be dispatched only
+   among the derivative-created serial copies of that same line. New soft
+   factors retain explicit denominator-derived provenance until outer-CFF
+   assembly; only those factors may use an exactly certified off-shell routing
+   through the active cograph edges, including every fixed external shift.
 4. Apply the exact immutable production assignment plan, including the signed
    hard/raw/parsed conversion `H = h R`, `P = r R`, and `H^0 = h r P^0`.
 5. Substitute the source post-Taylor numerator and the reconstructed UV-EMR
@@ -112,8 +115,13 @@ Only after both exact certificates pass may a discrepancy be attributed to
 generalized-CFF input normalization, CFF generation, component composition, or
 residue aggregation. The common LMB is only a coordinate chart for this proof;
 it never supplies EMR ownership or CFF rank capacity. Correctness of the EMR
-rewrite precedes minimax rank optimization. Production numerators remain
-factorized; test-only copies may be expanded solely to establish the identity.
+rewrite precedes dispatch optimization. Production compares at most three
+certified proposals by their actual native generated source-map row count,
+before surface conversion or cut/host selection. Rank orders the proposals and
+breaks count ties; it is not a substitute for that count or a proof of global
+optimality. The selected payload and its exact assignment must stay together.
+Production numerators remain factorized; test-only copies may be expanded
+solely to establish the identity.
 The worked GL04 `1zs/T2` certificate is maintained in
 [`docs/architecture/exact-powered-denominator-cff-lifting.md`](docs/architecture/exact-powered-denominator-cff-lifting.md#worked-live-reproducer-gl04-temporal-square-1zst2).
 

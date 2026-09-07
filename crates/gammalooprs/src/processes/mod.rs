@@ -46,11 +46,12 @@ pub(crate) use selection::{GraphCutSelectionSubject, GraphSelectionSubject};
 )]
 #[serde(rename_all = "snake_case")]
 pub enum TensorNetworkContractionOrder {
-    #[default]
     SparseAtomAware,
     AtomAware,
     ResultRankOnly,
     EntryAware,
+    #[default]
+    IntermediateCost,
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]

@@ -1,7 +1,6 @@
 use std::ops::Neg;
 
 use color_eyre::Result;
-use itertools::Itertools;
 use symbolica::atom::Atom;
 
 use crate::{
@@ -33,7 +32,6 @@ impl From<OrientationIntegrands> for FrozenActiveCt {
         Self {
             active,
             frozen_integrands,
-            active_lmb: None,
         }
     }
 }
@@ -51,7 +49,6 @@ impl Neg for FrozenActiveCt {
         Self {
             active: -self.active,
             frozen_integrands: self.frozen_integrands,
-            active_lmb: self.active_lmb,
         }
     }
 }
@@ -79,40 +76,6 @@ impl OrientationIntegrands {
                 })
                 .collect(),
         )
-    }
-
-    pub(crate) fn zip_add(&self, other: &Self) -> Result<Self> {
-        // Deferred integrands expose nonzero evaluator calls through `iter`, so
-        // this predicate only prunes compact branches proven to be zero.
-        let is_zero = |branch: &OrientationIntegrandBranch| {
-            branch.integrands.iter().all(|(_, atom)| atom.is_zero())
-        };
-        let fallback_zero = self
-            .0
-            .iter()
-            .chain(&other.0)
-            .find(|branch| is_zero(branch))
-            .cloned();
-        let mut branches = self
-            .0
-            .iter()
-            .filter(|branch| !is_zero(branch))
-            .cloned()
-            .collect::<Vec<_>>();
-        for right in other.0.iter().filter(|branch| !is_zero(branch)) {
-            if let Some(left) = branches.iter_mut().find(|left| {
-                left.selector_id == right.selector_id
-                    && left.source_edge_energy_map == right.source_edge_energy_map
-            }) {
-                left.integrands = left.integrands.clone().zip_add(right.integrands.clone())?;
-            } else {
-                branches.push(right.clone());
-            }
-        }
-        if branches.is_empty() {
-            branches.extend(fallback_zero);
-        }
-        Ok(Self(branches))
     }
 
     pub(crate) fn zip_mul_unmapped(&self, other: &Integrands) -> Result<Self> {
@@ -147,77 +110,6 @@ impl OrientationIntegrands {
             .map(Self)
     }
 
-    /// Multiply branches hosted by the same production selector. A branch
-    /// absent on either side contributes zero, so independently projected
-    /// factors retain only their selector intersection. The mapper sees the
-    /// complete active factor only after its host has been selected.
-    pub(crate) fn zip_mul_mapped_factor(
-        &self,
-        factor: &Self,
-        mut map: impl FnMut(OrientationID, Option<&[LinearEnergyExpr]>, &Atom) -> Result<Atom>,
-    ) -> Result<Self> {
-        self.0
-            .iter()
-            .filter_map(|outer| {
-                let matching = factor
-                    .0
-                    .iter()
-                    .filter(|inner| inner.selector_id == outer.selector_id)
-                    .collect::<Vec<_>>();
-                (!matching.is_empty()).then(|| {
-                    let mut product = outer.integrands.zero_like();
-                    for inner in matching {
-                        let mapped = inner.integrands.fallible_map(|atom| {
-                            map(
-                                outer.selector_id,
-                                outer.source_edge_energy_map.as_deref(),
-                                atom,
-                            )
-                        })?;
-                        product = product.zip_add(outer.integrands.zip_mul(&mapped)?)?;
-                    }
-                    Ok(OrientationIntegrandBranch {
-                        selector_id: outer.selector_id,
-                        source_edge_energy_map: outer.source_edge_energy_map.clone(),
-                        integrands: product,
-                    })
-                })
-            })
-            .collect::<Result<Vec<_>>>()
-            .map(Self)
-    }
-
-    /// A factorized additive projection for coefficient diagnostics. Repeated
-    /// selector hosts of the same active expression are included only once.
-    #[cfg(test)]
-    pub(crate) fn factorized_sum(&self) -> Atom {
-        let mut distinct = Vec::new();
-        for atom in self
-            .0
-            .iter()
-            .flat_map(|branch| branch.integrands.iter().map(|(_, atom)| atom))
-        {
-            if !distinct.contains(atom) {
-                distinct.push(atom.clone());
-            }
-        }
-        distinct
-            .into_iter()
-            .fold(Atom::Zero, |sum, atom| sum + atom)
-    }
-
-    /// Keep independently evaluated production branches algebraically
-    /// independent while deriving one conservative outer-CFF capacity.
-    /// Analyze the factorized atoms separately instead of copying them into a
-    /// tagged sum. Repeated selector hosts of an identical atom share its rank.
-    pub(crate) fn independent_numerators(&self) -> impl Iterator<Item = &Atom> {
-        self.0
-            .iter()
-            .flat_map(|branch| branch.integrands.iter().map(|(_, atom)| atom))
-            .filter(|atom| !atom.is_zero())
-            .unique()
-    }
-
     pub(crate) fn map(&self, mut f: impl FnMut(&Atom) -> Atom) -> Self {
         Self(
             self.0
@@ -229,29 +121,6 @@ impl OrientationIntegrands {
                 })
                 .collect(),
         )
-    }
-
-    pub(in crate::uv::approx) fn fallible_map(
-        &self,
-        mut f: impl FnMut(OrientationID, Option<&[LinearEnergyExpr]>, &Atom) -> Result<Atom>,
-    ) -> Result<Self> {
-        self.0
-            .iter()
-            .map(|branch| {
-                Ok(OrientationIntegrandBranch {
-                    selector_id: branch.selector_id,
-                    source_edge_energy_map: branch.source_edge_energy_map.clone(),
-                    integrands: branch.integrands.fallible_map(|atom| {
-                        f(
-                            branch.selector_id,
-                            branch.source_edge_energy_map.as_deref(),
-                            atom,
-                        )
-                    })?,
-                })
-            })
-            .collect::<Result<Vec<_>>>()
-            .map(Self)
     }
 
     #[cfg(test)]

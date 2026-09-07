@@ -168,7 +168,7 @@ impl Forest {
                 .data
                 .final_integrand(graph)?
                 .map(|numerator| post_process(numerator.clone()))
-                .materialize();
+                .into_integrands();
             for (term_index, (&residue_index, numerator)) in final_integrand.iter().enumerate() {
                 terms.push(UVForestNodeExpression {
                     forest_index,
@@ -317,10 +317,9 @@ impl Forest {
             };
             let atom = marker.prefix(&graph.full_filter(), n.data.subgraph(), &physical);
 
-            let expanded_atom = atom.expand_num();
             debug_tags!(#generation, #uv, #graph, #term;
                 forest_term = %n.data.simple_display(graph),
-                log.expr = expanded_atom,
+                log.expr = atom,
                 "Term before simplification"
             );
 

@@ -308,6 +308,60 @@ mod tests {
     }
 
     #[test]
+    fn evaluator_contraction_order_defaults_and_explicit_presets_roundtrip() {
+        use crate::processes::{EvaluatorSettings, TensorNetworkContractionOrder};
+
+        let defaults_guard = ShowDefaultsGuard::new(false);
+        let defaults: EvaluatorSettings = toml::from_str("").unwrap();
+        assert_eq!(
+            defaults.tensor_network_contraction_order,
+            TensorNetworkContractionOrder::IntermediateCost
+        );
+        assert_eq!(defaults, EvaluatorSettings::default());
+        assert!(
+            !toml::to_string(&defaults)
+                .unwrap()
+                .contains("tensor_network_contraction_order")
+        );
+        for (name, expected) in [
+            (
+                "intermediate_cost",
+                TensorNetworkContractionOrder::IntermediateCost,
+            ),
+            (
+                "sparse_atom_aware",
+                TensorNetworkContractionOrder::SparseAtomAware,
+            ),
+            ("atom_aware", TensorNetworkContractionOrder::AtomAware),
+            (
+                "result_rank_only",
+                TensorNetworkContractionOrder::ResultRankOnly,
+            ),
+            ("entry_aware", TensorNetworkContractionOrder::EntryAware),
+        ] {
+            let settings: EvaluatorSettings =
+                toml::from_str(&format!("tensor_network_contraction_order = \"{name}\"\n"))
+                    .unwrap();
+            assert_eq!(settings.tensor_network_contraction_order, expected);
+            let serialized = toml::to_string(&settings).unwrap();
+            assert_eq!(
+                toml::from_str::<EvaluatorSettings>(&serialized).unwrap(),
+                settings
+            );
+            if expected != TensorNetworkContractionOrder::IntermediateCost {
+                assert!(serialized.contains(name));
+            }
+        }
+        drop(defaults_guard);
+        let _defaults_guard = ShowDefaultsGuard::new(true);
+        assert!(
+            toml::to_string(&defaults)
+                .unwrap()
+                .contains("tensor_network_contraction_order = \"intermediate_cost\"")
+        );
+    }
+
+    #[test]
     fn compile_test_serialize_deserialize() {
         use crate::settings::global::GammaloopCompileOptions;
         generic_test_settings::<GammaloopCompileOptions>();

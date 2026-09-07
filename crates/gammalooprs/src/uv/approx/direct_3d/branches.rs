@@ -202,7 +202,16 @@ impl DirectResidueBranches {
         graph: &Graph,
         factor: &Atom,
     ) -> Result<Self> {
-        self.fallible_map(|key, atom| Ok(atom * key.map_numerator(orientation, graph, factor)?))
+        Self::from_keyed(
+            self.iter_keys()
+                .map(|(key, integrands)| {
+                    // The complete branch key owns one energy substitution;
+                    // every selected cut order reuses that same mapped factor.
+                    let mapped = key.map_numerator(orientation, graph, factor)?;
+                    Ok((key.clone(), integrands.map(|atom| atom * &mapped)))
+                })
+                .collect::<Result<Vec<_>>>()?,
+        )
     }
 
     /// Materialize residue selectors only at the evaluator boundary.
@@ -331,6 +340,57 @@ mod tests {
             OrientationID(1).select(localized_body.as_view()),
             Atom::Zero
         );
+        // Several cut orders share one map, while two maps on the same host
+        // remain different branches. Attach an untouched factorized numerator
+        // through the public production operation and compare each cut body
+        // with the explicit substitution oracle.
+        let raised = CutCFFIndex {
+            lu_cut_order: Some(1),
+            ..index
+        };
+        let factor = (q0.clone() + &a) * (&q0 + &b);
+        let branches = DirectResidueBranches::from_keyed([2, 3].map(|scale| {
+            (
+                DirectResidueKey::source(
+                    host,
+                    vec![
+                        LinearEnergyExpr::uniform_scale(scale),
+                        LinearEnergyExpr::zero(),
+                    ],
+                ),
+                [(index, Atom::num(5)), (raised, Atom::num(7))]
+                    .into_iter()
+                    .collect(),
+            )
+        }))?;
+        let mapped = branches.multiply_key_mapped(orientation, &graph, &factor)?;
+        assert_eq!(mapped.iter_keys().count(), 2);
+        for ((key, integrands), scale) in mapped.iter_keys().zip([2, 3]) {
+            assert_eq!(key.selector_host, host);
+            let energy = Atom::num(scale) * Atom::var(GS.numerator_sampling_scale);
+            let expected = (&energy + &a) * (&energy + &b);
+            assert_eq!(
+                integrands,
+                &[
+                    (index, Atom::num(5) * &expected),
+                    (raised, Atom::num(7) * &expected)
+                ]
+                .into_iter()
+                .collect::<Integrands>(),
+            );
+            for (_, atom) in integrands.iter() {
+                let AtomView::Mul(factors) = atom.as_view() else {
+                    panic!("mapping a factor must preserve its product across cut orders")
+                };
+                assert_eq!(
+                    factors
+                        .iter()
+                        .filter(|factor| matches!(factor, AtomView::Add(_)))
+                        .count(),
+                    2,
+                );
+            }
+        }
         Ok(())
     }
 

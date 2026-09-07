@@ -19,9 +19,9 @@ use gammalooprs::{
 };
 use idenso::tensor::{SymbolicNet, SymbolicNetExt, SymbolicTensor};
 use spenso::network::{
-    DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinResultRank, MinResultRankWith, Network,
-    PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE, PAIR_SCORE_RESULT_RANK_ONLY, ScalarAliases,
-    Sequential, SmallestDegree,
+    DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinIntermediateCost, MinResultRank,
+    MinResultRankWith, Network, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
+    PAIR_SCORE_RESULT_RANK_ONLY, ScalarAliases, Sequential, SmallestDegree,
     library::{DummyLibrary, function_lib::Wrap},
     parsing::{
         ParseSettings as NetworkParseSettings, SchoonschipExpansionMode, ShorthandParsing,
@@ -42,6 +42,13 @@ use tabled::{builder::Builder, settings::Style};
 macro_rules! execute_concrete_network {
     ($net:expr, $order:expr) => {
         match $order {
+            TensorNetworkContractionOrder::IntermediateCost => $net.execute::<
+                Sequential,
+                MinIntermediateCost,
+                _,
+                _,
+                _,
+            >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()),
             TensorNetworkContractionOrder::SparseAtomAware => $net.execute::<
                 Sequential,
                 MinResultRank,
@@ -444,110 +451,109 @@ fn main() -> Result<()> {
         "",
         "",
     );
-    if let Ok(result) = result {
-        let root = match result {
-            ExecutionResult::One => Atom::num(1),
-            ExecutionResult::Zero => Atom::Zero,
-            ExecutionResult::Val(value) => value.into_owned(),
-        };
-        if let Some(aliases) = &scalar_aliases {
-            let aliased = net.aliased_atom(aliases, root);
-            if let Some(path) = &config.dump_aliased_path {
-                let bytes = write_aliased_atom_dump(path, &aliased)?;
-                print_metric_table(
-                    "aliased_dump",
-                    [
-                        ("path", path.display().to_string()),
-                        ("bytes", bytes.to_string()),
-                    ],
-                );
-                summary.push(
-                    "aliased_dump",
-                    "written",
-                    "",
-                    "",
-                    bytes.to_string(),
-                    path.display().to_string(),
-                );
-            }
+    let result = result.wrap_err("failed to read concrete scalar result")?;
+    let root = match result {
+        ExecutionResult::One => Atom::num(1),
+        ExecutionResult::Zero => Atom::Zero,
+        ExecutionResult::Val(value) => value.into_owned(),
+    };
+    if let Some(aliases) = &scalar_aliases {
+        let aliased = net.aliased_atom(aliases, root);
+        if let Some(path) = &config.dump_aliased_path {
+            let bytes = write_aliased_atom_dump(path, &aliased)?;
             print_metric_table(
-                "result_aliased_root",
+                "aliased_dump",
                 [
-                    ("aliases", aliased.get_aliases().len().to_string()),
-                    ("terms", aliased.get_root().nterms().to_string()),
-                    (
-                        "bytes",
-                        aliased.get_root().as_view().get_byte_size().to_string(),
-                    ),
+                    ("path", path.display().to_string()),
+                    ("bytes", bytes.to_string()),
                 ],
             );
             summary.push(
-                "result_aliased_root",
-                "done",
+                "aliased_dump",
+                "written",
                 "",
-                aliased.get_root().nterms().to_string(),
-                aliased.get_root().as_view().get_byte_size().to_string(),
-                format!("aliases={}", aliased.get_aliases().len()),
-            );
-            if config.resolve_aliases {
-                let resolve_started = Instant::now();
-                let resolved = aliased.into_inner();
-                let resolve_elapsed = resolve_started.elapsed();
-                print_metric_table(
-                    "result_alias_resolve",
-                    [
-                        ("elapsed", format_duration(resolve_elapsed)),
-                        ("terms", resolved.nterms().to_string()),
-                        ("bytes", resolved.as_view().get_byte_size().to_string()),
-                    ],
-                );
-                summary.push(
-                    "result_alias_resolve",
-                    "done",
-                    format_duration(resolve_elapsed),
-                    resolved.nterms().to_string(),
-                    resolved.as_view().get_byte_size().to_string(),
-                    "",
-                );
-            } else {
-                print_metric_table("result_alias_resolve", [("skipped", "true".to_owned())]);
-                summary.push("result_alias_resolve", "skipped", "", "", "", "");
-            }
-        } else {
-            if let Some(path) = &config.dump_aliased_path {
-                let bytes = write_aliased_atom_dump(path, &AliasedAtom::from(root.clone()))?;
-                print_metric_table(
-                    "aliased_dump",
-                    [
-                        ("path", path.display().to_string()),
-                        ("bytes", bytes.to_string()),
-                    ],
-                );
-                summary.push(
-                    "aliased_dump",
-                    "written",
-                    "",
-                    "",
-                    bytes.to_string(),
-                    path.display().to_string(),
-                );
-            }
-            print_metric_table(
-                "result_atom",
-                [
-                    ("terms", root.nterms().to_string()),
-                    ("bytes", root.as_view().get_byte_size().to_string()),
-                ],
-            );
-            summary.push(
-                "result_atom",
-                "done",
                 "",
-                root.nterms().to_string(),
-                root.as_view().get_byte_size().to_string(),
-                "",
+                bytes.to_string(),
+                path.display().to_string(),
             );
         }
+        print_metric_table(
+            "result_aliased_root",
+            [
+                ("aliases", aliased.get_aliases().len().to_string()),
+                ("terms", aliased.get_root().nterms().to_string()),
+                (
+                    "bytes",
+                    aliased.get_root().as_view().get_byte_size().to_string(),
+                ),
+            ],
+        );
+        summary.push(
+            "result_aliased_root",
+            "done",
+            "",
+            aliased.get_root().nterms().to_string(),
+            aliased.get_root().as_view().get_byte_size().to_string(),
+            format!("aliases={}", aliased.get_aliases().len()),
+        );
+        if config.resolve_aliases {
+            let resolve_started = Instant::now();
+            let resolved = aliased.into_inner();
+            let resolve_elapsed = resolve_started.elapsed();
+            print_metric_table(
+                "result_alias_resolve",
+                [
+                    ("elapsed", format_duration(resolve_elapsed)),
+                    ("terms", resolved.nterms().to_string()),
+                    ("bytes", resolved.as_view().get_byte_size().to_string()),
+                ],
+            );
+            summary.push(
+                "result_alias_resolve",
+                "done",
+                format_duration(resolve_elapsed),
+                resolved.nterms().to_string(),
+                resolved.as_view().get_byte_size().to_string(),
+                "",
+            );
+        } else {
+            print_metric_table("result_alias_resolve", [("skipped", "true".to_owned())]);
+            summary.push("result_alias_resolve", "skipped", "", "", "", "");
+        }
+    } else {
+        if let Some(path) = &config.dump_aliased_path {
+            let bytes = write_aliased_atom_dump(path, &AliasedAtom::from(root.clone()))?;
+            print_metric_table(
+                "aliased_dump",
+                [
+                    ("path", path.display().to_string()),
+                    ("bytes", bytes.to_string()),
+                ],
+            );
+            summary.push(
+                "aliased_dump",
+                "written",
+                "",
+                "",
+                bytes.to_string(),
+                path.display().to_string(),
+            );
+        }
+        print_metric_table(
+            "result_atom",
+            [
+                ("terms", root.nterms().to_string()),
+                ("bytes", root.as_view().get_byte_size().to_string()),
+            ],
+        );
+        summary.push(
+            "result_atom",
+            "done",
+            "",
+            root.nterms().to_string(),
+            root.as_view().get_byte_size().to_string(),
+            "",
+        );
     }
 
     summary.print();
@@ -605,7 +611,7 @@ impl Config {
                 "--contraction-order" => {
                     let Some(order) = args.next() else {
                         bail!(
-                            "--contraction-order requires sparse-atom-aware, atom-aware, result-rank-only, or entry-aware"
+                            "--contraction-order requires intermediate-cost, sparse-atom-aware, atom-aware, result-rank-only, or entry-aware"
                         );
                     };
                     contraction_order = parse_contraction_order(&order)?;
@@ -695,6 +701,7 @@ fn looks_like_selector(value: &str) -> bool {
 
 fn parse_contraction_order(value: &str) -> Result<TensorNetworkContractionOrder> {
     match value {
+        "intermediate-cost" => Ok(TensorNetworkContractionOrder::IntermediateCost),
         "sparse-atom-aware" => Ok(TensorNetworkContractionOrder::SparseAtomAware),
         "atom-aware" => Ok(TensorNetworkContractionOrder::AtomAware),
         "result-rank-only" => Ok(TensorNetworkContractionOrder::ResultRankOnly),
@@ -705,6 +712,7 @@ fn parse_contraction_order(value: &str) -> Result<TensorNetworkContractionOrder>
 
 fn contraction_order_label(order: TensorNetworkContractionOrder) -> &'static str {
     match order {
+        TensorNetworkContractionOrder::IntermediateCost => "intermediate-cost",
         TensorNetworkContractionOrder::SparseAtomAware => "sparse-atom-aware",
         TensorNetworkContractionOrder::AtomAware => "atom-aware",
         TensorNetworkContractionOrder::ResultRankOnly => "result-rank-only",
@@ -725,7 +733,7 @@ fn print_usage() {
     println!("--dump-aliased writes the post-execution aliased atom JSON dump");
     println!("--dump-scalar-aliases-md writes aliased scalar-store log_print markdown");
     println!(
-        "--contraction-order selects sparse-atom-aware, atom-aware, result-rank-only, or entry-aware"
+        "--contraction-order selects intermediate-cost (default), sparse-atom-aware, atom-aware, result-rank-only, or entry-aware"
     );
     println!("--symbolic-net executes a SymbolicTensor network and aliases scalar-store atoms");
     println!(

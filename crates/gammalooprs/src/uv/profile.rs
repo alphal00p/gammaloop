@@ -6,6 +6,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::DependentMomentaConstructor;
@@ -31,7 +32,7 @@ use colored::Colorize;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::PowersetIterator;
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec, HedgePair, Orientation, SignOrZero};
+use linnet::half_edge::involution::{EdgeIndex, HedgePair, SignOrZero};
 use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps};
 use rand::Rng;
@@ -55,7 +56,8 @@ use typed_index_collections::TiVec;
 
 type LoopMomentumSample = TiVec<LoopIndex, ThreeMomentum<F<f64>>>;
 type ProfileLmbLimits = Vec<(LoopMomentumBasis, Vec<(SubSet<LoopIndex>, i32)>)>;
-const UV_PROFILE_RETRY_MAX_DOD: f64 = -0.9;
+/// Numerical UV-profile acceptance threshold, also used to trigger precision retries.
+pub const UV_PROFILE_MAX_DOD: f64 = -0.9;
 const UV_PROFILE_RETRY_MIN_R_SQUARED: f64 = 0.9;
 const UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED: f64 = 0.99;
 const UV_PROFILE_MIN_POINTS: usize = 5;
@@ -234,6 +236,7 @@ impl UVLimitSelection {
 }
 
 pub struct ProfileSettings {
+    pub fail_fast: bool,
     pub n_points: usize,
     pub min_scale_exponent: f64,
     pub max_scale_exponent: f64,
@@ -250,6 +253,7 @@ pub struct ProfileSettings {
 impl Default for ProfileSettings {
     fn default() -> Self {
         ProfileSettings {
+            fail_fast: false,
             n_points: 15,
             min_scale_exponent: 3.0,
             max_scale_exponent: 6.0,
@@ -694,6 +698,7 @@ mod tests {
     #[test]
     fn analysis_preserves_selected_graph_and_cut_identity() {
         let profile = UVProfile {
+            stopped_early: false,
             per_graph: vec![UVSamplingResult {
                 graph_index: 2,
                 graph_name: "GL2".to_string(),
@@ -774,6 +779,7 @@ mod tests {
             used_arb_prec_retry: false,
         };
         let analysis = UVProfileAnalysis {
+            stopped_early: false,
             scales: Vec::new(),
             graphs: vec![UVProfileGraphAnalysis {
                 graph_index: 0,
@@ -811,6 +817,27 @@ mod tests {
         assert_eq!(report.failures.len(), 1);
         assert_eq!(report.failures[0].orientation_label, None);
         assert_eq!(report.failures[0].reason, "dod_exceeds_threshold");
+        let subset = &analysis.graphs[0].lmbs[0].subsets[0].analysis;
+        assert_eq!(
+            subset.inspect_verdicts(-0.9, true).collect::<Vec<_>>(),
+            vec![(None, Some("dod_exceeds_threshold")), (Some("+-"), None)]
+        );
+
+        let mut vanishing = subset.clone();
+        vanishing.inspect_level = None;
+        vanishing.inspect_fit_status = InspectFitStatus {
+            finite_samples: 5,
+            positive_finite_samples: 0,
+        };
+        assert!(
+            vanishing
+                .inspect_verdicts(-0.9, true)
+                .all(|(_, reason)| reason.is_none())
+        );
+        assert_eq!(
+            vanishing.inspect_verdicts(-0.9, false).next(),
+            Some((None, Some("missing_fit")))
+        );
     }
 
     #[test]
@@ -991,6 +1018,7 @@ struct UVProfileRunner<'a> {
     settings: &'a RuntimeSettings,
     profile_settings: &'a ProfileSettings,
     base_seed: u64,
+    stopped: AtomicBool,
 }
 
 pub trait UVProfileable {
@@ -1083,6 +1111,7 @@ impl UVProfileable for Amplitude {
             settings: &settings,
             profile_settings,
             base_seed,
+            stopped: AtomicBool::new(false),
         };
 
         // Generated symbolic evaluators need the same worker-stack headroom while profiling as
@@ -1092,20 +1121,30 @@ impl UVProfileable for Amplitude {
             .stack_size(UV_PROFILE_THREAD_STACK_SIZE_BYTES)
             .build()?;
         let per_graph = profile_pool.install(|| {
-            graph_inputs
-                .par_iter()
-                .map(|(graph_id, graph)| {
-                    let res = runner.sample_graph(*graph_id, graph)?;
-                    profile_span.pb_inc(1);
-                    Ok(res)
-                })
-                .collect::<Result<Vec<_>>>()
+            let sample_graph = |(graph_id, graph): &(usize, &AmplitudeGraph)| {
+                let res = runner.sample_graph(*graph_id, graph)?;
+                profile_span.pb_inc(1);
+                Ok(res)
+            };
+            if profile_settings.fail_fast {
+                graph_inputs
+                    .iter()
+                    .take_while(|_| !runner.stopped.load(Ordering::Relaxed))
+                    .map(sample_graph)
+                    .collect::<Result<Vec<_>>>()
+            } else {
+                graph_inputs.par_iter().map(sample_graph).collect()
+            }
         })?;
 
+        if runner.stopped.load(Ordering::Relaxed) {
+            profile_span.pb_set_finish_message("stopped at failing UV limit");
+        }
         drop(_profile_span_enter);
         drop(profile_span);
 
         Ok(UVProfile {
+            stopped_early: runner.stopped.load(Ordering::Relaxed),
             per_graph,
             scales,
             allow_vanishing_missing_fits: false,
@@ -1297,6 +1336,7 @@ impl UVProfileable for CrossSection {
             settings: &settings,
             profile_settings,
             base_seed,
+            stopped: AtomicBool::new(false),
         };
 
         // Generated symbolic evaluators need the same worker-stack headroom while profiling as
@@ -1306,20 +1346,30 @@ impl UVProfileable for CrossSection {
             .stack_size(UV_PROFILE_THREAD_STACK_SIZE_BYTES)
             .build()?;
         let per_graph = profile_pool.install(|| {
-            graph_inputs
-                .par_iter()
-                .map(|(graph_id, graph, lmbs, cuts)| {
-                    let res = runner.sample_cross_section_graph(*graph_id, graph, lmbs, cuts)?;
-                    profile_span.pb_inc(1);
-                    Ok(res)
-                })
-                .collect::<Result<Vec<_>>>()
+            let sample_graph = |(graph_id, graph, lmbs, cuts): &(usize, _, _, Vec<_>)| {
+                let res = runner.sample_cross_section_graph(*graph_id, graph, lmbs, cuts)?;
+                profile_span.pb_inc(1);
+                Ok(res)
+            };
+            if profile_settings.fail_fast {
+                graph_inputs
+                    .iter()
+                    .take_while(|_| !runner.stopped.load(Ordering::Relaxed))
+                    .map(sample_graph)
+                    .collect::<Result<Vec<_>>>()
+            } else {
+                graph_inputs.par_iter().map(sample_graph).collect()
+            }
         })?;
 
+        if runner.stopped.load(Ordering::Relaxed) {
+            profile_span.pb_set_finish_message("stopped at failing UV limit");
+        }
         drop(_profile_span_enter);
         drop(profile_span);
 
         Ok(UVProfile {
+            stopped_early: runner.stopped.load(Ordering::Relaxed),
             per_graph,
             scales,
             allow_vanishing_missing_fits: true,
@@ -1328,6 +1378,7 @@ impl UVProfileable for CrossSection {
 }
 
 pub struct UVProfile {
+    pub stopped_early: bool,
     pub per_graph: Vec<UVSamplingResult>,
     pub scales: Vec<f64>,
     pub allow_vanishing_missing_fits: bool,
@@ -1429,6 +1480,7 @@ impl UVProfile {
             .collect();
 
         UVProfileAnalysis {
+            stopped_early: self.stopped_early,
             scales: self.scales.clone(),
             graphs,
             allow_vanishing_missing_fits: self.allow_vanishing_missing_fits,
@@ -1458,6 +1510,9 @@ impl UVProfile {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UVProfileAnalysis {
+    /// Results cover only the completed prefix when fail-fast stopped sampling.
+    #[serde(skip_serializing_if = "crate::utils::serde_utils::is_false")]
+    pub stopped_early: bool,
     pub scales: Vec<f64>,
     pub graphs: Vec<UVProfileGraphAnalysis>,
     #[serde(skip_serializing)]
@@ -1917,36 +1972,11 @@ impl UVProfileAnalysis {
         for graph in &self.graphs {
             for lmb in &graph.lmbs {
                 for subset in &lmb.subsets {
-                    total += 1;
-                    let reason = inspect_failure_reason(
-                        subset.analysis.inspect_level.as_ref(),
-                        subset.analysis.inspect_fit_status,
-                        max_dod,
-                        self.allow_vanishing_missing_fits,
-                    );
-
-                    if let Some(reason) = reason {
-                        failures.push(UVProfileFailure {
-                            graph_index: graph.graph_index,
-                            graph_name: graph.graph_name.clone(),
-                            cutkosky_cut: graph.cutkosky_cut.clone(),
-                            lmb_index: lmb.lmb_index,
-                            fixed: subset.fixed.clone(),
-                            free: subset.free.clone(),
-                            orientation_label: None,
-                            reason: reason.to_string(),
-                        });
-                    }
-
-                    for entry in subset.analysis.per_orientation_inspect.iter().flatten() {
+                    for (orientation_label, reason) in subset
+                        .analysis
+                        .inspect_verdicts(max_dod, self.allow_vanishing_missing_fits)
+                    {
                         total += 1;
-                        let reason = inspect_failure_reason(
-                            entry.analysis.as_ref(),
-                            entry.inspect_fit_status,
-                            max_dod,
-                            self.allow_vanishing_missing_fits,
-                        );
-
                         if let Some(reason) = reason {
                             failures.push(UVProfileFailure {
                                 graph_index: graph.graph_index,
@@ -1955,7 +1985,7 @@ impl UVProfileAnalysis {
                                 lmb_index: lmb.lmb_index,
                                 fixed: subset.fixed.clone(),
                                 free: subset.free.clone(),
-                                orientation_label: Some(entry.orientation_label.clone()),
+                                orientation_label: orientation_label.map(str::to_owned),
                                 reason: reason.to_string(),
                             });
                         }
@@ -2042,7 +2072,6 @@ pub struct UVSamplingResult {
 
 impl<'a> UVProfileRunner<'a> {
     fn sample_graph(&self, graph_id: usize, g: &AmplitudeGraph) -> Result<UVSamplingResult> {
-        let deferred_integrands = g.derived_data.deferred_integrands.as_ref();
         let profiles_per_orientation = self
             .profile_settings
             .orientation_mode
@@ -2065,21 +2094,6 @@ impl<'a> UVProfileRunner<'a> {
         }
         let analytic_integrands = if !self.profile_settings.analyse_analytically {
             Vec::new()
-        } else if let Some(deferred_integrands) = deferred_integrands {
-            let materialized = deferred_integrands.materialize();
-            let mut roots = materialized.iter();
-            let (index, integrand) = roots
-                .next()
-                .ok_or_else(|| eyre!("deferred amplitude integrand has no root residue"))?;
-            if *index != crate::cff::CutCFFIndex::new_all_none() || roots.next().is_some() {
-                return Err(eyre!(
-                    "deferred amplitude integrand must contain exactly one root residue"
-                ));
-            }
-            let mut summed =
-                OrientationData::new(EdgeVec::from_iter(std::iter::empty::<Orientation>()));
-            summed.label = Some("explicit source-local sum".to_string());
-            vec![(summed, integrand.clone())]
         } else {
             g.derived_data
                 .cff_expression
@@ -2140,59 +2154,66 @@ impl<'a> UVProfileRunner<'a> {
         lmb_span.pb_set_finish_message("all loop momentum bases profiled");
         let _lmb_span_enter = lmb_span.enter();
 
-        let per_lmb = lmbs
-            .par_iter()
-            .enumerate()
-            .map(|(lmb_index, (lmb, subsets))| {
-                let mut result = self.sample_lmb(
-                    graph_id,
-                    &g.graph,
-                    lmb_index,
-                    lmb,
-                    subsets,
-                    orientation_labels.as_deref(),
-                    None,
-                )?;
+        let sample_lmb = |(lmb_index, (lmb, subsets)): (usize, &(LoopMomentumBasis, Vec<_>))| {
+            let mut result = self.sample_lmb(
+                graph_id,
+                &g.graph,
+                lmb_index,
+                lmb,
+                subsets,
+                orientation_labels.as_deref(),
+                None,
+            )?;
 
-                if self.profile_settings.analyse_analytically {
-                    let orientation_limits: Vec<(
-                        SubSet<LoopIndex>,
-                        OrientationData,
-                        Series<AtomField>,
-                    )> = analytic_integrands
-                        .par_iter()
-                        .map(|(orientation, integrand)| {
-                            g.graph
-                                .all_limits(
-                                    &g.graph.full_filter(),
-                                    integrand,
-                                    symbol!("lambd"),
-                                    lmb,
-                                )
-                                .into_iter()
-                                .map(|(limit, value)| (limit, orientation.clone(), value))
-                                .collect::<Vec<_>>()
-                        })
-                        .reduce(Vec::new, |mut limits, mut more_limits| {
-                            limits.append(&mut more_limits);
-                            limits
-                        });
+            // A failed numerical limit stops before optional analytic work.
+            if self.profile_settings.analyse_analytically && !self.stopped.load(Ordering::Relaxed) {
+                let orientation_limits: Vec<(
+                    SubSet<LoopIndex>,
+                    OrientationData,
+                    Series<AtomField>,
+                )> = analytic_integrands
+                    .par_iter()
+                    .map(|(orientation, integrand)| {
+                        g.graph
+                            .all_limits(&g.graph.full_filter(), integrand, symbol!("lambd"), lmb)
+                            .into_iter()
+                            .map(|(limit, value)| (limit, orientation.clone(), value))
+                            .collect::<Vec<_>>()
+                    })
+                    .reduce(Vec::new, |mut limits, mut more_limits| {
+                        limits.append(&mut more_limits);
+                        limits
+                    });
 
-                    for (limit, orientation, value) in orientation_limits {
-                        let Some(subset) = result.per_subsets.get_mut(&limit) else {
-                            continue;
-                        };
-                        let analytic = subset.analytic.get_or_insert_with(|| AnalyticResult {
-                            per_orientations: BTreeMap::new(),
-                        });
-                        analytic.per_orientations.insert(orientation, value);
-                    }
+                for (limit, orientation, value) in orientation_limits {
+                    let Some(subset) = result.per_subsets.get_mut(&limit) else {
+                        continue;
+                    };
+                    let analytic = subset.analytic.get_or_insert_with(|| AnalyticResult {
+                        per_orientations: BTreeMap::new(),
+                    });
+                    analytic.per_orientations.insert(orientation, value);
                 }
-                lmb_span.pb_inc(1);
-                Ok(result)
-            })
-            .collect::<Result<Vec<_>>>()?;
+            }
+            lmb_span.pb_inc(1);
+            Ok(result)
+        };
+        let per_lmb = if self.profile_settings.fail_fast {
+            lmbs.iter()
+                .enumerate()
+                .take_while(|_| !self.stopped.load(Ordering::Relaxed))
+                .map(sample_lmb)
+                .collect::<Result<Vec<_>>>()?
+        } else {
+            lmbs.par_iter()
+                .enumerate()
+                .map(sample_lmb)
+                .collect::<Result<Vec<_>>>()?
+        };
 
+        if self.stopped.load(Ordering::Relaxed) {
+            lmb_span.pb_set_finish_message("stopped at failing UV limit");
+        }
         drop(_lmb_span_enter);
         drop(lmb_span);
 
@@ -2271,24 +2292,35 @@ impl<'a> UVProfileRunner<'a> {
         lmb_span.pb_set_finish_message("all loop momentum bases profiled");
         let _lmb_span_enter = lmb_span.enter();
 
-        let per_lmb = lmbs
-            .par_iter()
-            .enumerate()
-            .map(|(lmb_index, (lmb, subsets))| {
-                let result = self.sample_lmb(
-                    graph_id,
-                    graph,
-                    lmb_index,
-                    lmb,
-                    subsets,
-                    orientation_labels.as_deref(),
-                    Some(cuts),
-                )?;
-                lmb_span.pb_inc(1);
-                Ok(result)
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let sample_lmb = |(lmb_index, (lmb, subsets)): (usize, &(LoopMomentumBasis, Vec<_>))| {
+            let result = self.sample_lmb(
+                graph_id,
+                graph,
+                lmb_index,
+                lmb,
+                subsets,
+                orientation_labels.as_deref(),
+                Some(cuts),
+            )?;
+            lmb_span.pb_inc(1);
+            Ok(result)
+        };
+        let per_lmb = if self.profile_settings.fail_fast {
+            lmbs.iter()
+                .enumerate()
+                .take_while(|_| !self.stopped.load(Ordering::Relaxed))
+                .map(sample_lmb)
+                .collect::<Result<Vec<_>>>()?
+        } else {
+            lmbs.par_iter()
+                .enumerate()
+                .map(sample_lmb)
+                .collect::<Result<Vec<_>>>()?
+        };
 
+        if self.stopped.load(Ordering::Relaxed) {
+            lmb_span.pb_set_finish_message("stopped at failing UV limit");
+        }
         drop(_lmb_span_enter);
         drop(lmb_span);
 
@@ -2353,62 +2385,82 @@ impl<'a> UVProfileRunner<'a> {
         subset_span.pb_set_message("Profiling subsets");
         let _subset_span_enter = subset_span.enter();
 
-        let per_subsets_vec: Vec<(SubSet<LoopIndex>, SubSetResult)> = subsets
-            .par_iter()
-            .map_init(
-                || {
-                    let mut integrand = self
-                        .integrand
-                        .lock()
-                        .expect("integrand mutex poisoned")
-                        .clone();
-                    // LU cut compatibility is projected from the production event weights.
-                    if compatible_cuts.is_some() {
-                        integrand.get_mut_settings().general.generate_events = true;
-                    }
-                    integrand
+        let prepare_integrand = || {
+            let mut integrand = self
+                .integrand
+                .lock()
+                .expect("integrand mutex poisoned")
+                .clone();
+            // LU cut compatibility is projected from the production event weights.
+            if compatible_cuts.is_some() {
+                integrand.get_mut_settings().general.generate_events = true;
+            }
+            integrand
+        };
+        let sample_subset = |integrand: &mut ProcessIntegrand, (subset, initial_dod): &_| {
+            let compatible_event_cut_ids = compatible_cuts.map(|cuts| {
+                let cycle = UVLimitSelection::cycle_union(graph, lmb, subset);
+                cuts.iter()
+                    .filter(|(cut, _)| !cycle.intersects(cut))
+                    .map(|(_, representative_cut_id)| *representative_cut_id)
+                    .sorted_by_key(|cut_id| cut_id.0)
+                    .dedup()
+                    .collect_vec()
+            });
+            if compatible_event_cut_ids.as_ref().is_some_and(Vec::is_empty) {
+                return Err(eyre!(
+                    "UV subset {subset:?} in LMB '{}' of graph '{}' has no compatible Cutkosky cut after cut-compatible limit selection",
+                    lmb.tree.string_label(),
+                    graph.name,
+                ));
+            }
+            let res = self.sample_subset(
+                integrand,
+                SubsetSampleInput {
+                    graph_id,
+                    subset,
+                    initial_dod: *initial_dod,
+                    lmb,
+                    generation_lmb: &graph.loop_momentum_basis,
+                    sample: &sample,
+                    orientation_labels,
+                    compatible_event_cut_ids: compatible_event_cut_ids.as_deref(),
                 },
-                |integrand, (subset, initial_dod)| {
-                    let compatible_event_cut_ids = compatible_cuts.map(|cuts| {
-                        let cycle = UVLimitSelection::cycle_union(graph, lmb, subset);
-                        cuts
-                            .iter()
-                            .filter(|(cut, _)| !cycle.intersects(cut))
-                            .map(|(_, representative_cut_id)| *representative_cut_id)
-                            .sorted_by_key(|cut_id| cut_id.0)
-                            .dedup()
-                            .collect_vec()
-                    });
-                    if compatible_event_cut_ids
-                        .as_ref()
-                        .is_some_and(Vec::is_empty)
-                    {
-                        return Err(eyre!(
-                            "UV subset {subset:?} in LMB '{}' of graph '{}' has no compatible Cutkosky cut after cut-compatible limit selection",
-                            lmb.tree.string_label(),
-                            graph.name,
-                        ));
-                    }
-                    let res = self.sample_subset(
-                        integrand,
-                        SubsetSampleInput {
-                            graph_id,
-                            subset,
-                            initial_dod: *initial_dod,
-                            lmb,
-                            generation_lmb: &graph.loop_momentum_basis,
-                            sample: &sample,
-                            orientation_labels,
-                            compatible_event_cut_ids: compatible_event_cut_ids.as_deref(),
-                        },
-                    )?;
-                    subset_span.pb_inc(1);
-                    Ok((subset.clone(), res))
-                },
-            )
-            .collect::<Result<Vec<_>>>()?;
+            )?;
+            subset_span.pb_inc(1);
+            if self.profile_settings.fail_fast
+                && res
+                    .analyse(self.scales)
+                    .inspect_verdicts(UV_PROFILE_MAX_DOD, compatible_cuts.is_some())
+                    .any(|(_, reason)| reason.is_some())
+            {
+                // Retain the completed limit (including all requested
+                // residues and precision retries) before stopping.
+                self.stopped.store(true, Ordering::Relaxed);
+            }
+            Ok((subset.clone(), res))
+        };
+        let per_subsets_vec: Vec<(SubSet<LoopIndex>, SubSetResult)> =
+            if self.profile_settings.fail_fast {
+                let mut integrand = prepare_integrand();
+                subsets
+                    .iter()
+                    .take_while(|_| !self.stopped.load(Ordering::Relaxed))
+                    .map(|subset| sample_subset(&mut integrand, subset))
+                    .collect::<Result<_>>()?
+            } else {
+                subsets
+                    .par_iter()
+                    .map_init(prepare_integrand, sample_subset)
+                    .collect::<Result<_>>()?
+            };
         let per_subsets = per_subsets_vec.into_iter().collect();
 
+        subset_span.pb_set_finish_message(if self.stopped.load(Ordering::Relaxed) {
+            "stopped at failing UV limit"
+        } else {
+            "all subsets profiled"
+        });
         drop(_subset_span_enter);
         drop(subset_span);
 
@@ -2721,11 +2773,11 @@ fn inspect_results_need_arbprec_retry(inspect: &[InspectResult], scales: &[f64])
         None => true,
         Some(analysis) => {
             analysis.result.slope.is_nan()
-                || analysis.result.slope > UV_PROFILE_RETRY_MAX_DOD
+                || analysis.result.slope > UV_PROFILE_MAX_DOD
                 || !analysis.result.r_squared.is_finite()
                 || analysis.result.r_squared < UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED
                 || analysis.result.full_range_slope.is_nan()
-                || analysis.result.full_range_slope > UV_PROFILE_RETRY_MAX_DOD
+                || analysis.result.full_range_slope > UV_PROFILE_MAX_DOD
                 || !analysis.result.full_range_r_squared.is_finite()
                 || analysis.result.full_range_r_squared < UV_PROFILE_RETRY_MIN_R_SQUARED
         }
@@ -2800,7 +2852,7 @@ fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult>
             (candidate.2 >= UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED).then_some((start, candidate))
         })
         .unwrap_or((0, full_range_fit));
-    if slope > UV_PROFILE_RETRY_MAX_DOD || r_squared < UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED {
+    if slope > UV_PROFILE_MAX_DOD || r_squared < UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED {
         debug!(
             slope,
             intercept,
@@ -2943,6 +2995,29 @@ pub struct Analysis {
 }
 
 impl Analysis {
+    // The early-stop decision and the final report consume the same summed
+    // and per-residue verdicts, including the LU vanishing-fit exemption.
+    fn inspect_verdicts(
+        &self,
+        max_dod: f64,
+        allow_vanishing_missing_fits: bool,
+    ) -> impl Iterator<Item = (Option<&str>, Option<&'static str>)> {
+        std::iter::once((None, self.inspect_level.as_ref(), self.inspect_fit_status))
+            .chain(self.per_orientation_inspect.iter().flatten().map(|entry| {
+                (
+                    Some(entry.orientation_label.as_str()),
+                    entry.analysis.as_ref(),
+                    entry.inspect_fit_status,
+                )
+            }))
+            .map(move |(orientation, analysis, status)| {
+                (
+                    orientation,
+                    inspect_failure_reason(analysis, status, max_dod, allow_vanishing_missing_fits),
+                )
+            })
+    }
+
     fn per_orientation_inspect_entries(&self) -> Option<Vec<UVProfileOrientationInspectEntry>> {
         self.per_orientation_inspect.as_ref().map(|entries| {
             entries

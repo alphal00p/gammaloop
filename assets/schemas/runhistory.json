@@ -5385,7 +5385,8 @@
         "sparse_atom_aware",
         "atom_aware",
         "result_rank_only",
-        "entry_aware"
+        "entry_aware",
+        "intermediate_cost"
       ]
     },
     "ThreeDRep": {
@@ -5530,7 +5531,28 @@
       "type": "object",
       "properties": {
         "analyse_analytically": {
+          "description": "Also derive analytic UV series (amplitudes only)",
           "type": "boolean"
+        },
+        "cutkosky_cut": {
+          "description": "Restrict a cross section to the Cutkosky cut with these edge IDs",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "fail_fast": {
+          "description": "Stop after the first failing numerical UV limit, including precision retries",
+          "type": "boolean"
+        },
+        "graph": {
+          "description": "Restrict profiling to this graph",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "integrand_name": {
           "description": "The integrand name to inspect",
@@ -5540,12 +5562,12 @@
           ]
         },
         "max_scale_exponent": {
-          "description": "Maximum scaling factor",
+          "description": "Maximum base-10 scaling exponent",
           "type": "number",
           "format": "double"
         },
         "min_scale_exponent": {
-          "description": "Minimum scaling factor",
+          "description": "Minimum base-10 scaling exponent",
           "type": "number",
           "format": "double"
         },
@@ -5556,7 +5578,7 @@
           "minimum": 0
         },
         "output_file": {
-          "description": "Output file for results (optional)",
+          "description": "Output directory for uv_profile.json (optional)",
           "type": [
             "string",
             "null"
@@ -5585,6 +5607,11 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "selected_limits": {
+          "description": "UV limits to profile",
+          "$ref": "#/$defs/UVLimitSelection",
+          "default": "only-divergent"
         },
         "use_f128": {
           "description": "Use f128 precision for evaluation",
@@ -5775,6 +5802,20 @@
       "enum": [
         "Feynman",
         "LightLikeAxial"
+      ]
+    },
+    "UVLimitSelection": {
+      "oneOf": [
+        {
+          "description": "One representative for every expected divergent cycle union: the generation LMB when\nsuitable, otherwise the first suitable basis in the deterministically sorted full list.",
+          "type": "string",
+          "const": "only-divergent"
+        },
+        {
+          "description": "Every nonempty loop subset in every generated physical LMB.",
+          "type": "string",
+          "const": "all"
+        }
       ]
     }
   }

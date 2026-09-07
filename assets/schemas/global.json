@@ -454,7 +454,8 @@
         "sparse_atom_aware",
         "atom_aware",
         "result_rank_only",
-        "entry_aware"
+        "entry_aware",
+        "intermediate_cost"
       ]
     },
     "ThresholdSubtractionSettings": {

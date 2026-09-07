@@ -110,6 +110,12 @@ impl Chain for Atom {
 }
 impl<'a> Chain for AtomView<'a> {
     fn collect_chains(&self, representation: LibraryRep) -> Atom {
+        // Every rule below requires a chain. Avoid polynomial collection of
+        // unrelated scalar factors when there is no chain to compose.
+        if !self.contains_symbol(T.chain) {
+            return self.to_owned();
+        }
+
         let in_index = representation.to_symbolic([W_.d_, W_.i_]);
         let dummy_out = representation.dual().to_symbolic([W_.d_, W_.j_]);
         let dummy_in = representation.to_symbolic([W_.d_, W_.j_]);
@@ -193,11 +199,22 @@ mod tests {
     use symbolica::{parse, parse_lit};
     use symbolica_utils::AtomPrintExt;
 
-    use crate::representations::Bispinor;
+    use crate::representations::{Bispinor, ColorFundamental};
     use crate::test_support::{TestReps, test_initialize};
     use crate::{bis, gamma};
 
     use super::*;
+
+    #[test]
+    fn collect_chains_preserves_factorized_scalars_without_chains() {
+        test_initialize();
+        let scalar = parse_lit!((a + b) ^ 8 * (c + d) ^ 8 / (1 + a * c + b * d));
+        for representation in [Bispinor {}.into(), ColorFundamental {}.into()] {
+            // Structural equality checks the original factorization, not only
+            // equality after expanding or evaluating the scalar expression.
+            assert_eq!(scalar.collect_chains(representation), scalar);
+        }
+    }
 
     #[test]
     fn collect_gamma_chains_and_close_trace() {

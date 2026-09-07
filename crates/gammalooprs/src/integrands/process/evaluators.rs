@@ -21,14 +21,13 @@ use spenso::{
         complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
     },
     network::{
-        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinResultRank, MinResultRankWith,
-        PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE, PAIR_SCORE_RESULT_RANK_ONLY, Sequential,
-        SequentialExtract, SequentialRef, SmallestDegree,
+        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinIntermediateCost, MinResultRank,
+        MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
+        PAIR_SCORE_RESULT_RANK_ONLY, Sequential, SequentialExtract, SequentialRef, SmallestDegree,
     },
     shadowing::symbolica_utils::{LogPrint, SpensoPrintSettings},
 };
 use std::ops::Deref;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{mem::transmute, ops::Neg, path::Path};
 use symbolica::{
     domains::{dual::HyperDual, float::Complex as SymComplex, rational::Fraction},
@@ -69,12 +68,6 @@ use super::{
 };
 
 const NETWORK_SCALAR_ALIAS_MIN_BYTES: usize = 4096;
-const DUMP_EVALUATOR_PRE_NETWORK_PARSE_ENV: &str = "GAMMALOOP_DUMP_EVALUATOR_PRE_NETWORK_PARSE";
-const STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV: &str =
-    "GAMMALOOP_STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE";
-const TRACE_PARAMETRIC_NONFINITE_ENV: &str = "GAMMALOOP_TRACE_PARAMETRIC_NONFINITE";
-const DUMP_PARAMETRIC_NONFINITE_DIR_ENV: &str = "GAMMALOOP_DUMP_PARAMETRIC_NONFINITE_DIR";
-static PARAMETRIC_NONFINITE_DUMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, Copy)]
 pub enum SingleOrAllOrientations<'a, OID> {
@@ -550,63 +543,6 @@ impl EvaluatorStack {
         Ok((stack, timings))
     }
 
-    pub(crate) fn new_deferred_explicit_sum_with_timings(
-        compact_atom: &Atom,
-        bodies: &[Atom],
-        param_builder: &ParamBuilder,
-        dual_shape: Option<Vec<Vec<usize>>>,
-        settings: &EvaluatorSettings,
-    ) -> Result<(Self, EvaluatorBuildTimings)> {
-        let setup_started = std::time::Instant::now();
-        let expected_compact = bodies
-            .iter()
-            .enumerate()
-            .map(|(tag, _)| function!(GS.projected_cff_sum, tag))
-            .fold(Atom::Zero, |sum, call| sum + call);
-        if compact_atom != &expected_compact {
-            return Err(eyre!(
-                "deferred projected-CFF compact expression does not match its {} function bodies",
-                bodies.len()
-            ));
-        }
-
-        let validation_time = setup_started.elapsed();
-        let spenso_started = std::time::Instant::now();
-        let bodies = bodies
-            .iter()
-            .enumerate()
-            .map(|(body_index, body)| {
-                Self::preprocess_atom(&Self::sum_residue_map_selectors(body), body_index, settings)
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let spenso_time = spenso_started.elapsed();
-
-        let setup_started = std::time::Instant::now();
-        let mut param_builder = param_builder.clone();
-        for (tag, body) in bodies.iter().enumerate() {
-            param_builder
-                .add_tagged_function::<Symbol>(
-                    GS.projected_cff_sum,
-                    vec![Atom::num(tag)],
-                    format!("projected_cff_sum_{tag}"),
-                    Vec::new(),
-                    GS.collect_orientation_if(body.as_view()),
-                )
-                .map_err(|error| eyre!(error))?;
-        }
-
-        let setup_time = validation_time + setup_started.elapsed();
-        let (stack, mut timings) = Self::new_explicit_sum_with_timings(
-            std::slice::from_ref(compact_atom),
-            &param_builder,
-            dual_shape,
-            settings,
-        )?;
-        timings.spenso_time += spenso_time;
-        timings.symbolica_time += setup_time;
-        Ok((stack, timings))
-    }
-
     fn preprocess_atom<A: AtomCore>(
         a: &A,
         atom_index: usize,
@@ -655,21 +591,6 @@ impl EvaluatorStack {
             log.atom = network_input,
             "Evaluator atom before network parsing"
         );
-        if let Some(path) =
-            std::env::var_os(DUMP_EVALUATOR_PRE_NETWORK_PARSE_ENV).map(std::path::PathBuf::from)
-        {
-            std::fs::write(&path, network_input.to_plain_string()).with_context(|| {
-                format!(
-                    "failed to write evaluator pre-network atom to {}",
-                    path.display()
-                )
-            })?;
-        }
-        if std::env::var_os(STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV).is_some() {
-            return Err(eyre!(
-                "stopped after evaluator pre-network parse dump because {STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV} is set"
-            ));
-        }
         let mut net = network_input.parse_into_net()?;
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
             stage = "evaluator_stack_parse_atom_net_done",
@@ -713,6 +634,11 @@ impl EvaluatorStack {
         macro_rules! execute_min_result_rank {
             ($execution_strategy:ty) => {
                 match settings.tensor_network_contraction_order {
+                    TensorNetworkContractionOrder::IntermediateCost => net
+                        .execute::<$execution_strategy, MinIntermediateCost, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        ),
                     TensorNetworkContractionOrder::SparseAtomAware => net
                         .execute::<$execution_strategy, MinResultRank, _, _, _>(
                             TENSORLIB.read().unwrap().deref(),
@@ -1006,129 +932,6 @@ impl EvaluatorStack {
                 evaluation_metadata,
                 record_primary_timing,
             );
-            if std::env::var_os(TRACE_PARAMETRIC_NONFINITE_ENV).is_some() {
-                let output_nonfinite = output.iter().any(|entry| match entry {
-                    DualOrNot::Dual(dual_result) => dual_result.values.iter().any(|value| {
-                        value.re.is_nan()
-                            || value.re.is_infinite()
-                            || value.im.is_nan()
-                            || value.im.is_infinite()
-                    }),
-                    DualOrNot::NonDual(value) => {
-                        value.re.is_nan()
-                            || value.re.is_infinite()
-                            || value.im.is_nan()
-                            || value.im.is_infinite()
-                    }
-                });
-
-                if output_nonfinite {
-                    let f128_params = input
-                        .as_slice()
-                        .iter()
-                        .map(|value| {
-                            Complex::new(
-                                F::<f128>::from_ff64(value.re.into_ff64()),
-                                F::<f128>::from_ff64(value.im.into_ff64()),
-                            )
-                        })
-                        .collect::<Vec<_>>();
-                    let mut f128_out =
-                        vec![Complex::default(); self.single_parametric.compute_out_size()];
-                    self.single_parametric
-                        .f128
-                        .evaluate(&f128_params, &mut f128_out);
-
-                    let arb_params = input
-                        .as_slice()
-                        .iter()
-                        .map(|value| {
-                            Complex::new(
-                                F::<ArbPrec>::from_ff64(value.re.into_ff64()),
-                                F::<ArbPrec>::from_ff64(value.im.into_ff64()),
-                            )
-                        })
-                        .collect::<Vec<_>>();
-                    let mut arb_out =
-                        vec![Complex::default(); self.single_parametric.compute_out_size()];
-                    self.single_parametric
-                        .arb
-                        .evaluate(&arb_params, &mut arb_out);
-
-                    let f128_nonfinite_count = f128_out
-                        .iter()
-                        .filter(|value| {
-                            value.re.is_nan()
-                                || value.re.is_infinite()
-                                || value.im.is_nan()
-                                || value.im.is_infinite()
-                        })
-                        .count();
-                    let arb_nonfinite_count = arb_out
-                        .iter()
-                        .filter(|value| {
-                            value.re.is_nan()
-                                || value.re.is_infinite()
-                                || value.im.is_nan()
-                                || value.im.is_infinite()
-                        })
-                        .count();
-                    let f128_dump = f128_out
-                        .iter()
-                        .enumerate()
-                        .map(|(index, value)| format!("{index}: {value:+16e}"))
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    let arb_dump = arb_out
-                        .iter()
-                        .enumerate()
-                        .map(|(index, value)| format!("{index}: {value:+16e}"))
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    let params_dump = input
-                        .as_slice()
-                        .iter()
-                        .enumerate()
-                        .map(|(index, value)| format!("{index:04}\t{value:+16e}"))
-                        .collect::<Vec<_>>()
-                        .join("\n");
-
-                    if let Some(dump_dir) = std::env::var_os(DUMP_PARAMETRIC_NONFINITE_DIR_ENV) {
-                        let dump_dir = std::path::PathBuf::from(dump_dir);
-                        let _ = std::fs::create_dir_all(&dump_dir);
-                        let dump_index =
-                            PARAMETRIC_NONFINITE_DUMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-                        let stem = format!(
-                            "parametric_nonfinite_{dump_index:04}_orientation{}",
-                            usize::from(orientation_id)
-                        );
-                        let _ = std::fs::write(
-                            dump_dir.join(format!("{stem}.txt")),
-                            format!(
-                                "orientation_id={}\norientations_start={}\nmultiplicative_offset={}\nf128_nonfinite_count={}\narb_nonfinite_count={}\n\n# f128_out\n{}\n\n# arb_out\n{}\n\n# params_after_orientation\n{}\n",
-                                usize::from(orientation_id),
-                                input.orientations_start,
-                                input.multiplicative_offset,
-                                f128_nonfinite_count,
-                                arb_nonfinite_count,
-                                f128_dump,
-                                arb_dump,
-                                params_dump
-                            ),
-                        );
-                    }
-                    crate::debug_tags!(#integration, #inspect, #dump;
-                        stage = "parametric_orientation_nonfinite",
-                        orientation_id = usize::from(orientation_id),
-                        output_nonfinite = output_nonfinite,
-                        f128_nonfinite_count = f128_nonfinite_count,
-                        arb_nonfinite_count = arb_nonfinite_count,
-                        f128 = %f128_dump,
-                        arb = %arb_dump,
-                        "single-parametric orientation produced nonfinite output"
-                    );
-                }
-            }
             if let Some(result) = &mut result {
                 for (r, v) in result.iter_mut().zip(output) {
                     *r += v;
@@ -1582,8 +1385,12 @@ impl GenericEvaluator {
             ])
             .map_err(|e| eyre!("Failed to register the imaginary-unit constant: {e}"))?;
 
-        for r in &evaluator_replacements {
-            println!("Reps!!{:#}", r)
+        for replacement in &evaluator_replacements {
+            crate::debug_tags!(#generation, #compile, #term, #dump;
+                stage = "evaluator_function_map_replacement",
+                file.replacement = %replacement,
+                "Evaluator function-map replacement"
+            );
         }
 
         let exprs: Vec<Atom> = atoms
@@ -2171,40 +1978,12 @@ mod tests {
     }
 
     #[test]
-    fn deferred_explicit_sum_lowering_is_local_and_matches_materialized_value() {
-        let builder = ParamBuilder::new_empty();
-        let settings = EvaluatorSettings::default();
-        let bodies = [Atom::num(2), Atom::num(3)];
-        let compact = function!(GS.projected_cff_sum, 0) + function!(GS.projected_cff_sum, 1);
-        let (mut deferred, _) = EvaluatorStack::new_deferred_explicit_sum_with_timings(
-            &compact, &bodies, &builder, None, &settings,
-        )
-        .unwrap();
-        assert!(builder.reps.is_empty());
-
-        let (mut materialized, _) = EvaluatorStack::new_explicit_sum_with_timings(
-            &[Atom::num(5)],
-            &builder,
-            None,
-            &settings,
-        )
-        .unwrap();
-        let actual = <f64 as GenericEvaluatorFloat>::get_evaluator_single(
-            &mut deferred.single_parametric,
-        )(&[]);
-        let expected = <f64 as GenericEvaluatorFloat>::get_evaluator_single(
-            &mut materialized.single_parametric,
-        )(&[]);
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn parameterless_deferred_body_preserves_multiparameter_hyperdual_derivatives() {
-        let x = Atom::var(symbol!("evaluator_test::deferred_dual_x"));
-        let y = Atom::var(symbol!("evaluator_test::deferred_dual_y"));
+    fn parameterless_function_body_preserves_multiparameter_hyperdual_derivatives() {
+        let x = Atom::var(symbol!("evaluator_test::function_dual_x"));
+        let y = Atom::var(symbol!("evaluator_test::function_dual_y"));
         let body = &x * &x + &x * &y + Atom::num(3) * &y;
-        let call = function!(GS.projected_cff_sum, 0);
+        let function_symbol = symbol!("evaluator_test::parameterless_dual_function");
+        let call = function!(function_symbol, 0);
         let entry = FnMapEntry {
             lhs: call.clone(),
             rhs: body.clone(),
@@ -2214,7 +1993,7 @@ mod tests {
         let mut function_map = FunctionMap::default();
         function_map
             .add_tagged_function(
-                GS.projected_cff_sum,
+                function_symbol,
                 vec![Atom::num(0)],
                 Vec::<Indeterminate>::new(),
                 body.clone(),
@@ -2222,7 +2001,7 @@ mod tests {
             .unwrap();
         let dual_shape = Some(crate::utils::hyperdual_utils::simple_n_deriv_shape(1));
         let settings = EvaluatorSettings::default();
-        let mut deferred = GenericEvaluator::new_from_raw_params(
+        let mut function_evaluator = GenericEvaluator::new_from_raw_params(
             [call],
             &[x.clone(), y.clone()],
             &function_map,
@@ -2248,11 +2027,11 @@ mod tests {
             Complex::new_re(F(5.0)),
             Complex::new_re(F(11.0)),
         ];
-        let actual = <f64 as GenericEvaluatorFloat>::get_evaluator(&mut deferred)(&input);
+        let actual = <f64 as GenericEvaluatorFloat>::get_evaluator(&mut function_evaluator)(&input);
         let expected = <f64 as GenericEvaluatorFloat>::get_evaluator(&mut materialized)(&input);
 
         let [DualOrNot::Dual(actual)] = actual.as_slice() else {
-            panic!("deferred evaluator did not return the requested dual output")
+            panic!("function evaluator did not return the requested dual output")
         };
         let [DualOrNot::Dual(expected)] = expected.as_slice() else {
             panic!("materialized evaluator did not return the requested dual output")
@@ -2263,7 +2042,7 @@ mod tests {
     }
 
     #[test]
-    fn deferred_explicit_sum_preprocesses_tensor_function_bodies() {
+    fn explicit_sum_preprocesses_tensor_integrands() {
         test_initialise().unwrap();
         let builder = ParamBuilder::new_empty();
         let settings = EvaluatorSettings {
@@ -2271,15 +2050,9 @@ mod tests {
             ..Default::default()
         };
         let body = Bispinor {}.new_rep(4).g(9, 9);
-        let compact = function!(GS.projected_cff_sum, 0);
-        let (mut deferred, _) = EvaluatorStack::new_deferred_explicit_sum_with_timings(
-            &compact,
-            &[body],
-            &builder,
-            None,
-            &settings,
-        )
-        .unwrap();
+        let (mut stack, _) =
+            EvaluatorStack::new_explicit_sum_with_timings(&[body], &builder, None, &settings)
+                .unwrap();
         let (mut expected, _) = EvaluatorStack::new_explicit_sum_with_timings(
             &[Atom::num(4)],
             &builder,
@@ -2288,9 +2061,8 @@ mod tests {
         )
         .unwrap();
 
-        let actual = <f64 as GenericEvaluatorFloat>::get_evaluator_single(
-            &mut deferred.single_parametric,
-        )(&[]);
+        let actual =
+            <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut stack.single_parametric)(&[]);
         let expected = <f64 as GenericEvaluatorFloat>::get_evaluator_single(
             &mut expected.single_parametric,
         )(&[]);

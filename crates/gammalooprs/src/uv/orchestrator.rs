@@ -200,12 +200,10 @@ impl ParametricIntegrandsComparison<'_> {
                     cut_index
                 ));
             }
-            let legacy_integrands = legacy.integrands.materialize();
-            let hedge_integrands = hedge.integrands.materialize();
             IntegrandMapComparison {
                 cut_index,
-                legacy: &legacy_integrands,
-                hedge: &hedge_integrands,
+                legacy: &legacy.integrands,
+                hedge: &hedge.integrands,
             }
             .compare()?;
         }

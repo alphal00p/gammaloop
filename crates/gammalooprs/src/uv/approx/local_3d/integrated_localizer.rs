@@ -30,7 +30,6 @@ impl Localizer<'_> {
                     .into_iter()
                     .map(|index| (index, Atom::one()))
                     .collect(),
-                active_lmb: None,
             });
         }
 
@@ -39,7 +38,7 @@ impl Localizer<'_> {
         // Keep finite addbacks for nested multi-loop entries. Integrated expressions carry
         // their forest-composition signs where needed, so dropping the localized finite
         // representative here removes the Tint(T(...)) terms.
-        let finite_ct = expr.clone();
+        let finite_ct = expr;
         debug_tags!(#generation, #profile, #uv, #integrated, #local, #summary;
             stage = "localize_integrated_ct_forest_overlap",
             integrated_loop_count,
@@ -68,38 +67,39 @@ impl Localizer<'_> {
         // Integration replaces the contracted spinney by an independent
         // coefficient. Its cograph residue maps need not extend to a complete
         // production map, but each still belongs to the finite addback once.
-        let active = self
-            .with_independent_source_sum()
-            .projected_cff(
+        let mut active = self.with_independent_source_sum().projected_cff(
+            graph,
+            to_contract,
+            [&analysis_numerator],
+            CffGenerationContext::Standalone,
+        )?;
+        for branch in &mut active.0 {
+            // A source map owns the finite coefficient for every cut order;
+            // attaching it must not repeat the same numerator substitution.
+            let mapped_finite_ct = self.orientation.map_numerator(
                 graph,
-                to_contract,
-                [&analysis_numerator],
-                CffGenerationContext::Standalone,
-            )?
-            .fallible_map(|orientation_id, source_edge_energy_map, localized| {
+                branch.selector_id,
+                branch.source_edge_energy_map.as_deref(),
+                finite_ct,
+            )?;
+            branch.integrands = branch.integrands.map(|localized| {
                 let localized = localized * &fourddenoms;
                 let localized_cff_byte_size = localized.as_view().get_byte_size();
-                let mapped_finite_ct = self.orientation.map_numerator(
-                    graph,
-                    orientation_id,
-                    source_edge_energy_map,
-                    &finite_ct,
-                )?;
-                let active_ct = localized * mapped_finite_ct;
-                let localized_ct = &active_ct * &localizing_integrand;
+                let active_ct = localized * &mapped_finite_ct;
                 debug_tags!(#generation, #profile, #uv, #integrated, #local, #term, #summary;
                     stage = "localize_integrated_ct_term",
                     integrated_node = %integrated_node.log_display(),
                     contracted = %to_contract.string_label(),
                     reduced = %reduced.string_label(),
-                    residue_map_key = orientation_id.0,
+                    residue_map_key = branch.selector_id.0,
                     localized_cff_byte_size,
                     active_ct_byte_size = active_ct.as_view().get_byte_size(),
-                    localized_ct_byte_size = localized_ct.as_view().get_byte_size(),
+                    localized_ct_byte_size = (&active_ct * &localizing_integrand).as_view().get_byte_size(),
                     "Integrated UV CT localization size checkpoint"
                 );
-                Ok(active_ct)
-            })?;
+                active_ct
+            });
+        }
         let frozen_integrands = self
             .cutset
             .residue_selector
@@ -111,7 +111,6 @@ impl Localizer<'_> {
         Ok(FrozenActiveCt {
             active,
             frozen_integrands,
-            active_lmb: None,
         })
     }
 }

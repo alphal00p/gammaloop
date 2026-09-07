@@ -14,9 +14,11 @@ use idenso::{
     },
 };
 
+#[cfg(test)]
+use linnet::half_edge::subgraph::SubGraphLike;
 use linnet::half_edge::{
     involution::EdgeIndex,
-    subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubGraphLike, SubSetLike},
+    subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike},
 };
 use spenso::shadowing::TensorCollectExt;
 use symbolica::{
@@ -24,7 +26,6 @@ use symbolica::{
     prelude::*,
 };
 
-#[cfg(test)]
 use crate::utils::symbols::UvMomentumProvenanceRole;
 use crate::{
     debug_tags,
@@ -43,13 +44,10 @@ pub(crate) struct FourDSector {
     atom: Atom,
     // Each active component retains its denominator-owner set, the full source
     // scope whose omitted prefix is contracted by exact CFF reconstruction, and
-    // the quotient LMB in which its energy residues must be generated. The
-    // complete Taylor LMB records the compatible coordinates used by the latest
-    // enclosing T.
-    // Both are distinct from frozen LMBs whose integrations have already been
-    // completed and which only own localization factors.
+    // the quotient LMB in which its energy residues must be generated. These
+    // independent component frames are distinct from frozen LMBs whose
+    // integrations have already completed and only own localization factors.
     pub(crate) active_components: Vec<(SuBitGraph, SuBitGraph, LoopMomentumBasis)>,
-    pub(crate) taylor_lmb: Option<LoopMomentumBasis>,
     frozen_lmbs: Vec<LoopMomentumBasis>,
 }
 
@@ -75,13 +73,11 @@ impl FourDSector {
     pub(crate) fn new(
         atom: Atom,
         active_components: Vec<(SuBitGraph, SuBitGraph, LoopMomentumBasis)>,
-        taylor_lmb: Option<LoopMomentumBasis>,
         frozen_lmbs: Vec<LoopMomentumBasis>,
     ) -> Self {
         Self {
             atom,
             active_components,
-            taylor_lmb,
             frozen_lmbs,
         }
     }
@@ -124,7 +120,7 @@ impl FourDSectors {
 
     fn active_atom(atom: Atom) -> Self {
         Self::new(
-            vec![FourDSector::new(atom, Vec::new(), None, Vec::new())],
+            vec![FourDSector::new(atom, Vec::new(), Vec::new())],
             Vec::new(),
         )
     }
@@ -144,7 +140,7 @@ impl Full4dCts {
         is_root: bool,
         lmb: &LoopMomentumBasis,
     ) -> Result<Self> {
-        let completed = |atom| FourDSector::new(atom, Vec::new(), None, vec![lmb.clone()]);
+        let completed = |atom| FourDSector::new(atom, Vec::new(), vec![lmb.clone()]);
         match scheme {
             ApproximationType::MUV => {
                 let integrated = integrated.finite_counterterm_atom();
@@ -197,6 +193,7 @@ impl Full4dCts {
     /// excluded: final assembly adds that coefficient exactly once on its
     /// separately localized branch. Numerator factors outside the spinney are
     /// grown later under each exact source-local energy map.
+    #[cfg(test)]
     pub(crate) fn with_cograph<S: SubGraphLike>(
         local: &Local4dCts,
         graph: &Graph,
@@ -211,7 +208,6 @@ impl Full4dCts {
                 FourDSector::new(
                     &sector.atom * &cograph,
                     sector.active_components.clone(),
-                    sector.taylor_lmb.clone(),
                     sector.frozen_lmbs.clone(),
                 )
             })
@@ -258,24 +254,14 @@ impl Neg for Local4dCts {
                 .active
                 .into_iter()
                 .map(|sector| {
-                    FourDSector::new(
-                        -sector.atom,
-                        sector.active_components,
-                        sector.taylor_lmb,
-                        sector.frozen_lmbs,
-                    )
+                    FourDSector::new(-sector.atom, sector.active_components, sector.frozen_lmbs)
                 })
                 .collect(),
             self.0
                 .recursive_completion
                 .into_iter()
                 .map(|sector| {
-                    FourDSector::new(
-                        -sector.atom,
-                        sector.active_components,
-                        sector.taylor_lmb,
-                        sector.frozen_lmbs,
-                    )
+                    FourDSector::new(-sector.atom, sector.active_components, sector.frozen_lmbs)
                 })
                 .collect(),
             atom,
@@ -289,10 +275,7 @@ impl Local4dCts {
     }
 
     pub(crate) fn from_full_product(factors: impl IntoIterator<Item = Full4dCts>) -> Self {
-        let mut products = vec![(
-            FourDSector::new(Atom::one(), Vec::new(), None, Vec::new()),
-            false,
-        )];
+        let mut products = vec![(FourDSector::new(Atom::one(), Vec::new(), Vec::new()), false)];
         let mut atom = Atom::one();
         for factor in factors {
             atom *= &factor.0.atom;
@@ -316,26 +299,14 @@ impl Local4dCts {
                         .iter()
                         .cloned()
                         .map(move |(right, right_active)| {
-                            let left_has_active_components = !left.active_components.is_empty();
-                            let right_has_active_components = !right.active_components.is_empty();
                             let mut active_components = left.active_components.clone();
                             active_components.extend(right.active_components);
-                            let taylor_lmb =
-                                match (left_has_active_components, right_has_active_components) {
-                                    (true, false) => left.taylor_lmb.clone(),
-                                    (false, true) => right.taylor_lmb.clone(),
-                                    // Two independent active factors have no single
-                                    // enclosing Taylor frame. Once ambiguous, later
-                                    // products must not spuriously restore one.
-                                    _ => None,
-                                };
                             let mut frozen_lmbs = left.frozen_lmbs.clone();
                             frozen_lmbs.extend(right.frozen_lmbs);
                             (
                                 FourDSector::new(
                                     left.atom.clone() * right.atom,
                                     active_components,
-                                    taylor_lmb,
                                     frozen_lmbs,
                                 ),
                                 left_active || right_active,
@@ -366,7 +337,6 @@ impl Local4dCts {
         FourDTerm::from_view(self.0.atom.as_view())
     }
 
-    #[cfg(test)]
     pub(crate) fn active_sectors(&self) -> &[FourDSector] {
         &self.0.active
     }
@@ -392,6 +362,12 @@ impl FourDTerm {
     }
 
     fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
+        // A denominator-free subtree is an opaque numerator. Inspect its symbols
+        // once instead of recursively rebuilding its sums/products just to prove
+        // that every child has the same empty denominator topology.
+        if matches!(view, AtomView::Add(_) | AtomView::Mul(_)) && !view.contains_symbol(GS.den) {
+            return Ok(vec![Self::numerator(view.to_owned())]);
+        }
         match view {
             AtomView::Add(add) => {
                 // The outer additive shell of a completed Taylor coefficient can
@@ -552,8 +528,9 @@ impl Graph {
                 let source_momentum = function!(GS.emr_mom, edge.as_view());
                 // Role two is transient and distinguishes a denominator which
                 // belongs to this Taylor operation from persistent role-zero or
-                // role-one tags retained by a nested child, or role-three tags
-                // fixing physical-source momenta.
+                // role-one tags retained by a nested child, role-three tags
+                // fixing physical-source momenta, or role-four tags retaining
+                // the literal carrier of a new soft crown momentum.
                 let tag = GS.uv_momentum_provenance.call_args([
                     edge.as_view(),
                     Atom::num(2).as_view(),
@@ -613,38 +590,52 @@ impl Graph {
             if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() == 0 {
                 return;
             }
-            let (owner, role, routed) =
-                if let Some(provenance) = GS.uv_momentum_provenance_data(momentum.get(0)) {
-                    // A nested child tag stores its complete frozen hard projection.
-                    // Transport that projection into the enclosing hard/soft split;
-                    // retained carriers can have a soft shift in the current LMB.
-                    // Only its hard payload changes: owner and provenance role stay
-                    // fixed until the completed Taylor source is assigned to CFF.
-                    provenance
-                } else {
-                    let (owner, derived) = match momentum.get(0) {
-                        AtomView::Fun(provenance)
-                            if provenance.get_symbol() == GS.uv_momentum_provenance
-                                && provenance.get_nargs() == 3
-                                && provenance.get(1) == Atom::num(2).as_view() =>
-                        {
-                            (usize::try_from(provenance.get(0)), true)
-                        }
-                        edge => (usize::try_from(edge), false),
-                    };
-                    let Ok(owner) = owner.map(EdgeIndex) else {
-                        return;
-                    };
+            let (owner, role, routed) = if let Some((owner, role, mut routed)) =
+                GS.uv_momentum_provenance_data(momentum.get(0))
+            {
+                // A hard child tag retains its complete frozen hard projection;
+                // a soft child tag retains its literal crown carrier. Express
+                // that literal carrier in the compatible enclosing LMB, just
+                // like an ordinary Q, before the hard/soft split. Otherwise
+                // a newly hard numerator can retain an independent Q absent
+                // from the vacuum denominator's momentum system.
+                if role == UvMomentumProvenanceRole::DenominatorDerivedSoft {
                     if !scaled_edges.contains(&owner) {
+                        **output = Atom::from(momentum.to_owned());
                         return;
                     }
-                    (
-                        owner,
-                        derived.into(),
-                        lmb.loop_atom::<Atom>(owner, GS.emr_mom, &[], true)
-                            + lmb.ext_atom::<Atom>(owner, GS.emr_mom, &[], true),
-                    )
+                    routed = lmb.loop_atom::<Atom>(owner, GS.emr_mom, &[], true)
+                        + lmb.ext_atom::<Atom>(owner, GS.emr_mom, &[], true);
+                }
+                // Retained hard payloads can have a soft shift in this LMB.
+                // Existing hard ownership stays fixed until assignment to CFF.
+                // A previously soft carrier receives a new fixed hard tag below,
+                // independently of the child's denominator.
+                (owner, role, routed)
+            } else {
+                let (owner, derived) = match momentum.get(0) {
+                    AtomView::Fun(provenance)
+                        if provenance.get_symbol() == GS.uv_momentum_provenance
+                            && provenance.get_nargs() == 3
+                            && provenance.get(1) == Atom::num(2).as_view() =>
+                    {
+                        (usize::try_from(provenance.get(0)), true)
+                    }
+                    edge => (usize::try_from(edge), false),
                 };
+                let Ok(owner) = owner.map(EdgeIndex) else {
+                    return;
+                };
+                if !scaled_edges.contains(&owner) {
+                    return;
+                }
+                (
+                    owner,
+                    derived.into(),
+                    lmb.loop_atom::<Atom>(owner, GS.emr_mom, &[], true)
+                        + lmb.ext_atom::<Atom>(owner, GS.emr_mom, &[], true),
+                )
+            };
             let soft = routed.replace_map(|view, _, output| {
                 if let AtomView::Fun(momentum) = view
                     && momentum.get_symbol() == GS.emr_mom
@@ -660,29 +651,58 @@ impl Graph {
                 }
             });
             let hard = (&routed - &soft).expand();
+            // A child coefficient's soft carrier can become hard in an
+            // enclosing Taylor limit. It is then fixed to that carrier, not a
+            // derivative-created copy of the child's original denominator.
+            let hard_role = match role {
+                UvMomentumProvenanceRole::DenominatorDerivedSoft => {
+                    UvMomentumProvenanceRole::TaylorFixed
+                }
+                role => role,
+            };
             let tag = GS.uv_momentum_provenance_tag(
                 Atom::num(usize::from(owner) as i64).as_view(),
-                role,
+                hard_role,
                 hard.as_view(),
             );
             let mut tagged_hard = FunctionBuilder::new(GS.emr_mom).add_arg(tag);
             for index in momentum.iter().skip(1) {
                 tagged_hard = tagged_hard.add_arg(index.to_owned());
             }
+            // In particular, a child soft carrier can remain entirely
+            // external to an enclosing limit. Do not manufacture a rank-one
+            // tagged momentum for its exactly vanishing hard projection.
+            let hard_component = if hard.is_zero() {
+                Atom::Zero
+            } else {
+                tagged_hard.finish()
+            };
             let soft = soft.replace_map(|view, _, output| {
                 if let AtomView::Fun(soft_momentum) = view
                     && soft_momentum.get_symbol() == GS.emr_mom
                     && soft_momentum.get_nargs() == 1
                 {
-                    let mut component =
-                        FunctionBuilder::new(GS.emr_mom).add_arg(soft_momentum.get(0));
+                    let source = if matches!(
+                        role,
+                        UvMomentumProvenanceRole::DenominatorDerived
+                            | UvMomentumProvenanceRole::DenominatorDerivedSoft
+                    ) {
+                        GS.uv_momentum_provenance_tag(
+                            soft_momentum.get(0),
+                            UvMomentumProvenanceRole::DenominatorDerivedSoft,
+                            view,
+                        )
+                    } else {
+                        soft_momentum.get(0).to_owned()
+                    };
+                    let mut component = FunctionBuilder::new(GS.emr_mom).add_arg(source);
                     for index in momentum.iter().skip(1) {
                         component = component.add_arg(index.to_owned());
                     }
                     **output = component.finish();
                 }
             });
-            **output = tagged_hard.finish() * &inverse_rescale + soft;
+            **output = hard_component * &inverse_rescale + soft;
         });
 
         // Free `mUVexp` occurrences are left untouched here: with the
@@ -835,7 +855,12 @@ fn t<S: super::ForestNodeLike>(
 
     let series = rescaled
         .series(GS.rescale, Atom::Zero, 0)
-        .unwrap()
+        .map_err(|error| {
+            eyre!(
+                "local 4D Taylor expansion failed for {}: {error}",
+                current.subgraph().string_label()
+            )
+        })?
         .to_atom();
     debug_tags!(#uv,#integrated, #series;log.res = series, "Series expanded");
 
@@ -912,7 +937,6 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                     return Ok(FourDSector::new(
                         Atom::Zero,
                         Vec::new(),
-                        None,
                         sector.frozen_lmbs.clone(),
                     ));
                 }
@@ -1041,7 +1065,6 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                         &-result,
                     ),
                     active_components,
-                    Some(coordinate_lmb),
                     sector.frozen_lmbs.clone(),
                 ))
             };
@@ -1215,6 +1238,53 @@ mod tests {
             "erasing provenance must commute with a compatible outer UV rescaling",
         );
         assert!(matches!(rescaled.as_view(), AtomView::Mul(_)));
+
+        // The child-soft carrier is a literal edge, not a previously frozen
+        // hard expression. In this directed vacuum triangle Q(1) = Q(0);
+        // the enclosing vacuum denominator system uses only carrier Q(0).
+        // Check the raw payload, before any later graph identity can hide an
+        // uneliminated numerator-only Q(1) from analytic integration.
+        let carrier_momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(carrier))
+            .finish();
+        assert_ne!(owner, carrier);
+        assert_eq!(
+            graph
+                .loop_momentum_basis
+                .loop_atom::<Atom>(owner, GS.emr_mom, &[], true),
+            carrier_momentum,
+        );
+        let child_soft = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(
+                GS.uv_momentum_provenance_tag(
+                    Atom::num(usize::from(owner) as i64).as_view(),
+                    UvMomentumProvenanceRole::DenominatorDerivedSoft,
+                    FunctionBuilder::new(GS.emr_mom)
+                        .add_arg(usize::from(owner))
+                        .finish(),
+                ),
+            )
+            .add_arg(GS.cind(0))
+            .finish();
+        let expected = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(GS.uv_momentum_provenance_tag(
+                Atom::num(usize::from(owner) as i64).as_view(),
+                UvMomentumProvenanceRole::TaylorFixed,
+                carrier_momentum,
+            ))
+            .add_arg(GS.cind(0))
+            .finish()
+            / GS.rescale;
+        assert_eq!(
+            graph.uv_rescaled(
+                &filter,
+                0,
+                &graph.loop_momentum_basis,
+                &graph.loop_momentum_basis,
+                &child_soft
+            ),
+            expected,
+        );
         Ok(())
     }
 
@@ -1355,6 +1425,7 @@ mod tests {
         );
 
         let mut tags = BTreeMap::new();
+        let mut soft_carriers = BTreeSet::new();
         let mut malformed = false;
         let _ = tagged.replace_map(|view, _, _| {
             let AtomView::Fun(momentum) = view else {
@@ -1364,6 +1435,10 @@ mod tests {
                 return;
             }
             if let Some((owner, role, hard)) = GS.uv_momentum_provenance_data(momentum.get(0)) {
+                if role == UvMomentumProvenanceRole::DenominatorDerivedSoft {
+                    soft_carriers.insert(owner);
+                    return;
+                }
                 let denominator_derived = role == UvMomentumProvenanceRole::DenominatorDerived;
                 if let Some(previous) = tags.insert((owner, denominator_derived), hard.clone()) {
                     assert_eq!(previous, hard);
@@ -1380,6 +1455,7 @@ mod tests {
             !malformed,
             "no transient provenance role may survive Taylor expansion"
         );
+        assert_eq!(soft_carriers, BTreeSet::from([EdgeIndex(4)]));
         assert_eq!(
             tags,
             BTreeMap::from([
@@ -1433,6 +1509,7 @@ mod tests {
                         && momentum.get_nargs() >= 1
                         && let Some((owner, role, hard)) =
                             GS.uv_momentum_provenance_data(momentum.get(0))
+                        && role != UvMomentumProvenanceRole::DenominatorDerivedSoft
                     {
                         let denominator_derived =
                             role == UvMomentumProvenanceRole::DenominatorDerived;
@@ -1614,6 +1691,7 @@ mod tests {
                 if momentum.get_symbol() == GS.emr_mom
                     && momentum.get_nargs() >= 1
                     && let Some((owner, role, _)) = GS.uv_momentum_provenance_data(momentum.get(0))
+                    && role != UvMomentumProvenanceRole::DenominatorDerivedSoft
                 {
                     let denominator_derived = role == UvMomentumProvenanceRole::DenominatorDerived;
                     tags.insert((usize::from(owner), denominator_derived));
@@ -2040,14 +2118,6 @@ mod tests {
             })
             .collect::<Result<Vec<_>, _>>()?;
         for (source, term) in sources.iter().zip(&terms) {
-            graph.register_3d_expression_for_4d_term(
-                source,
-                &options,
-                &term.numerator,
-                &mut cache,
-            )?;
-        }
-        for (source, term) in sources.iter().zip(&terms) {
             graph.generate_3d_expression_for_4d_term(
                 source,
                 &options,
@@ -2101,10 +2171,9 @@ mod tests {
                 vec![FourDSector::new(
                     local,
                     vec![(active_subgraph.clone(), active_subgraph, lmb.clone())],
-                    Some(lmb.clone()),
                     Vec::new(),
                 )],
-                vec![FourDSector::new(finite, Vec::new(), None, vec![lmb])],
+                vec![FourDSector::new(finite, Vec::new(), vec![lmb])],
             ))
         };
 
@@ -2133,7 +2202,7 @@ mod tests {
         );
         assert_eq!(
             product.recursive_completion()[0],
-            FourDSector::new(&finite_a * &finite_b, Vec::new(), None, vec![lmb_a, lmb_b])
+            FourDSector::new(&finite_a * &finite_b, Vec::new(), vec![lmb_a, lmb_b])
         );
 
         let cograph = graph.empty_subgraph::<SuBitGraph>();
@@ -2179,6 +2248,7 @@ mod tests {
                 .ext_atom::<Atom>(EdgeIndex(0), GS.emr_mom, &[], true)
                 .is_zero()
         );
+        assert_ne!(chosen.loop_edges, reference.loop_edges);
         for index in [GS.cind(0), GS.cind(1)] {
             let indices = std::slice::from_ref(&index);
             for owner in [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)] {
@@ -2218,12 +2288,55 @@ mod tests {
                             && momentum.get_nargs() > 0
                             && let Some((actual_owner, actual_role, _)) =
                                 GS.uv_momentum_provenance_data(momentum.get(0))
+                            && actual_role != UvMomentumProvenanceRole::DenominatorDerivedSoft
                         {
                             assert_eq!(actual_owner, owner);
                             assert_eq!(actual_role, role.unwrap_or(false).into());
                         }
                     });
                 }
+                let soft_input = FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(
+                        GS.uv_momentum_provenance_tag(
+                            Atom::num(usize::from(owner) as i64).as_view(),
+                            UvMomentumProvenanceRole::DenominatorDerivedSoft,
+                            FunctionBuilder::new(GS.emr_mom)
+                                .add_arg(usize::from(owner))
+                                .finish()
+                                .as_view(),
+                        ),
+                    )
+                    .add_arg(index.as_view())
+                    .finish();
+                let transported = graph.uv_rescaled(&filter, 0, &chosen, reference, &soft_input);
+                let ordinary = graph.uv_rescaled(&filter, 0, &chosen, reference, &original);
+                assert_eq!(
+                    GS.erase_uv_momentum_provenance(&transported),
+                    GS.erase_uv_momentum_provenance(&ordinary),
+                    "a child-soft carrier must enter the same raw enclosing chart as ordinary Q before any later graph substitution",
+                );
+                assert!(
+                    (GS.erase_uv_momentum_provenance(&transported)
+                        .replace_multiple(
+                            graph.uv_wrapped_replacement(&filter, reference, indices)
+                        )
+                        - &expected)
+                        .expand()
+                        .is_zero()
+                );
+                let _ = transported.replace_map(|view, _, _| {
+                    if let AtomView::Fun(momentum) = view
+                        && momentum.get_symbol() == GS.emr_mom
+                        && momentum.get_nargs() > 0
+                        && let Some((actual_owner, actual_role, _)) =
+                            GS.uv_momentum_provenance_data(momentum.get(0))
+                        && actual_role != UvMomentumProvenanceRole::DenominatorDerivedSoft
+                    {
+                        assert_eq!(actual_owner, owner);
+                        assert_eq!(actual_role, UvMomentumProvenanceRole::TaylorFixed,
+                            "a child soft carrier's new hard part is not an outer denominator derivative");
+                    }
+                });
             }
         }
         // A proper child also has paired crown edges. Their literal external
@@ -2249,6 +2362,24 @@ mod tests {
                         .is_zero()
             })
             .expect("the bubble has an external paired carrier with a zero local row");
+        for index in [GS.cind(0), GS.cind(1)] {
+            let payload = FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(crown))
+                .finish();
+            let soft = FunctionBuilder::new(GS.emr_mom)
+                .add_arg(GS.uv_momentum_provenance_tag(
+                    Atom::num(usize::from(crown) as i64).as_view(),
+                    UvMomentumProvenanceRole::DenominatorDerivedSoft,
+                    payload.as_view(),
+                ))
+                .add_arg(index)
+                .finish();
+            assert_eq!(
+                graph.uv_rescaled(&child_filter, 0, &child_lmb, &child_lmb, &soft),
+                soft,
+                "an entirely external soft carrier must not acquire a synthetic zero hard factor",
+            );
+        }
         for owner in [EdgeIndex(1), EdgeIndex(2)] {
             let expected = child_lmb.loop_atom(owner, GS.emr_mom, &[GS.cind(0)], true) / GS.rescale
                 + child_lmb.ext_atom(owner, GS.emr_mom, &[GS.cind(0)], true);

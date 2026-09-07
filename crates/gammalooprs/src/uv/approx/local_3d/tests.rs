@@ -87,6 +87,190 @@ fn two_edge_graph() -> Result<Graph> {
 }
 
 #[test]
+fn soft_dispatch_prefers_fewer_native_maps_at_equal_rank() -> Result<()> {
+    use crate::{graph::GraphThreeDSource, utils::symbols::UvMomentumProvenanceRole};
+    use std::sync::Mutex;
+    use three_dimensional_reps::{
+        Generate3DExpressionOptions, NumeratorSamplingScaleMode, ThreeDGraphSource,
+    };
+
+    test_initialise()?;
+    let mut graph: Graph = dot!(digraph soft_count_triangle {
+        edge [num=1 mass=2]
+        node [num=1]
+        a -> b [id=0 lmb_id=0]
+        b -> c [id=1]
+        c -> a [id=2]
+        a -> a [id=3 lmb_id=1]
+    })?;
+    let active = [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)];
+    let temporal = active.map(|edge| GS.emr_mom(edge, GS.cind(0)));
+    let originals = temporal.iter().cloned().product::<Atom>();
+    let payload = FunctionBuilder::new(GS.emr_mom).add_arg(0).finish();
+    let soft = FunctionBuilder::new(GS.emr_mom)
+        .add_arg(GS.uv_momentum_provenance_tag(
+            Atom::num(0).as_view(),
+            UvMomentumProvenanceRole::DenominatorDerivedSoft,
+            payload.as_view(),
+        ))
+        .add_arg(GS.cind(0))
+        .finish();
+    let numerator = &originals * soft;
+    let proposals = graph.soft_momentum_routing_proposals(&numerator, active)?;
+    assert_eq!(
+        proposals,
+        vec![
+            &originals * &temporal[0],
+            &originals * &temporal[1],
+            &originals * &temporal[2]
+        ],
+        "only the new soft factor may change its destination; all original factors stay literal"
+    );
+    let contract = graph.get_edge_subgraph(EdgeIndex(3));
+    let options = Generate3DExpressionOptions {
+        cff_generation_context: CffGenerationContext::EmbeddedCffFactor,
+        numerator_sampling_scale: NumeratorSamplingScaleMode::None,
+        ..graph.denominator_only_cff_3d_expression_options()
+    };
+    let parsed = GraphThreeDSource::new(&graph, &[EdgeIndex(3)])?.to_three_d_parsed_graph()?;
+    assert_eq!(parsed.internal_edges.len(), 3);
+    assert!(
+        parsed
+            .internal_edges
+            .iter()
+            .all(|edge| edge.signature.loop_signature == [1]
+                && edge.signature.external_signature.is_empty())
+    );
+    // This ordinary source preserves ascending physical edge IDs. Its first
+    // loop basis is e0; no exact-source canonical relabeling can change it.
+    assert_eq!(parsed.internal_edges[0].edge_id, 0);
+
+    let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+    let production = graph.generate_3d_expression_for_integrand(
+        &[],
+        &canonization,
+        &options,
+        Some(&proposals[0]),
+    )?;
+    let mut ordinary_graph = graph.clone();
+    let untouched = bincode::encode_to_vec(&graph.surface_cache, bincode::config::standard())?;
+    let mut references = Vec::new();
+    for proposal in &proposals {
+        let generated = graph.generate_raw_3d_expression_for_integrand(
+            &[EdgeIndex(3)],
+            &options,
+            Some(proposal),
+        )?;
+        references.push((
+            generated.source_energy_degree_bounds,
+            generated.expression.orientations.len(),
+        ));
+    }
+    assert_eq!(references[0].0, vec![(0, 2), (1, 1), (2, 1)]);
+    assert_eq!(references[1].0, vec![(0, 1), (1, 2), (2, 1)]);
+    assert_eq!(references[2].0, vec![(0, 1), (1, 1), (2, 2)]);
+    // Six ordinary maps survive. Deleting basis e0 adds six contact maps;
+    // deleting e1 preserves the original loop map, so four contacts coincide
+    // with remainder maps and only two are new. Sorted rank alone ties.
+    assert_eq!(
+        references
+            .iter()
+            .map(|(_, count)| *count)
+            .collect::<Vec<_>>(),
+        vec![12, 8, 8]
+    );
+    assert_eq!(
+        bincode::encode_to_vec(&graph.surface_cache, bincode::config::standard())?,
+        untouched
+    );
+
+    let reports = Mutex::new(Vec::new());
+    let cutset = CutSet::empty(graph.n_hedges());
+    let pattern = OrientationPattern::default();
+    let localizer = Localizer::new(
+        &cutset,
+        OrientationProjection::exact_expression(&production, &options, &pattern, true)
+            .with_energy_degree_bound_reports(&reports),
+    )
+    .with_independent_source_sum();
+    let (selected_numerator, selected) = localizer.projected_cff_from_soft_momentum_proposals(
+        &mut graph,
+        &contract,
+        &numerator,
+        active,
+        CffGenerationContext::EmbeddedCffFactor,
+    )?;
+    assert_eq!(
+        selected_numerator, proposals[1],
+        "the real picker must override its tied-rank baseline using the smaller native catalogue"
+    );
+    {
+        let reports = reports.lock().unwrap();
+        assert_eq!(
+            reports.len(),
+            1,
+            "only the selected source records its capacity"
+        );
+        assert_eq!(reports[0].assigned_cff_source_bounds, references[1].0);
+        assert_eq!(reports[0].physical_parent_bounds, references[1].0);
+    }
+    let ordinary_localizer = Localizer::new(
+        &cutset,
+        OrientationProjection::exact_expression(&production, &options, &pattern, true),
+    )
+    .with_independent_source_sum();
+    let ordinary = ordinary_localizer.projected_cff(
+        &mut ordinary_graph,
+        &contract,
+        [&proposals[1]],
+        CffGenerationContext::EmbeddedCffFactor,
+    )?;
+    assert_eq!(
+        selected.iter_orientations().count(),
+        ordinary.iter_orientations().count()
+    );
+    let mut contour = Atom::Zero;
+    for (
+        (selected_id, selected_map, selected_terms),
+        (ordinary_id, ordinary_map, ordinary_terms),
+    ) in selected
+        .iter_orientations()
+        .zip(ordinary.iter_orientations())
+    {
+        assert_eq!(selected_id, ordinary_id);
+        assert_eq!(selected_map, ordinary_map);
+        assert_eq!(
+            selected_terms.iter().collect::<Vec<_>>(),
+            ordinary_terms.iter().collect::<Vec<_>>()
+        );
+        let mapped =
+            localizer.map_numerator(&graph, selected_id, selected_map, &selected_numerator)?;
+        for (index, term) in selected_terms.iter() {
+            assert_eq!(*index, CutCFFIndex::new_all_none());
+            contour += term * &mapped;
+        }
+    }
+    // The selected cograph is q^4/(q^2-E^2+i0)^3. Its independent clockwise
+    // Below contour is -3/(16E); the attached tadpole was contracted and must
+    // contribute neither another energy integral nor another measure factor.
+    for edge in active {
+        contour = contour.replace(GS.ose(edge)).with(Atom::num(2));
+    }
+    let normalization = -Atom::i() / (Atom::num(2) * Atom::var(GS.pi)).pow(3);
+    let expected = -Atom::num(3) * normalization / Atom::num(32);
+    assert!(
+        (contour - expected).together().is_zero(),
+        "native-count dispatch must preserve the independently normalized quartic contour"
+    );
+    assert_eq!(
+        bincode::encode_to_vec(&graph.surface_cache, bincode::config::standard())?,
+        bincode::encode_to_vec(&ordinary_graph.surface_cache, bincode::config::standard())?,
+        "the rejected native source must not change physical surface registration",
+    );
+    Ok(())
+}
+
+#[test]
 fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
     let mut graph = two_edge_graph()?;
     let edge = EdgeIndex(0);
@@ -436,7 +620,6 @@ fn zero_sampling_maps_keep_loop_lifts_as_provenance_only() -> Result<()> {
             &[],
             None,
             None,
-            Some(&reduced.edge_energy_map),
         )?;
         assert_eq!(hosted.len(), 1);
         assert_eq!(hosted[0].1, Atom::one());
@@ -518,7 +701,6 @@ fn source_selector_is_invariant_under_source_generation_lmb() -> Result<()> {
             &[],
             Some(&valid_hosts),
             None,
-            Some(&reduced.edge_energy_map),
         )?);
     }
 
@@ -579,7 +761,6 @@ fn projected_source_sum_uses_a_host_without_imposing_a_global_orientation() -> R
         &[],
         Some(&valid_host),
         None,
-        Some(&reduced.edge_energy_map),
     )?;
     assert_eq!(hosted, vec![(OrientationID(1), Atom::one())]);
     Ok(())
@@ -620,7 +801,6 @@ fn projected_source_sum_prefers_a_compatible_physical_host() -> Result<()> {
         &[],
         None,
         None,
-        Some(&reduced.edge_energy_map),
     )?;
     assert_eq!(hosted, vec![(OrientationID(0), Atom::one())]);
     Ok(())
@@ -661,7 +841,6 @@ fn projected_source_sum_falls_back_when_the_cut_excludes_compatible_hosts() -> R
         &[],
         Some(&valid_host),
         None,
-        Some(&reduced.edge_energy_map),
     )?;
     assert!(direct_hosted.is_empty());
 
@@ -675,7 +854,6 @@ fn projected_source_sum_falls_back_when_the_cut_excludes_compatible_hosts() -> R
             &[],
             Some(&valid_host),
             None,
-            Some(&reduced.edge_energy_map),
         )?;
     assert_eq!(projected_hosted, vec![(OrientationID(1), Atom::one())]);
     let explicit = Localizer::new(
@@ -690,7 +868,6 @@ fn projected_source_sum_falls_back_when_the_cut_excludes_compatible_hosts() -> R
         &[],
         Some(&valid_host),
         None,
-        Some(&reduced.edge_energy_map),
     )?;
     assert_eq!(explicit_hosted, projected_hosted);
     Ok(())
@@ -811,7 +988,6 @@ fn nested_powered_contact_keeps_loop_lift_as_provenance_only() -> Result<()> {
             &internal_edges,
             Some(&valid_host),
             orientation.production_orientation_id,
-            Some(&orientation.orientation.edge_energy_map),
         )?;
         assert_eq!(hosted.len(), 1);
         assert_eq!(hosted[0].0, selected_host);
@@ -967,7 +1143,6 @@ fn source_energy_map_owns_factorized_contact_branch() -> Result<()> {
         &[EdgeIndex(1)],
         None,
         None,
-        Some(&reduced.edge_energy_map),
     )?;
     assert_eq!(localized, vec![(OrientationID(0), Atom::one())]);
     let selector_index = CutCFFIndex::new_all_none();
@@ -1052,83 +1227,83 @@ fn source_energy_map_owns_factorized_contact_branch() -> Result<()> {
         );
     }
 
-    let index = CutCFFIndex::new_all_none();
-    let source = OrientationIntegrands(vec![OrientationIntegrandBranch {
-        selector_id: OrientationID(0),
-        source_edge_energy_map: Some(reduced.edge_energy_map.clone()),
-        integrands: [(index, Atom::num(3))].into_iter().collect(),
-    }]);
-    let distinct_map = vec![LinearEnergyExpr::zero(), LinearEnergyExpr::zero()];
-    let distinct = OrientationIntegrands(vec![OrientationIntegrandBranch {
-        selector_id: OrientationID(0),
-        source_edge_energy_map: Some(distinct_map.clone()),
-        integrands: [(index, Atom::num(5))].into_iter().collect(),
-    }]);
-    let production_zero = OrientationIntegrands(vec![OrientationIntegrandBranch {
-        selector_id: OrientationID(0),
-        source_edge_energy_map: None,
-        integrands: [(index, Atom::Zero)].into_iter().collect(),
-    }]);
-    let union = source.zip_add(&distinct)?.zip_add(&production_zero)?;
-    assert_eq!(union.iter_orientations().count(), 2);
-    assert!(
-        union
-            .iter_orientations()
-            .all(|(_, source_map, _)| source_map.is_some()),
-        "a zero production-map identity branch is pruned beside source-owned terms"
-    );
-    assert!(
-        union
-            .iter_orientations()
-            .any(|(_, map, _)| map == Some(reduced.edge_energy_map.as_slice()))
-    );
-    assert!(
-        union
-            .iter_orientations()
-            .any(|(_, map, _)| map == Some(distinct_map.as_slice()))
-    );
-
-    let same_source = OrientationIntegrands(vec![OrientationIntegrandBranch {
-        selector_id: OrientationID(0),
-        source_edge_energy_map: Some(reduced.edge_energy_map.clone()),
-        integrands: [(index, Atom::num(7))].into_iter().collect(),
-    }]);
-    let merged = source.zip_add(&same_source)?;
-    assert_eq!(merged.iter_orientations().count(), 1);
-    assert_eq!(
-        merged.iter().next(),
-        Some((&index, &Atom::num(10))),
-        "only identical selector/source-map branches are coalesced"
-    );
     Ok(())
 }
 
 #[test]
-fn factorized_products_keep_only_shared_production_hosts() -> Result<()> {
+fn projected_shared_coefficient_uses_each_outer_map_once_per_cut_order() -> Result<()> {
+    let graph = two_edge_graph()?;
     let index = CutCFFIndex::new_all_none();
-    let branch = |selector, value| OrientationIntegrandBranch {
-        selector_id: OrientationID(selector),
-        source_edge_energy_map: None,
-        integrands: [(index, Atom::num(value))].into_iter().collect(),
+    let raised = CutCFFIndex {
+        lu_cut_order: Some(1),
+        ..index
     };
-    let left = OrientationIntegrands(vec![branch(0, 2), branch(1, 3)]);
-    let right = OrientationIntegrands(vec![branch(1, 5), branch(2, 7)]);
-    let mut mapped_hosts = Vec::new();
-    let product = left.zip_mul_mapped_factor(&right, |host, _, factor| {
-        mapped_hosts.push(host);
-        Ok(factor.clone())
-    })?;
-
-    assert_eq!(mapped_hosts, vec![OrientationID(1)]);
-    assert_eq!(
-        product
-            .iter_orientations()
-            .map(|(host, _, _)| host)
-            .collect::<Vec<_>>(),
-        vec![OrientationID(1)],
-        "factorized multiplication must neither retain nor synthesize unmatched hosts"
+    let production = [
+        energy_map(edgevec([1, 1]), vec![LinearEnergyExpr::zero(); 2]),
+        energy_map(edgevec([-1, -1]), vec![LinearEnergyExpr::zero(); 2]),
+    ]
+    .into_iter()
+    .collect::<TiVec<OrientationID, _>>();
+    let pattern = OrientationPattern::default();
+    let options = graph.denominator_only_cff_3d_expression_options();
+    let cutset = CutSet::empty(graph.n_hedges());
+    let localizer = Localizer::new(
+        &cutset,
+        OrientationProjection::exact(&production, &options, &pattern, true),
     );
-    assert_eq!(product.iter().next(), Some((&index, &Atom::num(15))));
+    let branch = |selector, scale, value, raised_value| OrientationIntegrandBranch {
+        selector_id: OrientationID(selector),
+        source_edge_energy_map: Some(vec![
+            LinearEnergyExpr::uniform_scale(scale),
+            LinearEnergyExpr::zero(),
+        ]),
+        integrands: [(index, Atom::num(value)), (raised, Atom::num(raised_value))]
+            .into_iter()
+            .collect(),
+    };
+    let outer = OrientationIntegrands(vec![
+        branch(0, 2, 2, 7),
+        branch(0, 3, 3, 11),
+        branch(1, 5, 5, 13),
+    ]);
+    let energy = GS.emr_mom(EdgeIndex(0), GS.cind(0));
+    let coefficient = (energy.clone() + Atom::one()) * (energy + Atom::num(2));
+    let mut mapped_hosts = Vec::new();
+    let product = outer.multiply_mapped(|host, source_map| {
+        mapped_hosts.push(host);
+        localizer.map_numerator(&graph, host, source_map, &coefficient)
+    })?;
+    assert_eq!(
+        mapped_hosts,
+        vec![OrientationID(0), OrientationID(0), OrientationID(1)],
+        "distinct source maps on one host remain independent; cut orders reuse their mapped coefficient"
+    );
+    let mut sum: crate::uv::Integrands = [(index, Atom::Zero), (raised, Atom::Zero)]
+        .into_iter()
+        .collect();
+    for (_, _, integrands) in product.iter_orientations() {
+        sum = sum.zip_add(integrands.clone())?;
+    }
+    let mut expected = [Atom::Zero, Atom::Zero];
+    for (scale, values) in [(2, [2, 7]), (3, [3, 11]), (5, [5, 13])] {
+        let energy = Atom::num(scale) * Atom::var(GS.numerator_sampling_scale);
+        let mapped = (&energy + Atom::one()) * (&energy + Atom::num(2));
+        for (expected, value) in expected.iter_mut().zip(values) {
+            *expected += Atom::num(value) * &mapped;
+        }
+    }
+    assert_eq!(
+        sum,
+        [(index, expected[0].clone()), (raised, expected[1].clone())]
+            .into_iter()
+            .collect(),
+        "fully mapped outer branches must sum independently for every cut order"
+    );
+    assert!(
+        sum.zip_add([(index, Atom::one())].into_iter().collect())
+            .is_err(),
+        "final projected accumulation must reject an incomplete cut-key shape"
+    );
     Ok(())
 }
 
@@ -1150,57 +1325,29 @@ fn outer_cff_capacity_does_not_cancel_between_selector_branches() -> Result<()> 
     let graph = two_edge_graph()?;
     let energy = GS.emr_mom(EdgeIndex(0), GS.cind(0));
     let factorized = (energy.clone() + Atom::num(1)) * (energy.clone() + Atom::num(2));
-    let root = CutCFFIndex::new_all_none();
-    let branches = OrientationIntegrands(vec![
-        OrientationIntegrandBranch {
-            selector_id: OrientationID(0),
-            source_edge_energy_map: None,
-            integrands: [(root, factorized.clone())].into_iter().collect(),
-        },
-        OrientationIntegrandBranch {
-            selector_id: OrientationID(1),
-            source_edge_energy_map: None,
-            integrands: [(root, -&factorized + &energy)].into_iter().collect(),
-        },
-    ]);
+    let branches = [factorized.clone(), -&factorized + &energy];
 
     assert_eq!(
-        energy_bounds(&graph, [&branches.factorized_sum()])?,
+        energy_bounds(&graph, [&branches[0] + &branches[1]])?,
         vec![(0, 1)]
     );
     assert_eq!(
-        energy_bounds(&graph, branches.independent_numerators())?,
+        energy_bounds(&graph, &branches)?,
         vec![(0, 2)],
         "mutually exclusive selector branches need the maximum of their separate ranks"
     );
     let outside = GS.emr_mom(EdgeIndex(1), GS.cind(0)).pow(3);
     assert_eq!(
-        energy_bounds(
-            &graph,
-            branches
-                .independent_numerators()
-                .map(|atom| atom * &outside),
-        )?,
+        energy_bounds(&graph, branches.iter().map(|atom| atom * &outside),)?,
         vec![(0, 2), (1, 3)],
         "the outer numerator contributes to every independently evaluated branch"
     );
     assert!(
-        energy_bounds(
-            &graph,
-            branches
-                .independent_numerators()
-                .map(|atom| atom * Atom::Zero),
-        )?
-        .is_empty(),
+        energy_bounds(&graph, branches.iter().map(|atom| atom * Atom::Zero),)?.is_empty(),
         "a zero outer coefficient needs no numerator-energy capacity"
     );
     assert_eq!(
-        branches
-            .iter_orientations()
-            .next()
-            .and_then(|(_, _, integrands)| integrands.iter().next())
-            .map(|(_, atom)| atom),
-        Some(&factorized),
+        branches[0], factorized,
         "capacity analysis must not expand or rewrite the stored factorized numerator"
     );
     Ok(())
@@ -1213,39 +1360,14 @@ fn outer_cff_capacity_does_not_cancel_between_cut_orders() -> Result<()> {
     let cubic = (energy.clone() + Atom::num(1))
         * (energy.clone() + Atom::num(2))
         * (energy.clone() + Atom::num(3));
-    let raised = CutCFFIndex {
-        lu_cut_order: Some(1),
-        ..CutCFFIndex::new_all_none()
-    };
-    let branches = OrientationIntegrands(vec![
-        OrientationIntegrandBranch {
-            selector_id: OrientationID(0),
-            source_edge_energy_map: None,
-            integrands: [
-                (CutCFFIndex::new_all_none(), cubic.clone()),
-                (raised, -&cubic + &energy),
-            ]
-            .into_iter()
-            .collect(),
-        },
-        OrientationIntegrandBranch {
-            selector_id: OrientationID(1),
-            source_edge_energy_map: None,
-            integrands: [(CutCFFIndex::new_all_none(), cubic)].into_iter().collect(),
-        },
-    ]);
-    assert_eq!(
-        branches.independent_numerators().count(),
-        2,
-        "identical atoms on different selector hosts need only one rank analysis"
-    );
+    let branches = [cubic.clone(), -&cubic + &energy];
 
     assert_eq!(
-        energy_bounds(&graph, [&branches.factorized_sum()])?,
+        energy_bounds(&graph, [&branches[0] + &branches[1]])?,
         vec![(0, 1)]
     );
     assert_eq!(
-        energy_bounds(&graph, branches.independent_numerators())?,
+        energy_bounds(&graph, &branches)?,
         vec![(0, 3)],
         "separately evaluated CutCFFIndex values need the maximum of their separate ranks"
     );
@@ -1303,7 +1425,6 @@ fn exact_projection_skips_extensions_excluded_by_the_full_pattern() -> Result<()
                 &Atom::one(),
                 &contract,
                 &[EdgeIndex(1)],
-                None,
                 None,
                 None,
             )?
@@ -1560,13 +1681,18 @@ fn contracted_exact_extensions_follow_evaluator_orientation_mode() -> Result<()>
         OrientationProjection::exact(&production, &options, &pattern, false),
     );
     let contract = graph.get_edge_subgraph(EdgeIndex(1));
+    // The strict affine-map proof is independent of choosing the one host
+    // for this source-owned residue. Preserve both exact extensions here.
+    assert_eq!(
+        localizer.exact_representatives(&graph, &reduced, &contract)?,
+        vec![OrientationID(0), OrientationID(1)],
+    );
     let localized = localizer.localized_orientation_terms(
         &graph,
         &reduced,
         &Atom::one(),
         &contract,
         &[EdgeIndex(1)],
-        None,
         None,
         None,
     )?;
@@ -1587,7 +1713,6 @@ fn contracted_exact_extensions_follow_evaluator_orientation_mode() -> Result<()>
         &Atom::one(),
         &contract,
         &[EdgeIndex(1)],
-        None,
         None,
         None,
     )?;
@@ -1651,7 +1776,6 @@ fn cut_valid_ids_host_one_inner_representative_per_outer_sector() -> Result<()> 
                     &[EdgeIndex(1)],
                     Some(&valid_ids),
                     None,
-                    Some(&reduced.edge_energy_map),
                 )?;
                 Ok((body, terms))
             })
@@ -1738,7 +1862,6 @@ fn stored_root_residue_keeps_its_production_orientation_diagonal() -> Result<()>
         &[EdgeIndex(1)],
         None,
         Some(OrientationID(1)),
-        None,
     )?;
 
     assert_eq!(localized.len(), 1);
@@ -1764,7 +1887,6 @@ fn stored_root_residue_keeps_its_production_orientation_diagonal() -> Result<()>
         &[EdgeIndex(1)],
         None,
         Some(OrientationID(1)),
-        None,
     )?;
     assert_eq!(explicit, vec![(OrientationID(1), Atom::one())]);
     Ok(())
@@ -1816,7 +1938,6 @@ fn stored_generalized_root_map_preserves_its_own_selector() -> Result<()> {
         &[],
         None,
         Some(OrientationID(2)),
-        Some(&reduced.edge_energy_map),
     )?;
 
     assert_eq!(
@@ -1834,7 +1955,6 @@ fn stored_generalized_root_map_preserves_its_own_selector() -> Result<()> {
         &[],
         Some(&cut_valid_ids),
         Some(OrientationID(2)),
-        Some(&reduced.edge_energy_map),
     )?;
     assert_eq!(
         cut_localized,
@@ -1864,7 +1984,6 @@ fn stored_generalized_root_map_preserves_its_own_selector() -> Result<()> {
             &[],
             None,
             Some(OrientationID(2)),
-            Some(&reduced.edge_energy_map),
         )?,
         vec![(OrientationID(2), Atom::one())],
         "an explicit orientation sum keeps the stored generalized branch exactly once without a selector",
@@ -1878,7 +1997,6 @@ fn stored_generalized_root_map_preserves_its_own_selector() -> Result<()> {
             &[],
             Some(&cut_valid_ids),
             Some(OrientationID(2)),
-            Some(&reduced.edge_energy_map),
         )?,
         vec![(OrientationID(2), Atom::one())],
         "the explicit sum retains the stored cut-valid branch metadata without a selector",
@@ -1922,13 +2040,18 @@ fn contracted_uv_source_directions_use_late_residue_key_selectors() -> Result<()
         OrientationProjection::exact(&production, &options, &pattern, false),
     );
     let contract = graph.full_filter();
+    // The strict affine-map proof is independent of choosing the one host
+    // for this source-owned residue. Preserve both exact extensions here.
+    assert_eq!(
+        localizer.exact_representatives(&graph, &reduced, &contract)?,
+        vec![OrientationID(0), OrientationID(1)],
+    );
     let localized = localizer.localized_orientation_terms(
         &graph,
         &reduced,
         &Atom::one(),
         &contract,
         &[EdgeIndex(0), EdgeIndex(1)],
-        None,
         None,
         None,
     )?;

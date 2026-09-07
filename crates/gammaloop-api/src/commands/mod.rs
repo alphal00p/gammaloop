@@ -174,8 +174,50 @@ impl Commands {
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<CommandExecution, Report> {
         match self {
-            Commands::Profile(p) => {
-                p.run(state, global_cli_settings)?;
+            Commands::Profile(mut p) => {
+                if let profile::ProfileResult::UltraViolet(analysis) =
+                    p.run(state, global_cli_settings)?
+                {
+                    let verdict = analysis.pass_fail(gammalooprs::uv::profile::UV_PROFILE_MAX_DOD);
+                    if verdict.failed > 0 {
+                        let Profile::UltraViolet(options) = &mut p else {
+                            unreachable!()
+                        };
+                        let (process_id, integrand_name) = state.find_integrand_ref(
+                            options.process.as_ref(),
+                            options.integrand_name.as_ref(),
+                        )?;
+                        options.process = Some(crate::state::ProcessRef::Id(process_id));
+                        options.integrand_name = Some(integrand_name.clone());
+                        options.seed = Some(options.seed.unwrap_or(42));
+                        if !options.uv_ray_directions.is_empty() && options.uv_ray_norms.is_empty()
+                        {
+                            options.uv_ray_norms.push(
+                                state
+                                    .process_list
+                                    .get_integrand_mut(process_id, &integrand_name)?
+                                    .get_settings()
+                                    .kinematics
+                                    .e_cm,
+                            );
+                        }
+                        let scope = if analysis.stopped_early {
+                            "Stopped after the first failing limit; only completed limits are reported."
+                        } else {
+                            "All selected limits were profiled."
+                        };
+                        // Reuse the command serialization accepted by run cards.
+                        // Resolve defaults that otherwise depend on session selection.
+                        let reproduction =
+                            toml::to_string_pretty(&std::collections::BTreeMap::from([(
+                                "commands",
+                                vec![Commands::Profile(p)],
+                            )]))?;
+                        return Err(eyre::eyre!(
+                            "{verdict}\n{scope}\nReproduce in the same generated state with this run-card fragment:\n{reproduction}"
+                        ));
+                    }
+                }
             }
             Commands::ThreeDRep(command) => {
                 command.run(state, global_cli_settings)?;

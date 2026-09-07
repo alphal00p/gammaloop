@@ -681,19 +681,7 @@ impl LUCounterTermEvaluators {
             .map(|(index, atom)| {
                 let dual_shape = shape_from_cut_cff_index(index);
                 let (evaluator, evaluator_timings) =
-                    if let Some(bodies) = parametric_integrands.integrands.deferred_terms(index) {
-                        assert!(
-                            settings.generation.explicit_orientation_sum_only,
-                            "deferred projected-CFF terms require an explicit orientation sum"
-                        );
-                        EvaluatorStack::new_deferred_explicit_sum_with_timings(
-                            atom,
-                            bodies,
-                            param_builder,
-                            dual_shape,
-                            &settings.generation.evaluator,
-                        )
-                    } else if settings.generation.explicit_orientation_sum_only {
+                    if settings.generation.explicit_orientation_sum_only {
                         EvaluatorStack::new_explicit_sum_with_timings(
                             std::slice::from_ref(atom),
                             param_builder,

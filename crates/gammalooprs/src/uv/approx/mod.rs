@@ -32,10 +32,10 @@ use color_eyre::Result;
 use eyre::eyre;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 
-use std::{hash::Hash, sync::Mutex};
+use std::sync::Mutex;
 
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView},
+    atom::{Atom, AtomCore},
     function,
 };
 
@@ -48,7 +48,6 @@ use three_dimensional_reps::CffGenerationContext;
 use three_dimensional_reps::{Generate3DExpressionOptions, GeneratedThreeDExpression};
 use typed_index_collections::TiVec;
 
-use super::IntegrandExpr;
 use vakint::Vakint;
 
 #[cfg(test)]
@@ -78,16 +77,6 @@ pub trait ForestNodeLike: LogMessage {
     fn reduced_subgraph(&self, given: &Self) -> SuBitGraph;
 }
 
-pub trait ApproximationKernel<C> {
-    fn kernel<S: ForestNodeLike>(
-        &self,
-        ctx: &C,
-        current: &S,
-        given: &S,
-        atom: &Atom,
-    ) -> Result<Atom>;
-}
-
 pub struct UVCtx<'a> {
     pub graph: &'a Graph,
     pub settings: &'a UVgenerationSettings,
@@ -97,25 +86,6 @@ impl<'a> UVCtx<'a> {
     pub fn new(graph: &'a Graph, settings: &'a UVgenerationSettings) -> Self {
         Self { graph, settings }
     }
-}
-
-pub trait ApproxKernel {
-    fn apply<'a, A: Into<AtomOrView<'a>>>(&self, atom: A) -> Atom;
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ApproxOp {
-    NotComputed,
-    // Union operations must be computed before use.
-    Union {
-        t_args: Vec<IntegrandExpr>,
-        subgraphs: Vec<InternalSubGraph>,
-    },
-    Dependent {
-        t_arg: IntegrandExpr,
-        subgraph: InternalSubGraph,
-    },
-    Root,
 }
 
 #[derive(Clone)]
@@ -524,7 +494,7 @@ impl Approximation {
             if settings.local_uv_cts_from_expanded_4d_integrands {
                 let local_4d = self.local(graph)?;
                 let projected = Projected4dApproximation::new(localizer, graph, settings)
-                    .project_local_4d(local_4d, self)?;
+                    .project_local_4d(local_4d)?;
                 let final_integrand = FinalIntegrandBuilder::new(localizer, settings)
                     .build_projected(graph, self, &projected, self.integrated(graph)?)?;
                 (Local3DCts::Projected4d(projected), final_integrand)
@@ -701,9 +671,18 @@ mod tests {
         let contracted = graph
             .get_edge_subgraph(EdgeIndex(1))
             .union(&graph.get_edge_subgraph(EdgeIndex(2)));
-        let analysis_numerator = GS.emr_mom(EdgeIndex(3), GS.cind(0))
+        // These distinct occurrences carry the same physical four-momentum.
+        // Keep the multilinear form as an ordinary-CFF reference, and exercise
+        // a genuinely quadratic occurrence in the generalized contact source.
+        assert_eq!(
+            graph.loop_momentum_basis.edge_signatures[EdgeIndex(3)],
+            graph.loop_momentum_basis.edge_signatures[EdgeIndex(4)],
+        );
+        let multilinear_numerator = GS.emr_mom(EdgeIndex(3), GS.cind(0))
             * GS.emr_mom(EdgeIndex(4), GS.cind(0))
             + Atom::num(Rational::from((7, 11)));
+        let analysis_numerator =
+            GS.emr_mom(EdgeIndex(3), GS.cind(0)).pow(2) + Atom::num(Rational::from((7, 11)));
         let contract_subgraph = contracted
             .union(&graph.tree_edges)
             .subtract(&graph.initial_state_cut);
@@ -858,7 +837,7 @@ mod tests {
                         .iter()
                         .map(|orientation| {
                             &orientation.expression
-                                * analysis_numerator.replace_multiple(
+                                * multilinear_numerator.replace_multiple(
                                     orientation
                                         .orientation
                                         .energy_replacements_gs(&denominator_only_graph),

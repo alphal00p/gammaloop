@@ -228,6 +228,10 @@ impl TensorContractionProfile {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TensorContractionPairEstimate {
+    /// Nonzero entry products sharing their contracted coordinates, before
+    /// symbolic cancellation. The profile fallback is a conservative Cartesian
+    /// estimate; sparse support can supply its exact join cardinality.
+    pub estimated_products: u128,
     pub estimated_output_entries: u128,
     pub output_dense_size: u128,
     pub max_output_entry_products: u128,
@@ -245,6 +249,7 @@ impl TensorContractionPairEstimate {
         let output_dense_size = output_dense_size.max(1);
         let estimated_output_entries = output_dense_size.min(entry_work).max(1);
         Self {
+            estimated_products: entry_work,
             estimated_output_entries,
             output_dense_size,
             max_output_entry_products: div_ceil_u128(entry_work, estimated_output_entries).max(1),
@@ -618,6 +623,7 @@ where
     let right_groups = sparse_free_keys_by_match(right_sparse, right_matches, None);
     if left_groups.is_empty() || right_groups.is_empty() {
         return TensorContractionPairEstimate {
+            estimated_products: 0,
             estimated_output_entries: 1,
             output_dense_size: output_dense_size.max(1),
             max_output_entry_products: 1,
@@ -647,6 +653,7 @@ where
 
     if join_cardinality == 0 {
         return TensorContractionPairEstimate {
+            estimated_products: 0,
             estimated_output_entries: 1,
             output_dense_size: output_dense_size.max(1),
             max_output_entry_products: 1,
@@ -688,6 +695,7 @@ where
     };
 
     TensorContractionPairEstimate {
+        estimated_products: join_cardinality,
         estimated_output_entries,
         output_dense_size,
         max_output_entry_products,
@@ -2911,10 +2919,10 @@ pub mod parsing;
 // use log::trace;
 pub mod contract;
 pub use contract::{
-    ContractScalars, ContractionStrategy, DEFAULT_EXACT_JOIN_LIMIT, MinResultRank,
-    MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE, PAIR_SCORE_RESULT_RANK_ONLY,
-    PAIR_SCORE_SPARSE_ATOM_AWARE, ProductContraction, SingleSmallestDegree, SmallestDegree,
-    SmallestDegreeIter,
+    ContractScalars, ContractionStrategy, DEFAULT_EXACT_JOIN_LIMIT, MinIntermediateCost,
+    MinResultRank, MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
+    PAIR_SCORE_INTERMEDIATE_COST, PAIR_SCORE_RESULT_RANK_ONLY, PAIR_SCORE_SPARSE_ATOM_AWARE,
+    ProductContraction, SingleSmallestDegree, SmallestDegree, SmallestDegreeIter,
 };
 pub trait ExecutionStrategy<E, FL, L, K, FK, Aind>
 where
