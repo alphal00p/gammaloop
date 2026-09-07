@@ -1,3 +1,4 @@
+# Historical GL20 is GL38 with CP grouping disabled; the directed topology is unchanged.
 commands = [
   "import model sm-default.json",
   "set model MT=173.0",
@@ -11,11 +12,11 @@ commands = [
   """
   generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==2 QED^2==6 [{{3}} QCD=1]
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
-      --symmetrize-left-right-states true
+      --symmetrize-left-right-states false
       -p epem_a_tth -i NLO
       --only-diagrams
   """,
-  "select -p epem_a_tth -i NLO --with-graph-names GL20",
+  "select -p epem_a_tth -i NLO --with-graph-names GL38",
   "generate existing -p epem_a_tth -i NLO",
 ]
 

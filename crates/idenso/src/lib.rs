@@ -368,19 +368,53 @@ impl IndexTooling for AtomView<'_> {
             }
         }
 
+        let external = net.graph.dangling_indices();
         let expr = net.simple_execute::<()>();
-        let a = expr.canonize_tensors(dummies).unwrap();
+        // Spenso owns contraction and external-slot validation. Canonize the
+        // existing summands separately: Symbolica's reconstruction counters
+        // can mislabel a contraction completed inside a sum as an open index.
+        // Neither the summands nor products of sums are distributed here.
+        let terms = match expr.as_view() {
+            AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+            term => vec![term],
+        };
+        let canonical: Atom = terms
+            .into_iter()
+            .map(|term| {
+                term.canonize_tensors(dummies.clone())
+                    .unwrap()
+                    .canonical_form
+            })
+            .sum();
+
+        // Sum branches also have paired copies of genuinely external slots.
+        // Preserve those labels after Symbolica has validated their incidence.
+        for slot in external {
+            let slot = if slot.rep_name().is_dual() {
+                slot.dual()
+            } else {
+                slot
+            };
+            dummies.remove(&slot.to_atom());
+        }
 
         let mut reps = vec![];
 
-        for (i, (d, r)) in a.dummy_indices.into_iter().enumerate() {
+        // Only names from the validated contracted-index pool can have been
+        // allocated as dummies. Their occurrence is authoritative even when
+        // Symbolica reports a stale open-index counter for one of these names.
+        for (i, (d, r)) in dummies
+            .into_iter()
+            .filter(|(index, _)| canonical.contains(index))
+            .enumerate()
+        {
             reps.push(Replacement::new(
                 d.to_pattern(),
                 r.slot::<Aind, Aind>(new_dummy(i)).to_atom(),
             ));
         }
 
-        a.canonical_form
+        canonical
             .replace_multiple(&reps)
             .replace_multiple(&redual_reps)
     }

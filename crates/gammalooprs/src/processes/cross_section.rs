@@ -9,6 +9,8 @@ use std::{
 };
 
 #[cfg(test)]
+mod gauge_sewing_tests;
+#[cfg(test)]
 mod sewing_tests;
 
 // use bincode::{Decode, Encode};
@@ -894,13 +896,6 @@ impl CrossSection {
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
         let process_name = process_definition.folder_name.as_str();
-        if process_definition.symmetrize_left_right_states {
-            model.validate_cp_symmetrization(self.supergraphs.iter().flat_map(|graph| {
-                graph.graph.iter_nodes().filter_map(|(_, _, vertex)| {
-                    vertex.vertex_rule.as_ref().map(|rule| rule.0.as_ref())
-                })
-            }))?;
-        }
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #graph, #summary;
             stage = "cross_section_build_integrand_start",
@@ -1225,8 +1220,8 @@ impl CrossSectionCut {
                 })
                 .collect_vec();
 
-            let any_pdg_list_passes = process
-                .final_pdgs_lists
+            let covariant_states = process.covariant_cut_states(model)?;
+            let any_pdg_list_passes = covariant_states
                 .iter()
                 .map(|x| {
                     x.iter()
@@ -1426,6 +1421,9 @@ impl CrossSectionGraph {
         let preprocess_started = std::time::Instant::now();
         let mut stats = GraphGenerationStats::default();
         self.graph.validate_real_masses(model)?;
+        process_definition.covariant_cut_states(model)?;
+        self.derived_data.covariant_cut_representatives =
+            process_definition.covariant_cut_representatives(model);
         self.apply_spin_sum(model, settings, &runtime_default)?;
         debug_tags!(#generation; "generating cuts");
         self.generate_cuts(model, process_definition, settings)?;
@@ -3296,6 +3294,9 @@ impl CrossSectionGraph {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionDerivedData {
+    /// Observable labels of the physical states represented by covariant
+    /// Goldstone/ghost cuts; explicit unphysical diagnostic states stay intact.
+    pub covariant_cut_representatives: BTreeMap<isize, isize>,
     pub orientations: Option<TiVec<OrientationID, EdgeVec<Orientation>>>,
     pub cut_paramatric_integrand: TiVec<CutGroupId, ParametricIntegrands>,
     pub global_cff_expression: Option<
@@ -3492,6 +3493,7 @@ impl CutGroupData {
 impl CrossSectionDerivedData {
     fn new_empty() -> Self {
         Self {
+            covariant_cut_representatives: BTreeMap::new(),
             orientations: None,
             global_cff_expression: None,
             cut_paramatric_integrand: TiVec::new(),

@@ -3407,6 +3407,53 @@ Evaluated (n_loops=1, mu_r=1) :
         Ok(NumericalEvaluationResult(epsilon_coeffs_vec_floats))
     }
 
+    fn scalar_numerator(
+        &self,
+        settings: &VakintSettings,
+        numerator: AtomView,
+    ) -> Result<Atom, VakintError> {
+        let indexed_vector = vk_parse!("s_(id_,idx_)").unwrap().to_pattern();
+        let vector_condition = Condition::from((vk_symbol!("id_"), number_condition()))
+            & Condition::from((vk_symbol!("s_"), symbol_condition()));
+        let metrics = ["g", METRIC_SYMBOL].map(|name| {
+            vk_parse!(format!("{name}(idx1_,idx2_)"))
+                .unwrap()
+                .to_pattern()
+        });
+        let has_indices = |expression: &Atom| {
+            expression
+                .pattern_match(&indexed_vector, Some(&vector_condition), None)
+                .next()
+                .is_some()
+                || metrics.iter().any(|metric| {
+                    expression
+                        .pattern_match(metric, None, None)
+                        .next()
+                        .is_some()
+                })
+        };
+        let mut scalar = Self::convert_to_dot_notation(numerator);
+        if has_indices(&scalar) {
+            // A scalar contraction can cross a factorized vector sum. Reuse
+            // tensor reduction instead of distributing the input to expose it.
+            // This operation uses only the numerator, not topology metadata.
+            let mut term = VakintTerm {
+                integral: Atom::one(),
+                numerator: scalar,
+                vectors: Vec::new(),
+            };
+            term.tensor_reduce(self, settings)?;
+            scalar = Self::convert_to_dot_notation(term.numerator.as_view());
+        }
+        // Make sure there is no open index left after internal contractions.
+        if has_indices(&scalar) {
+            return Err(VakintError::InvalidNumerator(format!(
+                "PySecDec requires a scalar numerator; open Lorentz indices remain after tensor reduction. Contract them with external momenta or tensors: {scalar}"
+            )));
+        }
+        Ok(scalar)
+    }
+
     fn pysecdec_evaluate(
         &self,
         settings: &VakintSettings,
@@ -3426,35 +3473,16 @@ Evaluated (n_loops=1, mu_r=1) :
                 "PySecDec".green(),
                 integral
             );
-            let dot_product_numerator = Vakint::convert_from_dot_notation(input_numerator);
+            let numerator_atom = self.scalar_numerator(settings, input_numerator)?;
+            let numerator = numerator_atom.as_view();
+            let dot_product_numerator = Vakint::convert_from_dot_notation(numerator);
             let vectors =
                 VakintTerm::identify_vectors_in_numerator(dot_product_numerator.as_view())?;
-            let numerator_atom = Vakint::convert_to_dot_notation(input_numerator);
-            let numerator = numerator_atom.as_view();
-            let mut processed_numerator = Vakint::convert_to_dot_notation(numerator);
-
-            // Make sure there is no open index left
-            if processed_numerator
-                .pattern_match(
-                    &vk_parse!("s_(id_,idx_)").unwrap().to_pattern(),
-                    Some(
-                        &(Condition::from((vk_symbol!("id_"), number_condition()))
-                            & Condition::from((vk_symbol!("s_"), symbol_condition()))),
-                    ),
-                    None,
-                )
-                .next()
-                .is_some()
-            {
-                return Err(VakintError::InvalidNumerator(format!(
-                    "PySecDec can only handle scalar numerator. If you have open indices, make sure they are contracted with external momenta: {}",
-                    processed_numerator
-                )));
-            }
+            let mut processed_numerator = numerator_atom.clone();
 
             // Check if numerator contains additional symbols
             // First, replace functions with 1 and get all remaining symbols
-            let mut numerator_additional_symbols = input_numerator
+            let mut numerator_additional_symbols = numerator
                 .replace(vk_parse!("f_(args__)").unwrap().to_pattern())
                 .with(vk_parse!("1").unwrap().to_pattern())
                 .get_all_symbols(false);
@@ -4639,7 +4667,9 @@ Evaluated (n_loops=1, mu_r=1) :
     }
 
     pub fn convert_to_dot_notation(atom: AtomView) -> Atom {
-        let mut old_expr = atom.to_owned().expand();
+        // Contract the existing tensor factors without distributing scalar or
+        // tensor sums. Contractions crossing additive factors remain indexed.
+        let mut old_expr = atom.to_owned();
 
         loop {
             let mut expr = old_expr
@@ -5393,6 +5423,43 @@ mod tests {
     use symbolica::parse_lit;
 
     use super::*;
+
+    #[test]
+    fn scalar_numerator_contracts_indexed_sums_and_rejects_open_indices() {
+        let vakint = Vakint::new().unwrap();
+        let input = vk_parse!("(k(1,11)+k(2,11))*k(2,11)").unwrap();
+        let expected = vk_parse!("dot(k(1),k(2))+dot(k(2),k(2))").unwrap();
+        let cancelled = vk_parse!(
+            "1+cancelled_coefficient*((k(1,11)+k(2,11))*k(2,11)-dot(k(1),k(2))-dot(k(2),k(2)))"
+        )
+        .unwrap();
+        for use_dot_product_notation in [false, true] {
+            let settings = VakintSettings {
+                use_dot_product_notation,
+                ..VakintSettings::default()
+            };
+            assert_eq!(
+                vakint.scalar_numerator(&settings, input.as_view()).unwrap(),
+                expected,
+            );
+            // Scalar reduction removes this coefficient entirely. PySecDec's
+            // parameter inventory must use the returned numerator as well.
+            assert_eq!(
+                vakint
+                    .scalar_numerator(&settings, cancelled.as_view())
+                    .unwrap(),
+                Atom::one(),
+            );
+            for open in ["p(1,11)", "g(mu,nu)", "g(idx(1),idx(2))"] {
+                let open = vk_parse!(open).unwrap();
+                assert!(matches!(
+                    vakint.scalar_numerator(&settings, open.as_view()),
+                    Err(VakintError::InvalidNumerator(message))
+                        if message.contains("open Lorentz indices remain after tensor reduction")
+                ));
+            }
+        }
+    }
 
     #[test]
     #[allow(clippy::unnecessary_operation)]

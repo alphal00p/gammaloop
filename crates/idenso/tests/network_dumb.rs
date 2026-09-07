@@ -1,13 +1,15 @@
 use idenso::{
     representations::initialize,
     shorthands::schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
+    tensor::SymbolicNetParse,
 };
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::{
+    network::parsing::ParseSettings,
     shadowing::TensorCollectExt,
     structure::{
         abstract_index::AbstractIndex,
-        representation::{Minkowski, RepName},
+        representation::{LibraryRep, Minkowski, RepName},
     },
     symbol_set,
 };
@@ -25,7 +27,7 @@ symbol_set!(TestSymbols, TS;
 fn spenso_bare_symb_vertex_substitution() {
     initialize();
     let _mu1 = TS.mu1;
-    let _mink = Minkowski {}.new_rep(4);
+    let mink = Minkowski {}.new_rep(4);
 
     symbol!("k";
         tags=["spenso::tensor","spenso::rank1"]);
@@ -90,19 +92,27 @@ fn spenso_bare_symb_vertex_substitution() {
     println!("in:{}", r.printer(settings.clone()));
 
     let out = r.schoonschip_with_net::<false, AbstractIndex>(
-        &SchoonschipSettings::partial()
-            .into_single_pass()
-            .with_expanded_contracted_sums(),
+        &SchoonschipSettings::partial().into_single_pass(),
     );
 
     println!("out:{}", out.printer(settings.clone()));
 
-    for mu in [TS.mu1, TS.mu2, TS.mu3, TS.mu4] {
-        assert!(
-            out.replace(mu).match_iter().next().is_none(),
-            "{}",
-            out.printer(settings.clone())
-        );
+    // The four internal indices remain bound even when a contraction keeps
+    // products of tensor sums. Check physical external slots, not whether the
+    // bound names disappear from a distributed expression.
+    let mut expected = [TS.mu5, TS.mu8, TS.mu9, TS.mu10, TS.mu11]
+        .map(|index| mink.slot::<AbstractIndex, _>(index).cast::<LibraryRep>());
+    expected.sort();
+    for expression in [&r, &out] {
+        let net = expression
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
+                take_first_term_from_sum: false,
+                ..Default::default()
+            })
+            .unwrap();
+        let mut external = net.graph.dangling_indices();
+        external.sort();
+        assert_eq!(external, expected, "{expression}");
     }
 }
 
@@ -184,7 +194,6 @@ fn print_three_vertex_method(name: &str, out: Atom, dummies: &[(&str, Atom)]) {
 fn cleanup_with_smallest_degree(mut result: Atom) -> Atom {
     let cleanup_settings = SchoonschipSettings::partial()
         .into_single_pass()
-        .with_expanded_contracted_sums()
         .with_contraction_order(SchoonschipContractionOrder::SmallestDegree);
     for _ in 0..4 {
         let next = result.schoonschip_with_net::<false, AbstractIndex>(&cleanup_settings);
@@ -205,15 +214,30 @@ fn print_two_dummy_method(name: &str, out: Atom, mu1: &Atom, mu9: &Atom) {
 fn min_product_terms_three_vertex_simplifies_after_boundary_cleanup() {
     initialize();
     let _ = TS.mu1;
-    let (r, dummies) = substituted_three_vertex_reproducer();
+    let (r, _) = substituted_three_vertex_reproducer();
     let out = r.schoonschip_with_net::<false, AbstractIndex>(
         &SchoonschipSettings::partial()
             .into_single_pass()
-            .with_expanded_contracted_sums()
             .with_contraction_order(SchoonschipContractionOrder::MinProductTerms),
     );
 
-    assert!(residual_dummy_names(&out, &dummies).is_empty());
+    // Only mu2 and mu7 are physical external slots. Parsing every sum branch
+    // validates the internal contractions without distributing the numerator.
+    let mink = Minkowski {}.new_rep(4);
+    let mut expected =
+        [TS.mu2, TS.mu7].map(|index| mink.slot::<AbstractIndex, _>(index).cast::<LibraryRep>());
+    expected.sort();
+    for expression in [&r, &out] {
+        let net = expression
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
+                take_first_term_from_sum: false,
+                ..Default::default()
+            })
+            .unwrap();
+        let mut external = net.graph.dangling_indices();
+        external.sort();
+        assert_eq!(external, expected, "{expression}");
+    }
 }
 
 #[test]
@@ -503,21 +527,15 @@ fn compare_three_vertex_residual_methods() {
     println!("\nthree-vertex residual contraction comparison");
     print_three_vertex_method("normalize_dots", r.normalize_dots(), &dummies);
     print_three_vertex_method("bare schoonschip", r.schoonschip(), &dummies);
-    print_three_vertex_method(
-        "expanded bare schoonschip",
-        r.expand().schoonschip(),
-        &dummies,
-    );
 
     for (name, order) in orders {
         let one_pass = r.schoonschip_with_net::<false, AbstractIndex>(
             &SchoonschipSettings::partial()
                 .into_single_pass()
-                .with_expanded_contracted_sums()
                 .with_contraction_order(order),
         );
         print_three_vertex_method(
-            &format!("net one-pass partial expanded {name}"),
+            &format!("net one-pass partial factorized {name}"),
             one_pass.clone(),
             &dummies,
         );
@@ -527,35 +545,14 @@ fn compare_three_vertex_residual_methods() {
             &dummies,
         );
 
-        let expanded_input = r.expand().schoonschip_with_net::<false, AbstractIndex>(
-            &SchoonschipSettings::partial()
-                .into_single_pass()
-                .with_expanded_contracted_sums()
-                .with_contraction_order(order),
-        );
-        print_three_vertex_method(
-            &format!("expanded-input net one-pass partial {name}"),
-            expanded_input,
-            &dummies,
-        );
-
-        let expanded_input_full = r.expand().schoonschip_with_net::<false, AbstractIndex>(
-            &SchoonschipSettings::full()
-                .with_expanded_contracted_sums()
-                .with_contraction_order(order),
-        );
-        print_three_vertex_method(
-            &format!("expanded-input net full {name}"),
-            expanded_input_full,
-            &dummies,
-        );
-
         let full = r.schoonschip_with_net::<false, AbstractIndex>(
-            &SchoonschipSettings::full()
-                .with_expanded_contracted_sums()
-                .with_contraction_order(order),
+            &SchoonschipSettings::full().with_contraction_order(order),
         );
-        print_three_vertex_method(&format!("net full expanded {name}"), full.clone(), &dummies);
+        print_three_vertex_method(
+            &format!("net full factorized {name}"),
+            full.clone(),
+            &dummies,
+        );
         print_three_vertex_method(
             &format!("net full + smallest cleanup {name}"),
             cleanup_with_smallest_degree(full),

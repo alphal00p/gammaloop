@@ -1389,6 +1389,18 @@ impl ProcessDefinition {
                     unresolved = unresolved.union(p).cloned().collect();
                 }
             }
+            let partners = unresolved
+                .iter()
+                .flat_map(|particle| {
+                    model
+                        .covariant_cut_multiplets
+                        .get(&(particle.pdg_code as i64))
+                        .into_iter()
+                        .flatten()
+                        .map(|pdg| model.get_particle_from_pdg(*pdg as isize))
+                })
+                .collect_vec();
+            unresolved.extend(partners);
             (p.values().sum(), unresolved)
         } else {
             (0, AHashSet::new())
@@ -1941,148 +1953,109 @@ impl ProcessDefinition {
             .enumerate()
             .map(|(i_n, pdg)| (pdg, i_n + 1))
             .collect::<Vec<_>>();
-        let mut final_pdgs = if matches!(self.generation_type, GenerationType::CrossSection) {
-            self.initial_pdgs
-                .iter()
-                .enumerate()
-                .map(|(i_n, pdg)| (pdg, i_n + 1 + initial_pdgs.len()))
-                .collect::<Vec<_>>()
+        let final_pdgs = if matches!(self.generation_type, GenerationType::CrossSection) {
+            &self.initial_pdgs
         } else {
-            self.final_pdgs_lists[0]
-                .iter()
-                .enumerate()
-                .map(|(i_n, pdg)| (pdg, i_n + 1 + initial_pdgs.len()))
-                .collect::<Vec<_>>()
+            &self.final_pdgs_lists[0]
         };
-
-        let mut all_pdgs = initial_pdgs.clone();
-        all_pdgs.extend(final_pdgs.clone());
-
+        let mut final_pdgs = final_pdgs
+            .iter()
+            .enumerate()
+            .map(|(i_n, pdg)| (pdg, i_n + 1 + self.initial_pdgs.len()))
+            .collect::<Vec<_>>();
+        let mut all_pdgs = initial_pdgs
+            .iter()
+            .chain(&final_pdgs)
+            .copied()
+            .collect_vec();
         let mut new_node_data = vec![];
         let mut new_edge_data = vec![];
 
-        // We do two passes, first assigning "specified externals" only (i.e. with tags > 0) and finally the remaining non specified ones (tags < 0)
-        // The three pass steps are:
-        // 0: distribute all externals with forced assignment, i.e. external_tag > 0
-        // 1: distribute all externals with forced assignment up to left-right symmetry, i.e. external_tag < -2000
-        // 2: distribute symmetrized externals, i.e. external_tag > -2000 && external_tag < 0
-
-        for pass_steps in [0, 1, 2] {
-            for (i_e, e) in graph.edges().iter().enumerate() {
-                // All edges supposed to be incoming at this stage
+        // Assign specified externals before the remaining symmetrized ones.
+        // The three passes retain fixed positive tags, paired forward tags
+        // below -2000, and freely permuted tags between -2000 and zero.
+        // Incoming and outgoing containers remain separate unless the user
+        // explicitly permits CP/left-right symmetrization.
+        for pass in [0, 1, 2] {
+            for (edge_position, e) in graph.edges().iter().enumerate() {
+                // All edges are incoming at this stage.
                 assert!(graph.nodes()[e.vertices.1].data.external_tag == 0);
                 assert!(graph.nodes()[e.vertices.0].data.external_tag >= 0);
-                let p = model.get_particle_from_pdg(e.data.pdg);
                 let external_tag = graph.nodes()[e.vertices.0].data.external_tag;
-                let symmetrized_external_tag = node_colors_for_external_symmetrization
+                let tag = node_colors_for_external_symmetrization
                     .get(&external_tag)
                     .copied()
                     .unwrap_or(external_tag);
-                let is_initial_state = external_tag <= self.initial_pdgs.len() as i32;
-                let container = if is_initial_state {
+                let is_initial = external_tag <= self.initial_pdgs.len() as i32;
+                let container = if self.symmetrize_left_right_states {
+                    &mut all_pdgs
+                } else if is_initial {
                     &mut initial_pdgs
                 } else {
                     &mut final_pdgs
                 };
-                if pass_steps == 0 && symmetrized_external_tag > 0 {
-                    if self.symmetrize_left_right_states {
-                        let matched_external_pos = all_pdgs
-                            .iter()
-                            .position(|(_pdg, i_ext)| (*i_ext as i32) == symmetrized_external_tag)
-                            .unwrap();
-                        all_pdgs.remove(matched_external_pos);
-                    } else {
-                        let matched_external_pos = container
-                            .iter()
-                            .position(|(_pdg, i_ext)| (*i_ext as i32) == symmetrized_external_tag)
-                            .unwrap();
-                        container.remove(matched_external_pos);
-                    };
-                } else if pass_steps == 1 && symmetrized_external_tag < -2000 {
-                    // Node colors below -2000 indicate a left-right symmetrization of the external legs for a forward-scattering diagrams
-                    // without symmetrizing the initial-states.
-                    let external_leg_position = (-symmetrized_external_tag) % 1000;
-                    // Try and find this either in initial or final states
-                    let (matched_position, is_initial_match) = if let Some(matched_initial_pos) =
-                        all_pdgs
-                            .iter()
-                            .position(|(_pdg, i_ext)| (*i_ext as i32) == external_leg_position)
-                    {
-                        (matched_initial_pos, true)
-                    } else if let Some(matched_final_pos) =
-                        all_pdgs.iter().position(|(_pdg, i_ext)| {
-                            (*i_ext as i32)
-                                == external_leg_position + (self.initial_pdgs.len() as i32)
-                        })
-                    {
-                        (matched_final_pos, false)
-                    } else {
-                        unreachable!(
-                            "Logical mistake in feyngen: external legs in canonicalized graphs should always be matchable."
-                        )
-                    };
-
-                    let mut new_data = graph.nodes()[e.vertices.0].data.clone();
-                    let new_external_tag = all_pdgs[matched_position].1 as i32;
-                    // If we swapped initial and final state assignment, then we must also flip the pdg code of the corresponding half-edges
-                    if is_initial_state != is_initial_match {
-                        let mut e_data = e.data;
-                        e_data.pdg = model
-                            .get_particle_from_pdg(e_data.pdg)
-                            .0
-                            .get_anti_particle(model)
-                            .0
-                            .pdg_code;
-                        new_edge_data.push((i_e, e_data));
-                    }
-                    new_data.set_external_tag(new_external_tag);
-                    new_node_data.push((e.vertices.0, new_data));
-                    all_pdgs.remove(matched_position);
-                } else if pass_steps == 2 && (-2000..0).contains(&symmetrized_external_tag) {
-                    let pdg_code = if is_initial_state {
-                        p.0.pdg_code
-                    } else {
-                        p.0.get_anti_particle(model).0.pdg_code
-                    };
-                    if self.symmetrize_left_right_states {
-                        let matched_external_pos: usize = all_pdgs
-                            .iter()
-                            .position(|(pdg, _i_ext)| **pdg == pdg_code as i64)
-                            .unwrap();
-                        let mut new_data = graph.nodes()[e.vertices.0].data.clone();
-                        let new_external_tag = all_pdgs[matched_external_pos].1 as i32;
-                        // If we swapped initial and final state assignment, then we must also flip the pdg code of the corresponding half-edges
-                        if (new_external_tag > initial_pdgs.len() as i32
-                            && new_data.external_tag <= initial_pdgs.len() as i32)
-                            || (new_external_tag <= initial_pdgs.len() as i32
-                                && new_data.external_tag > initial_pdgs.len() as i32)
-                        {
-                            let mut e_data = e.data;
-                            e_data.pdg = model
-                                .get_particle_from_pdg(e_data.pdg)
-                                .0
-                                .get_anti_particle(model)
-                                .0
-                                .pdg_code;
-                            new_edge_data.push((i_e, e_data));
+                let matched_position = match pass {
+                    0 if tag > 0 => container
+                        .iter()
+                        .position(|(_, position)| *position as i32 == tag),
+                    1 if tag < -2000 => {
+                        let position = (-tag % 1000) as usize;
+                        if self.symmetrize_left_right_states {
+                            // Prefer the incoming copy, then its outgoing partner,
+                            // as in the original left/right canonical assignment.
+                            container
+                                .iter()
+                                .position(|(_, candidate)| *candidate == position)
+                                .or_else(|| {
+                                    container.iter().position(|(_, candidate)| {
+                                        *candidate == position + self.initial_pdgs.len()
+                                    })
+                                })
+                        } else {
+                            let position = position
+                                + if is_initial {
+                                    0
+                                } else {
+                                    self.initial_pdgs.len()
+                                };
+                            container
+                                .iter()
+                                .position(|(_, candidate)| *candidate == position)
                         }
-                        new_data.set_external_tag(new_external_tag);
-                        new_node_data.push((e.vertices.0, new_data));
-                        all_pdgs.remove(matched_external_pos);
-                    } else {
-                        let matched_external_pos = container
-                            .iter()
-                            .position(|(pdg, _i_ext)| **pdg == pdg_code as i64)
-                            .unwrap();
-                        let mut new_data = graph.nodes()[e.vertices.0].data.clone();
-                        new_data.set_external_tag(container[matched_external_pos].1 as i32);
-                        new_node_data.push((e.vertices.0, new_data));
-                        container.remove(matched_external_pos);
                     }
+                    2 if (-2000..0).contains(&tag) => {
+                        let particle = model.get_particle_from_pdg(e.data.pdg);
+                        let pdg = if is_initial {
+                            particle.0.pdg_code
+                        } else {
+                            particle.0.get_anti_particle(model).0.pdg_code
+                        };
+                        container
+                            .iter()
+                            .position(|(candidate, _)| **candidate == pdg as i64)
+                    }
+                    _ => continue,
                 }
+                .expect("canonicalized external legs must match an allowed assignment");
+                let new_external_tag = container.remove(matched_position).1 as i32;
+                if self.symmetrize_left_right_states
+                    && is_initial != (new_external_tag <= self.initial_pdgs.len() as i32)
+                {
+                    // Crossing an external leg also conjugates its particle label.
+                    let mut data = e.data;
+                    data.pdg = model
+                        .get_particle_from_pdg(data.pdg)
+                        .0
+                        .get_anti_particle(model)
+                        .0
+                        .pdg_code;
+                    new_edge_data.push((edge_position, data));
+                }
+                let mut new_data = graph.nodes()[e.vertices.0].data.clone();
+                new_data.set_external_tag(new_external_tag);
+                new_node_data.push((e.vertices.0, new_data));
             }
         }
-
         for (node_pos, new_data) in new_node_data {
             graph.set_node_data(node_pos, new_data);
         }
@@ -2755,6 +2728,47 @@ impl ProcessDefinition {
 
     #[instrument(skip_all)]
     pub fn generate(
+        &self,
+        model: &Model,
+        settings: &GlobalSettings,
+    ) -> Result<Vec<Graph>, FeynGenError> {
+        if self.symmetrize_left_right_states {
+            warn!(
+                "CP/left-right canonicalization is enabled: the user assumes CP is valid for this theory, process, and current coupling point; GammaLoop does not verify that assumption"
+            );
+        }
+        let mut covariant = self.clone();
+        covariant.final_pdgs_lists = self
+            .covariant_cut_states(model)
+            .map_err(|error| FeynGenError::GenericError(error.to_string()))?;
+        if !self.covariant_cut_representatives(model).is_empty()
+            && (self.selected_graphs.is_some()
+                || self.vetoed_graphs.is_some()
+                || self
+                    .amplitude_filters
+                    .0
+                    .iter()
+                    .chain(&self.cross_section_filters.0)
+                    .any(|filter| {
+                        matches!(
+                            filter,
+                            FeynGenFilter::VertexAllow(_) | FeynGenFilter::VertexVeto(_)
+                        )
+                    }))
+        {
+            warn!(
+                "The requested physical-vector sector includes its covariant cut states, but vertex/diagram selection may retain a gauge-dependent subset; physical polarization completeness requires the full partner graph sum"
+            );
+        }
+        // The complete state set feeds every existing early/late cut filter
+        // and symmetry-factor path. Keep the original physical declaration
+        // outside this internal generation stage, distinct from diagnostic
+        // Goldstone/ghost states explicitly requested by the user.
+        covariant.generate_diagrams(model, settings)
+    }
+
+    #[instrument(skip_all)]
+    fn generate_diagrams(
         &self,
         model: &Model,
         settings: &GlobalSettings,
@@ -3598,169 +3612,72 @@ impl ProcessDefinition {
             last_step = step;
         }
 
-        if self.generation_type == GenerationType::CrossSection && self.symmetrize_left_right_states
-        {
-            model.validate_cp_symmetrization(processed_graphs.iter().flat_map(|(graph, _)| {
-                graph
-                    .nodes()
-                    .iter()
-                    .map(|node| node.data.vertex_rule.0.as_ref())
-            }))?;
-        }
-
-        // Because of the interplay with the cutkosky cut filter and left-right canonization when using symmetrize_left_right_states
-        // we must do to canonicalizations here and we will select the "smallest one"
+        // The exact Cutkosky filter and external-state permutations require
+        // two canonicalization passes. Compare paired incoming permutations
+        // and, only when explicitly enabled, their CP-related side exchanges.
         let mut node_colors_for_canonicalization: HashMap<i32, i32> = HashMap::default();
-        let mut perform_graph_pregrouping_without_numerator_and_left_right_symmetry = true;
-        match self.generation_type {
+        let perform_graph_pregrouping_without_numerator = match self.generation_type {
             GenerationType::CrossSection => {
-                match (
-                    self.symmetrize_initial_states,
-                    self.symmetrize_left_right_states,
-                ) {
-                    // (true, true) | (true, false) => {
-                    //     for initial_color in 1..=self.initial_pdgs.len() {
-                    //         node_colors_for_canonicalization.insert(initial_color as i32, -2);
-                    //     }
-                    //     for final_color in self.initial_pdgs.len() + 1
-                    //         ..=2 * self.initial_pdgs.len()
-                    //     {
-                    //         node_colors_for_canonicalization.insert(final_color as i32, -3);
-                    //     }
-                    // }
-                    (false, true) | (true, true) | (true, false) => {
-                        // In this case we only care about left-righ  the pre-grouping does nothing so we can skip it
-                        perform_graph_pregrouping_without_numerator_and_left_right_symmetry = false;
-                        for initial_color in 1..=self.initial_pdgs.len() {
-                            node_colors_for_canonicalization
-                                .insert(initial_color as i32, -2000 - (initial_color as i32));
-                        }
-                        for final_color in self.initial_pdgs.len() + 1..=2 * self.initial_pdgs.len()
-                        {
-                            node_colors_for_canonicalization.insert(
-                                final_color as i32,
-                                -3000 - ((final_color - self.initial_pdgs.len()) as i32),
-                            );
-                        }
+                if self.symmetrize_initial_states || self.symmetrize_left_right_states {
+                    // Paired permutations and side exchanges require explicit
+                    // canonicalization; changing node colors alone cannot implement them.
+                    for initial_color in 1..=self.initial_pdgs.len() {
+                        node_colors_for_canonicalization
+                            .insert(initial_color as i32, -2000 - initial_color as i32);
+                        node_colors_for_canonicalization.insert(
+                            (initial_color + self.initial_pdgs.len()) as i32,
+                            -3000 - initial_color as i32,
+                        );
                     }
-                    (false, false) => {}
                 }
+                false
             }
             GenerationType::Amplitude => {
-                match (
-                    self.symmetrize_initial_states,
-                    self.symmetrize_final_states,
-                    self.symmetrize_left_right_states,
-                ) {
-                    (true, true, true) => {
-                        for initial_color in 1..=self.initial_pdgs.len() {
+                if self.symmetrize_left_right_states
+                    && !(self.symmetrize_initial_states && self.symmetrize_final_states)
+                {
+                    return Err(FeynGenError::GenericError(format!(
+                        "Option symmetrize_initial_states={}, symmetrize_final_states={} and symmetrize_left_right_states={} not valid for amplitude generation.",
+                        self.symmetrize_initial_states,
+                        self.symmetrize_final_states,
+                        self.symmetrize_left_right_states
+                    )));
+                }
+                for (enabled, pdgs, offset, color) in [
+                    (self.symmetrize_initial_states, &self.initial_pdgs, 0, -2),
+                    (
+                        self.symmetrize_final_states,
+                        &representative_final_pdgs,
+                        self.initial_pdgs.len(),
+                        -3,
+                    ),
+                ] {
+                    if enabled {
+                        for (position, pdg) in pdgs.iter().enumerate() {
                             if !model
-                                .get_particle_from_pdg(
-                                    self.initial_pdgs[initial_color - 1] as isize,
-                                )
+                                .get_particle_from_pdg(*pdg as isize)
                                 .0
                                 .is_anticommutating()
                                 || self.allow_symmetrization_of_external_fermions_in_amplitudes
                             {
-                                node_colors_for_canonicalization.insert(initial_color as i32, -1);
+                                node_colors_for_canonicalization.insert(
+                                    (position + offset + 1) as i32,
+                                    if self.symmetrize_left_right_states {
+                                        -1
+                                    } else {
+                                        color
+                                    },
+                                );
                             }
                         }
-                        for final_color in self.initial_pdgs.len() + 1
-                            ..=self.initial_pdgs.len() + representative_final_pdgs.len()
-                        {
-                            if !model
-                                .get_particle_from_pdg(
-                                    representative_final_pdgs
-                                        [final_color - self.initial_pdgs.len() - 1]
-                                        as isize,
-                                )
-                                .0
-                                .is_anticommutating()
-                                || self.allow_symmetrization_of_external_fermions_in_amplitudes
-                            {
-                                node_colors_for_canonicalization.insert(final_color as i32, -1);
-                            }
-                        }
-                    }
-                    (true, false, false) => {
-                        for initial_color in 1..=self.initial_pdgs.len() {
-                            if !model
-                                .get_particle_from_pdg(
-                                    self.initial_pdgs[initial_color - 1] as isize,
-                                )
-                                .0
-                                .is_anticommutating()
-                                || self.allow_symmetrization_of_external_fermions_in_amplitudes
-                            {
-                                node_colors_for_canonicalization.insert(initial_color as i32, -2);
-                            }
-                        }
-                    }
-                    (false, true, false) => {
-                        for final_color in self.initial_pdgs.len() + 1
-                            ..=self.initial_pdgs.len() + representative_final_pdgs.len()
-                        {
-                            if !model
-                                .get_particle_from_pdg(
-                                    representative_final_pdgs
-                                        [final_color - self.initial_pdgs.len() - 1]
-                                        as isize,
-                                )
-                                .0
-                                .is_anticommutating()
-                                || self.allow_symmetrization_of_external_fermions_in_amplitudes
-                            {
-                                node_colors_for_canonicalization.insert(final_color as i32, -3);
-                            }
-                        }
-                    }
-                    (true, true, false) => {
-                        for initial_color in 1..=self.initial_pdgs.len() {
-                            if !model
-                                .get_particle_from_pdg(
-                                    self.initial_pdgs[initial_color - 1] as isize,
-                                )
-                                .0
-                                .is_anticommutating()
-                                || self.allow_symmetrization_of_external_fermions_in_amplitudes
-                            {
-                                node_colors_for_canonicalization.insert(initial_color as i32, -2);
-                            }
-                        }
-                        for final_color in self.initial_pdgs.len() + 1
-                            ..=self.initial_pdgs.len() + representative_final_pdgs.len()
-                        {
-                            if !model
-                                .get_particle_from_pdg(
-                                    representative_final_pdgs
-                                        [final_color - self.initial_pdgs.len() - 1]
-                                        as isize,
-                                )
-                                .0
-                                .is_anticommutating()
-                                || self.allow_symmetrization_of_external_fermions_in_amplitudes
-                            {
-                                node_colors_for_canonicalization.insert(final_color as i32, -3);
-                            }
-                        }
-                    }
-                    (false, false, false) => {
-                        // No external symmetrization needed
-                        perform_graph_pregrouping_without_numerator_and_left_right_symmetry = false;
-                    }
-                    _ => {
-                        return Err(FeynGenError::GenericError(format!(
-                            "Option symmetrize_initial_states={}, symmetrize_final_states={} and symmetrize_left_right_states={} not valid for amplitude generation.",
-                            self.symmetrize_initial_states,
-                            self.symmetrize_final_states,
-                            self.symmetrize_left_right_states
-                        )));
                     }
                 }
+                // No pregrouping is needed when neither side is symmetrized.
+                self.symmetrize_initial_states || self.symmetrize_final_states
             }
-        }
+        };
 
-        if perform_graph_pregrouping_without_numerator_and_left_right_symmetry
+        if perform_graph_pregrouping_without_numerator
             && !node_colors_for_canonicalization.is_empty()
         {
             processed_graphs = group_isomorphic_graphs_after_node_color_change(
@@ -3798,30 +3715,26 @@ impl ProcessDefinition {
                 .par_iter()
                 .progress_with(bar.clone())
                 .map(|(g, symmetry_factor)| {
-                    let manually_canonalize_initial_states_cross_section_ordering =
-                        if self.generation_type == GenerationType::CrossSection
-                            && (self.symmetrize_initial_states || self.symmetrize_left_right_states)
-                        {
-                            Some((
-                                self.symmetrize_initial_states,
-                                self.symmetrize_left_right_states,
-                            ))
-                        } else {
-                            None
-                        };
+                    let canonicalize_initial_states = (self.generation_type
+                        == GenerationType::CrossSection
+                        && (self.symmetrize_initial_states || self.symmetrize_left_right_states))
+                        .then_some((
+                            self.symmetrize_initial_states,
+                            self.symmetrize_left_right_states,
+                        ));
                     let (mut canonical_repr, mut sorted_g) = self
                         .canonicalize_edge_and_vertex_ordering(
                             model,
                             g,
                             &node_colors_for_canonicalization,
                             &self.numerator_grouping,
-                            manually_canonalize_initial_states_cross_section_ordering,
+                            canonicalize_initial_states,
                         )
                         .unwrap();
-                    // If we are symmetrizing the left-right states in the context of a cross-section, the canonaliztion above
-                    // has canonized the choice of which nodes to assign to the initial and final state.
-                    // We now do a second pass to canonalize the vertex ordering for that particular choice.
-                    if manually_canonalize_initial_states_cross_section_ordering.is_some() {
+                    // The first pass chooses the external assignment, including
+                    // a CP-related side exchange only when enabled. Canonicalize
+                    // vertex ordering again for that selected assignment.
+                    if canonicalize_initial_states.is_some() {
                         (canonical_repr, sorted_g) = self
                             .canonicalize_edge_and_vertex_ordering(
                                 model,
@@ -4681,10 +4594,10 @@ impl ProcessedNumeratorForComparison {
             "Starting sign-only comparison between diagrams"
         );
         fn analyze_diff_and_sum(a: AtomView, b: AtomView) -> Option<Atom> {
-            if (a - b).expand().is_zero() {
+            if (a - b).is_zero() {
                 return Some(Atom::num(1));
             }
-            if (a + b).expand().is_zero() {
+            if (a + b).is_zero() {
                 return Some(Atom::num(-1));
             }
             debug!(a = %a.floatify(13).to_canonical_string(),b=%b.floatify(13).to_canonical_string(),"compared but no luck");
@@ -4758,7 +4671,19 @@ impl ProcessedNumeratorForComparison {
                         denominator_diagram_id = %other.diagram_id,
                         "Sample denominator evaluation"
                     );
-                    let ratio = analyze_diff_and_sum(a.as_view(), b.as_view());
+                    let ratio = analyze_diff_and_sum(a.as_view(), b.as_view()).or_else(|| {
+                        // Only the already sampled scalar coefficients enter polynomial
+                        // comparison; canonical tensor numerators stay factorized.
+                        let a = self.sample_evaluations_as_polynomial.get(idx)?;
+                        let b = other.sample_evaluations_as_polynomial.get(idx)?;
+                        if (a - b).is_zero() {
+                            Some(Atom::num(1))
+                        } else if (a + b).is_zero() {
+                            Some(Atom::num(-1))
+                        } else {
+                            None
+                        }
+                    });
                     if let Some(a) = &ratio {
                         debug!(
                             sample_idx = %idx,

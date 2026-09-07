@@ -117,7 +117,6 @@ fn run_tensor_reduction_tests() {
 
 #[test_log::test]
 fn dot_conversion_preserves_factorized_scalar_powers() {
-    use symbolica::atom::AtomCore;
     use vakint::Vakint;
 
     let _ = vakint::symbols::S.dot;
@@ -133,10 +132,10 @@ fn dot_conversion_preserves_factorized_scalar_powers() {
         let indexed = Vakint::convert_from_dot_notation(numerator.as_view());
         let round_trip = Vakint::convert_to_dot_notation(indexed.as_view());
         // Every copy of a scalar contraction, including both copies in a
-        // square, needs independent summed indices. Expansion is confined to
-        // this diagnostic comparison.
-        assert!(
-            (&round_trip - &numerator).expand().is_zero(),
+        // square, needs independent summed indices. The exact round trip must
+        // preserve the original scalar factors without expanding either side.
+        assert_eq!(
+            round_trip, numerator,
             "conversion changed the scalar contractions of {expression}"
         );
     }
@@ -144,7 +143,10 @@ fn dot_conversion_preserves_factorized_scalar_powers() {
 
 #[test_log::test]
 fn tensor_reduction_preserves_factorized_scalar_cancellation() {
-    use symbolica::atom::AtomCore;
+    use symbolica::{
+        atom::{Atom, AtomCore},
+        id::Replacement,
+    };
 
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
@@ -158,7 +160,24 @@ fn tensor_reduction_preserves_factorized_scalar_cancellation() {
         - 4 * (&a + &b).pow(2) * c.clone().pow(2)
         - 4 * a.pow(2) * c.clone().pow(2);
     let scalar: symbolica::atom::Atom = -4 * b.pow(2) * c.pow(2);
-    assert!((&numerator - &scalar).expand().is_zero());
+    // Both displayed expressions have degree at most two in each of a, b, c.
+    // Their exact values on three distinct points per variable therefore
+    // certify the complete identity, with no polynomial conversion or expansion.
+    for a_value in [-1, 0, 1] {
+        for b_value in [-1, 0, 1] {
+            for c_value in [-1, 0, 1] {
+                let replacements = [
+                    Replacement::new(a.clone(), Atom::num(a_value)),
+                    Replacement::new(b.clone(), Atom::num(b_value)),
+                    Replacement::new(c.clone(), Atom::num(c_value)),
+                ];
+                assert_eq!(
+                    numerator.replace_multiple(&replacements),
+                    scalar.replace_multiple(&replacements),
+                );
+            }
+        }
+    }
     let topology =
         vakint_parse!("topo(prop(1,edge(1,1),k(1),muvsq,5)*prop(2,edge(1,1),k(2),muvsq,3))")
             .unwrap();
@@ -171,24 +190,22 @@ fn tensor_reduction_preserves_factorized_scalar_cancellation() {
     // external p(5) dependence, before any angular or radial integration.
     for (label, input) in [
         ("scalar control", scalar),
-        ("expanded diagnostic control", numerator.expand()),
         ("complete factorized source", numerator),
     ] {
         let canonical = vakint
             .to_canonical((input * &topology).as_view(), false)
             .unwrap();
         let actual = vakint.tensor_reduce(canonical.as_view()).unwrap();
-        assert!(
-            (&actual - &expected).together().is_zero(),
-            "{label} tensor reduction differs from the exact scalar source: {}",
-            (&actual - &expected).together()
+        assert_eq!(
+            actual.collect_factors(),
+            expected.collect_factors(),
+            "{label} tensor reduction differs from the exact scalar source"
         );
     }
 }
 
 #[test_log::test]
 fn dot_conversion_preserves_existing_indices() {
-    use symbolica::atom::AtomCore;
     use vakint::Vakint;
 
     let _ = vakint::symbols::S.dot;
@@ -209,8 +226,8 @@ fn dot_conversion_preserves_existing_indices() {
                 "no dot notation must require no conversion"
             );
         }
-        assert!(
-            (actual - expected).expand().is_zero(),
+        assert_eq!(
+            actual, expected,
             "{label} changed a pre-existing contraction"
         );
     }
@@ -236,13 +253,13 @@ fn dot_conversion_preserves_reciprocal_powers() {
             "dot conversion must be idempotent"
         );
         // Inverting the scalar coefficient exposes every repeated contraction
-        // to the ordinary polynomial round-trip check, without integrating an
+        // to the exact structural round-trip check, without integrating an
         // input with a non-polynomial energy numerator.
         let reciprocal = Vakint::convert_to_dot_notation(converted.pow(-1).as_view());
         let expected = input.pow(-1);
-        assert!(
-            (&reciprocal - &expected).together().is_zero(),
-            "{expression} changed its reciprocal scalar contractions: {reciprocal}"
+        assert_eq!(
+            reciprocal, expected,
+            "{expression} changed its reciprocal scalar contractions"
         );
     }
 }
@@ -327,7 +344,7 @@ fn tensor_reduction_preserves_symbolica_user_namespaces() {
         ))
         .unwrap();
         assert!(
-            (&round_trip - &coefficient_atom).together().is_zero(),
+            round_trip == coefficient_atom,
             "no-FORM namespace round trip changed {coefficient}: actual={}, expected={}; tensor actual={}, expected={}",
             round_trip.to_canonical_string(),
             coefficient_atom.to_canonical_string(),
@@ -335,7 +352,7 @@ fn tensor_reduction_preserves_symbolica_user_namespaces() {
             expected.to_canonical_string(),
         );
         assert!(
-            (&reduced - &expected).together().is_zero(),
+            reduced.collect_factors() == expected.collect_factors(),
             "namespace round trip changed {coefficient}: actual={}, expected={}",
             reduced.to_canonical_string(),
             expected.to_canonical_string(),

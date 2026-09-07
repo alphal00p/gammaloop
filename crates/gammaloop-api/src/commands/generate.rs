@@ -263,6 +263,7 @@ pub struct SpecArgs {
     pub symmetrize_initial_states: Option<bool>,
     #[arg(long = "symmetrize-final-states")]
     pub symmetrize_final_states: Option<bool>,
+    /// Optional CP-based left/right graph identification; requires CP symmetry.
     #[arg(long = "symmetrize-left-right-states")]
     pub symmetrize_left_right_states: Option<bool>,
 
@@ -1795,12 +1796,9 @@ fn feyngen_from_spec_args(
     let sym_left_right = a.symmetrize_left_right_states.unwrap_or(false);
     let (sym_init, sym_final) = match generation_type {
         GenerationType::Amplitude => {
-            let s_init = a
-                .symmetrize_initial_states
-                .unwrap_or(sym_left_right /* default equal to LR */);
-            let s_final = a
-                .symmetrize_final_states
-                .unwrap_or(sym_left_right /* default equal to LR */);
+            // LR is the amplitude shorthand; explicit side options take precedence.
+            let s_init = a.symmetrize_initial_states.unwrap_or(sym_left_right);
+            let s_final = a.symmetrize_final_states.unwrap_or(sym_left_right);
             (s_init, s_final)
         }
         GenerationType::CrossSection => {
@@ -2361,6 +2359,72 @@ mod tests {
         let model = &load_generic_model("sm");
         let a = base_args(s);
         parse_spec_with_model(&a, GenerationType::CrossSection, model).unwrap()
+    }
+
+    #[test]
+    fn cp_symmetrization_option_defaults_false_and_roundtrips() {
+        let model = load_generic_model("sm");
+        for option in [None, Some(false), Some(true)] {
+            let mut command = vec!["gammaloop", "generate", "xs", "a", ">", "d", "d~"];
+            if let Some(enabled) = option {
+                command.extend([
+                    "--symmetrize-left-right-states",
+                    if enabled { "true" } else { "false" },
+                ]);
+            }
+            let repl = Repl::try_parse_from(command).unwrap();
+            let Commands::Generate(Generate {
+                mode: Some(GenerateCmd::Xs(args)),
+                ..
+            }) = repl.command
+            else {
+                panic!("expected a cross-section generation command");
+            };
+            assert_eq!(args.symmetrize_left_right_states, option);
+            let serialized = serde_json::to_value(&args).unwrap();
+            assert_eq!(
+                serialized["symmetrize_left_right_states"],
+                serde_json::json!(option)
+            );
+            let decoded: SpecArgs = serde_json::from_value(serialized).unwrap();
+            assert_eq!(decoded, args);
+            let spec =
+                parse_spec_with_model(&decoded, GenerationType::CrossSection, &model).unwrap();
+            assert_eq!(
+                spec.process_definition.symmetrize_left_right_states,
+                option.unwrap_or(false)
+            );
+        }
+    }
+
+    #[test]
+    fn amplitude_left_right_shorthand_respects_explicit_side_options() {
+        let model = load_generic_model("sm");
+        let mut args = base_args("e+ e- > d d~");
+        for (left_right, initial, final_state, expected) in [
+            (None, None, None, (false, false)),
+            (Some(true), None, None, (true, true)),
+            (Some(true), Some(false), None, (false, true)),
+            (Some(true), None, Some(false), (true, false)),
+        ] {
+            args.symmetrize_left_right_states = left_right;
+            args.symmetrize_initial_states = initial;
+            args.symmetrize_final_states = final_state;
+            let definition = parse_spec_with_model(&args, GenerationType::Amplitude, &model)
+                .unwrap()
+                .process_definition;
+            assert_eq!(
+                (
+                    definition.symmetrize_initial_states,
+                    definition.symmetrize_final_states
+                ),
+                expected
+            );
+            assert_eq!(
+                definition.symmetrize_left_right_states,
+                left_right.unwrap_or(false)
+            );
+        }
     }
 
     #[test]

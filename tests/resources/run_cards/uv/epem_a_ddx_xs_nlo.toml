@@ -67,7 +67,7 @@ commands = [
   "set global kv global.generation.uv.generate_integrated=true",
   """generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{2}} QCD=1]
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
-      --symmetrize-left-right-states true
+      --symmetrize-left-right-states false
       -p epem_a_ddx -i NLO
       --select-graphs GL0
       """,

@@ -1518,6 +1518,8 @@ pub struct Order {
 pub struct SerializableModel {
     pub name: SmartString<LazyCompact>,
     pub restriction: Option<SmartString<LazyCompact>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    covariant_cut_multiplets: BTreeMap<i64, [i64; 4]>,
     orders: Vec<Order>,
     parameters: Vec<SerializableParameter>,
     particles: Vec<SerializableParticle>,
@@ -1539,6 +1541,7 @@ impl SerializableModel {
         SerializableModel {
             name: model.name.clone(),
             restriction: model.restriction.clone(),
+            covariant_cut_multiplets: model.covariant_cut_multiplets.clone(),
             orders: model
                 .orders
                 .iter()
@@ -1584,6 +1587,9 @@ impl SerializableModel {
 pub struct Model {
     pub name: SmartString<LazyCompact>,
     pub restriction: Option<SmartString<LazyCompact>>,
+    /// Physical vector PDG -> [vector, Goldstone, ghost, antighost]. The model
+    /// declares this BRST quartet; equal numerical masses never infer one.
+    pub covariant_cut_multiplets: BTreeMap<i64, [i64; 4]>,
     pub orders: Vec<Arc<Order>>,
     pub parameters: BTreeMap<ParameterName, Parameter>,
     pub particles: Vec<ArcParticle>,
@@ -1607,6 +1613,7 @@ impl Default for Model {
         Model {
             name: SmartString::<LazyCompact>::from("ModelNotLoaded"),
             restriction: None,
+            covariant_cut_multiplets: BTreeMap::new(),
             orders: vec![],
             parameters: BTreeMap::new(),
             particles: vec![],
@@ -2075,57 +2082,6 @@ n_couplings = format!("{}", self.couplings.len()).green(),
         None
     }
 
-    pub(crate) fn validate_cp_symmetrization<'a>(
-        &self,
-        vertices: impl IntoIterator<Item = &'a VertexRule>,
-    ) -> Result<()> {
-        let mut pending = vertices
-            .into_iter()
-            .flat_map(|vertex| {
-                vertex
-                    .couplings
-                    .iter()
-                    .flatten()
-                    .flatten()
-                    .map(|name| name.0)
-            })
-            .collect_vec();
-        let mut checked = HashSet::default();
-        while let Some(symbol) = pending.pop() {
-            if !checked.insert(symbol) {
-                continue;
-            }
-            if let Some(parameter) = self.parameters.get(&ParameterName(symbol)) {
-                // UFO-real parameters remain real by the model contract. For
-                // complex declarations, use the resolved intrinsic value;
-                // ordinary Feynman coupling i factors are not parameters.
-                if parameter.parameter_type != ParameterType::Real
-                    && parameter.value.is_none_or(|value| value.im.0 != 0.0)
-                {
-                    let value = self
-                        .get_symbol_value(symbol)
-                        .map_or_else(|| "unresolved".to_string(), |value| value.to_string());
-                    return Err(eyre!(
-                        "symmetrize_left_right_states=true uses an unsupported CP-based optimization: a used vertex coupling depends on complex model parameter '{}' = {}. Set symmetrize_left_right_states=false and regenerate to use ordinary Hermitian forward-graph sewing.",
-                        parameter.name,
-                        value
-                    ));
-                }
-            } else if let Some(coupling) = self.couplings.get(&CouplingName(symbol)) {
-                // Follow coupling aliases once each; resolved parameters are
-                // leaves, so a currently real derived parameter stays allowed.
-                pending.extend(
-                    coupling
-                        .expression
-                        .get_all_symbols(false)
-                        .into_iter()
-                        .map(UFOSymbol),
-                );
-            }
-        }
-        Ok(())
-    }
-
     fn parameters_to_empty_fns(&self) -> Vec<Replacement> {
         let mut reps = vec![];
         for n in self.couplings.keys() {
@@ -2418,6 +2374,7 @@ n_couplings = format!("{}", self.couplings.len()).green(),
         let mut model: Model = Model::default();
         model.name = serializable_model.name;
         model.restriction = serializable_model.restriction;
+        model.covariant_cut_multiplets = serializable_model.covariant_cut_multiplets;
 
         // Extract coupling orders
         model.orders = serializable_model
@@ -2553,6 +2510,7 @@ n_couplings = format!("{}", self.couplings.len()).green(),
             SerializableModel::from_file(file_path).map(Model::from_serializable_model)?;
 
         model.recompute_dependents()?;
+        model.validate_covariant_cut_multiplets()?;
         Ok(model)
     }
 
@@ -2561,7 +2519,100 @@ n_couplings = format!("{}", self.couplings.len()).green(),
             SerializableModel::from_str(s, format).map(Model::from_serializable_model)?;
 
         model.recompute_dependents()?;
+        model.validate_covariant_cut_multiplets()?;
         Ok(model)
+    }
+
+    pub(crate) fn validate_covariant_cut_multiplets(&self) -> Result<()> {
+        let mut declared = HashSet::default();
+        for (&physical, members) in &self.covariant_cut_multiplets {
+            let particles = members
+                .iter()
+                .map(|pdg| {
+                    self.particle_pdg_to_position
+                        .get(&(*pdg as isize))
+                        .map(|position| &self.particles[*position])
+                        .ok_or_else(|| {
+                            eyre!("Covariant cut multiplet {physical} contains unknown PDG {pdg}")
+                        })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let vector = particles[0];
+            let denominator = self
+                .get_propagator_for_particle(&vector.name)
+                .denominator
+                .clone();
+            if members[0] != physical
+                || !vector.is_vector()
+                || !vector.is_massive()
+                || vector.ghost_number != 0
+                || particles[1].spin != 1
+                || !particles[1].is_goldstone()
+                || particles[1].ghost_number != 0
+                || particles[2].spin != -1
+                || particles[2].ghost_number != 1
+                || particles[3].spin != -1
+                || particles[3].ghost_number != -1
+                || particles.iter().any(|p| {
+                    p.mass != vector.mass
+                        || p.charge != vector.charge
+                        || p.color != vector.color
+                        || self.get_propagator_for_particle(&p.name).denominator != denominator
+                })
+                || members.iter().any(|pdg| !declared.insert(*pdg))
+            {
+                return Err(eyre!(
+                    "Covariant cut multiplet {physical} must contain one massive vector, its Goldstone, ghost and antighost with the same symbolic pole mass, charge and color"
+                ));
+            }
+            let conjugate_vector = vector.get_anti_particle(self).pdg_code as i64;
+            let conjugate_members = particles
+                .iter()
+                .map(|p| p.get_anti_particle(self).pdg_code as i64)
+                .sorted()
+                .collect_vec();
+            if self
+                .covariant_cut_multiplets
+                .get(&conjugate_vector)
+                .map(|m| m.iter().copied().sorted().collect_vec())
+                != Some(conjugate_members)
+            {
+                return Err(eyre!(
+                    "Covariant cut multiplet {physical} is not closed under particle conjugation"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Covariant completeness acts on whole final-state multisets. Mixed
+    /// vector/Goldstone states and the two ghost charges must remain distinct;
+    /// graph automorphisms supply their symmetry factors exactly once.
+    pub(crate) fn covariant_cut_states(&self, states: &[Vec<i64>]) -> Result<Vec<Vec<i64>>> {
+        self.validate_covariant_cut_multiplets()?;
+        if !states
+            .iter()
+            .flatten()
+            .any(|pdg| self.covariant_cut_multiplets.contains_key(pdg))
+        {
+            return Ok(states.to_vec());
+        }
+        Ok(states
+            .iter()
+            .flat_map(|state| {
+                state
+                    .iter()
+                    .map(|pdg| {
+                        self.covariant_cut_multiplets
+                            .get(pdg)
+                            .map_or_else(|| vec![*pdg], |members| members.to_vec())
+                    })
+                    .multi_cartesian_product()
+                    .map(|members| members.into_iter().sorted().collect_vec())
+            })
+            .sorted()
+            .dedup()
+            .collect())
     }
 
     #[inline]

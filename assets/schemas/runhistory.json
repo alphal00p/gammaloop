@@ -5137,6 +5137,7 @@
           ]
         },
         "symmetrize_left_right_states": {
+          "description": "Optional CP-based left/right graph identification; requires CP symmetry.",
           "type": [
             "boolean",
             "null"

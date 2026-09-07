@@ -656,7 +656,7 @@ mod tests {
             }
         }
         assert!(
-            (batched.clone() - sequential).expand().is_zero(),
+            (batched.collect_factors() - sequential.collect_factors()).is_zero(),
             "batched production projection must equal independently generated sequential CFFs"
         );
 
@@ -847,9 +847,9 @@ mod tests {
             1,
             "every state entering the second component wave must reuse its one canonical topology"
         );
-        assert!((cached.clone() - &sequential).expand().is_zero());
+        assert!((cached.collect_factors() - sequential.collect_factors()).is_zero());
         assert!(
-            (batched - sequential).expand().is_zero(),
+            (batched.collect_factors() - sequential.collect_factors()).is_zero(),
             "the production two-pass waves must equal fully uncached sequential component projection"
         );
         Ok(())

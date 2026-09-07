@@ -1176,6 +1176,8 @@ fn cp_fix_from_symbolica()->Result<()>{
     // Choose the model to consider
     cli.run_command("import model sm-default.json")?;
 
+    // Group IDs here use the explicitly requested CP canonicalization;
+    // default forward-side generation has a different label assignment.
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-12*G^2*ee^(-2)+-9*G^2*Nc*ee^(-2)+9*G^2*Nc^(-1)*ee^(-2)");//good
     Ok(())
 }
@@ -1189,8 +1191,11 @@ fn test_generate_sm_full_a_ddx() -> Result<()> {
     // Full particle contents
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"1 | -1 = -1");//good
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"47 | -47 = -47");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"37 | -35+Group(29,1,-1)+Group(30,1,-1)+Group(31,1,-1)+Group(32,1,-1) = -39");//less 37 vs 45 due to lorentz cancellations
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?,@"36 | -33+Group(29,1,-1)+Group(30,1,-1)+Group(32,1,-1)+Group(33,1,-1)+Group(35,1,-1)+Group(36,1,-1) = -39");//as above
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"45 | -43+Group(29,1,-1)+Group(30,1,-1)+Group(31,1,-1)+Group(32,1,-1) = -47");//The previous 37 omitted eight mixed W/Goldstone diagrams made spuriously zero by reversed scalar projectors.
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?,@"44 | -41+Group(29,1,-1)+Group(30,1,-1)+Group(31,1,-1)+Group(32,1,-1)+Group(35,1,-1)+Group(36,1,-1) = -47");//As above: all eight mass-insertion contributions survive with the corrected scalar projectors.
+    // CP pairs the eight restored mixed W/Goldstone mass-insertion diagrams
+    // into four groups; the signed contribution count remains -47.
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?,@"40 | -33+Group(12,1,-1)+Group(13,1,-1)+Group(29,1,-1)+Group(30,1,-1)+Group(32,1,-1)+Group(33,1,-1)+Group(35,1,-1)+Group(36,1,-1)+Group(39,1,-1)+Group(40,1,-1)+Group(42,1,-1)+Group(43,1,-1)+Group(5,1,-1)+Group(6,1,-1) = -47");//as above
 
     Ok(())
 }

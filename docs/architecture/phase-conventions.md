@@ -1,6 +1,6 @@
 # Phase conventions and forward-cut conjugation
 
-This note fixes the convention for GammaLoop amplitudes and LU cross-sections and records the independent audit of right-side conjugation. It is intended for GammaLoop contributors. The supported physical setting is a Hermitian UFO theory with real propagator masses. The complex-mass scheme requires additional machinery and is outside this implementation. The companion [SM convention audit](sm-conventions-audit.md) covers derivative vertices, scalar/pseudoscalar and vector/axial structures, fermion momentum signs and the separate W/Z gauge limitation.
+This note fixes the convention for GammaLoop amplitudes and LU cross-sections and records the independent audit of right-side conjugation. It is intended for GammaLoop contributors. The supported physical setting is a Hermitian UFO theory with real propagator masses. The complex-mass scheme requires additional machinery and is outside this implementation. The companion [SM convention audit](sm-conventions-audit.md) covers derivative vertices, scalar/pseudoscalar and vector/axial structures, fermion momentum signs and the W/Z virtual and cut-state gauge contract.
 
 ## Amplitudes
 
@@ -88,7 +88,11 @@ Computed UV-forest exports contain the same finalized physical expressions as pr
 
 Intrinsic complex couplings in a Hermitian interaction are compatible with marking. In the vendored SM, the unique conjugate-field partners `V_125` and `V_95` contain \(iV_{ub}\) and \(iV_{ub}^*\), respectively. The parameter \(V_{ub}=A\lambda^3(\rho-i\eta)\) is complex even though its Wolfenstein inputs are real. Leaving the inverse vertex value intact preserves \(|V_{ub}|^2\). Testing whether a numerical UFO coupling has a nonzero imaginary part would wrongly reject conventional Feynman-rule factors of \(i\). Model Hermiticity and correct partner assignment, rather than that numerical test, are the relevant assumptions.
 
-The optional `symmetrize_left_right_states` setting performs an additional CP-based graph transformation. It defaults to false. A guard rejects this optimization when a used vertex coupling depends on a complex-declared parameter with a nonreal or unresolved value. It follows coupling aliases, ignores unrelated parameters, and does not treat an explicit Feynman-rule `i` as an intrinsic phase. The assumption is retained in the generated integrand and rechecked after model updates. Disable the optimization and regenerate to use ordinary Hermitian sewing with complex CKM. Passing this guard is not a proof of CP invariance for every possible UFO interaction: a phase written directly in a coupling, such as `i*g*exp(i*theta)` with real `g` and `theta`, is not diagnosed. Such models must leave this optional optimization disabled; ordinary sewing still requires the Hermitian partner vertex.
+By default, graph canonicalization preserves each original forward side. The optional `--symmetrize-left-right-states true` optimization identifies forward graphs under CP. Enabling it asserts that this identification is valid for the selected theory, process and coupling point; generation and runtime warm-up warn about that assumption. A scalar-parameter test cannot certify CP invariance: complex coefficients may reflect field conventions, while intrinsic phases can also be written inline as `i*g*exp(i*theta)` with real inputs. No automatic complex-coupling veto is applied to this user-controlled option.
+
+Ordinary Hermitian sewing uses the inverse-process vertex regardless of whether its physical coupling is a named complex parameter or an inline expression, and requires the correct Hermitian partner. This sewing operation does not add a second tensor adjoint. Users enabling the CP optimization remain responsible for its validity after model-parameter updates.
+
+Numerator-aware grouping and independent initial/final permutations remain available. With CP symmetrization disabled, these permutations do not charge-conjugate the graph or exchange its forward sides. The existing inverse-vertex reconstruction in `fix_cp_vertex_rules` is also required by ordinary oriented-graph parsing; its role is distinct from opting into whole-graph CP canonicalization.
 
 CMS analytically continues masses and derived parameters. Its renormalized action alone is non-Hermitian; for example, the same complex field-renormalization constant applies to both charged W fields. Charge reversal therefore does not supply all conjugations required by amplitude sewing. [Denner–Dittmaier, equations (1)–(4)](https://arxiv.org/pdf/hep-ph/0605312).
 
@@ -96,7 +100,7 @@ An exact squared resonant amplitude contains conjugate denominators \((s-\mu^2)^
 
 Ordinary stable-particle Cutkosky delta functions are insufficient for finite-width propagators. CMS unitarity requires the appropriate mass counterterms and cuts through stable states; its fixed-order relation holds up to omitted perturbative orders. [Denner–Lang, equations (4.4), (4.11)–(4.12), and section 4.3](https://arxiv.org/pdf/1406.6280).
 
-GammaLoop currently constructs real on-shell energies and does not implement those complex poles or CMS cutting rules. Actual complex masses must produce a clear error before cross-section generation or evaluation, including after model updates. A UFO's width metadata alone does not activate CMS in this implementation. No tensor-conjugation switch can supply the missing analytic continuation and counterterm prescription.
+GammaLoop currently constructs real on-shell energies and does not implement those complex poles or CMS cutting rules. Actual complex masses produce a clear error during cross-section integrand generation or runtime warm-up, including after model updates. Used internal UFO propagators must also have the standard denominator `q² − m²`; custom denominators, including explicit `i m Γ` terms with an otherwise real mass parameter, are rejected instead of silently discarded. This check uses the current model and normalizes only denominator algebra. Unused propagators and amputated external lines do not impose a denominator constraint. A UFO's width metadata alone does not activate CMS in this implementation. No tensor-conjugation switch can supply the missing analytic continuation and counterterm prescription.
 
 The mass check does not prove that an arbitrary UFO is Hermitian. Unpaired complex interaction coefficients, including CMS-derived coefficients in a graph whose propagator masses happen to be real, violate the supported model contract and are not comprehensively diagnosed by this check.
 
@@ -111,3 +115,24 @@ For symmetric scalar Born halves, the full cut result must equal \(|A_\Gamma|^2d
 The acceptance suite covers multiplicities two through six, massive decay, two incoming particles, an exchange tree and left/right virtual-loop mirrors. Separate signed acceptances compare both components of the four photon/lepton ddx/ttx channels, including negative and positive NLO graph contributions. Analytic scalar threshold examples test discontinuity signs separately from Born positivity. Execution status and actual numerical results belong in `PHASE_CONVENTIONS_FIX.md`.
 
 An explicit complete global numerator retains its full-forward meaning; it does not specify two separately supplied amplitude factors. A literal numerator-one topology need not have the phase or positivity of a squared physical UFO amplitude. No new `exact`/`scalar_only` modes are introduced. Regenerate integrands and saved compiled states after the convention change; old numerical artifacts contain the old phases.
+
+
+## Generation options and generated states
+
+The CLI option `--symmetrize-left-right-states` and the serialized
+`symmetrize_left_right_states` fields remain available, with the optimization
+disabled by default. The generated cross-section integrand retains the selected
+flag so runtime warm-up can repeat its CP-validity warning, including after
+model updates. The amplitude option retains its existing external-state
+crossing/symmetrization behavior; independent initial and final permutations
+remain separately selectable.
+
+Models declare covariant W/Z cut multiplets explicitly. Generated integrands
+retain the physical representative used to label their vector, Goldstone and
+ghost cut events, keeping observable semantics consistent across bare, UV and
+threshold contributions.
+
+Regenerate saved processes, integrands and compiled evaluators after these
+phase and model changes. No backward-compatibility layer is supplied. Recheck
+graph selectors when changing symmetrization options: graph labels and grouping
+can change, while signed physical acceptance targets remain fixed.

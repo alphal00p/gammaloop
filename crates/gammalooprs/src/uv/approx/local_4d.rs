@@ -361,7 +361,7 @@ impl FourDTerm {
         left
     }
 
-    fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
+    pub(super) fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
         // A denominator-free subtree is an opaque numerator. Inspect its symbols
         // once instead of recursively rebuilding its sums/products just to prove
         // that every child has the same empty denominator topology.
@@ -1420,7 +1420,7 @@ mod tests {
         let erased = GS.erase_uv_momentum_provenance(&tagged);
         assert!(!erased.contains_symbol(GS.uv_momentum_provenance));
         assert!(
-            (erased - plain).expand().together().is_zero(),
+            (erased.collect_factors() - plain.collect_factors()).is_zero(),
             "tag erasure must recover the independent child-sub-LMB Taylor coefficient",
         );
 
@@ -1465,17 +1465,9 @@ mod tests {
             ])
         );
 
-        // Expand and cancel only inside this ownership oracle. Production
-        // retains each Taylor topology and its factorized numerator.
-        let expanded = tagged.expand();
-        let expanded_terms = match expanded.as_view() {
-            AtomView::Add(add) => add.iter().map(|term| term.to_owned()).collect(),
-            _ => vec![expanded],
-        };
-        let mut leaves = Vec::new();
-        for expanded_term in expanded_terms {
-            leaves.extend(FourDTerm::from_view(expanded_term.cancel().as_view())?);
-        }
+        // Read the natural Taylor leaves directly in this ownership oracle.
+        // Production retains the same topologies and factorized numerators.
+        let mut leaves = FourDTerm::from_view(tagged.as_view())?;
         leaves.sort_by_key(|leaf| {
             leaf.denominators
                 .iter()
@@ -1537,8 +1529,8 @@ mod tests {
         test_initialise()?;
         // This is the GL24 skeleton and generation LMB used by the scalar LU
         // acceptance test. The quartic factor is local to e1. The deliberately
-        // collected common denominator and algebraic leaf extraction below
-        // stress ownership on a test copy; production keeps Taylor topologies separate.
+        // collected common denominator below stresses ownership while each
+        // numerator stays factorized; production keeps Taylor topologies separate.
         let graph: Graph = dot!(
             digraph gl24_dod_two_taylor {
                 edge [particle="scalar_0" num=1]
@@ -1593,12 +1585,80 @@ mod tests {
             .coefficient(Rational::from(0))
             .simplify_metrics()
             .to_dots()
-            .normalize_dots()
-            .together();
+            .normalize_dots();
 
-        let common_terms = FourDTerm::from_view(expanded.as_view())?;
-        assert_eq!(common_terms.len(), 1);
-        let common = &common_terms[0];
+        let natural_terms = FourDTerm::from_view(expanded.as_view())?;
+        // Typed denominator kinematics erase hard-momentum tags. A positive
+        // denominator factor in the numerator must instead retain the original
+        // wrapper, so e2/e7 keep their own derivative families even when their
+        // hard momenta share the e1 carrier in this child LMB.
+        let mut tagged_denominators = Vec::<(FourDDenominator, Atom)>::new();
+        for matched in expanded.pattern_match(
+            &GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_).to_pattern(),
+            None,
+            None,
+        ) {
+            let tagged = GS.den(
+                &matched[&W_.a_],
+                &matched[&W_.mom_],
+                &matched[&W_.mass_],
+                &matched[&W_.prop_],
+            );
+            let denominator = FourDDenominator::from_view(tagged.as_view())?.unwrap();
+            if let Some((_, previous)) = tagged_denominators
+                .iter()
+                .find(|(candidate, _)| candidate == &denominator)
+            {
+                assert_eq!(previous, &tagged);
+            } else {
+                tagged_denominators.push((denominator, tagged));
+            }
+        }
+        assert_eq!(tagged_denominators.len(), owners.len());
+        let mut common_denominators = Vec::new();
+        for term in &natural_terms {
+            let mut available = common_denominators.clone();
+            for denominator in &term.denominators {
+                if let Some(index) = available.iter().position(|item| item == denominator) {
+                    available.remove(index);
+                } else {
+                    common_denominators.push(denominator.clone());
+                }
+            }
+        }
+        let denominator_product = |denominators: &[FourDDenominator]| {
+            denominators
+                .iter()
+                .fold(Atom::one(), |product, denominator| {
+                    product
+                        * &tagged_denominators
+                            .iter()
+                            .find(|(candidate, _)| candidate == denominator)
+                            .expect("every typed denominator has its original tagged wrapper")
+                            .1
+                })
+        };
+        let common_denominator = denominator_product(&common_denominators);
+        let common_numerator = natural_terms.iter().fold(Atom::Zero, |sum, term| {
+            let mut missing = common_denominators.clone();
+            for denominator in &term.denominators {
+                let index = missing.iter().position(|item| item == denominator).unwrap();
+                missing.remove(index);
+            }
+            // Only multiply the existing numerator by missing denominator
+            // factors. Certify each contribution by exact factor cancellation,
+            // without forming or distributing a common polynomial numerator.
+            let contribution = &term.numerator * denominator_product(&missing);
+            assert_eq!(
+                (&contribution / &common_denominator).collect_factors(),
+                (&term.numerator / denominator_product(&term.denominators)).collect_factors(),
+            );
+            sum + contribution
+        });
+        let common = FourDTerm {
+            numerator: common_numerator,
+            denominators: common_denominators,
+        };
         let owner_multiplicities = owners.map(|owner| {
             common
                 .denominators
@@ -1704,32 +1764,25 @@ mod tests {
             BTreeSet::from([(1, false), (1, true), (2, true), (7, true)]),
         );
 
-        // Reduce only the test copy to its natural Taylor leaves. Regrouping by
-        // denominator multiplicity restores each factorized C_i after the
-        // test-only expansion of its soft-shift and mass pieces.
-        let expanded_for_oracle = expanded.expand();
-        let additive_terms = match expanded_for_oracle.as_view() {
-            AtomView::Add(add) => add.iter().map(|term| term.to_owned()).collect(),
-            _ => vec![expanded_for_oracle],
-        };
+        // Read the same natural Taylor leaves before collecting their common
+        // denominator. Regrouping by denominator multiplicity preserves each
+        // factorized C_i and its soft-shift and mass pieces.
         let analyzer = EnergyPowerAnalyzer::for_physical_emr_edges(owners);
         let mut reduced_numerators = BTreeMap::<[usize; 3], Atom>::new();
-        for additive_term in additive_terms {
-            for leaf in FourDTerm::from_view(additive_term.cancel().as_view())? {
-                if leaf.numerator.is_zero() {
-                    continue;
-                }
-                let multiplicities = owners.map(|owner| {
-                    leaf.denominators
-                        .iter()
-                        .filter(|denominator| denominator.source_edge == owner)
-                        .count()
-                });
-                let reduced_numerator = reduced_numerators
-                    .entry(multiplicities)
-                    .or_insert(Atom::Zero);
-                *reduced_numerator = &*reduced_numerator + &leaf.numerator;
+        for leaf in natural_terms {
+            if leaf.numerator.is_zero() {
+                continue;
             }
+            let multiplicities = owners.map(|owner| {
+                leaf.denominators
+                    .iter()
+                    .filter(|denominator| denominator.source_edge == owner)
+                    .count()
+            });
+            let reduced_numerator = reduced_numerators
+                .entry(multiplicities)
+                .or_insert(Atom::Zero);
+            *reduced_numerator = &*reduced_numerator + &leaf.numerator;
         }
         let reduced_leaves = reduced_numerators
             .iter()
@@ -1805,10 +1858,7 @@ mod tests {
             .to_dots()
             .normalize_dots();
         assert!(
-            (&production - scalar_series_oracle)
-                .expand()
-                .together()
-                .is_zero(),
+            (production.collect_factors() - scalar_series_oracle.collect_factors()).is_zero(),
             "production T must equal the complete scalar Taylor series, including leading and linear layers",
         );
         let mut production_numerators = BTreeMap::<[usize; 3], Atom>::new();
@@ -1868,10 +1918,16 @@ mod tests {
                 .with(Atom::Zero)
                 .replace(physical_mass_variable.get_symbol())
                 .with(Atom::Zero);
-            let actual_mass_part =
-                GS.erase_uv_momentum_provenance(&(coefficient - without_mass_constants).expand());
-            let expected_mass_part =
-                (&numerator * (physical_mass.pow(2) - &expansion_mass_squared)).expand();
+            let actual_mass_part = GS
+                .erase_uv_momentum_provenance(&(coefficient - without_mass_constants))
+                .collect_factors()
+                // Normalize numerical coefficients within the mass sum only;
+                // momentum factors and products of sums stay factorized.
+                .expand_num();
+            let expected_mass_part = (&numerator
+                * (physical_mass.pow(2) - &expansion_mass_squared))
+                .collect_factors()
+                .expand_num();
             assert_eq!(
                 actual_mass_part,
                 expected_mass_part,
@@ -2092,7 +2148,7 @@ mod tests {
             .simplify_metrics()
             .to_dots()
             .normalize_dots();
-        assert!((expanded - independent).expand().together().is_zero());
+        assert!((expanded.collect_factors() - independent.collect_factors()).is_zero());
 
         let options = graph.denominator_only_cff_3d_expression_options();
         let mut cache = ExactCffGenerationCache::default();

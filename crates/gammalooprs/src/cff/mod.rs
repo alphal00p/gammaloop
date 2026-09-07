@@ -2781,7 +2781,7 @@ mod tests {
             .collect::<Vec<_>>();
         let mut reference_parsed: Option<three_dimensional_reps::ParsedGraph> = None;
         let mut reference_orientation_sum: Option<Atom> = None;
-        let mut reference_quadratic_sum: Option<Atom> = None;
+        let mut reference_scaled_quadratic_sum: Option<Atom> = None;
         for denominators in denominator_records.iter().cloned().permutations(3) {
             let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
                 &graph,
@@ -2868,6 +2868,11 @@ mod tests {
                 reference_orientation_sum = Some(orientation_sum.clone());
             }
 
+            // Clear the common E^5 denominator on scalar CFF kernels before
+            // inserting any numerator. This also aligns lower-sector E^-3
+            // terms while retaining every mapped numerator factor.
+            let common_energy_denominator = energy.pow(5);
+            let scaled_orientation_sum = (&orientation_sum * &common_energy_denominator).together();
             let quadratic_numerator = GS.emr_mom(carrier, GS.cind(0)).pow(2);
             let (quadratic_cff, _) = graph.cff_from_4d_denominators_in_uv_edges(
                 &denominators,
@@ -2893,12 +2898,14 @@ mod tests {
                 vec![2],
                 "an original quadratic energy must stay on its canonical source occurrence"
             );
-            let quadratic_sum = quadratic_cff
+            let scaled_quadratic_sum = quadratic_cff
                 .terms
                 .values()
                 .flat_map(|term| {
                     term.orientations.iter().map(|orientation| {
-                        Ok(orientation.expression.clone()
+                        let scaled_kernel =
+                            (&orientation.expression * &common_energy_denominator).together();
+                        Ok(scaled_kernel
                             * term.map_exact_source_numerator(&orientation.orientation)?)
                     })
                 })
@@ -2926,12 +2933,14 @@ mod tests {
                 &tagged_quadratic_numerator,
                 None,
             )?;
-            let tagged_quadratic_sum = tagged_quadratic_cff
+            let scaled_tagged_quadratic_sum = tagged_quadratic_cff
                 .terms
                 .values()
                 .flat_map(|term| {
                     term.orientations.iter().map(|orientation| {
-                        Ok(orientation.expression.clone()
+                        let scaled_kernel =
+                            (&orientation.expression * &common_energy_denominator).together();
+                        Ok(scaled_kernel
                             * term.map_exact_source_numerator(&orientation.orientation)?)
                     })
                 })
@@ -2939,7 +2948,11 @@ mod tests {
                 .into_iter()
                 .fold(Atom::Zero, |sum, term| sum + term)
                 * Atom::num(tagged_quadratic_cff.production_prefactor_factor());
-            let tagged_difference = (&tagged_quadratic_sum - &quadratic_sum).together();
+            // Normalize each factorized numerator route before subtraction;
+            // rational-polynomial normalization would expand its mapped factors.
+            let tagged_difference = (scaled_tagged_quadratic_sum.collect_factors()
+                - scaled_quadratic_sum.collect_factors())
+            .collect_factors();
             assert!(
                 tagged_difference.is_zero(),
                 "two fixed provenance factors carrying the same hard Q must reproduce Q0^2: {tagged_difference}",
@@ -2948,14 +2961,16 @@ mod tests {
             // the powered pole. Keep this test on production invariants:
             // tagged and untagged forms agree above, and permuting provenance
             // owners cannot change the resulting Laurent functional below.
-            if let Some(reference) = &reference_quadratic_sum {
-                let provenance_difference = (&quadratic_sum - reference).together();
+            if let Some(reference) = &reference_scaled_quadratic_sum {
+                let provenance_difference = (scaled_quadratic_sum.collect_factors()
+                    - reference.collect_factors())
+                .collect_factors();
                 assert!(
                     provenance_difference.is_zero(),
                     "the q0^2 cubic exact UV CFF depends on denominator-factor order: {provenance_difference}"
                 );
             } else {
-                reference_quadratic_sum = Some(quadratic_sum.clone());
+                reference_scaled_quadratic_sum = Some(scaled_quadratic_sum.clone());
             }
 
             let spatial_norm = (1..=3).fold(Atom::Zero, |norm_squared, spatial_index| {
@@ -2970,12 +2985,14 @@ mod tests {
                 &momentum_squared_numerator,
                 None,
             )?;
-            let momentum_squared_sum = momentum_squared_cff
+            let scaled_momentum_squared_sum = momentum_squared_cff
                 .terms
                 .values()
                 .flat_map(|term| {
                     term.orientations.iter().map(|orientation| {
-                        Ok(orientation.expression.clone()
+                        let scaled_kernel =
+                            (&orientation.expression * &common_energy_denominator).together();
+                        Ok(scaled_kernel
                             * term.map_exact_source_numerator(&orientation.orientation)?)
                     })
                 })
@@ -2983,10 +3000,16 @@ mod tests {
                 .into_iter()
                 .fold(Atom::Zero, |sum, term| sum + term)
                 * Atom::num(momentum_squared_cff.production_prefactor_factor());
-            let momentum_squared_reference = &quadratic_sum - &spatial_norm * &orientation_sum;
-            let momentum_squared_difference = (momentum_squared_sum - momentum_squared_reference)
-                .together()
-                .expand();
+            let momentum_squared_reference =
+                &scaled_quadratic_sum - &spatial_norm * &scaled_orientation_sum;
+            // Normalize numeric signs within the local sums, including the
+            // common coefficients exposed by collection, without distributing
+            // products of retained numerator factors.
+            let momentum_squared_difference =
+                (scaled_momentum_squared_sum.expand_num().collect_factors()
+                    - momentum_squared_reference.expand_num().collect_factors())
+                .collect_factors()
+                .expand_num();
             assert!(
                 momentum_squared_difference.is_zero(),
                 "the full momentum-square numerator must preserve CFF linearity between its temporal and spatial factors: {momentum_squared_difference}"
@@ -3329,7 +3352,8 @@ mod tests {
                         .sqrt();
                     exact_sum = exact_sum.replace(GS.ose(edge)).with(on_shell_energy);
                 }
-                let difference = (&exact_sum - &ordinary_sum).together();
+                let difference = (exact_sum.collect_factors() - ordinary_sum.collect_factors())
+                    .collect_factors();
                 assert!(
                     difference.is_zero(),
                     "exact and ordinary LU residues differ for maximum order {expected_order}, index {index}: {difference}"
@@ -3896,7 +3920,10 @@ mod tests {
         )?;
         let combined_uncut_sum = cff_sum(&combined_uncut)?;
         let cograph_uncut_sum = cff_sum(&cograph_uncut)?;
-        let uncut_difference = (&combined_uncut_sum - &cograph_uncut_sum * &uv_sum).together();
+        // Keep the spectator numerator factorized in both complete routes.
+        let uncut_difference = (combined_uncut_sum.collect_factors()
+            - (&cograph_uncut_sum * &uv_sum).collect_factors())
+        .collect_factors();
         assert!(
             uncut_difference.is_zero(),
             "an uncut exact source must factorize between its independent rational components: difference={uncut_difference}, combined={combined_uncut_sum} (bridge={}), cograph={cograph_uncut_sum} (bridge={}), spectator={uv_sum} (bridge={})",
@@ -3904,7 +3931,9 @@ mod tests {
             cograph_uncut.production_prefactor_factor(),
             uv.production_prefactor_factor(),
         );
-        let difference = (combined_sum - cograph_sum * uv_sum).together();
+        let difference = (combined_sum.collect_factors()
+            - (cograph_sum * uv_sum).collect_factors())
+        .collect_factors();
         assert!(
             difference.is_zero(),
             "an LU residue in one exact component must factorize from a quadratic cubic spectator: {difference}"
@@ -4007,7 +4036,9 @@ mod tests {
                 .fold(Atom::Zero, |sum, term| sum + term)
                 * Atom::num(cff.production_prefactor_factor())
         };
-        let difference = (highest_pole(&generalized) - highest_pole(&ordinary)).together();
+        let difference = (highest_pole(&generalized).collect_factors()
+            - highest_pole(&ordinary).collect_factors())
+        .collect_factors();
         assert!(
             difference.is_zero(),
             "the maximum-order LU residue must commute with its factorized cubic numerator: {difference}",
@@ -4123,12 +4154,13 @@ mod tests {
                 .fold(Atom::Zero, |sum, term| sum + term)
                 * Atom::num(cff.production_prefactor_factor())
         };
-        let difference = (selected_lu1(&generalized, &numerator)
-            - selected_lu1(&remainder, &remainder_numerator)
-            - selected_lu1(&contact, &alias_energy))
+        let difference = (selected_lu1(&generalized, &numerator).collect_factors()
+            - (selected_lu1(&remainder, &remainder_numerator)
+                + selected_lu1(&contact, &alias_energy))
+            .collect_factors())
         .replace(GS.ose(EdgeIndex(4)))
         .with(GS.ose(EdgeIndex(3)))
-        .together();
+        .collect_factors();
         assert!(
             difference.is_zero(),
             "the first-order LU residue must preserve exact polynomial division on a repeated channel: {difference}",
@@ -6634,9 +6666,9 @@ mod tests {
             "the exact test point must lie on the selected LU surface"
         );
         let raised_laurent_residue = |expression: Atom| -> Result<Atom> {
-            // Expanding the complete mapped-numerator times CFF rational
-            // function supplies the same t derivatives as raised-cut pass two,
-            // without assigning representation-dependent raw channels.
+            // After fixing the physical data, the radial Laurent coefficient
+            // supplies the same t derivatives as raised-cut pass two without
+            // expanding numerator products or assigning raw channels.
             Ok(rescale_expression(expression)
                 .series(GS.rescale, rescale_star.clone(), 0)
                 .map_err(|error| eyre::eyre!("failed to expand selected LU residue: {error}"))?

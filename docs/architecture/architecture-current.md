@@ -68,6 +68,14 @@ Infrastructure
 
 The command model is stateful by design: commands mutate a long-lived `State` that can be saved and resumed.
 
+Generation preserves the original forward sides by default. The optional
+`--symmetrize-left-right-states` CP optimization remains a user assertion about
+the selected theory, process and coupling point, with warnings at generation
+and runtime warm-up. Models declare covariant cut multiplets, and generated
+integrands retain their physical event representatives. Regenerate saved
+processes and integrands after the phase/model changes; see
+[the generation options and generated-state contract](phase-conventions.md#generation-options-and-generated-states).
+
 ### 3. Domain Core (gammalooprs)
 - Root module wiring: `crates/gammalooprs/src/lib.rs`.
 - Model and parameters: `crates/gammalooprs/src/model/mod.rs`.
@@ -483,6 +491,17 @@ Each event carries:
 
 Observable-specific entry reweighting remains internal to the observable
 runtime; it is not stored on the event.
+
+For physical W/Z final states, generation includes the model-declared covariant
+vector, Goldstone and ghost cut states. Event construction preserves their
+momenta and maps their PDGs to the requested physical vector before selectors
+or observables run. The same event receives its bare, UV and threshold weights,
+so measurement functions respect the complete gauge sum. The representative
+map is persisted with each cross-section graph term. Ambiguous requests mixing
+an explicit unphysical state with its physical-vector sector are rejected;
+separate diagnostic requests retain their original PDGs. See the
+[electroweak gauge contract](sm-conventions-audit.md#electroweak-virtual-and-cut-state-gauge-contract)
+for the required graph completeness and treatment of intentional subsets.
 
 `additional_weights` is a generic `BTreeMap` keyed by lightweight identifiers
 such as:

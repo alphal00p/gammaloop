@@ -308,6 +308,63 @@ impl Default for ProcessDefinition {
 }
 
 impl ProcessDefinition {
+    pub(crate) fn covariant_cut_states(&self, model: &Model) -> Result<Vec<Vec<i64>>> {
+        if self.generation_type != GenerationType::CrossSection {
+            return Ok(self.final_pdgs_lists.clone());
+        }
+        let states = model.covariant_cut_states(&self.final_pdgs_lists)?;
+        let representatives = self.covariant_cut_representatives(model);
+        for &member in self.final_pdgs_lists.iter().flatten() {
+            if let Some(&physical) = representatives.get(&(member as isize))
+                && member != physical as i64
+            {
+                return Err(eyre!(
+                    "Final-state PDG {member} overlaps the covariant cut multiplet of requested physical PDG {physical}; separate physical-vector and unphysical diagnostic final-state requests so their observable labels remain unambiguous. For imported covariant partner graphs, supply the physical channel with --process-spec; raw graph states do not establish that intent"
+                ));
+            }
+        }
+        for filter in [&self.amplitude_filters, &self.cross_section_filters] {
+            if let Some(vetoes) = filter.get_particle_vetos() {
+                for (&member, &physical) in &representatives {
+                    let anti = model
+                        .get_particle_from_pdg(member)
+                        .get_anti_particle(model)
+                        .pdg_code;
+                    if vetoes.contains(&(member as i64)) || vetoes.contains(&(anti as i64)) {
+                        return Err(eyre!(
+                            "Particle veto removes PDG {member} from the covariant cut multiplet of physical PDG {physical}; retain the complete vector/Goldstone/ghost sector for a physical cross section"
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(states)
+    }
+
+    pub(crate) fn covariant_cut_representatives(&self, model: &Model) -> BTreeMap<isize, isize> {
+        if self.generation_type != GenerationType::CrossSection {
+            return BTreeMap::new();
+        }
+        let (_, unresolved) = self.unresolved_cut_content(model);
+        model
+            .covariant_cut_multiplets
+            .iter()
+            .filter(|(physical, _)| {
+                self.final_pdgs_lists
+                    .iter()
+                    .any(|state| state.contains(physical))
+                    || unresolved
+                        .iter()
+                        .any(|particle| particle.pdg_code as i64 == **physical)
+            })
+            .flat_map(|(&physical, members)| {
+                members
+                    .iter()
+                    .map(move |&member| (member as isize, physical as isize))
+            })
+            .collect()
+    }
+
     // Best attempt at creating what process definition matches the given graphs
     pub fn from_graph_list(
         graphs: &[Graph],

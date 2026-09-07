@@ -1,4 +1,9 @@
 {
+  "covariant_cut_multiplets": {
+    "23": [23, 250, 9000002, -9000002],
+    "24": [24, 251, 9000003, -9000004],
+    "-24": [-24, -251, 9000004, -9000003]
+  },
   "couplings": [{
     "expression": "-1𝑖/3*UFO::{}::ee",
     "name": "GC_1",
@@ -1915,6 +1920,7 @@
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
+    "goldstone": true,
     "mass": "MZ",
     "name": "G0",
     "pdg_code": 250,
@@ -1929,6 +1935,7 @@
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
+    "goldstone": true,
     "mass": "MW",
     "name": "G+",
     "pdg_code": 251,
@@ -1943,6 +1950,7 @@
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
+    "goldstone": true,
     "mass": "MW",
     "name": "G-",
     "pdg_code": -251,
@@ -2043,17 +2051,17 @@
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MZ^2",
     "name": "Z_propFeynman",
-    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MZ^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*1𝑖",
+    "numerator": "-1𝑖*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "Z"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "W+_propFeynman",
-    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MW^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*1𝑖",
+    "numerator": "-1𝑖*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "W+"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "W-_propFeynman",
-    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MW^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*1𝑖",
+    "numerator": "-1𝑖*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "W-"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",

@@ -35,7 +35,7 @@ fn run_network_informed() {
     let rhs_subs = Pattern::Transformer(Box::new((
         Some(gluon_rule),
         vec![Transformer::Map(Box::new(move |input, _state, out| {
-            *out = input.expand().simplify_metrics(); //.to_dots();
+            *out = input.simplify_metrics(); //.to_dots();
             Ok(())
         }))],
     )));

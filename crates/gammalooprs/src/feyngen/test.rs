@@ -194,110 +194,205 @@ fn generated_ghost_loop_has_one_statistics_minus() {
 }
 
 #[test]
-fn cp_symmetrization_checks_used_intrinsic_parameters_after_model_updates() -> color_eyre::Result<()>
-{
-    use crate::model::{InputParamCard, ParameterType};
-    use crate::utils::F;
+fn cp_symmetrization_is_an_explicit_serialized_opt_in() -> color_eyre::Result<()> {
+    let mut definition = serde_json::to_value(ProcessDefinition::default())?;
+    assert!(
+        !serde_json::from_value::<ProcessDefinition>(definition.clone())?
+            .symmetrize_left_right_states
+    );
+    for enabled in [false, true] {
+        definition["symmetrize_left_right_states"] = serde_json::json!(enabled);
+        let process = serde_json::from_value::<ProcessDefinition>(definition.clone())?;
+        assert_eq!(process.symmetrize_left_right_states, enabled);
+        assert_eq!(
+            serde_json::to_value(process)?["symmetrize_left_right_states"],
+            enabled
+        );
+    }
+    Ok(())
+}
 
-    let mut model = load_generic_model("sm");
-    let ckm_vertex = model.get_vertex_rule("V_125");
-    let leptonic_vertex = model.get_vertex_rule("V_113");
-    for eta in [0.0, 0.341] {
-        // The JSON model defaults to diagonal CKM. Set every independent
-        // Wolfenstein input so changing eta actually changes this coupling.
+#[test]
+fn cp_symmetrization_groups_mirrored_real_scalar_forward_graphs() {
+    let model = load_generic_model("scalars");
+    // Sew a cubic scalar box to a quartic Born vertex. The external neighbors
+    // have valences three and four, so a side-preserving permutation cannot
+    // identify its mirror. The real scalar theory permits CP.
+    let mut graphs = Vec::new();
+    for mirrored in [false, true] {
+        let mut graph = SymbolicaGraph::new();
+        for (node, external_tag) in [
+            0,
+            0,
+            0,
+            0,
+            0,
+            if mirrored { 2 } else { 1 },
+            if mirrored { 1 } else { 2 },
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            graph.add_node(NodeColorWithVertexRule {
+                external_tag,
+                vertex_rule: model.get_vertex_rule(if node == 4 {
+                    "V_4_SCALAR_0000"
+                } else {
+                    "V_3_SCALAR_000"
+                }),
+            });
+        }
+        for (source, sink) in [
+            (5, 0),
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 0),
+            (1, 4),
+            (2, 4),
+            (3, 4),
+            (4, 6),
+        ] {
+            let (source, sink) = if mirrored {
+                (sink, source)
+            } else {
+                (source, sink)
+            };
+            graph
+                .add_edge(source, sink, true, EdgeColor { pdg: 1000 })
+                .unwrap();
+        }
+        graphs.push(graph);
+    }
+    for enabled in [false, true] {
+        let process = ProcessDefinition {
+            generation_type: GenerationType::CrossSection,
+            initial_pdgs: vec![1000],
+            final_pdgs_lists: vec![vec![1000, 1000, 1000]],
+            loop_count_range: (3, 3),
+            symmetrize_left_right_states: enabled,
+            ..Default::default()
+        };
+        let colors = if enabled {
+            [(1, -2001), (2, -3001)].into_iter().collect()
+        } else {
+            HashMap::default()
+        };
+        let canonical = graphs
+            .iter()
+            .map(|graph| {
+                let (_, sorted) = process
+                    .canonicalize_edge_and_vertex_ordering(
+                        &model,
+                        graph,
+                        &colors,
+                        &process.numerator_grouping,
+                        enabled.then_some((false, true)),
+                    )
+                    .unwrap();
+                // As in generation, the second pass fixes vertex order after the
+                // external assignment has been selected.
+                process
+                    .canonicalize_edge_and_vertex_ordering(
+                        &model,
+                        &sorted,
+                        &colors,
+                        &process.numerator_grouping,
+                        None,
+                    )
+                    .unwrap()
+                    .0
+            })
+            .collect_vec();
+        assert_eq!(canonical[0] == canonical[1], enabled);
+    }
+}
+
+#[test]
+fn complex_ckm_generation_preserves_named_and_inline_couplings() -> color_eyre::Result<()> {
+    use crate::{
+        model::{CouplingName, InputParamCard, ParameterType},
+        utils::F,
+    };
+
+    for inline in [false, true] {
+        let mut model = load_generic_model("sm");
+        // UFO-real inputs remain real. Their derived CKM value can nevertheless
+        // be complex; ordinary Feynman i factors are not intrinsic parameters.
+        // The JSON defaults to diagonal CKM, so set every independent input.
         InputParamCard::<F<f64>>::from_str(
-            format!(
-                "lamWS = [0.2253, 0.0]\nAWS = [0.808, 0.0]\nrhoWS = [0.132, 0.0]\netaWS = [{eta}, 0.0]"
-            ),
+            "lamWS = [0.2253, 0.0]\nAWS = [0.808, 0.0]\nrhoWS = [0.132, 0.0]\netaWS = [0.341, 0.0]"
+                .into(),
             "toml",
         )?
         .apply_to_model(&mut model)?;
         let ckm = model.get_parameter("CKM1x3");
         assert_eq!(ckm.parameter_type, ParameterType::Imaginary);
         assert!(ckm.value.unwrap().re.0 > 0.0);
-        assert_eq!(ckm.value.unwrap().im.0 == 0.0, eta == 0.0);
-        // The leptonic vertex's ordinary imaginary Feynman coupling is allowed,
-        // even while unrelated CKM parameters elsewhere in this model are complex.
-        assert_ne!(model.get_coupling("GC_40").value.unwrap().im, 0.0);
-        model.validate_cp_symmetrization([leptonic_vertex.0.as_ref()])?;
-        let result = model.validate_cp_symmetrization([ckm_vertex.0.as_ref()]);
-        if eta == 0.0 {
-            result?;
-        } else {
-            let error = result.unwrap_err().to_string();
-            assert!(error.contains("CP-based optimization"));
-            assert!(error.contains("CKM1x3"));
-            assert!(error.contains("symmetrize_left_right_states=false"));
+        assert!(ckm.value.unwrap().im.0 < 0.0);
+        if inline {
+            let symbol = Atom::from(ckm.name.0);
+            let expression = ckm.expression.as_ref().unwrap().clone();
+            for name in ["GC_43", "GC_102"] {
+                let name = CouplingName(model.get_coupling(name).name);
+                let coupling = model.couplings.get_mut(&name).unwrap();
+                coupling.expression = coupling
+                    .expression
+                    .replace(symbol.to_pattern())
+                    .with(expression.to_pattern());
+            }
+            // Coupling aliases and inline expressions retain their full physical
+            // values. No CP decision is inferred from a scalar coefficient.
+            model.recompute_dependents()?;
         }
-    }
-    // A coupling alias must not hide a relevant intrinsic parameter.
-    let alias = model.get_coupling("GC_43").name;
-    let leptonic_coupling = model.get_coupling("GC_40").name;
-    model
-        .couplings
-        .get_mut(&crate::model::CouplingName(leptonic_coupling))
-        .unwrap()
-        .expression = alias.into();
-    assert!(
-        model
-            .validate_cp_symmetrization([leptonic_vertex.0.as_ref()])
-            .is_err()
-    );
-    Ok(())
-}
-
-#[test]
-fn complex_ckm_generation_rejects_only_the_cp_optimization() -> color_eyre::Result<()> {
-    use crate::{model::InputParamCard, utils::F};
-
-    let mut model = load_generic_model("sm");
-    InputParamCard::<F<f64>>::from_str(
-        "lamWS = [0.2253, 0.0]\nAWS = [0.808, 0.0]\nrhoWS = [0.132, 0.0]\netaWS = [0.341, 0.0]"
-            .into(),
-        "toml",
-    )?
-    .apply_to_model(&mut model)?;
-    assert!(model.get_parameter("CKM1x3").value.unwrap().im.0 < 0.0);
-    let mut process = ProcessDefinition {
-        generation_type: GenerationType::CrossSection,
-        initial_pdgs: vec![24],
-        final_pdgs_lists: vec![vec![2, -5]],
-        loop_count_range: (1, 1),
-        symmetrize_left_right_states: true,
-        cross_section_filters: FeynGenFilters(vec![FeynGenFilter::VertexAllow(vec![
-            "V_95".into(),
-            "V_125".into(),
-        ])]),
-        ..Default::default()
-    };
-    let settings = GlobalSettings {
-        n_cores: Parallelisation {
-            feyngen: 1,
+        // The unrelated leptonic coupling retains its ordinary imaginary factor.
+        assert_ne!(model.get_coupling("GC_40").value.unwrap().im, 0.0);
+        let mut process = ProcessDefinition {
+            generation_type: GenerationType::CrossSection,
+            initial_pdgs: vec![24],
+            final_pdgs_lists: vec![vec![2, -5]],
+            loop_count_range: (1, 1),
+            cross_section_filters: FeynGenFilters(vec![FeynGenFilter::VertexAllow(vec![
+                "V_95".into(),
+                "V_125".into(),
+            ])]),
             ..Default::default()
-        },
-        ..Default::default()
-    };
-    let Err(error) = process.generate(&model, &settings) else {
-        panic!("complex CKM must reject CP symmetrization");
-    };
-    let error = error.to_string();
-    assert!(error.contains("CP-based optimization"));
-    assert!(error.contains("CKM1x3"));
-    process.symmetrize_left_right_states = false;
-    assert_eq!(process.generate(&model, &settings)?.len(), 1);
+        };
+        let settings = GlobalSettings {
+            n_cores: Parallelisation {
+                feyngen: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        for symmetrize in [false, true] {
+            // Acceptance certifies the opt-in contract, not CP validity of
+            // this complex coupling point or a physical optimized rate.
+            process.symmetrize_left_right_states = symmetrize;
+            assert_eq!(process.generate(&model, &settings)?.len(), 1);
+        }
+        let left = model.get_coupling("GC_43").value.unwrap();
+        let right = model.get_coupling("GC_102").value.unwrap();
+        assert_ne!(left.re, 0.0);
+        assert_eq!(left.re, -right.re);
+        assert_eq!(left.im, right.im);
+    }
     Ok(())
 }
 
 #[test]
-fn cp_symmetrization_is_revalidated_by_direct_integrand_warm_up() -> color_eyre::Result<()> {
+fn complex_ckm_updates_preserve_direct_integrand_warm_up() -> color_eyre::Result<()> {
     use crate::{
-        integrands::process::ProcessIntegrand, model::InputParamCard, processes::Process,
-        settings::RuntimeSettings, utils::F,
+        integrands::process::ProcessIntegrand,
+        model::{CouplingName, InputParamCard},
+        processes::Process,
+        settings::RuntimeSettings,
+        utils::F,
     };
 
     test_initialise()?;
     let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
-    for symmetrize in [false, true] {
+    for (inline, symmetrize) in [(false, false), (false, true), (true, false), (true, true)] {
         let mut model = load_generic_model("sm");
         InputParamCard::<F<f64>>::from_str(
             "lamWS = [0.2253, 0.0]\nAWS = [0.808, 0.0]\nrhoWS = [0.132, 0.0]\netaWS = [0.0, 0.0]"
@@ -307,6 +402,21 @@ fn cp_symmetrization_is_revalidated_by_direct_integrand_warm_up() -> color_eyre:
         .apply_to_model(&mut model)?;
         assert!(model.get_parameter("CKM1x3").value.unwrap().re.0 > 0.0);
         assert_eq!(model.get_parameter("CKM1x3").value.unwrap().im.0, 0.0);
+        if inline {
+            let ckm = model.get_parameter("CKM1x3");
+            let symbol = Atom::from(ckm.name.0);
+            let expression = ckm.expression.as_ref().unwrap().clone();
+            for name in ["GC_43", "GC_102"] {
+                let name = CouplingName(model.get_coupling(name).name);
+                let coupling = model.couplings.get_mut(&name).unwrap();
+                coupling.expression = coupling
+                    .expression
+                    .replace(symbol.to_pattern())
+                    .with(expression.to_pattern());
+            }
+            model.recompute_dependents()?;
+        }
+
         let definition = ProcessDefinition {
             generation_type: GenerationType::CrossSection,
             initial_pdgs: vec![24],
@@ -340,7 +450,7 @@ fn cp_symmetrization_is_revalidated_by_direct_integrand_warm_up() -> color_eyre:
         let graphs = definition.generate(&model, &settings)?;
         assert_eq!(graphs.len(), 1);
         let mut process = Process::from_graph_list(
-            "runtime_cp".into(),
+            "runtime_complex_ckm".into(),
             "default".into(),
             graphs,
             GenerationType::CrossSection,
@@ -359,15 +469,10 @@ fn cp_symmetrization_is_revalidated_by_direct_integrand_warm_up() -> color_eyre:
         InputParamCard::<F<f64>>::from_str("etaWS = [0.341, 0.0]".into(), "toml")?
             .apply_to_model(&mut model)?;
         assert!(model.get_parameter("CKM1x3").value.unwrap().im.0 < 0.0);
-        let result = integrand.warm_up(&model);
-        if symmetrize {
-            let error = result.unwrap_err().to_string();
-            assert!(error.contains("CP-based optimization"));
-            assert!(error.contains("CKM1x3"));
-            assert!(error.contains("regenerate"));
-        } else {
-            result?;
-        }
+        assert_ne!(model.get_coupling("GC_43").value.unwrap().re, 0.0);
+        // Updating the coupling point must not turn the user's CP assumption
+        // into an automatic rejection. No CP-violating rate is certified here.
+        integrand.warm_up(&model)?;
     }
     Ok(())
 }
@@ -627,9 +732,8 @@ fn gl_11_vs_gl_12() {
         numerator_color_simplified_11.canonize(Aind::Dummy)
     );
 
-    let r = (numerator_color_simplified_11.canonize(Aind::Dummy)
-        / &numerator_color_simplified_12.canonize(Aind::Dummy))
-        .expand();
+    let r = numerator_color_simplified_11.canonize(Aind::Dummy)
+        / &numerator_color_simplified_12.canonize(Aind::Dummy);
 
     println!("ratio:{r}");
 
@@ -676,7 +780,7 @@ fn gl_11_vs_gl_12() {
 
     if let Some(a) = pn_11.compare_with_scalar_rescaling(&pn_12) {
         println!("{}", a);
-        println!("Expanded: {}", a.expand());
+        println!("Ratio: {}", a);
     }
 }
 

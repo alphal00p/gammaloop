@@ -3,10 +3,17 @@
 
 use std::collections::BTreeMap;
 
+use linnet::half_edge::involution::HedgePair;
+
 use spenso::{
     iterators::IteratableTensor,
-    network::{ExecutionResult, Sequential, SmallestDegree, parsing::ParseSettings},
-    structure::{TensorStructure, slot::IsAbstractSlot},
+    network::{
+        ExecutionResult, Sequential, SmallestDegree,
+        library::symbolic::{ExplicitKey, TensorLibrary},
+        parsing::ParseSettings,
+    },
+    structure::{TensorStructure, representation::Minkowski, slot::IsAbstractSlot},
+    tensors::parametric::{ParamOrConcrete, ParamTensor},
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -68,15 +75,17 @@ fn vertex_matrix(
     model: &Model,
     vector_component: usize,
     tau_yukawa: Atom,
+    parameter_values: &[(&str, Atom)],
 ) -> Matrix {
     let (node, _, vertex) = graph
         .underlying
         .iter_nodes()
         .find(|(_, _, vertex)| {
-            vertex
-                .vertex_rule
-                .as_ref()
-                .is_some_and(|rule| rule.name == vertex_name)
+            vertex.name.value == vertex_name
+                || vertex
+                    .vertex_rule
+                    .as_ref()
+                    .is_some_and(|rule| rule.name == vertex_name)
         })
         .unwrap();
     let mut index_rules = Vec::new();
@@ -122,6 +131,11 @@ fn vertex_matrix(
     expression = expression
         .replace(Atom::from(ckm.name).to_pattern())
         .with(ckm.expression.as_ref().unwrap().to_pattern());
+    for (name, value) in parameter_values {
+        expression = expression
+            .replace(Atom::from(UFOSymbol::from(*name)).to_pattern())
+            .with(value.clone());
+    }
     for (name, value) in [
         ("ytau", tau_yukawa),
         ("ee", Atom::one()),
@@ -138,7 +152,21 @@ fn vertex_matrix(
             .with(value);
     }
 
-    let library = spenso_hep_lib::hep_lib_atom::<Aind, F<f64>>();
+    tensor_matrix(expression, vector_component)
+}
+
+fn tensor_matrix(expression: Atom, vector_component: usize) -> Matrix {
+    // Build the generic metric with Atom entries so its spatial signs
+    // remain exact alongside the parametric gamma matrices and couplings.
+    let mut library = spenso_hep_lib::hep_lib_atom::<Aind, F<f64>>();
+    library.insert_generic(
+        TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::id(Minkowski {}.into()),
+        |key| {
+            ParamOrConcrete::Param(
+                TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::diag_unimodular_metric(key),
+            )
+        },
+    );
     let mut network =
         ParsingNet::try_from_view(expression.as_view(), &library, &ParseSettings::default())
             .unwrap();
@@ -198,9 +226,9 @@ fn generated_charged_scalar_forward_vertex_is_already_the_hermitian_partner() {
         &model,
     )
     .unwrap();
-    let amplitude = vertex_matrix(&graphs[0], "V_112", &model, 1, Atom::one());
-    let left = vertex_matrix(&graphs[1], "V_112", &model, 1, Atom::one());
-    let raw_right = vertex_matrix(&graphs[1], "V_147", &model, 1, Atom::one());
+    let amplitude = vertex_matrix(&graphs[0], "V_112", &model, 1, Atom::one(), &[]);
+    let left = vertex_matrix(&graphs[1], "V_112", &model, 1, Atom::one(), &[]);
+    let raw_right = vertex_matrix(&graphs[1], "V_147", &model, 1, Atom::one(), &[]);
     assert_eq!(left, amplitude);
     assert_eq!(negative(&raw_right), bar(&amplitude));
     assert_eq!(spin_sum(&amplitude, &bar(&amplitude)), Atom::num(21));
@@ -232,9 +260,9 @@ fn generated_complex_charged_current_preserves_the_ckm_norm() {
         &model,
     )
     .unwrap();
-    let amplitude = vertex_matrix(&graphs[0], "V_125", &model, 1, Atom::one());
-    let left = vertex_matrix(&graphs[1], "V_125", &model, 1, Atom::one());
-    let raw_right = vertex_matrix(&graphs[1], "V_95", &model, 1, Atom::one());
+    let amplitude = vertex_matrix(&graphs[0], "V_125", &model, 1, Atom::one(), &[]);
+    let left = vertex_matrix(&graphs[1], "V_125", &model, 1, Atom::one(), &[]);
+    let raw_right = vertex_matrix(&graphs[1], "V_95", &model, 1, Atom::one(), &[]);
     assert_eq!(left, amplitude);
     assert_eq!(negative(&raw_right), bar(&amplitude));
     // ee=sw=1 leaves the physical vertex factor 1/sqrt(2).
@@ -288,8 +316,8 @@ fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
     // write y_tau=(2/5)/sqrt(2) so the exact check needs no radical identities.
     let inverse_sqrt_two = Atom::num(2).pow(Atom::num((-1, 2)));
     let yukawa = Atom::num((2, 5)) * &inverse_sqrt_two;
-    let goldstone = vertex_matrix(&graphs[0], "V_112", &model, 0, yukawa.clone());
-    let vector = vertex_matrix(&graphs[1], "V_115", &model, 0, yukawa.clone());
+    let goldstone = vertex_matrix(&graphs[0], "V_112", &model, 0, yukawa.clone(), &[]);
+    let vector = vertex_matrix(&graphs[1], "V_115", &model, 0, yukawa.clone(), &[]);
     for row in 0..4 {
         for column in 0..4 {
             // Independent Weyl entries of y_tau PR and i gamma0 PL/sqrt(2)
@@ -367,4 +395,222 @@ fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
         .replace(GS.emr_mom(antighost_edge.unwrap(), GS.cind(0)).to_pattern())
         .with(Atom::num(3));
     assert_eq!(ghost_value, Atom::num(-3) * Atom::i());
+}
+
+#[test]
+fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    let inverse_sqrt_two = Atom::num(2).pow(Atom::num((-1, 2)));
+    let yukawa = Atom::num((2, 3)) * &inverse_sqrt_two;
+    let bilinear = |bra: &[Atom; 4], matrix: &Matrix, ket: &[Atom; 4]| {
+        (0..4).fold(Atom::Zero, |sum, row| {
+            sum + (0..4).fold(Atom::Zero, |sum, column| {
+                sum + &bra[row] * &matrix[row][column] * &ket[column]
+            })
+        })
+    };
+
+    for charged in [true, false] {
+        let (vector, goldstone, fermion, mass_name) = if charged {
+            ("W+", "G+", "vt", "MW")
+        } else {
+            ("Z", "G0", "ta-", "MZ")
+        };
+        let graphs = Graph::from_string(
+            format!(
+                r#"
+                digraph vector_exchange {{
+                    ext [style=invis];
+                    left [name="left"];
+                    right [name="right"];
+                    ext -> left [particle="{fermion}"];
+                    ext -> left [particle="ta+"];
+                    left -> right [particle="{vector}", name="exchange"];
+                    right -> ext [particle="{fermion}"];
+                    right -> ext [particle="ta+"];
+                }}
+                digraph goldstone_exchange {{
+                    ext [style=invis];
+                    left [name="left"];
+                    right [name="right"];
+                    ext -> left [particle="{fermion}"];
+                    ext -> left [particle="ta+"];
+                    left -> right [particle="{goldstone}", name="exchange"];
+                    right -> ext [particle="{fermion}"];
+                    right -> ext [particle="ta+"];
+                }}
+                "#
+            ),
+            &model,
+        )
+        .unwrap();
+        // In both sectors v=6 and m_tau=2. Charged: g=1, MW=3.
+        // Neutral: g/cw=1, MZ=3. Each has sw=3/5, cw=4/5.
+        let parameters = [
+            ("ee", Atom::num(if charged { (3, 5) } else { (12, 25) })),
+            ("sw", Atom::num((3, 5))),
+            ("cw", Atom::num((4, 5))),
+        ];
+        // All spinors are exact on-shell Weyl representatives. Both channels
+        // carry q=(5,0,0,0), away from the mediator pole q^2-M^2=16.
+        // Charged incoming (nu,tau)=(21/10,+21/10),(29/10,-21/10)
+        // along z; the outgoing pair is backscattered. Neutral tau energies
+        // are 5/2 with momenta +/-3/2 along z, unchanged by the scattering.
+        let (left_bra, left_ket, right_bra, right_ket) = if charged {
+            (
+                [Atom::Zero, Atom::one(), Atom::Zero, Atom::num((-2, 5))],
+                [Atom::Zero, Atom::one(), Atom::Zero, Atom::Zero],
+                [Atom::Zero, Atom::Zero, Atom::one(), Atom::Zero],
+                [Atom::num((-2, 5)), Atom::Zero, Atom::one(), Atom::Zero],
+            )
+        } else {
+            (
+                [Atom::num(-1), Atom::Zero, Atom::num(2), Atom::Zero],
+                [Atom::one(), Atom::Zero, Atom::num(2), Atom::Zero],
+                [Atom::num(2), Atom::Zero, Atom::one(), Atom::Zero],
+                [Atom::num(2), Atom::Zero, Atom::num(-1), Atom::Zero],
+            )
+        };
+        let left: [Atom; 4] = std::array::from_fn(|component| {
+            bilinear(
+                &left_bra,
+                &vertex_matrix(
+                    &graphs[0],
+                    "left",
+                    &model,
+                    component,
+                    yukawa.clone(),
+                    &parameters,
+                ),
+                &left_ket,
+            )
+        });
+        let right: [Atom; 4] = std::array::from_fn(|component| {
+            bilinear(
+                &right_bra,
+                &vertex_matrix(
+                    &graphs[0],
+                    "right",
+                    &model,
+                    component,
+                    yukawa.clone(),
+                    &parameters,
+                ),
+                &right_ket,
+            )
+        });
+        let scalar_left = bilinear(
+            &left_bra,
+            &vertex_matrix(&graphs[1], "left", &model, 0, yukawa.clone(), &parameters),
+            &left_ket,
+        );
+        let scalar_right = bilinear(
+            &right_bra,
+            &vertex_matrix(&graphs[1], "right", &model, 0, yukawa.clone(), &parameters),
+            &right_ket,
+        );
+        // Opposite momentum directions fix the two local Ward signs. Keep
+        // the raw inverse-process UFO vertices, with no extra adjoint.
+        assert_eq!(
+            Atom::num(5) * &left[0] - Atom::i() * Atom::num(3) * &scalar_left,
+            Atom::Zero
+        );
+        assert_eq!(
+            Atom::num(5) * &right[0] + Atom::i() * Atom::num(3) * &scalar_right,
+            Atom::Zero
+        );
+
+        let (pair, _, edge) = graphs[0]
+            .underlying
+            .iter_edges()
+            .find(|(_, _, edge)| edge.data.name.value == "exchange")
+            .unwrap();
+        let HedgePair::Paired { source, sink } = pair else {
+            panic!("the vector exchange must be internal");
+        };
+        let mut numerator = edge.data.num.value.clone();
+        for (order, hedge) in [source, sink].into_iter().enumerate() {
+            for slot in graphs[0].underlying[hedge]
+                .num_indices
+                .spin_indices
+                .edge_indices
+                .external_structure_iter()
+            {
+                numerator = numerator
+                    .replace(slot.to_atom().to_pattern())
+                    .with(slot.rep().slot::<Aind, _>(Aind::Normal(order)).to_atom());
+            }
+        }
+        let propagator = tensor_matrix(numerator, 0);
+        let mass = edge
+            .data
+            .particle
+            .mass_atom()
+            .replace(Atom::from(UFOSymbol::from(mass_name)).to_pattern())
+            .with(Atom::num(3));
+        assert_eq!(mass, Atom::num(3));
+        let denominator = Atom::num(25) - mass.pow(2);
+        assert_eq!(denominator, Atom::num(16));
+        let (_, _, scalar_edge) = graphs[1]
+            .underlying
+            .iter_edges()
+            .find(|(_, _, edge)| edge.data.name.value == "exchange")
+            .unwrap();
+        assert_eq!(scalar_edge.data.num.value, Atom::i());
+        assert_eq!(
+            scalar_edge.data.particle.mass_atom(),
+            edge.data.particle.mass_atom()
+        );
+
+        let mut covariant_vector = Atom::Zero;
+        let mut unitary_vector = Atom::Zero;
+        for mu in 0..4 {
+            for nu in 0..4 {
+                let metric = if mu != nu {
+                    0
+                } else if mu == 0 {
+                    1
+                } else {
+                    -1
+                };
+                assert_eq!(propagator[mu][nu], -Atom::i() * Atom::num(metric));
+                covariant_vector += &left[mu] * &propagator[mu][nu] * &right[nu] / &denominator;
+                // Independent complete unitary propagator, with the same
+                // denominator and q=(5,0,0,0); not a replacement graph rule.
+                let qq_over_mass_squared = if mu == 0 && nu == 0 {
+                    Atom::num((25, 9))
+                } else {
+                    Atom::Zero
+                };
+                unitary_vector +=
+                    &left[mu] * Atom::i() * (qq_over_mass_squared - Atom::num(metric)) * &right[nu]
+                        / &denominator;
+            }
+        }
+        let scalar_exchange =
+            scalar_left * &scalar_edge.data.num.value * scalar_right / denominator;
+        let expected_vector = if charged { (1, 100) } else { (63, 1250) };
+        let expected_scalar = if charged { (-1, 72) } else { (-25, 144) };
+        let expected_total = if charged { (-7, 1800) } else { (-11089, 90000) };
+        assert_eq!(
+            covariant_vector,
+            Atom::num(expected_vector) * Atom::i(),
+            "{vector}"
+        );
+        assert_eq!(
+            scalar_exchange,
+            Atom::num(expected_scalar) * Atom::i(),
+            "{goldstone}"
+        );
+        assert_eq!(
+            unitary_vector,
+            Atom::num(expected_total) * Atom::i(),
+            "{vector}"
+        );
+        assert_eq!(&covariant_vector + &scalar_exchange, unitary_vector);
+        // The previous hybrid counted the longitudinal/Goldstone contribution
+        // twice. Its complete exchange must fail this same absolute oracle.
+        assert_ne!(&unitary_vector + scalar_exchange, unitary_vector);
+    }
 }

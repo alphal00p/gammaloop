@@ -5205,8 +5205,20 @@ mod tests {
             * (-d.clone().pow(3) + (&uv_mass_squared + p_squared) * d.clone().pow(2)
                 - Atom::num(4) * p_dot_minus_q.clone().pow(2) * &d
                 + &uv_mass_squared * d.clone().pow(2)
-                + Atom::num(2) * p_dot_minus_q * d.pow(2));
-        let difference = (mapped - post_t).expand().together();
+                + Atom::num(2) * &p_dot_minus_q * d.pow(2));
+        // Compare in the common chart, normalizing numeric signs without
+        // distributing the retained post-Taylor numerator or its factors.
+        // Only the squared contraction is even: preserve its separate linear
+        // occurrences so this identity cannot conceal a momentum-sign error.
+        let squared_opposite_dot = (-&p_dot_minus_q).expand_num().pow(2);
+        let retained_dot_square = p_dot_minus_q.expand_num().pow(2);
+        let difference = (mapped
+            .expand_num()
+            .replace(squared_opposite_dot)
+            .with(retained_dot_square)
+            .collect_factors()
+            - post_t.expand_num().collect_factors())
+        .collect_factors();
         assert!(
             difference.is_zero(),
             "the actual GL04 T2 occurrence plan must commute with substitution into one common formal loop momentum: {difference}"
@@ -5421,8 +5433,8 @@ mod tests {
                     &fixed_temporal_plan,
                 )?;
                 let expected = -Atom::num(left_sign * right_sign) * &contacts[0] * &contacts[1];
-                assert!(
-                    (actual - expected).expand().is_zero(),
+                assert_eq!(
+                    actual, expected,
                     "fixed factors must consume owner-local samples in their immutable hard-momentum frame ({left_sign:+}, {right_sign:+})",
                 );
             }
@@ -6269,7 +6281,7 @@ mod tests {
         for (direct_coefficient, direct_numerator) in direct_terms.drain(..) {
             let Some(position) = exact_terms.iter().position(|(coefficient, numerator)| {
                 (&direct_coefficient - coefficient).together().is_zero()
-                    && (&direct_numerator - numerator).expand().is_zero()
+                    && direct_numerator.collect_factors() == numerator.collect_factors()
             }) else {
                 panic!(
                     "direct triangle variant has no reconstructed match: coefficient={direct_coefficient}, numerator={direct_numerator}, remaining={exact_terms:?}",
@@ -6622,7 +6634,9 @@ mod tests {
         temporal_contour *= Atom::num(source_sign);
         let expected_contour = Atom::one() / (Atom::num(4) * positive_right_energy);
         assert!(
-            (&temporal_contour - &expected_contour).together().is_zero(),
+            (temporal_contour.collect_factors() - expected_contour.collect_factors())
+                .collect_factors()
+                .is_zero(),
             "the independent owner samples must sum to the analytic temporal contour: actual={temporal_contour}, expected={expected_contour}",
         );
 
@@ -6957,11 +6971,12 @@ mod tests {
             .replace(GS.emr_mom(owners[0], GS.cind(0)))
             .with(&energy + &external_energy)
             .replace_multiple(&external_replacements);
-            assert!(
-                (mapper.map_numerator_factor(&loop_map, &edge_map, &literal, &assignments)?
-                    - &expected)
-                    .expand()
-                    .is_zero(),
+            assert_eq!(
+                mapper
+                    .map_numerator_factor(&loop_map, &edge_map, &literal, &assignments)?
+                    .expand_num()
+                    .collect_factors(),
+                expected.expand_num().collect_factors(),
                 "untagged Q retains its physical affine coordinates"
             );
             assert_eq!(
