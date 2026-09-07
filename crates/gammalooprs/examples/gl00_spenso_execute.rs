@@ -80,7 +80,7 @@ fn print_help() {
         "Usage: cargo run -p gammalooprs --example gl00_spenso_execute -- [OPTIONS] [INPUT]\n\
 \n\
 Options:\n\
-  --input <PATH>       Atom dumped by GAMMALOOP_DUMP_EVALUATOR_PRE_NETWORK_PARSE\n\
+  --input <PATH>       Atom extracted from the standard pre-network generation dump log\n\
   --skip-execute       Stop after parsing the spenso network\n\
   --strategy <NAME>    sequential-min-result-rank (default), sequential-smallest-degree,\n\
                        or sequential-ref-smallest-degree\n\

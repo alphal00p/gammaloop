@@ -51,7 +51,7 @@ use crate::{
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, GS, Length, W_},
     uv::{
-        Integrands, RenormalizationPart, UVgenerationSettings, UltravioletGraph,
+        RenormalizationPart, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, OrientationProjection, integrated::to_vakint_integrand},
         settings::VakintSettings,
     },
@@ -763,7 +763,6 @@ impl AmplitudeGraph {
             graph,
             derived_data: AmplitudeDerivedData {
                 all_mighty_integrand: Atom::Zero,
-                deferred_integrands: None,
                 cff_expression: None,
 
                 lmbs: None,
@@ -1258,19 +1257,13 @@ impl AmplitudeGraph {
             "Generation timing milestone"
         );
 
-        let normalization_started = std::time::Instant::now();
-        let exprs: Vec<_> = parametric_exprs.into_iter().collect();
-        crate::debug_tags!(#generation, #profile, #graph, #summary;
-            stage = "amplitude_graph_cff_normalization_done",
-            graph = %self.graph.name,
-            expr_count = exprs.len(),
-            elapsed_ms = normalization_started.elapsed().as_secs_f64() * 1000.0,
-            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "Generation timing milestone"
-        );
-
         let assign_started = std::time::Instant::now();
-        let expr = exprs.into_iter().next().unwrap();
+        let [expr] = parametric_exprs.as_slice() else {
+            return Err(eyre!(
+                "amplitude UV construction must produce exactly one cut integrand, got {}",
+                parametric_exprs.len(),
+            ));
+        };
         let mut roots = expr.integrands.iter();
         let (index, integrand) = roots
             .next()
@@ -1281,10 +1274,6 @@ impl AmplitudeGraph {
             ));
         }
         self.derived_data.all_mighty_integrand = integrand.clone();
-        self.derived_data.deferred_integrands = expr
-            .integrands
-            .deferred_terms(index)
-            .map(|_| expr.integrands.clone());
         crate::debug_tags!(#generation, #profile, #graph, #summary;
             stage = "amplitude_graph_build_integrands_done",
             graph = %self.graph.name,
@@ -1616,7 +1605,6 @@ impl AmplitudeGraph {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeDerivedData {
     pub all_mighty_integrand: Atom,
-    pub(crate) deferred_integrands: Option<Integrands>,
     pub threshold_counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
     pub raised_data: RaisedEsurfaceData,
     pub raised_esurface_ids: TiVec<EsurfaceID, RaisedEsurfaceId>,

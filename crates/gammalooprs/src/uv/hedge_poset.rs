@@ -379,6 +379,8 @@ impl ComputeStore {
     }
 
     fn require(&self, key: &OperationNode) -> Result<&ComputeNode> {
+        // Union operations, like individual Taylor steps, must be computed
+        // before their typed values are consumed by another forest node.
         self.get(key)
             .ok_or_else(|| eyre!("{key} not yet added to compute store"))
     }
@@ -1087,7 +1089,7 @@ impl Forests {
             let local_4d = self.compute_store.require(operation)?.local_4d(operation)?;
             Local3DCts::Projected4d(
                 Projected4dApproximation::new(localizer, graph, settings)
-                    .project_local_4d(local_4d, &forest_node)?,
+                    .project_local_4d(local_4d)?,
             )
         } else if self.graph.is_disjoint_union(node) {
             // Both direct variants replay the Taylor operators on the complete
@@ -1127,7 +1129,7 @@ impl Forests {
                         topo_order: integrated_operation.key.op_count(),
                     };
                     Direct3dApproximation::new(localizer, graph, settings).run_integrated(
-                        integrated,
+                        &integrated.physical_finite_counterterm_atom(),
                         &prefix_node,
                         &current,
                         &given,
@@ -1160,14 +1162,16 @@ impl Forests {
             let parent_operation = &self.graph[parent];
             // An empty dependency frontier starts from the per-cut root integrand;
             // otherwise its typed local result remains the sequential accumulator.
+            let root;
             let parent_local = if parent_operation.key.is_empty() {
-                Local3DCts::Direct(Direct3dCts::root(graph, localizer)?)
+                root = Direct3dCts::root(graph, localizer)?;
+                &root
             } else {
                 self.compute_store
                     .require(parent_operation)?
                     .cut(parent_operation, cutset)?
                     .local_3d
-                    .clone()
+                    .direct()?
             };
             let parent_integrated = self
                 .compute_store
@@ -1182,7 +1186,7 @@ impl Forests {
             // applies both subtraction signs; no projected 4D coefficient,
             // external sign, or raw Foata-level product enters this route.
             Local3DCts::Direct(Direct3dApproximation::new(localizer, graph, settings).run(
-                parent_local.direct()?,
+                parent_local,
                 parent_integrated,
                 &current,
                 &given,
@@ -1353,7 +1357,7 @@ impl Forests {
                 .cut(operation, cutset)?
                 .final_integrands
                 .map(|numerator| post_process(numerator.clone()))
-                .materialize();
+                .into_integrands();
             let node_key = operation.to_string();
             for (term_index, (&residue_index, numerator)) in final_integrands.iter().enumerate() {
                 terms.push(UVForestNodeExpression {

@@ -4,6 +4,7 @@ use std::{
     ops::MulAssign,
 };
 
+use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use spenso::shadowing::symbolica_utils::LogPrint;
 use spenso::structure::{
@@ -11,13 +12,19 @@ use spenso::structure::{
     representation::{LibraryRep, Minkowski},
 };
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
+use symbolica::domains::rational::Rational;
 use thiserror::Error;
+use three_dimensional_reps::utils::{rank_i64, solve_rational_system};
 
 use crate::{
     graph::Graph,
+    momentum::SignOrZero,
     utils::{GS, symbols::UvMomentumProvenanceRole},
     uv::UltravioletGraph,
 };
+
+// Bound native CFF trials while sharing the same budget for hard and soft dispatch.
+const ENERGY_ASSIGNMENT_PROPOSAL_BUDGET: usize = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct EnergyPowerCapMap {
@@ -94,8 +101,11 @@ pub(crate) struct EquivalentEnergyCandidates {
 }
 
 impl EquivalentEnergyCandidates {
-    fn try_new<K: Eq>(
-        groups: impl IntoIterator<Item = (EdgeIndex, Vec<(usize, K)>)>,
+    /// Build candidate sets from the serial denominator occurrences certified
+    /// by source-edge topology reconstruction. Algebraic energy equality is
+    /// not rediscovered here: members already share one immutable source owner.
+    pub(crate) fn try_from_source_occurrences(
+        groups: impl IntoIterator<Item = (EdgeIndex, Vec<usize>)>,
     ) -> Result<Self, EnergyPowerAnalysisError> {
         let mut by_family = BTreeMap::new();
         let mut candidate_owners = BTreeMap::<usize, EdgeIndex>::new();
@@ -108,7 +118,7 @@ impl EquivalentEnergyCandidates {
                     },
                 );
             }
-            candidates.sort_by_key(|(candidate, _)| *candidate);
+            candidates.sort_unstable();
             if candidates.is_empty() {
                 return Err(
                     EnergyPowerAnalysisError::EmptyEquivalentEnergyCandidateSet {
@@ -117,16 +127,16 @@ impl EquivalentEnergyCandidates {
                 );
             }
             for pair in candidates.windows(2) {
-                if pair[0].0 == pair[1].0 {
+                if pair[0] == pair[1] {
                     return Err(
                         EnergyPowerAnalysisError::DuplicateEquivalentEnergyCandidate {
                             edge: edge.into(),
-                            candidate: pair[0].0,
+                            candidate: pair[0],
                         },
                     );
                 }
             }
-            for (candidate, _) in &candidates {
+            for candidate in &candidates {
                 if let Some(first_edge) = candidate_owners.insert(*candidate, edge) {
                     return Err(
                         EnergyPowerAnalysisError::OverlappingEquivalentEnergyCandidates {
@@ -138,59 +148,15 @@ impl EquivalentEnergyCandidates {
                 }
             }
 
-            let mut equivalent_classes = Vec::<Vec<(usize, K)>>::new();
-            for candidate in candidates {
-                if let Some(class) = equivalent_classes
-                    .iter_mut()
-                    .find(|class| class[0].1 == candidate.1)
-                {
-                    class.push(candidate);
-                } else {
-                    equivalent_classes.push(vec![candidate]);
-                }
-            }
-            // More equivalent occurrences minimize the maximal assigned
-            // degree. The lowest canonical occurrence fixes equal-size ties.
-            equivalent_classes.sort_by(|left, right| {
-                right
-                    .len()
-                    .cmp(&left.len())
-                    .then_with(|| left[0].0.cmp(&right[0].0))
-            });
-            let candidate_ids: Vec<usize> = equivalent_classes
-                .remove(0)
-                .into_iter()
-                .map(|(candidate, _)| candidate)
-                .collect();
             by_family.insert(
                 EnergyCandidateFamily::Unprovenanced(edge),
-                vec![candidate_ids[0]],
+                vec![candidates[0]],
             );
-            by_family.insert(EnergyCandidateFamily::Fixed(edge), vec![candidate_ids[0]]);
-            by_family.insert(
-                EnergyCandidateFamily::DenominatorDerived(edge),
-                candidate_ids,
-            );
+            by_family.insert(EnergyCandidateFamily::Fixed(edge), vec![candidates[0]]);
+            by_family.insert(EnergyCandidateFamily::DenominatorDerived(edge), candidates);
         }
 
         Ok(Self { by_family })
-    }
-
-    /// Build candidate sets from the serial denominator occurrences certified
-    /// by source-edge topology reconstruction. Algebraic energy equality is
-    /// not rediscovered here: members already share one immutable source owner.
-    pub(crate) fn try_from_source_occurrences(
-        groups: impl IntoIterator<Item = (EdgeIndex, Vec<usize>)>,
-    ) -> Result<Self, EnergyPowerAnalysisError> {
-        Self::try_new(groups.into_iter().map(|(edge, occurrences)| {
-            (
-                edge,
-                occurrences
-                    .into_iter()
-                    .map(|occurrence| (occurrence, ()))
-                    .collect(),
-            )
-        }))
     }
 
     /// Build production candidate sets from one retained source occurrence and
@@ -238,6 +204,9 @@ impl EquivalentEnergyCandidates {
     }
 }
 
+// Factor ID -> original edge owner -> certified exact energy occurrence.
+type FactorEnergyAssignments = BTreeMap<usize, BTreeMap<EdgeIndex, usize>>;
+
 /// One immutable assignment of factor-local physical energy dependencies to
 /// certified equivalent exact energy variables.
 ///
@@ -248,7 +217,7 @@ impl EquivalentEnergyCandidates {
 #[derive(Debug, Clone)]
 pub(crate) struct EnergyPowerAssignmentPlan {
     expression: PlannedEnergyExpression,
-    factor_assignments: BTreeMap<usize, BTreeMap<EdgeIndex, usize>>,
+    factor_assignments: FactorEnergyAssignments,
     energy_degree_bounds: Vec<(usize, usize)>,
 }
 
@@ -261,7 +230,10 @@ impl EnergyPowerAssignmentPlan {
         &self,
         mut map: impl FnMut(&Atom, &BTreeMap<EdgeIndex, usize>) -> Result<Atom, E>,
     ) -> Result<Atom, E> {
-        self.expression.map(&self.factor_assignments, &mut map)
+        self.expression.map(
+            &self.factor_assignments,
+            &mut |_, expression, assignments| map(expression, assignments),
+        )
     }
 }
 
@@ -282,6 +254,84 @@ enum PlannedEnergyExpression {
 }
 
 impl PlannedEnergyExpression {
+    /// Select independently at factor leaves, adding ranks in products and
+    /// taking their componentwise maximum across sums. The rank Pareto frontier
+    /// is exact; no numerator polynomial or Cartesian product of its monomials is
+    /// ever constructed.
+    fn soft_momentum_assignments(
+        &self,
+        alternatives: &BTreeMap<Atom, Vec<(Atom, EnergyPowerCapMap)>>,
+    ) -> Vec<(EnergyPowerCapMap, BTreeMap<usize, usize>)> {
+        match self {
+            Self::Factor {
+                id,
+                expression,
+                degrees,
+                ..
+            } => alternatives
+                .get(expression)
+                .map(|choices| {
+                    choices
+                        .iter()
+                        .enumerate()
+                        .map(|(choice, (_, degrees))| {
+                            (degrees.clone(), BTreeMap::from([(*id, choice)]))
+                        })
+                        .collect()
+                })
+                .unwrap_or_else(|| vec![(degrees.clone(), BTreeMap::new())]),
+            Self::Add(children)
+            | Self::Mul(children)
+            | Self::MultilinearFunction {
+                arguments: children,
+                ..
+            } => {
+                let additive = matches!(self, Self::Add(_));
+                children.iter().fold(
+                    vec![(EnergyPowerCapMap::default(), BTreeMap::new())],
+                    |states, child| {
+                        let right = child.soft_momentum_assignments(alternatives);
+                        let mut unique = BTreeMap::new();
+                        for (left_degrees, left_assignments) in &states {
+                            for (right_degrees, right_assignments) in &right {
+                                let mut degrees = left_degrees.clone();
+                                if additive {
+                                    degrees.max_assign(right_degrees.clone());
+                                } else {
+                                    degrees.add_assign(right_degrees.clone());
+                                }
+                                unique.entry(degrees.degrees).or_insert_with(|| {
+                                    let mut assignments = left_assignments.clone();
+                                    assignments.extend(right_assignments);
+                                    assignments
+                                });
+                            }
+                        }
+                        unique
+                            .iter()
+                            .filter(|(degrees, _)| {
+                                !unique.keys().any(|other| {
+                                    other != *degrees
+                                        && other.iter().all(|(edge, degree)| {
+                                            *degree <= degrees.get(edge).copied().unwrap_or(0)
+                                        })
+                                })
+                            })
+                            .map(|(degrees, assignments)| {
+                                (
+                                    EnergyPowerCapMap {
+                                        degrees: degrees.clone(),
+                                    },
+                                    assignments.clone(),
+                                )
+                            })
+                            .collect()
+                    },
+                )
+            }
+        }
+    }
+
     fn degrees(&self) -> EnergyPowerCapMap {
         match self {
             Self::Factor { degrees, .. } => degrees.clone(),
@@ -303,10 +353,10 @@ impl PlannedEnergyExpression {
         }
     }
 
-    fn minimax_assignments(
+    fn assignment_proposals(
         &self,
         candidates: &EquivalentEnergyCandidates,
-    ) -> Result<BTreeMap<usize, BTreeMap<EdgeIndex, usize>>, EnergyPowerAnalysisError> {
+    ) -> Result<Vec<FactorEnergyAssignments>, EnergyPowerAnalysisError> {
         #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
         struct OwnerState {
             energy_loads: Vec<usize>,
@@ -468,7 +518,8 @@ impl PlannedEnergyExpression {
             }
         }
 
-        let mut factor_assignments = BTreeMap::<usize, BTreeMap<EdgeIndex, usize>>::new();
+        let mut factor_assignments = FactorEnergyAssignments::new();
+        let mut owner_alternatives = Vec::new();
         for (owner, _) in self.degrees().iter() {
             let mut owner_candidates = candidates
                 .get(EnergyCandidateFamily::DenominatorDerived(owner))
@@ -492,41 +543,92 @@ impl PlannedEnergyExpression {
                 .enumerate()
                 .map(|(position, candidate)| (*candidate, position))
                 .collect::<BTreeMap<_, _>>();
-            let states = frontier(
+            let mut states = frontier(
                 self,
                 owner,
                 &owner_candidates,
                 &candidate_positions,
                 candidates,
             )?;
-            let assignments = states
-                .into_iter()
-                .min_by_key(|state| {
-                    (
-                        state.energy_loads.iter().copied().max().unwrap_or(0),
-                        state.derived_unit_loads.iter().copied().max().unwrap_or(0),
-                        state.energy_loads.iter().sum::<usize>(),
-                        state.derived_unit_loads.iter().sum::<usize>(),
-                        state.assignments.clone(),
-                        state.energy_loads.clone(),
-                        state.derived_unit_loads.clone(),
-                    )
-                })
-                .expect("every planned expression has one owner-assignment state")
-                .assignments;
-            for (factor, candidate) in assignments {
+            states.sort_by_cached_key(|state| {
+                // Compare the complete descending envelope: an unrelated
+                // saturated occurrence must not hide an avoidable (3, 1)
+                // distribution when the same factors fit in (2, 2).
+                let mut envelope = state.energy_loads.clone();
+                envelope.sort_unstable_by(|left, right| right.cmp(left));
+                (
+                    envelope,
+                    state.derived_unit_loads.iter().copied().max().unwrap_or(0),
+                    state.energy_loads.iter().sum::<usize>(),
+                    state.derived_unit_loads.iter().sum::<usize>(),
+                    state.assignments.clone(),
+                    state.energy_loads.clone(),
+                    state.derived_unit_loads.clone(),
+                )
+            });
+            let baseline = states.remove(0);
+            for (factor, candidate) in baseline.assignments {
                 factor_assignments
                     .entry(factor)
                     .or_default()
                     .insert(owner, candidate);
             }
+            for alternative in states
+                .into_iter()
+                .filter(|state| state.energy_loads != baseline.energy_loads)
+                .unique_by(|state| state.energy_loads.clone())
+                .take(ENERGY_ASSIGNMENT_PROPOSAL_BUDGET - 1)
+            {
+                owner_alternatives.push((owner, alternative.assignments));
+            }
         }
-        Ok(factor_assignments)
+
+        // Rank supplies the baseline and up to two deterministic one-owner
+        // deviations. The caller compares their actual CFF maps.
+        // The Pareto frontiers are only a proposal heuristic for that metric;
+        // no count-optimality or independent-owner factorization is assumed.
+        let baseline_bounds = self.exact_degrees(&factor_assignments)?;
+        let occurrence_ids = candidates
+            .by_family
+            .values()
+            .flatten()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let mut alternatives = Vec::new();
+        for (owner, owner_assignments) in owner_alternatives {
+            let mut assignments = factor_assignments.clone();
+            for (factor, candidate) in owner_assignments {
+                assignments
+                    .entry(factor)
+                    .or_default()
+                    .insert(owner, candidate);
+            }
+            let bounds = self.exact_degrees(&assignments)?;
+            if bounds == baseline_bounds {
+                continue;
+            }
+            let mut envelope = occurrence_ids
+                .iter()
+                .map(|edge| bounds.get(edge).copied().unwrap_or(0))
+                .collect::<Vec<_>>();
+            envelope.sort_unstable_by(|left, right| right.cmp(left));
+            alternatives.push((envelope, assignments, bounds));
+        }
+        alternatives.sort();
+        Ok(std::iter::once(factor_assignments)
+            .chain(
+                alternatives
+                    .into_iter()
+                    .unique_by(|(_, _, bounds)| bounds.clone())
+                    .take(ENERGY_ASSIGNMENT_PROPOSAL_BUDGET - 1)
+                    .map(|(_, assignments, _)| assignments),
+            )
+            .collect())
     }
 
     fn exact_degrees(
         &self,
-        assignments: &BTreeMap<usize, BTreeMap<EdgeIndex, usize>>,
+        assignments: &FactorEnergyAssignments,
     ) -> Result<BTreeMap<usize, usize>, EnergyPowerAnalysisError> {
         match self {
             Self::Factor {
@@ -577,13 +679,13 @@ impl PlannedEnergyExpression {
 
     fn map<E>(
         &self,
-        assignments: &BTreeMap<usize, BTreeMap<EdgeIndex, usize>>,
-        map: &mut impl FnMut(&Atom, &BTreeMap<EdgeIndex, usize>) -> Result<Atom, E>,
+        assignments: &FactorEnergyAssignments,
+        map: &mut impl FnMut(usize, &Atom, &BTreeMap<EdgeIndex, usize>) -> Result<Atom, E>,
     ) -> Result<Atom, E> {
         match self {
             Self::Factor { id, expression, .. } => {
                 let empty = BTreeMap::new();
-                map(expression, assignments.get(id).unwrap_or(&empty))
+                map(*id, expression, assignments.get(id).unwrap_or(&empty))
             }
             Self::Add(terms) => {
                 terms.iter().try_fold(
@@ -744,24 +846,39 @@ impl EnergyPowerAnalyzer {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn plan_atom_assignment(
         &self,
         expression: &Atom,
         candidates: &EquivalentEnergyCandidates,
     ) -> Result<EnergyPowerAssignmentPlan, EnergyPowerAnalysisError> {
+        Ok(self
+            .plan_atom_assignment_proposals(expression, candidates)?
+            .remove(0))
+    }
+
+    pub(crate) fn plan_atom_assignment_proposals(
+        &self,
+        expression: &Atom,
+        candidates: &EquivalentEnergyCandidates,
+    ) -> Result<Vec<EnergyPowerAssignmentPlan>, EnergyPowerAnalysisError> {
         let expected_degrees = self.analyze_atom(expression)?;
         let mut next_factor_id = 0;
         let planned = self.plan_view(expression.as_view(), &mut next_factor_id)?;
         debug_assert_eq!(planned.degrees(), expected_degrees);
 
-        let factor_assignments = planned.minimax_assignments(candidates)?;
-        let exact_bounds = planned.exact_degrees(&factor_assignments)?;
-
-        Ok(EnergyPowerAssignmentPlan {
-            expression: planned,
-            factor_assignments,
-            energy_degree_bounds: exact_bounds.into_iter().collect(),
-        })
+        planned
+            .assignment_proposals(candidates)?
+            .into_iter()
+            .map(|factor_assignments| {
+                let exact_bounds = planned.exact_degrees(&factor_assignments)?;
+                Ok(EnergyPowerAssignmentPlan {
+                    expression: planned.clone(),
+                    factor_assignments,
+                    energy_degree_bounds: exact_bounds.into_iter().collect(),
+                })
+            })
+            .collect()
     }
 
     fn plan_view(
@@ -1101,6 +1218,9 @@ impl EnergyPowerAnalyzer {
                 | UvMomentumProvenanceRole::PhysicalSourceFixed => {
                     EnergyCandidateFamily::Fixed(edge)
                 }
+                UvMomentumProvenanceRole::DenominatorDerivedSoft => {
+                    EnergyCandidateFamily::Unprovenanced(edge)
+                }
             });
         }
         match argument {
@@ -1158,6 +1278,213 @@ impl EnergyPowerAnalyzer {
 }
 
 impl Graph {
+    #[cfg(test)]
+    pub(crate) fn optimize_soft_momentum_routing(
+        &self,
+        numerator: &Atom,
+        active_edges: impl IntoIterator<Item = EdgeIndex>,
+    ) -> color_eyre::Result<Atom> {
+        Ok(self
+            .soft_momentum_routing_proposals(numerator, active_edges)?
+            .remove(0))
+    }
+
+    /// Route only denominator-derived soft momenta once the untouched outer
+    /// numerator is present. Original factors retain their literal owners.
+    /// Every candidate is an exact off-shell linear identity in the production
+    /// LMB, including the fixed external shift; on-shell energies play no role.
+    pub(crate) fn soft_momentum_routing_proposals(
+        &self,
+        numerator: &Atom,
+        active_edges: impl IntoIterator<Item = EdgeIndex>,
+    ) -> color_eyre::Result<Vec<Atom>> {
+        if !numerator.contains_symbol(GS.uv_momentum_provenance) {
+            return Ok(vec![numerator.clone()]);
+        }
+        let mut soft_components = BTreeSet::new();
+        let _ = numerator.replace_map(|view, _, output| {
+            if let AtomView::Fun(momentum) = view
+                && momentum.get_symbol() == GS.emr_mom
+                && momentum.get_nargs() == 2
+                && let Some((_, UvMomentumProvenanceRole::DenominatorDerivedSoft, _)) =
+                    GS.uv_momentum_provenance_data(momentum.get(0))
+            {
+                soft_components.insert(view.to_owned());
+                **output = view.to_owned();
+            }
+        });
+        if soft_components.is_empty() {
+            return Ok(vec![numerator.clone()]);
+        }
+
+        let active_edges = active_edges.into_iter().collect::<BTreeSet<_>>();
+        let analyzer = EnergyPowerAnalyzer::for_physical_emr_edges(active_edges.iter().copied());
+        let lmb = &self.loop_momentum_basis;
+        let row = |edge: EdgeIndex| {
+            lmb.edge_signatures[edge]
+                .internal
+                .iter()
+                .map(|sign| match sign {
+                    SignOrZero::Minus => -1,
+                    SignOrZero::Zero => 0,
+                    SignOrZero::Plus => 1,
+                })
+                .collect::<Vec<i64>>()
+        };
+        let rows = active_edges
+            .iter()
+            .map(|edge| (*edge, row(*edge)))
+            .filter(|(_, row)| row.iter().any(|coefficient| *coefficient != 0))
+            .collect::<Vec<_>>();
+        let rank = rank_i64(&rows.iter().map(|(_, row)| row.clone()).collect::<Vec<_>>());
+        let mut alternatives = BTreeMap::new();
+        let mut planning_edges = active_edges.clone();
+        for component in soft_components {
+            let AtomView::Fun(momentum) = component.as_view() else {
+                unreachable!()
+            };
+            let (owner, _, payload) = GS.uv_momentum_provenance_data(momentum.get(0)).unwrap();
+            planning_edges.insert(owner);
+            let original = GS.erase_uv_momentum_provenance(&component);
+            // Soft tags name actual crown carriers. A nested Taylor operation
+            // consumes its new hard part separately before reaching this stage.
+            if payload
+                != FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(usize::from(owner))
+                    .finish()
+            {
+                return Err(eyre::eyre!(
+                    "soft momentum provenance does not retain its literal crown carrier"
+                ));
+            }
+            let target = row(owner);
+            let indices = [momentum.get(1).to_owned()];
+            let spatial = matches!(
+                analyzer.lorentz_index_kind(momentum.get(1)),
+                LorentzIndexKind::Spatial
+            );
+            let fixed_external = target.iter().all(|coefficient| *coefficient == 0);
+            let mut candidates = BTreeSet::new();
+            if spatial || fixed_external || active_edges.contains(&owner) {
+                candidates.insert(original);
+            }
+            if spatial {
+                // Concrete spatial components carry no energy rank and keep
+                // their original routing.
+            } else if fixed_external {
+                candidates.insert(lmb.ext_atom(owner, GS.emr_mom, &indices, true));
+            } else {
+                // Every minimal support is linearly independent and extends to
+                // a basis of the available row space. Enumerating those bases
+                // therefore includes every nondominated energy support.
+                for selected in rows.iter().combinations(rank) {
+                    for columns in (0..target.len()).combinations(rank) {
+                        let matrix = columns
+                            .iter()
+                            .map(|axis| {
+                                selected
+                                    .iter()
+                                    .map(|(_, row)| Rational::from(row[*axis]))
+                                    .collect()
+                            })
+                            .collect();
+                        let rhs = columns
+                            .iter()
+                            .map(|axis| Rational::from(target[*axis]))
+                            .collect();
+                        let Some(coefficients) = solve_rational_system(matrix, rhs) else {
+                            continue;
+                        };
+                        if !(0..target.len()).all(|axis| {
+                            selected.iter().zip(&coefficients).fold(
+                                Rational::from(0),
+                                |sum, ((_, row), coefficient)| {
+                                    sum + coefficient * &Rational::from(row[axis])
+                                },
+                            ) == target[axis]
+                        }) {
+                            continue;
+                        }
+                        let mut candidate = lmb.ext_atom(owner, GS.emr_mom, &indices, true);
+                        for ((edge, _), coefficient) in selected.iter().zip(coefficients) {
+                            if coefficient != 0 {
+                                candidate += Atom::num(coefficient)
+                                    * (GS.emr_mom(*edge, &indices[0])
+                                        - lmb.ext_atom(*edge, GS.emr_mom, &indices, true));
+                            }
+                        }
+                        candidates.insert(candidate);
+                        // Different invertible minors of one basis give the
+                        // same unique exact solution.
+                        break;
+                    }
+                }
+            }
+            if candidates.is_empty() {
+                return Err(eyre::eyre!(
+                    "soft energy on crown edge {owner} has no exact routing through the active outer CFF edges {active_edges:?}"
+                ));
+            }
+            alternatives.insert(
+                component,
+                candidates
+                    .into_iter()
+                    .map(|candidate| Ok((candidate.clone(), analyzer.analyze_atom(&candidate)?)))
+                    .collect::<Result<Vec<_>, EnergyPowerAnalysisError>>()?,
+            );
+        }
+
+        // An unavailable crown carrier must still expose its power factors to
+        // the planner; treating it as constant would silently lose the ranks
+        // of the active edges onto which its energy has to be routed. Fixed
+        // loads on these extra axes are identical in every assignment and do
+        // not enter the final active-edge objective.
+        let planned = EnergyPowerAnalyzer::for_physical_emr_edges(planning_edges)
+            .plan_view(numerator.as_view(), &mut 0)?;
+        let mut proposals = planned.soft_momentum_assignments(&alternatives);
+        proposals.sort_by_cached_key(|(degrees, assignments)| {
+            let mut envelope = active_edges
+                .iter()
+                .map(|edge| degrees.degrees.get(edge).copied().unwrap_or(0))
+                .collect::<Vec<_>>();
+            envelope.sort_unstable_by(|left, right| right.cmp(left));
+            (envelope, assignments.clone())
+        });
+        // The bounded search uses the certified basis/Pareto class only to
+        // propose candidates. Actual native map count selects between them before
+        // graph surface conversion; no global count optimum is claimed.
+        proposals
+            .into_iter()
+            .unique_by(|(degrees, _)| {
+                active_edges
+                    .iter()
+                    .map(|edge| degrees.degrees.get(edge).copied().unwrap_or(0))
+                    .collect::<Vec<_>>()
+            })
+            .take(ENERGY_ASSIGNMENT_PROPOSAL_BUDGET)
+            .map(|(_, assignments)| {
+                let optimized = planned.map(&BTreeMap::new(), &mut |id, factor, _| {
+                    Ok::<_, EnergyPowerAnalysisError>(assignments.get(&id).map_or_else(
+                        || factor.clone(),
+                        |choice| alternatives[factor][*choice].0.clone(),
+                    ))
+                })?;
+                // Energy-independent powers/functions need no assignment traversal.
+                // Erase their remaining soft metadata without changing their routing.
+                Ok(optimized.replace_map(|view, _, output| {
+                    if let AtomView::Fun(momentum) = view
+                        && momentum.get_symbol() == GS.emr_mom
+                        && momentum.get_nargs() == 2
+                        && let Some((_, UvMomentumProvenanceRole::DenominatorDerivedSoft, _)) =
+                            GS.uv_momentum_provenance_data(momentum.get(0))
+                    {
+                        **output = GS.erase_uv_momentum_provenance(&view.to_owned());
+                    }
+                }))
+            })
+            .collect()
+    }
+
     pub fn full_numerator_atom(&self) -> Atom {
         self.numerator(&self.full_filter(), &self.empty_subgraph())
             .get_single_atom()
@@ -1242,12 +1569,28 @@ impl Graph {
             .collect())
     }
 
+    #[cfg(test)]
     pub(crate) fn plan_numerator_energy_assignment_in_atom_excluding(
         &self,
         numerator: &Atom,
         excluded_edges: impl IntoIterator<Item = EdgeIndex>,
         candidates: &EquivalentEnergyCandidates,
     ) -> Result<EnergyPowerAssignmentPlan, EnergyPowerAnalysisError> {
+        Ok(self
+            .plan_numerator_energy_assignment_proposals_in_atom_excluding(
+                numerator,
+                excluded_edges,
+                candidates,
+            )?
+            .remove(0))
+    }
+
+    pub(crate) fn plan_numerator_energy_assignment_proposals_in_atom_excluding(
+        &self,
+        numerator: &Atom,
+        excluded_edges: impl IntoIterator<Item = EdgeIndex>,
+        candidates: &EquivalentEnergyCandidates,
+    ) -> Result<Vec<EnergyPowerAssignmentPlan>, EnergyPowerAnalysisError> {
         let excluded_edges = excluded_edges.into_iter().collect::<BTreeSet<_>>();
         let active_edges = self
             .underlying
@@ -1257,7 +1600,7 @@ impl Graph {
                     .then_some(edge)
             });
         EnergyPowerAnalyzer::for_physical_emr_edges(active_edges)
-            .plan_atom_assignment(numerator, candidates)
+            .plan_atom_assignment_proposals(numerator, candidates)
     }
 }
 
@@ -1266,11 +1609,14 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
+        dot,
+        graph::{Graph, LMBext, parse::IntoGraph},
+        initialisation::test_initialise,
         numerator::energy_degree::{
             EnergyCandidateFamily, EnergyPowerAnalysisError, EnergyPowerAnalyzer,
             EquivalentEnergyCandidates,
         },
-        utils::GS,
+        utils::{GS, W_, symbols::UvMomentumProvenanceRole},
     };
     use linnet::half_edge::involution::EdgeIndex;
     use spenso::structure::{
@@ -1278,7 +1624,7 @@ mod tests {
         representation::{LibraryRep, Minkowski},
     };
     use symbolica::{
-        atom::{Atom, AtomCore, FunctionBuilder},
+        atom::{Atom, AtomCore, AtomView, FunctionBuilder},
         function, symbol,
     };
 
@@ -1571,6 +1917,259 @@ mod tests {
         unit_assignments.sort_unstable();
         assert_eq!(denominator_assignments, vec![11, 12]);
         assert_eq!(unit_assignments, vec![11, 12]);
+    }
+
+    #[test]
+    fn production_minimax_balances_the_entire_envelope_below_a_fixed_quartic() {
+        let edge = EdgeIndex(3);
+        let fixed = uv_owned_q3(false, GS.cind(0));
+        let derived = uv_owned_q3(true, GS.cind(0));
+        let denominator = function!(
+            GS.den,
+            3,
+            function!(GS.emr_mom, 3),
+            1,
+            derived.clone().pow(2)
+        );
+        // The quadratic wrapper stays indivisible. Minimizing only the maximum
+        // rank, then splitting the two unit factors, would choose (4, 3, 1).
+        let expression = fixed.clone().pow(4) * &denominator * derived.clone().pow(2);
+        let plan = EnergyPowerAnalyzer::for_physical_emr_edges([edge])
+            .plan_atom_assignment(
+                &expression,
+                &production_candidates_with_two_derived_copies(),
+            )
+            .unwrap();
+        assert_eq!(plan.energy_degree_bounds(), &[(10, 4), (11, 2), (12, 2)]);
+
+        let mut wrapper_occurrence = None;
+        let mut unit_occurrences = Vec::new();
+        let mapped = plan
+            .map_factors(|factor, assignments| {
+                if factor == &fixed {
+                    assert_eq!(assignments[&edge], 10);
+                } else if factor == &denominator {
+                    wrapper_occurrence = Some(assignments[&edge]);
+                } else if factor == &derived {
+                    unit_occurrences.push(assignments[&edge]);
+                }
+                Ok::<_, ()>(factor.clone())
+            })
+            .unwrap();
+        assert_eq!(mapped, expression);
+        assert_eq!(unit_occurrences.len(), 2);
+        assert_eq!(unit_occurrences[0], unit_occurrences[1]);
+        assert_ne!(wrapper_occurrence, Some(unit_occurrences[0]));
+    }
+
+    #[test]
+    fn bounded_hard_dispatch_keeps_originals_and_proposes_distinct_copy_bounds() {
+        let edge = EdgeIndex(3);
+        let fixed = uv_owned_q3(false, GS.cind(0));
+        let derived = uv_owned_q3(true, GS.cind(0));
+        let expression = fixed.clone().pow(4) * derived.clone().pow(2);
+        let plans = EnergyPowerAnalyzer::for_physical_emr_edges([edge])
+            .plan_atom_assignment_proposals(
+                &expression,
+                &production_candidates_with_two_derived_copies(),
+            )
+            .unwrap();
+        assert_eq!(plans.len(), 3);
+        assert_eq!(
+            plans[0].energy_degree_bounds(),
+            &[(10, 4), (11, 1), (12, 1)]
+        );
+        assert_eq!(plans[1].energy_degree_bounds(), &[(10, 4), (11, 2)]);
+        assert_eq!(plans[2].energy_degree_bounds(), &[(10, 4), (12, 2)]);
+        for plan in plans {
+            let mut fixed_count = 0;
+            let mut derived_count = 0;
+            let mapped = plan
+                .map_factors(|factor, assignments| {
+                    if factor == &fixed {
+                        assert_eq!(assignments[&edge], 10);
+                        fixed_count += 1;
+                    } else if factor == &derived {
+                        assert!([11, 12].contains(&assignments[&edge]));
+                        derived_count += 1;
+                    }
+                    Ok::<_, ()>(factor.clone())
+                })
+                .unwrap();
+            assert_eq!(mapped, expression);
+            assert_eq!((fixed_count, derived_count), (4, 2));
+        }
+    }
+
+    #[test]
+    fn soft_taylor_routing_balances_the_outer_envelope_without_moving_originals()
+    -> color_eyre::Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph soft_taylor_cograph {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2]
+            b -> c [id=3 lmb_id=1]
+            c -> d [id=4]
+            d -> a [id=5]
+            d -> outgoing [id=6]
+        })?;
+        let soft_component = |index: Atom| {
+            let owner = Atom::num(4);
+            let payload = function!(GS.emr_mom, 4);
+            function!(
+                GS.emr_mom,
+                GS.uv_momentum_provenance_tag(
+                    owner.as_view(),
+                    UvMomentumProvenanceRole::DenominatorDerivedSoft,
+                    payload.as_view(),
+                ),
+                index
+            )
+        };
+        let soft = |index| soft_component(GS.cind(index));
+        let fixed_quartic = GS.emr_mom(EdgeIndex(3), GS.cind(0)).pow(4);
+        let fixed_linear = GS.emr_mom(EdgeIndex(4), GS.cind(0));
+        let numerator = &fixed_quartic * &fixed_linear * soft(0).pow(3);
+        let active = [EdgeIndex(3), EdgeIndex(4), EdgeIndex(5)];
+        let optimized = graph.optimize_soft_momentum_routing(&numerator, active)?;
+        assert_eq!(
+            EnergyPowerAnalyzer::for_physical_emr_edges(active)
+                .analyze_atom(&optimized)?
+                .into_generation_bounds(),
+            vec![(3, 4), (4, 2), (5, 2)],
+        );
+        assert_ne!(
+            optimized.replace(fixed_quartic.clone()).with(Atom::one()),
+            optimized,
+            "the original quartic remains on its original edge",
+        );
+        let neutral = graph.normal_emr_replacement(
+            &graph.full_filter(),
+            &graph.loop_momentum_basis,
+            &[W_.x___],
+            |_| true,
+        );
+        assert!(
+            (optimized.replace_multiple(&neutral)
+                - GS.erase_uv_momentum_provenance(&numerator)
+                    .replace_multiple(&neutral))
+            .expand()
+            .is_zero(),
+            "soft routing must be an exact off-shell identity"
+        );
+        assert!(!optimized.contains_symbol(GS.uv_momentum_provenance));
+        assert_eq!(
+            graph.optimize_soft_momentum_routing(&soft(1).pow(2), active)?,
+            GS.emr_mom(EdgeIndex(4), GS.cind(1)).pow(2),
+            "spatial powers lose metadata without being expanded or rerouted",
+        );
+        let surviving = [EdgeIndex(3), EdgeIndex(5)];
+        let rerouted = graph.optimize_soft_momentum_routing(&soft(0).pow(2), surviving)?;
+        assert_eq!(
+            EnergyPowerAnalyzer::for_physical_emr_edges(surviving)
+                .analyze_atom(&rerouted)?
+                .into_generation_bounds(),
+            vec![(3, 1), (5, 1)],
+            "an unavailable crown carrier cannot masquerade as a rank-zero coefficient",
+        );
+        assert!(
+            (rerouted.replace_multiple(&neutral)
+                - GS.erase_uv_momentum_provenance(&soft(0).pow(2))
+                    .replace_multiple(&neutral))
+            .expand()
+            .is_zero()
+        );
+        assert!(
+            graph
+                .optimize_soft_momentum_routing(&soft(0), [EdgeIndex(1)])
+                .unwrap_err()
+                .to_string()
+                .contains("no exact routing")
+        );
+        let vector_index = compact_minkowski_vector();
+        let dot = function!(
+            GS.dot,
+            soft_component(vector_index.clone()),
+            GS.emr_mom(EdgeIndex(0), vector_index)
+        );
+        // This diagnostic routing polynomial exercises abstract vector slots
+        // and a factorized additive power without using numerator expansion.
+        let factorized = &fixed_quartic * (dot + Atom::one()).pow(2);
+        let routed = graph.optimize_soft_momentum_routing(&factorized, active)?;
+        assert_eq!(
+            EnergyPowerAnalyzer::for_physical_emr_edges(active)
+                .analyze_atom(&routed)?
+                .into_generation_bounds(),
+            vec![(3, 4), (4, 1), (5, 1)],
+        );
+        assert!(matches!(routed.as_view(), AtomView::Mul(_)));
+        assert!(
+            (routed.replace_multiple(&neutral)
+                - GS.erase_uv_momentum_provenance(&factorized)
+                    .replace_multiple(&neutral))
+            .expand()
+            .is_zero(),
+            "abstract-slot routing must obey the same exact linear identity"
+        );
+        // A dependent external carrier has two literal exact representations,
+        // but both request the same all-zero active CFF capacity. A lone factor
+        // bypasses the composite-node deduplication and must still be scored once.
+        let external_owner = [EdgeIndex(0), EdgeIndex(6)]
+            .into_iter()
+            .find(|edge| {
+                graph
+                    .loop_momentum_basis
+                    .ext_atom(*edge, GS.emr_mom, &[GS.cind(0)], true)
+                    != GS.emr_mom(*edge, GS.cind(0))
+            })
+            .expect("one of the two external momenta is dependent");
+        let owner = Atom::num(usize::from(external_owner));
+        let payload = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(external_owner))
+            .finish();
+        let external_soft = function!(
+            GS.emr_mom,
+            GS.uv_momentum_provenance_tag(
+                owner.as_view(),
+                UvMomentumProvenanceRole::DenominatorDerivedSoft,
+                payload.as_view(),
+            ),
+            GS.cind(0)
+        );
+        let literal = GS.erase_uv_momentum_provenance(&external_soft);
+        let external =
+            graph
+                .loop_momentum_basis
+                .ext_atom(external_owner, GS.emr_mom, &[GS.cind(0)], true);
+        assert_ne!(
+            literal, external,
+            "the fixture must expose duplicate capacity through different atoms"
+        );
+        let proposals = graph.soft_momentum_routing_proposals(&external_soft, active)?;
+        assert_eq!(proposals.len(), 1);
+        assert!(proposals[0] == literal || proposals[0] == external);
+        assert!(
+            EnergyPowerAnalyzer::for_physical_emr_edges(active)
+                .analyze_atom(&proposals[0])?
+                .is_empty()
+        );
+        let factorized = (external_soft + Atom::one()).pow(8);
+        let proposals = graph.soft_momentum_routing_proposals(&factorized, active)?;
+        assert_eq!(proposals.len(), 1);
+        assert!(
+            matches!(proposals[0].as_view(), AtomView::Pow(_)),
+            "zero-capacity routing must retain the unexpanded additive power"
+        );
+        assert!(
+            proposals[0] == (literal + Atom::one()).pow(8)
+                || proposals[0] == (external + Atom::one()).pow(8)
+        );
+        Ok(())
     }
 
     #[test]

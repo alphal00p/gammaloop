@@ -130,19 +130,7 @@ impl AmplitudeCountertermAtom {
             // In explicit mode the atom already contains the complete
             // orientation sum, so selecting orientations again would double count it.
             let (evaluator_stack, evaluator_timings) =
-                if let Some(bodies) = self.parametric.deferred_terms(index) {
-                    assert!(
-                        global_settings.generation.explicit_orientation_sum_only,
-                        "deferred projected-CFF terms require an explicit orientation sum"
-                    );
-                    EvaluatorStack::new_deferred_explicit_sum_with_timings(
-                        integrand,
-                        bodies,
-                        param_builder,
-                        dual_shape,
-                        &global_settings.generation.evaluator,
-                    )
-                } else if global_settings.generation.explicit_orientation_sum_only {
+                if global_settings.generation.explicit_orientation_sum_only {
                     EvaluatorStack::new_explicit_sum_with_timings(
                         slice::from_ref(integrand),
                         param_builder,

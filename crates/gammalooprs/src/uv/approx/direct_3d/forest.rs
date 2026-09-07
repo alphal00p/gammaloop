@@ -253,13 +253,7 @@ impl<'a> Direct3dApproximation<'a> {
         let FrozenActiveCt {
             active,
             frozen_integrands,
-            active_lmb,
         } = self.localizer.localize(expr, self.graph, integrated_node)?;
-        if active_lmb.is_some() {
-            return Err(eyre!(
-                "a direct integrated localization unexpectedly retained a projected-4D Taylor LMB"
-            ));
-        }
         let branches = DirectResidueBranches::from_transient(&active)?;
         Ok((branches, frozen_integrands))
     }
@@ -277,113 +271,36 @@ impl<'a> Direct3dApproximation<'a> {
         // integrations. The explicit-sum option changes only whether each
         // branch's complete residue-map key is materialized as a selector; it
         // must not select a different UV construction.
-        let integrated_atom = integrated.physical_finite_counterterm_atom();
-        let integrated_t = (!integrated_atom.is_zero())
-            .then(|| self.localize_integrated(&integrated_atom, given))
+        // Localize the integrated source before reading the local graph, as
+        // localization registers its CFF surfaces. The two Taylor branches
+        // are independent; each replay method supplies its own minus and marker.
+        // A sequential zero addback is omitted, while an explicit integrated
+        // replay keeps its typed zero sector for disconnected descendants.
+        let finite_counterterm = integrated.physical_finite_counterterm_atom();
+        let integrated = (!finite_counterterm.is_zero())
+            .then(|| {
+                self.run_integrated(
+                    &finite_counterterm,
+                    given,
+                    current,
+                    given,
+                    marker_current,
+                    marker_given,
+                )
+            })
             .transpose()?;
-        let ctx = UVCtx::new(self.graph, self.settings);
-        let marker = UvMarker::new(ctx.settings);
-        let reduced_subgraph = current.reduced_subgraph(given);
-        let sectors = match local {
-            Direct3dCts::Root(branches) => vec![(
-                self.graph.empty_subgraph(),
-                Vec::new(),
-                branches.clone(),
-                branches.identity_integrands(),
-            )],
-            Direct3dCts::Sectors(sectors) => sectors
-                .iter()
-                .map(|sector| {
-                    (
-                        sector.active_subgraph.clone(),
-                        sector.coordinate_frames.clone(),
-                        sector.active.clone(),
-                        sector.frozen_integrands.clone(),
-                    )
-                })
-                .collect(),
-        };
-        let mut next = Vec::with_capacity(sectors.len() + usize::from(integrated_t.is_some()));
-
-        for (prior_active_subgraph, prior_frames, active, frozen_integrands) in sectors {
-            let active_subgraph = prior_active_subgraph.union(&reduced_subgraph);
-            let rescaled_subgraph = active_subgraph.intersection(current.subgraph());
-            let coordinate_lmb = coordinate_lmb(
-                &ctx,
-                current,
-                given,
-                Some(&prior_active_subgraph),
-                &prior_frames,
-                &rescaled_subgraph,
-            )?;
-            let coordinate_frames = extend_coordinate_frames(
-                prior_frames,
-                DirectCoordinateFrame {
-                    active_subgraph: rescaled_subgraph.clone(),
-                    lmb: coordinate_lmb.clone(),
-                },
-            )?;
-            // A normalized integrated prefix is inert under every later Taylor
-            // operation. Transform only its complete active CFF and retain the
-            // frozen localizing kernel outside the series.
-            let active = -active.fallible_map(|key, atom| {
-                apply_taylor(
-                    &ctx,
-                    self.localizer.orientation,
-                    current,
-                    given,
-                    Some(rescaled_subgraph.clone()),
-                    &coordinate_lmb,
-                    key,
-                    atom,
-                )
-            })?;
-            next.push(DirectSector {
-                active_subgraph,
-                coordinate_frames,
-                active,
-                frozen_integrands,
-            });
+        let local = self.run_local(local, current, given, marker_current, marker_given)?;
+        if let Some(integrated) = integrated {
+            let mut sectors = local.sectors()?.to_vec();
+            sectors.extend(integrated.sectors()?.iter().cloned());
+            Direct3dCts::from_sectors(sectors)
+        } else {
+            Ok(local)
         }
-
-        if let Some((active, frozen_integrands)) = integrated_t {
-            let coordinate_lmb =
-                coordinate_lmb(&ctx, current, given, None, &[], &reduced_subgraph)?;
-            let active = -active.fallible_map(|key, atom| {
-                apply_taylor(
-                    &ctx,
-                    self.localizer.orientation,
-                    current,
-                    given,
-                    Some(reduced_subgraph.clone()),
-                    &coordinate_lmb,
-                    key,
-                    atom,
-                )
-            })?;
-            next.push(DirectSector {
-                active_subgraph: reduced_subgraph.clone(),
-                coordinate_frames: vec![DirectCoordinateFrame {
-                    active_subgraph: reduced_subgraph,
-                    lmb: coordinate_lmb,
-                }],
-                active,
-                frozen_integrands,
-            });
-        }
-
-        Direct3dCts::from_sectors(next)?.map(|atom| {
-            Ok(marker.apply(
-                UvOperation::Approx,
-                marker_current.subgraph(),
-                marker_given.subgraph(),
-                atom,
-            ))
-        })
     }
 
     pub(crate) fn run_local<S: ForestNodeLike, M: ForestNodeLike>(
-        self,
+        &self,
         local: &Direct3dCts,
         current: &S,
         given: &S,
@@ -396,7 +313,7 @@ impl<'a> Direct3dApproximation<'a> {
             Direct3dCts::Root(branches) => vec![(
                 self.graph.empty_subgraph(),
                 Vec::new(),
-                branches.clone(),
+                branches,
                 branches.identity_integrands(),
             )],
             Direct3dCts::Sectors(sectors) => sectors
@@ -405,7 +322,7 @@ impl<'a> Direct3dApproximation<'a> {
                     (
                         sector.active_subgraph.clone(),
                         sector.coordinate_frames.clone(),
-                        sector.active.clone(),
+                        &sector.active,
                         sector.frozen_integrands.clone(),
                     )
                 })
@@ -434,6 +351,9 @@ impl<'a> Direct3dApproximation<'a> {
                             lmb: coordinate_lmb.clone(),
                         },
                     )?;
+                    // A normalized integrated prefix is inert under every later Taylor
+                    // operation. Transform only its complete active CFF and retain the
+                    // frozen localizing kernel outside the series.
                     Ok(DirectSector {
                         active_subgraph,
                         coordinate_frames,
@@ -467,18 +387,16 @@ impl<'a> Direct3dApproximation<'a> {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn run_integrated<S: ForestNodeLike, I: ForestNodeLike, M: ForestNodeLike>(
-        mut self,
-        integrated: &IntegratedCts,
+        &mut self,
+        finite_counterterm: &Atom,
         integrated_node: &I,
         current: &S,
         given: &S,
         marker_current: &M,
         marker_given: &M,
     ) -> Result<Direct3dCts> {
-        let (active, frozen_integrands) = self.localize_integrated(
-            &integrated.physical_finite_counterterm_atom(),
-            integrated_node,
-        )?;
+        let (active, frozen_integrands) =
+            self.localize_integrated(finite_counterterm, integrated_node)?;
         let ctx = UVCtx::new(self.graph, self.settings);
         let active_subgraph = current.reduced_subgraph(given);
         let coordinate_lmb = coordinate_lmb(&ctx, current, given, None, &[], &active_subgraph)?;

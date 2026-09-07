@@ -359,7 +359,7 @@ impl CrossSectionIntegrand {
 
         self.settings
             .to_file(path.as_ref().join("settings.toml"), override_existing)
-            .with_context(|| "Error saving settings.toml file for amplitude integrand")?;
+            .with_context(|| "Error saving settings.toml file for cross-section integrand")?;
         Ok(())
     }
 
@@ -370,7 +370,7 @@ impl CrossSectionIntegrand {
 
         let settings = SmartSerde::from_file(
             path.as_ref().join("settings.toml"),
-            "runtime settings for amplitude integrand",
+            "runtime settings for cross-section integrand",
         )?;
 
         Ok(CrossSectionIntegrand {
@@ -771,45 +771,30 @@ impl CrossSectionGraphTerm {
                 }
                 let dual_shape = shape_from_cut_cff_index(cut_cff_index);
 
-                let (evaluator_stack, evaluator_timings) = if let Some(bodies) =
-                    integrand_for_cut_group
-                        .integrands
-                        .deferred_terms(cut_cff_index)
-                {
-                    assert!(
-                        settings.generation.explicit_orientation_sum_only,
-                        "deferred projected-CFF terms require an explicit orientation sum"
-                    );
-                    EvaluatorStack::new_deferred_explicit_sum_with_timings(
-                        integrand_for_subset,
-                        bodies,
-                        &graph.graph.param_builder,
-                        dual_shape,
-                        &settings.generation.evaluator,
-                    )
-                } else if settings.generation.explicit_orientation_sum_only {
-                    EvaluatorStack::new_explicit_sum_with_timings(
-                        slice::from_ref(integrand_for_subset),
-                        &graph.graph.param_builder,
-                        dual_shape,
-                        &settings.generation.evaluator,
-                    )
-                } else {
-                    EvaluatorStack::new_with_timings(
-                        slice::from_ref(integrand_for_subset),
-                        &graph.graph.param_builder,
-                        &orientations.raw,
-                        &production_orientation_ids,
-                        dual_shape,
-                        &settings.generation.evaluator,
-                    )
-                }
-                .with_context(|| {
-                    format!(
-                        "Failed to create evaluator for graph{}",
-                        graph.graph.debug_dot()
-                    )
-                })?;
+                let (evaluator_stack, evaluator_timings) =
+                    if settings.generation.explicit_orientation_sum_only {
+                        EvaluatorStack::new_explicit_sum_with_timings(
+                            slice::from_ref(integrand_for_subset),
+                            &graph.graph.param_builder,
+                            dual_shape,
+                            &settings.generation.evaluator,
+                        )
+                    } else {
+                        EvaluatorStack::new_with_timings(
+                            slice::from_ref(integrand_for_subset),
+                            &graph.graph.param_builder,
+                            &orientations.raw,
+                            &production_orientation_ids,
+                            dual_shape,
+                            &settings.generation.evaluator,
+                        )
+                    }
+                    .with_context(|| {
+                        format!(
+                            "Failed to create evaluator for graph{}",
+                            graph.graph.debug_dot()
+                        )
+                    })?;
                 if crate::is_interrupted() {
                     return Err(eyre!("Generation interrupted by user"));
                 }

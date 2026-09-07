@@ -10,7 +10,9 @@ use linnet::half_edge::{
     subgraph::{SuBitGraph, SubSetLike, SubSetOps},
 };
 use symbolica::atom::Atom;
-use three_dimensional_reps::CffGenerationContext;
+use three_dimensional_reps::{
+    CffGenerationContext, Generate3DExpressionOptions, GeneratedThreeDExpression,
+};
 
 use crate::{
     cff::{
@@ -20,7 +22,7 @@ use crate::{
         surface::LinearEnergyExpr,
     },
     debug_tags,
-    graph::{Graph, cuts::CutSet},
+    graph::{FeynmanGraph, Graph, cuts::CutSet},
     settings::global::OrientationPattern,
     utils::GS,
     uv::approx::OrientationProjection,
@@ -46,10 +48,18 @@ impl<'a> Localizer<'a> {
         self
     }
 
-    fn cff_contract_subgraph(self, graph: &Graph, to_contract: &SuBitGraph) -> SuBitGraph {
-        to_contract
+    fn cff_setup(
+        self,
+        graph: &Graph,
+        to_contract: &SuBitGraph,
+        generation_context: CffGenerationContext,
+    ) -> Result<(SuBitGraph, Generate3DExpressionOptions)> {
+        let contract_subgraph = to_contract
             .union(&graph.tree_edges)
-            .subtract(&graph.initial_state_cut)
+            .subtract(&graph.initial_state_cut);
+        let mut options = self.orientation.cff_options()?;
+        options.cff_generation_context = generation_context;
+        Ok((contract_subgraph, options))
     }
 
     fn cff(
@@ -59,9 +69,8 @@ impl<'a> Localizer<'a> {
         analysis_numerators: impl IntoIterator<Item = impl Borrow<Atom>>,
         generation_context: CffGenerationContext,
     ) -> Result<(CutCFF, SuBitGraph)> {
-        let contract_subgraph = self.cff_contract_subgraph(graph, to_contract);
-        let mut options = self.orientation.cff_options()?;
-        options.cff_generation_context = generation_context;
+        let (contract_subgraph, mut options) =
+            self.cff_setup(graph, to_contract, generation_context)?;
         // Exact projection applies the user pattern to full production maps.
         // Contracted edges are undirected in the reduced CFF and cannot be
         // filtered against a pattern that still constrains those edges.
@@ -115,6 +124,7 @@ impl<'a> Localizer<'a> {
         Ok((cff, contract_subgraph))
     }
 
+    #[cfg(test)]
     pub(super) fn exact_representatives(
         self,
         graph: &Graph,
@@ -322,7 +332,6 @@ impl<'a> Localizer<'a> {
         internal_edges: &[EdgeIndex],
         valid_production_ids: Option<&BTreeSet<OrientationID>>,
         production_orientation_id: Option<OrientationID>,
-        source_edge_energy_map: Option<&[LinearEnergyExpr]>,
     ) -> Result<Vec<(OrientationID, Atom)>> {
         let production = self.orientation.exact_orientations()?;
         if let Some(id) = production_orientation_id {
@@ -347,9 +356,7 @@ impl<'a> Localizer<'a> {
                 .map(|_| vec![(id, reduced_expression.clone())])
                 .unwrap_or_default());
         }
-        let candidate_representatives = if source_edge_energy_map.is_none() {
-            self.exact_representatives(graph, reduced, contract_subgraph)?
-        } else {
+        let candidate_representatives =
             match self.source_selector_representatives(graph, reduced, contract_subgraph) {
                 Ok(representatives) if !representatives.is_empty() => representatives,
                 Ok(_) | Err(_)
@@ -364,15 +371,13 @@ impl<'a> Localizer<'a> {
                 }
                 Ok(representatives) => representatives,
                 Err(error) => return Err(error),
-            }
-        };
+            };
         let mut representatives = candidate_representatives
             .iter()
             .copied()
             .filter(|id| valid_production_ids.is_none_or(|valid| valid.contains(id)))
             .collect::<Vec<_>>();
         if representatives.is_empty()
-            && source_edge_energy_map.is_some()
             && (self.source_selector_hosting == SourceSelectorHosting::IndependentSum
                 || self.orientation.explicit_orientation_sum_only)
         {
@@ -436,6 +441,90 @@ impl<'a> Localizer<'a> {
     ) -> Result<OrientationIntegrands> {
         let (cff, contract_subgraph) =
             self.cff(graph, to_contract, analysis_numerators, generation_context)?;
+        self.project_cff(graph, to_contract, cff, contract_subgraph)
+    }
+
+    pub(crate) fn projected_cff_from_soft_momentum_proposals(
+        self,
+        graph: &mut Graph,
+        to_contract: &SuBitGraph,
+        numerator: &Atom,
+        active_edges: impl IntoIterator<Item = EdgeIndex>,
+        generation_context: CffGenerationContext,
+    ) -> Result<(Atom, OrientationIntegrands)> {
+        let mut proposals = graph.soft_momentum_routing_proposals(numerator, active_edges)?;
+        if to_contract.is_empty() && self.orientation.root_expression().is_some() {
+            // Existing root maps own this source; do not regenerate a different
+            // capacity while pretending to reuse its production expression.
+            let numerator = proposals.remove(0);
+            let projected =
+                self.projected_cff(graph, to_contract, [&numerator], generation_context)?;
+            return Ok((numerator, projected));
+        }
+        let (contract_subgraph, options) =
+            self.cff_setup(graph, to_contract, generation_context)?;
+        let mut contract_edges = graph.paired_edges(&contract_subgraph);
+        contract_edges.sort_unstable();
+        contract_edges.dedup();
+        let mut selected: Option<(usize, Atom, GeneratedThreeDExpression)> = None;
+        for (proposal, numerator) in proposals.into_iter().enumerate() {
+            let started = std::time::Instant::now();
+            let generated = graph.generate_raw_3d_expression_for_integrand(
+                &contract_edges,
+                &options,
+                Some(&numerator),
+            )?;
+            let map_count = generated.expression.orientations.len();
+            debug_tags!(#generation, #profile, #uv, #summary;
+                stage = "outer_cff_routing_proposal",
+                proposal,
+                native_source_maps = map_count,
+                bounds = ?generated.source_energy_degree_bounds,
+                elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                "Scored bounded soft-momentum routing proposal"
+            );
+            // These are actual native source rows. Selected host/map branches
+            // can differ after cuts; rank proposal order only breaks count ties.
+            if selected
+                .as_ref()
+                .is_none_or(|(best, _, _)| map_count < *best)
+            {
+                selected = Some((map_count, numerator, generated));
+            }
+        }
+        let (_, numerator, generated) = selected.expect("soft routing always supplies a baseline");
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let initial_cut_edges = graph
+            .iter_edges_of(&graph.initial_state_cut)
+            .map(|(_, edge, _)| edge)
+            .collect::<Vec<_>>();
+        // This is the first persistent surface mutation. Losing raw proposals
+        // have already been dropped, and the winner is never generated twice.
+        let generated = graph.convert_generated_expression_surfaces(
+            generated,
+            &canonization,
+            &initial_cut_edges,
+        )?;
+        let cff = graph.cff_from_generated_expression(
+            generated,
+            &contract_subgraph,
+            self.cutset,
+            &OrientationPattern::default(),
+            &options,
+        )?;
+        self.orientation
+            .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
+        let projected = self.project_cff(graph, to_contract, cff, contract_subgraph)?;
+        Ok((numerator, projected))
+    }
+
+    fn project_cff(
+        self,
+        graph: &Graph,
+        to_contract: &SuBitGraph,
+        cff: CutCFF,
+        contract_subgraph: SuBitGraph,
+    ) -> Result<OrientationIntegrands> {
         // A generalized source map can have several resolved production
         // extensions, but only some of them support the selected Cutkosky
         // residue. Restrict selector hosts to those admissible production IDs,
@@ -524,24 +613,24 @@ impl<'a> Localizer<'a> {
                     &internal_edges,
                     valid_production_ids,
                     reduced.production_orientation_id,
-                    source_edge_energy_map.as_deref(),
                 )?;
                 for (id, expression) in localized {
-                    if !terms.iter().any(|(selector_id, energy_map, _)| {
-                        *selector_id == id && energy_map == &source_edge_energy_map
-                    }) {
-                        terms.push((
-                            id,
-                            source_edge_energy_map.clone(),
-                            indices.iter().map(|index| (*index, Atom::Zero)).collect(),
-                        ));
-                    }
-                    *terms
-                        .iter_mut()
-                        .find(|(selector_id, energy_map, _)| {
+                    let branch = terms
+                        .iter()
+                        .position(|(selector_id, energy_map, _)| {
                             *selector_id == id && energy_map == &source_edge_energy_map
                         })
-                        .and_then(|(_, _, integrands)| integrands.get_mut(&index))
+                        .unwrap_or_else(|| {
+                            terms.push((
+                                id,
+                                source_edge_energy_map.clone(),
+                                indices.iter().map(|index| (*index, Atom::Zero)).collect(),
+                            ));
+                            terms.len() - 1
+                        });
+                    *terms[branch]
+                        .2
+                        .get_mut(&index)
                         .expect("all projected CFF branch keys were initialized") += expression;
                 }
             }

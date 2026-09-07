@@ -397,6 +397,13 @@ impl ExactSourceEnergyMapper {
             else {
                 return;
             };
+            if role == crate::utils::symbols::UvMomentumProvenanceRole::DenominatorDerivedSoft {
+                // The child contour leaves its soft coefficients untouched.
+                // Their complete outer numerator chooses one certified routing
+                // before the outer CFF is generated and mapped.
+                **output = Atom::from(momentum.to_owned());
+                return;
+            }
             // A factorized component maps only its own coordinate domain. Keep
             // remote tags intact so the later component can consume the same
             // unexpanded numerator. Membership in `edge_coordinates`, rather
@@ -454,7 +461,8 @@ impl ExactSourceEnergyMapper {
             // occurrence frame. Convert that sample back through the raw
             // rewritten-denominator frame to the immutable hard momentum.
             // Provenance role controls occurrence assignment, not this frame
-            // conversion: H=hR and P=rR imply H^0=h*r*P^0 for either role.
+            // conversion: H=hR and P=rR imply H^0=h*r*P^0 for both fixed
+            // and denominator-derived hard factors.
             let occurrence_to_hard_sign =
                 hard_to_raw_sign * occurrence.raw_to_parsed_sign;
             let signed_energy = if occurrence_to_hard_sign == -1 {
@@ -512,11 +520,12 @@ impl ExactSourceEnergyMapper {
         }
 
         // An untagged numerator belongs to the unchanged physical graph and
-        // must reproduce its ordinary edge-energy map exactly. Every tagged
-        // factor has already consumed the exact occurrence selected by the
-        // same immutable plan that supplied its CFF energy bound. Fixed
-        // factors stay on the canonical occurrence; only denominator-derived
-        // factors may be balanced over serial copies.
+        // must reproduce its ordinary edge-energy map exactly. Local hard
+        // tagged factors have consumed the exact occurrences selected by the
+        // same immutable plan that supplied their CFF energy bounds. Soft and
+        // remote-component tags remain for their later mapping boundaries.
+        // Fixed factors stay on the canonical occurrence; only newly derived
+        // hard factors may be balanced over serial copies.
         let mut exact_edge_energies = BTreeMap::new();
         if !has_local_provenance {
             for (edge, (occurrence, energy)) in &selected_occurrences {
@@ -918,137 +927,6 @@ impl<'a> GraphThreeDSource<'a> {
             }
             _ => {}
         }
-        let production_signatures = denominators
-            .iter()
-            .map(|denominator| {
-                denominator.momentum_signature(graph, uv_edges.contains(&denominator.source_edge))
-            })
-            .collect::<three_dimensional_reps::graph_io::Result<Vec<_>>>()?;
-        let coordinate_signatures = coordinate_lmb
-            .map(|lmb| {
-                denominators
-                    .iter()
-                    .map(|denominator| {
-                        denominator.momentum_signature_in_lmb(
-                            lmb,
-                            uv_edges.contains(&denominator.source_edge),
-                        )
-                    })
-                    .collect::<three_dimensional_reps::graph_io::Result<Vec<_>>>()
-            })
-            .transpose()?;
-        // Exact 4D sources must use the same coordinate frame as the ordinary
-        // production CFF. The configured graph LMB is not necessarily the
-        // canonical carrier basis selected by `GraphThreeDSource::new`.
-        let mut production_source = Self::new(graph, &[])?;
-        if coordinate_lmb.is_none() && uv_edges.is_empty() && exact_uv_boundary_hedges.is_empty() {
-            let production_parsed = production_source.to_three_d_parsed_graph()?;
-            let production_energy_map = production_source
-                .energy_edge_index_map(&production_parsed)
-                .expect("GammaLoop production sources provide an edge-index map");
-            let original_occurrences = denominators
-                .iter()
-                .enumerate()
-                .filter(|(_, denominator)| denominator.is_original_graph_denominator(graph))
-                .map(|(original, denominator)| (denominator.source_edge, original))
-                .collect::<BTreeMap<_, _>>();
-            let retained_source_edges = production_energy_map
-                .internal
-                .values()
-                .copied()
-                .map(EdgeIndex)
-                .filter(|edge| !production_source.initial_state_cut_edges.contains(edge))
-                .collect::<BTreeSet<_>>();
-            // A complete set of unchanged source denominators is the production
-            // graph, not a reconstructed exact topology. Reuse that source
-            // literally, including its unpaired-external-leg convention.
-            // `vertex_external_balance_info` is not a zero oracle here because
-            // production external coordinates may include a dependent momentum;
-            // this identity path must not pass through exact-source validation.
-            if original_occurrences.len() == denominators.len()
-                && original_occurrences
-                    .keys()
-                    .copied()
-                    .collect::<BTreeSet<_>>()
-                    == retained_source_edges
-            {
-                let local_edges_by_source = production_energy_map
-                    .internal
-                    .iter()
-                    .map(|(local, source)| (EdgeIndex(*source), *local))
-                    .collect::<BTreeMap<_, _>>();
-                let exact_signatures = denominators
-                    .iter()
-                    .map(|denominator| {
-                        let signature = production_parsed.internal_edges
-                            [local_edges_by_source[&denominator.source_edge]]
-                            .signature
-                            .clone();
-                        let source_momentum = FunctionBuilder::new(GS.emr_mom)
-                            .add_arg(usize::from(denominator.source_edge))
-                            .finish();
-                        if denominator.momentum == source_momentum {
-                            signature
-                        } else {
-                            signature.negated()
-                        }
-                    })
-                    .collect();
-                let exact_occurrences = production_energy_map
-                    .internal
-                    .iter()
-                    .filter_map(|(local_edge_id, energy_edge_id)| {
-                        original_occurrences.get(&EdgeIndex(*energy_edge_id)).map(
-                            |original_occurrence| ExactParsedOccurrence {
-                                local_edge_id: *local_edge_id,
-                                energy_edge_id: *energy_edge_id,
-                                original_occurrence: *original_occurrence,
-                                is_base: true,
-                            },
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                production_source.exact_denominators = Some(denominators);
-                production_source.exact_signatures = exact_signatures;
-                production_source.exact_parsed = Some(production_parsed);
-                production_source.exact_local_to_original_occurrence = exact_occurrences
-                    .iter()
-                    .map(|occurrence| occurrence.original_occurrence)
-                    .collect();
-                production_source.exact_occurrences = exact_occurrences;
-                production_source.exact_energy_edge_index_map = Some(production_energy_map);
-                return Ok(production_source);
-            }
-        }
-        let parent_loop_count = graph.loop_momentum_basis.loop_edges.len();
-        let integral_coordinate = |coordinate: &Rational| {
-            (coordinate.denominator_ref().to_i64() == Some(1))
-                .then(|| coordinate.numerator_ref().to_i64())
-                .flatten()
-                .and_then(|numerator| i32::try_from(numerator).ok())
-        };
-        let production_loop_rows = production_signatures
-            .iter()
-            .map(|signature| {
-                (0..parent_loop_count)
-                    .map(|production_column| {
-                        let coordinate = signature
-                            .loop_signature
-                            .iter()
-                            .zip(&production_source.parent_loop_coordinates)
-                            .fold(Rational::from(0), |sum, (coefficient, parent_coordinates)| {
-                                sum + Rational::from(*coefficient)
-                                    * parent_coordinates[production_column].clone()
-                            });
-                        integral_coordinate(&coordinate).ok_or_else(|| {
-                            GraphIoError::Source(format!(
-                                "exact 4D denominator has non-integral production CFF coordinate {coordinate}"
-                            ))
-                        })
-                    })
-                    .collect()
-            })
-            .collect::<three_dimensional_reps::graph_io::Result<Vec<Vec<_>>>>()?;
         let (
             inner_loop_count,
             outer_loop_edges,
@@ -1067,8 +945,18 @@ impl<'a> GraphThreeDSource<'a> {
                     uv_edges.iter().copied().sorted().collect::<Vec<_>>(),
                 )));
             }
-            let exact_signatures = coordinate_signatures
-                .expect("an explicit exact coordinate LMB has coordinate signatures");
+            // This source has its own complete coordinate chart. Preparing a
+            // full-graph production source would solve a second, unused LMB and
+            // parse every denominator again in unrelated outer coordinates.
+            let exact_signatures = denominators
+                .iter()
+                .map(|denominator| {
+                    denominator.momentum_signature_in_lmb(
+                        sub_lmb,
+                        uv_edges.contains(&denominator.source_edge),
+                    )
+                })
+                .collect::<three_dimensional_reps::graph_io::Result<Vec<_>>>()?;
             let source_loop_count = sub_lmb.loop_edges.len();
             let source_loop_rows = exact_signatures
                 .iter()
@@ -1104,6 +992,125 @@ impl<'a> GraphThreeDSource<'a> {
                 exact_signatures,
             )
         } else {
+            // Exact 4D sources must use the same coordinate frame as the ordinary
+            // production CFF. The configured graph LMB is not necessarily the
+            // canonical carrier basis selected by `GraphThreeDSource::new`.
+            let mut production_source = Self::new(graph, &[])?;
+            if uv_edges.is_empty() && exact_uv_boundary_hedges.is_empty() {
+                let production_parsed = production_source.to_three_d_parsed_graph()?;
+                let production_energy_map = production_source
+                    .energy_edge_index_map(&production_parsed)
+                    .expect("GammaLoop production sources provide an edge-index map");
+                let original_occurrences = denominators
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, denominator)| denominator.is_original_graph_denominator(graph))
+                    .map(|(original, denominator)| (denominator.source_edge, original))
+                    .collect::<BTreeMap<_, _>>();
+                let retained_source_edges = production_energy_map
+                    .internal
+                    .values()
+                    .copied()
+                    .map(EdgeIndex)
+                    .filter(|edge| !production_source.initial_state_cut_edges.contains(edge))
+                    .collect::<BTreeSet<_>>();
+                // A complete set of unchanged source denominators is the production
+                // graph, not a reconstructed exact topology. Reuse that source
+                // literally, including its unpaired-external-leg convention.
+                // `vertex_external_balance_info` is not a zero oracle here because
+                // production external coordinates may include a dependent momentum;
+                // this identity path must not pass through exact-source validation.
+                if original_occurrences.len() == denominators.len()
+                    && original_occurrences
+                        .keys()
+                        .copied()
+                        .collect::<BTreeSet<_>>()
+                        == retained_source_edges
+                {
+                    let local_edges_by_source = production_energy_map
+                        .internal
+                        .iter()
+                        .map(|(local, source)| (EdgeIndex(*source), *local))
+                        .collect::<BTreeMap<_, _>>();
+                    let exact_signatures = denominators
+                        .iter()
+                        .map(|denominator| {
+                            let signature = production_parsed.internal_edges
+                                [local_edges_by_source[&denominator.source_edge]]
+                                .signature
+                                .clone();
+                            let source_momentum = FunctionBuilder::new(GS.emr_mom)
+                                .add_arg(usize::from(denominator.source_edge))
+                                .finish();
+                            if denominator.momentum == source_momentum {
+                                signature
+                            } else {
+                                signature.negated()
+                            }
+                        })
+                        .collect();
+                    let exact_occurrences = production_energy_map
+                        .internal
+                        .iter()
+                        .filter_map(|(local_edge_id, energy_edge_id)| {
+                            original_occurrences.get(&EdgeIndex(*energy_edge_id)).map(
+                                |original_occurrence| ExactParsedOccurrence {
+                                    local_edge_id: *local_edge_id,
+                                    energy_edge_id: *energy_edge_id,
+                                    original_occurrence: *original_occurrence,
+                                    is_base: true,
+                                },
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    production_source.exact_denominators = Some(denominators);
+                    production_source.exact_signatures = exact_signatures;
+                    production_source.exact_parsed = Some(production_parsed);
+                    production_source.exact_local_to_original_occurrence = exact_occurrences
+                        .iter()
+                        .map(|occurrence| occurrence.original_occurrence)
+                        .collect();
+                    production_source.exact_occurrences = exact_occurrences;
+                    production_source.exact_energy_edge_index_map = Some(production_energy_map);
+                    return Ok(production_source);
+                }
+            }
+            let parent_loop_count = graph.loop_momentum_basis.loop_edges.len();
+            let integral_coordinate = |coordinate: &Rational| {
+                (coordinate.denominator_ref().to_i64() == Some(1))
+                    .then(|| coordinate.numerator_ref().to_i64())
+                    .flatten()
+                    .and_then(|numerator| i32::try_from(numerator).ok())
+            };
+            let production_signatures = denominators
+                .iter()
+                .map(|denominator| {
+                    denominator
+                        .momentum_signature(graph, uv_edges.contains(&denominator.source_edge))
+                })
+                .collect::<three_dimensional_reps::graph_io::Result<Vec<_>>>()?;
+            let production_loop_rows = production_signatures
+                .iter()
+                .map(|signature| {
+                    (0..parent_loop_count)
+                        .map(|production_column| {
+                            let coordinate = signature
+                                .loop_signature
+                                .iter()
+                                .zip(&production_source.parent_loop_coordinates)
+                                .fold(Rational::from(0), |sum, (coefficient, parent_coordinates)| {
+                                    sum + Rational::from(*coefficient)
+                                        * parent_coordinates[production_column].clone()
+                                });
+                            integral_coordinate(&coordinate).ok_or_else(|| {
+                                GraphIoError::Source(format!(
+                                    "exact 4D denominator has non-integral production CFF coordinate {coordinate}"
+                                ))
+                            })
+                        })
+                        .collect()
+                })
+                .collect::<three_dimensional_reps::graph_io::Result<Vec<Vec<_>>>>()?;
             let (outer_basis_rows, active_loop_columns) =
                 select_exact_loop_basis(&production_loop_rows, parent_loop_count)?;
             let inactive_loop_columns = (0..parent_loop_count)
@@ -3264,7 +3271,7 @@ mod tests {
         cff::expression::GammaLoopOrientationExpression,
         cff::surface::GammaLoopSurfaceCache,
         dot,
-        graph::{feynman_graph::FeynmanGraph, parse::IntoGraph},
+        graph::parse::IntoGraph,
         initialisation::test_initialise,
         momentum::sample::LoopIndex,
         numerator::energy_degree::{EnergyPowerAnalyzer, EquivalentEnergyCandidates},
@@ -5145,6 +5152,9 @@ mod tests {
                     | UvMomentumProvenanceRole::PhysicalSourceFixed => {
                         fixed_assignments.entry(owner).or_default().push(occurrence);
                     }
+                    UvMomentumProvenanceRole::DenominatorDerivedSoft => {
+                        panic!("a soft coefficient must not own a child-contour occurrence");
+                    }
                 }
             }
             Ok::<_, std::convert::Infallible>(factor.clone())
@@ -6027,19 +6037,6 @@ mod tests {
         let options = graph.denominator_only_cff_3d_expression_options();
         let mut cache = crate::cff::generation::ExactCffGenerationCache::default();
         let mut edge_counts = Vec::new();
-        for denominators in &terms {
-            let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
-                &graph,
-                denominators,
-                owners,
-            )?;
-            graph.register_3d_expression_for_4d_term(
-                &source,
-                &options,
-                &Atom::one(),
-                &mut cache,
-            )?;
-        }
         for denominators in terms {
             let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
                 &graph,
@@ -6111,7 +6108,7 @@ mod tests {
             &sub_lmb,
             ExactUvSubLmbFrame::TaylorVacuum,
         )?;
-        let mut direct_graph: Graph = dot!(digraph direct_physical_uv_triangle {
+        let direct_graph: Graph = dot!(digraph direct_physical_uv_triangle {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -6169,11 +6166,11 @@ mod tests {
         ];
         let exact_numerator = &exact_factors[0] * &exact_factors[1];
         let options = graph.denominator_only_cff_3d_expression_options();
-        let direct_canonization =
-            direct_graph.get_esurface_canonization(&direct_graph.loop_momentum_basis);
-        let direct = direct_graph.generate_3d_expression_for_integrand(
+        // Compare both source constructions before physical surface conversion:
+        // an affine direct source moves its positive half-edge energy factors
+        // into a separate global product only at that later boundary.
+        let direct = direct_graph.generate_raw_3d_expression_for_integrand(
             &[],
-            &direct_canonization,
             &options,
             Some(&direct_numerator),
         )?;
@@ -6530,18 +6527,24 @@ mod tests {
             ],
             "the production analyzer must keep the two fixed owner factors on their own exact occurrences",
         );
+        let temporal_plan = EnergyPowerAnalyzer::for_physical_emr_edges(uv_edges)
+            .plan_atom_assignment(
+                &(&left_temporal * &right_temporal),
+                &pair_mapper.equivalent_energy_candidates(uv_edges)?,
+            )?;
+        assert_eq!(
+            temporal_plan.energy_degree_bounds(),
+            pair_plan.energy_degree_bounds()
+        );
         assert!(!pair_generated.expression.orientations.is_empty());
         let positive_right_energy =
             crate::utils::ose_atom_from_index(EdgeIndex(right_occurrence.energy_edge_id))
                 .replace_multiple(pair_mapper.exact_ose_replacements());
-        let sample_sign = |sample: &Atom| {
-            [-1, 0, 1].into_iter().find(|sign| {
-                (sample - Atom::num(*sign) * &positive_right_energy)
-                    .expand()
-                    .is_zero()
-            })
-        };
-        let mut contact_samples = BTreeSet::new();
+        let pair_surface_replacements = pair_generated
+            .expression
+            .surfaces
+            .get_all_replacements_gs(&[]);
+        let mut temporal_contour = Atom::Zero;
         for (orientation_id, pair_orientation) in
             pair_generated.expression.orientations.iter().enumerate()
         {
@@ -6575,51 +6578,57 @@ mod tests {
                 &pair_orientation.edge_energy_map,
                 &right_temporal,
             )?;
-            let is_contact = pair_orientation.variants.iter().any(|variant| {
-                variant.origin.as_deref().is_some_and(|origin| {
-                    origin.starts_with("bounded_degree_quadratic_recursive_contact:")
-                })
-            });
-            if !is_contact {
-                assert!(
-                    !mapped_left_temporal.is_zero()
-                        && !mapped_right_temporal.is_zero()
-                        && (&mapped_left_temporal + &mapped_right_temporal)
-                            .expand()
-                            .is_zero(),
-                    "the selected +Q and -Q occurrences must map to opposite immutable hard-momentum samples in orientation {orientation_id}: left={mapped_left_temporal}, right={mapped_right_temporal}, directions={:?}, label={:?}, origins={:?}",
-                    pair_orientation.data.orientation,
-                    pair_orientation.data.label,
-                    pair_orientation
-                        .variants
-                        .iter()
-                        .filter_map(|variant| variant.origin.as_deref())
-                        .collect::<Vec<_>>(),
+            // Even when the physical momenta are +Q and -Q, independent CFF
+            // interpolation samples need not obey that relation in each
+            // orientation. Each fixed factor must use its own occurrence
+            // sample and immutable raw-to-parsed sign.
+            for (occurrence, mapped_temporal) in [
+                (left_occurrence, &mapped_left_temporal),
+                (right_occurrence, &mapped_right_temporal),
+            ] {
+                let expected = Atom::num(occurrence.raw_to_parsed_sign)
+                    * pair_orientation.edge_energy_map[occurrence.energy_edge_id]
+                        .to_atom_gs(&[])
+                        .replace_multiple(pair_mapper.exact_ose_replacements());
+                assert_eq!(
+                    mapped_temporal, &expected,
+                    "a fixed temporal factor must retain its own signed sample in orientation {orientation_id}",
                 );
-            } else {
-                contact_samples.insert((
-                    sample_sign(&mapped_left_temporal).ok_or_else(|| {
-                        eyre::eyre!(
-                            "left contact sample is not -E, 0, or +E in orientation {orientation_id}: {mapped_left_temporal}",
-                        )
-                    })?,
-                    sample_sign(&mapped_right_temporal).ok_or_else(|| {
-                        eyre::eyre!(
-                            "right contact sample is not -E, 0, or +E in orientation {orientation_id}: {mapped_right_temporal}",
-                        )
-                    })?,
-                ));
             }
+            let planned_temporal = pair_mapper.map_planned_numerator(
+                &pair_orientation.loop_energy_map,
+                &pair_orientation.edge_energy_map,
+                &temporal_plan,
+            )?;
+            assert_eq!(
+                planned_temporal,
+                mapped_left_temporal * mapped_right_temporal
+            );
+            temporal_contour += pair_orientation
+                .to_atom_gs()
+                .replace_multiple(&pair_surface_replacements)
+                .replace_multiple(pair_mapper.exact_ose_replacements())
+                * planned_temporal;
         }
-        assert_eq!(
-            contact_samples,
-            BTreeSet::from([(-1, 1), (0, 0), (1, -1)]),
-            "the fixed-owner bubble must retain the deterministic e0=-,0,+ contact family, with the selected +Q and -Q occurrences mapped oppositely in every branch, including the zero-energy lower sector",
+        // The unconverted core expression already includes positive 1/(2E)
+        // factors. Convert its ordinary source frame to the signed contour.
+        // Independently, the clockwise Below residue of -q0^2/(q0^2-E^2)^2
+        // is -d[-q0^2/(q0+E)^2]/dq0 at q0=E = +1/(4E).
+        let source_sign = three_dimensional_reps::CffGlobalPrefactorSign::from_exponent(
+            parsed.denominator_internal_edge_ids().len(),
+        )
+        .product(pair_generated.core_global_prefactor_sign)
+        .factor();
+        temporal_contour *= Atom::num(source_sign);
+        let expected_contour = Atom::one() / (Atom::num(4) * positive_right_energy);
+        assert!(
+            (&temporal_contour - &expected_contour).together().is_zero(),
+            "the independent owner samples must sum to the analytic temporal contour: actual={temporal_contour}, expected={expected_contour}",
         );
 
         // Canonicalizing the even D(-Q) denominator may change its oriented
-        // parsed-edge contact sample. A fixed factor stays on its canonical
-        // owner occurrence, whereas a denominator-derived factor may use a
+        // parsed-edge interpolation sample. A fixed factor stays on its
+        // canonical owner occurrence, whereas a denominator-derived factor may use a
         // serial copy. Once either occurrence is selected, both compose that
         // occurrence's raw-to-parsed sign to recover the immutable hard
         // momentum. The dedicated mapper-role regression exercises the two

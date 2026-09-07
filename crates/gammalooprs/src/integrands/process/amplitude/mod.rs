@@ -30,7 +30,6 @@ use typed_index_collections::{TiVec, ti_vec};
 use crate::{
     DependentMomentaConstructor, F, FloatLike, GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        CutCFFIndex,
         esurface::{
             EsurfaceCollection, ExistingEsurfaces, GroupEsurfaceId, RaisedEsurfaceId,
             get_representative,
@@ -245,35 +244,7 @@ impl AmplitudeGraphTerm {
             "Generation timing milestone"
         );
         let (original_integrand, evaluator_timings) =
-            if let Some(deferred_integrands) = &graph.derived_data.deferred_integrands {
-                assert!(
-                    settings.generation.explicit_orientation_sum_only,
-                    "deferred projected-CFF terms require an explicit orientation sum"
-                );
-                let mut roots = deferred_integrands.iter();
-                let (index, compact_integrand) = roots
-                    .next()
-                    .ok_or_else(|| eyre!("deferred amplitude integrand has no root residue"))?;
-                if *index != CutCFFIndex::new_all_none() || roots.next().is_some() {
-                    return Err(eyre!(
-                        "deferred amplitude integrand must contain exactly one root residue"
-                    ));
-                }
-                if compact_integrand != &graph.derived_data.all_mighty_integrand {
-                    return Err(eyre!(
-                        "deferred amplitude compact integrand is out of sync with its public mirror"
-                    ));
-                }
-                EvaluatorStack::new_deferred_explicit_sum_with_timings(
-                    compact_integrand,
-                    deferred_integrands
-                        .deferred_terms(index)
-                        .expect("deferred amplitude integrand is missing its root residue"),
-                    &graph.graph.param_builder,
-                    None,
-                    &settings.generation.evaluator,
-                )?
-            } else if settings.generation.explicit_orientation_sum_only {
+            if settings.generation.explicit_orientation_sum_only {
                 EvaluatorStack::new_explicit_sum_with_timings(
                     &[&graph.derived_data.all_mighty_integrand],
                     &graph.graph.param_builder,

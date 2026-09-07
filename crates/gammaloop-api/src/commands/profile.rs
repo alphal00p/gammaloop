@@ -14,7 +14,9 @@ use gammalooprs::{
     },
     processes::ProcessCollection,
     uv::{
-        profile::{ProfileSettings, UVLimitSelection, UVProfileFixedRay, UVProfileable},
+        profile::{
+            ProfileSettings, UVLimitSelection, UVProfileFixedRay, UVProfileable, UV_PROFILE_MAX_DOD,
+        },
         UVProfileAnalysis,
     },
 };
@@ -80,6 +82,14 @@ pub struct UltraVioletProfile {
     #[arg(long = "selected-limits", value_enum, default_value = "only-divergent")]
     #[serde(default)]
     pub selected_limits: UVLimitSelection,
+
+    /// Stop after the first failing numerical UV limit, including precision retries
+    #[arg(long = "fail-fast")]
+    #[serde(
+        default,
+        skip_serializing_if = "gammalooprs::utils::serde_utils::is_false"
+    )]
+    pub fail_fast: bool,
 
     /// Number of scaling points to sample
     #[arg(long = "n-points", default_value_t = 20)]
@@ -210,6 +220,7 @@ impl Default for UltraVioletProfile {
             graph: None,
             cutkosky_cut: Vec::new(),
             selected_limits: UVLimitSelection::OnlyDivergent,
+            fail_fast: false,
             n_points: 20,
             min_scale_exponent: 3.0,
             max_scale_exponent: 6.0,
@@ -260,6 +271,7 @@ impl Profile {
                 graph,
                 cutkosky_cut,
                 selected_limits,
+                fail_fast,
                 n_points,
                 min_scale_exponent,
                 max_scale_exponent,
@@ -337,6 +349,7 @@ impl Profile {
                 };
 
                 let profile_settings = ProfileSettings {
+                    fail_fast: *fail_fast,
                     n_points: *n_points,
                     min_scale_exponent: *min_scale_exponent,
                     max_scale_exponent: *max_scale_exponent,
@@ -382,7 +395,7 @@ impl Profile {
                 }
                 .analyse();
 
-                for t in profile_res.tables_per_graph(-0.9) {
+                for t in profile_res.tables_per_graph(UV_PROFILE_MAX_DOD) {
                     info!("\n{}", t);
                 }
 
@@ -393,14 +406,20 @@ impl Profile {
                     info!("\n{}", t);
                 }
 
-                for t in profile_res.per_orientation_tables_per_graph(-0.9) {
+                for t in profile_res.per_orientation_tables_per_graph(UV_PROFILE_MAX_DOD) {
                     let Some(t) = t else {
                         continue;
                     };
                     info!("\n{}", t);
                 }
 
-                info!("\n{}", profile_res.pass_fail(-0.9));
+                let verdict = profile_res.pass_fail(UV_PROFILE_MAX_DOD);
+                if profile_res.stopped_early {
+                    info!(
+                        "Stopped after the first failing UV limit; the summary covers completed limits."
+                    );
+                }
+                info!("\n{}", verdict);
 
                 if let Some(file) = output_file {
                     global_cli_settings
@@ -505,6 +524,11 @@ mod tests {
         assert_eq!(profile.selected_limits, UVLimitSelection::OnlyDivergent);
         assert_eq!(profile.graph, None);
         assert!(profile.cutkosky_cut.is_empty());
+        assert!(!profile.fail_fast);
+        let mut legacy = serde_json::to_value(&profile).unwrap();
+        legacy.as_object_mut().unwrap().remove("fail_fast");
+        let restored: super::UltraVioletProfile = serde_json::from_value(legacy).unwrap();
+        assert!(!restored.fail_fast);
     }
 
     #[test]
@@ -519,6 +543,7 @@ mod tests {
             "5,2",
             "--selected-limits",
             "all",
+            "--fail-fast",
         ])
         .unwrap();
         let Commands::Profile(Profile::UltraViolet(profile)) = repl.command else {
@@ -528,6 +553,14 @@ mod tests {
         assert_eq!(profile.selected_limits, UVLimitSelection::All);
         assert_eq!(profile.graph.as_deref(), Some("GL2"));
         assert_eq!(profile.cutkosky_cut, [5, 2]);
+        assert!(profile.fail_fast);
+        assert_eq!(
+            serde_json::from_value::<super::UltraVioletProfile>(
+                serde_json::to_value(&profile).unwrap()
+            )
+            .unwrap(),
+            profile
+        );
 
         let alias = Repl::try_parse_from([
             "gammaloop",

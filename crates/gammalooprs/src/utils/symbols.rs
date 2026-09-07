@@ -35,12 +35,16 @@ pub(crate) enum UvMomentumProvenanceRole {
     /// A pre-existing numerator factor fixed to its owner's canonical exact
     /// denominator occurrence. It is never minimax-dispatched.
     TaylorFixed = 0,
-    /// A numerator factor created by differentiating a denominator. It may be
+    /// A hard numerator factor created by differentiating a denominator. It may be
     /// minimax-dispatched only over degenerate copies of the same owner.
     DenominatorDerived = 1,
     /// A physical source momentum reconstructed from its stored hard lift,
     /// independently of occurrence-local contact samples.
     PhysicalSourceFixed = 3,
+    /// A soft momentum created by a denominator Taylor derivative. Its exact
+    /// off-shell routing may be chosen when the outer numerator is complete;
+    /// it is not an occurrence of the differentiated hard denominator.
+    DenominatorDerivedSoft = 4,
 }
 
 impl From<bool> for UvMomentumProvenanceRole {
@@ -140,8 +144,6 @@ pub struct WildCards {
 
 pub struct GammaloopSymbols {
     pub integrand: Symbol,
-    /// Evaluator-local function bodies for an explicit projected-CFF sum.
-    pub projected_cff_sum: Symbol,
     /// Exact generalized-3D-representation residue-map identifier selected by
     /// the runtime evaluator. This is independent of physical edge signs.
     pub residue_map_id: Symbol,
@@ -221,9 +223,10 @@ pub struct GammaloopSymbols {
     ///Q(<edgeid>,index___)
     pub emr_mom: Symbol,
     /// UV-local provenance stored in the tag slot of `Q(...)` while applying a
-    /// Taylor operator. Its arguments are the immutable source edge, whether
-    /// the momentum came from a differentiated denominator, and its complete
-    /// hard projection in the frozen child LMB.
+    /// Taylor operator. Its arguments are the immutable source edge, its
+    /// `UvMomentumProvenanceRole`, and the literal momentum payload. Hard roles
+    /// retain their complete projection in the frozen child LMB; newly derived
+    /// soft factors retain their crown carrier until outer-CFF routing.
     pub uv_momentum_provenance: Symbol,
     pub emr_vec: Symbol,
     pub dot: Symbol,
@@ -557,7 +560,6 @@ spenso::symbolica_init_lazy_static! {
 pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     renormalization_localization_scale: symbol!("rls"),
     integrand: symbol!("integrand"),
-    projected_cff_sum: symbol!("projected_cff_sum"),
     residue_map_id: symbol!("residue_map_id"),
     tree_denom_wrapper: symbol!("tree_denoms"),
     dim_epsilon: symbol!("ε"),
@@ -1183,13 +1185,13 @@ impl GammaloopSymbols {
         &self,
         edge: impl Into<AtomOrView<'a>>,
         role: impl Into<UvMomentumProvenanceRole>,
-        hard_momentum: impl Into<AtomOrView<'a>>,
+        momentum: impl Into<AtomOrView<'a>>,
     ) -> Atom {
         let role = role.into();
         self.uv_momentum_provenance.call_args([
             edge.into().as_view(),
             Atom::num(role as i64).as_view(),
-            hard_momentum.into().as_view(),
+            momentum.into().as_view(),
         ])
     }
 
@@ -1208,6 +1210,7 @@ impl GammaloopSymbols {
             0 => UvMomentumProvenanceRole::TaylorFixed,
             1 => UvMomentumProvenanceRole::DenominatorDerived,
             3 => UvMomentumProvenanceRole::PhysicalSourceFixed,
+            4 => UvMomentumProvenanceRole::DenominatorDerivedSoft,
             _ => return None,
         };
         Some((edge, role, provenance.get(2).to_owned()))

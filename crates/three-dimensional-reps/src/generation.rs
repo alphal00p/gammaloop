@@ -499,7 +499,7 @@ fn generate_3d_expression_from_parsed_generated(
         options.energy_degree_bounds.as_deref().unwrap_or(&[]),
         parsed.internal_edges.len(),
     )?;
-    let uses_generalized_expression = cff_bounds_need_generalized_expression(parsed, &bounds);
+    let uses_generalized_expression = cff_bounds_need_generalized_expression(&bounds);
     let denominator_edge_ids = parsed.denominator_internal_edge_ids();
     let duplicate_excess = cff_duplicate_signature_excess(parsed);
     // The scalar denominator convention is the product of the independent
@@ -1794,14 +1794,7 @@ struct ContactComponent {
 }
 
 #[derive(Debug, Clone)]
-struct LogicalChannel {
-    rep_edge: usize,
-    members: Vec<usize>,
-    power: usize,
-}
-
-#[derive(Debug, Clone)]
-struct ChannelNormalFormTerm {
+struct OccurrenceNormalFormTerm {
     remaining_power: usize,
     parity: usize,
     cancelled_power: usize,
@@ -2465,18 +2458,11 @@ impl<'a> BoundedCffBuilder<'a> {
         Ok(builder)
     }
 
-    fn for_bounds(parsed: &'a ParsedGraph, mut bounds: Vec<usize>) -> Self {
-        // A repeated denominator group is one algebraic on-shell-energy
-        // channel. Canonicalize only this private structural bound; the
-        // caller's occurrence caps and factor-local numerator assignment stay
-        // minimax-distributed across equivalent occurrences.
-        for channel in KnownFactorCffBuilder::logical_channels(parsed) {
-            let degree = channel.members.iter().map(|edge_id| bounds[*edge_id]).sum();
-            for edge_id in channel.members {
-                bounds[edge_id] = 0;
-            }
-            bounds[channel.rep_edge] = degree;
-        }
+    fn for_bounds(parsed: &'a ParsedGraph, bounds: Vec<usize>) -> Self {
+        // CFF acts on independent numerator occurrences, including serial
+        // copies of the same physical denominator. Preserve their individual
+        // bounds: restricting them to a common interpolation variable would
+        // sum degrees and destroy the factor-local numerator assignment.
         Self {
             parsed,
             source_prefactor: Rational::from(
@@ -2499,8 +2485,7 @@ impl<'a> BoundedCffBuilder<'a> {
     }
 
     fn build(mut self) -> Result<ThreeDExpression<OrientationID>> {
-        let needs_generalized_expression =
-            cff_bounds_need_generalized_expression(self.parsed, &self.bounds);
+        let needs_generalized_expression = cff_bounds_need_generalized_expression(&self.bounds);
         if !needs_generalized_expression {
             let mut lower = LowerSectorCffBuilder::new(self.parsed);
             lower.source_prefactor = Some(self.source_prefactor.clone());
@@ -2511,26 +2496,8 @@ impl<'a> BoundedCffBuilder<'a> {
             .bounds
             .iter()
             .any(|degree| *degree > 1 && self.sampling_scale_mode.is_active_for_degree(*degree));
-        // A repeated denominator channel shares one physical EMR energy. Reconstruct its
-        // aggregate numerator degree before taking a per-edge quadratic shortcut.
-        let repeated_channel_needs_known_factor =
-            KnownFactorCffBuilder::logical_channels(self.parsed)
-                .iter()
-                .any(|channel| {
-                    channel
-                        .members
-                        .iter()
-                        .map(|edge_id| self.bounds[*edge_id])
-                        .sum::<usize>()
-                        > 2
-                });
-        if repeated_channel_needs_known_factor {
-            let mut known =
-                KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode);
-            known.source_prefactor = self.source_prefactor;
-            known.normalize_public_output = self.normalize_public_output;
-            return known.build_with_inherited_contours(false, &self.inherited_contour_rows);
-        }
+        // Quadratic completion depends only on each occurrence's degree,
+        // even when several occurrences have equal physical energies.
         if !uniform_sampling_for_nonlinear_degree && self.supports_quadratic_e_surface_only() {
             self.build_quadratic_e_surface_only()?;
             self.finalize_numerator_map_labels();
@@ -2563,16 +2530,6 @@ impl<'a> BoundedCffBuilder<'a> {
 
     fn supports_known_factor_recursive(&self) -> bool {
         self.bounds.iter().any(|degree| *degree > 1)
-            || KnownFactorCffBuilder::logical_channels(self.parsed)
-                .iter()
-                .any(|channel| {
-                    channel
-                        .members
-                        .iter()
-                        .map(|edge_id| self.bounds[*edge_id])
-                        .sum::<usize>()
-                        > 2
-                })
     }
 
     fn has_duplicate_signature_ignoring_mass(&self) -> bool {
@@ -2721,11 +2678,7 @@ impl<'a> BoundedCffBuilder<'a> {
                     orientation.edge_energy_map[edge_id].clone(),
                 ) {
                     let mut edge_exprs = orientation.edge_energy_map.clone();
-                    self.assign_repeated_channel_sample(
-                        &mut edge_exprs,
-                        edge_id,
-                        component.sample,
-                    )?;
+                    Self::assign_occurrence_sample(&mut edge_exprs, edge_id, component.sample);
                     let mut half_edges = base_half_edges.clone();
                     half_edges.extend(component.half_edges);
                     half_edges.sort_unstable();
@@ -2828,11 +2781,7 @@ impl<'a> BoundedCffBuilder<'a> {
 
                 for component in &components {
                     let mut edge_exprs = base_edge_exprs.clone();
-                    self.assign_repeated_channel_sample(
-                        &mut edge_exprs,
-                        edge_id,
-                        component.sample,
-                    )?;
+                    Self::assign_occurrence_sample(&mut edge_exprs, edge_id, component.sample);
                     let mut half_edges = base_half_edges.clone();
                     half_edges.extend(component.half_edges.iter().copied());
                     half_edges.sort_unstable();
@@ -2873,37 +2822,12 @@ impl<'a> BoundedCffBuilder<'a> {
         Ok(())
     }
 
-    fn assign_repeated_channel_sample(
-        &self,
-        edge_exprs: &mut [LinearEnergyExpr],
-        edge_id: usize,
-        sample: i32,
-    ) -> Result<()> {
-        let channel = KnownFactorCffBuilder::logical_channels(self.parsed)
-            .into_iter()
-            .find(|channel| channel.members.contains(&edge_id));
-        let members = channel
-            .as_ref()
-            .map(|channel| channel.members.as_slice())
-            .unwrap_or(std::slice::from_ref(&edge_id));
-        let reference = &self.parsed.internal_edges[edge_id].signature;
-
-        // Repeated denominator occurrences are one algebraic q0 channel. A
-        // quadratic interpolation sample therefore applies to every
-        // occurrence, while the occurrence-local map retains only the routing
-        // sign needed by the factorized numerator assignment.
-        for member in members {
-            let relative_sign = KnownFactorCffBuilder::relative_signature_sign(
-                reference,
-                &self.parsed.internal_edges[*member].signature,
-            )?;
-            edge_exprs[*member] = if sample == 0 {
-                LinearEnergyExpr::zero()
-            } else {
-                LinearEnergyExpr::ose(EdgeIndex(*member), i64::from(sample * relative_sign))
-            };
-        }
-        Ok(())
+    fn assign_occurrence_sample(edge_exprs: &mut [LinearEnergyExpr], edge_id: usize, sample: i32) {
+        // A sample belongs to this numerator occurrence only. Equal or
+        // oppositely routed denominator momenta do not couple the samples of
+        // factors assigned to their distinct EMR owners.
+        edge_exprs[edge_id] =
+            KnownFactorCffBuilder::occurrence_replacement_expr(edge_id, sample, false);
     }
 
     fn lift_contracted_cff_terms(&mut self, pinched_edges: &[usize]) -> Result<()> {
@@ -3391,7 +3315,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
     ) -> Result<ThreeDExpression<OrientationID>> {
         let local_to_orig = (0..self.original.internal_edges.len()).collect::<Vec<_>>();
         let recursion_budget = self.recursion_budget();
-        self.channel_recursive_terms(
+        self.sample_occurrences(
             self.original,
             &local_to_orig,
             &BTreeMap::new(),
@@ -3414,16 +3338,11 @@ impl<'a> KnownFactorCffBuilder<'a> {
     }
 
     fn recursion_budget(&self) -> usize {
-        2 * self.original.internal_edges.len()
-            + self.bounds.iter().copied().sum::<usize>()
-            + Self::logical_channels(self.original)
-                .iter()
-                .map(|channel| channel.members.len() * channel.power)
-                .sum::<usize>()
+        3 * self.original.internal_edges.len() + self.bounds.iter().copied().sum::<usize>()
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn channel_recursive_terms(
+    fn sample_occurrences(
         &mut self,
         parsed: &ParsedGraph,
         local_to_orig: &[usize],
@@ -3434,15 +3353,15 @@ impl<'a> KnownFactorCffBuilder<'a> {
         extra_uniform_scale_power: usize,
         prefactor: Rational,
         lower_sector_base: bool,
-        repeated_channel_normal_form_consumed: bool,
+        occurrence_normal_form_consumed: bool,
         depth: usize,
         recursion_budget: usize,
     ) -> Result<()> {
         if depth > recursion_budget {
             return Err(GenerationError::CffHigherEnergyPowerNotImplemented);
         }
-        let Some((channel, degree)) =
-            self.active_repeated_channel(parsed, local_to_orig, replacements)
+        let Some((active_local, degree)) =
+            self.active_occurrence(parsed, local_to_orig, replacements)
         else {
             return self.recursive_terms(
                 parsed,
@@ -3454,44 +3373,50 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 extra_uniform_scale_power,
                 prefactor,
                 lower_sector_base,
-                repeated_channel_normal_form_consumed,
+                occurrence_normal_form_consumed,
                 0,
                 recursion_budget,
             );
         };
 
-        let rep_local = channel.rep_edge;
-        let rep_orig = local_to_orig[rep_local];
-        let rep_signature = parsed.internal_edges[rep_local].signature.clone();
+        let active_orig = local_to_orig[active_local];
         let nodes = Self::interpolation_nodes(degree);
         let use_uniform_scale = self.sampling_scale_mode.is_active_for_degree(degree);
 
         for (node_idx, sample) in nodes.iter().enumerate() {
             let basis_poly = lagrange_basis(&nodes, node_idx);
-            let channel_terms = if use_uniform_scale {
-                Self::channel_uniform_normal_form_terms(&basis_poly, channel.power)
-            } else {
-                Self::channel_normal_form_terms(&basis_poly, channel.power)
-            };
-            for term in channel_terms {
+            for term in Self::occurrence_normal_form_terms(&basis_poly, use_uniform_scale) {
                 if term.coeff.is_zero() {
                     continue;
                 }
-                let keep = channel
-                    .members
-                    .iter()
-                    .take(term.remaining_power)
-                    .copied()
-                    .collect::<BTreeSet<_>>();
-                let delete = channel
-                    .members
-                    .iter()
-                    .copied()
-                    .filter(|local_id| !keep.contains(local_id))
-                    .collect::<Vec<_>>();
+                let delete = if term.remaining_power == 0 {
+                    vec![active_local]
+                } else {
+                    Vec::new()
+                };
                 let (subparsed, sub_to_local) =
                     BoundedCffBuilder::for_bounds(parsed, vec![0; parsed.internal_edges.len()])
                         .project_parsed_edges(&delete);
+                if !delete.is_empty() && degree > 2 {
+                    let signature = &parsed.internal_edges[active_local].signature.loop_signature;
+                    if let Some(variable) = (0..parsed.loop_names.len()).find(|variable| {
+                        signature.iter().enumerate().all(|(index, coefficient)| {
+                            if index == *variable {
+                                coefficient.abs() == 1
+                            } else {
+                                *coefficient == 0
+                            }
+                        }) && subparsed
+                            .internal_edges
+                            .iter()
+                            .all(|edge| edge.signature.loop_signature[*variable] == 0)
+                    }) {
+                        return Err(GenerationError::UnlocalizedEnergyContact {
+                            variable,
+                            power: degree - 2,
+                        });
+                    }
+                }
                 if subparsed.internal_edges.is_empty() {
                     continue;
                 }
@@ -3499,43 +3424,38 @@ impl<'a> KnownFactorCffBuilder<'a> {
                     .iter()
                     .map(|local_id| local_to_orig[*local_id])
                     .collect::<Vec<_>>();
-                // Removing serial copies of one repeated denominator channel
-                // selects an algebraic quotient; it does not integrate out a
-                // loop-energy direction. Preserve only genuine inherited
-                // contour closures from the parent recursion.
-                let next_contour_rows = inherited_contour_rows.to_vec();
-
-                let mut sub_replacements = replacements.clone();
-                for local_id in &channel.members {
-                    let orig_id = local_to_orig[*local_id];
-                    let relative_sign = Self::relative_signature_sign(
-                        &rep_signature,
-                        &parsed.internal_edges[*local_id].signature,
-                    )?;
-                    sub_replacements.insert(
-                        orig_id,
-                        Self::channel_replacement_expr(
-                            orig_id,
-                            *sample,
-                            relative_sign,
-                            use_uniform_scale,
-                        ),
+                // Contracting this occurrence selects its algebraic quotient.
+                // Preserve the ordered parent closure for the lower sector;
+                // surviving degenerate occurrences remain distinct carriers.
+                let mut next_contour_rows = inherited_contour_rows.to_vec();
+                if !delete.is_empty() {
+                    next_contour_rows.push(
+                        parsed.internal_edges[active_local]
+                            .signature
+                            .loop_signature
+                            .clone(),
                     );
                 }
+
+                let mut sub_replacements = replacements.clone();
+                sub_replacements.insert(
+                    active_orig,
+                    Self::occurrence_replacement_expr(active_orig, *sample, use_uniform_scale),
+                );
 
                 let mut next_known = known_factors.to_vec();
                 if term.parity != 0 {
-                    next_known.push(KnownLinearExpr::var(rep_local, 1));
+                    next_known.push(KnownLinearExpr::var(active_local, 1));
                 }
                 if term.positive_ose_power != 0 {
                     next_known.extend(
-                        (0..term.positive_ose_power).map(|_| KnownLinearExpr::ose(rep_orig, 1)),
+                        (0..term.positive_ose_power).map(|_| KnownLinearExpr::ose(active_orig, 1)),
                     );
                 }
                 if term.cancelled_power != 0 {
-                    let y_expr = KnownLinearExpr::var(rep_local, 1);
-                    let plus = (y_expr.clone() + KnownLinearExpr::ose(rep_orig, 1)).canonical();
-                    let minus = (y_expr - KnownLinearExpr::ose(rep_orig, 1)).canonical();
+                    let y_expr = KnownLinearExpr::var(active_local, 1);
+                    let plus = (y_expr.clone() + KnownLinearExpr::ose(active_orig, 1)).canonical();
+                    let minus = (y_expr - KnownLinearExpr::ose(active_orig, 1)).canonical();
                     for _ in 0..term.cancelled_power {
                         next_known.push(minus.clone());
                         next_known.push(plus.clone());
@@ -3543,20 +3463,20 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 }
 
                 let mut next_half_edges = extra_half_edges.to_vec();
-                let channel_uniform_power = if use_uniform_scale {
+                let sample_uniform_power = if use_uniform_scale {
                     term.inverse_power
                 } else {
-                    next_half_edges.extend(std::iter::repeat_n(rep_orig, term.inverse_power));
+                    next_half_edges.extend(std::iter::repeat_n(active_orig, term.inverse_power));
                     0
                 };
-                let channel_prefactor = prefactor.clone()
+                let sample_prefactor = prefactor.clone()
                     * term.coeff
                     * if use_uniform_scale {
                         Rational::one()
                     } else {
                         rational_pow_i64(2, term.inverse_power)
                     };
-                if channel_prefactor.is_zero() {
+                if sample_prefactor.is_zero() {
                     continue;
                 }
 
@@ -3567,15 +3487,15 @@ impl<'a> KnownFactorCffBuilder<'a> {
                     })
                     .collect::<Result<Vec<_>>>()
                 {
-                    Ok(sub_known) => self.channel_recursive_terms(
+                    Ok(sub_known) => self.sample_occurrences(
                         &subparsed,
                         &sub_local_to_orig,
                         &sub_replacements,
                         &sub_known,
                         &next_half_edges,
                         &next_contour_rows,
-                        extra_uniform_scale_power + channel_uniform_power,
-                        channel_prefactor,
+                        extra_uniform_scale_power + sample_uniform_power,
+                        sample_prefactor,
                         lower_sector_base || !delete.is_empty(),
                         true,
                         depth + 1,
@@ -3594,8 +3514,8 @@ impl<'a> KnownFactorCffBuilder<'a> {
                             &next_known,
                             &next_half_edges,
                             &next_contour_rows,
-                            extra_uniform_scale_power + channel_uniform_power,
-                            channel_prefactor,
+                            extra_uniform_scale_power + sample_uniform_power,
+                            sample_prefactor,
                         )?;
                     }
                     Err(error) => return Err(error),
@@ -3624,7 +3544,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         extra_uniform_scale_power: usize,
         prefactor: Rational,
         lower_sector_base: bool,
-        repeated_channel_normal_form_consumed: bool,
+        occurrence_normal_form_consumed: bool,
         depth: usize,
         recursion_budget: usize,
     ) -> Result<()> {
@@ -3642,30 +3562,16 @@ impl<'a> KnownFactorCffBuilder<'a> {
 
         let total_bounds =
             self.known_total_bounds(parsed, local_to_orig, replacements, &known_factors);
-        // An unresolved black-box numerator bound requires another
-        // interpolation step. Exact factors introduced by an earlier step do
-        // so only on a genuinely powered denominator channel, where their
-        // derivatives enter the raised residue. On ordinary edges they stay
-        // factorized and are completed by the bounded lower-sector CFF below,
-        // rather than resampling the black-box numerator.
-        let repeated_edges = Self::logical_channels(parsed)
-            .into_iter()
-            .flat_map(|channel| channel.members)
-            .collect::<BTreeSet<_>>();
+        // An unresolved black-box numerator bound requires interpolation.
+        // Exact factors introduced by earlier steps stay factorized and are
+        // completed by the bounded lower-sector CFF below. Coincident
+        // denominators do not change these occurrence-local responsibilities.
         let active = local_to_orig
             .iter()
             .enumerate()
             .find_map(|(local_id, orig_id)| {
                 (self.bounds[*orig_id] > 1 && !replacements.contains_key(orig_id))
                     .then_some(local_id)
-            })
-            .or_else(|| {
-                total_bounds
-                    .iter()
-                    .enumerate()
-                    .find_map(|(local_id, degree)| {
-                        (*degree > 1 && repeated_edges.contains(&local_id)).then_some(local_id)
-                    })
             });
         let Some(active) = active else {
             if self.contact_only && !lower_sector_base {
@@ -3687,7 +3593,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 extra_uniform_scale_power,
                 prefactor.clone(),
                 lower_sector_base,
-                repeated_channel_normal_form_consumed,
+                occurrence_normal_form_consumed,
             );
         };
 
@@ -3726,7 +3632,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 extra_uniform_scale_power,
                 prefactor.clone(),
                 lower_sector_base,
-                repeated_channel_normal_form_consumed,
+                occurrence_normal_form_consumed,
                 depth + 1,
                 recursion_budget,
             )?;
@@ -3807,7 +3713,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                         extra_uniform_scale_power,
                         branch_prefactor,
                         true,
-                        repeated_channel_normal_form_consumed,
+                        occurrence_normal_form_consumed,
                         depth + 1,
                         recursion_budget,
                     )?,
@@ -4117,7 +4023,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         extra_uniform_scale_power: usize,
         prefactor: Rational,
         lower_sector_base: bool,
-        repeated_channel_normal_form_consumed: bool,
+        occurrence_normal_form_consumed: bool,
     ) -> Result<()> {
         if KnownLinearExpr::product_is_zero(known_factors) {
             return Ok(());
@@ -4128,7 +4034,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         // scalar-CFF numerator class. Complete their remaining degree with
         // bounded lower-sector maps, independent of repeated-channel history.
         // The original black-box samples stay fixed in `replacements`.
-        let bounded_lower = if cff_bounds_need_generalized_expression(parsed, &total_bounds) {
+        let bounded_lower = if cff_bounds_need_generalized_expression(&total_bounds) {
             let mut bounded = BoundedCffBuilder::for_bounds(parsed, total_bounds.clone());
             bounded.source_prefactor = self.source_prefactor.clone();
             bounded.inherited_contour_rows = inherited_contour_rows.to_vec();
@@ -4231,9 +4137,16 @@ impl<'a> KnownFactorCffBuilder<'a> {
         } else if !known_factors.is_empty() || !replacements.is_empty() {
             // The surrounding generalized branch has selected this exact
             // denominator product. Once interpolation has consumed every
-            // powered channel it is an ordinary direct CFF; otherwise retain
-            // the established derivative-aware lower-sector construction.
-            if repeated_channel_normal_form_consumed {
+            // powered channel, one rational component is an ordinary direct
+            // CFF; otherwise retain the derivative-aware lower-sector path.
+            // Components sharing only an incidence vertex still close their
+            // contours independently. The lower-sector constructor owns their
+            // product normalization and inherited closures, so the connected
+            // direct-CFF frame must not be applied to that product.
+            let lower = LowerSectorCffBuilder::new(parsed);
+            if occurrence_normal_form_consumed
+                && lower.vector_matroid_components(&lower.signatures()).len() == 1
+            {
                 direct_base()?
             } else {
                 lower_sector_base_expression()?
@@ -4365,82 +4278,38 @@ impl<'a> KnownFactorCffBuilder<'a> {
             .collect()
     }
 
-    fn logical_channels(parsed: &ParsedGraph) -> Vec<LogicalChannel> {
-        repeated_groups(parsed)
-            .into_iter()
-            .map(|group| LogicalChannel {
-                rep_edge: group.edge_ids[0],
-                power: group.edge_ids.len(),
-                members: group.edge_ids,
-            })
-            .collect()
-    }
-
-    fn active_repeated_channel(
+    fn active_occurrence(
         &self,
         parsed: &ParsedGraph,
         local_to_orig: &[usize],
         replacements: &BTreeMap<usize, LinearEnergyExpr>,
-    ) -> Option<(LogicalChannel, usize)> {
-        Self::logical_channels(parsed)
+    ) -> Option<(usize, usize)> {
+        parsed
+            .denominator_internal_edge_ids()
             .into_iter()
-            .find_map(|channel| {
-                let degree = channel
-                    .members
-                    .iter()
-                    .map(|local_id| {
-                        let orig_id = local_to_orig[*local_id];
-                        if replacements.contains_key(&orig_id) {
-                            0
-                        } else {
-                            self.bounds[orig_id]
-                        }
-                    })
-                    .sum::<usize>();
+            .find_map(|local_id| {
+                let orig_id = local_to_orig[local_id];
+                let degree = if replacements.contains_key(&orig_id) {
+                    0
+                } else {
+                    self.bounds[orig_id]
+                };
                 (degree > 2 || self.sampling_scale_mode.is_active_for_degree(degree))
-                    .then_some((channel, degree))
+                    .then_some((local_id, degree))
             })
     }
 
-    fn channel_replacement_expr(
+    fn occurrence_replacement_expr(
         edge_id: usize,
         sample: i32,
-        relative_sign: i32,
         use_uniform_scale: bool,
     ) -> LinearEnergyExpr {
-        let sample = sample * relative_sign;
         if sample == 0 {
             LinearEnergyExpr::zero()
         } else if use_uniform_scale {
             LinearEnergyExpr::uniform_scale(i64::from(sample))
         } else {
             LinearEnergyExpr::ose(EdgeIndex(edge_id), i64::from(sample))
-        }
-    }
-
-    fn relative_signature_sign(
-        reference: &MomentumSignature,
-        candidate: &MomentumSignature,
-    ) -> Result<i32> {
-        if candidate == reference {
-            return Ok(1);
-        }
-        let negated = MomentumSignature {
-            loop_signature: reference
-                .loop_signature
-                .iter()
-                .map(|value| -*value)
-                .collect(),
-            external_signature: reference
-                .external_signature
-                .iter()
-                .map(|value| -*value)
-                .collect(),
-        };
-        if *candidate == negated {
-            Ok(-1)
-        } else {
-            Err(GenerationError::CffHigherEnergyPowerNotImplemented)
         }
     }
 
@@ -4459,52 +4328,13 @@ impl<'a> KnownFactorCffBuilder<'a> {
         nodes
     }
 
-    // Divide the sampled numerator polynomial by the powered physical
-    // denominator before contracting any occurrence. This keeps cancellations
-    // between repeated-pole orders visible to the causal completion.
-    fn channel_normal_form_terms(
+    // Divide only by the sampled occurrence's denominator before contracting
+    // that occurrence. Higher powers remain exact known numerator factors;
+    // coincident denominator copies never merge interpolation variables.
+    fn occurrence_normal_form_terms(
         polynomial: &[Rational],
-        channel_power: usize,
-    ) -> Vec<ChannelNormalFormTerm> {
-        let mut combined = BTreeMap::<(usize, usize, usize, usize), Rational>::new();
-        for (power, coefficient) in polynomial.iter().cloned().enumerate() {
-            if coefficient.is_zero() {
-                continue;
-            }
-            let quotient_power = power / 2;
-            let parity = power % 2;
-            for denominator_power in 0..=quotient_power {
-                let coefficient = coefficient.clone() * binomial(quotient_power, denominator_power);
-                let remaining = channel_power.saturating_sub(denominator_power);
-                let cancelled = denominator_power.saturating_sub(channel_power);
-                let inverse_power = 2 * denominator_power + parity;
-                let entry = combined
-                    .entry((remaining, parity, cancelled, inverse_power))
-                    .or_insert_with(Rational::zero);
-                *entry = entry.clone() + coefficient;
-            }
-        }
-        combined
-            .into_iter()
-            .filter_map(
-                |((remaining_power, parity, cancelled_power, inverse_power), coeff)| {
-                    (!coeff.is_zero()).then_some(ChannelNormalFormTerm {
-                        remaining_power,
-                        parity,
-                        cancelled_power,
-                        inverse_power,
-                        positive_ose_power: 0,
-                        coeff,
-                    })
-                },
-            )
-            .collect()
-    }
-
-    fn channel_uniform_normal_form_terms(
-        polynomial: &[Rational],
-        channel_power: usize,
-    ) -> Vec<ChannelNormalFormTerm> {
+        use_uniform_scale: bool,
+    ) -> Vec<OccurrenceNormalFormTerm> {
         let mut combined = BTreeMap::<(usize, usize, usize, usize, usize), Rational>::new();
         for (power, coefficient) in polynomial.iter().cloned().enumerate() {
             if coefficient.is_zero() {
@@ -4514,11 +4344,21 @@ impl<'a> KnownFactorCffBuilder<'a> {
             let parity = power % 2;
             for denominator_power in 0..=quotient_power {
                 let coefficient = coefficient.clone() * binomial(quotient_power, denominator_power);
-                let remaining = channel_power.saturating_sub(denominator_power);
-                let cancelled = denominator_power.saturating_sub(channel_power);
-                let positive_ose_power = 2 * (quotient_power - denominator_power);
+                let remaining = usize::from(denominator_power == 0);
+                let cancelled = denominator_power.saturating_sub(1);
+                let (inverse_power, positive_ose_power) = if use_uniform_scale {
+                    (power, 2 * (quotient_power - denominator_power))
+                } else {
+                    (2 * denominator_power + parity, 0)
+                };
                 let entry = combined
-                    .entry((remaining, parity, cancelled, power, positive_ose_power))
+                    .entry((
+                        remaining,
+                        parity,
+                        cancelled,
+                        inverse_power,
+                        positive_ose_power,
+                    ))
                     .or_insert_with(Rational::zero);
                 *entry = entry.clone() + coefficient;
             }
@@ -4530,7 +4370,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                     (remaining_power, parity, cancelled_power, inverse_power, positive_ose_power),
                     coeff,
                 )| {
-                    (!coeff.is_zero()).then_some(ChannelNormalFormTerm {
+                    (!coeff.is_zero()).then_some(OccurrenceNormalFormTerm {
                         remaining_power,
                         parity,
                         cancelled_power,
@@ -4580,6 +4420,20 @@ impl<'a> KnownFactorCffBuilder<'a> {
         parsed: &ParsedGraph,
         signature: &MomentumSignature,
     ) -> Result<KnownLinearExpr> {
+        // A contracted occurrence may leave an identical momentum carrier.
+        // Keep its exact quotient factor on that one surviving energy rather
+        // than inventing a broader polynomial envelope through a loop basis.
+        // Original black-box numerator samples remain fixed in replacements.
+        let (canonical, sign) = signature.canonical_up_to_sign();
+        for edge in &parsed.internal_edges {
+            let (candidate, candidate_sign) = edge.signature.canonical_up_to_sign();
+            if candidate == canonical {
+                return Ok(KnownLinearExpr::var(
+                    edge.edge_id,
+                    i64::from(sign * candidate_sign),
+                ));
+            }
+        }
         let signatures = parsed
             .internal_edges
             .iter()
@@ -6347,21 +6201,8 @@ fn scale_linear_energy_expr_rational(
     .canonical())
 }
 
-fn cff_bounds_need_generalized_expression(parsed: &ParsedGraph, bounds: &[usize]) -> bool {
-    if bounds.iter().all(|degree| *degree == 0) {
-        return false;
-    }
+fn cff_bounds_need_generalized_expression(bounds: &[usize]) -> bool {
     bounds.iter().any(|degree| *degree > 1)
-        || KnownFactorCffBuilder::logical_channels(parsed)
-            .iter()
-            .any(|channel| {
-                channel
-                    .members
-                    .iter()
-                    .map(|edge_id| bounds[*edge_id])
-                    .sum::<usize>()
-                    > 1
-            })
 }
 
 #[cfg(test)]
@@ -6450,8 +6291,25 @@ mod causal_generation_tests {
                     &KnownLinearExpr::var(0, 1),
                 )
                 .unwrap(),
+            KnownLinearExpr::var(2, 1),
+            "a deleted occurrence reuses an exact surviving carrier before a loop basis",
+        );
+
+        let (without_carrier, remaining) =
+            BoundedCffBuilder::for_bounds(&parsed, vec![0; parsed.internal_edges.len()])
+                .project_parsed_edges(&[0, 3]);
+        assert_eq!(remaining, vec![1, 2]);
+        assert_eq!(
+            builder
+                .remap_known_factor_to_sub(
+                    &parsed,
+                    &without_carrier,
+                    &remaining,
+                    &KnownLinearExpr::var(0, 1),
+                )
+                .unwrap(),
             KnownLinearExpr::var(0, 1) + KnownLinearExpr::var(1, 1),
-            "only the deleted occurrence is reconstructed in the lower-sector loop-coordinate basis",
+            "the loop-coordinate basis reconstructs a deleted momentum only when no exact carrier survives",
         );
 
         let mut opposite = parsed.clone();
@@ -6475,6 +6333,18 @@ mod causal_generation_tests {
                 .unwrap(),
             KnownLinearExpr::var(2, 1),
             "a surviving -Q occurrence carries its sign in its cloned energy map",
+        );
+        assert_eq!(
+            opposite_builder
+                .remap_known_factor_to_sub(
+                    &opposite,
+                    &opposite_subparsed,
+                    &opposite_sub_to_parent,
+                    &KnownLinearExpr::var(0, 1),
+                )
+                .unwrap(),
+            KnownLinearExpr::var(2, -1),
+            "a deleted +Q factor restores the sign of its surviving -Q carrier",
         );
     }
 
@@ -7177,15 +7047,92 @@ mod causal_generation_tests {
                     // Literal signed Below residues give S[1/Dx]=-1/(2a),
                     // S[1/Dy^2]=+1/(4b^3), S[y^2/Dy^2]=-1/(4b).
                     // The rational source and each factor converge in energy.
+                    // The squared numerator belongs to the occurrence whose
+                    // bound was declared, including the oppositely routed copy.
                     for (numerator, expected) in [
-                        ("1", -1.0 / (8.0 * a * b.powi(3))),
-                        ("edges[1][0]**2", 1.0 / (8.0 * a * b)),
+                        ("1".to_string(), -1.0 / (8.0 * a * b.powi(3))),
+                        (format!("edges[{owner}][0]**2"), 1.0 / (8.0 * a * b)),
                     ] {
                         let actual = source_factor
-                            * powered_identity_test_value(&parsed, &generated, numerator, &input);
+                            * powered_identity_test_value(&parsed, &generated, &numerator, &input);
                         assert!(
                             (actual - expected).abs() < 1.0e-11 * expected.abs(),
                             "{context:?} owner {owner} {numerator}: actual={actual:.17e}, expected={expected:.17e}"
+                        );
+                    }
+                }
+            }
+        }
+        // Higher occurrence degrees enter the known-factor remainder, unlike
+        // the quadratic fixture above. Its four-edge bubble and attached
+        // tadpole still define independent contours despite sharing vertex 0.
+        let mut powered = parsed.clone();
+        powered.internal_edges = [(0, 0), (0, 2), (1, 3), (2, 1), (3, 0)]
+            .into_iter()
+            .enumerate()
+            .map(|(edge_id, (tail, head))| {
+                let mut edge = parsed.internal_edges[usize::from(edge_id != 0)].clone();
+                edge.edge_id = edge_id;
+                edge.tail = tail;
+                edge.head = head;
+                edge.label = format!("q{edge_id}");
+                edge
+            })
+            .collect();
+        powered.node_name_to_internal = (0..4).map(|node| (format!("v{node}"), node)).collect();
+        for context in [
+            CffGenerationContext::Standalone,
+            CffGenerationContext::EmbeddedCffFactor,
+        ] {
+            for bounds in [
+                vec![(1, 6)],
+                vec![(1, 4), (2, 1), (3, 1)],
+                vec![(1, 4), (2, 2)],
+                vec![(1, 4), (3, 2)],
+            ] {
+                let numerator = bounds
+                    .iter()
+                    .map(|(edge, degree)| format!("edges[{edge}][0]**{degree}"))
+                    .collect::<Vec<_>>()
+                    .join("*");
+                let generated = generate_3d_expression(
+                    &powered,
+                    &Generate3DExpressionOptions {
+                        cff_generation_context: context,
+                        energy_degree_bounds: Some(bounds.clone()),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                assert_eq!(
+                    generated.denominator_only_global_prefactor_sign.factor(),
+                    -1
+                );
+                // Five source denominators and the two independent contour
+                // frames convert this generated raw expression with sign +1.
+                for (tadpole_spatial, bubble_spatial) in [(0.0, 0.0), (1.5, 0.0), (0.0, 1.5)] {
+                    let input = crate::eval::EvaluationInput {
+                        external_momenta: Vec::new(),
+                        loop_spatial_momenta: vec![
+                            [tadpole_spatial, 0.0, 0.0],
+                            [bubble_spatial, 0.0, 0.0],
+                        ],
+                        masses: vec![2.0; 5],
+                        uniform_scale: None,
+                    };
+                    let a = (4.0_f64 + tadpole_spatial * tadpole_spatial).sqrt();
+                    let b = (4.0_f64 + bubble_spatial * bubble_spatial).sqrt();
+                    // Signed Below residues: S[1/Dx]=-1/(2a),
+                    // S[1/Dy^4]=+5/(32b^7), S[y^6/Dy^4]=-5/(32b).
+                    for (probe, expected) in [
+                        ("1", -5.0 / (64.0 * a * b.powi(7))),
+                        (numerator.as_str(), 5.0 / (64.0 * a * b)),
+                    ] {
+                        let actual =
+                            powered_identity_test_value(&powered, &generated, probe, &input);
+                        assert!(
+                            (actual - expected).abs() < 1.0e-10 * expected.abs(),
+                            "{context:?} bounds {bounds:?}, a={a}, b={b}, {probe}: actual={actual:.17e}, expected={expected:.17e}"
                         );
                     }
                 }
@@ -7498,6 +7445,76 @@ mod causal_generation_tests {
 
     #[cfg(feature = "eval")]
     #[test]
+    fn repeated_quadratic_occurrence_position_changes_stored_map_count() {
+        let parsed = powered_identity_test_graph(
+            vec![
+                MomentumSignature {
+                    loop_signature: vec![1],
+                    external_signature: Vec::new(),
+                };
+                2
+            ],
+            1,
+            0,
+        );
+        assert!(crate::validate_parsed_graph(&parsed).ok);
+        let input = crate::eval::EvaluationInput {
+            external_momenta: Vec::new(),
+            loop_spatial_momenta: vec![[0.0; 3]],
+            masses: vec![2.0; 2],
+            uniform_scale: None,
+        };
+
+        for context in [
+            CffGenerationContext::Standalone,
+            CffGenerationContext::EmbeddedCffFactor,
+        ] {
+            for (owner, expected_maps) in [(0, 5), (1, 4)] {
+                let options = Generate3DExpressionOptions {
+                    cff_generation_context: context,
+                    energy_degree_bounds: Some(vec![(owner, 2)]),
+                    ..Default::default()
+                };
+                let generated = generate_3d_expression(&parsed, &options).unwrap();
+                assert_eq!(
+                    generated.source_energy_degree_bounds,
+                    options.energy_degree_bounds.clone().unwrap(),
+                );
+                // Both envelopes have maximum two and the same product of
+                // (degree + 1). The ordinary remainder uses e0 as its loop
+                // basis. Deleting e0 gives three contact maps with L=+E1;
+                // deleting e1 instead retains L=+E0, so its negative sample
+                // coincides with one remainder map. Future dispatch scoring
+                // must count the stored rows, not infer their number from
+                // either rank proxy or the number of coarse directions.
+                assert_eq!(
+                    generated.expression.orientations.len(),
+                    expected_maps,
+                    "{context:?}, quadratic owner e{owner}",
+                );
+                let source_sign = CffGlobalPrefactorSign::from_exponent(2)
+                    .product(generated.denominator_only_global_prefactor_sign)
+                    .factor() as f64;
+                // Independently, clockwise Below residues of 1/D^2 and q0^2/D^2
+                // are +1/(4E^3) and -1/(4E), with D=q0^2-E^2+i0. E=2 makes
+                // these values and the generated arithmetic exact in f64.
+                for (numerator, expected) in [
+                    ("1".to_string(), 1.0 / 32.0),
+                    (format!("edges[{owner}][0]**2"), -1.0 / 8.0),
+                ] {
+                    let actual = source_sign
+                        * powered_identity_test_value(&parsed, &generated, &numerator, &input);
+                    assert_eq!(
+                        actual, expected,
+                        "{context:?}, quadratic owner e{owner}, numerator {numerator}",
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
     fn quadratic_repeated_channel_matches_half_simple_pole_under_physical_routing_reversal() {
         let signature = |sign| MomentumSignature {
             loop_signature: vec![sign],
@@ -7537,22 +7554,31 @@ mod causal_generation_tests {
                 CffGenerationContext::Standalone,
                 CffGenerationContext::EmbeddedCffFactor,
             ] {
-                let generated = generate_3d_expression_from_parsed_generated(
-                    &parsed,
-                    &Generate3DExpressionOptions {
-                        cff_generation_context: context,
-                        energy_degree_bounds: Some(vec![(0, 2)]),
-                        ..Default::default()
-                    },
-                )
-                .unwrap();
-                let actual =
-                    powered_identity_test_value(&parsed, &generated, "edges[0][0]**2", &input(2));
-                let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
-                assert!(
-                    (actual - expected).abs() <= 1.0e-12 * scale,
-                    "Q0^2/D(Q)^2 changed under the valid routing {signs:?} in {context:?}: actual={actual:e}, expected={expected:e}",
-                );
+                for (bounds, numerator) in [
+                    (vec![(0, 2)], "edges[0][0]**2".to_string()),
+                    (vec![(1, 2)], "edges[1][0]**2".to_string()),
+                    (
+                        vec![(0, 1), (1, 1)],
+                        format!("{}*edges[0][0]*edges[1][0]", signs[0] * signs[1]),
+                    ),
+                ] {
+                    let generated = generate_3d_expression_from_parsed_generated(
+                        &parsed,
+                        &Generate3DExpressionOptions {
+                            cff_generation_context: context,
+                            energy_degree_bounds: Some(bounds.clone()),
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+                    let actual =
+                        powered_identity_test_value(&parsed, &generated, &numerator, &input(2));
+                    let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+                    assert!(
+                        (actual - expected).abs() <= 1.0e-12 * scale,
+                        "Q0^2/D(Q)^2 changed under the valid routing {signs:?} in {context:?}, bounds={bounds:?}: actual={actual:e}, expected={expected:e}",
+                    );
+                }
             }
         }
     }
@@ -7607,29 +7633,44 @@ mod causal_generation_tests {
                 CffGenerationContext::Standalone,
                 CffGenerationContext::EmbeddedCffFactor,
             ] {
-                let generated = generate_3d_expression_from_parsed_generated(
-                    &parsed,
-                    &Generate3DExpressionOptions {
-                        cff_generation_context: context,
-                        energy_degree_bounds: Some(vec![(0, 4)]),
-                        ..Default::default()
-                    },
-                )
-                .unwrap();
-                let actual =
-                    powered_identity_test_value(&parsed, &generated, "edges[0][0]**4", &input);
-                let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
-                assert!(
-                    (actual - expected).abs() <= 1.0e-12 * scale,
-                    "Q0^4/D(Q)^3 changed under the valid routing {signs:?} in {context:?}: actual={actual:e}, expected={expected:e}",
-                );
-                if let Some(reference) = reference {
+                for bounds in [
+                    vec![(0, 4)],
+                    vec![(0, 2), (1, 2)],
+                    vec![(0, 2), (1, 1), (2, 1)],
+                ] {
+                    // Restore each occurrence's physical routing before
+                    // comparing these distinct factor-local quartic products.
+                    let numerator = bounds
+                        .iter()
+                        .map(|(edge, degree)| {
+                            format!("({}*edges[{edge}][0])**{degree}", signs[*edge])
+                        })
+                        .collect::<Vec<_>>()
+                        .join("*");
+                    let generated = generate_3d_expression_from_parsed_generated(
+                        &parsed,
+                        &Generate3DExpressionOptions {
+                            cff_generation_context: context,
+                            energy_degree_bounds: Some(bounds.clone()),
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+                    let actual =
+                        powered_identity_test_value(&parsed, &generated, &numerator, &input);
+                    let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
                     assert!(
-                        (actual - reference).abs() <= 1.0e-12 * scale,
-                        "Q0^4/D(Q)^3 is not routing/context invariant: actual={actual:e}, reference={reference:e}",
+                        (actual - expected).abs() <= 1.0e-12 * scale,
+                        "Q0^4/D(Q)^3 changed under the valid routing {signs:?} in {context:?}, bounds={bounds:?}: actual={actual:e}, expected={expected:e}",
                     );
-                } else {
-                    reference = Some(actual);
+                    if let Some(reference) = reference {
+                        assert!(
+                            (actual - reference).abs() <= 1.0e-12 * scale,
+                            "Q0^4/D(Q)^3 is not routing/context invariant: actual={actual:e}, reference={reference:e}",
+                        );
+                    } else {
+                        reference = Some(actual);
+                    }
                 }
             }
         }
@@ -9084,7 +9125,7 @@ mod causal_generation_tests {
     }
 
     #[test]
-    fn finite_pole_sampling_updates_entire_repeated_logical_channel() {
+    fn finite_pole_sampling_preserves_other_repeated_occurrences() {
         let mut parsed = crate::graph_io::test_graphs::box_pow3_graph();
         parsed.internal_edges[5]
             .signature
@@ -9104,26 +9145,23 @@ mod causal_generation_tests {
             },
         )
         .unwrap();
+        assert_eq!(builder.bounds, vec![0, 0, 0, 2, 0, 0]);
         let mut edge_maps = (0..parsed.internal_edges.len())
             .map(|edge_id| LinearEnergyExpr::ose(EdgeIndex(edge_id), 1))
             .collect::<Vec<_>>();
         edge_maps[5] = LinearEnergyExpr::ose(EdgeIndex(5), -1);
 
-        builder
-            .assign_repeated_channel_sample(&mut edge_maps, 3, 0)
-            .unwrap();
+        BoundedCffBuilder::assign_occurrence_sample(&mut edge_maps, 3, 0);
 
         assert!(edge_maps[3].is_zero());
-        assert!(edge_maps[4].is_zero());
-        assert!(edge_maps[5].is_zero());
+        assert_eq!(edge_maps[4], LinearEnergyExpr::ose(EdgeIndex(4), 1));
+        assert_eq!(edge_maps[5], LinearEnergyExpr::ose(EdgeIndex(5), -1));
 
-        builder
-            .assign_repeated_channel_sample(&mut edge_maps, 3, -1)
-            .unwrap();
+        BoundedCffBuilder::assign_occurrence_sample(&mut edge_maps, 3, -1);
 
         assert_eq!(edge_maps[3], LinearEnergyExpr::ose(EdgeIndex(3), -1));
-        assert_eq!(edge_maps[4], LinearEnergyExpr::ose(EdgeIndex(4), -1));
-        assert_eq!(edge_maps[5], LinearEnergyExpr::ose(EdgeIndex(5), 1));
+        assert_eq!(edge_maps[4], LinearEnergyExpr::ose(EdgeIndex(4), 1));
+        assert_eq!(edge_maps[5], LinearEnergyExpr::ose(EdgeIndex(5), -1));
     }
 
     #[test]
@@ -9275,16 +9313,20 @@ mod causal_generation_tests {
             conservative.core_global_prefactor_sign
         );
         for (label, generated) in [("exact", &exact), ("conservative", &conservative)] {
-            let origins = generated
+            let denominator_counts = generated
                 .expression
                 .orientations
                 .iter()
                 .flat_map(|orientation| &orientation.variants)
-                .filter_map(|variant| variant.origin.as_deref())
+                .map(|variant| variant.denominator_edges.len())
                 .collect::<Vec<_>>();
+            let original_count = parsed.denominator_internal_edge_ids().len();
             assert!(
-                origins.contains(&"bounded_degree_known_factor_cff"),
-                "{label} structural-cut CFF did not retain its factorized lower-sector branch: {origins:?}",
+                denominator_counts.contains(&original_count)
+                    && denominator_counts
+                        .iter()
+                        .any(|count| *count < original_count),
+                "{label} structural-cut CFF must retain finite-pole and lower-sector branches: {denominator_counts:?}",
             );
             // A conservative quadratic capacity may add internal interpolation
             // contacts. Those variants still sample the same runtime
@@ -9930,7 +9972,7 @@ mod cff_tests {
     }
 
     #[test]
-    fn repeated_p6_and_p5_share_one_variant_local_energy_frame() {
+    fn repeated_p6_and_p5_preserve_their_source_energy_frames() {
         let repeated_cycle = |power: usize| ParsedGraph {
             internal_edges: (0..power)
                 .map(|edge_id| ParsedGraphInternalEdge {
@@ -9970,12 +10012,13 @@ mod cff_tests {
             .unwrap()
         });
 
-        for expression in generated {
-            assert_eq!(
-                expression.energy_factor_ownership,
-                CffEnergyFactorOwnership::VariantLocal
-            );
+        for (expression, ownership) in generated.into_iter().zip([
+            CffEnergyFactorOwnership::VariantLocal,
+            CffEnergyFactorOwnership::GlobalSourceProduct,
+        ]) {
+            assert_eq!(expression.energy_factor_ownership, ownership);
             assert_eq!(expression.energy_factor_components.len(), 1);
+            assert_eq!(expression.energy_factor_components[0].ownership, ownership);
             assert_eq!(expression.core_global_prefactor_sign.factor(), 1);
         }
     }
@@ -11132,13 +11175,34 @@ mod cff_tests {
         .unwrap();
 
         assert!(!expression.orientations.is_empty());
+        // Polynomial quotient factors may contain q-E in the numerator;
+        // only denominator surfaces can create noncausal singularities.
         assert!(
             expression
                 .surfaces
                 .linear_surface_cache
                 .iter()
-                .all(|surface| surface.kind == LinearSurfaceKind::Esurface)
+                .all(|surface| {
+                    surface.numerator_only || surface.kind == LinearSurfaceKind::Esurface
+                })
         );
+        for surface_id in expression
+            .orientations
+            .iter()
+            .flat_map(|orientation| &orientation.variants)
+            .flat_map(|variant| denominator_tree_chains(&variant.denominator))
+            .flatten()
+        {
+            if let HybridSurfaceID::Linear(id) = surface_id {
+                let surface = &expression.surfaces.linear_surface_cache[id];
+                assert_eq!(
+                    surface.kind,
+                    LinearSurfaceKind::Esurface,
+                    "noncausal denominator surface: {surface:?}"
+                );
+                assert!(!surface.numerator_only);
+            }
+        }
         assert!(
             expression
                 .orientations
@@ -11223,7 +11287,7 @@ mod cff_tests {
     }
 
     #[test]
-    fn cff_generation_samples_a_nonlinear_repeated_channel_as_one_emr_energy() {
+    fn cff_generation_samples_nonlinear_occurrences_independently() {
         let parsed = parsed_fixture("box_pow3.dot");
         let expression = generate_3d_expression_from_parsed(
             &parsed,
@@ -11239,25 +11303,23 @@ mod cff_tests {
 
         assert!(!expression.orientations.is_empty());
         assert!(expression.orientations.iter().all(|orientation| {
-            let channel_maps = &orientation.edge_energy_map[3..=5];
-            channel_maps
-                .iter()
-                .all(|energy_map| energy_map == &channel_maps[0])
+            orientation.edge_energy_map.len() == parsed.internal_edges.len()
         }));
         assert!(expression.orientations.iter().any(|orientation| {
-            orientation.edge_energy_map[3..=5]
-                .iter()
-                .all(LinearEnergyExpr::is_zero)
+            orientation.edge_energy_map[3].is_zero()
+                && !orientation.edge_energy_map[4].is_zero()
+                && !orientation.edge_energy_map[5].is_zero()
         }));
-        assert!(expression.orientations.iter().any(|orientation| {
-            orientation.edge_energy_map[3..=5]
+        assert!(!expression.orientations.iter().any(|orientation| {
+            orientation
+                .edge_energy_map
                 .iter()
-                .all(LinearEnergyExpr::uses_uniform_scale)
+                .any(LinearEnergyExpr::uses_uniform_scale)
         }));
     }
 
     #[test]
-    fn cff_repeated_quadratic_channel_is_invariant_under_bound_ownership() {
+    fn cff_repeated_occurrences_retain_independent_rank_capacity() {
         let mut parsed = parsed_fixture("box_pow3.dot");
         parsed.internal_edges[5]
             .signature
@@ -11270,7 +11332,6 @@ mod cff_tests {
             .iter_mut()
             .for_each(|coefficient| *coefficient = -*coefficient);
 
-        let mut reference = None;
         for bounds in [
             vec![(3, 2)],
             vec![(4, 2)],
@@ -11282,48 +11343,43 @@ mod cff_tests {
             let generated = generate_3d_expression_from_parsed_generated(
                 &parsed,
                 &Generate3DExpressionOptions {
-                    energy_degree_bounds: Some(bounds),
+                    energy_degree_bounds: Some(bounds.clone()),
                     ..Default::default()
                 },
             )
             .unwrap();
             assert_eq!(
                 generated.energy_factor_ownership,
-                CffEnergyFactorOwnership::VariantLocal
+                if bounds.iter().any(|(_, degree)| *degree > 1) {
+                    CffEnergyFactorOwnership::VariantLocal
+                } else {
+                    CffEnergyFactorOwnership::GlobalSourceProduct
+                }
             );
             for orientation in &generated.expression.orientations {
-                let representative = &orientation.edge_energy_map[3];
-                let sample = if representative.is_zero() {
-                    0
-                } else if representative == &LinearEnergyExpr::ose(EdgeIndex(3), 1) {
-                    1
-                } else if representative == &LinearEnergyExpr::ose(EdgeIndex(3), -1) {
-                    -1
-                } else {
-                    panic!(
-                        "quadratic repeated-channel representative has a non-sample map: {representative:?}"
-                    );
-                };
                 assert_eq!(
-                    orientation.edge_energy_map[4],
-                    LinearEnergyExpr::ose(EdgeIndex(4), sample),
-                    "the same-routing occurrence must receive the representative sample"
+                    orientation.edge_energy_map.len(),
+                    parsed.internal_edges.len()
                 );
-                assert_eq!(
-                    orientation.edge_energy_map[5],
-                    LinearEnergyExpr::ose(EdgeIndex(5), -sample),
-                    "the reversed-routing occurrence must receive the signed representative sample"
-                );
+                for edge_id in 3..=5 {
+                    if orientation.edge_energy_map[edge_id].is_zero() {
+                        assert!(
+                            bounds.contains(&(edge_id, 2)),
+                            "only the quadratic owner may acquire a zero sample"
+                        );
+                    }
+                }
             }
-            let encoded =
-                bincode::encode_to_vec(&generated.expression, bincode::config::standard()).unwrap();
-            if let Some(reference) = &reference {
-                assert_eq!(
-                    &encoded, reference,
-                    "a common quadratic EMR channel must not depend on which Q/Q/-Q occurrence owns its bound"
-                );
-            } else {
-                reference = Some(encoded);
+            for (edge_id, degree) in bounds {
+                if degree > 1 {
+                    assert!(
+                        generated
+                            .expression
+                            .orientations
+                            .iter()
+                            .any(|orientation| { orientation.edge_energy_map[edge_id].is_zero() })
+                    );
+                }
             }
         }
     }
@@ -11371,13 +11427,34 @@ mod cff_tests {
         .unwrap();
 
         assert!(!expression.orientations.is_empty());
+        // Polynomial quotient factors may contain q-E in the numerator;
+        // only denominator surfaces can create noncausal singularities.
         assert!(
             expression
                 .surfaces
                 .linear_surface_cache
                 .iter()
-                .all(|surface| surface.kind == LinearSurfaceKind::Esurface)
+                .all(|surface| {
+                    surface.numerator_only || surface.kind == LinearSurfaceKind::Esurface
+                })
         );
+        for surface_id in expression
+            .orientations
+            .iter()
+            .flat_map(|orientation| &orientation.variants)
+            .flat_map(|variant| denominator_tree_chains(&variant.denominator))
+            .flatten()
+        {
+            if let HybridSurfaceID::Linear(id) = surface_id {
+                let surface = &expression.surfaces.linear_surface_cache[id];
+                assert_eq!(
+                    surface.kind,
+                    LinearSurfaceKind::Esurface,
+                    "noncausal denominator surface: {surface:?}"
+                );
+                assert!(!surface.numerator_only);
+            }
+        }
         assert!(
             expression
                 .orientations

@@ -778,6 +778,29 @@ impl Graph {
             options,
             analysis_numerator,
         )?;
+        self.cff_from_generated_expression(
+            generated,
+            contract_subgraph,
+            cutset,
+            orientation_pattern,
+            options,
+        )
+    }
+
+    pub(crate) fn cff_from_generated_expression<S: SubGraphLike + SubSetLike>(
+        &self,
+        generated: GeneratedThreeDExpression<esurface::Esurface, hsurface::Hsurface>,
+        contract_subgraph: &S,
+        cutset: &CutSet,
+        orientation_pattern: &OrientationPattern,
+        options: &Generate3DExpressionOptions,
+    ) -> Result<CutCFF> {
+        let mut contract_edges = self
+            .iter_edges_of(contract_subgraph)
+            .filter_map(|(pair, edge, _)| pair.is_paired().then_some(edge))
+            .collect::<Vec<_>>();
+        contract_edges.sort_unstable();
+        contract_edges.dedup();
         let energy_factor_ownership = generated.energy_factor_ownership;
         let source_energy_degree_bounds = generated.source_energy_degree_bounds.clone();
         let production_prefactor_bridge = CutCFF::gamma_loop_prefactor_conversion(&generated);
@@ -3030,6 +3053,41 @@ mod tests {
         let q3_squared = tagged_temporal(3, &(-q1)).pow(2);
         let q1_cff = exact_cff(&mut graph, &q1_squared)?;
         let q3_cff = exact_cff(&mut graph, &q3_squared)?;
+        // Equal physical energies may have different independent CFF maps.
+        // Each original factor must still use its own retained base occurrence.
+        for (cff, owner, numerator) in [
+            (&q1_cff, EdgeIndex(1), &q1_squared),
+            (&q3_cff, EdgeIndex(3), &q3_squared),
+        ] {
+            assert_eq!(
+                cff.energy_degree_bound_report.physical_parent_bounds,
+                vec![(usize::from(owner), 2)],
+            );
+            for term in cff.terms.values() {
+                let planned = term.exact_source_numerator.as_ref().unwrap();
+                assert_eq!(planned.assignment.energy_degree_bounds().len(), 1);
+                assert_eq!(planned.assignment.energy_degree_bounds()[0].1, 2);
+                let reconstructed = planned
+                    .assignment
+                    .map_factors(|factor, assignments| {
+                        assert_eq!(assignments.keys().copied().collect::<Vec<_>>(), vec![owner]);
+                        Ok::<_, ()>(factor.clone())
+                    })
+                    .unwrap();
+                assert_eq!(&reconstructed, numerator);
+                for orientation in &term.orientations {
+                    assert_eq!(
+                        term.map_exact_source_numerator(&orientation.orientation)?,
+                        planned.mapper.map_numerator(
+                            &orientation.orientation.loop_energy_map,
+                            &orientation.orientation.edge_energy_map,
+                            numerator,
+                        )?,
+                        "the original quadratic factor must use its own base sample",
+                    );
+                }
+            }
+        }
         let empty: linnet::half_edge::subgraph::SuBitGraph = graph.empty_subgraph();
         let ordinary = graph.cff(
             &empty,
@@ -3102,66 +3160,33 @@ mod tests {
                 }
                 expression
             };
-            let q1_orientations = q1_cff
-                .terms
-                .values()
-                .flat_map(|term| {
-                    term.orientations
-                        .iter()
-                        .map(move |orientation| (term, orientation))
-                })
-                .collect::<Vec<_>>();
-            let q3_orientations = q3_cff
-                .terms
-                .values()
-                .flat_map(|term| {
-                    term.orientations
-                        .iter()
-                        .map(move |orientation| (term, orientation))
-                })
-                .collect::<Vec<_>>();
-            assert_eq!(q1_orientations.len(), q3_orientations.len());
-            for (index, ((q1_term, q1_orientation), (q3_term, q3_orientation))) in
-                q1_orientations.iter().zip(&q3_orientations).enumerate()
-            {
-                assert_eq!(
-                    q1_orientation.orientation.loop_energy_map,
-                    q3_orientation.orientation.loop_energy_map,
-                    "owner-dependent loop-energy map at orientation {index}",
-                );
-                assert_eq!(
-                    q1_orientation.orientation.edge_energy_map,
-                    q3_orientation.orientation.edge_energy_map,
-                    "owner-dependent edge-energy map at orientation {index}",
-                );
-                let q1_carrier = fix(q1_orientation.expression.clone()).together();
-                let q3_carrier = fix(q3_orientation.expression.clone()).together();
-                let carrier_difference = &q1_carrier - &q3_carrier;
-                assert!(
-                    carrier_difference.together().is_zero(),
-                    "owner-dependent GL carrier at orientation {index}: {carrier_difference}",
-                );
-                let q1_numerator =
-                    fix(q1_term.map_exact_source_numerator(&q1_orientation.orientation)?)
-                        .together();
-                let q3_numerator =
-                    fix(q3_term.map_exact_source_numerator(&q3_orientation.orientation)?)
-                        .together();
-                let numerator_difference = &q1_numerator - &q3_numerator;
-                assert!(
-                    numerator_difference.together().is_zero(),
-                    "owner-dependent mapped numerator at orientation {index}: {numerator_difference}",
-                );
-                // Preserve the production factorization at the symbolic oracle boundary.
-                // Multiplying before applying the shell point can leave equivalent positive
-                // radicals in the distinct forms `sqrt(x) / x` and `1 / sqrt(x)`, which
-                // `together()` deliberately does not identify through a branch assumption.
-                let product_difference = &q1_carrier * &q1_numerator - &q3_carrier * &q3_numerator;
-                assert!(
-                    product_difference.together().is_zero(),
-                    "owner-dependent carrier product at orientation {index}: {product_difference}",
-                );
+            let mut sums = Vec::new();
+            for cff in [&q1_cff, &q3_cff] {
+                let mut sum = Atom::Zero;
+                for term in cff.terms.values() {
+                    for orientation in &term.orientations {
+                        let carrier = fix(orientation.expression.clone()).together();
+                        let numerator =
+                            fix(term.map_exact_source_numerator(&orientation.orientation)?)
+                                .together();
+                        // Preserve the production factorization at the symbolic oracle boundary.
+                        // Multiplying before applying the shell point can leave equivalent positive
+                        // radicals in the distinct forms `sqrt(x) / x` and `1 / sqrt(x)`, which
+                        // `together()` deliberately does not identify through a branch assumption.
+                        sum += carrier * numerator;
+                    }
+                }
+                sums.push(sum * Atom::num(cff.production_prefactor_factor()));
             }
+            assert!(
+                !sums[0].together().is_zero(),
+                "the temporal theta contour must exercise a nonzero numerator contribution",
+            );
+            let difference = (&sums[0] - &sums[1]).together();
+            assert!(
+                difference.is_zero(),
+                "equal physical temporal numerators must agree after their complete independent residue sums: {difference}",
+            );
         }
         Ok(())
     }

@@ -2,6 +2,7 @@ use super::utils::*;
 use super::*;
 use std::fs;
 
+use gammaloop_api::commands::Commands;
 use gammalooprs::integrands::process::ProcessIntegrand;
 use gammalooprs::processes::CutId;
 use gammalooprs::settings::runtime::{
@@ -278,6 +279,7 @@ fn bare_raised_scalar_self_energy_has_the_reported_uv_degree() -> Result<()> {
         ],
     )?;
     let mut failures = Vec::new();
+    let mut expected_uv_failures = Vec::new();
     for (graph_name, expected_dod) in [
         ("raised_se_unit", 0),
         ("raised_se_q3_temporal", 0),
@@ -310,6 +312,7 @@ fn bare_raised_scalar_self_energy_has_the_reported_uv_degree() -> Result<()> {
             .flat_map(|graph| &graph.lmbs)
             .flat_map(|lmb| &lmb.subsets)
             .collect_vec();
+        expected_uv_failures.extend(analysis.pass_fail(-0.9).failures);
         assert_eq!(subsets.len(), 1);
         assert_eq!(subsets[0].initial_dod, expected_dod);
         // The leading odd-energy term cancels in the complete temporal pole sum.
@@ -331,6 +334,91 @@ fn bare_raised_scalar_self_energy_has_the_reported_uv_degree() -> Result<()> {
         "bare raised-self-energy UV-degree mismatches:\n{}",
         failures.join("\n"),
     );
+    expected_uv_failures.sort_by_key(|failure| (failure.graph_index, failure.lmb_index));
+    assert_eq!(expected_uv_failures.len(), 10);
+
+    // Reuse the generated bare graphs: a direct API call retains the failing
+    // analysis, while fail-fast samples only the first complete failing limit.
+    let stopped = Profile::UltraViolet(UltraVioletProfile {
+        process: Some(ProcessRef::Unqualified(
+            "bare_raised_scalar_self_energy".into(),
+        )),
+        integrand_name: Some("compare".into()),
+        fail_fast: true,
+        n_points: 6,
+        seed: Some(9300),
+        uv_ray_directions: vec![1.0, 0.3, -0.2],
+        uv_ray_norms: vec![3.0],
+        ..Default::default()
+    })
+    .run(&mut cli.state, &cli.cli_settings)?
+    .unwrap_uv();
+    assert!(stopped.stopped_early);
+    let stopped_report = stopped.pass_fail(-0.9);
+    assert_eq!((stopped_report.total, stopped_report.failed), (1, 1));
+    assert_eq!(
+        serde_json::to_value(&stopped_report.failures[0])?,
+        serde_json::to_value(&expected_uv_failures[0])?
+    );
+
+    // Command execution must fail in both modes, after writing the complete
+    // or partial JSON report. The emitted run-card fragment must parse back.
+    let output = test_root.with_extension("uv-profile-reports");
+    clean_test(&output);
+    for fail_fast in [false, true] {
+        let report_path = output.join(if fail_fast { "fast" } else { "full" });
+        let command = Commands::Profile(Profile::UltraViolet(UltraVioletProfile {
+            process: Some(ProcessRef::Unqualified(
+                "bare_raised_scalar_self_energy".into(),
+            )),
+            integrand_name: Some("compare".into()),
+            fail_fast,
+            n_points: 6,
+            uv_ray_directions: vec![1.0, 0.3, -0.2],
+            output_file: Some(report_path.clone()),
+            ..Default::default()
+        }));
+        let error = command
+            .run(
+                &mut cli.state,
+                &mut cli.run_history,
+                &mut cli.cli_settings,
+                &mut cli.default_runtime_settings,
+            )
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("UV limit tests:") && error.contains("FAIL"));
+        // A constant bare limit can fail the fit-quality check before the DOD
+        // threshold. Both are valid failures of an unsubtracted integrand.
+        assert!(
+            error.contains("unstable_fit") || error.contains("dod_exceeds_threshold"),
+            "missing the bare integrand's UV failure reason: {error}"
+        );
+        let fragment = error.split_once("run-card fragment:\n").unwrap().1;
+        let history: gammaloop_api::state::RunHistory = toml::from_str(fragment)?;
+        let Commands::Profile(Profile::UltraViolet(reproduction)) = &history.commands[0].command
+        else {
+            panic!("expected the failing UV profile reproduction command");
+        };
+        assert_eq!(reproduction.fail_fast, fail_fast);
+        assert_eq!(reproduction.seed, Some(42));
+        assert!(matches!(reproduction.process, Some(ProcessRef::Id(_))));
+        assert_eq!(reproduction.integrand_name.as_deref(), Some("compare"));
+        assert_eq!(reproduction.uv_ray_directions, [1.0, 0.3, -0.2]);
+        assert_eq!(reproduction.uv_ray_norms.len(), 1);
+        assert!(reproduction.uv_ray_norms[0] > 0.0);
+        let written: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(report_path.join("uv_profile.json"))?)?;
+        assert_eq!(
+            written["stopped_early"].as_bool().unwrap_or(false),
+            fail_fast
+        );
+        assert_eq!(
+            written["graphs"].as_array().unwrap().len(),
+            if fail_fast { 1 } else { 10 }
+        );
+    }
+    clean_test(output);
     clean_test(test_root);
     Ok(())
 }
@@ -365,6 +453,8 @@ fn uv_profile_all_limits_profiles_finite_amplitude_cycles() -> Result<()> {
     let report = analysis.pass_fail(-0.9);
     assert_eq!(report.total, subsets.len());
     assert_eq!(report.failed, 0, "{report}");
+    assert!(!analysis.stopped_early);
+    cli.run_command("profile ultra-violet -p triangle -i scalar_tri --selected-limits all --n-points 5 --uv-ray-directions=1.0,0.3,-0.2 --uv-ray-norms 3.0 --fail-fast")?;
 
     clean_test(&cli.cli_settings.state.folder);
     Ok(())

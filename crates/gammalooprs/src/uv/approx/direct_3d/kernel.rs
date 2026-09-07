@@ -279,7 +279,6 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         file.mapped_numerator = %mapped_numerator,
         "Mapped the direct branch-owned numerator before its Taylor kernel"
     );
-    let source_map = key.source_edge_energy_map();
     match current.renormalization_scheme() {
         ApproximationType::MUV | ApproximationType::PolePart => {
             let started = start(
@@ -309,12 +308,10 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         ApproximationType::IR => {
             let t_tilde = t_tilde(
                 ctx,
-                orientation,
-                key.selector_host,
-                source_map,
                 current,
                 given,
                 integrand,
+                &mapped_numerator,
                 active_subgraph.as_ref(),
                 lmb,
             )?;
@@ -345,15 +342,12 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
 //     given = %given.log_display(),
 //     reduced,
 // )]
-#[allow(clippy::too_many_arguments)]
 fn t_tilde<S: ForestNodeLike>(
     ctx: &UVCtx<'_>,
-    orientation: OrientationProjection<'_>,
-    orientation_id: crate::cff::expression::OrientationID,
-    source_edge_energy_map: Option<&[crate::cff::surface::LinearEnergyExpr]>,
     current: &S,
     given: &S,
     cff: &Atom,
+    mapped_numerator: &Atom,
     active_subgraph: Option<&SuBitGraph>,
     lmb: &LoopMomentumBasis,
 ) -> Result<Atom> {
@@ -376,13 +370,7 @@ fn t_tilde<S: ForestNodeLike>(
         }
     }
 
-    let numerator = graph
-        .numerator(&reduced, given.subgraph())
-        .get_single_atom()
-        .unwrap();
-    let mut numerator = orientation
-        .map_numerator(graph, orientation_id, source_edge_energy_map, &numerator)?
-        .replace_multiple(&reps);
+    let mut numerator = mapped_numerator.replace_multiple(&reps);
 
     // rescale the external momenta in the added numerator subgraph
     for e in &lmb.ext_edges {
@@ -450,7 +438,15 @@ fn t_tilde<S: ForestNodeLike>(
         .replace(function!(GS.ose, W_.a___))
         .with(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___));
 
-    let a = atomarg.series(GS.rescale, Atom::Zero, -1).unwrap();
+    let a = atomarg.series(GS.rescale, Atom::Zero, -1).map_err(|error| {
+        eyre!(
+            "local 3D infrared Taylor series through order minus one failed for graph `{}` at {} given {}, in loop coordinates {:?}: {error}",
+            graph.name,
+            current.subgraph().string_label(),
+            given.subgraph().string_label(),
+            lmb.loop_edges,
+        )
+    })?;
 
     let mut a = a
         .to_atom()
@@ -647,7 +643,15 @@ impl Direct3dApproximation<'_> {
 
         debug_tags!(#uv, #local, #before_series; log.expr = atomarg, "Before series in t");
 
-        let series = atomarg.series(GS.rescale, Atom::Zero, 0).unwrap();
+        let series = atomarg.series(GS.rescale, Atom::Zero, 0).map_err(|error| {
+            eyre!(
+                "local 3D Taylor series through order zero failed for graph `{}` at {} given {}, in loop coordinates {:?}: {error}",
+                graph.name,
+                current.subgraph().string_label(),
+                given.subgraph().string_label(),
+                lmb.loop_edges,
+            )
+        })?;
         let series_atom = series.to_atom();
         debug_tags!(#generation, #profile, #uv, #local, #summary;
             stage = "local_3d_t_after_series",

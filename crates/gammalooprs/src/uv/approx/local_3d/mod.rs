@@ -7,7 +7,7 @@ use symbolica::atom::Atom;
 
 use crate::{
     cff::{expression::OrientationID, surface::LinearEnergyExpr},
-    graph::{LoopMomentumBasis, cuts::CutSet},
+    graph::cuts::CutSet,
     uv::{
         Integrands,
         approx::{OrientationProjection, direct_3d::Direct3dCts, projected_4d::Projected4dCts},
@@ -25,10 +25,6 @@ mod tests;
 pub(crate) struct FrozenActiveCt {
     pub active: OrientationIntegrands,
     pub frozen_integrands: Integrands,
-    /// The coordinate frame in which this sector's still-active Taylor
-    /// coefficient was formed. Direct complete-CFF sectors have no such
-    /// independent 4D frame.
-    pub active_lmb: Option<LoopMomentumBasis>,
 }
 
 /// Residue integrands grouped by the selector and exact energy map that own

@@ -544,6 +544,7 @@ pub(crate) fn to_vakint_integrand<
     );
 
     let mut propagator_id = 1;
+    let mut propagator_replacements = Vec::new();
 
     let vk_prop = vakint::symbols::S.prop;
     let vk_edge = vakint_symbol!("edge");
@@ -572,15 +573,15 @@ pub(crate) fn to_vakint_integrand<
             // } else {
             //     graph.node_id(sink)
             // };
-            integrand_vakint = integrand_vakint
-                .replace(function!(
+            propagator_replacements.push(Replacement::new(
+                function!(
                     GS.den,
                     usize::from(index) as i64,
                     W_.mom_,
                     W_.mass_,
                     W_.x___
-                ))
-                .with(function!(
+                ),
+                function!(
                     vk_prop,
                     propagator_id,
                     function!(
@@ -595,12 +596,17 @@ pub(crate) fn to_vakint_integrand<
                         W_.mass_
                     },
                     1
-                ))
-                .replace(function!(vk_prop, W_.x___, 1).pow(Atom::var(W_.e_)))
-                .with(function!(vk_prop, W_.x___, -Atom::var(W_.e_)));
+                ),
+            ));
             propagator_id += 1;
         }
     }
+    // Edge IDs make these denominator replacements disjoint. Convert all
+    // propagators together, then encode their powers once for the whole atom.
+    integrand_vakint = integrand_vakint
+        .replace_multiple(&propagator_replacements)
+        .replace(function!(vk_prop, W_.x___, 1).pow(Atom::var(W_.e_)))
+        .with(function!(vk_prop, W_.x___, -Atom::var(W_.e_)));
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_den_to_prop",
         reduced = %reduced_label,

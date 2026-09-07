@@ -257,8 +257,8 @@ fn large_scaled_tensor_sum_contracts_without_broadcasting_coefficients() {
     use super::AtomSumShapeDiagnostics;
     use crate::{
         network::{
-            ExecutionResult, ExecutionStrategy, MinResultRank, Network, NetworkLeaf, NetworkNode,
-            Sequential, SequentialRef, TensorOrScalarOrKey,
+            ExecutionResult, ExecutionStrategy, MinIntermediateCost, MinResultRank, Network,
+            NetworkLeaf, NetworkNode, Sequential, SequentialRef, TensorOrScalarOrKey,
             library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
             store::NetworkStore,
         },
@@ -280,6 +280,8 @@ fn large_scaled_tensor_sum_contracts_without_broadcasting_coefficients() {
     type Lib = DummyLibrary<Tensor, DummyKey>;
     type FnLib = ErroringLibrary<DummyKey>;
 
+    macro_rules! check_method {
+        ($method:ty) => {{
     let lib = Lib::new();
     let fn_lib = FnLib::new();
     let coefficient = Atom::add_many(
@@ -312,7 +314,7 @@ fn large_scaled_tensor_sum_contracts_without_broadcasting_coefficients() {
             let mut small = sum.clone();
             // Inspect the internal strategy before terminal finalization: tiny
             // sums should still be eager during intermediate execution.
-            <Sequential as ExecutionStrategy<Store, FnLib, Lib, DummyKey, DummyKey, _>>::execute_all::<MinResultRank>(
+            <Sequential as ExecutionStrategy<Store, FnLib, Lib, DummyKey, DummyKey, _>>::execute_all::<$method>(
                 &mut small.store, &mut small.graph, &lib, &fn_lib,
             ).unwrap();
             assert!(matches!(
@@ -328,7 +330,7 @@ fn large_scaled_tensor_sum_contracts_without_broadcasting_coefficients() {
         let expected = &coefficient * Atom::num(dot_a) + &other_coefficient * Atom::num(dot_b);
         let mut contracted = sum.clone() * Net::from_tensor(tensor(&weights));
         contracted
-            .execute::<Sequential, MinResultRank, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+            .execute::<Sequential, $method, LibTensor, Lib, FnLib>(&lib, &fn_lib)
             .unwrap();
         let ExecutionResult::Val(actual) = contracted.result_scalar().unwrap() else {
             panic!("expected a scalar contraction");
@@ -347,7 +349,7 @@ fn large_scaled_tensor_sum_contracts_without_broadcasting_coefficients() {
         // callers do not have to request materialization with result_tensor().
         for (mut terminal, sign) in [(sum.clone(), 1), (-sum.clone(), -1)] {
             terminal
-                .execute::<SequentialRef, MinResultRank, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+                .execute::<SequentialRef, $method, LibTensor, Lib, FnLib>(&lib, &fn_lib)
                 .unwrap();
             let ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) =
                 terminal.result().unwrap()
@@ -395,7 +397,7 @@ fn large_scaled_tensor_sum_contracts_without_broadcasting_coefficients() {
         }));
         let mut product = sum * Net::from_tensor(matrix);
         product
-            .execute_parallel::<MinResultRank, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+            .execute_parallel::<$method, LibTensor, Lib, FnLib>(&lib, &fn_lib)
             .unwrap();
         let ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) =
             product.result().unwrap()
@@ -409,6 +411,230 @@ fn large_scaled_tensor_sum_contracts_without_broadcasting_coefficients() {
                     .expand()
                     .is_zero()
             );
+        }
+    }
+        }};
+    }
+    check_method!(MinResultRank);
+    check_method!(MinIntermediateCost);
+}
+
+#[test]
+fn intermediate_cost_avoids_a_lower_rank_larger_numeric_intermediate() {
+    use crate::{
+        network::{
+            ExecutionResult, MinIntermediateCost, MinResultRank, Network, Sequential,
+            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+            store::NetworkStore,
+        },
+        structure::{
+            OrderedStructure, TensorStructure,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    type LibTensor = DummyLibraryTensor<Tensor>;
+    type Lib = DummyLibrary<Tensor, DummyKey>;
+    type FnLib = ErroringLibrary<DummyKey>;
+
+    // Supply values in the written index order, independently of the storage
+    // permutations imposed by OrderedStructure for unequal dimensions.
+    fn tensor(axes: &[(usize, usize)], value: impl Fn(&[usize]) -> i64) -> Tensor {
+        let ordered = OrderedStructure::new(
+            axes.iter()
+                .map(|&(dim, id)| Euclidean {}.new_slot(dim, id))
+                .collect(),
+        );
+        let size = axes.iter().map(|(dim, _)| dim).product();
+        let mut data = vec![0.0; size];
+        for linear in 0..size {
+            let mut remainder = linear;
+            let mut indices = vec![0; axes.len()];
+            for (axis, &(dimension, _)) in axes.iter().enumerate().rev() {
+                indices[axis] = remainder % dimension;
+                remainder /= dimension;
+            }
+            let entry = value(&indices);
+            ordered.rep_permutation.apply_slice_in_place(&mut indices);
+            ordered.index_permutation.apply_slice_in_place(&mut indices);
+            let flat: usize = ordered.structure.flat_index(indices).unwrap().into();
+            data[flat] = entry as f64;
+        }
+        DenseTensor::from_data(data, ordered.structure).unwrap()
+    }
+
+    let a = |i: usize, j: usize, x: usize| (1 + i + 2 * j + x % 3) as i64;
+    let b = |i: usize, j: usize, y: usize| (2 * i + j + y % 5) as i64 - 3;
+    let c = |x: usize, z: usize| (x % 7 + z) as i64 - 2;
+    let original = Net::from_tensor(tensor(&[(2, 1), (3, 2), (16, 3)], |v| a(v[0], v[1], v[2])))
+        * Net::from_tensor(tensor(&[(2, 1), (3, 2), (16, 4)], |v| b(v[0], v[1], v[2])))
+        * Net::from_tensor(tensor(&[(16, 3), (1, 5)], |v| c(v[0], v[1])));
+    let input_tensors = original.store.tensors.len();
+
+    // Independent coordinate sum: R_yz = sum_ijx A_ijx B_ijy C_xz.
+    // Build the oracle in integers; every input and intermediate is exactly
+    // representable by this network's f64 backend. No floating tolerance or
+    // contraction kernel is used to manufacture the expected result.
+    let expected = tensor(&[(16, 4), (1, 5)], |v| {
+        let mut sum = 0;
+        for i in 0..2 {
+            for j in 0..3 {
+                for x in 0..16 {
+                    sum += a(i, j, x) * b(i, j, v[0]) * c(x, v[1]);
+                }
+            }
+        }
+        sum
+    });
+
+    let lib = Lib::new();
+    let fn_lib = FnLib::new();
+    let mut rank_first = original.clone();
+    rank_first
+        .execute::<Sequential, MinResultRank, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+        .unwrap();
+    let mut intermediate_cost = original;
+    intermediate_cost
+        .execute::<Sequential, MinIntermediateCost, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+        .unwrap();
+
+    for net in [&rank_first, &intermediate_cost] {
+        let ExecutionResult::Val(actual) = net.result_tensor::<LibTensor, Lib>(&lib).unwrap()
+        else {
+            panic!("expected the tensor with open y,z indices");
+        };
+        assert_eq!(actual.structure, expected.structure);
+        assert_eq!(actual.data, expected.data);
+    }
+
+    let largest_generated = |net: &Net| {
+        net.store
+            .tensors
+            .iter()
+            .skip(input_tensors)
+            .map(|tensor| tensor.data.len())
+            .max()
+            .unwrap()
+    };
+    // AB has rank two but 16*16 entries. AC has rank three with only
+    // 2*3*1 entries; its final contraction has 16 entries. The append-only
+    // store retains intermediates, so this inspects actual generated tensors.
+    assert_eq!(largest_generated(&rank_first), 256);
+    assert_eq!(largest_generated(&intermediate_cost), 16);
+}
+
+#[cfg(feature = "shadowing")]
+#[test]
+fn sparse_pair_cost_counts_only_matching_contracted_coordinates() {
+    use crate::{
+        contraction::Contract,
+        network::FastTensorSumContractible,
+        structure::{
+            HasStructure, OrderedStructure, TensorStructure,
+            representation::{Euclidean, RepName},
+        },
+        tensors::{
+            data::{DataTensor, GetTensorData, SparseTensor},
+            parametric::ParamTensor,
+        },
+    };
+    use symbolica::atom::Atom;
+
+    type Tensor = ParamTensor<OrderedStructure<Euclidean>>;
+    fn tensor(axes: [(usize, usize); 2], values: &[([usize; 2], i64)]) -> Tensor {
+        let ordered = OrderedStructure::new(
+            axes.into_iter()
+                .map(|(dim, id)| Euclidean {}.new_slot(dim, id))
+                .collect(),
+        );
+        let elements = values
+            .iter()
+            .map(|&(mut indices, value)| {
+                ordered.rep_permutation.apply_slice_in_place(&mut indices);
+                ordered.index_permutation.apply_slice_in_place(&mut indices);
+                (
+                    ordered.structure.flat_index(indices).unwrap(),
+                    Atom::num(value),
+                )
+            })
+            .collect();
+        ParamTensor::composite(DataTensor::Sparse(SparseTensor {
+            elements,
+            zero: Atom::Zero,
+            structure: ordered.structure,
+        }))
+    }
+
+    // Three entries on either side would suggest nine Cartesian products.
+    // Only k=0 overlaps: two left entries times two right entries gives four.
+    let left = tensor([(2, 1), (3, 2)], &[([0, 0], 2), ([1, 0], 3), ([0, 1], 5)]);
+    let right = tensor([(3, 2), (2, 3)], &[([0, 0], 7), ([0, 1], 11), ([2, 1], 13)]);
+    let (permutation, left_matches, right_matches) =
+        left.structure().match_indices(right.structure()).unwrap();
+    for exact_join_limit in [0, 20_000] {
+        let estimate = left.contraction_pair_estimate(
+            &right,
+            &permutation,
+            &left_matches,
+            &right_matches,
+            left.contraction_profile(),
+            right.contraction_profile(),
+            4,
+            exact_join_limit,
+        );
+        assert_eq!(estimate.estimated_products, 4);
+        assert_eq!(estimate.estimated_output_entries, 4);
+    }
+    let actual = left.contract(&right).unwrap();
+    let expected = tensor(
+        [(2, 1), (2, 3)],
+        &[([0, 0], 14), ([0, 1], 22), ([1, 0], 21), ([1, 1], 33)],
+    );
+    assert_eq!(actual.structure(), expected.structure());
+    for i in 0..2 {
+        for j in 0..2 {
+            assert_eq!(
+                actual.tensor.get_ref([i, j]).unwrap(),
+                expected.tensor.get_ref([i, j]).unwrap()
+            );
+        }
+    }
+
+    // Stored zero entries and disjoint nonzero supports both have an exactly
+    // empty join. The planner must not replace that known zero work by the
+    // profile fallback; contraction must retain the correct open-index shape.
+    for right in [
+        tensor([(3, 2), (2, 3)], &[]),
+        tensor([(3, 2), (2, 3)], &[([0, 0], 0)]),
+        tensor([(3, 2), (2, 3)], &[([2, 0], 7), ([2, 1], 11)]),
+    ] {
+        let (permutation, left_matches, right_matches) =
+            left.structure().match_indices(right.structure()).unwrap();
+        for exact_join_limit in [0, 20_000] {
+            let estimate = left.contraction_pair_estimate(
+                &right,
+                &permutation,
+                &left_matches,
+                &right_matches,
+                left.contraction_profile(),
+                right.contraction_profile(),
+                4,
+                exact_join_limit,
+            );
+            assert_eq!(estimate.estimated_products, 0);
+        }
+        let actual = left.contract(&right).unwrap();
+        assert_eq!(actual.structure(), expected.structure());
+        // Sparse zero entries are absent; materialize this four-entry result
+        // with its stored zero before checking every coordinate.
+        let actual = actual.tensor.to_bare_dense();
+        for i in 0..2 {
+            for j in 0..2 {
+                assert_eq!(actual.get_ref([i, j]).unwrap(), &Atom::Zero);
+            }
         }
     }
 }

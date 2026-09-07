@@ -7,7 +7,7 @@ fn oak() -> Result<()> {
         Some("generate_oak_diag.toml".into()),
         get_tests_workspace_path().join("generate_oak_diag"),
         None,
-        false,
+        true,
     )?;
     let output_dir = get_tests_workspace_path()
         .join("generate_oak_diag")
@@ -38,7 +38,7 @@ fn addbar() -> Result<()> {
         Some("addbar_generate.toml".into()),
         get_tests_workspace_path().join("addbar_generate"),
         None,
-        false,
+        true,
     )?;
     Ok(())
 }
