@@ -374,6 +374,15 @@
   edge(source(<c>), <outgoing>)
   ```
 
+  `graph.edge(..., spring-length: 1.5)` multiplies that edge's existing preferred
+  spring length by `1.5` in force/anneal layout. The factor must be positive,
+  finite, and dimensionless; it applies to each node-to-control-point spring,
+  including the existing doubled rest length for dangling edges. The argument
+  defaults to `none`, preserving local or default `spring-length` statements;
+  a missing statement means `1`. An explicit argument overrides those statements.
+  This is not a guaranteed rendered length, a rendering option, or a change to
+  global layout `spring.length`; tree/dot/stable-layered layout is unaffected.
+
   `graph.build` does not interpolate statement strings on the Rust side. Use
   `graph.eval-fields` or `graph.map` when a default statement should turn into
   Typst content or structured data. The evaluation scope includes the
@@ -847,11 +856,18 @@
   the same vertex-vertex, edge-vertex, incidence spring, local edge-edge,
   dangling-edge, dangling-centroid, and center terms. `step` is the integration
   step, `delta` clamps per-step movement, `steps` and `epochs` set the iteration
-  budget, `cool` shrinks
-  the step after each epoch, and `early-tol` stops when movement is small.
+  budget, `cool` shrinks the step after each epoch, and `early-tol` stops a phase
+  when movement is small, including motion in z.
   `z-spring` and `z-spring-growth` are force-only helpers: the integrator gives
   points temporary z coordinates to break overlaps and pulls them back toward the
-  2D plane.
+  2D plane. It then sets every z coordinate exactly to zero and performs a final
+  planar relaxation, so repulsion cannot be satisfied by invisible separation.
+  Each phase has its own `steps` × `epochs` budget and restarts from `step` with
+  the same cooling and movement clamp. Early convergence of the 3D phase does
+  not skip the planar phase. Pins, shared coordinates, and fixed subgraph
+  boundaries apply throughout; label layout runs only after both phases.
+  Flattening is exact, while force convergence remains limited by the iteration
+  budget and movement tolerance.
 
   `directional-force` is applied in both modes as an extra bias derived from
   pin/port direction constraints.

@@ -36,7 +36,6 @@ pub fn force_directed_layout<'a, E, V, H, N>(
     N: NodeStorageOps<NodeData = V> + Clone,
 {
     state.synchronize_grouped_coordinates();
-    let mut step = cfg.step;
     let mut rng = SmallRng::seed_from_u64(cfg.seed);
     let workset = ForceWorkSet::new(state);
     if workset.movable_nodes.is_empty() && workset.movable_edges.is_empty() {
@@ -64,60 +63,76 @@ pub fn force_directed_layout<'a, E, V, H, N>(
         &workset.movable_edges,
     );
 
-    for epoch in 0..cfg.epochs {
-        let z_spring = cfg.z_spring * cfg.z_spring_growth.powi(epoch as i32);
-        for _ in 0..cfg.steps {
-            let (mut forces_v, mut forces_e) =
-                compute_forces(state, energy, &node_z, &edge_z, z_spring, &workset);
-            if state.directional_force != 0.0 {
-                for &idx in &workset.movable_nodes {
-                    let bias = directional_force_shift(
-                        state.graph[idx].point_constraint(),
-                        LayoutPointIndex::Node(idx),
-                        state.vertex_points[idx],
-                        state.directional_force,
-                    );
-                    forces_v[idx] += Vector3::new(bias.x, bias.y, 0.0);
-                }
-                for &idx in &workset.movable_edges {
-                    let bias = directional_force_shift(
-                        state.graph[idx].point_constraint(),
-                        LayoutPointIndex::Edge(idx),
-                        state.edge_points[idx],
-                        state.directional_force,
-                    );
-                    forces_e[idx] += Vector3::new(bias.x, bias.y, 0.0);
-                }
+    // Virtual depth breaks symmetry, but its separation disappears in the drawing.
+    // Finish on the exact plane with a fresh cooling schedule so projected
+    // overlaps still have enough movement budget to relax.
+    for planar in [false, true] {
+        if planar {
+            for (_, z) in node_z.iter_mut() {
+                *z = 0.0;
             }
-
-            let mut max_move: f64 = 0.0;
-
-            for &idx in &workset.movable_nodes {
-                let shift3 = clamp_shift3(forces_v[idx] * step, cfg.max_delta);
-                let shift2 = Vector2::new(shift3.x, shift3.y);
-                node_z[idx] += shift3.z;
-                if apply_vertex_shift_with_groups(state, idx, shift2) {
-                    max_move = max_move.max(shift3.magnitude());
-                }
-            }
-
-            for &idx in &workset.movable_edges {
-                let shift3 = clamp_shift3(forces_e[idx] * step, cfg.max_delta);
-                let shift2 = Vector2::new(shift3.x, shift3.y);
-                edge_z[idx] += shift3.z;
-                if apply_edge_shift_with_groups(state, idx, shift2) {
-                    max_move = max_move.max(shift3.magnitude());
-                }
-            }
-
-            if max_move < cfg.early_tol {
-                return;
+            for (_, z) in edge_z.iter_mut() {
+                *z = 0.0;
             }
         }
+        let mut step = cfg.step;
+        'phase: for epoch in 0..cfg.epochs {
+            let z_spring = if planar {
+                0.0
+            } else {
+                cfg.z_spring * cfg.z_spring_growth.powi(epoch as i32)
+            };
+            for _ in 0..cfg.steps {
+                let (mut forces_v, mut forces_e) =
+                    compute_forces(state, energy, &node_z, &edge_z, z_spring, &workset);
+                if state.directional_force != 0.0 {
+                    for &idx in &workset.movable_nodes {
+                        let bias = directional_force_shift(
+                            state.graph[idx].point_constraint(),
+                            LayoutPointIndex::Node(idx),
+                            state.vertex_points[idx],
+                            state.directional_force,
+                        );
+                        forces_v[idx] += Vector3::new(bias.x, bias.y, 0.0);
+                    }
+                    for &idx in &workset.movable_edges {
+                        let bias = directional_force_shift(
+                            state.graph[idx].point_constraint(),
+                            LayoutPointIndex::Edge(idx),
+                            state.edge_points[idx],
+                            state.directional_force,
+                        );
+                        forces_e[idx] += Vector3::new(bias.x, bias.y, 0.0);
+                    }
+                }
 
-        step *= cfg.cool;
-        if step <= 0.0 {
-            break;
+                let mut max_move: f64 = 0.0;
+
+                for &idx in &workset.movable_nodes {
+                    let shift3 = clamp_shift3(forces_v[idx] * step, cfg.max_delta);
+                    let shift2 = Vector2::new(shift3.x, shift3.y);
+                    node_z[idx] += shift3.z;
+                    apply_vertex_shift_with_groups(state, idx, shift2);
+                    max_move = max_move.max(shift3.magnitude());
+                }
+
+                for &idx in &workset.movable_edges {
+                    let shift3 = clamp_shift3(forces_e[idx] * step, cfg.max_delta);
+                    let shift2 = Vector2::new(shift3.x, shift3.y);
+                    edge_z[idx] += shift3.z;
+                    apply_edge_shift_with_groups(state, idx, shift2);
+                    max_move = max_move.max(shift3.magnitude());
+                }
+
+                if max_move < cfg.early_tol {
+                    break 'phase;
+                }
+            }
+
+            step *= cfg.cool;
+            if step <= 0.0 {
+                break;
+            }
         }
     }
 }
@@ -362,7 +377,7 @@ where
                 continue;
             }
             let dir = d / dist;
-            let length = edge_spring_length(state, ei, energy.spring_length);
+            let length = SpringChargeEnergy::edge_spring_length(state, ei, energy.spring_length);
             let fmag = energy.k_spring * (length - dist);
             let f = dir * fmag;
             if workset.force_node[ni] {
@@ -545,21 +560,6 @@ fn center_gravity_force(point: Point3<f64>, c_center: f64) -> Vector3<f64> {
     (Point3::origin() - point) * c_center
 }
 
-fn edge_spring_length<'a, E, V, H, N>(
-    state: &LayoutState<'a, E, V, H, N>,
-    edge: EdgeIndex,
-    base: f64,
-) -> f64
-where
-    N: NodeStorageOps<NodeData = V> + Clone,
-{
-    let (_, pair) = &state.graph[&edge];
-    match pair {
-        crate::half_edge::involution::HedgePair::Unpaired { .. } => base * 2.0,
-        _ => base,
-    }
-}
-
 fn init_node_z(rng: &mut impl Rng, len: usize, spread: f64, movable: &[NodeIndex]) -> NodeVec<f64> {
     let mut out = NodeVec::with_capacity(len);
     for _ in 0..len {
@@ -586,15 +586,222 @@ fn init_edge_z(rng: &mut impl Rng, len: usize, spread: f64, movable: &[EdgeIndex
 mod tests {
     use super::*;
     use crate::half_edge::{
-        builder::HedgeGraphBuilder, layout::spring::ShiftDirection, nodestore::DefaultNodeStore,
+        builder::HedgeGraphBuilder,
+        involution::Flow,
+        layout::{
+            simulatedanneale::Energy,
+            spring::{ParamTuning, ShiftDirection},
+        },
+        nodestore::DefaultNodeStore,
         HedgeGraph, NoData,
     };
+
+    #[test]
+    fn edge_spring_length_scales_change_forces_consistently_with_energy() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, PointConstraint::default(), false);
+        builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
+        builder.add_external_edge(b, PointConstraint::default(), false, Flow::Sink);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut state = graph.new_layout_state(
+            vec![Point2::origin(), Point2::new(3.0, 4.0)].into(),
+            vec![
+                Point2::new(0.0, 4.0),
+                Point2::new(4.0, 0.0),
+                Point2::new(3.0, 8.0),
+            ]
+            .into(),
+            1.0,
+            0.0,
+            false,
+        );
+        let energy = SpringChargeEnergy {
+            spring_length: 3.0,
+            k_spring: 2.0,
+            c_vv: 0.0,
+            dangling_charge: 0.0,
+            dangling_centroid_charge: 0.0,
+            c_ev: 0.0,
+            c_ee_local: 0.0,
+            c_center: 0.0,
+            crossing_penalty: 0.0,
+            eps: 1e-4,
+        };
+        let workset = ForceWorkSet::new(&state);
+        let node_z = vec![0.0; 2].into();
+        let edge_z = vec![0.0; 3].into();
+        for (scales, expected_energy, node_forces, edge_forces) in [
+            (
+                [1.0, 1.0, 1.0],
+                9.0,
+                [Vector3::new(-4.0, 2.0, 0.0), Vector3::new(0.0, -4.0, 0.0)],
+                [
+                    Vector3::new(0.0, -2.0, 0.0),
+                    Vector3::new(4.0, 0.0, 0.0),
+                    Vector3::new(0.0, 4.0, 0.0),
+                ],
+            ),
+            (
+                [0.5, 1.0, 1.0],
+                16.5,
+                [Vector3::new(-4.0, 5.0, 0.0), Vector3::new(-3.0, -4.0, 0.0)],
+                [
+                    Vector3::new(3.0, -5.0, 0.0),
+                    Vector3::new(4.0, 0.0, 0.0),
+                    Vector3::new(0.0, 4.0, 0.0),
+                ],
+            ),
+            (
+                [0.5, 2.0, 1.0],
+                76.5,
+                [Vector3::new(-16.0, 5.0, 0.0), Vector3::new(-3.0, -4.0, 0.0)],
+                [
+                    Vector3::new(3.0, -5.0, 0.0),
+                    Vector3::new(16.0, 0.0, 0.0),
+                    Vector3::new(0.0, 4.0, 0.0),
+                ],
+            ),
+        ] {
+            state.edge_spring_length_scales = scales.to_vec().into();
+            assert_eq!(energy.energy(None, &state), expected_energy);
+            let (forces_v, forces_e) =
+                compute_forces(&state, &energy, &node_z, &edge_z, 0.0, &workset);
+            assert_eq!(forces_v, node_forces.to_vec().into());
+            assert_eq!(forces_e, edge_forces.to_vec().into());
+
+            for (index, force) in forces_v
+                .iter()
+                .map(|(i, f)| (LayoutPointIndex::Node(i), f))
+                .chain(forces_e.iter().map(|(i, f)| (LayoutPointIndex::Edge(i), f)))
+            {
+                for axis in 0..2 {
+                    let h = 1e-5;
+                    let mut plus = state.clone();
+                    let mut minus = state.clone();
+                    for (sample, offset) in [(&mut plus, h), (&mut minus, -h)] {
+                        let point = match index {
+                            LayoutPointIndex::Node(i) => &mut sample.vertex_points[i],
+                            LayoutPointIndex::Edge(i) => &mut sample.edge_points[i],
+                        };
+                        point[axis] += offset;
+                    }
+                    let gradient =
+                        (energy.energy(None, &plus) - energy.energy(None, &minus)) / (2.0 * h);
+                    assert!((force[axis] + gradient).abs() < 1e-8);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn edge_spring_length_scales_do_not_change_other_energy_or_forces() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, PointConstraint::default(), false);
+        builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
+        builder.add_external_edge(b, PointConstraint::default(), false, Flow::Sink);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut state = graph.new_layout_state(
+            vec![Point2::origin(), Point2::new(3.0, 4.0)].into(),
+            vec![
+                Point2::new(0.0, 4.0),
+                Point2::new(4.0, 0.0),
+                Point2::new(3.0, 8.0),
+            ]
+            .into(),
+            1.0,
+            0.0,
+            false,
+        );
+        let energy = SpringChargeEnergy::from_graph(
+            2,
+            6.0,
+            8.0,
+            ParamTuning {
+                k_spring: 0.0,
+                gamma_dangling_centroid: 1.0,
+                crossing_penalty: 2.0,
+                ..ParamTuning::default()
+            },
+        );
+        let workset = ForceWorkSet::new(&state);
+        let node_z = vec![1.0, -2.0].into();
+        let edge_z = vec![3.0, 4.0, -5.0].into();
+        let baseline_energy = energy.energy(None, &state);
+        let baseline_forces = compute_forces(&state, &energy, &node_z, &edge_z, 0.25, &workset);
+        assert!(baseline_energy > 0.0);
+        state.edge_spring_length_scales = vec![0.5, 2.0, 3.0].into();
+        assert_eq!(energy.energy(None, &state), baseline_energy);
+        assert_eq!(
+            compute_forces(&state, &energy, &node_z, &edge_z, 0.25, &workset),
+            baseline_forces
+        );
+    }
 
     #[test]
     fn center_gravity_force_points_toward_origin() {
         let force = center_gravity_force(Point3::new(2.0, -3.0, 4.0), 0.5);
 
         assert_eq!(force, Vector3::new(-1.0, 1.5, -2.0));
+    }
+
+    #[test]
+    fn planar_relaxation_restores_visible_spring_length_even_without_z_spring() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let node = builder.add_node(PointConstraint {
+            x: Constraint::Fixed,
+            y: Constraint::Fixed,
+        });
+        builder.add_external_edge(
+            node,
+            PointConstraint {
+                x: Constraint::Fixed,
+                y: Constraint::Free,
+            },
+            false,
+            Flow::Source,
+        );
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let energy = SpringChargeEnergy::from_graph(
+            1,
+            1.0,
+            1.0,
+            ParamTuning {
+                beta: 0.0,
+                ..ParamTuning::default()
+            },
+        );
+        for z_spring in [0.0, 0.05, 2.0] {
+            let mut state = graph.new_layout_state(
+                vec![Point2::origin()].into(),
+                vec![Point2::new(0.0, 0.1)].into(),
+                0.2,
+                0.0,
+                false,
+            );
+            force_directed_layout(
+                &mut state,
+                &energy,
+                ForceLayoutConfig {
+                    steps: 100,
+                    epochs: 30,
+                    step: 0.1,
+                    cool: 0.95,
+                    max_delta: 0.2,
+                    early_tol: 1e-6,
+                    seed: 2,
+                    z_spring,
+                    z_spring_growth: 1.0,
+                },
+            );
+            let endpoint = state.edge_points[EdgeIndex(0)];
+            assert_eq!(state.vertex_points[node], Point2::origin());
+            assert_eq!(endpoint.x, 0.0);
+            assert!((endpoint.y.abs() - 2.0 * energy.spring_length).abs() < 1e-4);
+        }
     }
 
     #[test]

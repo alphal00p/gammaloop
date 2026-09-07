@@ -14,9 +14,9 @@
 )
 #let momentum-mark = (
   end: (
-    symbol: ")>",
+    symbol: "straight",
     fill: black,
-    stroke: black + 0.2pt,
+    stroke: black + 0.4mm,
     anchor: "center",
     shorten-to: auto,
   ),
@@ -90,12 +90,25 @@
   let shift = _number(edge, "momentum-arrow-shift", 0)
   let label-shift = _number(edge, "momentum-label-shift", shift)
   let offset = _number(edge, "momentum-arrow-offset", 0.62)
-  let label = [$p_(#edge.eid)$]
+  let side = _value(edge, "momentum-arrow-side", auto)
+  let side = if side == auto { "auto" } else { str(side).trim("\"") }
+  assert(
+    side in ("auto", "left", "right"),
+    message: "momentum-arrow-side must be auto, left, or right",
+  )
+  // Explicit sides are relative to source -> sink and shared with the label carrier.
+  let geometry = _route(edge) + (
+    offset: if side == "auto" { offset } else {
+      calc.abs(offset) * if side == "left" { 1 } else { -1 }
+    },
+    offset-side: if side == "auto" { "label" } else { none },
+    label-side: if side == "auto" { auto } else { side },
+    label-gap: 0.45,
+  )
+  let label =edge.momentum
   let arrow = (
-    _route(edge)
+    geometry
       + (
-        offset: offset,
-        offset-side: "label",
         length: _number(edge, "momentum-arrow-length", 1.70),
         shift: shift,
         ratio: none,
@@ -103,27 +116,24 @@
         stroke: (paint: black, thickness: 1.2pt, cap: "round"),
         mark: momentum-mark,
         mark-position: "end",
-        mark-orientation: "edge",
+        mark-orientation: "path",
       )
   )
   // Put the complete measured label box beyond the momentum shaft. Normally
   // it follows that shaft; an explicit label shift gets a tiny invisible path.
   if label-shift == shift {
-    arrow += (label: label, label-gap: 0.45)
+    arrow += (label: label)
     (arrow,)
   } else {
     (
       arrow,
-      _route(edge)
+      geometry
         + (
           stroke: none,
-          offset: offset,
-          offset-side: "label",
           length: 0.02,
           shift: label-shift,
           resolve-length: "length",
           label: label,
-          label-gap: 0.45,
         ),
     )
   }
@@ -140,8 +150,8 @@
   (radius: 0.28, fill: white, stroke: edge-stroke)
 }
 
-// The hidden ordinary label participates in layout and selects the side; the
-// visible label is attached to the momentum layer and follows its geometry.
+// The hidden ordinary label participates in layout and selects the automatic side;
+// an explicit momentum-arrow-side moves the visible label and momentum shaft together.
 #let graph-style = (
   unit: 1.35,
   node-label: none,

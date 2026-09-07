@@ -134,6 +134,11 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
     let renderer = TypstRenderer::new(base.path()).typst_executable(typst);
     renderer.check_version().unwrap();
     renderer.stage_default_assets().unwrap();
+    fs::write(
+        base.path().join(".clinnet/templates/map-style.typ"),
+        include_str!("../../linnest/typst/examples/map-style.typ"),
+    )
+    .unwrap();
 
     let fixture = base
         .path()
@@ -216,6 +221,26 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
         2.5,
         0.1,
     );
+
+    let momentum_reference = paths_with_attr(&svg, "stroke", "#78716c");
+    let reference_y = own_translation(momentum_reference[0].1).1;
+    let reference_spans = stroke_spans(&svg, "#78716c");
+    assert_eq!(reference_spans.len(), 1);
+    let reference_center = (reference_spans[0].0 + reference_spans[0].1) / 2.0;
+    for (shaft_color, label_color, side, label_shift) in [
+        ("#86198f", "#a21caf", 1.0, 5.0),
+        ("#075985", "#0369a1", -1.0, -10.0),
+    ] {
+        let shafts = paths_with_attr(&svg, "stroke", shaft_color);
+        let labels = paths_with_attr(&svg, "fill", label_color);
+        assert_eq!(stroke_spans(&svg, shaft_color).len(), 1);
+        assert_eq!(labels.len(), 1);
+        let shaft_y = own_translation(shafts[0].1).1;
+        let label_position = preceding_group_translation(&svg, labels[0].0);
+        assert_close(reference_y - shaft_y, side * 8.0, 0.02);
+        assert_close(shaft_y - (label_position.1 + 1.5), side * 6.0, 0.02);
+        assert_close(label_position.0 + 1.5, reference_center + label_shift, 0.02);
+    }
 
     for color in ["#f97316", "#65a30d", "#0f766e"] {
         let spans = stroke_spans(&svg, color);

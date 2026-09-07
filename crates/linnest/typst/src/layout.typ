@@ -297,15 +297,16 @@
   /// For `"force"` and `"anneal"`, this scales the initial placement. -> float
   tree-dy: 1.2,
   /// Iterations per epoch. In `"force"` mode this is the number of force
-  /// integration steps; in `"anneal"` mode this is the number of proposals per
-  /// temperature epoch. -> int
+  /// integration steps in each of the virtual-3D and final planar phases;
+  /// in `"anneal"` mode this is the number of proposals per temperature epoch.
+  /// -> int
   steps: 30,
   /// Seed for deterministic initialization, force-mode jitter, and annealing
   /// proposals. Applies to both modes. -> int
   seed: 2,
   /// Initial movement scale. `"force"` multiplies computed forces by this
-  /// value; `"anneal"` uses it as a proposal step size in natural spring-length
-  /// units. -> float
+  /// value, restarting it for final planar relaxation; `"anneal"` uses it as a
+  /// proposal step size in natural spring-length units. -> float
   step: 0.81,
   /// Anneal-only step shrink factor, applied when an epoch's acceptance ratio
   /// falls below `accept-floor`. -> float
@@ -339,7 +340,8 @@
   /// -> float
   g-center: 0.002,
   /// Number of epochs. Both modes run up to `steps` iterations inside
-  /// each epoch. -> int
+  /// each epoch. Force mode applies this budget separately to virtual-3D
+  /// exploration and final planar relaxation. -> int
   epochs: 30,
   /// Anneal-only fixed energy penalty per detected edge crossing. The direct
   /// force integrator does not currently add a crossing force. -> float
@@ -442,7 +444,9 @@
   route-label-width-cap: 2.0,
   /// Force-only spring pulling temporary z coordinates back toward the layout
   /// plane. Higher values keep the visible 2D forces from being hidden by the
-  /// temporary 3D symmetry-breaking offsets. -> float
+  /// temporary 3D symmetry-breaking offsets. Final planar relaxation holds
+  /// every z coordinate exactly at zero, independently of this strength.
+  /// -> float
   z-spring: 2.0,
   /// Force-only per-epoch multiplier for `z-spring`. -> float
   z-spring-growth: 1.0,

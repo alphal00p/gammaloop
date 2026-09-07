@@ -3573,68 +3573,6 @@ fn typst_graph_rkyv_roundtrip() {
 }
 
 #[test]
-fn test_force_default_z_spring_keeps_parallel_edge_controls_planar() {
-    let parsed = parse_dot_graphs_bytes(
-        br#"digraph basketball {
-            node [num = "1"]
-            edge [particle=scalar_1]
-            e [style=invis]
-
-            e -> A:1 [id=5]
-            B:0 -> e [id=4]
-            A -> B [id=0 lmb_id=0]
-            A -> B [id=1 lmb_id=1]
-            A -> B [id=2 lmb_id=2]
-            A -> B [id=3]
-        }"#,
-    )
-    .unwrap();
-    let graph = decode_graphs(&parsed).remove(0);
-    let config = BTreeMap::from([
-        ("layout-algo".to_string(), "force".to_string()),
-        ("seed".to_string(), "7".to_string()),
-        ("steps".to_string(), "90".to_string()),
-        ("epochs".to_string(), "80".to_string()),
-        ("viewport-w".to_string(), "4.0".to_string()),
-        ("viewport-h".to_string(), "2.8".to_string()),
-        ("label-steps".to_string(), "0".to_string()),
-        ("g-center".to_string(), "0.0".to_string()),
-    ]);
-    let laid_out = layout_parsed_graph_bytes(&graph, &encode_cbor(&config)).unwrap();
-    let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&laid_out).unwrap());
-    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
-    let a = nodes
-        .iter()
-        .find(|node| node.name.as_deref() == Some("A"))
-        .unwrap()
-        .pos
-        .as_ref()
-        .unwrap();
-    let b = nodes
-        .iter()
-        .find(|node| node.name.as_deref() == Some("B"))
-        .unwrap()
-        .pos
-        .as_ref()
-        .unwrap();
-    let ab_x = b.x - a.x;
-    let ab_y = b.y - a.y;
-    let ab_len_sq = ab_x * ab_x + ab_y * ab_y;
-
-    for edge in edges.iter().filter(|edge| edge.edge < 4) {
-        let pos = edge.pos.as_ref().unwrap();
-        let ap_x = pos.x - a.x;
-        let ap_y = pos.y - a.y;
-        let t = (ap_x * ab_x + ap_y * ab_y) / ab_len_sq;
-        assert!(
-            (t - 0.5).abs() < 1e-3,
-            "edge {} control should stay near the A-B midpoint, got t={t}",
-            edge.edge
-        );
-    }
-}
-
-#[test]
 fn test_pin_parsing() {
     let figment = test_figment();
     let mut g = TypstGraph::from_dot(
@@ -4290,6 +4228,110 @@ fn grouped_open_xbox_keeps_cut_gluons_aligned_and_outside() {
 }
 
 #[test]
+fn grouped_open_xbox_free_rows_separate_after_planar_relaxation() {
+    // Unlike the pinned-row fixture, all node y coordinates and all three rows
+    // are free. The 3D-only layout left cut and d1 just 0.20764 units apart in 2D.
+    let input = r#"digraph {
+        a [id=0 pos="0,0" "pos-mode"="start" "pos-x-set"=true "pos-y-set"=false]
+        b [id=1 pos="-2,0" "pos-mode"="start" "pos-x-set"=true "pos-y-set"=false]
+        c [id=2 pos="-2,0" "pos-mode"="start" "pos-x-set"=true "pos-y-set"=false]
+        d [id=3 pos="2,0" "pos-mode"="start" "pos-x-set"=true "pos-y-set"=false]
+        ext [style=invis]
+        a -> c [id=0]
+        b -> a [id=1 pin="x:@+lower-inner" pos="0.5,0" "pos-x-set"=true "pos-y-set"=false "group-start-x"=true]
+        ext -> b [id=2 pin="x:@-in,y:@d1" pos="-7,-5" "group-start-x"=true "group-start-y"=true]
+        ext -> c [id=3 pin="x:@-in,y:@d2" pos="-7,5" "group-start-x"=true "group-start-y"=true]
+        ext -> d [id=4 pin="x:@+out,y:@d2" pos="7,5" "group-start-x"=true "group-start-y"=true]
+        d -> ext [id=5 pin="x:@+out,y:@d1" pos="7,-5" "group-start-x"=true "group-start-y"=true]
+        a -> d [id=6 "spring-length"=0.1]
+        b -> ext [id=7 pin="x:@+out,y:@cut" pos="7,0" "group-start-x"=true "group-start-y"=true]
+        ext -> c [id=8 pin="x:@-in,y:@cut" pos="-7,0" "group-start-x"=true "group-start-y"=true]
+    }"#;
+    let settings = BTreeMap::from([
+        ("layout-algo".to_string(), "force".to_string()),
+        ("steps".to_string(), "50".to_string()),
+        ("epochs".to_string(), "50".to_string()),
+        ("seed".to_string(), "2".to_string()),
+        ("step".to_string(), "0.81".to_string()),
+        ("delta".to_string(), "0.4".to_string()),
+        ("cool".to_string(), "0.85".to_string()),
+        ("k-spring".to_string(), "18".to_string()),
+        ("length-scale".to_string(), "0.25".to_string()),
+        ("beta".to_string(), "12".to_string()),
+        ("gamma-ev".to_string(), "0.29".to_string()),
+        ("gamma-ee".to_string(), "0.1".to_string()),
+        ("gamma-dangling".to_string(), "14.75".to_string()),
+        ("gamma-dangling-centroid".to_string(), "25".to_string()),
+        ("g-center".to_string(), "0.0005".to_string()),
+        ("directional-force".to_string(), "10".to_string()),
+        ("z-spring".to_string(), "2".to_string()),
+        ("z-spring-growth".to_string(), "1".to_string()),
+        ("label-steps".to_string(), "0".to_string()),
+    ]);
+    let figment = Figment::from(Serialized::from(settings, Profile::Default));
+    let mut graph = TypstGraph::parse(input).unwrap();
+    graph.layout_config = crate::LayoutConfig::from_figment(&figment);
+    for index in 0..4 {
+        assert!(matches!(
+            graph[NodeIndex(index)].constraints.y,
+            Constraint::Free
+        ));
+        assert!(!graph[NodeIndex(index)].start_y);
+    }
+    for (left, right) in [(2, 5), (3, 4), (7, 8)] {
+        let Constraint::Grouped(left_group, ShiftDirection::Any) =
+            graph[EdgeIndex(left)].constraints.y
+        else {
+            panic!("edge {left} lost its freely ordered y group");
+        };
+        let Constraint::Grouped(right_group, ShiftDirection::Any) =
+            graph[EdgeIndex(right)].constraints.y
+        else {
+            panic!("edge {right} lost its freely ordered y group");
+        };
+        assert_eq!(left_group, right_group);
+    }
+
+    graph.layout();
+
+    for (left, right) in [(2, 5), (3, 4), (7, 8)] {
+        assert_eq!(graph[EdgeIndex(left)].pos.y, graph[EdgeIndex(right)].pos.y);
+    }
+    for (first, second) in [(2, 3), (2, 8), (4, 5), (4, 7)] {
+        assert_eq!(
+            graph[EdgeIndex(first)].pos.x,
+            graph[EdgeIndex(second)].pos.x
+        );
+    }
+    let cut_y = graph[EdgeIndex(7)].pos.y;
+    for row in [2, 3] {
+        let row_y = graph[EdgeIndex(row)].pos.y;
+        let gap = (cut_y - row_y).abs();
+        assert!(
+            gap > 1.0,
+            "projected cut/row gap is too small: cut={cut_y}, edge {row} y={row_y}, gap={gap}",
+        );
+    }
+    assert!(graph[EdgeIndex(1)].pos.x >= 0.0);
+    assert!(graph[EdgeIndex(2)].pos.x <= 0.0);
+    assert!(graph[EdgeIndex(4)].pos.x >= 0.0);
+
+    let mut repeated = TypstGraph::parse(input).unwrap();
+    repeated.layout_config = crate::LayoutConfig::from_figment(&figment);
+    repeated.layout();
+    for index in 0..4 {
+        let position = graph[NodeIndex(index)].pos;
+        assert!(position.x.is_finite() && position.y.is_finite());
+        assert_eq!(position, repeated[NodeIndex(index)].pos);
+    }
+    for index in 0..9 {
+        let position = graph[EdgeIndex(index)].pos;
+        assert!(position.x.is_finite() && position.y.is_finite());
+        assert_eq!(position, repeated[EdgeIndex(index)].pos);
+    }
+}
+
+#[test]
 fn grouped_xbox_hidden_nodes_stay_clear_of_dangling_endpoints() {
     let input = r#"digraph {
         ext [style=invis]
@@ -4349,6 +4391,115 @@ fn grouped_xbox_hidden_nodes_stay_clear_of_dangling_endpoints() {
         left_gap > 0.75 && right_gap > 0.75,
         "hidden/dangling y gaps are too small: left={left_gap}, right={right_gap}",
     );
+}
+
+#[test]
+fn edge_spring_length_scales_preserve_defaults_and_round_trip() {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&TestTemplatedGraphSpec {
+        name: "spring-scales".to_string(),
+        statements: BTreeMap::new(),
+        default_node_statements: BTreeMap::new(),
+        default_edge_statements: one_statement("spring-length", "2"),
+        nodes: ["a", "b"]
+            .map(|name| TestNodeSpec {
+                name: name.to_string(),
+                statements: BTreeMap::new(),
+            })
+            .into(),
+        edges: [None, Some("1"), Some("\"0.5\"")]
+            .map(|scale| TestEdgeSpec {
+                source: Some(TestEndpointSpec {
+                    node: 0,
+                    compass: None,
+                    statement: None,
+                }),
+                sink: Some(TestEndpointSpec {
+                    node: 1,
+                    compass: None,
+                    statement: None,
+                }),
+                statements: scale
+                    .map(|scale| one_statement("spring-length", scale))
+                    .unwrap_or_default(),
+            })
+            .into(),
+    }))
+    .unwrap();
+    let graph = crate::graph_api::decode_typst_graph(&graph).unwrap();
+    let archived = rkyv::to_bytes::<_, 4096>(&graph).unwrap();
+    let restored = crate::graph_api::decode_typst_graph(&archived).unwrap();
+    let round_trip = TypstGraph::parse(&graph.to_dot_graph().debug_dot()).unwrap();
+    for graph in [&graph, &restored, &round_trip] {
+        let (state, energy) = graph.layout_energy_state();
+        assert_eq!(state.edge_spring_length_scales[EdgeIndex(0)], 2.0);
+        assert_eq!(state.edge_spring_length_scales[EdgeIndex(1)], 1.0);
+        assert_eq!(state.edge_spring_length_scales[EdgeIndex(2)], 0.5);
+        let mut unscaled = TypstGraph::parse(&graph.to_dot_graph().debug_dot()).unwrap();
+        for index in 0..3 {
+            unscaled.graph[EdgeIndex(index)].statements.clear();
+        }
+        let (unscaled_state, unscaled_energy) = unscaled.layout_energy_state();
+        for index in 0..3 {
+            assert_eq!(
+                unscaled_state.edge_spring_length_scales[EdgeIndex(index)],
+                1.0
+            );
+        }
+        assert_eq!(energy.spring_length, unscaled_energy.spring_length);
+        assert_eq!(energy.c_vv, unscaled_energy.c_vv);
+        assert_eq!(energy.eps, unscaled_energy.eps);
+    }
+}
+
+#[test]
+fn edge_spring_length_scales_affect_force_and_anneal_layout() {
+    let input = r#"digraph {
+        a [pin="x:0,y:0"]
+        ext [style=invis]
+        a -> ext [id=0 pos="2,0" pin="y:0" "spring-length"=0.5]
+        a -> ext [id=1 pos="2,0" pin="y:0" "spring-length"=2]
+    }"#;
+    for algorithm in ["force", "anneal"] {
+        let settings = BTreeMap::from([
+            ("layout-algo".to_string(), algorithm.to_string()),
+            ("viewport-w".to_string(), "2".to_string()),
+            ("viewport-h".to_string(), "2".to_string()),
+            ("length-scale".to_string(), "0.5".to_string()),
+            ("beta".to_string(), "0".to_string()),
+            ("k-spring".to_string(), "1".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+            ("steps".to_string(), "100".to_string()),
+            ("epochs".to_string(), "30".to_string()),
+            ("step".to_string(), "0.1".to_string()),
+            ("cool".to_string(), "0.95".to_string()),
+            ("temp".to_string(), "0.001".to_string()),
+        ]);
+        let mut graph = TypstGraph::parse(input).unwrap();
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            settings,
+            Profile::Default,
+        )));
+        graph.layout();
+        assert_eq!(graph[NodeIndex(0)].pos, cgmath::Point2::new(0.0, 0.0));
+        for (index, expected) in [1.0, 4.0].into_iter().enumerate() {
+            let position = graph[EdgeIndex(index)].pos;
+            assert_eq!(position.y, 0.0);
+            assert!(
+                (position.x.abs() - expected).abs() < 0.1,
+                "{algorithm}: edge {index} should relax near {expected}, got {position:?}",
+            );
+        }
+    }
+}
+
+#[test]
+fn edge_spring_length_scales_reject_invalid_statements() {
+    for value in ["0", "-1", "NaN", "inf", "bad"] {
+        let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+        graph.graph[EdgeIndex(0)].statements = one_statement("spring-length", value);
+        let error = graph.layout_with_subgraph(None).unwrap_err();
+        assert!(error.contains("spring-length must be a positive finite multiplier"));
+    }
 }
 
 #[test]

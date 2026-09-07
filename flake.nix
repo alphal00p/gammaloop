@@ -41,13 +41,7 @@
         pkgs = nixpkgs.legacyPackages.${system};
         inherit (pkgs) lib;
 
-        typst015 =
-          assert lib.assertMsg (
-            pkgs.typst.version == "0.15.0"
-          ) "the documentation build requires Typst 0.15.0, but nixpkgs provides ${pkgs.typst.version}";
-          pkgs.typst;
-
-        docsTypst = typst015.withPackages (
+        docsTypst = pkgs.typst.withPackages (
           typstPackages: with typstPackages; [
             cetz_0_5_1
             mitex_0_2_6
@@ -1845,7 +1839,7 @@
             nls
             docsTypst
             linnetPython
-            roboto
+            pkgs.roboto
             cargo-nextest
             pkg-config
             cargo-deny

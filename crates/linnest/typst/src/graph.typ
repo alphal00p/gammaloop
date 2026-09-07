@@ -673,6 +673,12 @@
   label-angle: none,
   /// Edge bend stored as a statement. -> none | int | float | string
   bend: none,
+  /// Positive finite dimensionless multiplier of each incidence's preferred
+  /// spring length in force/anneal layout, including dangling-edge doubling.
+  /// `none` preserves statements/defaults; a missing statement means `1`.
+  /// Does not set rendered length or change global `spring.length`.
+  /// -> none | int | float
+  spring-length: none,
   /// Static logical-edge style, callback, `auto` fallback, or `none` to hide. -> auto | dictionary | array | function | none
   style: auto,
   /// Additional flat edge statements. Used by DOT; values cannot nest. -> dictionary
@@ -687,6 +693,7 @@
     label-pos: label-pos,
     label-angle: label-angle,
     bend: bend,
+    spring-length: spring-length,
     style: style,
     statements: statements,
   ),
