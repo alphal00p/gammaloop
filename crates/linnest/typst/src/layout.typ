@@ -58,8 +58,8 @@
     "max-movement": "number",
     "incremental-energy": "boolean",
     "crossing-penalty": "number",
-    "z-spring": "number",
-    "z-spring-growth": "number",
+    "depth-scale": "non-negative-finite",
+    "flattening-end": "unit-interval",
   ),
 )
 
@@ -75,8 +75,28 @@
 )
 
 #let _check-option-value(group, field, value, rule) = {
-  if rule == "number" and type(value) not in (int, float) {
+  if (
+    rule in ("number", "non-negative-finite", "unit-interval")
+      and type(value) not in (int, float)
+  ) {
     _option-error(group, field, "a number", value)
+  } else if (
+    rule in ("non-negative-finite", "unit-interval")
+      and (
+        value != value
+          or value < 0
+          or value >= calc.inf
+          or (rule == "unit-interval" and value > 1)
+      )
+  ) {
+    _option-error(
+      group,
+      field,
+      if rule == "unit-interval" { "a finite fraction between 0 and 1" } else {
+        "a non-negative finite number"
+      },
+      value,
+    )
   } else if rule == "integer" and (type(value) != int or value < 0) {
     _option-error(group, field, "a non-negative integer", value)
   } else if rule == "boolean" and type(value) != bool {
@@ -229,6 +249,15 @@
 /// tree placement, `"dot"` for a Graphviz-like layered placement, or
 /// `"stable-layered"` for a stable railroad-inspired layered placement.
 ///
+/// Force layout uses one `steps` × `epochs` iteration budget and one cooling
+/// schedule. Effective auxiliary depth is `scale * raw-z`: `scale` follows a
+/// smoothstep from `depth-scale` to zero over the initial `flattening-end`
+/// fraction of that budget. Remaining iterations are planar, without restarting
+/// `step` or cooling. `early-tol` can stop the run only after scale reaches zero.
+/// Unpinned raw depths remain bounded; hard raw-depth pins are preserved even
+/// when their effective depth is zero. Output positions remain 2D, and auxiliary
+/// depth does not change draw order; label layout runs after the single graph pass.
+///
 /// ```example
 /// #let g = graph.parse("digraph partial { a -> b;a -> b;a:s -> b:s; b:s -> c:s; c:s -> d:s; d:s -> a:s }").at(0)
 /// #let south = subgraph.compass(g,"s")
@@ -272,7 +301,7 @@
   /// Semantic solver options. Supported fields are `algorithm`, `steps`,
   /// `epochs`, `seed`, `step`, `step-shrink`, `cooling`, `acceptance-floor`,
   /// `tolerance`, `temperature`, `max-movement`, `incremental-energy`,
-  /// `crossing-penalty`, `z-spring`, and `z-spring-growth`. These override the
+  /// `crossing-penalty`, `depth-scale`, and `flattening-end`. These override the
   /// corresponding flat parameters below.
   /// -> none | dictionary
   solver: none,
@@ -297,7 +326,7 @@
   /// For `"force"` and `"anneal"`, this scales the initial placement. -> float
   tree-dy: 1.2,
   /// Iterations per epoch. In `"force"` mode this is the number of force
-  /// integration steps in each of the virtual-3D and final planar phases;
+  /// integration steps within the single depth-flattening schedule;
   /// in `"anneal"` mode this is the number of proposals per temperature epoch.
   /// -> int
   steps: 30,
@@ -305,7 +334,7 @@
   /// proposals. Applies to both modes. -> int
   seed: 2,
   /// Initial movement scale. `"force"` multiplies computed forces by this
-  /// value, restarting it for final planar relaxation; `"anneal"` uses it as a
+  /// value, with no restart when depth reaches zero; `"anneal"` uses it as a
   /// proposal step size in natural spring-length units. -> float
   step: 0.81,
   /// Anneal-only step shrink factor, applied when an epoch's acceptance ratio
@@ -318,8 +347,9 @@
   /// `step-shrink`. -> float
   accept-floor: 0.15,
   /// Force-only early stop threshold for maximum movement in one step, as a
-  /// multiple of the natural spring length. The annealing schedule stores this
-  /// value but does not currently use it for stopping. -> float
+  /// multiple of the natural spring length, eligible only after effective depth
+  /// scale reaches zero. The annealing schedule stores this value but does not
+  /// currently use it for stopping. -> float
   early-tol: 1e-6,
   /// Anneal-only initial temperature used in the Metropolis acceptance test,
   /// scaled by natural spring length squared. -> float
@@ -340,8 +370,8 @@
   /// -> float
   g-center: 0.002,
   /// Number of epochs. Both modes run up to `steps` iterations inside
-  /// each epoch. Force mode applies this budget separately to virtual-3D
-  /// exploration and final planar relaxation. -> int
+  /// each epoch. Force mode shares this budget and its cooling schedule across
+  /// depth flattening and the remaining planar relaxation. -> int
   epochs: 30,
   /// Anneal-only fixed energy penalty per detected edge crossing. The direct
   /// force integrator does not currently add a crossing force. -> float
@@ -442,14 +472,17 @@
   /// Maximum non-rank dummy label width as a multiple of `tree-dx`. Set to
   /// `0` or a negative value to disable the cap. -> float
   route-label-width-cap: 2.0,
-  /// Force-only spring pulling temporary z coordinates back toward the layout
-  /// plane. Higher values keep the visible 2D forces from being hidden by the
-  /// temporary 3D symmetry-breaking offsets. Final planar relaxation holds
-  /// every z coordinate exactly at zero, independently of this strength.
-  /// -> float
-  z-spring: 2.0,
-  /// Force-only per-epoch multiplier for `z-spring`. -> float
-  z-spring-growth: 1.0,
+  /// Force-only initial multiplier of raw auxiliary depth, finite and >= 0.
+  /// Effective z is this smoothly decreasing scale times raw z, not a spring
+  /// pulling raw coordinates toward the plane. A value of 0 starts in 2D;
+  /// flattening preserves hard raw-depth pins while removing their invisible
+  /// separation from the visible 2D force calculation. -> float
+  depth-scale: 1.0,
+  /// Force-only fraction of the total `steps` × `epochs` iteration budget over
+  /// which the depth scale reaches zero by smoothstep, finite and in 0..=1.
+  /// Zero starts in 2D; 1 still evaluates the final iteration on the exact
+  /// plane. Neither value adds a phase or restarts the cooling schedule. -> float
+  flattening-end: 0.5,
   /// Natural spring-length multiplier. This scales the graph's preferred edge
   /// length and dimensional force/energy terms so changing only this value
   /// mostly zooms the result instead of retuning the force ratios. Applies to
@@ -460,7 +493,14 @@
   repulsion = _checked-group("repulsion", repulsion)
   constraints = _checked-group("constraints", constraints)
   labels = _checked-group("labels", labels)
-  solver = _checked-group("solver", solver)
+  solver = _checked-group(
+    "solver",
+    (
+      depth-scale: depth-scale,
+      flattening-end: flattening-end,
+    )
+      + _checked-group("solver", solver),
+  )
   let rank-groups = constraints.at("same-rank", default: rank-same)
   if type(rank-groups) != array {
     panic("layout rank-same/constraints.same-rank must be an array")
@@ -525,11 +565,8 @@
     route-exit-weight: str(route-exit-weight),
     route-label-width-scale: str(route-label-width-scale),
     route-label-width-cap: str(route-label-width-cap),
-    z-spring: str(solver.at("z-spring", default: z-spring)),
-    z-spring-growth: str(solver.at(
-      "z-spring-growth",
-      default: z-spring-growth,
-    )),
+    depth-scale: str(solver.depth-scale),
+    flattening-end: str(solver.flattening-end),
     length-scale: str(spring.at("length", default: length-scale)),
   )
   if subgraph != none {

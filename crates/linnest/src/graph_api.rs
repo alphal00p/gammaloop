@@ -75,7 +75,7 @@ enum PlacementMode {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TypstPlacementSpec {
     #[serde(default)]
     mode: PlacementMode,
@@ -84,9 +84,13 @@ pub struct TypstPlacementSpec {
     #[serde(default)]
     y_mode: Option<PlacementMode>,
     #[serde(default)]
+    z_mode: Option<PlacementMode>,
+    #[serde(default)]
     x: Option<TypstPlacementCoord>,
     #[serde(default)]
     y: Option<TypstPlacementCoord>,
+    #[serde(default)]
+    z: Option<TypstNumber>,
     #[serde(default, rename = "ref")]
     reference: Option<usize>,
     #[serde(default, deserialize_with = "deserialize_optional_f64")]
@@ -131,7 +135,8 @@ pub struct ResolvedPoint {
 
 #[derive(Debug, Clone)]
 struct ResolvedPlacement {
-    point: ResolvedPoint,
+    point: Option<ResolvedPoint>,
+    z: Option<(f64, PlacementMode)>,
     pin: Option<String>,
     mode: PlacementMode,
     group_start_x: bool,
@@ -601,12 +606,14 @@ fn apply_typst_graph_structural_patch(
 
         let index = NodeIndex(node.index);
         if let Some(pos) = node.pos {
-            refresh_positions = true;
             let placement = pos.resolve(&node_positions, "node structural patch")?;
+            if let Some(point) = placement.point {
+                refresh_positions = true;
+                node_positions[node.index] = point;
+            }
             let statements = std::mem::take(&mut graph.graph[index].statements);
             graph.graph[index].statements =
                 apply_placement_statements(statements, Some(&placement));
-            node_positions[node.index] = placement.point;
         }
         if let Some(shift) = node.shift {
             graph.graph[index]
@@ -631,8 +638,8 @@ fn apply_typst_graph_structural_patch(
 
         let index = EdgeIndex(edge.index);
         if let Some(pos) = edge.pos {
-            refresh_positions = true;
             let placement = pos.resolve(&node_positions, "edge structural patch")?;
+            refresh_positions |= placement.point.is_some();
             let statements = std::mem::take(&mut graph.graph[index].statements);
             graph.graph[index].statements =
                 apply_placement_statements(statements, Some(&placement));
@@ -1201,7 +1208,7 @@ fn graph_from_spec(spec: TypstGraphSpec) -> Result<DotGraph, String> {
         node_positions.push(
             placement
                 .as_ref()
-                .map(|placement| placement.point)
+                .and_then(|placement| placement.point)
                 .unwrap_or_else(|| resolved_point_from_statements(&node_data.statements)),
         );
         builder.add_node(node_data);
@@ -1242,31 +1249,37 @@ fn add_edge_to_builder(
         .unwrap_or(Orientation::Default);
     let has_statement_position = statement_map_value(&edge.statements, "pos").is_some()
         || statement_map_value(&global_data.edge_statements, "pos").is_some();
-    let placement = resolve_placement(edge.pos.as_ref(), node_positions, "edge")?.or_else(|| {
-        if has_statement_position {
-            return None;
-        }
-        let (Some(source), Some(sink)) = (&edge.source, &edge.sink) else {
-            return None;
-        };
-        let (source, sink) = (
-            node_positions.get(source.node)?,
-            node_positions.get(sink.node)?,
-        );
-        (source.x_set && source.y_set && sink.x_set && sink.y_set).then_some(ResolvedPlacement {
-            point: ResolvedPoint {
-                x: (source.x + sink.x) / 2.0,
-                y: (source.y + sink.y) / 2.0,
-                x_set: false,
-                y_set: false,
-            },
-            pin: None,
-            mode: PlacementMode::Start,
-            group_start_x: false,
-            group_start_y: false,
-        })
-    });
+    let placement = resolve_placement(edge.pos.as_ref(), node_positions, "edge")?;
     let mut local_statements = apply_placement_statements(edge.statements, placement.as_ref());
+    let midpoint = edge
+        .source
+        .as_ref()
+        .zip(edge.sink.as_ref())
+        .and_then(|(source, sink)| {
+            if has_statement_position || placement.as_ref().is_some_and(|p| p.point.is_some()) {
+                return None;
+            }
+            let (source, sink) = (
+                node_positions.get(source.node)?,
+                node_positions.get(sink.node)?,
+            );
+            (source.x_set && source.y_set && sink.x_set && sink.y_set).then_some(
+                ResolvedPlacement {
+                    point: Some(ResolvedPoint {
+                        x: (source.x + sink.x) / 2.0,
+                        y: (source.y + sink.y) / 2.0,
+                        x_set: false,
+                        y_set: false,
+                    }),
+                    z: None,
+                    pin: None,
+                    mode: PlacementMode::Start,
+                    group_start_x: false,
+                    group_start_y: false,
+                },
+            )
+        });
+    local_statements = apply_placement_statements(local_statements, midpoint.as_ref());
     if let Some(name) = edge.name {
         local_statements.insert(TYPST_EDGE_NAME_KEY.to_owned(), name);
     }
@@ -1343,12 +1356,26 @@ fn apply_placement_statements(
         return statements;
     };
 
-    statements.insert(
-        "pos".to_string(),
-        format!("{},{}", placement.point.x, placement.point.y),
-    );
-    statements.insert("pos-x-set".to_string(), placement.point.x_set.to_string());
-    statements.insert("pos-y-set".to_string(), placement.point.y_set.to_string());
+    if let Some((z, mode)) = placement.z {
+        statements.remove("\"pos-z\"");
+        statements.remove("\"pos-z-mode\"");
+        statements.insert("pos-z".to_string(), z.to_string());
+        statements.insert(
+            "pos-z-mode".to_string(),
+            match mode {
+                PlacementMode::Start => "start",
+                PlacementMode::Pin => "pin",
+            }
+            .to_string(),
+        );
+    }
+    let Some(point) = placement.point else {
+        return statements;
+    };
+
+    statements.insert("pos".to_string(), format!("{},{}", point.x, point.y));
+    statements.insert("pos-x-set".to_string(), point.x_set.to_string());
+    statements.insert("pos-y-set".to_string(), point.y_set.to_string());
     statements.insert(
         "pos-mode".to_string(),
         match placement.mode {
@@ -1415,6 +1442,10 @@ impl TypstPlacementSpec {
         references: &[ResolvedPoint],
         context: &str,
     ) -> Result<ResolvedPlacement, String> {
+        let z = self.z.map(TypstNumber::as_f64);
+        if z.is_some_and(|z| !z.is_finite()) {
+            return Err(format!("{context} placement z must be a finite number"));
+        }
         let mut point = if let Some(reference) = self.reference {
             let reference = references.get(reference).ok_or_else(|| {
                 format!("{context} placement references node {reference}, but it is not available")
@@ -1470,9 +1501,13 @@ impl TypstPlacementSpec {
         }
 
         let pin = if parts.is_empty() {
-            if self.mode == PlacementMode::Pin && self.x_mode.is_none() && self.y_mode.is_none() {
+            if self.mode == PlacementMode::Pin
+                && self.x_mode.is_none()
+                && self.y_mode.is_none()
+                && z.is_none()
+            {
                 return Err(format!(
-                    "{context} pin placement must constrain x, y, or ref"
+                    "{context} pin placement must constrain x, y, z, or ref"
                 ));
             }
             None
@@ -1487,7 +1522,9 @@ impl TypstPlacementSpec {
         };
 
         Ok(ResolvedPlacement {
-            point,
+            // Depth-only placements must not synthesize or refresh XY state.
+            point: (z.is_none() || point.x_set || point.y_set).then_some(point),
+            z: z.map(|z| (z, self.z_mode.unwrap_or(self.mode))),
             pin,
             mode,
             group_start_x,
@@ -1947,4 +1984,346 @@ fn compass_pt_to_string(compass: CompassPt) -> String {
         CompassPt::Underscore => "_",
     }
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ciborium::Value;
+
+    #[test]
+    fn auxiliary_z_modes_preserve_xy_statements() {
+        let mut spec: TypstPlacementSpec = decode_cbor(
+            &encode_cbor(&BTreeMap::from([("z", -2.5)])).unwrap(),
+            "placement",
+        )
+        .unwrap();
+        let xy = BTreeMap::from([
+            ("pos".into(), "3,4".into()),
+            ("pos-x-set".into(), "true".into()),
+            ("pos-y-set".into(), "false".into()),
+            ("pos-mode".into(), "pin".into()),
+            ("pin".into(), "x:@column".into()),
+            ("group-start-x".into(), "true".into()),
+            ("label".into(), "unchanged".into()),
+            ("\"pos-z\"".into(), "9".into()),
+            ("\"pos-z-mode\"".into(), "start".into()),
+        ]);
+        for mode in [PlacementMode::Pin, PlacementMode::Start] {
+            for z_mode in [None, Some(PlacementMode::Pin), Some(PlacementMode::Start)] {
+                spec.mode = mode;
+                spec.z_mode = z_mode;
+                let decoded: TypstPlacementSpec =
+                    decode_cbor(&encode_cbor(&spec).unwrap(), "placement").unwrap();
+                assert_eq!(decoded, spec);
+                let resolved = decoded.resolve(&[], "test").unwrap();
+                assert!(resolved.point.is_none());
+                assert!(resolved.pin.is_none());
+                let mut statements = apply_placement_statements(xy.clone(), Some(&resolved));
+                assert_eq!(statements.remove("pos-z").as_deref(), Some("-2.5"));
+                assert_eq!(
+                    statements.remove("pos-z-mode").as_deref(),
+                    Some(match z_mode.unwrap_or(mode) {
+                        PlacementMode::Pin => "pin",
+                        PlacementMode::Start => "start",
+                    })
+                );
+                let mut expected = xy.clone();
+                expected.remove("\"pos-z\"");
+                expected.remove("\"pos-z-mode\"");
+                assert_eq!(statements, expected);
+            }
+        }
+
+        let statements = apply_placement_statements(xy, Some(&spec.resolve(&[], "test").unwrap()));
+        spec.z = None;
+        spec.x = Some(TypstPlacementCoord::Number(TypstNumber::Signed(7)));
+        let statements =
+            apply_placement_statements(statements, Some(&spec.resolve(&[], "test").unwrap()));
+        assert_eq!(statements["pos-z"], "-2.5");
+        assert_eq!(statements["pos-z-mode"], "start");
+        assert_eq!(statements["pos-x-set"], "true");
+        assert_eq!(statements["pos-y-set"], "false");
+    }
+
+    #[test]
+    fn auxiliary_z_requires_finite_numeric_coordinates() {
+        for z in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let spec: TypstPlacementSpec = decode_cbor(
+                &encode_cbor(&BTreeMap::from([("z", z)])).unwrap(),
+                "placement",
+            )
+            .unwrap();
+            assert!(spec
+                .resolve(&[], "test")
+                .unwrap_err()
+                .contains("finite number"));
+        }
+        for z in [
+            Value::Integer((-3).into()),
+            Value::Integer(u64::MAX.into()),
+            Value::Float(f64::MAX),
+        ] {
+            let spec: TypstPlacementSpec = decode_cbor(
+                &encode_cbor(&BTreeMap::from([("z", z)])).unwrap(),
+                "placement",
+            )
+            .unwrap();
+            let statements = apply_placement_statements(
+                BTreeMap::new(),
+                Some(&spec.resolve(&[], "test").unwrap()),
+            );
+            assert!(statements["pos-z"].parse::<f64>().unwrap().is_finite());
+            assert_eq!(statements["pos-z-mode"], "pin");
+            assert_eq!(statements.len(), 2);
+        }
+        for (key, value) in [
+            ("z", Value::Text("2".into())),
+            (
+                "z",
+                Value::Map(vec![(
+                    Value::Text("kind".into()),
+                    Value::Text("group".into()),
+                )]),
+            ),
+            ("dz", Value::Integer(1.into())),
+            ("ref-depth", Value::Integer(0.into())),
+            ("z-mode", Value::Text("group".into())),
+        ] {
+            assert!(decode_cbor::<TypstPlacementSpec>(
+                &encode_cbor(&BTreeMap::from([(key, value)])).unwrap(),
+                "placement",
+            )
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn auxiliary_z_build_keeps_defaults_and_edge_midpoint_seeds() {
+        let mut spec: TypstGraphSpec = decode_cbor(
+            &encode_cbor(&BTreeMap::from([(
+                "nodes",
+                vec![
+                    BTreeMap::from([("name", "a")]),
+                    BTreeMap::from([("name", "b")]),
+                ],
+            )]))
+            .unwrap(),
+            "graph",
+        )
+        .unwrap();
+        spec.nodes[1].pos = Some(
+            decode_cbor(
+                &encode_cbor(&BTreeMap::from([("x", 8), ("y", 10)])).unwrap(),
+                "placement",
+            )
+            .unwrap(),
+        );
+        spec.edges.push(
+            decode_cbor(
+                &encode_cbor(&BTreeMap::from([
+                    ("source", BTreeMap::from([("node", 0)])),
+                    ("sink", BTreeMap::from([("node", 1)])),
+                ]))
+                .unwrap(),
+                "edge",
+            )
+            .unwrap(),
+        );
+        let z: TypstPlacementSpec = decode_cbor(
+            &encode_cbor(&BTreeMap::from([("z", 3)])).unwrap(),
+            "placement",
+        )
+        .unwrap();
+
+        for with_defaults in [false, true] {
+            if with_defaults {
+                spec.default_node_statements = BTreeMap::from([
+                    ("pos".into(), "2,4".into()),
+                    ("pos-z".into(), "9".into()),
+                    ("pos-z-mode".into(), "start".into()),
+                ]);
+            }
+            for edge_pos in [None, Some("11,12")] {
+                spec.default_edge_statements = edge_pos
+                    .map(|pos| BTreeMap::from([("pos".into(), pos.into())]))
+                    .unwrap_or_default();
+                let baseline = graph_from_spec(spec.clone()).unwrap();
+                let mut placed = spec.clone();
+                placed.nodes[0].pos = Some(z.clone());
+                placed.edges[0].pos = Some(z.clone());
+                let graph = graph_from_spec(placed.clone()).unwrap();
+                for (actual, expected) in [
+                    (
+                        &graph.graph[NodeIndex(0)].statements,
+                        &baseline.graph[NodeIndex(0)].statements,
+                    ),
+                    (
+                        &graph.graph[EdgeIndex(0)].statements,
+                        &baseline.graph[EdgeIndex(0)].statements,
+                    ),
+                ] {
+                    let mut expected = expected.clone();
+                    expected.insert("pos-z".into(), "3".into());
+                    expected.insert("pos-z-mode".into(), "pin".into());
+                    assert_eq!(actual, &expected);
+                }
+                if with_defaults && edge_pos.is_none() {
+                    assert_eq!(graph.graph[EdgeIndex(0)].statements["pos"], "5,7");
+                    assert_eq!(graph.graph[EdgeIndex(0)].statements["pos-x-set"], "false");
+                    assert_eq!(graph.graph[EdgeIndex(0)].statements["pos-y-set"], "false");
+                }
+                assert_eq!(
+                    graph.graph[NodeIndex(1)].statements,
+                    baseline.graph[NodeIndex(1)].statements
+                );
+                let bytes =
+                    graph_from_spec_bytes(&encode_graph_spec_bytes(&placed).unwrap()).unwrap();
+                let nodes: Vec<TypstDotNode> =
+                    decode_cbor(&graph_nodes_bytes(&bytes).unwrap(), "nodes").unwrap();
+                let edges: Vec<TypstDotEdge> =
+                    decode_cbor(&graph_edges_bytes(&bytes).unwrap(), "edges").unwrap();
+                assert_eq!(nodes[0].statements["pos-z"], "3");
+                assert_eq!(edges[0].statements["pos-z-mode"], "pin");
+                if with_defaults && edge_pos.is_none() {
+                    assert_eq!(edges[0].pos, Some(TypstPoint { x: 5.0, y: 7.0 }));
+                    assert!(!edges[0].pos_x_set && !edges[0].pos_y_set);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn auxiliary_z_structural_patches_preserve_xy_state_and_metadata() {
+        for dot in [
+            "digraph { a; b; a -> b; }",
+            "digraph { a [pos=\"x:4!\"]; b [pos=\"x:@column!,y:8\"]; a -> b [pos=\"x:3,y:5!\"]; }",
+        ] {
+            let graphs = crate::parse_dot_graphs_bytes(dot.as_bytes()).unwrap();
+            let graph = decode_graph_bytes_list(&graphs).unwrap().remove(0);
+            let before = decode_typst_graph(&graph).unwrap();
+            let z_patch = BTreeMap::from([
+                ("index", Value::Integer(0.into())),
+                (
+                    "pos",
+                    Value::Map(vec![
+                        (Value::Text("z".into()), Value::Integer(6.into())),
+                        (Value::Text("z-mode".into()), Value::Text("start".into())),
+                    ]),
+                ),
+            ]);
+            let patch =
+                BTreeMap::from([("nodes", vec![z_patch.clone()]), ("edges", vec![z_patch])]);
+            let patched =
+                graph_apply_structural_patches_bytes(&graph, &encode_cbor(&patch).unwrap())
+                    .unwrap();
+            let after = decode_typst_graph(&patched).unwrap();
+            for (actual, expected) in [
+                (
+                    &after.graph[NodeIndex(0)].statements,
+                    &before.graph[NodeIndex(0)].statements,
+                ),
+                (
+                    &after.graph[EdgeIndex(0)].statements,
+                    &before.graph[EdgeIndex(0)].statements,
+                ),
+            ] {
+                let mut expected = expected.clone();
+                expected.insert("pos-z".into(), "6".into());
+                expected.insert("pos-z-mode".into(), "start".into());
+                assert_eq!(actual, &expected);
+            }
+            assert_eq!(
+                after.graph[NodeIndex(0)].pos,
+                before.graph[NodeIndex(0)].pos
+            );
+            assert_eq!(
+                after.graph[EdgeIndex(0)].pos,
+                before.graph[EdgeIndex(0)].pos
+            );
+            assert_eq!(
+                encode_cbor(&after.graph[NodeIndex(0)].constraints).unwrap(),
+                encode_cbor(&before.graph[NodeIndex(0)].constraints).unwrap(),
+            );
+            assert_eq!(
+                encode_cbor(&after.graph[EdgeIndex(0)].constraints).unwrap(),
+                encode_cbor(&before.graph[EdgeIndex(0)].constraints).unwrap(),
+            );
+            let old_nodes: Vec<TypstDotNode> =
+                decode_cbor(&graph_nodes_bytes(&graph).unwrap(), "nodes").unwrap();
+            let mut nodes: Vec<TypstDotNode> =
+                decode_cbor(&graph_nodes_bytes(&patched).unwrap(), "nodes").unwrap();
+            let old_edges: Vec<TypstDotEdge> =
+                decode_cbor(&graph_edges_bytes(&graph).unwrap(), "edges").unwrap();
+            let mut edges: Vec<TypstDotEdge> =
+                decode_cbor(&graph_edges_bytes(&patched).unwrap(), "edges").unwrap();
+            for statements in [&mut nodes[0].statements, &mut edges[0].statements] {
+                assert_eq!(statements.remove("pos-z").as_deref(), Some("6"));
+                assert_eq!(statements.remove("pos-z-mode").as_deref(), Some("start"));
+            }
+            assert_eq!(nodes, old_nodes);
+            assert_eq!(edges, old_edges);
+
+            let xy_patch = BTreeMap::from([
+                ("index", Value::Integer(0.into())),
+                (
+                    "pos",
+                    Value::Map(vec![(Value::Text("x".into()), Value::Integer(7.into()))]),
+                ),
+            ]);
+            let patch =
+                BTreeMap::from([("nodes", vec![xy_patch.clone()]), ("edges", vec![xy_patch])]);
+            let patched =
+                graph_apply_structural_patches_bytes(&patched, &encode_cbor(&patch).unwrap())
+                    .unwrap();
+            let after = decode_typst_graph(&patched).unwrap();
+            for statements in [
+                &after.graph[NodeIndex(0)].statements,
+                &after.graph[EdgeIndex(0)].statements,
+            ] {
+                assert_eq!(statements["pos-z"], "6");
+                assert_eq!(statements["pos-z-mode"], "start");
+                assert_eq!(statements["pos-x-set"], "true");
+                assert_eq!(statements["pos-y-set"], "false");
+            }
+        }
+    }
+
+    #[test]
+    fn auxiliary_z_patch_keeps_xy_references_in_the_same_batch() {
+        let graphs =
+            crate::parse_dot_graphs_bytes(b"digraph { a [pos=\"4,5\"]; b; a -> b; }").unwrap();
+        let graph = decode_graph_bytes_list(&graphs).unwrap().remove(0);
+        let patch = BTreeMap::from([(
+            "nodes",
+            vec![
+                BTreeMap::from([
+                    ("index", Value::Integer(0.into())),
+                    (
+                        "pos",
+                        Value::Map(vec![(Value::Text("z".into()), Value::Integer(9.into()))]),
+                    ),
+                ]),
+                BTreeMap::from([
+                    ("index", Value::Integer(1.into())),
+                    (
+                        "pos",
+                        Value::Map(vec![
+                            (Value::Text("ref".into()), Value::Integer(0.into())),
+                            (Value::Text("dx".into()), Value::Integer(2.into())),
+                            (Value::Text("z".into()), Value::Integer((-3).into())),
+                        ]),
+                    ),
+                ]),
+            ],
+        )]);
+        let patched =
+            graph_apply_structural_patches_bytes(&graph, &encode_cbor(&patch).unwrap()).unwrap();
+        let nodes: Vec<TypstDotNode> =
+            decode_cbor(&graph_nodes_bytes(&patched).unwrap(), "nodes").unwrap();
+        assert_eq!(nodes[0].pos, Some(TypstPoint { x: 4.0, y: 5.0 }));
+        assert_eq!(nodes[1].pos, Some(TypstPoint { x: 6.0, y: 5.0 }));
+        assert_eq!(nodes[0].statements["pos-z"], "9");
+        assert_eq!(nodes[1].statements["pos-z"], "-3");
+    }
 }

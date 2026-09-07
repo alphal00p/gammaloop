@@ -414,8 +414,9 @@
   === Placements
 
   `graph.pos` creates a first-class placement. The default `mode: "pin"` turns a
-  coordinate into a fixed layout constraint and a drawable position. Use
-  `mode: "start"` when the coordinate should only seed the layout:
+  coordinate into a fixed layout constraint and, for x/y, a drawable position.
+  Use `mode: "start"` when the coordinate should only seed the layout, or use
+  `graph.pin(value)` / `graph.start(value)` to choose a mode for one axis:
 
   ```typ
   #let g = build({
@@ -425,8 +426,35 @@
   })
   ```
 
-  `graph.group` links one coordinate across several nodes or edge control points.
-  A `side` of `"+"` keeps the coordinate positive, and `"-"` keeps it negative.
+  Auxiliary `z` is force-layout depth in the same numeric layout units as x/y,
+  not a Typst length or a rendered coordinate. Both `graph.build` and `graph.map`
+  accept `graph.pos(z: graph.pin(2))` for a hard raw-depth pin and
+  `graph.pos(z: graph.start(2))` for a movable initial depth. A bare
+  `graph.pos(z: 2)` follows `mode`, defaulting to `"pin"`:
+
+  ```typ
+  #let g = graph.map(g,
+    node: node => (pos: graph.pos(z: graph.pin(2))),
+    edge: edge => (pos: graph.pos(z: graph.start(-1))),
+  )
+  ```
+
+  A z-only placement leaves XY coordinates, constraints, and partial-position
+  flags alone, including automatic edge midpoint seeds. Omitting z preserves
+  existing depth metadata during unrelated XY patches. `ref`, `dx`, and `dy`
+  affect XY only; z groups, relative depth references, `dz`, and non-finite z
+  values are not supported.
+
+  Node and edge `statements` expose `"pos-z"` as finite numeric text and
+  `"pos-z-mode"` as `"pin"` or `"start"`. These describe the supplied raw pin
+  or seed; output `pos` remains a two-coordinate x/y record. The force solver
+  multiplies raw depth by a global scale that flattens to zero: a hard raw pin
+  remains fixed even when its effective depth is zero. Other layout backends do
+  not use z. Auxiliary depth does not change draw order or provide an over/under
+  rendering layer.
+
+  `graph.group` links one XY coordinate across several nodes or edge control
+  points. A `side` of "+" keeps the coordinate positive, and "-" keeps it negative.
   Use `start` to seed the shared coordinate without fixing it. Matching node and
   edge groups are one degree of freedom during force and annealing layouts, so
   repulsion and springs act on their combined force rather than being reconciled
@@ -856,18 +884,34 @@
   the same vertex-vertex, edge-vertex, incidence spring, local edge-edge,
   dangling-edge, dangling-centroid, and center terms. `step` is the integration
   step, `delta` clamps per-step movement, `steps` and `epochs` set the iteration
-  budget, `cool` shrinks the step after each epoch, and `early-tol` stops a phase
-  when movement is small, including motion in z.
-  `z-spring` and `z-spring-growth` are force-only helpers: the integrator gives
-  points temporary z coordinates to break overlaps and pulls them back toward the
-  2D plane. It then sets every z coordinate exactly to zero and performs a final
-  planar relaxation, so repulsion cannot be satisfied by invisible separation.
-  Each phase has its own `steps` × `epochs` budget and restarts from `step` with
-  the same cooling and movement clamp. Early convergence of the 3D phase does
-  not skip the planar phase. Pins, shared coordinates, and fixed subgraph
-  boundaries apply throughout; label layout runs only after both phases.
-  Flattening is exact, while force convergence remains limited by the iteration
-  budget and movement tolerance.
+  budget, and `cool` shrinks the step after each epoch. `early-tol` can stop the
+  run when movement is small only after the effective depth scale reaches zero;
+  small movement or a cooled-to-zero step cannot skip flattening.
+
+  The force-only `depth-scale` (default `1.0`) and `flattening-end` (default `0.5`)
+  control auxiliary depth. `depth-scale` must be finite and non-negative;
+  `flattening-end` must be finite and in `0..=1`. They can be supplied as flat
+  arguments or in `solver: (depth-scale: 1.0, flattening-end: 0.5)`; grouped
+  values override flat ones. The old depth-spring controls are not aliases.
+
+  Effective depth is `scale * raw-z`. The integrator starts with auxiliary raw
+  depths to break overlaps and smoothly reduces `scale` from `depth-scale` to
+  zero over the initial `flattening-end` fraction of the total `steps` × `epochs`
+  iteration budget. For normalized progress `u` from 0 to 1 over that interval,
+  the smoothstep scale is `depth-scale * (1 - u)^2 * (1 + 2 * u)`. The remaining
+  iterations relax projected overlaps with effective depth exactly zero, so
+  repulsion cannot be satisfied by invisible separation. `flattening-end: 0`
+  or `depth-scale: 0` starts in 2D; `flattening-end: 1` still evaluates the final
+  iteration on the exact plane.
+
+  There is a single original iteration budget and cooling schedule: flattening
+  neither adds a second phase nor restarts `step`. Unpinned raw depths stay
+  bounded by the initial spread and supplied depth magnitudes; hard raw-depth
+  pins remain fixed even after their effective depth has flattened to zero.
+  XY pins, shared coordinates, and fixed subgraph boundaries apply throughout;
+  label layout runs only after this single graph pass. Output positions remain
+  2D, and auxiliary z does not alter draw order. Flattening is exact, while force
+  convergence remains limited by the iteration budget and movement tolerance.
 
   `directional-force` is applied in both modes as an extra bias derived from
   pin/port direction constraints.

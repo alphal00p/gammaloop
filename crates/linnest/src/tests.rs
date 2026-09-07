@@ -1477,7 +1477,7 @@ fn test_group_start_seeds_first_class_placement() {
         ("beta".to_string(), "0".to_string()),
         ("gamma-ev".to_string(), "0".to_string()),
         ("k-spring".to_string(), "4".to_string()),
-        ("z-spring".to_string(), "0".to_string()),
+        ("depth-scale".to_string(), "0".to_string()),
     ]);
     graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
         settings,
@@ -3867,7 +3867,7 @@ fn cross_kind_group_is_one_force_and_annealing_coordinate() {
         ("delta".to_string(), "0.2".to_string()),
         ("beta".to_string(), "0".to_string()),
         ("k-spring".to_string(), "4".to_string()),
-        ("z-spring".to_string(), "0".to_string()),
+        ("depth-scale".to_string(), "0".to_string()),
         ("length-scale".to_string(), "0.2".to_string()),
     ]);
     let figment = Figment::from(Serialized::from(settings, Profile::Default));
@@ -3952,7 +3952,7 @@ fn cross_kind_group_is_one_force_and_annealing_coordinate() {
     let exact = energy.energy(None, &full);
     assert!((incremental - exact).abs() <= 1e-9 * (1.0 + exact.abs()));
 
-    let (nodes, edges) = graph.optimized_positions(nodes, edges, &energy);
+    let (nodes, edges) = graph.optimized_positions(nodes, edges, &energy, None);
     assert_eq!(nodes[NodeIndex(0)].y, edges[EdgeIndex(0)].y);
     assert_ne!(nodes[NodeIndex(0)].y, 4.0);
 }
@@ -4129,7 +4129,7 @@ fn dangling_centroid_repulsion_keeps_grouped_external_edges_outside() {
     let (tree, energy) = graph.tree_init_cfg(&spring);
     assert!((energy.dangling_centroid_charge / energy.c_vv - 1.25).abs() < 1e-12);
     let (nodes, edges) = graph.new_positions(tree);
-    let (nodes, edges) = graph.optimized_positions(nodes, edges, &energy);
+    let (nodes, edges) = graph.optimized_positions(nodes, edges, &energy, None);
 
     assert!(edges[EdgeIndex(4)].x > nodes[NodeIndex(3)].x);
     assert!(edges[EdgeIndex(2)].x < nodes[NodeIndex(2)].x);
@@ -4175,8 +4175,8 @@ fn grouped_open_xbox_keeps_cut_gluons_aligned_and_outside() {
         ("g-center".to_string(), "0.015".to_string()),
         ("directional-force".to_string(), "5".to_string()),
         ("length-scale".to_string(), "0.51".to_string()),
-        ("z-spring".to_string(), "1".to_string()),
-        ("z-spring-growth".to_string(), "1".to_string()),
+        ("depth-scale".to_string(), "1".to_string()),
+        ("flattening-end".to_string(), "0.5".to_string()),
     ]);
     let figment = Figment::from(Serialized::from(settings, Profile::Default));
     let mut graph = TypstGraph::parse(input).unwrap();
@@ -4228,7 +4228,7 @@ fn grouped_open_xbox_keeps_cut_gluons_aligned_and_outside() {
 }
 
 #[test]
-fn grouped_open_xbox_free_rows_separate_after_planar_relaxation() {
+fn grouped_open_xbox_free_rows_separate_after_depth_flattening() {
     // Unlike the pinned-row fixture, all node y coordinates and all three rows
     // are free. The 3D-only layout left cut and d1 just 0.20764 units apart in 2D.
     let input = r#"digraph {
@@ -4264,8 +4264,8 @@ fn grouped_open_xbox_free_rows_separate_after_planar_relaxation() {
         ("gamma-dangling-centroid".to_string(), "25".to_string()),
         ("g-center".to_string(), "0.0005".to_string()),
         ("directional-force".to_string(), "10".to_string()),
-        ("z-spring".to_string(), "2".to_string()),
-        ("z-spring-growth".to_string(), "1".to_string()),
+        ("depth-scale".to_string(), "1".to_string()),
+        ("flattening-end".to_string(), "0.5".to_string()),
         ("label-steps".to_string(), "0".to_string()),
     ]);
     let figment = Figment::from(Serialized::from(settings, Profile::Default));
@@ -4369,7 +4369,7 @@ fn grouped_xbox_hidden_nodes_stay_clear_of_dangling_endpoints() {
         ("g-center".to_string(), "0.005".to_string()),
         ("directional-force".to_string(), "10".to_string()),
         ("length-scale".to_string(), "0.45".to_string()),
-        ("z-spring".to_string(), "2".to_string()),
+        ("depth-scale".to_string(), "1".to_string()),
     ]);
     let figment = Figment::from(Serialized::from(settings, Profile::Default));
     let mut graph = TypstGraph::parse(input).unwrap();

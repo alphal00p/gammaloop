@@ -739,14 +739,30 @@
 /// Create a first-class graph placement.
 ///
 /// The default `mode: "pin"` turns numeric coordinates into layout constraints
-/// and also makes the coordinates immediately drawable without a layout pass.
+/// and also makes the XY coordinates immediately drawable without a layout pass.
 /// Use `start(value)` for an individual coordinate that should only seed the
 /// layout, or `pin(value)` to pin an individual numeric coordinate when
 /// `mode: "start"` is used. Grouped coordinates are always layout constraints
 /// for their axis.
 ///
+/// `z` is auxiliary depth for force-based layout only, in the same numeric
+/// layout units as x and y (not Typst lengths). Use `pos(z: pin(2))` for a
+/// hard raw-depth pin or `pos(z: start(2))` for a movable initial depth.
+/// A bare `pos(z: 2)` follows `mode`, defaulting to `"pin"`. The global depth
+/// scale and flattening schedule may reduce effective depth to zero without
+/// changing a hard raw-depth pin. This is not a rendered third coordinate:
+/// node/edge output `pos` and drawing remain 2D. Statements retain the configured
+/// raw pin/seed, not the solved free depth, as `"pos-z"` (finite numeric text)
+/// and `"pos-z-mode"` (`"pin"` or `"start"`). Other layout backends do not use z.
+///
+/// Both @build and @map accept z placements on nodes and edge control points.
+/// A z-only placement leaves XY placement and constraints alone, including
+/// automatic edge midpoint seeds. Omitting z preserves existing depth metadata.
+/// Z groups, relative depth references, `dz`, and non-finite values are not
+/// supported; `ref`, `dx`, and `dy` continue to affect XY only.
+///
 /// ```example
-/// #pos(x: group("right", side: "+"), y: start(10))
+/// #pos(x: group("right", side: "+"), y: start(10), z: pin(2))
 /// ```
 /// -> dictionary
 #let pos(
@@ -754,7 +770,9 @@
   x: none,
   /// Absolute or grouped y coordinate. -> none | int | float | dictionary
   y: none,
-  /// Node reference for relative placement, by name or numeric index. -> none | label | int
+  /// Auxiliary force-layout depth, numeric or wrapped in @pin / @start. -> none | int | float | dictionary
+  z: none,
+  /// Node reference for relative XY placement, by name or numeric index. -> none | label | int
   ref: none,
   /// Relative x offset from `ref`. -> none | int | float
   dx: none,
@@ -763,7 +781,7 @@
   /// Placement mode: `"pin"` constrains layout, `"start"` only seeds it. -> string
   mode: "pin",
 ) = {
-  _impl.pos((x: x, y: y, ref: ref, dx: dx, dy: dy, mode: mode))
+  _impl.pos((x: x, y: y, z: z, ref: ref, dx: dx, dy: dy, mode: mode))
 }
 
 /// Map graph metadata to new native data.
@@ -772,7 +790,8 @@
 /// merged statements and direct record fields. A callback returns `none` to
 /// leave the record unchanged, `(data: value)` to set new native data, or
 /// structural fields such as `pos`, `shift`, and `statements` to patch data
-/// seen by later layout calls.
+/// seen by later layout calls. Unchanged fields in a returned full record are
+/// not reapplied; this preserves partial XY placements when patching z or data.
 /// Source and sink callbacks may likewise patch `statement`, `port-label`, and
 /// `compass` before subgraph and layout operations run.
 ///

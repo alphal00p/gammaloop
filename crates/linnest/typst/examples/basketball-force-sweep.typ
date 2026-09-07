@@ -29,8 +29,8 @@ digraph basketball {
   viewport-h: 2.8,
   label-steps: 0,
   g-center: 0.0,
-  z-spring: 2.0,
-  z-spring-growth: 1.0,
+  depth-scale: 1.0,
+  flattening-end: 0.5,
 )
 
 #let distance(a, b) = calc.sqrt(calc.pow(a.x - b.x, 2) + calc.pow(a.y - b.y, 2))

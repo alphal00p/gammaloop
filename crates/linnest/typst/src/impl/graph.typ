@@ -525,12 +525,14 @@
 #let pos(options) = {
   let x = _axis-value(options.x, "graph.pos x")
   let y = _axis-value(options.y, "graph.pos y")
+  let z = _axis-value(options.at("z", default: none), "graph.pos z")
   let ref = options.ref
   let dx = options.dx
   let dy = options.dy
   let mode = options.mode
   let x-mode = options.at("x-mode", default: x.mode)
   let y-mode = options.at("y-mode", default: y.mode)
+  let z-mode = options.at("z-mode", default: z.mode)
   if mode != "start" and mode != "pin" {
     panic("graph.pos: mode must be \"start\" or \"pin\"")
   }
@@ -540,12 +542,32 @@
   if y-mode != none and y-mode != "start" and y-mode != "pin" {
     panic("graph.pos: y-mode must be none, \"start\", or \"pin\"")
   }
+  if z-mode != none and z-mode != "start" and z-mode != "pin" {
+    panic("graph.pos: z-mode must be none, \"start\", or \"pin\"")
+  }
+  if z.value != none {
+    if type(z.value) not in (int, float) {
+      panic(
+        "graph.pos: z must be a finite number, optionally wrapped in pin or start",
+      )
+    }
+    // Guard NaN before ordered comparisons, which Typst rejects for NaN.
+    if z.value != z.value or not (calc.abs(z.value) < calc.inf) {
+      panic("graph.pos: z must be a finite number")
+    }
+  }
   let result = (mode: mode)
   if x-mode != none {
     result.insert("x-mode", x-mode)
   }
   if y-mode != none {
     result.insert("y-mode", y-mode)
+  }
+  if z-mode != none {
+    result.insert("z-mode", z-mode)
+  }
+  if z.value != none {
+    result.insert("z", z.value)
   }
   if x.value != none {
     result.insert("x", x.value)
@@ -935,13 +957,24 @@
   let structural = (:)
   for key in structural-keys {
     if result.keys().contains(key) {
+      let value = result.at(key)
+      if value == record.at(key, default: none) {
+        continue
+      }
       if key == "statements" {
-        structural.insert(key, _flat-statements(
-          result.at(key),
-          context_ + " statements",
-        ))
+        let statements = _flat-statements(value, context_ + " statements")
+        let previous = record.at(key, default: (:))
+        let changed = (:)
+        for (name, value) in statements {
+          if value != previous.at(name, default: none) {
+            changed.insert(name, value)
+          }
+        }
+        if changed.len() != 0 {
+          structural.insert(key, changed)
+        }
       } else {
-        structural.insert(key, result.at(key))
+        structural.insert(key, value)
       }
     }
   }
@@ -1626,9 +1659,12 @@
   }
   _check-name(resolved-name, "graph.edge")
   _check-id(resolved-id, "graph.edge")
-  if spring-length != none and (
-    type(spring-length) not in (int, float)
-      or not (spring-length > 0 and spring-length < calc.inf)
+  if (
+    spring-length != none
+      and (
+        type(spring-length) not in (int, float)
+          or not (spring-length > 0 and spring-length < calc.inf)
+      )
   ) {
     panic("graph.edge: spring-length must be a positive finite number or none")
   }

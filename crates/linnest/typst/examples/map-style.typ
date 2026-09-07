@@ -1,4 +1,4 @@
-#let massless = 0.5mm
+#let massless = 0.5pt
 #let massive = 1pt
 #let edge-stroke = (paint: black, thickness: massless, cap: "round")
 
@@ -10,17 +10,17 @@
     anchor: "center",
     shorten-to: auto,
   ),
-  scale: 1.20,
+  scale: .5,
 )
 #let momentum-mark = (
   end: (
     symbol: "straight",
     fill: black,
-    stroke: black + 0.4mm,
+    stroke: black + 0.4pt,
     anchor: "center",
     shorten-to: auto,
   ),
-  scale: 0.90,
+  scale: 0.50,
 )
 
 #let fermion = (
@@ -32,13 +32,13 @@
 #let photon = (
   stroke: edge-stroke,
   pattern: "wave",
-  pattern-amplitude: 0.20,
+  pattern-amplitude: 0.10,
   pattern-wavelength: 0.50,
 )
 #let gluon = (
   stroke: edge-stroke,
   pattern: "coil",
-  pattern-amplitude: 0.25,
+  pattern-amplitude: 0.15,
   pattern-wavelength: 0.60,
   pattern-coil-longitudinal-scale: 1.60,
 )
@@ -97,23 +97,27 @@
     message: "momentum-arrow-side must be auto, left, or right",
   )
   // Explicit sides are relative to source -> sink and shared with the label carrier.
-  let geometry = _route(edge) + (
-    offset: if side == "auto" { offset } else {
-      calc.abs(offset) * if side == "left" { 1 } else { -1 }
-    },
-    offset-side: if side == "auto" { "label" } else { none },
-    label-side: if side == "auto" { auto } else { side },
-    label-gap: 0.45,
+  // The label gap is in graph units, beyond the measured label box.
+  let geometry = (
+    _route(edge)
+      + (
+        offset: if side == "auto" { offset } else {
+          calc.abs(offset) * if side == "left" { 1 } else { -1 }
+        },
+        offset-side: if side == "auto" { "label" } else { none },
+        label-side: if side == "auto" { auto } else { side },
+        label-gap: _number(edge, "momentum-label-gap", 0.45),
+      )
   )
-  let label =edge.momentum
+  let label = edge.momentum
   let arrow = (
     geometry
       + (
-        length: _number(edge, "momentum-arrow-length", 1.70),
+        length: _number(edge, "momentum-arrow-length", 1.0),
         shift: shift,
         ratio: none,
         resolve-length: "length",
-        stroke: (paint: black, thickness: 1.2pt, cap: "round"),
+        stroke: (paint: black, thickness: 0.4pt, cap: "round"),
         mark: momentum-mark,
         mark-position: "end",
         mark-orientation: "path",
@@ -147,7 +151,7 @@
 #let node-style(node) = if _enabled(node, "hidden") {
   (radius: 0, fill: none, stroke: none)
 } else {
-  (radius: 0.28, fill: white, stroke: edge-stroke)
+  (radius: 0.18, fill: white, stroke: edge-stroke)
 }
 
 // The hidden ordinary label participates in layout and selects the automatic side;

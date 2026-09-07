@@ -253,4 +253,41 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
             "unexpected {color} fallback or overridden style"
         );
     }
+
+    for (fill_color, stroke_color, edge_color, node_color, unit) in [
+        ("#f472b6", "#9f1239", "#b45309", "#1e3a8a", 10.0),
+        ("#22d3ee", "#6d28d9", "#92400e", "#172554", 20.0),
+    ] {
+        let overlays = paths_with_attr(&svg, "fill", fill_color);
+        let strokes = paths_with_attr(&svg, "stroke", stroke_color);
+        let edges = paths_with_attr(&svg, "stroke", edge_color);
+        let nodes = paths_with_attr(&svg, "fill", node_color);
+        assert_eq!(overlays.len(), 1);
+        assert_eq!(strokes.len(), 1);
+        assert_eq!(nodes.len(), 2);
+        assert!(!edges.is_empty());
+        let (overlay_offset, overlay) = overlays[0];
+        assert!(edges.iter().all(|(offset, _)| *offset < overlay_offset));
+        assert!(nodes.iter().all(|(offset, _)| *offset < overlay_offset));
+        assert!(overlay_offset < strokes[0].0);
+
+        let edge_spans = merged_spans(edges.iter().map(|(_, tag)| horizontal_span(tag)).collect());
+        assert_eq!(edge_spans.len(), 1);
+        let span = horizontal_span(strokes[0].1);
+        assert_close(span.1 - span.0, 4.0 * unit, 1e-3);
+        assert_close(span.0, edge_spans[0].0, 1e-3);
+        assert_close(span.1, edge_spans[0].1, 1e-3);
+        let overlay_position = own_translation(overlay);
+        let stroke_y = own_translation(strokes[0].1).1;
+        assert_close(span.0 - overlay_position.0, unit, 1e-3);
+        assert_close(stroke_y - overlay_position.1, unit, 1e-3);
+        for (_, edge) in edges {
+            assert_close(own_translation(edge).1, stroke_y, 1e-3);
+        }
+        for ((_, node), center_x) in nodes.iter().zip([span.0, span.1]) {
+            let position = own_translation(node);
+            assert_close(position.0 + 0.5 * unit, center_x, 1e-3);
+            assert_close(position.1 + 0.5 * unit, stroke_y, 1e-3);
+        }
+    }
 }

@@ -3,9 +3,53 @@
 #import "crates/linnest/typst/src/lib.typ": draw, graph, layout, layouts
 #import graph: *
 #import "map-style.typ" as feynman
+#import "@preview/cetz:0.5.1" as cetz
 
 #let close(a, b, epsilon: 1e-6) = calc.abs(a - b) < epsilon
 #let same-pos(a, b) = close(a.x, b.x) and close(a.y, b.y)
+
+// Auxiliary depth stays separate from XY, including through graph.map patches.
+#let depth-base = graph.build({
+  node(<depth-origin>, pos: pos(x: pin(0), y: pin(0), z: pin(2)))
+  edge(source(<depth-origin>), pos: pos(x: pin(0), y: start(1), z: pin(0)))
+})
+#let depth-node = graph.nodes(depth-base).first()
+#let depth-edge = graph.edges(depth-base).first()
+#assert(depth-node.statements.at("pos-z") == "2")
+#assert(depth-node.statements.at("pos-z-mode") == "pin")
+#assert(depth-edge.statements.at("pos-z") == "0")
+#let depth-patched = graph.map(depth-base, node: node => (
+  ..node,
+  pos: pos(z: start(-3)),
+))
+#let patched-node = graph.nodes(depth-patched).first()
+#assert(patched-node.pos == depth-node.pos)
+#assert(graph.dot(depth-patched).contains("pin=\"x:0,y:0\""))
+#assert(patched-node.statements.at("pos-z") == "-3")
+#assert(patched-node.statements.at("pos-z-mode") == "start")
+#let depth-options = (
+  viewport-w: 1,
+  viewport-h: 1,
+  spring: (strength: 1, length: 1),
+  repulsion: (strength: 0),
+  labels: (steps: 0),
+  solver: (
+    steps: 2, epochs: 1, step: 0.1, cooling: 1,
+    depth-scale: 1, flattening-end: 1,
+  ),
+)
+#let depth-solved = layout(depth-base, ..depth-options)
+#let flat-solved = layout(depth-base, ..depth-options, solver: (
+  ..depth-options.solver, depth-scale: 0,
+))
+#assert(
+  graph.edges(depth-solved).first().pos.y < graph.edges(flat-solved).first().pos.y,
+  message: "nonzero pinned auxiliary depth must affect the early XY forces",
+)
+#assert(graph.nodes(depth-solved).first().pos == (x: 0, y: 0))
+#assert(graph.edges(depth-solved).first().pos.x == 0)
+#assert(graph.nodes(depth-solved).first().statements.at("pos-z") == "2")
+#assert(graph.nodes(depth-solved).first().statements.at("pos-z-mode") == "pin")
 
 // Edge spring lengths are statements, not user data; none preserves inheritance.
 #let spring-items = {
@@ -215,8 +259,8 @@
     step: 0.81,
     max-movement: 0.4,
     cooling: 0.85,
-    z-spring: 2,
-    z-spring-growth: 1,
+    depth-scale: 1,
+    flattening-end: 0.5,
   ),
 )
 #let opened-planar = layout(opened-planar-base, ..opened-planar-options)
@@ -413,10 +457,8 @@
 })
 #for side in (auto, "auto", "left", "right") {
   for label-shift in (0, 1) {
-    let layers = feynman.edge-style((
-      momentum: [],
-      fields: (momentum-arrow-side: side, momentum-label-shift: label-shift),
-    ))
+    let fields = (momentum-arrow-side: side, momentum-label-shift: label-shift)
+    let layers = feynman.edge-style((momentum: [], fields: fields))
     let arrow = layers.at(1)
     let label = layers.last()
     let automatic = side in (auto, "auto")
@@ -425,6 +467,17 @@
     assert(arrow.offset == if side == "right" { -0.62 } else { 0.62 })
     assert(label.offset == arrow.offset and label.label-side == arrow.label-side)
     assert(label.offset-side == arrow.offset-side)
+    assert(arrow.label-gap == 0.45 and label.label-gap == 0.45)
+    // Gap overrides must reach both carrier modes without moving the arrow.
+    for gap in (0, 0.15, 0.8, "0.2") {
+      let customized = feynman.edge-style((
+        momentum: [],
+        fields: fields + (momentum-label-gap: gap),
+      ))
+      assert(customized == layers.enumerate().map(((index, layer)) => {
+        if index == 0 { layer } else { layer + (label-gap: float(gap)) }
+      }))
+    }
   }
 }
 
@@ -481,6 +534,77 @@
   node-style: invisible-node,
   node-outset: 0,
 )
+// Overlays cover both nodes and the edge, and extend beyond the diagram in
+// both axes. Horizontal cubics reuse the edge SVG span probes.
+#let after-graph = layout(graph.build({
+  node(<after-left>, pos: pos(x: -2, y: 1, mode: "pin"))
+  node(<after-right>, pos: pos(x: 2, y: 1, mode: "pin"))
+  edge(
+    source(<after-left>), sink(<after-right>),
+    pos: pos(x: 0, y: 1, mode: "pin"),
+  )
+}), labels: (steps: 0), solver: (steps: 2, seed: 17))
+#let after-options = bare-draw + (
+  padding: 0.25,
+  node-style: (radius: 0.5, fill: rgb("#1e3a8a"), stroke: none),
+  edge-style: (stroke: rgb("#b45309") + 0.5pt),
+)
+#let after-static = draw(
+  after-graph,
+  ..after-options,
+  unit: 10pt,
+  draw-after: {
+    cetz.draw.rect((-3, 0), (3, 2), fill: rgb("#f472b6"), stroke: none)
+    cetz.draw.bezier(
+      (-2, 1), (2, 1), (0, 1), (0, 1),
+      stroke: rgb("#9f1239") + 0.8pt,
+    )
+  },
+)
+#let after-callback = draw(
+  after-graph,
+  ..after-options,
+  unit: 20pt,
+  node-style: after-options.node-style + (fill: rgb("#172554")),
+  edge-style: (stroke: rgb("#92400e") + 0.5pt),
+  draw-after: g => {
+    assert(g == after-graph, message: "draw-after must receive the input graph")
+    let nodes = graph.nodes(g)
+    let edges = graph.edges(g)
+    assert(nodes.len() == 2 and edges.len() == 1)
+    let left = nodes.first().pos
+    let right = nodes.last().pos
+    let middle = edges.first().pos
+    assert(same-pos(left, (x: -2, y: 1)))
+    assert(same-pos(right, (x: 2, y: 1)))
+    assert(same-pos(middle, (x: 0, y: 1)))
+    cetz.draw.rect(
+      (left.x - 1, left.y - 1), (right.x + 1, right.y + 1),
+      fill: rgb("#22d3ee"), stroke: none,
+    )
+    cetz.draw.bezier(
+      (left.x, left.y), (right.x, right.y),
+      (middle.x, middle.y), (middle.x, middle.y),
+      stroke: rgb("#6d28d9") + 0.8pt,
+    )
+  },
+)
+#context {
+  for (unit, panel) in ((10pt, after-static), (20pt, after-callback)) {
+    let baseline = measure(draw(after-graph, ..after-options, unit: unit))
+    for empty in (none, ()) {
+      assert(baseline == measure(draw(
+        after-graph, ..after-options, unit: unit, draw-after: empty,
+      )), message: "empty draw-after must preserve diagram bounds")
+    }
+    assert(close(baseline.width / unit, 5.5))
+    assert(close(baseline.height / unit, 1.5))
+    let overlaid = measure(panel)
+    assert(close(overlaid.width / unit, 6.5), message: "draw-after must extend canvas width")
+    assert(close(overlaid.height / unit, 2.5), message: "draw-after must extend canvas height")
+  }
+}
+
 #stack(
   spacing: 12pt,
   draw(arrow-graph, edge-style: arrow-style, ..bare-draw),
@@ -501,4 +625,6 @@
     sink-style: precedence-endpoint,
     ..bare-draw,
   ),
+  after-static,
+  after-callback,
 )
