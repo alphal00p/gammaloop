@@ -378,7 +378,12 @@
     edge.at("bend", default: none),
     "graph.edge statements",
   )
-  statements
+  _statements-with-value(
+    statements,
+    "spring-length",
+    edge.at("spring-length", default: none),
+    "graph.edge statements",
+  )
 }
 
 #let _edge-spec(edge) = {
@@ -391,6 +396,7 @@
     "label-pos",
     "label-angle",
     "bend",
+    "spring-length",
     "data",
     "name",
     "payload",
@@ -1581,6 +1587,7 @@
   let label-pos = options.label-pos
   let label-angle = options.label-angle
   let bend = options.bend
+  let spring-length = options.spring-length
   let style = options.style
   let statements = options.statements
   let resolved-data = _data-from-args("graph.edge", args)
@@ -1619,6 +1626,12 @@
   }
   _check-name(resolved-name, "graph.edge")
   _check-id(resolved-id, "graph.edge")
+  if spring-length != none and (
+    type(spring-length) not in (int, float)
+      or not (spring-length > 0 and spring-length < calc.inf)
+  ) {
+    panic("graph.edge: spring-length must be a positive finite number or none")
+  }
   if resolved-source == none and resolved-sink == none {
     panic("graph.edge: expected a source or sink half-edge")
   }
@@ -1644,6 +1657,7 @@
       label-pos: label-pos,
       label-angle: label-angle,
       bend: bend,
+      spring-length: spring-length,
       statements: statements,
     ),
   )

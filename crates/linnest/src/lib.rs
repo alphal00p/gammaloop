@@ -2233,6 +2233,16 @@ impl TypstGraph {
     }
 
     pub fn layout_with_subgraph(&mut self, subgraph: Option<&SuBitGraph>) -> Result<(), String> {
+        for (_, edge, data) in self.graph.iter_edges() {
+            if dot_statement_value(&data.data.statements, "spring-length").is_some()
+                && !Self::positive_statement_f64(&data.data.statements, "spring-length")
+                    .is_some_and(|scale| scale > 0.0)
+            {
+                return Err(format!(
+                    "edge {edge}: spring-length must be a positive finite multiplier"
+                ));
+            }
+        }
         let spring_params = ParamTuning::from(&self.layout_config.spring);
         self.clear_hedge_route_points();
 
@@ -2318,13 +2328,16 @@ impl TypstGraph {
         let spring_params = ParamTuning::from(&self.layout_config.spring);
         let (tree_cfg, energy) = self.tree_init_cfg(&spring_params);
         let (pos_n, pos_e) = self.new_positions(tree_cfg);
-        let state = self.graph.new_layout_state(
+        let mut state = self.graph.new_layout_state(
             pos_n,
             pos_e,
             self.layout_config.delta,
             self.layout_config.directional_force,
             self.layout_config.incremental_energy,
         );
+        state.edge_spring_length_scales = self.new_edgevec(|edge, _, _| {
+            Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
+        });
 
         (state, energy)
     }
@@ -2600,16 +2613,24 @@ impl TypstGraph {
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
         self.apply_initial_grouped_constraints(&mut pos_n, &mut pos_e);
         let spring_length = energy.spring_length;
+        let mut state = self.graph.new_layout_state(
+            pos_n,
+            pos_e,
+            self.layout_config.delta * spring_length,
+            self.layout_config.directional_force
+                * if matches!(self.layout_config.layout_algo, LayoutAlgo::Force) {
+                    spring_length
+                } else {
+                    1.0
+                },
+            self.layout_config.incremental_energy,
+        );
+        state.edge_spring_length_scales = self.new_edgevec(|edge, _, _| {
+            Self::positive_statement_f64(&edge.statements, "spring-length").unwrap_or(1.0)
+        });
 
         match self.layout_config.layout_algo {
             LayoutAlgo::Anneal => {
-                let state = self.graph.new_layout_state(
-                    pos_n,
-                    pos_e,
-                    self.layout_config.delta * spring_length,
-                    self.layout_config.directional_force,
-                    self.layout_config.incremental_energy,
-                );
                 let mut schedule = GeoSchedule::from(&self.layout_config.schedule);
                 let (out, _stats) = anneal::<_, _, _, _, SmallRng>(
                     state,
@@ -2625,13 +2646,6 @@ impl TypstGraph {
                 (out.vertex_points, out.edge_points)
             }
             LayoutAlgo::Force => {
-                let mut state = self.graph.new_layout_state(
-                    pos_n,
-                    pos_e,
-                    self.layout_config.delta * spring_length,
-                    self.layout_config.directional_force * spring_length,
-                    self.layout_config.incremental_energy,
-                );
                 force_directed_layout(
                     &mut state,
                     energy,

@@ -2,9 +2,75 @@
 
 #import "crates/linnest/typst/src/lib.typ": draw, graph, layout, layouts
 #import graph: *
+#import "map-style.typ" as feynman
 
 #let close(a, b, epsilon: 1e-6) = calc.abs(a - b) < epsilon
 #let same-pos(a, b) = close(a.x, b.x) and close(a.y, b.y)
+
+// Edge spring lengths are statements, not user data; none preserves inheritance.
+#let spring-items = {
+  node(<spring-a>)
+  node(<spring-b>)
+  edge(source(<spring-a>), sink(<spring-b>))
+  edge(source(<spring-a>), sink(<spring-b>), spring-length: none)
+  edge(
+    source(<spring-a>), sink(<spring-b>),
+    statements: (spring-length: 0.75),
+  )
+  edge(
+    source(<spring-a>), sink(<spring-b>),
+    spring-length: 1.5,
+    statements: (spring-length: 3),
+    kind: "spring-data",
+  )
+  edge(source(<spring-a>), spring-length: 1)
+}
+#let spring-records = graph.edges(graph.build(spring-items))
+#assert(spring-records.map(edge => edge.statements.at(
+  "spring-length", default: none,
+)) == (none, none, "0.75", "1.5", "1"))
+#assert(spring-records.at(3).data == (kind: "spring-data"))
+#let inherited-spring-records = graph.edges(graph.build(
+  spring-items,
+  default-edge-statements: (spring-length: 2),
+))
+#assert(inherited-spring-records.map(edge => edge.statements.at(
+  "spring-length",
+)) == ("2", "2", "0.75", "1.5", "1"))
+
+// With other forces disabled, dangling endpoints approach their scaled rest lengths.
+#let spring-probe = graph.build({
+  node(<spring-origin>, pos: pos(x: pin(0), y: pin(0)))
+  for factor in (0.5, 2) {
+    edge(
+      source(<spring-origin>),
+      spring-length: factor,
+      pos: pos(x: start(2), y: pin(0)),
+    )
+  }
+})
+#for algorithm in ("force", "anneal") {
+  let positions = graph.edges(layout(
+    spring-probe,
+    viewport-w: 2,
+    viewport-h: 2,
+    spring: (strength: 1, length: 0.5),
+    repulsion: (strength: 0),
+    labels: (steps: 0),
+    solver: (
+      algorithm: algorithm,
+      steps: 100,
+      epochs: 30,
+      step: 0.1,
+      cooling: 0.95,
+      temperature: 0.001,
+    ),
+  )).map(edge => edge.pos)
+  for (index, expected) in (1, 4).enumerate() {
+    assert(close(calc.abs(positions.at(index).x), expected, epsilon: 0.1))
+    assert(positions.at(index).y == 0)
+  }
+}
 
 // Semantic layout groups should be equivalent to their flat spelling.
 #let semantic-base = layouts.options(spring: (strength: 8, length: 0.5))
@@ -103,6 +169,83 @@
     and close(grouped-pos.at(0).y, grouped-edge-pos.y),
 )
 #assert(grouped-pos.at(0).x <= 1e-6 and grouped-pos.at(2).x >= -1e-6)
+
+// The opened xbox has three freely ordered y groups, not pinned rows. A 3D
+// layout alone left cut and d1 only 0.20764 units apart after projection.
+#let opened-planar-base = graph.build({
+  let in-x = group("in", side: "-", start: -7)
+  let out-x = group("out", side: "+", start: 7)
+  let d1 = group("d1", start: -5)
+  let d2 = group("d2", start: 5)
+  let cut = group("cut", start: 0)
+  node(<opened-a>, pos: pos(x: start(0)))
+  node(<opened-b>, pos: pos(x: start(-2)))
+  node(<opened-c>, pos: pos(x: start(-2)))
+  node(<opened-d>, pos: pos(x: start(2)))
+  edge(source(<opened-a>), sink(<opened-c>))
+  edge(
+    source(<opened-b>), sink(<opened-a>),
+    pos: pos(x: group("lower-inner", side: "+", start: 0.5)),
+  )
+  edge(sink(<opened-b>), pos: pos(x: in-x, y: d1))
+  edge(sink(<opened-c>), pos: pos(x: in-x, y: d2))
+  edge(sink(<opened-d>), pos: pos(x: out-x, y: d2))
+  edge(source(<opened-d>), pos: pos(x: out-x, y: d1))
+  edge(source(<opened-a>), sink(<opened-d>), spring-length: 0.1)
+  edge(source(<opened-b>), pos: pos(x: out-x, y: cut))
+  edge(sink(<opened-c>), pos: pos(x: in-x, y: cut))
+})
+#let opened-planar-options = layouts.options(
+  spring: (strength: 18, length: 0.25),
+  repulsion: (
+    strength: 12,
+    centering: 0.0005,
+    edge-node: 0.29,
+    edge-edge: 0.1,
+    dangling: 14.75,
+    dangling-centroid: 25,
+  ),
+  constraints: (side-strength: 10),
+  labels: (steps: 0),
+  solver: (
+    algorithm: "force",
+    seed: 2,
+    steps: 50,
+    epochs: 50,
+    step: 0.81,
+    max-movement: 0.4,
+    cooling: 0.85,
+    z-spring: 2,
+    z-spring-growth: 1,
+  ),
+)
+#let opened-planar = layout(opened-planar-base, ..opened-planar-options)
+#let opened-planar-edges = graph.edges(opened-planar).map(edge => edge.pos)
+#for (left, right) in ((2, 5), (3, 4), (7, 8)) {
+  assert(close(opened-planar-edges.at(left).y, opened-planar-edges.at(right).y))
+}
+#for (first, second) in ((2, 3), (2, 8), (4, 5), (4, 7)) {
+  assert(close(opened-planar-edges.at(first).x, opened-planar-edges.at(second).x))
+}
+#for row in (2, 3) {
+  assert(
+    calc.abs(opened-planar-edges.at(7).y - opened-planar-edges.at(row).y) > 1,
+    message: "opened xbox: projected cut/row separation must exceed one unit",
+  )
+}
+#assert(opened-planar-edges.at(1).x >= 0)
+#assert(opened-planar-edges.at(2).x <= 0)
+#assert(opened-planar-edges.at(4).x >= 0)
+#let opened-planar-positions = (
+  graph.nodes(opened-planar) + graph.edges(opened-planar)
+).map(record => record.pos)
+#for point in opened-planar-positions {
+  assert(calc.abs(point.x) < calc.inf and calc.abs(point.y) < calc.inf)
+}
+#let opened-planar-repeat = layout(opened-planar-base, ..opened-planar-options)
+#assert(opened-planar-positions == (
+  graph.nodes(opened-planar-repeat) + graph.edges(opened-planar-repeat)
+).map(record => record.pos))
 
 #let invisible-node = (radius: 0, fill: none, stroke: none)
 #let arrow-color = rgb("#d119e6")
@@ -249,6 +392,42 @@
   ),
 )
 
+// Explicit momentum sides override the old layout-label side for both carrier modes.
+#let momentum-graph = graph.build({
+  node(<momentum-a>, pos: pos(x: 0, y: 0))
+  node(<momentum-b>, pos: pos(x: 6, y: 0))
+  for side in ("left", "right") {
+    edge(
+      source(<momentum-a>), sink(<momentum-b>),
+      pos: pos(x: 3, y: 0),
+      label-pos: (3, 2),
+      orientation: "reversed",
+      momentum: label-square(if side == "left" { rgb("#a21caf") } else { rgb("#0369a1") }),
+      momentum-arrow-side: side,
+      momentum-arrow-offset: -0.8,
+      momentum-arrow-shift: 0.5,
+      momentum-label-shift: if side == "left" { 0.5 } else { -1 },
+      route: "straight-through",
+    )
+  }
+})
+#for side in (auto, "auto", "left", "right") {
+  for label-shift in (0, 1) {
+    let layers = feynman.edge-style((
+      momentum: [],
+      fields: (momentum-arrow-side: side, momentum-label-shift: label-shift),
+    ))
+    let arrow = layers.at(1)
+    let label = layers.last()
+    let automatic = side in (auto, "auto")
+    assert(arrow.offset-side == if automatic { "label" } else { none })
+    assert(arrow.label-side == if automatic { auto } else { side })
+    assert(arrow.offset == if side == "right" { -0.62 } else { 0.62 })
+    assert(label.offset == arrow.offset and label.label-side == arrow.label-side)
+    assert(label.offset-side == arrow.offset-side)
+  }
+}
+
 // Element callbacks, `auto`, `none`, and endpoint overrides are tested by the
 // colors that reach the rendered output. The callback assertions also exercise
 // its documented graph record.
@@ -307,6 +486,14 @@
   draw(arrow-graph, edge-style: arrow-style, ..bare-draw),
   draw(crossing-graph, ..bare-draw),
   draw(labels-graph, edge-style: label-style, ..bare-draw),
+  draw(momentum-graph, edge-style: edge => {
+    let layers = feynman.edge-style(edge)
+    layers.at(0).stroke = rgb("#78716c") + 0.3pt
+    layers.at(1).stroke = if edge.fields.momentum-arrow-side == "left" {
+      rgb("#86198f") + 0.8pt
+    } else { rgb("#075985") + 0.8pt }
+    layers
+  }, ..bare-draw),
   draw(
     precedence-graph,
     edge-style: precedence-base,

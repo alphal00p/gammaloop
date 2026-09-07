@@ -127,6 +127,8 @@ pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     pub ext: SuBitGraph,
     pub vertex_points: NodeVec<Point2<f64>>,
     pub edge_points: EdgeVec<Point2<f64>>,
+    /// Dimensionless rest-length multipliers, defaulting to one; set before starting the layout.
+    pub edge_spring_length_scales: EdgeVec<f64>,
     pub delta: f64,
     pub directional_force: f64,
     // Tracks which node/edge entries were mutated during proposal generation so
@@ -153,6 +155,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             ext,
             vertex_points,
             edge_points,
+            edge_spring_length_scales: vec![1.0; len_e].into(),
             delta,
             directional_force,
             changed_nodes: SubSet::empty(len_v),
@@ -169,6 +172,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> Clone for LayoutState<'a, E, 
             ext: self.ext.clone(),
             vertex_points: self.vertex_points.clone(),
             edge_points: self.edge_points.clone(),
+            edge_spring_length_scales: self.edge_spring_length_scales.clone(),
             delta: self.delta,
             directional_force: self.directional_force,
             changed_nodes: self.changed_nodes.clone(),
@@ -1123,7 +1127,7 @@ impl SpringChargeEnergy {
         }
     }
 
-    fn edge_spring_length<'a, E, V, H, N>(
+    pub(super) fn edge_spring_length<'a, E, V, H, N>(
         s: &LayoutState<'a, E, V, H, N>,
         edge: EdgeIndex,
         base: f64,
@@ -1131,6 +1135,7 @@ impl SpringChargeEnergy {
     where
         N: NodeStorageOps<NodeData = V> + Clone,
     {
+        let base = base * s.edge_spring_length_scales[edge];
         let (_, pair) = &s.graph[&edge];
         match pair {
             HedgePair::Unpaired { .. } => base * 2.0,
@@ -1524,6 +1529,10 @@ impl SpringChargeEnergy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::half_edge::{
+        builder::HedgeGraphBuilder, involution::Flow, nodestore::DefaultNodeStore, NoData,
+    };
+    use rand::{rngs::SmallRng, SeedableRng};
 
     #[test]
     fn directional_force_only_restores_wrong_side() {
@@ -1568,6 +1577,120 @@ mod tests {
             c_center,
             crossing_penalty: 0.0,
             eps: 1e-4,
+        }
+    }
+
+    #[test]
+    fn edge_spring_length_scales_are_local_and_preserve_dangling_factor() {
+        for split in [None, Some(Flow::Source), Some(Flow::Sink)] {
+            let mut builder = HedgeGraphBuilder::<(), ()>::new();
+            let a = builder.add_node(());
+            let b = builder.add_node(());
+            builder.add_edge(a, b, (), false);
+            builder.add_external_edge(a, (), false, Flow::Source);
+            builder.add_external_edge(b, (), false, Flow::Sink);
+            let mut graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            if let Some(split) = split {
+                let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
+                    panic!("expected paired edge");
+                };
+                graph[&EdgeIndex(0)].1 = HedgePair::Split {
+                    source,
+                    sink,
+                    split,
+                };
+            }
+            let mut state = graph.new_layout_state(
+                vec![Point2::origin(), Point2::new(6.0, 0.0)].into(),
+                vec![
+                    Point2::new(2.0, 0.0),
+                    Point2::new(0.0, 4.0),
+                    Point2::new(6.0, 4.0),
+                ]
+                .into(),
+                1.0,
+                0.0,
+                false,
+            );
+            let energy = SpringChargeEnergy {
+                spring_length: 3.0,
+                ..test_energy(0.0)
+            };
+            assert_eq!(state.edge_spring_length_scales, vec![1.0; 3].into());
+            for (scales, lengths, expected_energy) in [
+                ([1.0, 1.0, 1.0], [3.0, 6.0, 6.0], 5.0),
+                ([0.5, 1.0, 1.0], [1.5, 6.0, 6.0], 7.25),
+                ([0.5, 2.0, 1.0], [1.5, 12.0, 6.0], 37.25),
+            ] {
+                state.edge_spring_length_scales = scales.to_vec().into();
+                for (edge, length) in lengths.into_iter().enumerate() {
+                    assert_eq!(
+                        SpringChargeEnergy::edge_spring_length(
+                            &state,
+                            EdgeIndex(edge),
+                            energy.spring_length,
+                        ),
+                        length,
+                    );
+                }
+                assert_eq!(energy.energy(None, &state), expected_energy);
+                let mut cloned = state.clone();
+                assert_eq!(
+                    cloned.edge_spring_length_scales,
+                    state.edge_spring_length_scales
+                );
+                assert_eq!(energy.energy(None, &cloned), expected_energy);
+                cloned.edge_spring_length_scales[EdgeIndex(0)] = 4.0;
+                assert_eq!(state.edge_spring_length_scales[EdgeIndex(0)], scales[0]);
+            }
+        }
+    }
+
+    #[test]
+    fn heterogeneous_edge_spring_length_scales_incremental_energy_matches_full() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let a = builder.add_node(());
+        let b = builder.add_node(());
+        let c = builder.add_node(());
+        builder.add_edge(a, b, (), false);
+        builder.add_edge(b, c, (), false);
+        builder.add_external_edge(a, (), false, Flow::Source);
+        builder.add_external_edge(c, (), false, Flow::Sink);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut state = graph.new_layout_state(
+            vec![
+                Point2::new(-2.0, 0.0),
+                Point2::new(1.0, 2.0),
+                Point2::new(4.0, -1.0),
+            ]
+            .into(),
+            vec![
+                Point2::new(-1.0, 1.0),
+                Point2::new(2.5, 0.5),
+                Point2::new(-4.0, -1.0),
+                Point2::new(6.0, 1.0),
+            ]
+            .into(),
+            1.0,
+            0.0,
+            true,
+        );
+        state.edge_spring_length_scales = vec![0.5, 2.0, 1.5, 0.75].into();
+        let energy = test_energy(0.2);
+        let mut rng = SmallRng::seed_from_u64(17);
+        let mut cached = energy.energy(None, &state);
+        for iteration in 0..100 {
+            let next = LayoutNeighbor.propose(&state, &mut rng, 0.2, 0.3);
+            let incremental = energy.energy(Some((&state, cached)), &next);
+            let exact = energy.total_energy(&next);
+            assert!(
+                (incremental - exact).abs() <= 1e-9 * (1.0 + exact.abs()),
+                "iteration {iteration}: incremental={incremental}, exact={exact}",
+            );
+            state = next;
+            energy.on_accept(&mut state);
+            cached = incremental;
+            assert_eq!(energy.energy(Some((&state, cached)), &state), cached);
         }
     }
 
