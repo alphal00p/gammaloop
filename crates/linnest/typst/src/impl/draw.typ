@@ -3156,6 +3156,9 @@
           element
         }
       })
+      if options.draw-after != none {
+        _call(options.draw-after, graph)
+      }
     },
   )
 

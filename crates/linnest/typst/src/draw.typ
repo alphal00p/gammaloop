@@ -310,6 +310,13 @@
   /// `label`, `label-style`, `style`, `radius`, and `node`.
   /// -> auto | function
   draw-node: auto,
+  /// Additional CeTZ elements drawn after the edges, labels, and nodes in the
+  /// same canvas. A callback receives this positioned graph and returns CeTZ
+  /// elements; use `graph.nodes` / `graph.edges` to inspect its coordinates.
+  /// These elements share `unit` and contribute to canvas bounds, but do not
+  /// participate in graph layout.
+  /// -> none | array | function
+  draw-after: none,
   /// Default CeTZ edge stroke. -> any
   edge-stroke: 0.1em,
   /// Default logical-edge style dictionary, layers, or callback. An edge's
@@ -442,6 +449,7 @@
       node-style: node-style,
       node-label: node-label,
       draw-node: draw-node,
+      draw-after: draw-after,
       edge-stroke: edge-stroke,
       edge-style: edge-style,
       edge-offset: edge-offset,

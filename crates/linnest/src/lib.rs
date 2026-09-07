@@ -1459,13 +1459,13 @@ struct LayoutConfig {
         deserialize_with = "deserialize_f64"
     )]
     directional_force: f64,
-    #[serde(default = "default_z_spring", deserialize_with = "deserialize_f64")]
-    z_spring: f64,
+    #[serde(default = "default_depth_scale", deserialize_with = "deserialize_f64")]
+    depth_scale: f64,
     #[serde(
-        default = "default_z_spring_growth",
+        default = "default_flattening_end",
         deserialize_with = "deserialize_f64"
     )]
-    z_spring_growth: f64,
+    flattening_end: f64,
     #[serde(
         default = "default_label_steps",
         deserialize_with = "deserialize_usize"
@@ -1549,8 +1549,8 @@ impl Default for LayoutConfig {
             seed: default_seed(),
             delta: default_delta(),
             directional_force: default_directional_force(),
-            z_spring: default_z_spring(),
-            z_spring_growth: default_z_spring_growth(),
+            depth_scale: default_depth_scale(),
+            flattening_end: default_flattening_end(),
             label_steps: default_label_steps(),
             label_layout: default_label_layout(),
             label_step: default_label_step(),
@@ -1631,8 +1631,8 @@ impl LayoutConfig {
                 | "tree-dy"
                 | "viewport-h"
                 | "viewport-w"
-                | "z-spring"
-                | "z-spring-growth"
+                | "depth-scale"
+                | "flattening-end"
         )
     }
 }
@@ -1680,12 +1680,12 @@ fn default_directional_force() -> f64 {
     5.0
 }
 
-fn default_z_spring() -> f64 {
-    2.0
+fn default_depth_scale() -> f64 {
+    1.0
 }
 
-fn default_z_spring_growth() -> f64 {
-    1.0
+fn default_flattening_end() -> f64 {
+    0.5
 }
 
 fn default_label_steps() -> usize {
@@ -2233,6 +2233,32 @@ impl TypstGraph {
     }
 
     pub fn layout_with_subgraph(&mut self, subgraph: Option<&SuBitGraph>) -> Result<(), String> {
+        if !self.layout_config.depth_scale.is_finite() || self.layout_config.depth_scale < 0.0 {
+            return Err("depth-scale must be a non-negative finite number".to_string());
+        }
+        if !(0.0..=1.0).contains(&self.layout_config.flattening_end) {
+            return Err("flattening-end must be a finite fraction between 0 and 1".to_string());
+        }
+        for (kind, index, statements) in (0..self.n_nodes())
+            .map(|i| ("node", i, &self[NodeIndex(i)].statements))
+            .chain((0..self.n_edges()).map(|i| ("edge", i, &self[EdgeIndex(i)].statements)))
+        {
+            if let Some(z) = dot_statement_value(statements, "pos-z") {
+                if !z
+                    .trim()
+                    .trim_matches('"')
+                    .parse::<f64>()
+                    .is_ok_and(f64::is_finite)
+                {
+                    return Err(format!("{kind} {index}: pos-z must be a finite number"));
+                }
+            }
+            if let Some(mode) = dot_statement_value(statements, "pos-z-mode") {
+                if !matches!(mode.trim().trim_matches('"'), "pin" | "start") {
+                    return Err(format!("{kind} {index}: pos-z-mode must be pin or start"));
+                }
+            }
+        }
         for (_, edge, data) in self.graph.iter_edges() {
             if dot_statement_value(&data.data.statements, "spring-length").is_some()
                 && !Self::positive_statement_f64(&data.data.statements, "spring-length")
@@ -2310,7 +2336,7 @@ impl TypstGraph {
             self.partial_optimized_positions(tree_cfg, &full, &energy)
         } else {
             let (pos_n, pos_e) = self.new_positions(tree_cfg);
-            self.optimized_positions(pos_n, pos_e, &energy)
+            self.optimized_positions(pos_n, pos_e, &energy, None)
         };
 
         self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
@@ -2610,6 +2636,7 @@ impl TypstGraph {
         mut pos_n: NodeVec<Point2<f64>>,
         mut pos_e: EdgeVec<Point2<f64>>,
         energy: &SpringChargeEnergy,
+        selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
     ) -> (NodeVec<Point2<f64>>, EdgeVec<Point2<f64>>) {
         self.apply_initial_grouped_constraints(&mut pos_n, &mut pos_e);
         let spring_length = energy.spring_length;
@@ -2646,6 +2673,27 @@ impl TypstGraph {
                 (out.vertex_points, out.edge_points)
             }
             LayoutAlgo::Force => {
+                for i in 0..self.n_nodes() {
+                    let index = NodeIndex(i);
+                    let statements = &self[index].statements;
+                    state.vertex_depths[index] = dot_statement_value(statements, "pos-z")
+                        .and_then(|z| z.trim().trim_matches('"').parse().ok());
+                    state.vertex_depth_pins[index] =
+                        self.layout_config.layout_nodes.nodes_are_fixed()
+                            || selection.is_some_and(|(nodes, _)| !nodes[index])
+                            || dot_statement_value(statements, "pos-z-mode")
+                                .is_some_and(|mode| mode.trim().trim_matches('"') == "pin");
+                }
+                for i in 0..self.n_edges() {
+                    let index = EdgeIndex(i);
+                    let statements = &self[index].statements;
+                    state.edge_depths[index] = dot_statement_value(statements, "pos-z")
+                        .and_then(|z| z.trim().trim_matches('"').parse().ok());
+                    state.edge_depth_pins[index] = selection
+                        .is_some_and(|(_, edges)| !edges[index])
+                        || dot_statement_value(statements, "pos-z-mode")
+                            .is_some_and(|mode| mode.trim().trim_matches('"') == "pin");
+                }
                 force_directed_layout(
                     &mut state,
                     energy,
@@ -2657,8 +2705,8 @@ impl TypstGraph {
                         max_delta: self.layout_config.delta * spring_length,
                         early_tol: self.layout_config.schedule.early_tol * spring_length,
                         seed: self.layout_config.seed,
-                        z_spring: self.layout_config.z_spring,
-                        z_spring_growth: self.layout_config.z_spring_growth,
+                        depth_scale: self.layout_config.depth_scale,
+                        flattening_end: self.layout_config.flattening_end,
                     },
                 );
                 (state.vertex_points, state.edge_points)
@@ -3294,7 +3342,12 @@ impl TypstGraph {
         let saved_node_constraints = self.new_nodevec(|_, _, node| node.constraints);
         let saved_edge_constraints = self.new_edgevec(|edge, _, _| edge.constraints);
         self.freeze_unselected_layout_axes(&selected_node_axes, &selected_edge_axes);
-        let positions = self.optimized_positions(pos_n, pos_e, energy);
+        let positions = self.optimized_positions(
+            pos_n,
+            pos_e,
+            energy,
+            Some((&selected_nodes, &selected_edges)),
+        );
         self.restore_layout_constraints(saved_node_constraints, saved_edge_constraints);
         positions
     }

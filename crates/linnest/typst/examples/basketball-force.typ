@@ -59,8 +59,8 @@ digraph basketball {
     name: "old-z-schedule",
     note: "delayed z collapse",
     settings: (
-      z-spring: 0.05,
-      z-spring-growth: 1.3,
+      depth-scale: 1.0,
+      flattening-end: 1.0,
     ),
   ),
   (
