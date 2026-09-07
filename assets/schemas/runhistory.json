@@ -5059,8 +5059,8 @@
             "format": "int32"
           }
         },
-        "number_of_fermion_loops": {
-          "description": "Number of closed fermion loops; negative disables",
+        "number_of_anticommutating_loops": {
+          "description": "Number of closed anticommutating (fermion or ghost) loops; negative disables",
           "type": [
             "array",
             "null"

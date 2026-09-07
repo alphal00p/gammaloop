@@ -520,7 +520,7 @@ mod tests {
             let one_pole_projection = fixed_point(one_pole_projection.clone());
             let energy_squared = energy.pow(2);
             let constant = Atom::one() - mass.pow(2);
-            let one_pole = Atom::i() / (Atom::num(16) * Atom::var(GS.pi).pow(3) * energy);
+            let one_pole = -Atom::i() / (Atom::num(16) * Atom::var(GS.pi).pow(3) * energy);
             let expected_powered = &one_pole * (Atom::num(2) * &energy_squared - &constant)
                 / (Atom::num(2) * &energy_squared);
             let difference = (&powered - &expected_powered).together();

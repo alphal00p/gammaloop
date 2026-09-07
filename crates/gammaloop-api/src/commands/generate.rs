@@ -236,14 +236,14 @@ pub struct SpecArgs {
         allow_negative_numbers = true
     )]
     pub number_of_factorized_loop_subtopologies: Option<Vec<i32>>,
-    /// Number of closed fermion loops; negative disables
+    /// Number of closed anticommutating (fermion or ghost) loops; negative disables
     #[arg(
-        long = "number-of-fermion-loops",
+        long = "number-of-anticommutating-loops",
         short = 'L',
         num_args = 2,
         allow_negative_numbers = true
     )]
-    pub number_of_fermion_loops: Option<Vec<i32>>,
+    pub number_of_anticommutating_loops: Option<Vec<i32>>,
 
     /// Cut options (cross-section)
     /// Range of cut blobs on either side of the cut
@@ -367,7 +367,7 @@ impl Default for SpecArgs {
             veto_only_scaleless_self_energy: None,
             max_n_bridges: None,
             number_of_factorized_loop_subtopologies: None,
-            number_of_fermion_loops: None,
+            number_of_anticommutating_loops: None,
             n_cut_blobs: None,
             n_cut_spectators: None,
             allow_symmetrization_of_external_fermions_in_amplitudes: None,
@@ -1768,8 +1768,8 @@ fn feyngen_from_spec_args(
         .or(if is_vacuum { Some(0) } else { None })
         .and_then(|n| if n < 0 { None } else { Some(n as usize) });
 
-    let number_of_fermion_loops = a
-        .number_of_fermion_loops
+    let number_of_anticommutating_loops = a
+        .number_of_anticommutating_loops
         .as_ref()
         .map(|v| (v[0].max(0) as usize, v[1].max(0) as usize));
 
@@ -1890,9 +1890,9 @@ fn feyngen_from_spec_args(
         }
     }
 
-    // Fermion loop count → FermionLoopCountRange((n,n))
-    if let Some((n_min, n_max)) = number_of_fermion_loops {
-        let filt = FeynGenFilter::FermionLoopCountRange((n_min, n_max));
+    // Anticommutating loop count → AnticommutatingLoopCountRange((n,n))
+    if let Some((n_min, n_max)) = number_of_anticommutating_loops {
+        let filt = FeynGenFilter::AnticommutatingLoopCountRange((n_min, n_max));
         if fg.generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
@@ -2318,7 +2318,7 @@ mod tests {
             veto_only_scaleless_self_energy: None,
             max_n_bridges: None,
             number_of_factorized_loop_subtopologies: None,
-            number_of_fermion_loops: None,
+            number_of_anticommutating_loops: None,
             symmetric_left_right_polarizations: None,
             n_cut_blobs: None,
             n_cut_spectators: None,
@@ -2361,6 +2361,25 @@ mod tests {
         let model = &load_generic_model("sm");
         let a = base_args(s);
         parse_spec_with_model(&a, GenerationType::CrossSection, model).unwrap()
+    }
+
+    #[test]
+    fn anticommutating_loop_filter_is_added_in_both_generation_modes() {
+        let model = &load_generic_model("sm");
+        let mut args = base_args("e+ e- > d d~");
+        args.number_of_anticommutating_loops = Some(vec![1, 2]);
+        for mode in [GenerationType::Amplitude, GenerationType::CrossSection] {
+            let spec = parse_spec_with_model(&args, mode, model).unwrap();
+            let filters = if mode == GenerationType::Amplitude {
+                &spec.process_definition.amplitude_filters
+            } else {
+                &spec.process_definition.cross_section_filters
+            };
+            assert!(filters.0.iter().any(|filter| matches!(
+                filter,
+                FeynGenFilter::AnticommutatingLoopCountRange((1, 2))
+            )));
+        }
     }
 
     #[test]

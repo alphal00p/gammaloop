@@ -8,7 +8,7 @@ use crate::utils::{
     serde_utils::{
         IsDefault, is_default_form_path, is_default_pysecdec_relative_precision,
         is_default_python_path, is_default_vakint_evaluation_methods,
-        is_default_vakint_normalization, is_false, is_minus_one_string, is_true, is_usize,
+        is_default_vakint_normalization, is_false, is_one_string, is_true, is_usize,
     },
 };
 use bincode_trait_derive::{Decode, Encode};
@@ -342,7 +342,7 @@ pub struct VakintSettings {
     pub temporary_directory: Option<String>,
     #[serde(skip_serializing_if = "is_default_vakint_normalization")]
     pub normalization: String,
-    #[serde(skip_serializing_if = "is_minus_one_string")]
+    #[serde(skip_serializing_if = "is_one_string")]
     pub additional_normalization: String,
 }
 
@@ -422,7 +422,7 @@ impl Default for VakintSettings {
             clean_tmp_dir: true,
             temporary_directory: None,
             normalization: "MSbar".to_string(),
-            additional_normalization: "-1".to_string(),
+            additional_normalization: "1".to_string(),
         }
     }
 }
@@ -556,6 +556,37 @@ mod tests {
 
     fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
         values.into_iter().collect()
+    }
+
+    #[test]
+    fn vakint_physical_loop_normalization_roundtrips_with_visible_defaults() {
+        use crate::utils::serde_utils::ShowDefaultsGuard;
+
+        let defaults: super::VakintSettings = toml::from_str("").unwrap();
+        assert_eq!(defaults.additional_normalization, "1");
+        let guard = ShowDefaultsGuard::new(false);
+        assert!(
+            !toml::to_string(&defaults)
+                .unwrap()
+                .contains("additional_normalization")
+        );
+        let explicit: super::VakintSettings =
+            toml::from_str("additional_normalization = '-1'").unwrap();
+        assert!(
+            toml::to_string(&explicit)
+                .unwrap()
+                .contains("additional_normalization = \"-1\"")
+        );
+        drop(guard);
+        let _guard = ShowDefaultsGuard::new(true);
+        let serialized = toml::to_string(&defaults).unwrap();
+        assert!(serialized.contains("additional_normalization = \"1\""));
+        assert_eq!(
+            toml::from_str::<super::VakintSettings>(&serialized)
+                .unwrap()
+                .additional_normalization,
+            "1",
+        );
     }
 
     #[test]

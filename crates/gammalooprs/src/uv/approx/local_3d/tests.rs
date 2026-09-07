@@ -256,7 +256,7 @@ fn soft_dispatch_prefers_fewer_native_maps_at_equal_rank() -> Result<()> {
     for edge in active {
         contour = contour.replace(GS.ose(edge)).with(Atom::num(2));
     }
-    let normalization = -Atom::i() / (Atom::num(2) * Atom::var(GS.pi)).pow(3);
+    let normalization = Atom::i() / (Atom::num(2) * Atom::var(GS.pi)).pow(3);
     let expected = -Atom::num(3) * normalization / Atom::num(32);
     assert!(
         (contour - expected).together().is_zero(),

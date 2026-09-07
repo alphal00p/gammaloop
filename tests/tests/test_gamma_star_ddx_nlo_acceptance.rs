@@ -77,7 +77,7 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
         uv.renormalization_prescription.massless_power_divergent = ApproximationType::MUV;
         uv.renormalization_prescription.overrides.clear();
         uv.vakint.normalization = "MSbar".to_string();
-        uv.vakint.additional_normalization = "-1".to_string();
+        uv.vakint.additional_normalization = "1".to_string();
         uv.vakint.form_exe_path = which("form")?.display().to_string();
     }
     cli.default_runtime_settings
@@ -137,7 +137,7 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
             r#"generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==2 QED^2==2 [{{{{2}}}} QCD=1]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p {process} -i {NLO} --global-prefactor-num "-1𝑖/2" --only-diagrams"#,
+                -p {process} -i {NLO} --global-prefactor-num "1/2" --only-diagrams"#,
         ))?;
         cli.run_command(&format!("generate existing -p {process} -i {NLO}"))?;
 
@@ -226,12 +226,12 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
     }
     .run(&mut cli.state)?;
     assert!(
-        lo_probe.im < 0.0 && lo_probe.re.abs() <= 1.0e-12 * lo_probe.im.abs(),
-        "the direct-current LO convention must be purely negative imaginary, got {lo_probe:e}",
+        lo_probe.re > 0.0 && lo_probe.im.abs() <= 1.0e-12 * lo_probe.re,
+        "the direct-current LO must be positive and real, got {lo_probe:e}",
     );
     cli.run_command(&format!(
         r#"set process -p {LO_PROCESS} -i {LO} kv
-            integrator.integrated_phase="imag"
+            integrator.integrated_phase="real"
             integrator.min_samples_for_update=5000
             integrator.n_start=5000
             integrator.n_increase=5000
@@ -257,10 +257,18 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
     let lo_estimate = lo_output
         .single_slot_integral()
         .ok_or_else(|| eyre!("expected one direct-current LO integration slot"))?;
-    let lo_value = -lo_estimate.result.im.0;
-    let lo_error = lo_estimate.error.im.0.abs();
+    let lo_value = lo_estimate.result.re.0;
+    let lo_error = lo_estimate.error.re.0.abs();
     assert!(
-        lo_error / lo_value <= 0.05,
+        lo_estimate.result.im.0.abs()
+            <= 3.0 * lo_estimate.error.im.0.abs() + 1.0e-12 * PUBLISHED_LO
+            && lo_estimate.error.im.0.abs() <= 0.05 * PUBLISHED_LO,
+        "direct-current LO must have a vanishing imaginary component: {:e} ± {:e}",
+        lo_estimate.result,
+        lo_estimate.error,
+    );
+    assert!(
+        lo_value > 0.0 && lo_error / lo_value <= 0.05,
         "direct-current LO uncertainty is too large: {lo_value:e} ± {lo_error:e}",
     );
     assert!(
@@ -410,6 +418,14 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
     let slot = output
         .single_slot()
         .ok_or_else(|| eyre!("expected one direct-current NLO integration slot"))?;
+    assert!(
+        slot.integral.result.im.0.abs()
+            <= 3.0 * slot.integral.error.im.0.abs() + 1.0e-12 * PUBLISHED_NLO
+            && slot.integral.error.im.0.abs() <= 0.15 * PUBLISHED_NLO,
+        "direct-current NLO must have a vanishing imaginary component: {:e} ± {:e}",
+        slot.integral.result,
+        slot.integral.error,
+    );
     let nlo_value = slot.integral.result.re.0;
     let nlo_error = slot.integral.error.re.0.abs();
     assert!(
@@ -466,6 +482,28 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
         assert!(
             (value - target).abs() <= 3.0 * error,
             "{graph} mismatch: {value:e} ± {error:e}, published={target:e}",
+        );
+    }
+    let imaginary_graphs = slot
+        .grid_breakdown
+        .im
+        .as_ref()
+        .filter(|breakdown| breakdown.axis_label == "graph")
+        .ok_or_else(|| eyre!("direct-current graph-MC result has no imaginary graph breakdown"))?;
+    assert_eq!(imaginary_graphs.entries.len(), graph_estimates.len());
+    for entry in &imaginary_graphs.entries {
+        let graph = entry.bin_label.as_deref().unwrap();
+        let target = match graph {
+            "GL0" => PUBLISHED_B2_SELF_ENERGY.abs(),
+            "GL2" => PUBLISHED_B1_VERTEX,
+            _ => panic!("unexpected graph {graph}"),
+        };
+        assert!(
+            entry.value.0.abs() <= 3.0 * entry.error.0.abs() + 1.0e-12 * target
+                && entry.error.0.abs() <= 0.15 * target,
+            "{graph} has a nonzero imaginary integral: {:e} ± {:e}",
+            entry.value.0,
+            entry.error.0,
         );
     }
     let graph_sum = graph_estimates

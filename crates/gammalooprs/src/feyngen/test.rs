@@ -61,6 +61,317 @@ use crate::numerator::GlobalPrefactor;
 use crate::processes::ProcessDefinition;
 use crate::utils::load_generic_model;
 
+#[test]
+fn closed_anticommutating_loop_counts() {
+    let model = load_generic_model("sm");
+    let process = dis_options_impl(&[], &[], 0, 0, 0);
+    for (name, edges, expected) in [
+        ("ghost", vec![(0, 1, 9000005), (1, 0, 9000005)], 1),
+        ("antighost", vec![(0, 1, -9000005), (1, 0, -9000005)], 1),
+        ("ghost self-loop", vec![(0, 0, 9000005)], 1),
+        ("Dirac", vec![(0, 1, 5), (1, 0, 5)], 1),
+        ("anti-Dirac", vec![(0, 1, -5), (1, 0, -5)], 1),
+        (
+            "open ghost chain",
+            vec![(0, 1, 9000005), (1, 2, 9000005)],
+            0,
+        ),
+        ("gluon cycle", vec![(0, 1, 21), (1, 0, 21)], 0),
+        (
+            "ghost and Dirac loops joined by a gluon",
+            vec![
+                (0, 1, 9000005),
+                (1, 0, 9000005),
+                (1, 2, 21),
+                (2, 3, 5),
+                (3, 2, 5),
+            ],
+            2,
+        ),
+        (
+            "two ghost loops joined by a gluon",
+            vec![
+                (0, 1, 9000005),
+                (1, 0, 9000005),
+                (1, 2, 21),
+                (2, 3, 9000005),
+                (3, 2, 9000005),
+            ],
+            2,
+        ),
+    ] {
+        let mut graph = SymbolicaGraph::new();
+        let last_node = edges.iter().flat_map(|(a, b, _)| [*a, *b]).max().unwrap();
+        for _ in 0..=last_node {
+            // Only edge statistics participates in this topology count.
+            graph.add_node(NodeColorWithVertexRule {
+                external_tag: 0,
+                vertex_rule: model.get_vertex_rule("V_35"),
+            });
+        }
+        for (a, b, pdg) in edges {
+            graph.add_edge(a, b, true, EdgeColor { pdg }).unwrap();
+        }
+        assert_eq!(
+            process
+                .count_closed_anticommutating_loops(&graph, &model)
+                .unwrap(),
+            expected,
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn open_ghost_chain_exchange_has_grassmann_sign() {
+    let model = load_generic_model("sm");
+    let process = ProcessDefinition {
+        initial_pdgs: vec![9000005, 9000005],
+        final_pdgs_lists: vec![vec![9000005, 9000005]],
+        ..Default::default()
+    };
+    let mut signs = Vec::new();
+    for outgoing in [[2, 3], [3, 2]] {
+        let mut graph = SymbolicaGraph::new();
+        for external_tag in [1, 2, 3, 4, 0, 0] {
+            // This flow/ordering certificate reads edge species and external tags only.
+            graph.add_node(NodeColorWithVertexRule {
+                external_tag,
+                vertex_rule: model.get_vertex_rule("V_35"),
+            });
+        }
+        for (a, b, pdg) in [
+            (0, 4, 9000005),
+            (4, outgoing[0], 9000005),
+            (1, 5, 9000005),
+            (5, outgoing[1], 9000005),
+            (4, 5, 21),
+        ] {
+            graph.add_edge(a, b, true, EdgeColor { pdg }).unwrap();
+        }
+        signs.push(process.normalize_flows(&graph, &model).unwrap().1);
+    }
+    assert_ne!(
+        signs[0], signs[1],
+        "exchanging two identical external ghosts must reverse the sign"
+    );
+}
+
+#[test]
+fn generated_ghost_loop_has_one_statistics_minus() {
+    use super::diagram_generator::evaluate_overall_factor;
+
+    let model = load_generic_model("sm");
+    let process = ProcessDefinition {
+        initial_pdgs: vec![21],
+        final_pdgs_lists: vec![vec![21]],
+        amplitude_filters: FeynGenFilters(vec![
+            FeynGenFilter::VertexAllow(vec!["V_35".into()]),
+            // The public filter counts both fermion and ghost loops.
+            FeynGenFilter::AnticommutatingLoopCountRange((1, 1)),
+        ]),
+        ..Default::default()
+    };
+    let settings = GlobalSettings {
+        n_cores: Parallelisation {
+            feyngen: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let graphs = process.generate(&model, &settings).unwrap();
+    let [graph] = graphs.as_slice() else {
+        panic!("expected exactly one ghost vacuum-polarization graph");
+    };
+    assert_eq!(graph.get_loop_number(), 1);
+    assert_eq!(
+        evaluate_overall_factor(graph.overall_factor.as_view()),
+        Atom::num(-1)
+    );
+    let mut process = process;
+    process.amplitude_filters.0[1] = FeynGenFilter::AnticommutatingLoopCountRange((0, 0));
+    assert!(process.generate(&model, &settings).unwrap().is_empty());
+}
+
+#[test]
+fn cp_symmetrization_checks_used_intrinsic_parameters_after_model_updates() -> color_eyre::Result<()>
+{
+    use crate::model::{InputParamCard, ParameterType};
+    use crate::utils::F;
+
+    let mut model = load_generic_model("sm");
+    let ckm_vertex = model.get_vertex_rule("V_125");
+    let leptonic_vertex = model.get_vertex_rule("V_113");
+    for eta in [0.0, 0.341] {
+        // The JSON model defaults to diagonal CKM. Set every independent
+        // Wolfenstein input so changing eta actually changes this coupling.
+        InputParamCard::<F<f64>>::from_str(
+            format!(
+                "lamWS = [0.2253, 0.0]\nAWS = [0.808, 0.0]\nrhoWS = [0.132, 0.0]\netaWS = [{eta}, 0.0]"
+            ),
+            "toml",
+        )?
+        .apply_to_model(&mut model)?;
+        let ckm = model.get_parameter("CKM1x3");
+        assert_eq!(ckm.parameter_type, ParameterType::Imaginary);
+        assert!(ckm.value.unwrap().re.0 > 0.0);
+        assert_eq!(ckm.value.unwrap().im.0 == 0.0, eta == 0.0);
+        // The leptonic vertex's ordinary imaginary Feynman coupling is allowed,
+        // even while unrelated CKM parameters elsewhere in this model are complex.
+        assert_ne!(model.get_coupling("GC_40").value.unwrap().im, 0.0);
+        model.validate_cp_symmetrization([leptonic_vertex.0.as_ref()])?;
+        let result = model.validate_cp_symmetrization([ckm_vertex.0.as_ref()]);
+        if eta == 0.0 {
+            result?;
+        } else {
+            let error = result.unwrap_err().to_string();
+            assert!(error.contains("CP-based optimization"));
+            assert!(error.contains("CKM1x3"));
+            assert!(error.contains("symmetrize_left_right_states=false"));
+        }
+    }
+    // A coupling alias must not hide a relevant intrinsic parameter.
+    let alias = model.get_coupling("GC_43").name;
+    let leptonic_coupling = model.get_coupling("GC_40").name;
+    model
+        .couplings
+        .get_mut(&crate::model::CouplingName(leptonic_coupling))
+        .unwrap()
+        .expression = alias.into();
+    assert!(
+        model
+            .validate_cp_symmetrization([leptonic_vertex.0.as_ref()])
+            .is_err()
+    );
+    Ok(())
+}
+
+#[test]
+fn complex_ckm_generation_rejects_only_the_cp_optimization() -> color_eyre::Result<()> {
+    use crate::{model::InputParamCard, utils::F};
+
+    let mut model = load_generic_model("sm");
+    InputParamCard::<F<f64>>::from_str(
+        "lamWS = [0.2253, 0.0]\nAWS = [0.808, 0.0]\nrhoWS = [0.132, 0.0]\netaWS = [0.341, 0.0]"
+            .into(),
+        "toml",
+    )?
+    .apply_to_model(&mut model)?;
+    assert!(model.get_parameter("CKM1x3").value.unwrap().im.0 < 0.0);
+    let mut process = ProcessDefinition {
+        generation_type: GenerationType::CrossSection,
+        initial_pdgs: vec![24],
+        final_pdgs_lists: vec![vec![2, -5]],
+        loop_count_range: (1, 1),
+        symmetrize_left_right_states: true,
+        cross_section_filters: FeynGenFilters(vec![FeynGenFilter::VertexAllow(vec![
+            "V_95".into(),
+            "V_125".into(),
+        ])]),
+        ..Default::default()
+    };
+    let settings = GlobalSettings {
+        n_cores: Parallelisation {
+            feyngen: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let Err(error) = process.generate(&model, &settings) else {
+        panic!("complex CKM must reject CP symmetrization");
+    };
+    let error = error.to_string();
+    assert!(error.contains("CP-based optimization"));
+    assert!(error.contains("CKM1x3"));
+    process.symmetrize_left_right_states = false;
+    assert_eq!(process.generate(&model, &settings)?.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn cp_symmetrization_is_revalidated_by_direct_integrand_warm_up() -> color_eyre::Result<()> {
+    use crate::{
+        integrands::process::ProcessIntegrand, model::InputParamCard, processes::Process,
+        settings::RuntimeSettings, utils::F,
+    };
+
+    test_initialise()?;
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
+    for symmetrize in [false, true] {
+        let mut model = load_generic_model("sm");
+        InputParamCard::<F<f64>>::from_str(
+            "lamWS = [0.2253, 0.0]\nAWS = [0.808, 0.0]\nrhoWS = [0.132, 0.0]\netaWS = [0.0, 0.0]"
+                .into(),
+            "toml",
+        )?
+        .apply_to_model(&mut model)?;
+        assert!(model.get_parameter("CKM1x3").value.unwrap().re.0 > 0.0);
+        assert_eq!(model.get_parameter("CKM1x3").value.unwrap().im.0, 0.0);
+        let definition = ProcessDefinition {
+            generation_type: GenerationType::CrossSection,
+            initial_pdgs: vec![24],
+            final_pdgs_lists: vec![vec![2, -5]],
+            loop_count_range: (1, 1),
+            symmetrize_left_right_states: symmetrize,
+            cross_section_filters: FeynGenFilters(vec![FeynGenFilter::VertexAllow(vec![
+                "V_95".into(),
+                "V_125".into(),
+            ])]),
+            ..Default::default()
+        };
+        let mut settings = GlobalSettings::default();
+        settings.n_cores.feyngen = 1;
+        settings.generation.evaluator.compile = false;
+        settings.generation.uv.subtract_uv = false;
+        settings.generation.uv.generate_integrated = false;
+        settings.generation.threshold_subtraction.enable_thresholds = false;
+        let mass = model.get_parameter("MW").value.unwrap().re.0;
+        let runtime: RuntimeSettings = toml::from_str(&format!(
+            r#"
+            [kinematics]
+            e_cm = {mass}
+            [kinematics.externals]
+            type = "constant"
+            [kinematics.externals.data]
+            momenta = [[{mass}, 0.0, 0.0, 0.0]]
+            helicities = [0]
+        "#
+        ))?;
+        let graphs = definition.generate(&model, &settings)?;
+        assert_eq!(graphs.len(), 1);
+        let mut process = Process::from_graph_list(
+            "runtime_cp".into(),
+            "default".into(),
+            graphs,
+            GenerationType::CrossSection,
+            Some(definition),
+            None,
+            &model,
+        )?;
+        process.preprocess(&model, &settings, &(&runtime).into(), &pool)?;
+        process.generate_integrands(&model, &settings, (&runtime).into(), &pool)?;
+        let integrand = process.get_integrand_mut("default")?;
+        let ProcessIntegrand::CrossSection(cross_section) = &*integrand else {
+            unreachable!();
+        };
+        assert_eq!(cross_section.data.symmetrize_left_right_states, symmetrize);
+        integrand.warm_up(&model)?;
+        InputParamCard::<F<f64>>::from_str("etaWS = [0.341, 0.0]".into(), "toml")?
+            .apply_to_model(&mut model)?;
+        assert!(model.get_parameter("CKM1x3").value.unwrap().im.0 < 0.0);
+        let result = integrand.warm_up(&model);
+        if symmetrize {
+            let error = result.unwrap_err().to_string();
+            assert!(error.contains("CP-based optimization"));
+            assert!(error.contains("CKM1x3"));
+            assert!(error.contains("regenerate"));
+        } else {
+            result?;
+        }
+    }
+    Ok(())
+}
+
 fn manual_lib<C: Into<Coefficient>>(
     loop_momenta: Vec<Vec<C>>,
     pol_v: Vec<(isize, Vec<C>, Vec<C>)>,

@@ -645,6 +645,8 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
         },
         "event_groups": event_groups,
     });
+    // Retain signed absorptive weights: the corrected left/right threshold prescription
+    // flips cut 2 imaginary parts while the three-loop graph normalization stays fixed.
     insta::assert_json_snapshot!("gl20_multichannel_local_inspect_events", snapshot);
 
     clean_test(&cli.cli_settings.state.folder);

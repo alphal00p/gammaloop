@@ -1047,6 +1047,10 @@ impl Particle {
         self.ghost_number != 0
     }
 
+    pub fn is_anticommutating(&self) -> bool {
+        self.is_fermion() || self.is_ghost()
+    }
+
     pub fn is_goldstone(&self) -> bool {
         self.goldstone
     }
@@ -2071,6 +2075,57 @@ n_couplings = format!("{}", self.couplings.len()).green(),
         None
     }
 
+    pub(crate) fn validate_cp_symmetrization<'a>(
+        &self,
+        vertices: impl IntoIterator<Item = &'a VertexRule>,
+    ) -> Result<()> {
+        let mut pending = vertices
+            .into_iter()
+            .flat_map(|vertex| {
+                vertex
+                    .couplings
+                    .iter()
+                    .flatten()
+                    .flatten()
+                    .map(|name| name.0)
+            })
+            .collect_vec();
+        let mut checked = HashSet::default();
+        while let Some(symbol) = pending.pop() {
+            if !checked.insert(symbol) {
+                continue;
+            }
+            if let Some(parameter) = self.parameters.get(&ParameterName(symbol)) {
+                // UFO-real parameters remain real by the model contract. For
+                // complex declarations, use the resolved intrinsic value;
+                // ordinary Feynman coupling i factors are not parameters.
+                if parameter.parameter_type != ParameterType::Real
+                    && parameter.value.is_none_or(|value| value.im.0 != 0.0)
+                {
+                    let value = self
+                        .get_symbol_value(symbol)
+                        .map_or_else(|| "unresolved".to_string(), |value| value.to_string());
+                    return Err(eyre!(
+                        "symmetrize_left_right_states=true uses an unsupported CP-based optimization: a used vertex coupling depends on complex model parameter '{}' = {}. Set symmetrize_left_right_states=false and regenerate to use ordinary Hermitian forward-graph sewing.",
+                        parameter.name,
+                        value
+                    ));
+                }
+            } else if let Some(coupling) = self.couplings.get(&CouplingName(symbol)) {
+                // Follow coupling aliases once each; resolved parameters are
+                // leaves, so a currently real derived parameter stays allowed.
+                pending.extend(
+                    coupling
+                        .expression
+                        .get_all_symbols(false)
+                        .into_iter()
+                        .map(UFOSymbol),
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn parameters_to_empty_fns(&self) -> Vec<Replacement> {
         let mut reps = vec![];
         for n in self.couplings.keys() {
@@ -2703,12 +2758,14 @@ mod test_polarization_sums;
 
 #[cfg(test)]
 mod tests {
+    use symbolica::atom::{Atom, AtomCore};
+
     use crate::{
         model::{
             ArcPropagator, ArcVertexRule, Parameter, ParameterName, ParameterNature, ParameterType,
         },
         momentum::{Helicity, ThreeMomentum},
-        utils::{F, load_generic_model},
+        utils::{F, load_generic_model, parse_python_expression},
     };
 
     use super::{ArcParticle, Model, UFOSymbol, parameter_display_sort_key};
@@ -2756,6 +2813,89 @@ mod tests {
         assert_eq!(model.get_propagator_for_particle("ghG").dod, -2);
         assert_eq!(model.get_propagator_for_particle("g").dod, -2);
         assert_eq!(model.get_propagator_for_particle("d").dod, -1);
+    }
+
+    #[test]
+    fn sm_lorentz_structures_use_the_scalar_and_vector_axial_basis() {
+        let model = load_generic_model("sm");
+        let identity =
+            parse_python_expression("UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))");
+        let gamma5 =
+            parse_python_expression("UFO::{}::Gamma5(UFO::{}::idx(1,1),UFO::{}::idx(1,2))");
+        let vector = parse_python_expression(
+            "UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
+        );
+        let axial = parse_python_expression(
+            "UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::Gamma5(UFO::{}::dummy(1),UFO::{}::idx(1,2))",
+        );
+
+        // PL = (1-gamma5)/2 and PR = (1+gamma5)/2. Scalar entries use the
+        // Goldstone chirality fixed by the Higgs-doublet action; vector entries
+        // retain their original left/right weights under the basis change.
+        for (even, odd, weights) in [
+            (
+                identity.clone(),
+                gamma5.clone(),
+                &[
+                    ("FFS1", 0, 1),
+                    ("FFS2", -1, 1),
+                    ("FFS3", 1, 0),
+                    ("FFS4", 1, 1),
+                ][..],
+            ),
+            (
+                vector,
+                axial,
+                &[
+                    ("FFV1", 1, 1),
+                    ("FFV2", 1, 0),
+                    ("FFV3", 1, -2),
+                    ("FFV4", 1, 2),
+                    ("FFV5", 1, 4),
+                ][..],
+            ),
+        ] {
+            for &(name, left, right) in weights {
+                let expected =
+                    &even * Atom::num((left + right, 2)) + &odd * Atom::num((right - left, 2));
+                assert_eq!(
+                    model.get_lorentz_structure(name).structure,
+                    expected,
+                    "{name}"
+                );
+            }
+        }
+
+        // The CP-even Higgs and projector sum must be gamma5-free before
+        // dimensional Dirac algebra, while the projector difference is gamma5.
+        let right = model.get_lorentz_structure("FFS1");
+        let left = model.get_lorentz_structure("FFS3");
+        // Probe the two independent coefficients of the structurally certified
+        // linear basis without distributing either Lorentz expression.
+        for (scalar, pseudoscalar) in [(1, 0), (0, 1)] {
+            for (combination, expected) in [
+                (&right.structure + &left.structure, scalar),
+                (&right.structure - &left.structure, pseudoscalar),
+            ] {
+                assert_eq!(
+                    combination
+                        .replace(identity.to_pattern())
+                        .with(Atom::num(scalar))
+                        .replace(gamma5.to_pattern())
+                        .with(Atom::num(pseudoscalar)),
+                    Atom::num(expected)
+                );
+            }
+        }
+        assert_eq!(model.get_lorentz_structure("FFS4").structure, identity);
+        for lorentz in &model.lorentz_structures {
+            let expression = lorentz.structure.to_canonical_string();
+            assert!(
+                !expression.contains("ProjM") && !expression.contains("ProjP"),
+                "{}: {expression}",
+                lorentz.name
+            );
+        }
     }
 
     #[test]

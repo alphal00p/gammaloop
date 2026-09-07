@@ -2405,9 +2405,9 @@ impl ProcessDefinition {
     ) -> Result<(SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>, bool), FeynGenError> {
         let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
         for (i_e, e) in graph.edges().iter().enumerate() {
-            // Build an adjacency list including only fermions
+            // Build an adjacency list including only anticommutating edges
             let p = model.get_particle_from_pdg(e.data.pdg);
-            if !(p.0.is_fermion() || p.0.is_ghost()) {
+            if !p.0.is_anticommutating() {
                 continue;
             }
             adj_map
@@ -2427,7 +2427,7 @@ impl ProcessDefinition {
             .iter()
             .map(|e| {
                 let p = model.get_particle_from_pdg(e.data.pdg);
-                !(p.0.is_fermion() || p.0.is_ghost())
+                !p.0.is_anticommutating()
             })
             .collect();
         let mut new_edges: AHashMap<usize, (usize, usize, bool, EdgeColor)> = AHashMap::default();
@@ -2593,10 +2593,10 @@ impl ProcessDefinition {
                         }
                     }
                 }
-                if external_tag_to_consider > 0 && starting_particle.0.is_fermion() {
+                if external_tag_to_consider > 0 && starting_particle.0.is_anticommutating() {
                     if connected_leg_ids.len() != 2 {
                         return Err(FeynGenError::GenericError(
-                            "External fermion flow must have exactly two legs".to_string(),
+                            "External anticommutating flow must have exactly two legs".to_string(),
                         ));
                     }
                     let connected_leg_ids_vec =
@@ -2628,10 +2628,10 @@ impl ProcessDefinition {
                         .collect::<Vec<_>>();
                     if connected_leg_pdgs
                         .iter()
-                        .any(|particle| !particle.0.is_fermion())
+                        .any(|particle| !particle.0.is_anticommutating())
                     {
                         return Err(FeynGenError::GenericError(
-                            "External fermion flow must connect two fermions".to_string(),
+                            "External anticommutating flow must connect two anticommutating particles".to_string(),
                         ));
                     }
                     if connected_leg_pdgs[0].0.is_antiparticle()
@@ -2650,7 +2650,7 @@ impl ProcessDefinition {
                             .push((connected_leg_ids_vec[1], connected_leg_ids_vec[0]));
                     } else {
                         return Err(FeynGenError::GenericError(
-                            "External fermion flow must connect a fermion and an anti-fermion. GammaLoop has no support for Majorana particles yet.".to_string(),
+                            "External anticommutating flow must connect a particle and an antiparticle. GammaLoop has no support for Majorana particles yet.".to_string(),
                         ));
                     }
                 }
@@ -2681,7 +2681,7 @@ impl ProcessDefinition {
             let this_edge_particle = model.get_particle_from_pdg(e.data.pdg);
             if is_a_virtual_edge
                 && this_edge_particle.0.is_antiparticle()
-                && !(this_edge_particle.0.is_fermion() || this_edge_particle.0.is_ghost())
+                && !this_edge_particle.0.is_anticommutating()
             {
                 new_edges.insert(
                     i_e,
@@ -2708,18 +2708,22 @@ impl ProcessDefinition {
         Ok((normalized_graph, external_fermion_flow_sign == -1))
     }
 
-    // Note, this function will not work as intended with four-fermion vertices, and only aggregated self-loops or fermion-loops not involving four-femion vertices
-    pub(crate) fn count_closed_fermion_loops(
+    // Note, this function will not work as intended with four-fermion vertices, and only aggregated self-loops or fermion-loops not involving four-femion vertices.
+    // Fermions and ghosts share the same closed-chain statistics and loop filter.
+    pub(crate) fn count_closed_anticommutating_loops(
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
     ) -> Result<usize, FeynGenError> {
         let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
+        let mut vetoed_edges = vec![true; graph.edges().len()];
         for (i_e, e) in graph.edges().iter().enumerate() {
-            // Build an adjacency list including only fermions
-            if !model.get_particle_from_pdg(e.data.pdg).0.is_fermion() {
+            // Build an adjacency list including only anticommutating edges.
+            let particle = model.get_particle_from_pdg(e.data.pdg);
+            if !particle.0.is_anticommutating() {
                 continue;
             }
+            vetoed_edges[i_e] = false;
             adj_map
                 .entry(e.vertices.0)
                 .or_default()
@@ -2732,12 +2736,7 @@ impl ProcessDefinition {
             }
         }
 
-        let mut vetoed_edges: Vec<bool> = graph
-            .edges()
-            .iter()
-            .map(|e| !model.get_particle_from_pdg(e.data.pdg).0.is_fermion())
-            .collect();
-        let mut n_fermion_loops = 0;
+        let mut n_anticommutating_loops = 0;
         for (i_e, e) in graph.edges().iter().enumerate() {
             if vetoed_edges[i_e] {
                 continue;
@@ -2748,10 +2747,10 @@ impl ProcessDefinition {
             let (_, right_trail_end) =
                 follow_chain(e.vertices.1, &mut vetoed_edges, &adj_map, false)?;
             if left_trail_end == right_trail_end {
-                n_fermion_loops += 1;
+                n_anticommutating_loops += 1;
             }
         }
-        Ok(n_fermion_loops)
+        Ok(n_anticommutating_loops)
     }
 
     #[instrument(skip_all)]
@@ -3446,28 +3445,31 @@ impl ProcessDefinition {
         );
         last_step = step;
 
-        let fermion_loop_count_range_filter = filters.get_fermion_loop_count_range();
+        let anticommutating_loop_count_range_filter =
+            filters.get_anticommutating_loop_count_range();
         let bar = ProgressBar::new(processed_graphs.len() as u64);
         bar.set_style(progress_bar_style.clone());
         bar.set_message(
-            "Analyzing closed fermion chains to capture antisymmetry and apply fermion filters...",
+            "Analyzing closed anticommutating chains to capture antisymmetry and apply loop filters...",
         );
         processed_graphs = pool.install(|| {
             processed_graphs
                 .iter()
                 .filter_map(|(g, symmetry_factor)| {
-                    match self.count_closed_fermion_loops(g, model) {
-                        Ok(n_closed_fermion_loops) => {
-                            let new_symmetry_factor = if n_closed_fermion_loops % 2 == 1 {
+                    match self.count_closed_anticommutating_loops(g, model) {
+                        Ok(n_closed_anticommutating_loops) => {
+                            let new_symmetry_factor = if n_closed_anticommutating_loops % 2 == 1 {
                                 function!(symbol!("InternalFermionLoopSign"), -1) * symmetry_factor
                             } else {
                                 symmetry_factor.clone()
                             };
-                            if let Some((min_n_fermion_loops, max_n_fermion_loops)) =
-                                fermion_loop_count_range_filter
+                            if let Some((
+                                min_n_anticommutating_loops,
+                                max_n_anticommutating_loops,
+                            )) = anticommutating_loop_count_range_filter
                             {
-                                if n_closed_fermion_loops >= min_n_fermion_loops
-                                    && n_closed_fermion_loops <= max_n_fermion_loops
+                                if n_closed_anticommutating_loops >= min_n_anticommutating_loops
+                                    && n_closed_anticommutating_loops <= max_n_anticommutating_loops
                                 {
                                     Some(Ok((g.clone(), new_symmetry_factor)))
                                 } else {
@@ -3490,7 +3492,7 @@ impl ProcessDefinition {
                 .blue()
                 .bold(),
             format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
-            "Number of graphs after closed fermion chains analysis:",
+            "Number of graphs after closed anticommutating chains analysis:",
             format!("{}", processed_graphs.len()).green()
         );
         last_step = step;
@@ -3596,6 +3598,16 @@ impl ProcessDefinition {
             last_step = step;
         }
 
+        if self.generation_type == GenerationType::CrossSection && self.symmetrize_left_right_states
+        {
+            model.validate_cp_symmetrization(processed_graphs.iter().flat_map(|(graph, _)| {
+                graph
+                    .nodes()
+                    .iter()
+                    .map(|node| node.data.vertex_rule.0.as_ref())
+            }))?;
+        }
+
         // Because of the interplay with the cutkosky cut filter and left-right canonization when using symmetrize_left_right_states
         // we must do to canonicalizations here and we will select the "smallest one"
         let mut node_colors_for_canonicalization: HashMap<i32, i32> = HashMap::default();
@@ -3647,7 +3659,7 @@ impl ProcessDefinition {
                                     self.initial_pdgs[initial_color - 1] as isize,
                                 )
                                 .0
-                                .is_fermion()
+                                .is_anticommutating()
                                 || self.allow_symmetrization_of_external_fermions_in_amplitudes
                             {
                                 node_colors_for_canonicalization.insert(initial_color as i32, -1);
@@ -3663,7 +3675,7 @@ impl ProcessDefinition {
                                         as isize,
                                 )
                                 .0
-                                .is_fermion()
+                                .is_anticommutating()
                                 || self.allow_symmetrization_of_external_fermions_in_amplitudes
                             {
                                 node_colors_for_canonicalization.insert(final_color as i32, -1);
@@ -3677,7 +3689,7 @@ impl ProcessDefinition {
                                     self.initial_pdgs[initial_color - 1] as isize,
                                 )
                                 .0
-                                .is_fermion()
+                                .is_anticommutating()
                                 || self.allow_symmetrization_of_external_fermions_in_amplitudes
                             {
                                 node_colors_for_canonicalization.insert(initial_color as i32, -2);
@@ -3695,7 +3707,7 @@ impl ProcessDefinition {
                                         as isize,
                                 )
                                 .0
-                                .is_fermion()
+                                .is_anticommutating()
                                 || self.allow_symmetrization_of_external_fermions_in_amplitudes
                             {
                                 node_colors_for_canonicalization.insert(final_color as i32, -3);
@@ -3709,7 +3721,7 @@ impl ProcessDefinition {
                                     self.initial_pdgs[initial_color - 1] as isize,
                                 )
                                 .0
-                                .is_fermion()
+                                .is_anticommutating()
                                 || self.allow_symmetrization_of_external_fermions_in_amplitudes
                             {
                                 node_colors_for_canonicalization.insert(initial_color as i32, -2);
@@ -3725,7 +3737,7 @@ impl ProcessDefinition {
                                         as isize,
                                 )
                                 .0
-                                .is_fermion()
+                                .is_anticommutating()
                                 || self.allow_symmetrization_of_external_fermions_in_amplitudes
                             {
                                 node_colors_for_canonicalization.insert(final_color as i32, -3);
@@ -3862,7 +3874,10 @@ impl ProcessDefinition {
                             Atom::num(1)
                         }
                     } else {
-                        self.cross_section_external_fermion_ordering_sign(&mut bare_graph, model)?
+                        self.cross_section_external_anticommutating_ordering_sign(
+                            &mut bare_graph,
+                            model,
+                        )?
                     };
 
                     bare_graph.global_data.overall_factor =
@@ -4569,25 +4584,25 @@ impl ProcessDefinition {
         res
     }
 
-    fn cross_section_external_fermion_ordering_sign(
+    fn cross_section_external_anticommutating_ordering_sign(
         &self,
         graph: &mut ParseGraph,
         model: &Model,
     ) -> Result<Atom> {
-        let n_external_fermion_loops = graph.n_external_fermion_loops()?;
+        let n_external_anticommutating_loops = graph.n_external_anticommutating_loops()?;
 
-        let number_of_initial_antifermions = self
+        let number_of_initial_antiparticles = self
             .initial_pdgs
             .iter()
             .filter(|&pdg| {
                 let p = model.get_particle_from_pdg(*pdg as isize);
 
-                p.0.is_antiparticle() && p.0.is_fermion()
+                p.0.is_antiparticle() && p.0.is_anticommutating()
             })
             .count();
 
-        let sign = Sign::Negative.pow(n_external_fermion_loops);
-        let antifermion_spinsum_sign = Sign::Negative.pow(number_of_initial_antifermions);
+        let sign = Sign::Negative.pow(n_external_anticommutating_loops);
+        let antifermion_spinsum_sign = Sign::Negative.pow(number_of_initial_antiparticles);
 
         Ok(function!(
             symbol!("ExternalFermionOrderingSign"),

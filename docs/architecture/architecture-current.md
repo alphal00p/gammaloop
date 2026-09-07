@@ -261,8 +261,9 @@ localizing factor remains inert under subsequent Taylor operations.
 The shared CFF core also returns its connected-loop and pure
 duplicate-denominator global sign as typed metadata. GammaLoop consumes that
 bridge exactly once for root, reduced, and exact production CFF sources,
-cancelling the shared-core-local uniform convention and retaining GammaLoop's
-established complete-integrand convention.
+cancelling the shared-core-local uniform convention before the physical
+Minkowski measure `i^L/(2*pi)^(3L)` is applied. Integrated UV addbacks use the
+same convention, with additional Vakint normalization `1`.
 The NLO acceptance layer independently generates orientation-local direct 3D,
 explicit-sum direct 3D, and projected local 4D with local and integrated UV and
 threshold counterterms. It compares complete GL0/GL2 values at a common native-
@@ -277,14 +278,28 @@ Direct-photon benchmarks use the off-shell spin projector `-g^(mu nu)` and no
 picobarn conversion. The inclusive lepton-process targets instead use the
 Eq. (7.1) normalization `2(4 pi alpha)/(3 Ecm^3)` and the conversion to picobarns;
 individual lepton-process graph components are not assigned the unconverted
-published photon targets. Existing signed-component and magnitude tests retain
-the current phase conventions. Resolving the overall phase and the unfinished
-right-hand-side cut conjugation is separate work. Current validation results
-and measured timings belong in the accompanying test evidence and PR.
+published photon targets. Acceptances require positive real LO and the signed
+real NLO correction, checking the imaginary component separately. Diagram
+contributions can have either real sign. Current validation results and
+measured timings belong in the accompanying test evidence and PR.
+
+The raw forward graph already contains inverse-process UFO vertices with their
+Hermitian-partner spin structures and couplings. An additional RHS numerator
+adjoint would conjugate those structures a second time. Marking vertices and
+virtual propagators, together with the reversed RHS virtual contours, instead
+gives `(-1)^C_R`, with boundary hairs retained in the RHS component count. The
+complete LU residue factor is `2*pi*i*(-1)^C_R`, hence `-2*pi*i` for connected
+RHS, while retaining the cut propagator numerators exactly once. Bare, local
+and integrated UV, and threshold branches use this same cut-group factor.
+Runtime subtracts threshold helpers with left `-i*pi` and right `+i*pi`
+integrated coefficients; iterated terms use their product. See
+[phase conventions and the independent conjugation audit](phase-conventions.md)
+for the cut-line `i` cancellation, intrinsic complex CKM phases, and the
+unsupported complex-mass-scheme boundary. There are no conjugation modes.
 
 The scalar local-equivalence matrix is generated from the scalar model rather
-than from hand-built graph data. Its unit-numerator lanes remain unchanged after
-generation, companion probes use only Feynman-rule-local edge factors, and
+than from hand-built graph data. Its lanes without an additional numerator
+retain the full UFO Feynman rules; companion probes use only Feynman-rule-local edge factors, and
 there is no graph-specific production branch. The matrix enables local UV,
 integrated UV and threshold counterterms while comparing all three local-UV
 routes, including native-Arb checks. `just test_LU_scalar_xs` includes the slow

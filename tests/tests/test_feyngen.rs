@@ -660,7 +660,7 @@ fn amplitude_standalone_export_reloads_and_evaluates() -> Result<()> {
         true,
     )?;
     cli.run_command("set global kv global.generation.evaluator.store_atom=true")?;
-    cli.run_command("generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i archive_eval --global-prefactor-num '1𝑖'")?;
+    cli.run_command("generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i archive_eval")?;
     cli.run_command("generate")?;
 
     cli.state.process_list.export_standalone(
@@ -1198,11 +1198,53 @@ fn test_generate_sm_full_a_ddx() -> Result<()> {
 #[test]
 #[rustfmt::skip]
 fn test_vacuum_amplitude_kaapo() -> Result<()> {
+    use linnet::half_edge::subgraph::{Inclusion, SuBitGraph};
+    use std::collections::BTreeMap;
+
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
     cli.run_command("import model sm-default.json")?;
 
     // 4-loop vaccuum contribution to the neutron start equation of state
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --number-of-fermion-loops 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",false)?,@"52 | -44/3 = -44/3");
+    let description = feyngen_str(&mut cli, "amp", "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --number-of-anticommutating-loops 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",false)?;
+    let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection else {
+        panic!("expected a vacuum amplitude inventory");
+    };
+    let mut histogram = BTreeMap::<(usize, usize), (usize, Atom)>::new();
+    let mut old_count = 0;
+    let mut old_sum = Atom::Zero;
+    for amplitude_graph in &amplitudes.values().next().unwrap().graphs {
+        let graph = &amplitude_graph.graph;
+        let fermions: SuBitGraph = graph.underlying.from_filter(|edge| edge.particle.is_fermion());
+        let ghosts: SuBitGraph = graph.underlying.from_filter(|edge| {
+            edge.particle.is_anticommutating() && !edge.particle.is_fermion()
+        });
+        // These QCD species form disjoint closed chains, so cycle rank counts loops.
+        for subset in [&fermions, &ghosts] {
+            for (_, neighbors, _) in graph.underlying.iter_nodes_of(subset) {
+                assert_eq!(neighbors.filter(|hedge| subset.includes(hedge)).count(), 2);
+            }
+        }
+        let f = graph.underlying.cyclotomatic_number(&fermions);
+        let g = graph.underlying.cyclotomatic_number(&ghosts);
+        assert!(f + g >= 1);
+        let weight = evaluate_overall_factor(graph.overall_factor.as_view());
+        let bucket = histogram.entry((f, g)).or_insert((0, Atom::Zero));
+        bucket.0 += 1;
+        bucket.1 += &weight;
+        // Undo only the new ghost statistics sign and restore the old F >= 1 filter.
+        // OnlyDetectZeroes does not merge nonzero numerators; UUV1 signs cannot alter zeros.
+        if f > 0 {
+            old_count += 1;
+            old_sum += weight * Atom::num(-1).pow(g as i64);
+        }
+    }
+    for ((f, g), (count, sum)) in histogram {
+        println!("Kaapo F={f}, G={g}: {count} graphs, signed sum {sum}");
+    }
+    println!("Kaapo aggregate: {description}");
+    assert_eq!(old_count, 52);
+    assert_eq!(old_sum, Atom::num((-44, 3)));
+    assert_snapshot!(description,@"91 | -25/3 = -25/3");
 
     Ok(())
 }

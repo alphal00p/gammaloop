@@ -666,9 +666,10 @@ fn run_scalar_3l_cross_section_case_impl(
             .filter(|(owner, _)| *owner == edge.0)
             .fold(Atom::one(), |product, (_, factor)| product * factor);
         let original = &graph.underlying[edge].num.value;
-        let coefficient = (original / &expected).expand();
+        let coefficient = original / &expected;
         // Check the stored original owner, not just the requested probe label.
         // Its Lorentz square(s) may carry a momentum-independent source factor.
+        // Cancel only matching factors; keep the stored numerator unexpanded.
         if coefficient.is_zero()
             || [GS.emr_mom, GS.loop_mom, GS.external_mom]
                 .into_iter()
@@ -677,7 +678,7 @@ fn run_scalar_3l_cross_section_case_impl(
         {
             return Ok(false);
         }
-        assert!((original - &expected * coefficient).expand().is_zero());
+        assert_eq!(original, &(&expected * coefficient));
         let parsed = graph.to_three_d_parsed_graph()?;
         let edge_map = graph
             .energy_edge_index_map(&parsed)

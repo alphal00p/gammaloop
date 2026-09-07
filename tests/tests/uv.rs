@@ -1805,7 +1805,7 @@ fn dod0_bubble_uv() {
         shifted_mu_r: 0.8,
         skip_uv_profile: true,
         targets: IntegratedUvTargets {
-            integrated: Some(Complex::new(F(0.0), F(0.01451155120018305))),
+            integrated: Some(Complex::new(F(0.0), F(-0.01451155120018305))),
         },
         integrated_ct_relative_error_limit: None,
         check_mu_r_dependence: true,
@@ -1828,7 +1828,7 @@ fn dod1_bubble_uv() {
         shifted_mu_r: 0.8,
         skip_uv_profile: true,
         targets: IntegratedUvTargets {
-            integrated: Some(Complex::new(F(0.0), F(0.003628430563793077))),
+            integrated: Some(Complex::new(F(0.0), F(-0.003628430563793077))),
         },
         integrated_ct_relative_error_limit: None,
         check_mu_r_dependence: true,
@@ -1851,7 +1851,7 @@ fn dod2_bubble_uv() {
         shifted_mu_r: 0.8,
         skip_uv_profile: true,
         targets: IntegratedUvTargets {
-            integrated: Some(Complex::new(F(0.0), F(0.01234018404957018))),
+            integrated: Some(Complex::new(F(0.0), F(-0.01234018404957018))),
         },
         integrated_ct_relative_error_limit: None,
         check_mu_r_dependence: true,
@@ -1874,7 +1874,7 @@ fn se1l_uv() {
         shifted_mu_r: 0.8,
         skip_uv_profile: false,
         targets: IntegratedUvTargets {
-            integrated: Some(Complex::new(F(13169.321086130927), F(56907.637709852635))),
+            integrated: Some(Complex::new(F(-13169.321086130927), F(-56907.637709852635))),
         },
         integrated_ct_relative_error_limit: None,
         check_mu_r_dependence: true,

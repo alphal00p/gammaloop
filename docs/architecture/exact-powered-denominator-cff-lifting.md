@@ -712,8 +712,8 @@ At the rational sample
 \]
 
 with $M=0$, physical masses one on edges 0 and 8 and zero on every other
-edge, and all graph numerator factors one except $(Q_5^0)^2$, the complete isolated `T2` contour evaluates in GammaLoop's
-normalization to
+edge, and all graph numerator factors one except $(Q_5^0)^2$, the complete
+isolated `T2` contour was recorded in the former production phase convention as
 
 \[
  -1.8354223786936939047533107951846543304391732719501496
@@ -747,8 +747,12 @@ factors. Its target source-frame coefficient is
 \]
 
 For generalized and ordinary public components, the signed contour is
-$J_c=\beta_c G_c$, using $dq^0/(2\pi i)$ for each loop. Internal pure-CFF
-catalogues retain their native orientation normalization, distinguished below.
+$J_c=\beta_c G_c$, using $dq^0/(2\pi i)$ for each loop. The physical
+Minkowski amplitude uses $i^{L_c}J_c/(2\pi)^{3L_c}$, including the vertex and
+propagator numerator factors of its model. The former $(-i)^{L_c}$ production
+factor is superseded; the real source-frame conversion described here is
+unchanged. Internal pure-CFF catalogues retain their native orientation
+normalization, distinguished below.
 Here $N_c$ counts denominator occurrences and $B_{\mathrm{den},c}$ is the
 numerator-bound-independent scalar denominator frame. The generalized core
 sign is already encoded in its Laurent functional; multiplying it again
@@ -1610,7 +1614,8 @@ and verifies the complete orientation sum
 
 \]
 
-in GammaLoop's production normalization. No signature-derived incidence bridge
+in GammaLoop's physical production normalization, including the typed
+source-frame bridge. No signature-derived incidence bridge
 is needed: source routing and numerator sign restoration are handled at their
 proper layers.
 
@@ -1682,10 +1687,10 @@ For every order it verifies:
 - canonical ParsedGraph and bare CFF orientation sums independent of input
   factor order;
 - the analytic cubic-pole production contour
-  \(3i/(128\pi^3E^5)\);
+  \(-3i/(128\pi^3E^5)\);
 - factorized quadratic bounds `(1,1)`;
 - the correct lower-sector parity for a `q_0^2` numerator,
-  \(-i/(128\pi^3E^3)\); and
+  \(+i/(128\pi^3E^3)\); and
 - the temporal/spatial cancellation of a full `q^2` numerator.
 
 The mirrored fixture

@@ -71,7 +71,7 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
         uv.renormalization_prescription.massless_power_divergent = ApproximationType::MUV;
         uv.renormalization_prescription.overrides.clear();
         uv.vakint.normalization = "MSbar".to_string();
-        uv.vakint.additional_normalization = "-1".to_string();
+        uv.vakint.additional_normalization = "1".to_string();
         uv.vakint.form_exe_path = which("form")?.display().to_string();
     }
     cli.default_runtime_settings
@@ -133,7 +133,7 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
             r#"generate xs a > t t~ | a t t~ g ghG ghG~ QCD^2==2 QED^2==2 [{{{{2}}}} QCD=1]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p {process} -i {NLO} --global-prefactor-num "-1𝑖/2" --only-diagrams"#,
+                -p {process} -i {NLO} --global-prefactor-num "1/2" --only-diagrams"#,
         ))?;
         cli.run_command(&format!("generate existing -p {process} -i {NLO}"))?;
 
@@ -176,12 +176,12 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
     }
     .run(&mut cli.state)?;
     assert!(
-        lo_probe.im < 0.0 && lo_probe.re.abs() <= 1.0e-12 * lo_probe.im.abs(),
-        "the direct-current LO convention must be purely negative imaginary, got {lo_probe:e}",
+        lo_probe.re > 0.0 && lo_probe.im.abs() <= 1.0e-12 * lo_probe.re,
+        "the direct-current LO must be positive and real, got {lo_probe:e}",
     );
     cli.run_command(&format!(
         r#"set process -p {LO_PROCESS} -i {LO} kv
-            integrator.integrated_phase="imag"
+            integrator.integrated_phase="real"
             integrator.min_samples_for_update=5000
             integrator.n_start=5000
             integrator.n_increase=5000
@@ -207,10 +207,18 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
     let lo_estimate = lo_output
         .single_slot_integral()
         .ok_or_else(|| eyre!("expected one direct-current LO integration slot"))?;
-    let lo_value = -lo_estimate.result.im.0;
-    let lo_error = lo_estimate.error.im.0.abs();
+    let lo_value = lo_estimate.result.re.0;
+    let lo_error = lo_estimate.error.re.0.abs();
     assert!(
-        lo_error / lo_value <= 0.05,
+        lo_estimate.result.im.0.abs()
+            <= 3.0 * lo_estimate.error.im.0.abs() + 1.0e-12 * PUBLISHED_LO
+            && lo_estimate.error.im.0.abs() <= 0.05 * PUBLISHED_LO,
+        "direct-current LO must have a vanishing imaginary component: {:e} ± {:e}",
+        lo_estimate.result,
+        lo_estimate.error,
+    );
+    assert!(
+        lo_value > 0.0 && lo_error / lo_value <= 0.05,
         "direct-current LO uncertainty is too large: {lo_value:e} ± {lo_error:e}",
     );
     assert!(
@@ -336,6 +344,8 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
     // below remains the inclusive NLO acceptance.
     let graph_process = NLO_PROCESS;
     let mut graph_estimates = BTreeMap::new();
+    let mut imaginary_sum = 0.0;
+    let mut imaginary_variance = 0.0;
     for (graph_index, graph) in ["GL0", "GL2"].into_iter().enumerate() {
         cli.run_command(&format!(
             r#"set process -p {graph_process} -i {NLO} kv
@@ -372,6 +382,15 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
         let estimate = output
             .single_slot_integral()
             .ok_or_else(|| eyre!("expected one direct-current {graph} integration slot"))?;
+        assert!(
+            estimate.result.im.0.abs() <= 3.0 * estimate.error.im.0.abs() + 1.0e-12 * PUBLISHED_NLO
+                && estimate.error.im.0.abs() <= 0.15 * PUBLISHED_NLO,
+            "{graph} must have a vanishing imaginary component: {:e} ± {:e}",
+            estimate.result,
+            estimate.error,
+        );
+        imaginary_sum += estimate.result.im.0;
+        imaginary_variance += estimate.error.im.0.powi(2);
         let value = estimate.result.re.0;
         let error = estimate.error.re.0.abs();
         graph_estimates.insert(graph, (value, error));
@@ -387,6 +406,11 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
             "{graph} mismatch: {value:e} ± {error:e}, published={target:e}",
         );
     }
+    assert!(
+        imaginary_sum.abs() <= 3.0 * imaginary_variance.sqrt() + 1.0e-12 * PUBLISHED_NLO,
+        "the inclusive NLO imaginary component must vanish: {imaginary_sum:e} ± {:e}",
+        imaginary_variance.sqrt(),
+    );
     let graph_sum = graph_estimates
         .values()
         .map(|(value, _)| value)

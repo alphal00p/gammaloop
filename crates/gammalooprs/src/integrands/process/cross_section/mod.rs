@@ -130,6 +130,8 @@ pub struct CrossSectionIntegrandData {
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
     pub graph_to_group_id: Vec<usize>,
     pub explicit_orientation_sum_only: bool,
+    /// Frozen graph-generation assumption, revalidated after model updates.
+    pub symmetrize_left_right_states: bool,
     // pub builder_cache: ParamBuilder<f64>,
 }
 
@@ -215,6 +217,7 @@ impl CrossSectionIntegrand {
                 graph_group_structure,
                 graph_to_group_id,
                 explicit_orientation_sum_only: self.data.explicit_orientation_sum_only,
+                symmetrize_left_right_states: self.data.symmetrize_left_right_states,
             },
             event_processing_runtime: RuntimeCache::default(),
             active_f64_backend: self.active_f64_backend.clone(),
@@ -455,6 +458,13 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
     }
 
     fn warm_up(&mut self, model: &Model) -> Result<()> {
+        if self.data.symmetrize_left_right_states {
+            model.validate_cp_symmetrization(self.data.graph_terms.iter().flat_map(|term| {
+                term.graph.iter_nodes().filter_map(|(_, _, vertex)| {
+                    vertex.vertex_rule.as_ref().map(|rule| rule.0.as_ref())
+                })
+            }))?;
+        }
         validate_process_runtime_settings(&self.settings, self.data.explicit_orientation_sum_only)?;
 
         self.data.rotations = Some(
@@ -1350,6 +1360,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     }
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
+        self.graph.validate_real_masses(model)?;
         self.estimated_scale = Some(
             self.graph
                 .expected_scale(F(settings.kinematics.e_cm), model),
