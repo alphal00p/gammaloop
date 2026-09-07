@@ -1399,19 +1399,6 @@ impl<T: FloatLike> ParamBuilder<T> {
         )
         .unwrap();
         new.add_function(
-            GS.tanh,
-            vec![symbol!("x")],
-            // Thermal arguments are real, but selecting by Re(x) also preserves
-            // complex tanh. Only bounded exponentials reach the chosen branch;
-            // both branches retain the analytic value and derivatives at x=0.
-            Symbol::IF.call_args([
-                parse_lit!(x + conj(x) + abs(x + conj(x))),
-                parse_lit!((1 - exp(-2 * x)) / (1 + exp(-2 * x))),
-                parse_lit!((exp(2 * x) - 1) / (exp(2 * x) + 1)),
-            ]),
-        )
-        .unwrap();
-        new.add_function(
             GS.heaviside,
             vec![symbol!("x")],
             parse_lit!((1 + x / abs(x)) / 2),
@@ -1948,8 +1935,10 @@ mod tests {
         )
         .unwrap();
         let argument = Atom::var(symbol!("thermal_tanh_argument"));
-        let evaluator = GS
-            .tanh(argument.clone())
+        // Thermal arguments are real, but native tanh must also preserve complex
+        // values and remain finite at UV scales, with analytic derivatives at x=0.
+        let evaluator = symbolica::transcendental::tanh()
+            .call_args([argument.clone()])
             .evaluator(std::slice::from_ref(&argument))
             .function_map(graph.param_builder.fn_map.clone())
             .build()
