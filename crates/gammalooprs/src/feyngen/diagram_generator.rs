@@ -23,7 +23,6 @@ use spenso::structure::{PermutedStructure, TensorStructure};
 use spenso::tensors::data::DataTensor;
 use spenso::tensors::parametric::ParamTensor;
 use spenso_hep_lib::{gamma_data_weyl, gamma5_weyl_data, proj_m_data_weyl, proj_p_data_weyl};
-use std::collections::hash_map::Entry;
 use std::collections::{HashSet, VecDeque};
 
 use std::ops::{Deref, RangeInclusive};
@@ -39,7 +38,7 @@ use symbolica::function;
 use symbolica::graph::{GenerationSettings, HalfEdge};
 use symbolica::id::Replacement;
 
-use tracing::{error, event_enabled, info, instrument};
+use tracing::{error, info, instrument};
 
 use ahash::AHashMap;
 use ahash::AHashSet;
@@ -107,6 +106,10 @@ use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 const CANONIZE_GRAPH_FLOWS: bool = true;
 const ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL: bool = true;
 const EXPAND_NUMERICAL_SAMPLES_BEFORE_COMPARISON: bool = false;
+
+#[cfg(test)]
+mod lookup_tests;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeColorWithVertexRule {
     pub external_tag: i32,
@@ -2726,6 +2729,51 @@ impl ProcessDefinition {
         Ok(n_anticommutating_loops)
     }
 
+    pub(crate) fn may_filter_covariant_partners(&self, model: &Model) -> bool {
+        !self.covariant_cut_representatives(model).is_empty()
+            && (self.selected_graphs.is_some()
+                || self
+                    .vetoed_graphs
+                    .as_ref()
+                    .is_some_and(|graphs| !graphs.is_empty())
+                || self
+                    .amplitude_filters
+                    .0
+                    .iter()
+                    .chain(&self.cross_section_filters.0)
+                    .any(|filter| match filter {
+                        // Complete perturbative orders retain their partner sum;
+                        // selecting diagrams within an order need not do so.
+                        FeynGenFilter::CouplingOrders(_)
+                        | FeynGenFilter::LoopCountRange(_)
+                        | FeynGenFilter::PerturbativeOrders(_) => false,
+                        FeynGenFilter::VertexAllow(_) => true,
+                        FeynGenFilter::VertexVeto(vertices) => !vertices.is_empty(),
+                        FeynGenFilter::ParticleVeto(particles) => !particles.is_empty(),
+                        FeynGenFilter::AnticommutatingLoopCountRange((min, max))
+                        | FeynGenFilter::FactorizedLoopTopologiesCountRange((min, max)) => {
+                            *min != 0 || *max != usize::MAX
+                        }
+                        FeynGenFilter::BlobRange(range) | FeynGenFilter::SpectatorRange(range) => {
+                            *range.start() != 0 || *range.end() != usize::MAX
+                        }
+                        FeynGenFilter::MaxNumberOfBridges(max) => *max != usize::MAX,
+                        FeynGenFilter::SelfEnergyFilter(options) => {
+                            options.veto_self_energy_of_massive_lines
+                                || options.veto_self_energy_of_massless_lines
+                        }
+                        FeynGenFilter::TadpolesFilter(options) => {
+                            options.veto_tadpoles_attached_to_massive_lines
+                                || options.veto_tadpoles_attached_to_massless_lines
+                        }
+                        FeynGenFilter::ZeroSnailsFilter(options) => {
+                            options.veto_snails_attached_to_massive_lines
+                                || options.veto_snails_attached_to_massless_lines
+                        }
+                        FeynGenFilter::SewedFilter(options) => options.filter_tadpoles,
+                    }))
+    }
+
     #[instrument(skip_all)]
     pub fn generate(
         &self,
@@ -2741,21 +2789,7 @@ impl ProcessDefinition {
         covariant.final_pdgs_lists = self
             .covariant_cut_states(model)
             .map_err(|error| FeynGenError::GenericError(error.to_string()))?;
-        if !self.covariant_cut_representatives(model).is_empty()
-            && (self.selected_graphs.is_some()
-                || self.vetoed_graphs.is_some()
-                || self
-                    .amplitude_filters
-                    .0
-                    .iter()
-                    .chain(&self.cross_section_filters.0)
-                    .any(|filter| {
-                        matches!(
-                            filter,
-                            FeynGenFilter::VertexAllow(_) | FeynGenFilter::VertexVeto(_)
-                        )
-                    }))
-        {
+        if self.may_filter_covariant_partners(model) {
             warn!(
                 "The requested physical-vector sector includes its covariant cut states, but vertex/diagram selection may retain a gauge-dependent subset; physical polarization completeness requires the full partner graph sum"
             );
@@ -3905,13 +3939,14 @@ impl ProcessDefinition {
         let n_zeroes_color = Arc::new(Mutex::new(0));
         let n_zeroes_lorentz = Arc::new(Mutex::new(0));
         let n_groupings = Arc::new(Mutex::new(0));
-        // the pooled bare graphs have keys being the skeletton graphs identifying the topology
+        // The pooled bare graphs are keyed by skeleton topology. Only bucket
+        // lookup holds the global lock; independent topologies compare in parallel.
         #[allow(clippy::type_complexity)]
         let pooled_bare_graphs: Arc<
             Mutex<
                 HashMap<
                     SymbolicaGraph<NodeColorWithoutVertexRule, std::string::String>,
-                    Vec<Vec<PooledGraphData>>,
+                    Arc<Mutex<Vec<Vec<PooledGraphData>>>>,
                 >,
             >,
         > = Arc::new(Mutex::new(HashMap::default()));
@@ -4029,11 +4064,11 @@ impl ProcessDefinition {
                         // );
                         // When disabling numerator-aware graph isomorphism, each graph is added separately
 
-                        let pooled_graph = PooledGraphData {
+                        let mut pooled_graph = PooledGraphData {
                             graph_id: i_g,
                             numerator_data: None,
                             ratio: Atom::num(1),
-                            bare_graph:canonized_fermion_flow_bare_graph.clone(),
+                            bare_graph: canonized_fermion_flow_bare_graph,
                         };
                         if abort_requested.load(Ordering::Relaxed) {
                             return Ok(());
@@ -4047,15 +4082,10 @@ impl ProcessDefinition {
                             NumeratorAwareGraphGroupingOption::NoGrouping
                         ) {
                             {
-                                let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
-                                match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
-                                    Entry::Vacant(entry) => {
-                                        entry.insert(vec![vec![pooled_graph]]);
-                                    }
-                                    Entry::Occupied(mut entry) => {
-                                        entry.get_mut().push(vec![pooled_graph]);
-                                    }
-                                }
+                                let bucket = pooled_bare_graphs_clone.lock().unwrap()
+                                    .entry(canonical_graph.canonized_graph.clone())
+                                    .or_default().clone();
+                                bucket.lock().unwrap().push(vec![pooled_graph]);
                             }
                         } else {
                             // println!("Processing graph #{}...", i_g);
@@ -4104,15 +4134,10 @@ impl ProcessDefinition {
                                 NumeratorAwareGraphGroupingOption::OnlyDetectZeroes
                             ) {
                                 {
-                                    let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
-                                    match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
-                                        Entry::Vacant(entry) => {
-                                            entry.insert(vec![vec![pooled_graph]]);
-                                        }
-                                        Entry::Occupied(mut entry) => {
-                                            entry.get_mut().push(vec![pooled_graph]);
-                                        }
-                                    }
+                                    let bucket = pooled_bare_graphs_clone.lock().unwrap()
+                                        .entry(canonical_graph.canonized_graph.clone())
+                                        .or_default().clone();
+                                    bucket.lock().unwrap().push(vec![pooled_graph]);
                                 }
                             } else {
 
@@ -4163,64 +4188,40 @@ impl ProcessDefinition {
                                     }
 
                                 // println!("Skeletton G#{}:\n{}", i_g, canonical_repr.to_dot());
-                                {
-                                    let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
-
-                                    match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
-                                        Entry::Vacant(entry) => {
-                                            entry.insert(vec![vec![
-                                                PooledGraphData {
-                                                    graph_id: i_g,
-                                                    numerator_data,
-                                                    ratio: Atom::num(1),
-                                                    bare_graph: canonized_fermion_flow_bare_graph,
-                                                }
-                                                ]]);
-                                        }
-                                        Entry::Occupied(mut entry) => {
-
-                                            let match_found = entry.get().iter().enumerate().find_map(|(i_entry, pooled_graphs_lists_for_this_topology)| {
-                                                let reference_pooled_graph_data = &pooled_graphs_lists_for_this_topology[0];
-                                                Self::compare_numerator_tensors(
-                                                    &self.numerator_grouping,
-                                                    numerator_data.as_ref().unwrap(),
-                                                    reference_pooled_graph_data.numerator_data.as_ref().unwrap(),
-                                                ).map(|ratio| {
-                                                    (i_entry, PooledGraphData {
-                                                        graph_id: i_g,
-                                                        numerator_data: None,
-                                                        ratio,
-                                                        bare_graph: canonized_fermion_flow_bare_graph.clone(),
-                                                    })
-                                                })
-                                            });
-                                            if let Some((i_entry, new_entry)) = match_found {
-                                                {
-                                                    let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
-                                                    let n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
-                                                    let mut n_groupings_value =
-                                                        n_groupings.lock().unwrap();
-                                                    *n_groupings_value += 1;
-                                                    bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
-                                                        "#zeros".green(),
-                                                        format!("{}",*n_zeroes_color_value+ *n_zeroes_lorentz_value).green().bold(),
-                                                        "#groupings".green(),
-                                                        format!("{}",n_groupings_value).green().bold(),
-                                                    ));
-                                                }
-                                                entry.get_mut()[i_entry].push(new_entry);
-                                            } else {
-                                                entry.get_mut().push(vec![
-                                                    PooledGraphData {
-                                                        graph_id: i_g,
-                                                        numerator_data,
-                                                        ratio: Atom::num(1),
-                                                        bare_graph: canonized_fermion_flow_bare_graph,
-                                                    }
-                                                ]);
-                                            }
-                                        }
+                                let bucket = pooled_bare_graphs_clone.lock().unwrap()
+                                    .entry(canonical_graph.canonized_graph.clone())
+                                    .or_default().clone();
+                                let grouped = {
+                                    // Search and insertion remain atomic within this topology.
+                                    let mut classes = bucket.lock().unwrap();
+                                    let match_found = classes.iter().enumerate().find_map(|(index, graphs)| {
+                                        Self::compare_numerator_tensors(
+                                            &self.numerator_grouping,
+                                            numerator_data.as_ref().unwrap(),
+                                            graphs[0].numerator_data.as_ref().unwrap(),
+                                        ).map(|ratio| (index, ratio))
+                                    });
+                                    if let Some((index, ratio)) = match_found {
+                                        pooled_graph.ratio = ratio;
+                                        classes[index].push(pooled_graph);
+                                        true
+                                    } else {
+                                        pooled_graph.numerator_data = numerator_data;
+                                        classes.push(vec![pooled_graph]);
+                                        false
                                     }
+                                };
+                                if grouped {
+                                    let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
+                                    let n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
+                                    let mut n_groupings_value = n_groupings.lock().unwrap();
+                                    *n_groupings_value += 1;
+                                    bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
+                                        "#zeros".green(),
+                                        format!("{}",*n_zeroes_color_value+ *n_zeroes_lorentz_value).green().bold(),
+                                        "#groupings".green(),
+                                        format!("{}",*n_groupings_value).green().bold(),
+                                    ));
                                 }
                             }
                         }
@@ -4241,9 +4242,10 @@ impl ProcessDefinition {
         let mut bare_graphs: Vec<(usize, Graph)> = Vec::default();
         let mut pooled_bare_graphs_len = 0;
         let mut n_cancellations: i32 = 0;
-        for pooled_graphs_lists_for_this_topology in pooled_bare_graphs.lock().unwrap().values() {
+        for bucket in pooled_bare_graphs.lock().unwrap().values() {
             pooled_bare_graphs_len += 1;
-            for pooled_graphs_list in pooled_graphs_lists_for_this_topology {
+            let pooled_graphs_lists_for_this_topology = bucket.lock().unwrap();
+            for pooled_graphs_list in pooled_graphs_lists_for_this_topology.iter() {
                 let sorted_graphs_to_combine = pooled_graphs_list
                     .iter()
                     .sorted_by_key(|pooled_graph| pooled_graph.graph_id)
@@ -4646,89 +4648,84 @@ impl ProcessedNumeratorForComparison {
             );
         }
 
-        // Fall back to sample evaluations
+        // Fall back to sample evaluations. A zero/nonzero mismatch cannot
+        // match, but must not override an earlier symbolic acceptance.
+        if self.sample_evaluations_are_zero != other.sample_evaluations_are_zero {
+            debug!("Sample zero masks differ - cannot group diagrams");
+            return None;
+        }
         if !self.sample_evaluations.is_empty() {
             debug!(
                 comparison_type = "numerical_samples",
                 sample_count = %self.sample_evaluations.len(),
                 "Attempting numerical comparison using sample evaluations"
             );
-            let ratios = self
+            let mut common_ratio = None;
+            for (idx, (a, b)) in self
                 .sample_evaluations
                 .iter()
-                .zip(other.sample_evaluations.iter())
+                .zip(&other.sample_evaluations)
                 .enumerate()
-                .map(|(idx, (a, b))| {
-                    debug!(
-                        sample_idx = %idx,
-                        numerator = %a.to_canonical_string(),
-                        numerator_diagram_id = %self.diagram_id,
-                        "Sample numerator evaluation"
-                    );
-                    debug!(
-                        sample_idx = %idx,
-                        denominator = %b.to_canonical_string(),
-                        denominator_diagram_id = %other.diagram_id,
-                        "Sample denominator evaluation"
-                    );
-                    let ratio = analyze_diff_and_sum(a.as_view(), b.as_view()).or_else(|| {
-                        // Only the already sampled scalar coefficients enter polynomial
-                        // comparison; canonical tensor numerators stay factorized.
-                        let a = self.sample_evaluations_as_polynomial.get(idx)?;
-                        let b = other.sample_evaluations_as_polynomial.get(idx)?;
-                        if (a - b).is_zero() {
-                            Some(Atom::num(1))
-                        } else if (a + b).is_zero() {
-                            Some(Atom::num(-1))
-                        } else {
-                            None
-                        }
-                    });
-                    if let Some(a) = &ratio {
-                        debug!(
-                            sample_idx = %idx,
-                            ratio = %a.to_canonical_string(),
-                            "Sign-only comparison result for sample"
-                        );
+            {
+                debug!(
+                    sample_idx = %idx,
+                    numerator = %a.to_canonical_string(),
+                    numerator_diagram_id = %self.diagram_id,
+                    "Sample numerator evaluation"
+                );
+                debug!(
+                    sample_idx = %idx,
+                    denominator = %b.to_canonical_string(),
+                    denominator_diagram_id = %other.diagram_id,
+                    "Sample denominator evaluation"
+                );
+                let ratio = analyze_diff_and_sum(a.as_view(), b.as_view()).or_else(|| {
+                    // Only the already sampled scalar coefficients enter polynomial
+                    // comparison; canonical tensor numerators stay factorized.
+                    let a = self.sample_evaluations_as_polynomial.get(idx)?;
+                    let b = other.sample_evaluations_as_polynomial.get(idx)?;
+                    if (a - b).is_zero() {
+                        Some(Atom::num(1))
+                    } else if (a + b).is_zero() {
+                        Some(Atom::num(-1))
                     } else {
-                        debug!(
-                            sample_idx = %idx,
-                            result = "none_ratio",
-                            reason = "expressions_not_identical_up_to_sign",
-                            "Sign-only comparison result for sample is None"
-                        );
+                        None
                     }
-
-                    ratio
-                })
-                .collect::<HashSet<_>>();
-
-            debug!(
-                unique_ratios_found = %ratios.len(),
-                "Found unique ratios from sample evaluations"
-            );
-
-            if ratios.len() == 1 {
-                if let Some(ratio) = ratios.iter().next().unwrap().to_owned() {
+                });
+                if let Some(a) = &ratio {
                     debug!(
-                        ratio = %ratio.to_canonical_string(),
-                        method = "numerical_evaluation",
-                        "Successfully matched diagrams using numerical evaluation"
+                        sample_idx = %idx,
+                        ratio = %a.to_canonical_string(),
+                        "Sign-only comparison result for sample"
                     );
-                    return Some(ratio);
                 } else {
                     debug!(
+                        sample_idx = %idx,
                         result = "none_ratio",
-                        reason = "likely_zeros",
-                        "Sample evaluations yielded None ratio"
+                        reason = "expressions_not_identical_up_to_sign",
+                        "Sign-only comparison result for sample is None"
                     );
                 }
-            } else {
+
+                let ratio = ratio?;
+                if common_ratio
+                    .as_ref()
+                    .is_some_and(|previous| previous != &ratio)
+                {
+                    debug!(
+                        "Sample evaluations yielded inconsistent ratios - cannot group diagrams"
+                    );
+                    return None;
+                }
+                common_ratio = Some(ratio);
+            }
+            if let Some(ratio) = common_ratio {
                 debug!(
-                    result = "inconsistent_ratios",
-                    unique_ratios_count = %ratios.len(),
-                    "Sample evaluations yielded inconsistent ratios - cannot group diagrams"
+                    ratio = %ratio.to_canonical_string(),
+                    method = "numerical_evaluation",
+                    "Successfully matched diagrams using numerical evaluation"
                 );
+                return Some(ratio);
             }
         } else {
             debug!(
@@ -4759,26 +4756,17 @@ impl ProcessedNumeratorForComparison {
             other_diagram_id = %other.diagram_id,
             "Starting scalar rescaling comparison between diagrams"
         );
-        fn analyze_ratios(ratios: &HashSet<Option<Atom>>) -> Option<Atom> {
-            if ratios.len() > 1 {
-                None
-            } else {
-                let ratio = ratios.iter().next().unwrap().to_owned();
-                if let Some(r) = ratio {
-                    for head in LibraryRep::all_self_duals()
-                        .chain(LibraryRep::all_inline_metrics())
-                        .chain(LibraryRep::all_dualizables())
-                        .map(|a| a.to_symbolic([W_.a__]).to_pattern())
-                    {
-                        if r.pattern_match(&head, None, None).next().is_some() {
-                            return None;
-                        }
-                    }
-                    Some(r)
-                } else {
-                    None
+        fn analyze_ratio(ratio: Atom) -> Option<Atom> {
+            for head in LibraryRep::all_self_duals()
+                .chain(LibraryRep::all_inline_metrics())
+                .chain(LibraryRep::all_dualizables())
+                .map(|a| a.to_symbolic([W_.a__]).to_pattern())
+            {
+                if ratio.pattern_match(&head, None, None).next().is_some() {
+                    return None;
                 }
             }
+            Some(ratio)
         }
 
         // Try canonized numerator comparison first
@@ -4793,7 +4781,6 @@ impl ProcessedNumeratorForComparison {
                 denominator_diagram_id = %other.diagram_id,
                 "Attempting symbolic comparison using canonized numerators",
             );
-            let mut ratios = HashSet::<Option<Atom>>::default();
             let r = if canonized_num_a == canonized_num_b {
                 debug!("Canonized numerators are identical");
                 Some(Atom::num(1))
@@ -4811,8 +4798,7 @@ impl ProcessedNumeratorForComparison {
                 );
                 Some(ratio)
             };
-            ratios.insert(r);
-            if let Some(ratio) = analyze_ratios(&ratios) {
+            if let Some(ratio) = r.and_then(analyze_ratio) {
                 debug!(
                     ratio = %ratio.to_canonical_string(),
                     method = "canonized_numerators",
@@ -4824,7 +4810,7 @@ impl ProcessedNumeratorForComparison {
                     comparison_type = "canonized_numerator",
                     result = "rejected",
                     reason = "problematic_patterns",
-                    rejection_stage = "analyze_ratios",
+                    rejection_stage = "analyze_ratio",
                     "Canonized numerator ratio was rejected"
                 );
             }
@@ -4837,95 +4823,96 @@ impl ProcessedNumeratorForComparison {
             );
         }
 
-        // Fall back to sample evaluations
+        // Fall back to sample evaluations. A zero/nonzero mismatch cannot
+        // match, but must not override an earlier symbolic acceptance.
+        if self.sample_evaluations_are_zero != other.sample_evaluations_are_zero {
+            debug!("Sample zero masks differ - cannot group diagrams");
+            return None;
+        }
         if !self.sample_evaluations.is_empty() {
             debug!(
                 comparison_type = "numerical_samples",
                 sample_count = %self.sample_evaluations.len(),
                 "Attempting numerical comparison using sample evaluations"
             );
-            let evaluations_a = &self.sample_evaluations;
-            let evaluations_b = &other.sample_evaluations;
-            if evaluations_a.is_empty() {
-                debug!(
-                    result = "cannot_proceed",
-                    reason = "empty_self_evaluations",
-                    "Self sample evaluations are empty"
-                );
-                return None;
-            }
-
-            let ratios = evaluations_a
+            let mut common_ratio = None;
+            for (idx, (a, b)) in self
+                .sample_evaluations
                 .iter()
-                .zip(evaluations_b.iter())
+                .zip(&other.sample_evaluations)
                 .enumerate()
-                .map(|(idx, (a, b))| {
+            {
+                debug!(
+                    sample_id= %idx,
+                    numerator = %a.to_canonical_string(),
+                    numerator_diagram_id = %self.diagram_id,
+                    denominator = %b.to_canonical_string(),
+                    denominator_diagram_id = %other.diagram_id,
+                    "Sample evaluation A"
+                );
+                let ratio = if a == b {
+                    Some(Atom::num(1))
+                } else if *a == b * Atom::num(-1) {
+                    Some(Atom::num(-1))
+                } else if b.is_zero() || a.is_zero() {
                     debug!(
-                        sample_id= %idx,
-                        numerator = %a.to_canonical_string(),
-                        numerator_diagram_id = %self.diagram_id,
-                        denominator = %b.to_canonical_string(),
-                        denominator_diagram_id = %other.diagram_id,
-                        "Sample evaluation A"
+                        sample_idx = %idx,
+                        "Skipping sample due to zero value"
                     );
-                    if a == b {
-                        Some(Atom::num(1))
-                    } else if *a == b * Atom::num(-1) {
-                        Some(Atom::num(-1))
-                    } else if b.is_zero() || a.is_zero() {
-                        debug!(
-                            sample_idx = %idx,
-                            "Skipping sample due to zero value"
-                        );
-                        None
-                    } else {
-                        let ratio = if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
-                            // let a_poly = a.to_polynomial(&Q_I.clone(), None);
-                            // let b_poly = b.to_polynomial(&Q_I.clone(), None);
-                            let a_poly = &self.sample_evaluations_as_polynomial[idx];
-                            let b_poly = &other.sample_evaluations_as_polynomial[idx];
-                            if a_poly.is_zero() || b_poly.is_zero() {
-                                debug!(
-                                    sample_idx = %idx,
-                                    "Skipping sample due to zero value after expansion"
-                                );
-                                None
-                            } else {
-                                let element = COMPLEXRATPOLYFIELD.to_element(a_poly.clone(), b_poly.clone(), true);
-                                Some(polyrat_to_atom(&element))
-                            }
-                            // let element = COMPLEXRATPOLYFIELD.to_element(a.to_polynomial(&Q_I, None), b.to_polynomial(&Q_I, None), true);
-                            // Some(polyrat_to_atom(&element))
+                    None
+                } else {
+                    let ratio = if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
+                        // let a_poly = a.to_polynomial(&Q_I.clone(), None);
+                        // let b_poly = b.to_polynomial(&Q_I.clone(), None);
+                        let a_poly = &self.sample_evaluations_as_polynomial[idx];
+                        let b_poly = &other.sample_evaluations_as_polynomial[idx];
+                        if a_poly.is_zero() || b_poly.is_zero() {
+                            debug!(
+                                sample_idx = %idx,
+                                "Skipping sample due to zero value after expansion"
+                            );
+                            None
                         } else {
-                            Some((a / b).cancel())
-                        };
-                        debug!(
-                            sample_idx = %idx,
-                            computed_ratio = %ratio.clone().map(|r| r.to_ordered_simple().to_string()).unwrap_or("None".into()),
-                            "Computed ratio for sample"
-                        );
-                        ratio
-                    }
-                })
-                .collect::<HashSet<_>>();
-
-            debug!(
-                unique_ratios_found = %ratios.len(),
-                "Found unique ratios from sample evaluations"
-            );
-            if event_enabled!(tracing::Level::DEBUG, parent: &Span::current()) {
-                for ((rat, a), b) in ratios.iter().zip(evaluations_a).zip(evaluations_b) {
+                            let element = COMPLEXRATPOLYFIELD.to_element(
+                                a_poly.clone(),
+                                b_poly.clone(),
+                                true,
+                            );
+                            Some(polyrat_to_atom(&element))
+                        }
+                        // let element = COMPLEXRATPOLYFIELD.to_element(a.to_polynomial(&Q_I, None), b.to_polynomial(&Q_I, None), true);
+                        // Some(polyrat_to_atom(&element))
+                    } else {
+                        Some((a / b).cancel())
+                    };
                     debug!(
-                        self_diagram_id = %self.diagram_id,
-                        other_diagram_id = %other.diagram_id,
-                        ratio_value = ?rat.as_ref().map(|ra| ra.floatify(13).to_ordered_simple()).unwrap_or("None".into()),
-                        numerator_value = %a.floatify(13).to_ordered_simple(),
-                        denominator_value = %b.floatify(13).to_ordered_simple(),
-                        "Detailed sample evaluation ratio information"
+                        sample_idx = %idx,
+                        computed_ratio = %ratio.clone().map(|r| r.to_ordered_simple().to_string()).unwrap_or("None".into()),
+                        "Computed ratio for sample"
                     );
+                    ratio
+                };
+                let ratio = ratio?;
+                debug!(
+                    self_diagram_id = %self.diagram_id,
+                    other_diagram_id = %other.diagram_id,
+                    ratio_value = %ratio.floatify(13).to_ordered_simple(),
+                    numerator_value = %a.floatify(13).to_ordered_simple(),
+                    denominator_value = %b.floatify(13).to_ordered_simple(),
+                    "Detailed sample evaluation ratio information"
+                );
+                if common_ratio
+                    .as_ref()
+                    .is_some_and(|previous| previous != &ratio)
+                {
+                    debug!(
+                        "Sample evaluations yielded inconsistent ratios - cannot group diagrams"
+                    );
+                    return None;
                 }
+                common_ratio = Some(ratio);
             }
-            if let Some(ratio) = analyze_ratios(&ratios) {
+            if let Some(ratio) = common_ratio.and_then(analyze_ratio) {
                 debug!(
                     ratio = %ratio.to_canonical_string(),
                     method = "numerical_evaluation",
@@ -4936,8 +4923,8 @@ impl ProcessedNumeratorForComparison {
                 debug!(
                     comparison_type = "numerical_samples",
                     result = "rejected",
-                    reason = "inconsistent_or_problematic_patterns",
-                    rejection_stage = "analyze_ratios",
+                    reason = "problematic_patterns",
+                    rejection_stage = "analyze_ratio",
                     "Sample evaluation ratios were rejected"
                 );
             }

@@ -1,6 +1,6 @@
 #![allow(uncommon_codepoints)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use eyre::eyre;
 use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike};
@@ -370,51 +370,47 @@ impl IndexTooling for AtomView<'_> {
 
         let external = net.graph.dangling_indices();
         let expr = net.simple_execute::<()>();
-        // Spenso owns contraction and external-slot validation. Canonize the
-        // existing summands separately: Symbolica's reconstruction counters
-        // can mislabel a contraction completed inside a sum as an open index.
-        // Neither the summands nor products of sums are distributed here.
-        let terms = match expr.as_view() {
-            AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
-            term => vec![term],
-        };
-        let canonical: Atom = terms
-            .into_iter()
-            .map(|term| {
-                term.canonize_tensors(dummies.clone())
-                    .unwrap()
-                    .canonical_form
-            })
-            .sum();
+        // Spenso owns contraction and external-slot validation. Symbolica
+        // canonizes the complete expression, including contractions completed
+        // inside nested sums, without distributing any products of sums.
+        let canonical = expr.canonize_tensors(dummies).unwrap();
 
         // Sum branches also have paired copies of genuinely external slots.
         // Preserve those labels after Symbolica has validated their incidence.
+        let mut reserved = BTreeSet::new();
         for slot in external {
             let slot = if slot.rep_name().is_dual() {
                 slot.dual()
             } else {
                 slot
             };
-            dummies.remove(&slot.to_atom());
+            let slot = slot.to_atom();
+            reserved.insert(slot);
         }
 
         let mut reps = vec![];
+        let mut next_dummy = 0;
 
-        // Only names from the validated contracted-index pool can have been
-        // allocated as dummies. Their occurrence is authoritative even when
-        // Symbolica reports a stale open-index counter for one of these names.
-        for (i, (d, r)) in dummies
+        // Only relabel names that Symbolica validated as contracted indices;
+        // keep their replacements distinct from the genuine external slots.
+        // Canceled terms can leave unused names in the validated index pool.
+        for (d, r) in canonical
+            .dummy_indices
             .into_iter()
-            .filter(|(index, _)| canonical.contains(index))
-            .enumerate()
+            .filter(|(index, _)| canonical.canonical_form.contains(index))
         {
-            reps.push(Replacement::new(
-                d.to_pattern(),
-                r.slot::<Aind, Aind>(new_dummy(i)).to_atom(),
-            ));
+            let target = loop {
+                let candidate = r.slot::<Aind, Aind>(new_dummy(next_dummy)).to_atom();
+                next_dummy += 1;
+                if reserved.insert(candidate.clone()) {
+                    break candidate;
+                }
+            };
+            reps.push(Replacement::new(d.to_pattern(), target));
         }
 
         canonical
+            .canonical_form
             .replace_multiple(&reps)
             .replace_multiple(&redual_reps)
     }

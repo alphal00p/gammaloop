@@ -22,10 +22,13 @@ use linnet::half_edge::{
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     shadowing::TensorCollectExt,
-    structure::representation::{Minkowski, RepName},
+    structure::{
+        representation::{Minkowski, RepName},
+        slot::{DummyAind, ParseableAind, Slot},
+    },
 };
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     domains::atom::AtomField,
     function,
     id::Replacement,
@@ -358,14 +361,33 @@ impl Integrated<'_> {
             "Raw post vakint "
         );
 
+        // Projector indices may close two opaque tensor leaves. Restore their
+        // complete Minkowski representation before exposing the tensor bodies.
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let mut projected_indices = std::collections::BTreeMap::new();
+        res = res.replace_map(|view, _, out| {
+            if matches!(view, AtomView::Fun(index) if index.get_symbol() == vakint::symbols::S.tensor_index) {
+                let replacement = projected_indices.entry(view.to_owned()).or_insert_with(|| loop {
+                    let candidate = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+                    if res.pattern_match(&candidate.to_pattern(), None, None).next().is_none() {
+                        break candidate;
+                    }
+                });
+                **out = replacement.clone();
+            }
+        });
+
         res = res
+            // Opaque tensor slots are needed only while Vakint validates and
+            // projects the Lorentz domain. Restore the caller's tensor leaves.
+            .replace(function!(vakint::symbols::S.tensor, W_.x_, W_.x___))
+            .with(Atom::var(W_.x_))
             .replace(parse_lit!(vakint::cl2))
             .with(parse_lit!(cl2))
             .replace(parse_lit!(vakint::sqrt3))
             .with(parse_lit!(sqrt(3)));
 
         let vk_metric = vakint_symbol!("g");
-        let mink = Minkowski {}.new_rep(GS.dim);
 
         // apply metric
         res = res
@@ -1034,6 +1056,36 @@ pub(crate) fn to_vakint_integrand<
                 Minkowski {}.to_symbolic([W_.a__]),
                 Minkowski {}.to_symbolic([W_.b__])
             ));
+        // Preserve the Lorentz slots of arbitrary spin tensors without
+        // teaching Vakint Spenso's representation syntax or tensor algebra.
+        // Direct slots use the same parser as the tensor network. The original
+        // leaf stays opaque, including its spin and color indices.
+        t.numerator = t.numerator.replace_map(|view, _, out| {
+            let AtomView::Fun(tensor) = view else { return };
+            if [
+                vakint::symbols::S.k,
+                vakint::symbols::S.p,
+                vakint::symbols::S.g,
+                vakint::symbols::S.dot,
+                vakint::symbols::S.tensor,
+            ]
+            .contains(&tensor.get_symbol())
+            {
+                **out = view.to_owned();
+                return;
+            }
+            let slots = tensor
+                .iter()
+                .filter(|argument| Slot::<Minkowski, Aind>::try_from(*argument).is_ok())
+                .collect::<Vec<_>>();
+            if !slots.is_empty() {
+                let mut wrapped = FunctionBuilder::new(vakint::symbols::S.tensor).add_arg(view);
+                for slot in slots {
+                    wrapped = wrapped.add_arg(slot);
+                }
+                **out = wrapped.finish();
+            }
+        });
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_vakint_symbols",
             term_index = %term_index,

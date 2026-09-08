@@ -183,10 +183,7 @@ fn finite_part_quark_lo() {
             ..Default::default()
         })
         .unwrap();
-    let muv = align_external_quark(&muv)
-        .replace(GS.dim_epsilon)
-        .with(0)
-        .expand();
+    let muv = align_external_quark(&muv).replace(GS.dim_epsilon).with(0);
     let log_mu_r_sq = function!(Symbol::LOG, Atom::var(GS.mu_r_sq));
     let log_coefficients = muv.coefficient_list::<i8>(std::slice::from_ref(&log_mu_r_sq));
     assert_eq!(log_coefficients.len(), 2);
@@ -195,25 +192,16 @@ fn finite_part_quark_lo() {
         .find_map(|(power, coefficient)| (power == log_mu_r_sq).then_some(coefficient))
         .unwrap();
     let contracted_log_coefficient = log_coefficient
-        .replace(parse_lit!(
-            gammalooprs::P(0, spenso::mink(4, gammalooprs::uvind(0, 2))) ^ 2
-        ))
-        .with(parse_lit!(spenso::dot(
-            gammalooprs::P(0, spenso::mink(4)),
-            gammalooprs::P(0, spenso::mink(4))
-        )))
-        .expand()
+        .normalize_dots()
+        .metric_shorthand_to_dot()
         .collect_factors();
-    // Vakint leaves the repeated UV dummy as an indexed momentum squared. After
+    // Vakint can leave a repeated Lorentz dummy as an indexed momentum squared. After
     // contracting it and stripping the standard i/(16 pi^2) loop normalization,
     // the MUV scale logarithm must be minus the already verified pole residue.
     let normalized_log_coefficient =
         (contracted_log_coefficient * Atom::num(-16) * Atom::i() * Atom::var(Symbol::PI).pow(2))
-            .expand()
             .collect_factors();
-    let pole_residue = (aligned_pole * Atom::var(GS.dim_epsilon))
-        .expand()
-        .collect_factors();
+    let pole_residue = (aligned_pole * Atom::var(GS.dim_epsilon)).collect_factors();
     assert_eq!(normalized_log_coefficient, -pole_residue);
 }
 

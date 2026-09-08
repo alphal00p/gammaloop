@@ -13,6 +13,27 @@ To this end, it uses a combination of [`Symbolica`](https://symbolica.io/) and [
 
 `Vakint` is also part of the [`symbolica-community`](https://github.com/benruijl/symbolica-community) `Python` module where vaccuum graphs can be evaluated directly using the `Python` API exposed in that module.
 
+Tensor reduction validates Lorentz index domains before vacuum projection. It
+passes universal loop-momentum tensor kernels to FORM while retaining graph
+coefficients as factorized expressions. Analytic integration uses temporary
+coefficient symbols and restores their values afterward; numerical integration
+combines the scalar sectors into one estimator. Coefficient poles in epsilon
+increase the required integral order. Rational epsilon dependence is supported;
+generic epsilon-dependent functions are rejected rather than expanded.
+
+Callers with additional spin tensors declare their Lorentz slots using
+`vakint::tensor(body, slot, ...)`. The loop-independent body stays opaque;
+metrics rename complete slots without modifying spin or color indices.
+Projection can introduce `vakint::tensor_index(family, loop, ordinal)` dummy
+slots, which callers translate to their own index representation before
+unwrapping tensor bodies. GammaLoop performs both conversions automatically.
+
+`PySecDecOptions.numerical_parameters` stores mass and numerator parameters as
+complex values. Real external momentum components retain their signs. This
+adapter requires real pole masses and real external momenta; complex numerator
+coefficients are supported. The optional numerical tests remain disabled unless
+`RUN_PYSECDEC_TESTS=1` is set.
+
 ## Rust usage
 
 Checkout the examples directory for a few examples of how to use this library.
@@ -118,7 +139,7 @@ fn main() {
         &params,
         &HashMap::default(),
         None,
-    );
+    ).unwrap();
     println!("Partial eval:\n{}\n", numerical_partial_eval);
 
     params.insert("g(11,22)".into(), settings.real_to_prec("1.0"));

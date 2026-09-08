@@ -21,6 +21,76 @@ use vakint::{externals_from_f64, params_from_f64, vakint_parse};
 const N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS: u32 = 32;
 
 #[test_log::test]
+fn analytic_backends_preserve_coefficients_and_epsilon_pole_orders() {
+    use symbolica::domains::float::RealLike;
+
+    for evaluation_order in [
+        EvaluationOrder::alphaloop_only(),
+        EvaluationOrder::matad_only(None),
+    ] {
+        let vakint = get_vakint(VakintSettings {
+            number_of_terms_in_epsilon_expansion: 2,
+            use_dot_product_notation: false,
+            integral_normalization_factor: LoopNormalizationFactor::pySecDec,
+            evaluation_order,
+            ..VakintSettings::default()
+        });
+        let left = vakint_parse!("(spectator_a+spectator_b)").unwrap();
+        let right = vakint_parse!("(spectator_c+spectator_d)").unwrap();
+        let integral = &left
+            * &right
+            * vakint_parse!("dot(p(1),p(1))*ε^-1*topo(prop(1,edge(1,1),k(1),muvsq,1))").unwrap();
+        let evaluated = vakint.evaluate_integral(integral.as_view()).unwrap();
+        assert!(
+            !evaluated
+                .get_all_symbols(true)
+                .contains(&vakint::symbols::S.dot)
+        );
+        // Neither spectator binomial may be distributed by the backend or
+        // by the epsilon series used after restoring its opaque coefficient.
+        for factor in [&left, &right] {
+            assert!(
+                evaluated
+                    .pattern_match(&factor.to_pattern(), None, None)
+                    .next()
+                    .is_some()
+            );
+        }
+        let parameters = vakint.params_from_f64(&HashMap::from_iter([
+            ("spectator_a".into(), 2.0),
+            ("spectator_b".into(), 3.0),
+            ("spectator_c".into(), 4.0),
+            ("spectator_d".into(), 5.0),
+            ("muvsq".into(), 1.0),
+            ("mursq".into(), 1.0),
+        ]));
+        let (result, _) = vakint
+            .numerical_evaluation(
+                evaluated.as_view(),
+                &parameters,
+                &HashMap::default(),
+                Some(&vakint.externals_from_f64(&HashMap::from_iter([(1, (1.0, 0.0, 0.0, 0.0))]))),
+            )
+            .unwrap();
+        // I1 = 1/epsilon + (1-gamma_E) +
+        // epsilon*(1-gamma_E+gamma_E^2/2+pi^2/12) in this normalization.
+        // The coefficient's pole makes the last term necessary at finite order.
+        let gamma = 0.577_215_664_901_532_9;
+        let coefficients = [
+            1.0,
+            1.0 - gamma,
+            1.0 - gamma + gamma * gamma / 2.0 + std::f64::consts::PI.powi(2) / 12.0,
+        ];
+        assert_eq!(result.0.len(), 3);
+        for (power, coefficient) in (-2..=0).zip(coefficients) {
+            let actual = result.get_epsilon_coefficient(power);
+            assert!((actual.re.to_f64() - 45.0 * coefficient).abs() < 1e-11);
+            assert!(actual.im.to_f64().abs() < 1e-11);
+        }
+    }
+}
+
+#[test_log::test]
 fn test_integrate_1l_a() {
     let mut vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
@@ -37,7 +107,7 @@ fn test_integrate_1l_a() {
     let mut integral = vakint
         .to_canonical(
             vakint_parse!(
-                "(k(1,1)*k(1,2)+k(1,3)*p(1,3))*topo(\
+                "(k(1,1)*k(1,2))*topo(\
                 prop(1,edge(1,1),k(1),muvsq,1)\
             )"
             )
@@ -106,7 +176,8 @@ fn test_integrate_1l_a() {
         &params,
         &HashMap::default(),
         None,
-    );
+    )
+    .unwrap();
     // numerical_partial_eval = numerical_partial_eval.expand();
 
     // This test is too unstable as the printout at fixed precision is not accurate enough

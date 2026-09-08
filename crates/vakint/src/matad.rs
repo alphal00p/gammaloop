@@ -319,7 +319,7 @@ impl MATAD {
 }
 
 impl Vakint {
-    pub fn matad_evaluate(
+    pub(super) fn matad_evaluate(
         &self,
         settings: &VakintSettings,
         input_numerator: AtomView,
@@ -383,7 +383,7 @@ impl Vakint {
             }
         };
 
-        let mut numerator = Vakint::convert_to_dot_notation(input_numerator);
+        let mut numerator = Vakint::convert_to_dot_notation(settings, input_numerator)?;
 
         // println!("Numerator before processing: {}", numerator);
         numerator = numerator.replace_multiple(&[

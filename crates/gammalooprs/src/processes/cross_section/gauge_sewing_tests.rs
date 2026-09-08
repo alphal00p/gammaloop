@@ -154,6 +154,29 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
             graph_count,
             "the complete covariant Higgs cut inventory"
         );
+        assert!(!process.may_filter_covariant_partners(&model));
+        if process.final_pdgs_lists[0] == [24, -24] {
+            let mut filtered = process.clone();
+            // In H -> WW this retains the four bosonic Born graphs while
+            // removing the two ghost graphs required by covariant completeness.
+            filtered
+                .cross_section_filters
+                .0
+                .push(FeynGenFilter::AnticommutatingLoopCountRange((0, 0)));
+            assert!(filtered.may_filter_covariant_partners(&model));
+            let bosonic_graphs = filtered.generate(&model, &settings)?;
+            assert_eq!(bosonic_graphs.len(), 4);
+            assert!(bosonic_graphs.iter().all(|graph| {
+                graph.iter_edges().all(|(_, _, edge)| {
+                    !edge
+                        .data
+                        .particle()
+                        .is_some_and(|particle| particle.is_ghost())
+                })
+            }));
+            filtered.final_pdgs_lists = vec![vec![251, -251]];
+            assert!(!filtered.may_filter_covariant_partners(&model));
+        }
         // Raw imported states cannot establish physical-vector intent. The
         // same collection with its physical process declaration retains every
         // partner through the import owner and the cut matcher below.

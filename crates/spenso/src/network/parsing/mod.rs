@@ -17,7 +17,13 @@ use crate::structure::{
 };
 use crate::tensors::parametric::ParamTensor;
 
-use std::{cell::Cell, fmt::Display, marker::PhantomData, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashSet,
+    fmt::Display,
+    marker::PhantomData,
+    rc::Rc,
+};
 
 use store::TensorScalarStore;
 // use log::trace;
@@ -278,6 +284,7 @@ impl ParseSettings {
 pub struct ParseState<Aind = AbstractIndex> {
     depth: usize,
     next_dummy: Rc<Cell<usize>>,
+    reserved_indices: Rc<RefCell<HashSet<Atom>>>,
     _aind: PhantomData<fn() -> Aind>,
 }
 
@@ -287,16 +294,22 @@ impl<Aind> Default for ParseState<Aind> {
         Self {
             depth: 0,
             next_dummy: Rc::new(Cell::new(1_000_000)),
+            reserved_indices: Rc::default(),
             _aind: PhantomData,
         }
     }
 }
 
-impl<Aind: DummyAind> ParseState<Aind> {
+impl<Aind: DummyAind + ParseableAind> ParseState<Aind> {
     fn next(&self) -> Aind {
-        let index = self.next_dummy.get();
-        self.next_dummy.set(index + 1);
-        Aind::new_dummy_at(index)
+        loop {
+            let index = self.next_dummy.get();
+            self.next_dummy.set(index + 1);
+            let dummy = Aind::new_dummy_at(index);
+            if self.reserved_indices.borrow_mut().insert(dummy.to_atom()) {
+                return dummy;
+            }
+        }
     }
 
     fn slot(&self, rep: &Representation<LibraryRep>) -> Slot<LibraryRep, Aind> {
@@ -355,6 +368,17 @@ where
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         let state = ParseState::<Aind>::default();
+        // Parsed indices can serialize like fresh dummies even when their Rust
+        // variants differ. Reserve written names once across all parser clones.
+        {
+            let mut reserved = state.reserved_indices.borrow_mut();
+            value.visitor(&mut |atom| {
+                if let Ok(slot) = Slot::<LibraryRep, Aind>::try_from(atom) {
+                    reserved.insert(slot.aind().to_atom());
+                }
+                true
+            });
+        }
         Self::try_from_view_impl(value, state, library, function_library, settings)
     }
 

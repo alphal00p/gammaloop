@@ -11,31 +11,26 @@ fn test_reduction_1l_a() {
         ..VakintSettings::default()
     });
 
-    let integral = vakint
-        .to_canonical(
-            vakint_parse!(
-                "(k(1,1)*k(1,2)+k(1,3)*p(1,3))*topo(\
-                prop(1,edge(1,1),k(1),muvsq,1)\
-            )"
-            )
-            .unwrap()
-            .as_view(),
-            true,
-        )
-        .unwrap();
-
-    _ = compare_output(
-        vakint
-            .tensor_reduce(integral.as_view())
-            .as_ref()
-            .map(|a| a.as_view()),
-        vakint_parse!(
-            "(\
-                -(2*ε-4)^-1*dot(k(1),k(1))*g(1,2)\
-            )*topo(I1L(muvsq,1))"
-        )
-        .unwrap(),
-    );
+    // Open rank-two and scalar terms have different Lorentz domains and must
+    // be projected independently. Odd vacuum rank still vanishes as intended.
+    for (numerator, expected) in [
+        ("k(1,1)*k(1,2)", "-(2*ε-4)^-1*dot(k(1),k(1))*g(1,2)"),
+        ("k(1,3)*p(1,3)", "0"),
+    ] {
+        let integral = vakint_parse!(format!("({numerator})*topo(I1L(muvsq,1))")).unwrap();
+        _ = compare_output(
+            vakint
+                .tensor_reduce(integral.as_view())
+                .as_ref()
+                .map(|a| a.as_view()),
+            vakint_parse!(format!("({expected})*topo(I1L(muvsq,1))")).unwrap(),
+        );
+    }
+    let malformed = vakint_parse!("(k(1,1)*k(1,2)+k(1,3)*p(1,3))*topo(I1L(muvsq,1))").unwrap();
+    assert!(matches!(
+        vakint.tensor_reduce(malformed.as_view()),
+        Err(vakint::VakintError::InvalidNumerator(_))
+    ));
 }
 
 #[test_log::test]
@@ -46,31 +41,24 @@ fn test_reduction_1l_b() {
         ..VakintSettings::default()
     });
 
-    let integral = vakint
-        .to_canonical(
-            vakint_parse!(
-                "((k(1,1)*k(1,2))^2*g(1,2)+k(1,3)*p(1,3)+k(1,1)*k(1,2)*p(2,1)*p(3,2))*topo(\
-                prop(1,edge(1,1),k(1),muvsq,1)\
-            )"
-            )
-            .unwrap()
-            .as_view(),
-            true,
-        )
-        .unwrap();
-
-    _ = compare_output(
-        vakint
-            .tensor_reduce(integral.as_view())
-            .as_ref()
-            .map(|a| a.as_view()),
-        vakint_parse!(
-            "(\
-                dot(k(1),k(1))^2*g(1,2)-(2*ε-4)^-1*dot(p(2),p(3))*dot(k(1),k(1))\
-            )*topo(I1L(muvsq,1))"
-        )
-        .unwrap(),
-    );
+    // Internal scalar powers are already contracted; their indices cannot be
+    // reused as the free slots of a metric in the same product.
+    for (numerator, expected) in [
+        ("dot(k(1),k(1))^2*g(1,2)", "dot(k(1),k(1))^2*g(1,2)"),
+        (
+            "k(1,1)*k(1,2)*p(2,1)*p(3,2)",
+            "-(2*ε-4)^-1*dot(p(2),p(3))*dot(k(1),k(1))",
+        ),
+    ] {
+        let integral = vakint_parse!(format!("({numerator})*topo(I1L(muvsq,1))")).unwrap();
+        _ = compare_output(
+            vakint
+                .tensor_reduce(integral.as_view())
+                .as_ref()
+                .map(|a| a.as_view()),
+            vakint_parse!(format!("({expected})*topo(I1L(muvsq,1))")).unwrap(),
+        );
+    }
 }
 
 #[test_log::test]
@@ -81,31 +69,26 @@ fn test_reduction_2l_a() {
         ..VakintSettings::default()
     });
 
-    let integral = vakint
-        .to_canonical(
-            vakint_parse!(
-                "(\
-                    (k(1,1)*k(2,2))^2*g(1,2)+k(2,3)*p(1,3)+k(1,1)*k(2,2)*p(2,1)*p(3,2)\
-                )*topo(I2L(mUVsq,1,2,1))"
-            )
-            .unwrap()
-            .as_view(),
-            true,
-        )
-        .unwrap();
-
-    _ = compare_output(
-        vakint
-            .tensor_reduce(integral.as_view())
-            .as_ref()
-            .map(|a| a.as_view()),
-        vakint_parse!(
-            "(\
-                -(2*ε-4)^-1*dot(p(2),p(3))*dot(k(1),k(2))+dot(k(1),k(1))*dot(k(2),k(2))*g(1,2)\
-            )*topo(I2L(mUVsq,1,2,1))"
-        )
-        .unwrap(),
-    );
+    for (numerator, expected) in [
+        (
+            "dot(k(1),k(1))*dot(k(2),k(2))*g(1,2)",
+            "dot(k(1),k(1))*dot(k(2),k(2))*g(1,2)",
+        ),
+        ("k(2,3)*p(1,3)", "0"),
+        (
+            "k(1,1)*k(2,2)*p(2,1)*p(3,2)",
+            "-(2*ε-4)^-1*dot(p(2),p(3))*dot(k(1),k(2))",
+        ),
+    ] {
+        let integral = vakint_parse!(format!("({numerator})*topo(I2L(mUVsq,1,2,1))")).unwrap();
+        _ = compare_output(
+            vakint
+                .tensor_reduce(integral.as_view())
+                .as_ref()
+                .map(|a| a.as_view()),
+            vakint_parse!(format!("({expected})*topo(I2L(mUVsq,1,2,1))")).unwrap(),
+        );
+    }
 }
 
 #[allow(dead_code)]
@@ -130,7 +113,8 @@ fn dot_conversion_preserves_factorized_scalar_powers() {
     ] {
         let numerator = vakint_parse!(expression).unwrap();
         let indexed = Vakint::convert_from_dot_notation(numerator.as_view());
-        let round_trip = Vakint::convert_to_dot_notation(indexed.as_view());
+        let round_trip =
+            Vakint::convert_to_dot_notation(&VakintSettings::default(), indexed.as_view()).unwrap();
         // Every copy of a scalar contraction, including both copies in a
         // square, needs independent summed indices. The exact round trip must
         // preserve the original scalar factors without expanding either side.
@@ -217,8 +201,11 @@ fn dot_conversion_preserves_existing_indices() {
     ] {
         let converted = Vakint::convert_from_dot_notation(input.as_view());
         let twice = Vakint::convert_from_dot_notation(converted.as_view());
-        let expected = Vakint::convert_to_dot_notation(input.as_view());
-        let actual = Vakint::convert_to_dot_notation(converted.as_view());
+        let expected =
+            Vakint::convert_to_dot_notation(&VakintSettings::default(), input.as_view()).unwrap();
+        let actual =
+            Vakint::convert_to_dot_notation(&VakintSettings::default(), converted.as_view())
+                .unwrap();
         assert_eq!(converted, twice, "dot conversion must be idempotent");
         if label == "already indexed" {
             assert_eq!(
@@ -255,7 +242,11 @@ fn dot_conversion_preserves_reciprocal_powers() {
         // Inverting the scalar coefficient exposes every repeated contraction
         // to the exact structural round-trip check, without integrating an
         // input with a non-polynomial energy numerator.
-        let reciprocal = Vakint::convert_to_dot_notation(converted.pow(-1).as_view());
+        let reciprocal = Vakint::convert_to_dot_notation(
+            &VakintSettings::default(),
+            converted.pow(-1).as_view(),
+        )
+        .unwrap();
         let expected = input.pow(-1);
         assert_eq!(
             reciprocal, expected,

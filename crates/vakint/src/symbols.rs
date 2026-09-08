@@ -28,6 +28,11 @@ pub struct VakintSymbols {
     pub dot_pow: Symbol,
     pub vkdot: Symbol,
     pub g: Symbol,
+    /// Opaque loop-independent tensor: `tensor(body, lorentz_slot, ...)`.
+    /// Slots are complete index atoms; the body retains all other tensor structure.
+    pub tensor: Symbol,
+    /// Fresh projector index: `tensor_index(family, loop_id, ordinal)`.
+    pub tensor_index: Symbol,
     pub g_form: Symbol,
     pub x: Symbol,
     pub y: Symbol,
@@ -87,6 +92,8 @@ pub static S: LazyLock<VakintSymbols> = LazyLock::new(|| VakintSymbols {
         format!("{}::vkdot",crate::NAMESPACE);  Symmetric, Linear
     ),
     g: symbol!(format!("{}::{}",crate::NAMESPACE,METRIC_SYMBOL); Symmetric),
+    tensor: vk_symbol!("tensor"),
+    tensor_index: vk_symbol!("tensor_index"),
     g_form: symbol!(format!("{}::g",crate::NAMESPACE); Symmetric),
     x: vk_symbol!("x"),
     y: vk_symbol!("y"),
@@ -143,6 +150,8 @@ pub static SYMBOL_REGISTRY: LazyLock<HashSet<Symbol>> = LazyLock::new(|| {
         s.dot_pow,
         s.vkdot,
         s.g,
+        s.tensor,
+        s.tensor_index,
         s.g_form,
         s.x,
         s.y,

@@ -8,7 +8,8 @@ use vakint::{FMFTOptions, MATADOptions};
 
 use std::{collections::HashMap, vec};
 
-use vakint::{externals_from_f64, params_from_f64};
+use symbolica::domains::float::{Complex, RealLike};
+use vakint::{Vakint, externals_from_f64, params_from_complex_f64, params_from_f64};
 
 use crate::test_utils::compare_vakint_evaluation_vs_reference;
 
@@ -24,7 +25,7 @@ fn test_integrate_1l_simple() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
         VakintSettings{ number_of_terms_in_epsilon_expansion: 2, integral_normalization_factor: LoopNormalizationFactor::pySecDec, ..VakintSettings::default()},
-        EvaluationOrder(vec![EvaluationMethod::PySecDec(PySecDecOptions { reuse_existing_output: Some("./tests_workspace/pysecdec_test_integrate_1l_simple".into()) ,..PySecDecOptions::default() })]),
+        EvaluationOrder::pysecdec_only(None),
         vakint_parse!(
             "( 1 )*topo(\
                 prop(1,edge(1,1),k(1),muvsq,1)\
@@ -45,6 +46,104 @@ fn test_integrate_1l_simple() {
 }
 
 #[test_log::test]
+fn test_integrate_1l_complex_and_signed_parameters() {
+    if test_utils::should_skip_pysecdec_tests() {
+        return;
+    }
+    let vakint = Vakint::new().unwrap();
+    let euler_gamma = 0.577_215_664_901_532_9;
+    let tadpole_coefficients = [
+        1.0,
+        1.0 - euler_gamma,
+        1.0 - euler_gamma + euler_gamma * euler_gamma / 2.0 + std::f64::consts::PI.powi(2) / 12.0,
+    ];
+    for (coefficient, re, im, first_power) in [
+        ("user_space::phase", 1.0, 2.0, -1),
+        ("user_space::phase", -3.0, 0.0, -1),
+        ("user_space::phase/vakint::ε", 1.0, 2.0, -2),
+    ] {
+        let input = vakint_parse!(&format!(
+            "({coefficient})*topo(prop(1,edge(1,1),k(1),muvsq,1))"
+        ))
+        .unwrap();
+        let mut settings = VakintSettings {
+            number_of_terms_in_epsilon_expansion: 2,
+            integral_normalization_factor: LoopNormalizationFactor::pySecDec,
+            evaluation_order: EvaluationOrder::pysecdec_only(Some(PySecDecOptions {
+                relative_precision: 1e-7,
+                min_n_evals: 10_000,
+                max_n_evals: 100_000,
+                // Regenerate the package and its parameter declarations at each point.
+                reuse_existing_output: None,
+                ..PySecDecOptions::default()
+            })),
+            ..VakintSettings::default()
+        };
+        let parameters = params_from_complex_f64(
+            &HashMap::from_iter([
+                ("muvsq".into(), Complex::new(1.0, 0.0)),
+                ("mursq".into(), Complex::new(1.0, 0.0)),
+                ("user_space::phase".into(), Complex::new(re, im)),
+            ]),
+            settings.run_time_decimal_precision,
+        );
+        settings
+            .evaluation_order
+            .adjust(
+                None,
+                1e-7,
+                &HashMap::default(),
+                &parameters,
+                &HashMap::default(),
+            )
+            .unwrap();
+        let canonical = vakint
+            .to_canonical(&settings, input.as_view(), true)
+            .unwrap();
+        let integral = vakint
+            .evaluate_integral(&settings, canonical.as_view())
+            .unwrap();
+        let (result, error) = Vakint::full_numerical_evaluation(
+            &settings,
+            integral.as_view(),
+            &HashMap::default(),
+            &parameters,
+            None,
+        )
+        .unwrap();
+        assert_eq!(result.0.len(), (1 - first_power) as usize);
+        // The same massive tadpole as test_integrate_1l_simple has residue one
+        // and finite part 1-EulerGamma. Dividing by epsilon also requires its
+        // order-epsilon coefficient to recover the requested finite part.
+        // Check both components, including zero.
+        for (power, coefficient) in (first_power..=0).zip(tadpole_coefficients) {
+            let actual = result.get_epsilon_coefficient(power);
+            for (component, value, expected) in [
+                ("real", actual.re.to_f64(), re * coefficient),
+                ("imaginary", actual.im.to_f64(), im * coefficient),
+            ] {
+                assert!(
+                    (value - expected).abs() <= 1e-6 * (1.0 + expected.abs()),
+                    "phase=({re},{im}), epsilon^{power} {component}: {value} != {expected}"
+                );
+            }
+            if let Some(error) = &error {
+                let uncertainty = error.get_epsilon_coefficient(power);
+                for (component, value, expected) in [
+                    ("real", uncertainty.re.to_f64(), re * coefficient),
+                    ("imaginary", uncertainty.im.to_f64(), im * coefficient),
+                ] {
+                    assert!(
+                        value.is_finite() && value.abs() <= 1e-6 * (1.0 + expected.abs()),
+                        "phase=({re},{im}), epsilon^{power} {component} uncertainty: {value}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test_log::test]
 fn test_integrate_1l_cross_product() {
     if test_utils::should_skip_pysecdec_tests() {
         return;
@@ -52,7 +151,7 @@ fn test_integrate_1l_cross_product() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 5, integral_normalization_factor: LoopNormalizationFactor::MSbar, ..VakintSettings::default()},
-        EvaluationOrder(vec![EvaluationMethod::PySecDec(PySecDecOptions { reuse_existing_output: Some("./tests_workspace/test_integrate_1l_cross_product".into()) ,..PySecDecOptions::default() })]),
+        EvaluationOrder::pysecdec_only(None),
         //EvaluationOrder(vec![EvaluationMethod::MATAD(MATADOptions::default())]),
         vakint_parse!(
             "(k(1,11)*p(1,11)*k(1,12)*p(1,12))*topo(\
@@ -88,7 +187,7 @@ fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 5, integral_normalization_factor: LoopNormalizationFactor::MSbar, ..VakintSettings::default()},
-        EvaluationOrder(vec![EvaluationMethod::PySecDec(PySecDecOptions { reuse_existing_output: Some("./tests_workspace/test_integrate_1l_cross_product_additional_symbols_numerator".into()) ,..PySecDecOptions::default() })]),
+        EvaluationOrder::pysecdec_only(None),
         //EvaluationOrder(vec![EvaluationMethod::MATAD(MATADOptions::default())]),
         vakint_parse!(
             "(user_space::A*k(1,11)*p(1,11)*k(1,12)*p(1,12)+user_space::B)*topo(\
@@ -416,6 +515,7 @@ fn test_integrate_4l_clover_with_numerator() {
 fn run_integral_evaluation_pysecdec_tests() {
     // Convenience runner to execute all tests in this module.
     test_integrate_1l_simple();
+    test_integrate_1l_complex_and_signed_parameters();
     test_integrate_1l_cross_product();
     test_integrate_1l_cross_product_with_additional_symbols_numerator();
     test_integrate_2l_different_masses();

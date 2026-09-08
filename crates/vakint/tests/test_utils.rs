@@ -271,13 +271,15 @@ pub fn compare_two_evaluations(
     let mut mod_evaluation_order_a = evaluation_orders.0.0.clone();
     let mut mod_evaluation_order_b = evaluation_orders.1.0.clone();
     for eval_order in [&mut mod_evaluation_order_a, &mut mod_evaluation_order_b] {
-        eval_order.adjust(
-            Some(quiet),
-            rel_threshold * 1.0e-2,
-            &numerical_masses,
-            &HashMap::default(),
-            &numerical_external_momenta,
-        );
+        eval_order
+            .adjust(
+                Some(quiet),
+                rel_threshold * 1.0e-2,
+                &numerical_masses,
+                &HashMap::default(),
+                &numerical_external_momenta,
+            )
+            .unwrap();
     }
 
     // First perform the first evaluation type
@@ -519,13 +521,15 @@ pub fn compare_vakint_evaluation_vs_reference(
     let python_exe = vakint_default_settings.python_exe_path.clone();
     // Adjust evaluation method options
     let mut mod_evaluation_order = evaluation_order.clone();
-    mod_evaluation_order.adjust(
-        None,
-        10.0_f64.powi(-(prec as i32)),
-        &numerical_masses,
-        &HashMap::default(),
-        &numerical_external_momenta,
-    );
+    mod_evaluation_order
+        .adjust(
+            None,
+            10.0_f64.powi(-(prec as i32)),
+            &numerical_masses,
+            &HashMap::default(),
+            &numerical_external_momenta,
+        )
+        .unwrap();
 
     // First perform Vakint evaluation
     let mut vakint_settings = VakintSettings {

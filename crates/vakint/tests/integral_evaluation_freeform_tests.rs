@@ -26,8 +26,9 @@ fn test_integrate_1l_decorated_indices_alphaloop() {
     compare_vakint_evaluation_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 3, integral_normalization_factor: LoopNormalizationFactor::MSbar, mu_r_sq_symbol: "some_space::{positive,scalar}::DDmursq".into(),..VakintSettings::default()},
         EvaluationOrder::alphaloop_only(),
+        // The odd term has the same two free slots and still integrates to zero.
         try_parse!(
-            "( (user_space::DDsigma(user_space::some_args) + user_space::{scalar}::DDsigma2(user_space::some_args) + user_space::{symmetric,real}::DDsigma3(user_space::some_args))*vakint::p(1,user_space::mink4(4,33))*vakint::p(2,user_space::mink4(4,33))*vakint::p(1,user_space::mink4(4,11))*vakint::p(2,user_space::mink4(4,22))+vakint::k(3,user_space::mink4(4,11))*vakint::k(3,user_space::mink4(4,22)) + vakint::k(3,user_space::mink4(4,77))*vakint::p(1,user_space::mink4(4,77)) ) \
+            "( (user_space::DDsigma(user_space::some_args) + user_space::{scalar}::DDsigma2(user_space::some_args) + user_space::{symmetric,real}::DDsigma3(user_space::some_args))*vakint::p(1,user_space::mink4(4,33))*vakint::p(2,user_space::mink4(4,33))*vakint::p(1,user_space::mink4(4,11))*vakint::p(2,user_space::mink4(4,22))+vakint::k(3,user_space::mink4(4,11))*vakint::k(3,user_space::mink4(4,22)) + vakint::g(user_space::mink4(4,11),user_space::mink4(4,22))*vakint::k(3,user_space::mink4(4,77))*vakint::p(1,user_space::mink4(4,77)) ) \
              * vakint::topo( vakint::prop(9,vakint::edge(66,66),vakint::k(3),user_space::{real}::DDMUVsq,1 ))\
             ")
         .unwrap()
@@ -63,8 +64,9 @@ fn test_integrate_1l_decorated_indices_matad() {
     compare_vakint_evaluation_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 3, integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
         EvaluationOrder::matad_only(None),
+        // The odd term has the same two free slots and still integrates to zero.
         try_parse!(
-            "( (user_space::CCsigma(user_space::some_args) + user_space::{scalar}::CCsigma2(user_space::some_args) + user_space::{real,symmetric}::CCsigma3(user_space::some_args))*vakint::p(1,user_space::mink4(4,33))*vakint::p(2,user_space::mink4(4,33))*vakint::p(1,user_space::mink4(4,11))*vakint::p(2,user_space::mink4(4,22))+vakint::k(3,user_space::mink4(4,11))*vakint::k(3,user_space::mink4(4,22)) + vakint::k(3,user_space::mink4(4,77))*vakint::p(1,user_space::mink4(4,77)) ) \
+            "( (user_space::CCsigma(user_space::some_args) + user_space::{scalar}::CCsigma2(user_space::some_args) + user_space::{real,symmetric}::CCsigma3(user_space::some_args))*vakint::p(1,user_space::mink4(4,33))*vakint::p(2,user_space::mink4(4,33))*vakint::p(1,user_space::mink4(4,11))*vakint::p(2,user_space::mink4(4,22))+vakint::k(3,user_space::mink4(4,11))*vakint::k(3,user_space::mink4(4,22)) + vakint::g(user_space::mink4(4,11),user_space::mink4(4,22))*vakint::k(3,user_space::mink4(4,77))*vakint::p(1,user_space::mink4(4,77)) ) \
              * vakint::topo( vakint::prop(9,vakint::edge(66,66),vakint::k(3),user_space::MUVsq,1 ))\
             ")
         .unwrap()
@@ -101,8 +103,9 @@ fn test_integrate_1l_decorated_indices_fmft() {
     compare_vakint_evaluation_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 5, integral_normalization_factor: LoopNormalizationFactor::MSbar, mu_r_sq_symbol: "some_space::{real,scalar}::BBmursq".into(),..VakintSettings::default()},
         EvaluationOrder::fmft_only(None),
+        // The odd term has the same two free slots and still integrates to zero.
         try_parse!(
-            "( ( user_space::BBsigma(user_space::some_args) + user_space::{symmetric,scalar}::BBsigma2(user_space::{real}::some_args2) + user_space::{integer}::BBparam )*vakint::p(1,user_space::mink4(4,33))*vakint::p(2,user_space::mink4(4,33))*vakint::p(1,user_space::mink4(4,11))*vakint::p(2,user_space::mink4(4,22))+vakint::k(3,user_space::mink4(4,11))*vakint::k(3,user_space::mink4(4,22)) + vakint::k(3,user_space::mink4(4,77))*vakint::p(1,user_space::mink4(4,77)) ) \
+            "( ( user_space::BBsigma(user_space::some_args) + user_space::{symmetric,scalar}::BBsigma2(user_space::{real}::some_args2) + user_space::{integer}::BBparam )*vakint::p(1,user_space::mink4(4,33))*vakint::p(2,user_space::mink4(4,33))*vakint::p(1,user_space::mink4(4,11))*vakint::p(2,user_space::mink4(4,22))+vakint::k(3,user_space::mink4(4,11))*vakint::k(3,user_space::mink4(4,22)) + vakint::g(user_space::mink4(4,11),user_space::mink4(4,22))*vakint::k(3,user_space::mink4(4,77))*vakint::p(1,user_space::mink4(4,77)) ) \
              * vakint::topo(
                   vakint::prop(9,vakint::edge(66,66),vakint::k(1),user_space::{real}::BBMUVsq,1 )
                 * vakint::prop(9,vakint::edge(66,66),vakint::k(2),user_space::{real}::BBMUVsq,1 )

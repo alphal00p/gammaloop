@@ -629,6 +629,77 @@ fn feyngen_str(
 
 #[test]
 #[serial]
+fn numerator_grouping_preserves_graphs_across_worker_counts() -> Result<()> {
+    let test_name = "numerator_grouping_preserves_graphs_across_worker_counts";
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    cli.run_command("import model sm-default.json")?;
+    let mut baseline = None;
+    for grouping in [
+        "group_identical_graphs_up_to_sign",
+        "group_identical_graphs_up_to_scalar_rescaling",
+    ] {
+        for cores in [1, 4] {
+            cli.run_command(&format!("set global kv global.n_cores.feyngen={cores}"))?;
+            assert_eq!(
+                feyngen_str(
+                    &mut cli,
+                    "xs",
+                    &format!(
+                        "e+ e- > d d~ | e- a d g QED^2==4 [{{{{2}}}} QCD] --numerator-grouping {grouping} --symmetrize-left-right-states false"
+                    ),
+                    false,
+                )?,
+                "2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3",
+                "{grouping}, {cores} workers",
+            );
+            let ProcessCollection::CrossSections(cross_sections) =
+                &cli.state.process_list.processes[0].collection
+            else {
+                panic!("expected a cross-section process");
+            };
+            let mut graphs = cross_sections
+                .values()
+                .next()
+                .unwrap()
+                .supergraphs
+                .iter()
+                .map(|graph| {
+                    (
+                        graph.graph.name.clone(),
+                        graph.graph.overall_factor.clone(),
+                        graph.graph.debug_dot(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            // Worker scheduling may change container order. The minimum-ID representative,
+            // complete grouping provenance, directed topology and momentum routing must agree.
+            graphs.sort_by(|a, b| a.0.cmp(&b.0));
+            assert_eq!(
+                graphs
+                    .iter()
+                    .map(|(name, factor, _)| {
+                        (name.as_str(), evaluate_overall_factor(factor.as_view()))
+                    })
+                    .collect::<Vec<_>>(),
+                vec![("GL0", Atom::num(-2)), ("GL2", Atom::num(-1))],
+            );
+            if let Some(baseline) = &baseline {
+                assert_eq!(&graphs, baseline, "{grouping}, {cores} workers");
+            } else {
+                baseline = Some(graphs);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
     let mut cli = get_test_cli(
         Some("scalars_load.toml".into()),

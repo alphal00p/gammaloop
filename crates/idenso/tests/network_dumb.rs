@@ -1,27 +1,145 @@
 use idenso::{
+    IndexTooling,
     representations::initialize,
     shorthands::schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
     tensor::SymbolicNetParse,
 };
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::{
-    network::parsing::ParseSettings,
+    network::{
+        ExecutionResult, Network, Sequential, SmallestDegree,
+        library::{
+            panicing::ErroringLibrary,
+            symbolic::{ExplicitKey, TensorLibrary},
+        },
+        parsing::{ParseSettings, ShadowedStructure, StrictTensorFilter},
+        store::NetworkStore,
+    },
     shadowing::TensorCollectExt,
     structure::{
-        abstract_index::AbstractIndex,
-        representation::{LibraryRep, Minkowski, RepName},
+        abstract_index::{AIND_SYMBOLS, AbstractIndex},
+        representation::{LibraryRep, Lorentz, Minkowski, RepName},
+        slot::{DualSlotTo, DummyAind, IsAbstractSlot},
     },
     symbol_set,
+    tensors::data::DataTensor,
 };
 use symbolica::{
-    atom::{Atom, AtomCore},
-    parse, symbol,
+    atom::{Atom, AtomCore, AtomView, Symbol},
+    function, parse, symbol,
 };
 
 // Generate TestSymbols with all alphabet characters and some multi-character symbols
 symbol_set!(TestSymbols, TS;
     mu1 mu2 mu3 mu4 mu5 mu6 mu7 mu8 mu9 mu10 mu11
 );
+
+fn assert_factorized_contraction(input: &Atom, output: &Atom, settings: &SchoonschipSettings) {
+    // Sum-by-sum boundaries deliberately remain factorized in this mode. A
+    // metric/rank-one probe under the same settings still requires contraction
+    // progress, so returning every input unchanged cannot satisfy this oracle.
+    let probe =
+        parse!("spenso::g(spenso::mink(4,mu6),spenso::mink(4,mu7))*k(99,spenso::mink(4,mu6))");
+    assert_eq!(
+        probe.schoonschip_with_net::<false, AbstractIndex>(settings),
+        parse!("k(99,spenso::mink(4,mu7))"),
+    );
+
+    // Reuse the component-network boundary, independently of the symbolic
+    // Schoonschip rewrite. Close external slots with independent probe vectors
+    // and compare exact integer assignments after finite component contraction.
+    let mut external = input
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap()
+        .graph
+        .dangling_indices();
+    external.sort();
+    let probes = external
+        .iter()
+        .enumerate()
+        .fold(Atom::one(), |product, (index, slot)| {
+            product * function!(symbol!("k"), 100 + index, slot.to_atom())
+        });
+    type ComponentLibrary =
+        TensorLibrary<DataTensor<Atom, ExplicitKey<AbstractIndex>>, AbstractIndex>;
+    let mut library = ComponentLibrary::new();
+    library.update_ids();
+    let components = [input, output].map(|expression| {
+        // Bare k(i) in an existing scalar g(k(i),k(j)) has an implicit
+        // Minkowski representation. Make it explicit for the component parser,
+        // whose existing shorthand materializer then contracts that dot with
+        // the same metric as the indexed vectors, preserving surrounding factors.
+        let expression = (expression * &probes).replace_map(|view, _, out| {
+            if let AtomView::Fun(vector) = view
+                && vector.get_symbol() == symbol!("k")
+                && vector.get_nargs() == 1
+            {
+                **out = function!(
+                    symbol!("k"),
+                    vector.get(0),
+                    function!(symbol!("spenso::mink"), 4)
+                );
+            }
+        });
+        let mut network = Network::<
+            NetworkStore<DataTensor<Atom, ShadowedStructure<AbstractIndex>>, Atom>,
+            ExplicitKey<AbstractIndex>,
+            Symbol,
+            AbstractIndex,
+        >::try_from_view::<ShadowedStructure<AbstractIndex>, ComponentLibrary>(
+            expression.as_view(),
+            &library,
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
+        .unwrap();
+        network
+            .execute::<
+                Sequential,
+                SmallestDegree,
+                DataTensor<Atom, ExplicitKey<AbstractIndex>>,
+                ComponentLibrary,
+                ErroringLibrary<Symbol>,
+            >(&library, &ErroringLibrary::new())
+            .unwrap();
+        match network.result_scalar().unwrap() {
+            ExecutionResult::One => Atom::one(),
+            ExecutionResult::Zero => Atom::zero(),
+            ExecutionResult::Val(value) => value.into_owned(),
+        }
+    });
+    let mut nonzero = false;
+    for seed in 1..=3 {
+        let [before, after] = components.each_ref().map(|expression| {
+            expression.replace_map(|view, _, out| {
+                let AtomView::Fun(vector) = view else {
+                    return;
+                };
+                if vector.get_symbol() != symbol!("k") {
+                    return;
+                }
+                let Some(AtomView::Fun(component)) = vector.iter().last() else {
+                    return;
+                };
+                if component.get_symbol() != AIND_SYMBOLS.cind {
+                    return;
+                }
+                let id = i64::try_from(vector.get(0)).unwrap();
+                let component = i64::try_from(component.get(0)).unwrap();
+                **out = Atom::num(
+                    ((id + 1) * (component + 2) * (seed + 3) + id * id + component * component) % 7
+                        - 3,
+                );
+            })
+        });
+        assert!(
+            matches!(before.as_view(), AtomView::Num(_)),
+            "unassigned tensor components: {before}"
+        );
+        nonzero |= !before.is_zero();
+        assert_eq!(before, after, "component assignment {seed}");
+    }
+    assert!(nonzero, "the component comparisons must not all vanish");
+}
 
 #[test]
 fn spenso_bare_symb_vertex_substitution() {
@@ -91,9 +209,8 @@ fn spenso_bare_symb_vertex_substitution() {
     settings.max_line_length = Some(80);
     println!("in:{}", r.printer(settings.clone()));
 
-    let out = r.schoonschip_with_net::<false, AbstractIndex>(
-        &SchoonschipSettings::partial().into_single_pass(),
-    );
+    let contraction_settings = SchoonschipSettings::partial().into_single_pass();
+    let out = r.schoonschip_with_net::<false, AbstractIndex>(&contraction_settings);
 
     println!("out:{}", out.printer(settings.clone()));
 
@@ -114,6 +231,7 @@ fn spenso_bare_symb_vertex_substitution() {
         external.sort();
         assert_eq!(external, expected, "{expression}");
     }
+    assert_factorized_contraction(&r, &out, &contraction_settings);
 }
 
 fn substituted_three_vertex_reproducer() -> (Atom, [(&'static str, Atom); 3]) {
@@ -215,11 +333,10 @@ fn min_product_terms_three_vertex_simplifies_after_boundary_cleanup() {
     initialize();
     let _ = TS.mu1;
     let (r, _) = substituted_three_vertex_reproducer();
-    let out = r.schoonschip_with_net::<false, AbstractIndex>(
-        &SchoonschipSettings::partial()
-            .into_single_pass()
-            .with_contraction_order(SchoonschipContractionOrder::MinProductTerms),
-    );
+    let contraction_settings = SchoonschipSettings::partial()
+        .into_single_pass()
+        .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
+    let out = r.schoonschip_with_net::<false, AbstractIndex>(&contraction_settings);
 
     // Only mu2 and mu7 are physical external slots. Parsing every sum branch
     // validates the internal contractions without distributing the numerator.
@@ -238,6 +355,7 @@ fn min_product_terms_three_vertex_simplifies_after_boundary_cleanup() {
         external.sort();
         assert_eq!(external, expected, "{expression}");
     }
+    assert_factorized_contraction(&r, &out, &contraction_settings);
 }
 
 #[test]
@@ -559,4 +677,146 @@ fn compare_three_vertex_residual_methods() {
             &dummies,
         );
     }
+}
+
+#[test]
+fn canonicalization_keeps_explicit_dummies_distinct_from_compact_dot_indices() {
+    initialize();
+    let mink = Minkowski {}.new_rep(4);
+    let vector = symbol!("capture_probe");
+    let spectator = parse!("(capture_a+capture_b)*(capture_c+capture_d)");
+    for dots in 1..=2 {
+        let compact = (0..dots).fold(Atom::one(), |product, index| {
+            product
+                * function!(
+                    spenso::network::tags::SPENSO_TAG.dot,
+                    function!(vector, 3 + 2 * index, mink.to_symbolic([])),
+                    function!(vector, 4 + 2 * index, mink.to_symbolic([]))
+                )
+        });
+        // The control differs only by the explicit dummy's name. Both forms
+        // contain three or fewer independent closed Lorentz contractions.
+        let mut expected = None;
+        for reserved in [17, 1_000_000, 1_000_001] {
+            let slot = mink.slot::<AbstractIndex, _>(AbstractIndex::new_dummy_at(reserved));
+            let input = &spectator
+                * &compact
+                * function!(vector, 1, slot.to_atom())
+                * function!(vector, 2, slot.to_atom());
+            let actual = input.canonize(AbstractIndex::Dummy);
+            if let Some(expected) = &expected {
+                assert_eq!(
+                    &actual, expected,
+                    "reserved dummy {reserved}, {dots} compact dots"
+                );
+            } else {
+                expected = Some(actual.clone());
+            }
+            for factor in [parse!("capture_a+capture_b"), parse!("capture_c+capture_d")] {
+                assert!(
+                    actual
+                        .pattern_match(&factor.to_pattern(), None, None)
+                        .next()
+                        .is_some()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn canonicalization_keeps_external_dummy_names_distinct_from_canonical_dummies() {
+    initialize();
+    let mink = Minkowski {}.new_rep(4);
+    for reserved in [0, 1] {
+        let external = mink
+            .slot::<AbstractIndex, _>(AbstractIndex::new_dummy_at(reserved))
+            .to_atom();
+        let expression = |dummy| {
+            let slot = mink
+                .slot::<AbstractIndex, _>(AbstractIndex::new_dummy_at(dummy))
+                .to_atom();
+            (function!(symbol!("capture_open_a"), slot.clone())
+                + function!(symbol!("capture_open_b"), slot.clone()))
+                * (function!(symbol!("capture_open_c"), slot.clone(), external.clone())
+                    + function!(symbol!("capture_open_d"), slot, external.clone()))
+        };
+        let canonical = expression(17).canonize(AbstractIndex::Dummy);
+        assert_eq!(canonical, expression(18).canonize(AbstractIndex::Dummy));
+        assert_eq!(canonical, canonical.canonize(AbstractIndex::Dummy));
+        assert_eq!(canonical.list_dangling::<AbstractIndex>(), vec![external]);
+        assert!(matches!(canonical.as_view(), AtomView::Mul(product)
+            if product.iter().filter(|factor| matches!(factor, AtomView::Add(_))).count() == 2));
+    }
+}
+
+#[test]
+fn canonicalization_keeps_dual_external_slots_distinct_from_canonical_dummies() {
+    initialize();
+    let rep = Lorentz {}.new_rep(4);
+    let external = rep
+        .slot::<AbstractIndex, _>(AbstractIndex::Dummy(0))
+        .dual()
+        .to_atom();
+    let spectator = parse!("(capture_a+capture_b)*(capture_c+capture_d)");
+    let expression = |dummy| {
+        let slot = rep.slot::<AbstractIndex, _>(AbstractIndex::Dummy(dummy));
+        &spectator
+            * function!(symbol!("capture_dual_t"), slot.to_atom(), external.clone())
+            * function!(symbol!("capture_dual_u"), slot.dual().to_atom())
+    };
+    let canonical = expression(17).canonize(AbstractIndex::Dummy);
+    assert_eq!(canonical, expression(18).canonize(AbstractIndex::Dummy));
+    assert_eq!(canonical, canonical.canonize(AbstractIndex::Dummy));
+    assert_eq!(canonical.list_dangling::<AbstractIndex>(), vec![external]);
+    assert!(
+        canonical
+            .pattern_match(&spectator.to_pattern(), None, None)
+            .next()
+            .is_some()
+    );
+}
+
+#[test]
+fn canonicalization_ignores_indices_from_canceled_representation_groups() {
+    initialize();
+    let expressions = [17, 18].map(|dummy| {
+        let index = AbstractIndex::Dummy(dummy);
+        let mink = Minkowski {}.new_rep(4).slot::<AbstractIndex, _>(index);
+        let lorentz = Lorentz {}.new_rep(4).slot::<AbstractIndex, _>(index);
+        [
+            (mink.to_atom(), mink.to_atom()),
+            (lorentz.to_atom(), lorentz.dual().to_atom()),
+        ]
+        .map(|(slot, dual)| {
+            function!(symbol!("capture_cancel_a"), slot)
+                * function!(symbol!("capture_cancel_b"), dual)
+        })
+    });
+    // Exercise both representation orderings: canceled terms must not consume
+    // a canonical dummy number ahead of the surviving contraction.
+    for canceled in 0..2 {
+        let survivor = &expressions[0][1 - canceled];
+        let input = &expressions[0][canceled] - &expressions[1][canceled] + survivor;
+        let canonical = input.canonize(AbstractIndex::Dummy);
+        assert_eq!(canonical, survivor.canonize(AbstractIndex::Dummy));
+        assert_eq!(canonical, canonical.canonize(AbstractIndex::Dummy));
+        assert!(canonical.list_dangling::<AbstractIndex>().is_empty());
+    }
+}
+
+#[test]
+fn tensor_canonicalization_closes_contractions_inside_nested_sums() {
+    initialize();
+    let input = parse!(
+        "nested_spectator*((nested_a(nested_mu)+nested_b(nested_mu))
+            *(nested_c(nested_mu)+nested_d(nested_mu))
+          +(nested_e(nested_mu)+nested_f(nested_mu))
+            *(nested_g(nested_mu)+nested_h(nested_mu)))"
+    );
+    // Each alternative closes the same index inside two vector sums. Keep
+    // both products of sums intact while validating the canonicalizer's scope.
+    let canonical = input.canonize_tensors([(parse!("nested_mu"), 0)]).unwrap();
+    assert!(canonical.external_indices.is_empty());
+    assert_eq!(canonical.canonical_form, input);
 }
