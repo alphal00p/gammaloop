@@ -176,6 +176,12 @@ Upload sizes remain unknown if the logs omit them. Reported artifact sizes are
 not established compressed wire bytes. Timers may include network,
 decompression, store import, and locking; they do not distinguish those phases.
 
+`transferTimeouts` records low-speed upload/download warnings separately, with
+reported thresholds and retry attempt numbers. Request URLs and arbitrary error
+text are omitted. `transferTimeoutCount` also appears in job/suite totals; it
+does not invent durations or byte counts for unfinished attempts. Use these
+events when assessing whether a pair had comparable service conditions.
+
 `intermediateDownloadReportedBytes` totals content restored by jobs classified
 as artifact producers from their attribute names: per-crate dependency/test
 artifacts, Cargo-artifact roots, prebuild, `ci-test-inputs`, and test-binary archives. This is an

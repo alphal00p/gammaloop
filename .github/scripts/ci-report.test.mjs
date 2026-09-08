@@ -33,6 +33,25 @@ test('completed transfers union within workers; Cargo and test evidence stay dis
   assert.equal(result.builds.length, 2);
 });
 
+test('transfer timeouts retain numeric retry evidence without inventing completed transfers', () => {
+  const result = parseLog(JSON.stringify({ utc_time: '2026-09-08T15:00:00Z', relative_nanoseconds: 0,
+    log_message: "warning: unable to upload 'https://cache.example/nar?token=private-sentinel': Timeout was reached (28) Operation too slow. Less than 1 bytes/sec transferred the last 300 seconds; retrying in 341 ms (attempt 1/5)\n"
+      + "error: unable to download 'https://cache.example/nar': Operation too slow. Less than 2 bytes/sec transferred the last 60 seconds",
+  }));
+  assert.deepEqual(result.transferTimeouts, [
+    { direction: 'upload', time: Date.parse('2026-09-08T15:00:00Z'), minimumBytesPerSecond: 1, windowSeconds: 300,
+      retryDelayMilliseconds: 341, attempt: 1, maximumAttempts: 5 },
+    { direction: 'download', time: Date.parse('2026-09-08T15:00:00Z'), minimumBytesPerSecond: 2, windowSeconds: 60,
+      retryDelayMilliseconds: null, attempt: null, maximumAttempts: null },
+  ]);
+  assert.equal(result.uploadCount, 0);
+  assert.equal(result.downloadCount, 0);
+  assert.equal(result.transferActiveSeconds, 0);
+  assert.equal(result.transferTimeoutCount, 2);
+  assert.equal(JSON.stringify(result).includes('private-sentinel'), false);
+  assert.equal(summarizeSuite(spec, { status: 'running' }, [], [{ ...result, logStatus: 'ok' }]).transferTimeoutCount, 2);
+});
+
 test('wrapper substitution is unknown; actual result substitution establishes reuse', () => {
   const job = { type: 'test', status: 'success', attribute: attr };
   assert.equal(parseLog(wrapper, job).testExecution, 'unknown');

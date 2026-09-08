@@ -46,10 +46,16 @@ export function parseLog(ndjson, job = {}) {
     return record;
   });
   if (!records.length) throw new Error('empty log');
-  const downloads = [], uploads = [], builds = [], cargo = [], compiled = [], checked = [], tests = [], testSummaries = [];
+  const downloads = [], uploads = [], transferTimeouts = [], builds = [], cargo = [], compiled = [], checked = [], tests = [], testSummaries = [];
   for (const record of records) {
     const text = record.log_message.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
     const time = timestamp(record.utc_time);
+    // Retry warnings are observations, not completed transfers or measured bytes.
+    // Keep numeric diagnostics only; request URLs can contain credentials.
+    for (const match of text.matchAll(/unable to (upload|download) '[^'\n]+'[^\n]*?Operation too slow\. Less than ([\d.]+) bytes\/sec transferred the last (\d+) seconds(?:; retrying in (\d+) ms \(attempt (\d+)\/(\d+)\))?/g))
+      transferTimeouts.push({ direction: match[1], time, minimumBytesPerSecond: Number(match[2]), windowSeconds: Number(match[3]),
+        retryDelayMilliseconds: match[4] == null ? null : Number(match[4]),
+        attempt: match[5] == null ? null : Number(match[5]), maximumAttempts: match[6] == null ? null : Number(match[6]) });
     // Ignore "Downloading cached": only the completed line has size and duration.
     for (const match of text.matchAll(new RegExp(`Downloaded cached ([^\\n]+?) \\(([\\d.]+) (B|KiB|MiB|GiB|TiB)\\) in (${durationPattern})`, 'g')))
       downloads.push({ name: match[1], reportedBytes: Number(match[2]) * units[match[3]], seconds: duration(match[4]), time });
@@ -92,6 +98,7 @@ export function parseLog(ndjson, job = {}) {
     cargoFinishedSeconds: sum(cargo, 'seconds'), cargoActiveSeconds: intervalSeconds(cargo),
     compilationMessages: compiled.length, compiled: [...new Set(compiled)],
     checkingMessages: checked.length, checked: [...new Set(checked)],
+    transferTimeoutCount: transferTimeouts.length, transferTimeouts,
     testExecution, testSummaries, tests, downloads, uploads, builds, cargo,
   };
 }
@@ -147,7 +154,8 @@ export function summarizeSuite(spec, suite, checks, jobs) {
     intermediateDownloadReportedBytes: sum(observed.filter(job => job.context === 'artifact-producer'), 'downloadReportedBytes'),
     uploadReportedBytes: observed.every(job => job.uploadReportedBytes != null) ? sum(observed, 'uploadReportedBytes') : null,
     downloadWorkerSeconds: sum(observed, 'downloadActiveSeconds'), uploadWorkerSeconds: sum(observed, 'uploadActiveSeconds'),
-    transferWorkerSeconds: sum(observed, 'transferActiveSeconds'), cargoFinishedSeconds: sum(observed, 'cargoFinishedSeconds'),
+    transferWorkerSeconds: sum(observed, 'transferActiveSeconds'), transferTimeoutCount: sum(observed, 'transferTimeoutCount'),
+    cargoFinishedSeconds: sum(observed, 'cargoFinishedSeconds'),
     compilationMessages: sum(observed, 'compilationMessages'), checkingMessages: sum(observed, 'checkingMessages'),
     executedTestJobs: jobs.filter(job => job.testExecution === 'executed').length,
     reusedTestJobs: jobs.filter(job => job.testExecution === 'reused').length,
@@ -471,6 +479,8 @@ export async function createReport(manifestPath, outputDir) {
     '', '*Log-reported artifact sizes; not established network bytes.', '',
     ...suites.flatMap(suite => suite.observedInterruptions.map(incident =>
       `- Prior interruption: [${display(incident.jobUrl.split('/').at(-1))}](${incident.jobUrl}) observed ${display(incident.observedAt)}; ${display(incident.evidence?.workerSeconds)} worker seconds and ${display(incident.evidence?.downloadReportedBytes)} reported download bytes in [saved evidence](${incident.evidenceFile}). Kept separate from current totals; pair is incomplete.`)),
+    ...suites.filter(suite => suite.transferTimeoutCount > 0).map(suite =>
+      `- [${display(suite.layout)} / ${display(suite.variant)} / ${display(suite.scenario)}](${suite.suiteUrl}): ${suite.transferTimeoutCount} transfer timeout warnings. Unfinished attempts are separate from completed-transfer totals; see per-job numeric diagnostics in report.json.`),
     '',
     '| Layout / scenario / pair | Comparable | Worker change % | Intermediate restore change % | Required latency change % |',
     '|---|---|---:|---:|---:|',
