@@ -1,5 +1,7 @@
 // Internal graph implementation. Public users should import `graph.typ`.
 
+#import "subgraph.typ" as subgraph-impl
+
 #let _plugin = plugin("../../linnest.wasm")
 
 #let _graph-kind = "linnest-graph"
@@ -130,7 +132,9 @@
 #let _statement-value(value, context_) = {
   if type(value) == str {
     value
-  } else if type(value) == int or type(value) == float or type(value) == bool {
+  } else if type(value) == bool {
+    repr(value)
+  } else if type(value) == int or type(value) == float {
     str(value).replace("−", "-")
   } else {
     panic(
@@ -779,6 +783,9 @@
 }
 
 #let _node-layout-statements(record, style-record) = {
+  if record.at("boundary", default: none) != none {
+    return ("layout-width": 0, "layout-height": 0)
+  }
   let node-data = _node-style-data(record, style-record)
   let default-label-value = node-data.at("label", default: record.name)
   let default-label = _as-content(default-label-value)
@@ -1109,6 +1116,19 @@
     result.name = _name-label(result.name, "graph.nodes")
   }
   result.data = _get-native-data(native-data, kind, index)
+  let origins = native-data.at("origins", default: (:))
+  if kind + "s" in origins {
+    result.origin = origins.at(kind + "s").at(index)
+  }
+  if kind in ("node", "edge") {
+    result.boundary = native-data
+      .at("boundaries", default: ())
+      .find(b => {
+        if kind == "node" { b.node == index } else {
+          b.node == none and b.edge == index
+        }
+      })
+  }
   result
 }
 
@@ -1140,7 +1160,10 @@
   let records = if subgraph == none {
     cbor(_plugin.graph_nodes(graph-bytes(graph)))
   } else {
-    cbor(_plugin.graph_nodes_of_subgraph(graph-bytes(graph), bytes(subgraph)))
+    cbor(_plugin.graph_nodes_of_subgraph(
+      graph-bytes(graph),
+      subgraph-impl.subgraph-bytes(subgraph-impl.validate(graph, subgraph)),
+    ))
   }
   records.map(record => _native-record-data(
     record,
@@ -1155,7 +1178,10 @@
   let records = if subgraph == none {
     cbor(_plugin.graph_edges(graph-bytes(graph)))
   } else {
-    cbor(_plugin.graph_edges_of_subgraph(graph-bytes(graph), bytes(subgraph)))
+    cbor(_plugin.graph_edges_of_subgraph(
+      graph-bytes(graph),
+      subgraph-impl.subgraph-bytes(subgraph-impl.validate(graph, subgraph)),
+    ))
   }
   records.map(record => _native-edge-record(record, native-data))
 }
@@ -1791,5 +1817,158 @@
     _empty-native-data(),
   )
 }
-#let cycles(graph) = cbor(_plugin.graph_cycle_basis(graph-bytes(graph)))
-#let forests(graph) = cbor(_plugin.graph_spanning_forests(graph-bytes(graph)))
+#let cycles(graph) = {
+  let topology = subgraph-impl.topology(graph)
+  cbor(_plugin.graph_cycle_basis(graph-bytes(graph))).map(
+    mask => subgraph-impl.wrap(mask, topology: topology),
+  )
+}
+#let forests(graph) = {
+  let topology = subgraph-impl.topology(graph)
+  cbor(_plugin.graph_spanning_forests(graph-bytes(graph))).map(
+    mask => subgraph-impl.wrap(mask, topology: topology),
+  )
+}
+
+#let cut(graph_, left, right, boundary) = {
+  let left = subgraph-impl.validate(graph_, left)
+  let right = subgraph-impl.validate(graph_, right)
+  let lhs = cbor(_plugin.subgraph_hedges(left.bytes))
+  let rhs = cbor(_plugin.subgraph_hedges(right.bytes))
+  assert(
+    lhs.len() == rhs.len() and not lhs.any(h => h in rhs),
+    message: "graph.cut: left and right must contain disjoint, paired half-edges",
+  )
+  let input-edges = edges(graph_, none)
+  let entries = ()
+  for edge in input-edges {
+    let selected = (edge.source, edge.sink).filter(h => (
+      h != none and h.hedge in lhs
+    ))
+    if selected.len() > 0 {
+      assert(
+        selected.len() == 1 and edge.source != none and edge.sink != none,
+        message: "graph.cut: select exactly one half of each paired edge on each side",
+      )
+      let l = selected.first().hedge
+      let r = if edge.source.hedge == l { edge.sink.hedge } else {
+        edge.source.hedge
+      }
+      assert(
+        r in rhs,
+        message: "graph.cut: right must be the involution of left",
+      )
+      let windings = ()
+      for (selection, h) in ((left, l), (right, r)) {
+        let data = selection.hedge-data.at(str(h), default: none)
+        if type(data) == dictionary and "winding" in data {
+          windings.push(data.winding)
+        }
+      }
+      let winding = windings.at(0, default: 1)
+      assert(
+        type(winding) == int
+          and winding > 0
+          and windings.all(w => type(w) == int and w == winding),
+        message: "graph.cut: winding must be a positive integer agreeing on both sides",
+      )
+      entries.push((left: l, right: r, winding: winding))
+    }
+  }
+  assert(
+    entries.len() == lhs.len(),
+    message: "graph.cut: selected half-edge does not belong to the graph",
+  )
+  if entries.len() == 0 { return graph_ }
+  let result = cbor(_plugin.graph_cut(
+    graph-bytes(graph_),
+    cbor.encode(entries),
+  ))
+  let original = _native-data(graph_)
+  let native = (
+    original
+      + (
+        nodes: result.nodes.map(i => _array-at(original.nodes, i)),
+        edges: result.edges.map(origin => _array-at(
+          original.edges,
+          origin.edge,
+        )),
+        hedges: result.hedges.map(i => _array-at(original.hedges, i)),
+        origins: (
+          nodes: result.nodes,
+          edges: result.edges.map(origin => (
+            origin + (name: input-edges.at(origin.edge).name)
+          )),
+          hedges: result.hedges,
+        ),
+        boundaries: result.boundaries.map(b => {
+          let selection = if b.side == "left" { left } else { right }
+          (
+            b
+              + (
+                data: selection.hedge-data.at(str(b.hedge), default: none),
+                cut-data: selection.data,
+                origin: result.edges.at(b.edge)
+                  + (name: input-edges.at(result.edges.at(b.edge).edge).name),
+              )
+          )
+        }),
+      )
+  )
+  // Earlier openings retain their creation provenance and annotations. Only
+  // their current node/edge anchors are remapped by a subsequent opening.
+  let previous = original.at("boundaries", default: ())
+  let output-edges = if previous.len() == 0 { () } else {
+    edges(_graph-object(result.graph, native), none)
+  }
+  for b in previous {
+    let node = if b.node == none { none } else {
+      result.nodes.position(n => n == b.node)
+    }
+    let edge = output-edges.find(e => (
+      e.origin.edge == b.edge
+        and (
+          if node == none { e.source == none or e.sink == none } else {
+            (e.source, e.sink).any(h => h != none and h.node == node)
+          }
+        )
+    ))
+    assert(
+      edge != none,
+      message: "graph.cut: could not remap an existing boundary",
+    )
+    native.boundaries.push(b + (node: node, edge: edge.edge))
+  }
+  let output = _graph-object(result.graph, native)
+  if boundary == none { output } else {
+    let created = result.boundaries.map(b => (b.node, b.edge))
+    let patch = record => if (
+      record.boundary != none
+        and (
+          (record.boundary.node, record.boundary.edge) in created
+        )
+    ) { _call(boundary, record) }
+    map(output, (
+      graph: none,
+      node: patch,
+      edge: patch,
+      source: none,
+      sink: none,
+    ))
+  }
+}
+
+#let boundaries(graph_) = {
+  let ns = nodes(graph_, none)
+  let es = edges(graph_, none)
+  _native-data(graph_)
+    .at("boundaries", default: ())
+    .map(b => (
+      b
+        + (
+          pos: if b.node == none { es.at(b.edge).pos } else {
+            ns.at(b.node).pos
+          },
+        )
+    ))
+}

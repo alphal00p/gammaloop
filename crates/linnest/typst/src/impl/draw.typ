@@ -82,6 +82,7 @@
 #let _edge-label-defaults = (
   label: none,
   label-style: (:),
+  label-shift: 0,
   label-gap: 0.15,
   label-side: auto,
 )
@@ -1674,29 +1675,28 @@
   )
 }
 
-#let _path-mid-frame(path, accuracy) = {
+#let _path-mid-frame(path, accuracy, shift: 0) = {
   let segments = curve-api.segments(path)
   if segments.len() == 0 {
     return none
   }
   let total = curve-api.length(path, accuracy: accuracy)
-  if total <= accuracy {
-    let segment = segments.first()
-    return (
-      point: segment.start,
-      tangent: curve-api.cubic-tangent(segment, 0),
-    )
-  }
-  let prefix = curve-api.trim(path, end-outset: total / 2, accuracy: accuracy)
-  let prefix-segments = curve-api.segments(prefix)
-  let segment = if prefix-segments.len() == 0 {
-    segments.first()
+  let at = calc.clamp(total / 2 + shift, 0, total)
+  let (segment, t) = if at == 0 {
+    (segments.first(), 0)
+  } else if at == total {
+    (segments.last(), 1)
+  } else if total <= accuracy {
+    (segments.first(), 0)
   } else {
-    prefix-segments.last()
+    let prefix = curve-api.segments(curve-api.trim(
+      path, end-outset: total - at, accuracy: accuracy,
+    ))
+    if prefix.len() == 0 { (segments.first(), 0) } else { (prefix.last(), 1) }
   }
   (
-    point: segment.end,
-    tangent: curve-api.cubic-tangent(segment, 1),
+    point: if t == 0 { segment.start } else { segment.end },
+    tangent: curve-api.cubic-tangent(segment, t),
   )
 }
 
@@ -1743,7 +1743,9 @@
   let label-origin = if edge == none { none } else {
     edge.at("pos", default: none)
   }
-  let frame = _path-mid-frame(path, _style-value(style, "accuracy"))
+  let frame = _path-mid-frame(
+    path, _style-value(style, "accuracy"), shift: _style-value(style, "label-shift"),
+  )
   if frame == none {
     return none
   }
@@ -1763,6 +1765,17 @@
     label-origin,
   ))
   let label-style = _style(_style-value(style, "label-style"), data)
+  let gap = calc.max(0, _style-value(style, "label-gap"))
+  // Explicit anchors are deliberate placement, not a request for box clearance.
+  if label-style.at("anchor", default: auto) not in (auto, "auto") {
+    return cetz.draw.content(
+      _point-add(frame.point, _point-scale(normal, gap)),
+      label,
+      padding: 0,
+      ..label-style,
+    )
+  }
+  label-style.anchor = "center"
   let element = cetz.draw.content(
     _point(frame.point),
     label,
@@ -1795,7 +1808,7 @@
   )
   let position = _point-add(frame.point, _point-scale(
     normal,
-    calc.max(0, _style-value(style, "label-gap")) - nearest,
+    gap - nearest,
   ))
   cetz.draw.content(_point(position), label, padding: 0, ..label-style)
 }
@@ -2173,39 +2186,40 @@
   }
 }
 
-#let _subgraph-record(entry, default-style) = {
-  if type(entry) == dictionary {
-    let graph = entry.at("subgraph", default: entry.at("graph", default: none))
-    if graph == none {
+#let _subgraph-record(graph, entry, default-style) = {
+  let selected = entry
+  let style = default-style
+  if (
+    type(entry) == dictionary
+      and entry.at("linnest-kind", default: none) != "linnest-subgraph"
+  ) {
+    selected = entry.at("subgraph", default: entry.at("graph", default: none))
+    if selected == none {
       panic("draw: subgraph dictionary entries need a `subgraph` field")
     }
-    (
-      hedges: subgraph-api.hedges(graph),
-      edge-style: entry.at(
-        "edge-style",
-        default: entry.at(
-          "style",
-          default: entry.at("subgraph-edge-style", default: default-style),
-        ),
+    style = entry.at(
+      "edge-style",
+      default: entry.at(
+        "style",
+        default: entry.at("subgraph-edge-style", default: default-style),
       ),
     )
-  } else {
-    (
-      hedges: subgraph-api.hedges(entry),
-      edge-style: default-style,
-    )
   }
+  (
+    hedges: subgraph-api.hedges(subgraph-api._impl.validate(graph, selected)),
+    edge-style: style,
+  )
 }
 
-#let _subgraph-records(subgraph, default-style) = {
+#let _subgraph-records(graph, subgraph, default-style) = {
   if subgraph == none {
     ()
   } else if type(subgraph) == array {
     subgraph
       .filter(entry => entry != none)
-      .map(entry => _subgraph-record(entry, default-style))
+      .map(entry => _subgraph-record(graph, entry, default-style))
   } else {
-    (_subgraph-record(subgraph, default-style),)
+    (_subgraph-record(graph, subgraph, default-style),)
   }
 }
 
@@ -2567,9 +2581,14 @@
         let node-outsets = ()
         let node-boxes = ()
         let debug-level = _debug-level(debug)
-        let subgraph-records = _subgraph-records(subgraph, subgraph-edge-style)
+        let subgraph-records = _subgraph-records(
+          graph,
+          subgraph,
+          subgraph-edge-style,
+        )
 
         for (i, v) in nodes.enumerate() {
+          let boundary = v.at("boundary", default: none) != none
           let pos = _node-pos(v)
           let node = v + (pos: pos)
           let record-label = _data-label(v)
@@ -2588,16 +2607,22 @@
           let node-data = scope + fields + (fields: fields)
           let default-label-value = node-data.at("label", default: node.name)
           let default-label = _as-content(default-label-value)
-          let label = _content(node-label, node-data, default-label)
-          let node-style-value = (
+          let label = if boundary { none } else {
+            _content(node-label, node-data, default-label)
+          }
+          let node-style-value = if boundary {
+            (radius: 0, fill: none, stroke: none)
+          } else {
             (
-              radius: node-radius,
-              fill: node-fill,
-              stroke: node-stroke,
+              (
+                radius: node-radius,
+                fill: node-fill,
+                stroke: node-stroke,
+              )
+                + _style(graph-node-style, node-data)
+                + _style(node-style, node-data)
             )
-              + _style(graph-node-style, node-data)
-              + _style(node-style, node-data)
-          )
+          }
           let node-style = (
             node-style-value
               + (
@@ -2610,19 +2635,19 @@
                 ),
               )
           )
-          let node-label-draw-style = (
+          let node-label-draw-style = if boundary { (:) } else {
             _style(graph-node-label-style, node-data) + node-label-style
-          )
+          }
           let layout-width = _statement-number(v, "layout-width", default: none)
           let layout-height = _statement-number(
             v,
             "layout-height",
             default: none,
           )
-          let node-width = if layout-width == none {
+          let node-width = if boundary { 0 } else if layout-width == none {
             2 * node-style.radius
           } else { layout-width }
-          let node-height = if layout-height == none {
+          let node-height = if boundary { 0 } else if layout-height == none {
             2 * node-style.radius
           } else { layout-height }
           let box = (
@@ -2639,7 +2664,7 @@
             node: node,
           )
           node-boxes.push(box)
-          node-outsets.push(if draw-node == auto {
+          node-outsets.push(if boundary { 0 } else if draw-node == auto {
             _node-outset(node-style, node-outset)
           } else if node-outset == auto {
             calc.max(node-width, node-height) / 2
@@ -2647,7 +2672,10 @@
             node-outset
           })
 
-          if draw-node == auto {
+          if boundary {
+            // Cut boundary nodes are endpoint positions, not interactions.
+            node-elements.push(cetz.draw.anchor(box.name, box.center))
+          } else if draw-node == auto {
             node-elements.push(cetz.draw.circle(
               _point(pos),
               name: box.name,

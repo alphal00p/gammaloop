@@ -310,14 +310,15 @@
 )
 
 #let _subgraph-bits(g, value, context_) = {
-  if type(value) == bytes {
-    return value
-  }
-  if type(value) == function {
-    return value(g)
+  let value = if type(value) == function { value(g) } else { value }
+  if type(value) == dictionary {
+    return subgraph._impl.validate(g, value)
   }
   if not _bool-array(value) {
-    panic(context_ + " must be a boolean half-edge array or a module function")
+    panic(
+      context_
+        + " must be a subgraph object, boolean half-edge array, or module function",
+    )
   }
   subgraph.bits(g, value)
 }
@@ -363,34 +364,36 @@
 }
 
 #let _draw-subgraph(g, value) = {
-  if value == none or type(value) == bytes or type(value) == function {
-    if type(value) == function { value(g) } else { value }
-  } else if _bool-array(value) {
-    if value.len() == 0 { () } else {
-      _subgraph-bits(g, value, "config.draw subgraph")
-    }
-  } else if type(value) == array {
-    value.map(item => {
-      if type(item) == dictionary and item.keys().contains("subgraph") {
-        (
-          item
-            + (
-              subgraph: _subgraph-bits(
-                g,
-                item.subgraph,
-                "config.draw subgraph entry",
-              ),
-            )
-        )
-      } else {
-        _subgraph-bits(g, item, "config.draw subgraph entry")
-      }
-    })
-  } else {
-    panic(
-      "config.draw subgraph must be a boolean half-edge array or an array of them",
-    )
+  let value = if type(value) == function { value(g) } else { value }
+  if value == none {
+    return none
   }
+  if _bool-array(value) and value.len() == 0 {
+    return ()
+  }
+  let multiple = type(value) == array and not _bool-array(value)
+  let entries = if multiple { value } else { (value,) }
+  let result = entries.map(item => {
+    let item = if type(item) == function { item(g) } else { item }
+    if (
+      type(item) == dictionary
+        and item.at("linnest-kind", default: none) != "linnest-subgraph"
+    ) {
+      (
+        item
+          + (
+            subgraph: _subgraph-bits(
+              g,
+              item.at("subgraph", default: none),
+              "config.draw subgraph entry",
+            ),
+          )
+      )
+    } else {
+      _subgraph-bits(g, item, "config.draw subgraph entry")
+    }
+  })
+  if multiple { result } else { result.first() }
 }
 
 #let _half-edge-style(record, side) = {

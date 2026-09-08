@@ -114,7 +114,12 @@
       and (
         type(value) != array
           or not value.all(group => (
-            type(group) in (bytes, function)
+            type(group) == function
+              or (
+                type(group) == dictionary
+                  and group.at("linnest-kind", default: none)
+                    == "linnest-subgraph"
+              )
               or (
                 type(group) == array
                   and group.all(index => type(index) == int and index >= 0)
@@ -161,40 +166,16 @@
 }
 
 #let _rank-subgraph(graph, value) = {
-  if type(value) == bytes {
-    return value
-  }
-  if type(value) == function {
-    return value(graph)
+  let value = if type(value) == function { value(graph) } else { value }
+  if type(value) == dictionary {
+    return subgraph-module._impl.validate(graph, value)
   }
   if type(value) != array or not value.all(item => type(item) == int) {
     panic(
-      "layout rank-same entries must be subgraphs, node-index arrays, or module functions",
+      "layout rank-same entries must be subgraph objects, node-index arrays, or module functions",
     )
   }
-  let nodes = graph-module.nodes(graph)
-  let count = 0
-  for edge in graph-module.edges(graph) {
-    for endpoint in (edge.source, edge.sink) {
-      if endpoint != none {
-        count = calc.max(count, endpoint.hedge + 1)
-      }
-    }
-  }
-  let bits = range(count).map(_ => false)
-  for index in value {
-    if index < 0 or index >= nodes.len() {
-      panic("layout rank-same node index is out of bounds")
-    }
-    for edge in graph-module.edges(graph) {
-      for endpoint in (edge.source, edge.sink) {
-        if endpoint != none and endpoint.node == index {
-          bits.at(endpoint.hedge) = true
-        }
-      }
-    }
-  }
-  subgraph-module.bits(graph, bits)
+  subgraph-module.select(graph, nodes: value)
 }
 
 /// Construct reusable semantic layout options or sparsely update existing ones.
@@ -311,7 +292,7 @@
   /// included nodes get dummy routing vertices and edge positions. With
   /// `"force"` and `"anneal"`, nodes and edges outside the subgraph are fixed
   /// boundary points during optimization.
-  /// -> none | bytes
+  /// The selection must have compatible topology. -> none | dictionary
   subgraph: none,
   /// Width of the layout viewport used to derive the natural spring length.
   /// Applies to both `"force"` and `"anneal"`. -> float
@@ -451,7 +432,8 @@
   /// `"stable-layered"`. Roots outside the selected node set are ignored.
   /// Remaining components are laid out afterward in graph order. -> array
   layout-roots: (),
-  /// Subgraphs whose incident nodes should share a dot/stable-layered rank.
+  /// Subgraph objects whose incident nodes should share a dot/stable-layered
+  /// rank; node-index arrays and callbacks receiving the graph are also accepted.
   /// These are layout hints supplied by Typst rather than parsed graph
   /// structure. -> array
   rank-same: (),
@@ -570,7 +552,9 @@
     length-scale: str(spring.at("length", default: length-scale)),
   )
   if subgraph != none {
-    settings.insert("subgraph", subgraph-module.to-label(subgraph))
+    settings.insert("subgraph", subgraph-module.to-label(
+      subgraph-module._impl.validate(graph, subgraph),
+    ))
   }
   let graph-bytes = _plugin.layout_parsed_graph(
     graph-module.graph-bytes(graph),

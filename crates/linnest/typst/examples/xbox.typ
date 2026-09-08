@@ -1,6 +1,6 @@
 #set page(height: auto, width: auto, margin: 5mm)
 
-#import "../src/lib.typ": draw, graph, layout, layouts
+#import "../src/lib.typ": draw, graph, layout, layouts, subgraph
 #import graph: *
 #import "map-style.typ" as feynman
 #import "@preview/cetz:0.5.1" as cetz
@@ -43,443 +43,267 @@
   ),
 )
 
-// `cut-x` is in graph units; auto puts the cut just right of center.
-#let diagram(g, options: base-layout, cut-x: auto, cut-y: auto) = draw(
-  layout(
-    graph.style(
-      g,
-      ..feynman.graph-style,
-      unit: diagram-style.unit,
-      node-style: node => {
-        let style = feynman.node-style(node)
-        if style.stroke != none {
-          style.stroke += (thickness: diagram-style.line-width)
-        }
-        style
-      },
-    ),
-    ..options,
-  ),
-  ..feynman.draw-style,
-  padding: diagram-style.padding,
-  draw-after: g => {
-    // Group signed external momenta explicitly, including the through-gluon's
-    // hidden endpoints. Shading follows the solved positions, not the layout seeds.
-    let endpoints = (graph.nodes(g) + graph.edges(g)).filter(
-      item => item.data != none and item.data.at("endpoint-group", default: none) != none,
-    )
-    let box-style = diagram-style.endpoint-box
-    cetz.draw.on-layer(-1, {
-      for (momentum, fill) in box-style.fills {
-        for side in ("in", "out") {
-          let points = endpoints.filter(
-            item => item.data.endpoint-group == side + "-" + momentum,
-          ).map(item => item.pos)
-          if points.len() > 0 {
-            let xs = points.map(p => p.x)
-            let ys = points.map(p => p.y)
-            cetz.draw.rect(
-              (calc.min(..xs) - box-style.padding.x, calc.min(..ys) - box-style.padding.y),
-              (calc.max(..xs) + box-style.padding.x, calc.max(..ys) + box-style.padding.y),
-              radius: box-style.radius,
-              fill: fill,
-              stroke: none,
-            )
-          }
-        }
-      }
-    })
+#let in-x = group("in", side: "-", start: -7)
+#let out-x = group("out", side: "+", start: 7)
+#let top = group("top", start: 5)
+#let mid = group("mid", start: 0)
+#let bot = group("bot", start: -5)
+#let mid2 = group("mid2", start: 2)
 
-    // Exclude the invisible compactification spring and its anchor nodes.
-    let nodes = graph.nodes(g).filter(n => n.name in (<a>, <b>, <c>, <d>))
-    let edges = graph
-      .edges(g)
-      .filter(e => e.data.at("edge-style", default: auto) != none)
-    let xs = nodes.map(n => n.pos.x)
-    let ys = (nodes + edges).map(item => item.pos.y)
-    let x = if cut-x == auto {
-      calc.min(..xs) + 0.6 * (calc.max(..xs) - calc.min(..xs))
-    } else { cut-x }
-    let y = if cut-y == auto {
-      1.5
-    } else { cut-y }
+// The physical K4 is shared; only cuts and drawing patches vary between views.
+#let master = {
+  node(<a>)
+  node(<b>)
+  node(<c>)
+  node(<d>)
+  edge(<D1>, source(<c>), sink(<d>), momentum: [$k-p_1$])
+  edge(<D2>, source(<a>), sink(<b>), momentum: [$k-p_2$], orientation: "reversed")
+  edge(<D3>, source(<c>), sink(<a>), momentum: [$p_1$], orientation: "reversed")
+  edge(<D4>, source(<d>), sink(<b>), momentum: [$p_2$])
+  edge(<D5>, source(<a>), sink(<d>), momentum: [$p_(12) - k$], particle: "a")
+  edge(<D6>, source(<b>), sink(<c>), momentum: [$k$],particle:"g")
+}
 
-    cetz.draw.line(
-      (x, calc.max(..ys) + y),
-      (x, calc.min(..ys) - y),
-      stroke: (
-        paint: red,
-        thickness: diagram-style.cut-line-width,
-        dash: "dashed",
-      ),
-    )
+#let compact = {
+  node(<compact-top>, hidden: true, pos: pos(x: start(0), y: top))
+  node(<compact-bottom>, hidden: true, pos: pos(x: start(0), y: bot))
+  edge(<compact>, source(<compact-top>), sink(<compact-bottom>),
+    momentum: [], style: none, pos: pos(x: pin(0)))
+}
+
+// Each entry describes one crossing along the underlying source -> sink flow.
+#let cut-side(g, x, crossings, ..selection) = subgraph.with-data(
+  g, subgraph.select(g, ..selection), data: (x: x),
+  hedge: h => {
+    let points = crossings.at(str(h.edge-name))
+    (winding: points.len(), crossings: points)
   },
 )
+#let boundary-position(item) = {
+  let b = item.boundary
+  (pos: pos(x: b.cut-data.x, y: b.data.crossings.at(b.crossing).y))
+}
 
-#context {
+// `cut-x` is in graph units; auto puts the cut just right of center.
+#let diagram(g, options: base-layout, cut-x: auto, cut-y: auto) = context {
+  draw(
+    layout(
+      graph.style(
+        g,
+        ..feynman.graph-style,
+        unit: diagram-style.unit,
+        node-style: node => {
+          let style = feynman.node-style(node)
+          if style.stroke != none {
+            style.stroke += (thickness: diagram-style.line-width)
+          }
+          style
+        },
+      ),
+      ..options,
+    ),
+    ..feynman.draw-style,
+    padding: diagram-style.padding,
+    draw-after: g => {
+      // Group signed external momenta explicitly, including the through-gluon's
+      // hidden endpoints. Shading follows the solved positions, not the layout seeds.
+      let endpoints = graph.boundaries(g).map(b => b + (
+        group: b.data.crossings.at(b.crossing).group,
+      ))
+      let box-style = diagram-style.endpoint-box
+      cetz.draw.on-layer(-1, {
+        for (momentum, fill) in box-style.fills {
+          for side in ("left", "right") {
+            let points = endpoints.filter(b => b.side == side and b.group == momentum).map(b => b.pos)
+            if points.len() > 0 {
+              let xs = points.map(p => p.x)
+              let ys = points.map(p => p.y)
+              cetz.draw.rect(
+                (calc.min(..xs) - box-style.padding.x, calc.min(..ys) - box-style.padding.y),
+                (calc.max(..xs) + box-style.padding.x, calc.max(..ys) + box-style.padding.y),
+                radius: box-style.radius,
+                fill: fill,
+                stroke: none,
+              )
+            }
+          }
+        }
+      })
 
-  let D1 =[$k-p_1$]
-  let D2 = [$k-p_2$]
-  let D3 = [$p_1$]
-  let D4 = [$p_2$]
-  let D5 = [$p_(12) - k$]
-  let D6 = [$k$]
+      // Exclude the invisible compactification spring and its anchor nodes.
+      let nodes = graph.nodes(g).filter(n => n.boundary == none and (
+        n.data == none or not n.data.at("hidden", default: false)
+      ))
+      let edges = graph.edges(g).filter(e => e.data.at("edge-style", default: auto) != none)
+      let xs = nodes.map(n => n.pos.x)
+      let ys = (nodes + edges).map(item => item.pos.y)
+      let x = if cut-x == auto {
+        calc.min(..xs) + 0.6 * (calc.max(..xs) - calc.min(..xs))
+      } else { cut-x }
+      let y = if cut-y == auto { 1.5 } else { cut-y }
+      cetz.draw.line(
+        (x, calc.max(..ys) + y),
+        (x, calc.min(..ys) - y),
+        stroke: (paint: red, thickness: diagram-style.cut-line-width, dash: "dashed"),
+      )
+    },
+  )
+}
 
+#{
+  let xbox = {
+    let g = graph.build(default-edge-data: (particle: "d", momentum-arrow-offset: 0.4), master)
+    let crossings = (D3: ((group: "p1", y: top),), D4: ((group: "p2", y: bot),))
+    let g = graph.cut(g,
+      left: cut-side(g, in-x, crossings, sink: (<D3>, <D4>)),
+      right: cut-side(g, out-x, crossings, source: (<D3>, <D4>)),
+      boundary: boundary-position,
+    )
+    let nodes = (
+      a: pos(x: start(-2), y: top), b: pos(x: start(-2), y: bot),
+      c: pos(x: start(2), y: top), d: pos(x: start(2), y: bot),
+    )
+    let edges = (
+      D1: (momentum-label-gap: 0.25), D2: (momentum-label-gap: 0.25),
+      "D3.0": (statements: ("spring-length": .3), momentum-label-gap: 0.4),
+      "D3.1": (statements: ("spring-length": .3), reverse: true,
+        momentum-label-gap: 0.4, momentum-arrow-side: "left"),
+      "D4.0": (statements: ("spring-length": .3), momentum-label-gap: 0.2, momentum-arrow-side: "right"),
+      "D4.1": (statements: ("spring-length": .3), momentum-label-gap: 0.2),
+      D5: (crossing-under: <D6>, crossing-gap: 0.9, momentum-arrow-shift: 1.5,
+        momentum-label-gap: 0.05, momentum-arrow-side: "right",
+        // momentum-arrow-offset: 0.80,
+      ),
+      D6: (momentum-arrow-side: "left", momentum-label-gap: 0.2, momentum-arrow-shift: 1.5),
+    )
+    graph.map(g,
+      node: n => (pos: nodes.at(str(n.name))),
+      edge: e => edges.at(str(e.name), default: (:)),
+    )
+  }
 
-  let in-x = group("in", side: "-", start: -7)
-  let out-x = group("out", side: "+", start: 7)
-  let top = group("top", start: 5)
-  let mid = group("mid", start: 0)
-  let bot = group("bot", start: -5)
-
-
-
-  let xbox = graph.build(default-edge-data: (particle: "d",momentum-arrow-offset: 0.4), {
-    node(<a>, pos: pos(x: start(-2), y: top))
-    node(<b>, pos: pos(x: start(-2), y: bot))
-    node(<c>, pos: pos(x: start(2), y: top))
-    node(<d>, pos: pos(x: start(2), y: bot))
-
-    edge(
-      source(<c>),
-      endpoint-group: "out-p1",
-      momentum: D3,
-      spring-length: .3,
-      orientation: "reversed",
-      momentum-label-gap: 0.4,
-      pos: pos(x:out-x,y: top)
-    )
-    edge(
-      sink(<a>),
-      endpoint-group: "in-p1",
-      momentum: D3,
-      reverse: true,
-      orientation: "reversed",
-      spring-length: .3,
-      momentum-label-gap: 0.4,
-      momentum-arrow-side: "left",
-      pos: pos(x:in-x, y: top),
-    )
-    edge(source(<a>), sink(<b>),orientation: "reversed",  momentum: D2, momentum-label-gap: 0.25)
-    edge(source(<c>), sink(<d>), momentum: D1,momentum-label-gap: 0.25)
-    edge(
-      source(<d>),
-      endpoint-group: "out-p2",
-      spring-length: .3,
-      momentum: D4,
-      momentum-label-gap: 0.2,
-      momentum-arrow-side: "right",
-      pos: pos(x:out-x,y: bot )
-    )
-    edge(
-      sink(<b>),
-      endpoint-group: "in-p2",
-      momentum: D4,
-      momentum-label-gap: 0.2,
-      spring-length: .3,
-      pos: pos(x: in-x, y: bot),
-    )
-    edge(
-      source(<a>),
-      sink(<d>),
-      momentum: D5,
-      particle: "a",
-      crossing-under: <bridge>,
-      crossing-gap: 0.9,
-      momentum-arrow-shift: 1.5,
-      momentum-label-gap: 0.05,
-      momentum-arrow-side: "right",
-      // momentum-arrow-offset: 0.80,
-    )
-    edge(
-      sink(<c>),
-      <bridge>,
-      source(<b>),
-      momentum: D6,
-      momentum-arrow-side: "left",
-      particle: "g",
-      momentum-label-gap: 0.2,
-      momentum-arrow-shift: 1.5,
-    )
-  })
-
-  let xbox-opened = graph.build(default-edge-data: (particle: "d",momentum-arrow-offset: 0.4), {
-    node(<a> )
-    node(<b>)
-    node(<c>)
-    node(<d>)
-
-    edge(source(<c>),sink(<a>), momentum-arrow-shift: 1.,  momentum:D3, orientation: "reversed")
-    edge(
-      source(<a>),
-      sink(<b>),
-      orientation: "reversed",  momentum: D2, momentum-label-gap: 0.2,
-      spring-length: .3,
-    )
-    edge(
-      source(<c>),
-      endpoint-group: "in-p1",
-      momentum: D1,
-      pos: pos(x: in-x, y: top,z:pin(0)),
-      momentum-arrow-side: "right", momentum-label-gap: 0.15,  momentum-label-shift: -1.5,
-    )
-    edge(
-      sink(<d>),
-      endpoint-group: "out-p1",
-      momentum: D1,
-      pos: pos(x: out-x, y: top, z: pin(0)),
-      momentum-arrow-side: "left",
-      momentum-arrow-length: 1.4, momentum-arrow-shift: -.4,
-    )
-
-    edge(
-      source(<d>),
-      endpoint-group: "out-p2",
-      momentum: D4,
-      pos: pos(x: out-x, y: bot, z: pin(0)),
-      bend: -0.18,
-      crossing-under: <bridge>,
-      crossing-gap: 0.9,
-       momentum-arrow-length: 1., momentum-arrow-shift: .5,
-        momentum-arrow-side: "left",
-      // fermion-arrow-shift: 1.15,
-    )
-    edge(
-      sink(<b>),
-      endpoint-group: "in-p2",
-      momentum: D4,
-      pos: pos(x: in-x, y: bot, z: pin(0)),
-      spring-length: .3,
-      momentum-arrow-shift: -1.3,
-      momentum-arrow-side: "left",
-    )
-
-    edge(
-      source(<a>),
-      sink(<d>),
-      momentum: D5,
-      spring-length: 1.5,
-      particle: "a",
-      // momentum-arrow-offset: 0.80,
-    )
-    edge(
-      source(<b>),
-      <bridge>,
-      endpoint-group: "out-p1",
-      momentum: D6,
-      particle: "g",
-      pos: pos(x: out-x, y: mid, z: pin(0)),
-      bend: -0.55,
-      momentum-arrow-side: "right",
-
-    )
-    edge(
-      sink(<c>),
-      endpoint-group: "in-p1",
-      momentum: D6,
-      particle: "g",
-      pos: pos(x: in-x, y:mid, z: pin(0)),
-      momentum-arrow-side: "left",
-      momentum-arrow-length: 1.4, momentum-arrow-shift: -0.4,
-    )
-
+  let xbox-opened = {
     // Pull the external rows together without drawing another propagator.
-    node(<compact-top>, hidden: true, pos: pos(x: pin(0), y: top))
-    node(<compact-bottom>, hidden: true, pos: pos(x: pin(0), y: bot))
-    edge(
-      source(<compact-top>),
-      sink(<compact-bottom>),
-      momentum: [],
-      style: none,
-      spring-length: 0.25,
-      pos: pos(x: pin(0)),
+    let g = graph.build(default-edge-data: (particle: "d", momentum-arrow-offset: 0.4), master, compact)
+    let crossings = (
+      D1: ((group: "p1", y: top),), D4: ((group: "p2", y: bot),), D6: ((group: "p1", y: mid),),
     )
-  })
-
-
-  let xbox-opened2 = graph.build(default-edge-data: (particle: "d",momentum-arrow-offset: 0.4), {
-    node(<a> )
-    node(<b>)
-    node(<c>, pos: pos(y:start(-4)))
-    node(<d>, pos: pos(y:start(0) ))
-
-    edge(
-      source(<c>),
-      endpoint-group: "out-p1",
-      momentum: D3,
-      orientation: "reversed",
-      pos: pos(x: out-x, y: top, z: pin(0)),
-
+    let g = graph.cut(g,
+      left: cut-side(g, in-x, crossings, source: (<D1>,), sink: (<D6>, <D4>)),
+      right: cut-side(g, out-x, crossings, sink: (<D1>,), source: (<D6>, <D4>)),
+      boundary: boundary-position,
     )
-    edge(sink(<a>), endpoint-group: "in-p1", momentum: D3, orientation: "reversed", pos: pos(x: in-x,y: top, z: pin(0)),momentum-arrow-length: 1.2,momentum-label-gap: 0.2, momentum-arrow-shift: -.6, momentum-arrow-side: "left",crossing-under: <bridge>,
-    crossing-gap: 0.7,)
-    edge(
-      source(<a>),
-      endpoint-group: "in-p2",
-      pos: pos(x: in-x, y: bot, z: pin(0)),
-      momentum: D2,orientation: "reversed",
-      momentum-arrow-side: "right",
-      momentum-arrow-length: 1., momentum-arrow-shift: .4, momentum-label-gap: 0.2,
+    let nodes = (
+      "compact-top": pos(x: pin(0), y: top), "compact-bottom": pos(x: pin(0), y: bot),
     )
-    edge(
-      sink(<b>),
-      endpoint-group: "out-p2",
-      pos: pos(x: out-x, y: bot, z: pin(0)),
-      momentum: D2,orientation: "reversed", momentum-arrow-side: "right",
-      momentum-arrow-length: .7, momentum-arrow-shift: -0.4, momentum-label-gap: 0.2,momentum-label-shift: -0.75,
-      momentum-label-anchor: "south-west",
+    let edges = (
+      compact: (statements: ("spring-length": 0.25)),
+      "D1.0": (momentum-arrow-side: "right", momentum-label-gap: 0.15, momentum-label-shift: -1.5),
+      "D1.1": (momentum-arrow-side: "left", momentum-arrow-length: 1.4, momentum-arrow-shift: -.4),
+      D2: (statements: ("spring-length": .3), momentum-label-gap: 0.2),
+      D3: (momentum-arrow-shift: 1.),
+      "D4.0": (bend: -0.18, crossing-under: <D6.0>, crossing-gap: 0.9,
+        momentum-arrow-length: 1., momentum-arrow-shift: .5, momentum-arrow-side: "left",
+        // fermion-arrow-shift: 1.15,
+      ),
+      "D4.1": (statements: ("spring-length": .3), momentum-arrow-shift: -1.3, momentum-arrow-side: "left"),
+      D5: (statements: ("spring-length": 1.5),
+        // momentum-arrow-offset: 0.80,
+      ),
+      "D6.0": (bend: -0.55, momentum-arrow-side: "right"),
+      "D6.1": (momentum-arrow-side: "left", momentum-arrow-length: 1.4, momentum-arrow-shift: -0.4),
     )
+    graph.map(g,
+      node: n => if str(n.name) in nodes { (pos: nodes.at(str(n.name))) },
+      edge: e => (pos: if e.boundary != none { pos(z: pin(0)) }) + edges.at(str(e.name), default: (:)),
+    )
+  }
 
-    edge(
-      source(<c>),
-      sink(<d>),
-      momentum:D1,
-      momentum-arrow-side: "left",momentum-arrow-length: 1.2, momentum-label-gap: 0.2,
-    )
-
-    edge(
-      source(<d>),
-      sink(<b>),
-      momentum: D4,
-      momentum-arrow-side: "right",momentum-arrow-shift: -0.4,
-      spring-length: .1,momentum-label-gap: 0.1,
-    )
-
-    edge(
-      source(<a>),
-      sink(<d>),
-      momentum: D5,
-      spring-length: .5,
-      particle: "a",
-      momentum-arrow-side: "right",momentum-label-gap: 0.05,
-      // momentum-arrow-offset: 0.80,
-    )
-    edge(
-      source(<b>),
-      endpoint-group: "out-p2",
-
-      momentum: D6,
-      particle: "g",
-      pos: pos(x: out-x, y: mid, z: pin(0)),
-      bend: -0.55, momentum-arrow-shift: .8,momentum-arrow-length: 1.5,
-      momentum-arrow-side: "left",
-    )
-    edge(
-      sink(<c>),<bridge>,
-      endpoint-group: "in-p2",
-      momentum: D6,
-      particle: "g", momentum-arrow-shift: .8, momentum-label-gap: 0.2,
-      pos: pos(x: in-x, y: mid, z: pin(0)),
-      momentum-arrow-side: "left",
-
-    )
-
+  let xbox-opened2 = {
     // Pull the external rows together without drawing another propagator.
-    node(<compact-top>, hidden: true, pos: pos(x: start(0), y: top))
-    node(<compact-bottom>, hidden: true, pos: pos(x: start(0), y: bot))
-    edge(
-      source(<compact-top>),
-      sink(<compact-bottom>),
-      momentum: [],
-      style: none,
-      spring-length: 0.01,
-      pos: pos(x: pin(0)),
+    let g = graph.build(default-edge-data: (particle: "d", momentum-arrow-offset: 0.4), master, compact)
+    let crossings = (
+      D2: ((group: "p2", y: bot),), D3: ((group: "p1", y: top),), D6: ((group: "p2", y: mid),),
     )
-  })
+    let g = graph.cut(g,
+      left: cut-side(g, in-x, crossings, source: (<D2>,), sink: (<D3>, <D6>)),
+      right: cut-side(g, out-x, crossings, sink: (<D2>,), source: (<D3>, <D6>)),
+      boundary: boundary-position,
+    )
+    let nodes = (c: pos(y: start(-4)), d: pos(y: start(0)))
+    let edges = (
+      compact: (statements: ("spring-length": 0.01)),
+      D1: (momentum-arrow-side: "left", momentum-arrow-length: 1.2, momentum-label-gap: 0.2),
+      "D2.0": (momentum-arrow-side: "right", momentum-arrow-length: 1.,
+        momentum-arrow-shift: .4, momentum-label-gap: 0.2),
+      "D2.1": (momentum-arrow-side: "right", momentum-arrow-length: .7, momentum-arrow-shift: -0.4,
+        momentum-label-gap: 0.2, momentum-label-shift: -0.75, momentum-label-anchor: "south-west"),
+      "D3.1": (momentum-arrow-length: 1.2, momentum-label-gap: 0.2, momentum-arrow-shift: -.6,
+        momentum-arrow-side: "left", crossing-under: <D6.1>, crossing-gap: 0.7),
+      D4: (statements: ("spring-length": .1), momentum-arrow-side: "right",
+        momentum-arrow-shift: -0.4, momentum-label-gap: 0.1),
+      D5: (statements: ("spring-length": .5), momentum-arrow-side: "right", momentum-label-gap: 0.05,
+        // momentum-arrow-offset: 0.80,
+      ),
+      "D6.0": (bend: -0.55, momentum-arrow-shift: .8, momentum-arrow-length: 1.5, momentum-arrow-side: "left"),
+      "D6.1": (momentum-arrow-shift: .8, momentum-label-gap: 0.2, momentum-arrow-side: "left"),
+    )
+    graph.map(g,
+      node: n => if str(n.name) in nodes { (pos: nodes.at(str(n.name))) },
+      edge: e => (pos: if e.boundary != none { pos(z: pin(0)) }) + edges.at(str(e.name), default: (:)),
+    )
+  }
 
-  let mid2 = group("mid2", start: 2)
-  let xbox-cut = graph.build(default-edge-data: (particle: "d", momentum-label-gap: 0.4,momentum-arrow-offset: 0.4), {
-    node(<a> )
-    node(<b>)
-    node(<c>)
-    node(<d>)
-
-    edge(
-      source(<c>),
-      sink(<a>),
-      momentum: D3,orientation: "reversed",
-      spring-length: 1.5,
-      crossing-under: <bridge>,
-      crossing-gap: 0.8,
-      fermion-arrow-shift: -0.5,
-      momentum-arrow-shift: -.6,
-    )
-
-    edge(source(<a>), endpoint-group: "in-p2", momentum:D2, pos: pos(x: in-x, y: bot,z: pin(0)), momentum-arrow-side: "right",momentum-arrow-shift: 0.7,momentum-label-gap: 0.1,orientation: "reversed")
-    edge(sink(<b>), endpoint-group: "out-p2", momentum: D2, pos: pos(x: out-x, y: bot,z: pin(0)), momentum-arrow-side: "left",momentum-label-gap: 0.1,momentum-label-shift: 0.5,orientation: "reversed", )
-
-    node(<h1>, hidden: true, endpoint-group: "in-p2", pos: pos(x: in-x, y: mid,z: pin(0)))
-    node(<h2>, hidden: true, endpoint-group: "out-p1", pos: pos(x: out-x, y: mid2,z: pin(0)))
-    edge(
-      source(<h1>),
-      <bridge>,
-      sink(<h2>),
-      momentum: D6,
-      spring-length: 3.5,
-      particle: "g",
-      momentum-arrow-shift: 4,
-      momentum-arrow-offset: 0.40,
-      momentum-label-offset: 0.10,
-    )
-
-    edge(sink(<d>), endpoint-group: "out-p1", momentum: D1, momentum-arrow-side: "right",momentum-label-shift: .6,
-    momentum-label-gap: 0.2,pos: pos(x: out-x, y: top,z: pin(0)))
-    edge(
-      source(<c>),
-      endpoint-group: "in-p1",
-      momentum: D1,
-      pos: pos(x: in-x, y: top,z: pin(0)),
-      momentum-arrow-side: "right", momentum-label-shift: -.6,
-      momentum-label-gap: 0.1,
-    )
-
-    edge(
-      source(<d>),
-      sink(<b>),
-      momentum: D4,
-      spring-length: 1.5,
-      crossing-under: <bridge>,
-      crossing-gap: .8,  momentum-arrow-shift: .4, momentum-label-gap: 0.2,
-      fermion-arrow-shift: 1.15,
-    )
-    edge(
-      source(<a>),
-      sink(<d>),
-      momentum: D5,
-      particle: "a",
-      crossing-under: <bridge>,
-      crossing-gap: 1.5,
-       momentum-label-gap: 0.01, momentum-arrow-side: "right",
-      momentum-arrow-shift: -1.,
-    )
-    edge(
-      source(<b>),
-      endpoint-group: "out-p2",
-      momentum: D6, momentum-arrow-side: "right",
-      particle: "g",
-      pos: pos(x: out-x, y: mid),
-      momentum-arrow-shift: 0.5,
-    )
-    edge(sink(<c>),endpoint-group: "in-p1",momentum:D6, particle: "g", pos: pos(x: in-x, y:mid2), momentum-arrow-side: "left",)
+  let xbox-cut = {
     // Pull the external rows together without drawing another propagator.
-    node(<compact-top>, hidden: true, pos: pos(x: start(0), y: top))
-    node(<compact-bottom>, hidden: true, pos: pos(x: start(0), y: bot))
-    edge(
-      source(<compact-top>),
-      sink(<compact-bottom>),
-      momentum: [],
-      style: none,
-      spring-length: 1.8,
-      pos: pos(x: pin(0)),
+    let g = graph.build(default-edge-data: (particle: "d", momentum-arrow-offset: 0.4), master, compact)
+    let crossings = (
+      D1: ((group: "p1", y: mid2),),
+      D2: ((group: "p2", y: bot),),
+      // Along b -> c: right p2 stub, left p2 -> right p1 middle, left p1 stub.
+      D6: ((group: "p2", y: mid), (group: "p1", y: top)),
     )
-  })
+    let g = graph.cut(g,
+      left: cut-side(g, in-x, crossings, source: (<D1>, <D2>), sink: (<D6>,)),
+      right: cut-side(g, out-x, crossings, sink: (<D1>, <D2>), source: (<D6>,)),
+      boundary: boundary-position,
+    )
+    let edges = (
+      compact: (statements: ("spring-length": 1.8)),
+      "D1.0": (momentum-arrow-side: "left", momentum-label-shift: 1, momentum-label-gap: 0.01,momentum-label-anchor: "east",momentum-arrow-length:.8),
+      "D1.1": (momentum-arrow-side: "right", momentum-label-shift: 2.,momentum-arrow-length: 2,momentum-arrow-shift: .5, momentum-label-gap: 0.1),
+      "D2.0": (momentum-arrow-side: "right", momentum-arrow-shift: 0.7, momentum-label-gap: 0.1),
+      "D2.1": (momentum-arrow-side: "right", momentum-label-gap: 0.1, momentum-label-shift: -0.5,momentum-label-anchor: "north-west"),
+      D3: (statements: ("spring-length": 1.5), crossing-under: <D6.1>, crossing-gap: 0.8,
+        fermion-arrow-shift: -0.5, momentum-arrow-shift: -.6),
+      D4: (statements: ("spring-length": .5), momentum-label-gap: 0.02),
+      D5: (crossing-under: <D6.1>, crossing-gap: 1.5, momentum-label-gap: 0.01,
+        momentum-arrow-side: "right", momentum-arrow-shift: -1.),
+      "D6.0": (momentum-arrow-side: "left", momentum-arrow-shift: 0.5,momentum-label-gap: 0.1),
+      "D6.1": (statements: ("spring-length": 3.5), momentum-arrow-side: "left",momentum-arrow-shift: 3,
+        momentum-label-shift: 2.5,momentum-label-gap: 0.1),
+      "D6.2": (momentum-arrow-side: "right"),
+    )
+
+    let nodes = (
+      a: (pos: pos(y:group("h"))),
+      d: (pos: pos(y:group("h"))),
+    )
+    graph.map(g,
+      // Keep the D6 stubs free in depth, but flatten their middle endpoints.
+      node: n => (if n.boundary != none { (pos: pos(z: pin(0))) })+ nodes.at(str(n.name), default: (:)),
+      edge: e => (
+        pos: if e.boundary != none and e.origin.name != <D6> { pos(z: pin(0)) },
+        momentum-label-gap: 0.4,
+      ) + edges.at(str(e.name), default: (:)),
+    )
+  }
 
   let diagrams = $
-
     #diagram(xbox, cut-x: -1)+
-    #diagram(xbox-opened, cut-x: 0)+
-    #diagram(xbox-opened2, cut-x: -2.1)+
-    #diagram(xbox-cut,cut-y: 1) = op("disc")_(p_1^2)  op("disc")_(p_2^2) integral (dif ^d k  )/(2 pi )^d (N^frak(q q')_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(  p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
+    #diagram(xbox-opened, cut-x: 0,cut-y: 1)+
+    #diagram(xbox-opened2, cut-x: -2.1,cut-y: 1)+
+    #diagram(xbox-cut,cut-y: 0.5) = op("disc")_(p_1^2)  op("disc")_(p_2^2) integral (dif ^d k  )/(2 pi )^d (N^frak(q q')_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(  p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
   $
   diagrams
 }

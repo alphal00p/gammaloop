@@ -909,6 +909,7 @@ mod tests {
     #[test]
     fn embedded_packages_include_nested_sources() {
         assert!(EmbeddedLinnestPackage::get("src/impl/draw.typ").is_some());
+        assert!(EmbeddedLinnestPackage::get("src/impl/subgraph.typ").is_some());
         assert!(EmbeddedKurvstPackage::get("src/impl.typ").is_some());
     }
 
@@ -966,6 +967,12 @@ mod tests {
         assert!(
             base.join(DEFAULT_TEMPLATE_SUBDIR)
                 .join("figure.typ")
+                .is_file()
+        );
+        assert!(
+            base.join(DEFAULT_TEMPLATE_SUBDIR)
+                .join(LINNEST_PACKAGE_DIR)
+                .join("src/impl/subgraph.typ")
                 .is_file()
         );
         fs::remove_dir_all(base).unwrap();
