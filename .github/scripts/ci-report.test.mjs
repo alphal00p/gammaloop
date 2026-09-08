@@ -609,3 +609,42 @@ test('Nextest timed-out tests contribute to failed outcomes and retain a separat
   assert.deepEqual(mixed.testSummaries.map(row => [row.failed, row.timedOut]), [[3, 2], [1, 0]]);
   assert.deepEqual(parseLog(overlap).testSummaries.map(row => [row.failed, row.timedOut]), [[0, 0], [0, 0]]);
 });
+
+test('only a final log record may extend its message without proving history replacement', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'ci-report-final-record-growth-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const runs = [{ type: 'config', status: 'cached', url: suiteUrl + '/config' },
+    { type: 'test', status: 'cached', attribute: attr, url: suiteUrl + '/test' }];
+  const incident = { jobUrl: runs[1].url, observedAt: '2026-09-06T00:00:20Z', evidenceFile: 'incident.json' };
+  const manifest = { repository: 'example/repo', runs: [{ ...spec, observedLogReplacements: [incident],
+    offline: { suite: 'suite.json', checks: 'checks.json', jobs: 'jobs.json', actions: 'actions.json' } }] };
+  for (const [file, value] of Object.entries({ 'manifest.json': manifest,
+    'suite.json': { commit: sha, status: 'success', runs }, 'jobs.json': [], 'actions.json': [],
+    'incident.json': { ...incident, file: 'prior.ndjson', replacement: { file: 'current.ndjson' } },
+    'checks.json': runs.map((job, i) => ({ id: i + 1, details_url: job.url, started_at: '2026-09-06T00:00:00Z',
+      completed_at: '2026-09-06T00:00:20Z', conclusion: 'success' })),
+  })) await writeFile(join(dir, file), JSON.stringify(value));
+  const original = overlap.trim().split('\n').map(line => JSON.parse(line));
+  const appended = { utc_time: '2026-09-06T00:00:15Z', relative_nanoseconds: 15000000000, log_message: 'more output' };
+  for (const [name, changedIndex, changeClock, valid] of [
+    ['final-message-growth', original.length - 1, false, false],
+    ['earlier-message-growth', 0, false, true],
+    ['final-clock-change', original.length - 1, true, true],
+  ]) {
+    const prior = structuredClone(original), current = [...structuredClone(original), appended];
+    prior[changedIndex].log_message = prior[changedIndex].log_message.slice(0, -1);
+    if (changeClock) current[changedIndex].relative_nanoseconds += 1;
+    for (const [file, records] of [['prior.ndjson', prior], ['current.ndjson', current]])
+      await writeFile(join(dir, file), records.map(record => JSON.stringify(record)).join('\n') + '\n');
+    const report = await createReport(join(dir, 'manifest.json'), join(dir, name));
+    assert.equal(report.incidents.some(row => row.kind === 'log-replacement'), valid, name);
+    assert.equal(report.errors.some(row => row.stage === 'log-replacement-evidence'), !valid, name);
+    assert.equal(report.suites[0].evidenceComplete, false, name);
+    if (!valid) assert.match(report.errors.find(row => row.stage === 'log-replacement-evidence').error, /identical or append-only/);
+    assert.equal(await readFile(join(dir, name, 'raw/1/log-replacements/1-prior.ndjson'), 'utf8'),
+      await readFile(join(dir, 'prior.ndjson'), 'utf8'));
+  }
+  manifest.runs[0].observedLogReplacements = [];
+  await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest));
+  assert.equal((await createReport(join(dir, 'manifest.json'), join(dir, 'normalized'))).complete, true);
+});
