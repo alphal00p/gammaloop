@@ -100,9 +100,13 @@ that job's measurements unknown. Cached jobs need no worker log. Skipped or
 unstarted jobs are not counted as missing workers. The command preserves its
 partial report and exits **2** for incomplete evidence; invalid invocation or
 manifest exits **1**. Resource totals in an incomplete report are observed
-lower bounds. A queued, running, or cancelled suite is also incomplete, even
-when every currently available log has been collected. A pair with incomplete evidence, unmet required checks, or an unsuccessful suite has no
-performance percentage comparison.
+lower bounds. Abandoned workers retain all visible measurements, but their logs
+may omit trailing work: `interruptedJobs` counts them and
+`observedResourceLowerBound` remains true even if a later retry succeeds. Such a
+recovered suite cannot supply paired performance percentages. A queued, running,
+or cancelled suite is also incomplete, even when every currently available log
+has been collected. A pair with incomplete evidence, unmet required checks, or
+an unsuccessful suite has no performance percentage comparison.
 
 Run the offline regression checks with:
 
@@ -117,7 +121,8 @@ completed actual NixCI job. Required latency ends at the last intended check.
 Final aggregate latency ends at the completed deploy/success check; final tail
 is the gap after required checks. A queued deploy placeholder is not a
 completion timestamp. Failed suites retain diagnostic elapsed time but are not
-successful timing samples. Cancelled/skipped suites have no completed duration.
+successful timing samples. Cancelled/skipped suites have no completed duration;
+abandoned job timestamps cannot extend completed-job latency.
 
 Each job also records completion measured from the suite's configuration start.
 Paired group comparisons use that completion latency, preserving their own

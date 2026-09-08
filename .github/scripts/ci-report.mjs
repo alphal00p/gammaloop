@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 const exec = promisify(execFile);
 const units = { B: 1, KiB: 1024, MiB: 1024 ** 2, GiB: 1024 ** 3, TiB: 1024 ** 4 };
 const durationPattern = String.raw`(?:\d+(?:\.\d+)?(?:ms|s|m|h)\s*)+`;
-const excluded = new Set(['cancelled', 'skipped', 'queued', 'pending', 'in_progress']);
+const excluded = new Set(['cancelled', 'skipped', 'abandoned', 'queued', 'pending', 'in_progress']);
 const sum = (rows, key) => rows.reduce((total, row) => total + (row[key] ?? 0), 0);
 const timestamp = value => {
   if (!value) return null;
@@ -121,6 +121,7 @@ export function summarizeSuite(spec, suite, checks, jobs) {
     .map(([drv, workers]) => ({ drv, workerCount: workers.size, jobUrls: [...workers] }));
   const observed = jobs.filter(job => job.logStatus === 'ok');
   const missing = jobs.filter(job => job.logStatus === 'missing');
+  const interrupted = jobs.filter(job => job.status === 'abandoned');
   const completedSuite = ['success', 'failure', 'failed'].includes(suite.status);
   return {
     layout: spec.layout, variant: spec.variant, scenario: spec.scenario, pair: spec.pair ?? '1', sha: spec.sha, suiteUrl: spec.suiteUrl,
@@ -136,7 +137,9 @@ export function summarizeSuite(spec, suite, checks, jobs) {
     scheduledJobs: jobs.length, cachedJobs: jobs.filter(job => job.status === 'cached').length,
     failedJobs: jobs.filter(job => ['failed', 'failure'].includes(job.status)).length,
     cancelledOrSkippedJobs: jobs.filter(job => ['cancelled', 'skipped'].includes(job.status)).length,
-    observedWorkers: observed.length, missingLogs: missing.length, evidenceComplete: completedSuite && wantedComplete && missing.length === 0 && checks.length > 0,
+    observedWorkers: observed.length, missingLogs: missing.length, interruptedJobs: interrupted.length,
+    observedResourceLowerBound: !completedSuite || missing.length > 0 || interrupted.length > 0,
+    evidenceComplete: completedSuite && wantedComplete && missing.length === 0 && interrupted.length === 0 && checks.length > 0,
     observedWorkerMinutes: sum(observed, 'workerSeconds') / 60,
     downloadReportedBytes: sum(observed, 'downloadReportedBytes'),
     intermediateDownloadReportedBytes: sum(observed.filter(job => job.context === 'artifact-producer'), 'downloadReportedBytes'),
@@ -277,10 +280,7 @@ class Collector {
         const runs = pages.flatMap(page => page.workflow_runs);
         if (spec.actionRunIds?.some(id => !runs.some(run => run.id === id))) throw new Error('selected Actions run ID not found for this SHA');
         for (const run of runs) {
-          if (spec.requiredAttributes && (!Array.isArray(spec.requiredAttributes) || !spec.requiredAttributes.length
-      || !spec.requiredAttributes.every(attribute => typeof attribute === 'string' && attribute.length)))
-      throw new Error('requiredAttributes must be a nonempty array of attribute names');
-    if (spec.actionRunIds && !spec.actionRunIds.includes(run.id)) continue;
+          if (spec.actionRunIds && !spec.actionRunIds.includes(run.id)) continue;
           for (let attempt = 1; attempt <= run.run_attempt; attempt++) {
             const endpoint = `repos/${repository}/actions/runs/${run.id}/attempts/${attempt}`;
             const metadata = await this.github(endpoint);
@@ -330,12 +330,15 @@ class Collector {
             Object.assign(job, parseLog(ndjson, job), { logStatus: 'ok' });
             job.file = await this.save(`${prefix}/logs/${position + 1}.ndjson`, ndjson);
             job.preWorkerSeconds = secondsBetween(timestamp(job.checkStartedAt), timestamp(job.workerStartedAt));
-            job.postWorkerSeconds = secondsBetween(timestamp(job.workerCompletedAt), timestamp(job.checkCompletedAt));
+            job.postWorkerSeconds = job.checkSeconds == null ? null
+              : secondsBetween(timestamp(job.workerCompletedAt), timestamp(job.checkCompletedAt));
           } catch (error) {
             job.logStatus = 'missing';
             this.errors.push({ suiteUrl: spec.suiteUrl, jobUrl: run.url, stage: 'log', error: error.message });
           }
         }
+        if (run.status === 'abandoned') this.errors.push({ suiteUrl: spec.suiteUrl, jobUrl: run.url, stage: 'interrupted-worker',
+          error: 'abandoned worker: observed resource totals are lower bounds, including after a successful retry' });
         jobs[position] = job;
       }
     }));
@@ -398,7 +401,7 @@ export async function createReport(manifestPath, outputDir) {
     complete: collector.errors.length === 0 && suites.every(suite => suite.evidenceComplete),
     limits: [
       'Worker minutes are the sum of observed worker log spans, not billed compute or CHF.',
-      'Missing logs make observed resource totals lower bounds; cached and skipped jobs are not missing workers.',
+      'Missing logs and abandoned workers make observed resource totals lower bounds, even after a successful retry; cached and skipped jobs are not missing workers.',
       'Download sizes are log-reported artifact sizes, not established compressed network bytes. Upload bytes may be unknown.',
       'Transfer timers include an unspecified combination of network, decompression and store import; pre-worker gaps are not proven queue time.',
       'Intervals are unioned per worker before summing across workers; download and upload intervals may overlap.',
