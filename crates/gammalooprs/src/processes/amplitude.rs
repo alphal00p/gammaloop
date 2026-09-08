@@ -2545,6 +2545,7 @@ pub mod test {
 
         spec.cuts[0].thresholds[0].counterterms = vec![
             ThresholdCountertermVariant {
+                group_id: None,
                 name: Some("disabled".to_string()),
                 subspace: None,
                 parent_lmb: None,
@@ -2552,6 +2553,7 @@ pub mod test {
                 multiplier: None,
             },
             ThresholdCountertermVariant {
+                group_id: None,
                 name: Some("duplicate".to_string()),
                 subspace: None,
                 parent_lmb: None,
@@ -2602,6 +2604,7 @@ pub mod test {
         let error = graph
             .resolve_amplitude_threshold_variant_subspace(
                 &ThresholdCountertermVariant {
+                    group_id: None,
                     name: Some("explicit_missing_parent".to_string()),
                     subspace: None,
                     parent_lmb: Some(generation_lmb.iter().copied().collect()),
@@ -2657,9 +2660,14 @@ pub mod test {
             },
             ..Default::default()
         };
-        graph.generate_cff(&settings.orientation_pattern).unwrap();
+        graph.generate_cff(&settings).unwrap();
         let raised_data = graph.graph.determine_raised_esurfaces_from_expression(
-            graph.derived_data.cff_expression.as_ref().unwrap(),
+            &graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .expression,
         );
         graph.build_lmbs();
 
@@ -2696,9 +2704,10 @@ pub mod test {
         )
         .unwrap();
         let selected_graph = graph.graph.clone();
-        graph.generate_cff(&OrientationPattern::default()).unwrap();
+        graph.generate_cff(&GenerationSettings::default()).unwrap();
         let full_cff = graph.derived_data.cff_expression.as_ref().unwrap();
         let physical_thresholds = full_cff
+            .expression
             .surfaces
             .esurface_cache
             .iter_enumerated()
@@ -2711,15 +2720,15 @@ pub mod test {
             })
             .collect_vec();
         let (orientation_pattern, dormant_threshold_edges) = full_cff
+            .expression
             .orientations
             .iter()
             .find_map(|orientation| {
                 let present = orientation
-                    .expression
-                    .iter_nodes()
+                    .iter_denominator_nodes()
                     .filter_map(|node| match node.data {
                         crate::cff::surface::HybridSurfaceID::Esurface(esurface_id) => Some(
-                            full_cff.surfaces.esurface_cache[esurface_id]
+                            full_cff.expression.surfaces.esurface_cache[esurface_id]
                                 .energies
                                 .iter()
                                 .copied()
@@ -2749,6 +2758,7 @@ pub mod test {
                 thresholds: vec![ThresholdCountertermThreshold {
                     edges: dormant_threshold_edges.clone(),
                     counterterms: vec![ThresholdCountertermVariant {
+                        group_id: None,
                         name: Some("dormant".to_string()),
                         subspace: None,
                         parent_lmb: None,
@@ -2768,19 +2778,25 @@ pub mod test {
             },
             ..Default::default()
         };
-        graph.generate_cff(&settings.orientation_pattern).unwrap();
+        graph.generate_cff(&settings).unwrap();
         assert_eq!(
             graph
                 .derived_data
                 .cff_expression
                 .as_ref()
                 .unwrap()
+                .expression
                 .orientations
                 .len(),
             1,
         );
         let raised_data = graph.graph.determine_raised_esurfaces_from_expression(
-            graph.derived_data.cff_expression.as_ref().unwrap(),
+            &graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .expression,
         );
         graph.build_lmbs();
         let (resolved, _) = graph
@@ -2836,6 +2852,7 @@ pub mod test {
         let resolved = graph
             .resolve_amplitude_threshold_variant_subspace(
                 &ThresholdCountertermVariant {
+                    group_id: None,
                     name: Some("one_loop".to_string()),
                     subspace: Some(requested_subspace.clone()),
                     parent_lmb: Some(parent_edges),
@@ -2875,12 +2892,13 @@ pub mod test {
                     "scalars"
                 )
                 .unwrap();
-                graph.generate_cff(&OrientationPattern::default()).unwrap();
+                graph.generate_cff(&GenerationSettings::default()).unwrap();
                 let threshold_edges = graph
                     .derived_data
                     .cff_expression
                     .as_ref()
                     .unwrap()
+                    .expression
                     .surfaces
                     .esurface_cache
                     .iter()
@@ -2899,6 +2917,7 @@ pub mod test {
                             edges: threshold_edges.clone(),
                             counterterms: vec![
                                 ThresholdCountertermVariant {
+                                    group_id: None,
                                     name: Some("first".to_string()),
                                     subspace: None,
                                     parent_lmb: None,
@@ -2906,6 +2925,7 @@ pub mod test {
                                     multiplier: None,
                                 },
                                 ThresholdCountertermVariant {
+                                    group_id: None,
                                     name: Some("disabled".to_string()),
                                     subspace: None,
                                     parent_lmb: None,
@@ -2913,6 +2933,7 @@ pub mod test {
                                     multiplier: None,
                                 },
                                 ThresholdCountertermVariant {
+                                    group_id: None,
                                     name: Some("second".to_string()),
                                     subspace: None,
                                     parent_lmb: None,
@@ -3136,6 +3157,7 @@ pub mod test {
                             ],
                             counterterms: vec![
                                 ThresholdCountertermVariant {
+                                    group_id: None,
                                     name: Some("one_loop".to_string()),
                                     subspace: Some(vec![parent_edges[0]]),
                                     parent_lmb: Some(parent_edges.clone()),
@@ -3143,6 +3165,7 @@ pub mod test {
                                     multiplier: None,
                                 },
                                 ThresholdCountertermVariant {
+                                    group_id: None,
                                     name: Some("two_loop".to_string()),
                                     subspace: Some(parent_edges.clone()),
                                     parent_lmb: Some(parent_edges),
@@ -3621,6 +3644,7 @@ pub mod test {
                             thresholds: vec![ThresholdCountertermThreshold {
                                 edges: vec![super::EdgeIndex(0), super::EdgeIndex(1)],
                                 counterterms: vec![ThresholdCountertermVariant {
+                                    group_id: None,
                                     name: Some(name.to_string()),
                                     subspace: Some(vec![super::EdgeIndex(subspace_edge)]),
                                     parent_lmb: None,
@@ -4013,6 +4037,7 @@ pub mod test {
                 }
 
                 let explicit_variant = ThresholdCountertermVariant {
+                    group_id: None,
                     name: Some("raised_one_loop".to_string()),
                     subspace: Some(vec![super::EdgeIndex(3)]),
                     parent_lmb: None,
