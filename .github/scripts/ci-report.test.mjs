@@ -91,7 +91,7 @@ test('Actions attempts retain their own clock and cancelled work without complet
 });
 
 test('paired deltas require complete successful evidence and never infer coverage equivalence', () => {
-  const baseline = { ...spec, pair: '1', evidenceComplete: true, successfulTimingSample: true,
+  const baseline = { ...spec, pair: '1', evidenceComplete: true, successfulTimingSample: true, requiredPassed: true,
     observedWorkerMinutes: 10, intermediateDownloadReportedBytes: 100, suiteStartedAt: '2026-09-06T00:00:00Z',
     jobs: [{ type: 'test', attribute: attr, checkStartedAt: '2026-09-06T00:00:05Z', checkCompletedAt: '2026-09-06T00:00:20Z', checkSeconds: 15 }] };
   const candidate = { ...baseline, variant: 'candidate', observedWorkerMinutes: 5, intermediateDownloadReportedBytes: 20,
@@ -139,7 +139,7 @@ test('offline collector scopes exact URLs, emits all formats and returns a faili
   assert.equal(report.suites[0].intermediateDownloadReportedBytes, 3 * 1024 ** 2);
   assert.equal(report.suites[0].jobs[1].checkId, 2);
   assert.equal(report.suites[0].jobs[1].completedFromSuiteSeconds, 20);
-  for (const name of ['report.json', 'report.md', 'suites.csv', 'jobs.csv', 'actions.csv', 'transfers.csv', 'compilations.csv', 'pairs.csv'])
+  for (const name of ['manifest.json', 'report.json', 'report.md', 'suites.csv', 'jobs.csv', 'actions.csv', 'transfers.csv', 'compilations.csv', 'pairs.csv'])
     assert.ok((await readFile(join(dir, 'out', name), 'utf8')).length);
   await rm(join(dir, 'overlap.ndjson'));
   const partial = await createReport(join(dir, 'manifest.json'), join(dir, 'partial'));
@@ -149,4 +149,25 @@ test('offline collector scopes exact URLs, emits all formats and returns a faili
   await assert.rejects(promisify(execFile)(process.execPath,
     [fileURLToPath(new URL('./ci-report.mjs', import.meta.url)), join(dir, 'manifest.json'), join(dir, 'cli')]),
     error => error.code === 2);
+});
+
+test('omitting an explicitly required group cannot look like a worker-time saving', () => {
+  const doctest = 'packages.x86_64-linux.nix-ci-check-gammaloop-doctest';
+  const expectation = { ...spec, requiredAttributes: [attr, doctest] };
+  const config = { type: 'config', status: 'success', checkStartedAt: '2026-09-06T00:00:00Z',
+    checkCompletedAt: '2026-09-06T00:00:01Z' };
+  const core = { type: 'test', attribute: attr, status: 'success', checkConclusion: 'success', logStatus: 'ok',
+    checkStartedAt: '2026-09-06T00:00:01Z', checkCompletedAt: '2026-09-06T00:00:21Z', workerSeconds: 20 };
+  const docs = { ...core, attribute: doctest, workerSeconds: 21 };
+  const baseline = summarizeSuite(expectation, { status: 'success' }, [{}], [config, core, docs]);
+  const candidate = summarizeSuite({ ...expectation, variant: 'candidate' }, { status: 'success' }, [{}], [config, core]);
+  assert.equal(baseline.evidenceComplete, true);
+  assert.equal(candidate.requiredPassed, false);
+  assert.equal(candidate.evidenceComplete, false);
+  assert.deepEqual(candidate.requiredAttributes, [attr, doctest]);
+  assert.deepEqual(candidate.observedRequiredAttributes, [attr]);
+  assert.deepEqual(candidate.missingRequiredAttributes, [doctest]);
+  const [pair] = comparePairs([baseline, candidate]);
+  assert.equal(pair.comparable, false);
+  assert.equal(pair.workerMinutesChangePercent, null);
 });

@@ -45,13 +45,16 @@ Packaging, documentation, and WASM checks are excluded from this primary set. Fo
 controlled comparison of different scheduling layouts, provide the same
 explicit `requiredAttributes` array in both entries. Include every intended
 test group, Clippy, doctest, formatting, and graph/configuration check. Missing
-required attributes leave required latency unknown. The final success job is
+required attributes leave required latency unknown and make the suite incomplete
+and ineligible for paired percentages. Requested, observed, and missing
+attributes are recorded separately. The final success job is
 measured separately.
 
 ## Outputs and replay
 
 The output directory contains:
 
+- `manifest.json`: the exact input manifest, including explicit check expectations.
 - `report.json`: all metrics, per-job evidence, Actions jobs/steps, paired
   comparisons, and collection errors.
 - `report.md`: readable suite, Actions-attempt, and paired tables.
@@ -98,7 +101,7 @@ unstarted jobs are not counted as missing workers. The command preserves its
 partial report and exits **2** for incomplete evidence; invalid invocation or
 manifest exits **1**. Resource totals in an incomplete report are observed
 lower bounds. A queued, running, or cancelled suite is also incomplete, even
-when every currently available log has been collected. A pair with incomplete evidence or an unsuccessful suite has no
+when every currently available log has been collected. A pair with incomplete evidence, unmet required checks, or an unsuccessful suite has no
 performance percentage comparison.
 
 Run the offline regression checks with:
