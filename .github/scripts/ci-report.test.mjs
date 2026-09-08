@@ -562,3 +562,32 @@ test('hopeless jobs are terminal failures with required end clocks, never accept
     assert.equal(recovered.evidenceComplete, false);
   }
 });
+
+test('failure timestamps use check completion or earliest matching status observation, never the last worker record', () => {
+  for (const status of ['failed', 'failure', 'hopeless', 'abandoned']) {
+    const job = { type: 'build', attribute: 'packages.x86_64-linux.crate-test-binaries-gammalooprs', url: suiteUrl + '/producer',
+      status, checkStartedAt: '2026-09-08T18:00:00Z', workerCompletedAt: '2026-09-08T18:21:41Z' };
+    const kind = status === 'abandoned' ? 'interrupted-worker' : 'job-failure';
+    const observations = [
+      { at: '2026-09-08T18:30:00Z', evidenceFile: 'later.json', suite: { runs: [job] } },
+      { at: '2026-09-08T18:26:16.661Z', suite: { runs: [{ ...job, status: 'started' }] } },
+      { at: '2026-09-08T18:20:00Z', suite: { runs: [{ ...job, url: suiteUrl + '/other' }] } },
+      { at: '2026-09-08T18:27:17.025Z', evidenceFile: 'first.json', suite: { runs: [job] } },
+    ];
+    const unknown = summarizeSuite(spec, { status: 'failed' }, [], [job]).incidents.find(row => row.kind === kind);
+    assert.equal(unknown.time, null);
+    assert.equal(unknown.timeSource, null);
+    const observed = summarizeSuite({ ...spec, observations }, { status: 'failed' }, [], [job]).incidents.find(row => row.kind === kind);
+    assert.equal(observed.time, Date.parse('2026-09-08T18:27:17.025Z'));
+    assert.equal(observed.timeSource, 'status-snapshot');
+    assert.equal(observed.evidenceFile, 'first.json');
+    assert.match(observed.observation, /not a termination time/);
+    assert.equal(observed.cause, 'unknown');
+    const completed = summarizeSuite({ ...spec, observations }, { status: 'failed' }, [], [
+      { ...job, checkCompletedAt: '2026-09-08T18:26:30Z' },
+    ]).incidents.find(row => row.kind === kind);
+    assert.equal(completed.time, Date.parse('2026-09-08T18:26:30Z'));
+    assert.equal(completed.timeSource, 'check-completion');
+    assert.equal(completed.evidenceFile, undefined);
+  }
+});

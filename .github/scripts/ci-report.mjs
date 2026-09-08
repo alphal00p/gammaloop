@@ -144,15 +144,22 @@ export function summarizeSuite(spec, suite, checks, jobs) {
   }
   const repeatedDerivations = [...builtBy].filter(([, workers]) => workers.size > 1)
     .map(([drv, workers]) => ({ drv, workerCount: workers.size, jobUrls: [...workers] }));
+  const snapshots = spec.observations ?? [];
   const incidents = jobs.flatMap(job => (job.incidents ?? []).map(incident => ({ jobUrl: job.url, logUrl: job.url ? job.url + '/logs' : null, attribute: job.attribute, ...incident })));
   for (const job of jobs) {
-    if (['failed', 'failure', 'abandoned', 'hopeless'].includes(job.status))
+    const start = timestamp(job.checkStartedAt), end = timestamp(job.checkCompletedAt);
+    if (['failed', 'failure', 'abandoned', 'hopeless'].includes(job.status)) {
+      const observed = snapshots.filter(snapshot => timestamp(snapshot.at) != null
+        && job.url && snapshot.suite.runs.some(run => run.url === job.url && run.status === job.status))
+        .toSorted((a, b) => timestamp(a.at) - timestamp(b.at))[0];
       incidents.push({ kind: job.status === 'abandoned' ? 'interrupted-worker' : 'job-failure',
-        time: timestamp(job.checkCompletedAt) ?? timestamp(job.workerCompletedAt), jobUrl: job.url, logUrl: job.url ? job.url + '/logs' : null,
-        attribute: job.attribute, cause: 'unknown', observation: 'service reports this job as ' + job.status });
+        time: end ?? timestamp(observed?.at), timeSource: end != null ? 'check-completion' : observed ? 'status-snapshot' : null,
+        evidenceFile: end == null ? observed?.evidenceFile : undefined, jobUrl: job.url, logUrl: job.url ? job.url + '/logs' : null,
+        attribute: job.attribute, cause: 'unknown', observation: 'service reports this job as ' + job.status
+          + (end == null && observed ? '; timestamp is the first saved status observation, not a termination time' : '') });
+    }
     const needsStart = !['queued', 'pending', 'skipped', 'cancelled'].includes(job.status);
     const needsEnd = ['success', 'cached', 'failed', 'failure', 'hopeless'].includes(job.status);
-    const start = timestamp(job.checkStartedAt), end = timestamp(job.checkCompletedAt);
     if ((needsStart && start == null) || (needsEnd && end == null) || (start != null && end != null && end < start))
       incidents.push({ kind: start != null && end != null ? 'invalid-clock' : 'missing-clock', time: end ?? start,
         jobUrl: job.url, attribute: job.attribute, cause: 'unknown', observation: 'check timestamps are missing, invalid, or reversed' });
@@ -166,7 +173,6 @@ export function summarizeSuite(spec, suite, checks, jobs) {
     if (!attempts.has(key)) attempts.set(key, new Map());
     if (job.url) attempts.get(key).set(job.url, job);
   }
-  const snapshots = spec.observations ?? [];
   const prior = new Map(), queued = new Map();
   for (const snapshot of snapshots) {
     for (const job of snapshot.suite.runs) {

@@ -259,6 +259,13 @@ these failures nor timeout warnings count as completed transfers. Incident text
 uses fixed descriptions and omits request URLs and arbitrary error messages;
 the underlying backend/network cause is unknown.
 
+For a job currently reported as failed or abandoned, the incident timestamp
+prefers its recorded check completion. If absent, it uses the earliest saved
+snapshot reporting that exact job URL and status; otherwise it is null. `timeSource` records
+`check-completion`, `status-snapshot`, or null. A snapshot timestamp records when
+the status was observed, not precise worker termination. The last worker log
+record is never used to infer failure time.
+
 The incident table also flags service-reported job failures/interruption, exact
 derivations built under multiple job URLs, multiple check attempts sharing one
 URL, missing/reversed clocks, and a successful final aggregate completing more
