@@ -13,9 +13,9 @@ The important Crane contracts are:
 
 - Nix rebuilds a derivation when any direct input changes, including files in
   `src`. Source filtering and narrow source sets prevent unrelated invalidation.
-- `cargoArtifacts` is an existing Cargo `target` directory. Crane inherits it
-  after patching and before build hooks, so Cargo can mark already-built units as
-  fresh.
+- `cargoArtifacts` contains an existing Cargo `target` tree, as a directory or
+  archive. Crane restores it after patching and before build hooks, so Cargo can
+  mark already-built units as fresh.
 - The inherited artifact only avoids compilation when Cargo asks for the same
   unit: same profile, target kind, package graph, and feature set.
 - `doNotLinkInheritedArtifacts = true` does not disable reuse. It asks Crane to
@@ -333,8 +333,8 @@ Crane's normal single-archive unpack path does not recursively materialize the
 `.prev` chain created by `buildDepsOnlyWithArtifacts`; passing the bare
 `crate-deps-linnest` archive caused the final package build to lose inherited
 root artifacts and recompile third-party crates. The final package derivations
-now receive a merged target directory so the `.prev` chain is expanded before
-Crane copies artifacts.
+now receive a self-contained merged archive with the `.prev` chain already
+materialized before Crane restores it.
 
 The hack timestamp normalization also has to run after unpack in
 `buildDepsOnlyWithArtifacts`. Running it only while constructing a dummy source
