@@ -1256,7 +1256,7 @@ fn test_mass_approach_threshold_subtraction_dotted() -> Result<()> {
 
 #[test]
 fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
-    // CFF normalization contributes the loop-dependent phase (-i)^L.
+    // CFF normalization contributes the loop-dependent phase i^L.
     fn assert_inspect(
         cli: &mut gammaloop_integration_tests::CLIState,
         process_id: usize,
@@ -1312,7 +1312,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         1,
         0,
         &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        Complex::new(0.0, -1.750_719_959_696_99e-5),
+        Complex::new(0.0, 1.750_719_959_696_99e-5),
         "thermal mercedes inspect f64 benchmark at point 0 at muB=0.0",
     )?;
 
@@ -1321,7 +1321,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         1,
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
-        Complex::new(0.0, -6.126_647_366_322_035e-7),
+        Complex::new(0.0, 6.126_647_366_322_035e-7),
         "thermal mercedes inspect f64 benchmark at point 1 at muB=0.0",
     )?;
 
@@ -1330,7 +1330,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         2,
         0,
         &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        Complex::new(0.0, 2.403_408_249_730_896e-5),
+        Complex::new(0.0, -2.403_408_249_730_896e-5),
         "thermal tennis ball inspect f64 benchmark at point 0 at muB=0.0",
     )?;
 
@@ -1339,7 +1339,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         2,
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
-        Complex::new(0.0, 5.482_474_260_313_583e-7),
+        Complex::new(0.0, -5.482_474_260_313_583e-7),
         "thermal tennis ball inspect f64 benchmark at point 1 at muB=0.0",
     )?;
 
@@ -1368,7 +1368,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         1,
         0,
         &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        Complex::new(0.0, -6.558_647_319_025_115e-6),
+        Complex::new(0.0, 6.558_647_319_025_115e-6),
         "thermal mercedes inspect f64 benchmark at point 0 at muB=3.0",
     )?;
 
@@ -1377,7 +1377,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         1,
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
-        Complex::new(0.0, -3.520_118_714_871_738e-7),
+        Complex::new(0.0, 3.520_118_714_871_738e-7),
         "thermal mercedes inspect f64 benchmark at point 1 at muB=3.0",
     )?;
 
@@ -1386,7 +1386,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         2,
         0,
         &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        Complex::new(0.0, 9.425_414_745_613_589e-6),
+        Complex::new(0.0, -9.425_414_745_613_589e-6),
         "thermal tennis ball inspect f64 benchmark at point 0 at muB=3.0",
     )?;
 
@@ -1395,7 +1395,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         2,
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
-        Complex::new(0.0, 3.494_310_883_292_893e-7),
+        Complex::new(0.0, -3.494_310_883_292_893e-7),
         "thermal tennis ball inspect f64 benchmark at point 1 at muB=3.0",
     )?;
 
@@ -1404,7 +1404,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
 
 #[test]
 fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
-    // CFF normalization contributes the loop-dependent phase (-i)^L.
+    // CFF normalization contributes the loop-dependent phase i^L.
     fn assert_inspect(
         cli: &mut gammaloop_integration_tests::CLIState,
         process_id: usize,
@@ -1458,7 +1458,7 @@ fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
         1,
         0,
         &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        Complex::new(0.0, 9.891_479_783_716_468e-6),
+        Complex::new(0.0, -9.891_479_783_716_468e-6),
         "cold dense mercedes inspect f64 benchmark at point 0 at muB=3.0",
     )?;
 
@@ -1467,7 +1467,7 @@ fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
         1,
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
-        Complex::new(0.0, -2.452_375_990_392_057e-7),
+        Complex::new(0.0, 2.452_375_990_392_057e-7),
         "cold dense mercedes inspect f64 benchmark at point 1 at muB=3.0",
     )?;
 
