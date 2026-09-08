@@ -1,4 +1,8 @@
-use std::{fs, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::Path,
+};
 
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
@@ -226,6 +230,171 @@ pub struct ProcessList {
     pub processes: Vec<Process>,
 }
 
+/// Restricts which saved processes and integrands are loaded into a process list.
+///
+/// An unqualified integrand selector applies to every process containing an
+/// integrand with that name, while a qualified selector applies only to its
+/// named process. Process selectors take precedence and load every integrand
+/// in the selected process.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProcessLoadSelection {
+    pub process_names: BTreeSet<String>,
+    pub integrand_selectors: Vec<ProcessLoadIntegrandSelector>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProcessLoadIntegrandSelector {
+    Name(String),
+    Qualified {
+        process_name: String,
+        integrand_name: String,
+    },
+}
+
+impl ProcessLoadSelection {
+    pub fn is_unrestricted(&self) -> bool {
+        self.process_names.is_empty() && self.integrand_selectors.is_empty()
+    }
+
+    pub fn selected_integrand_names<'a, I>(
+        &self,
+        process_name: &str,
+        available_names: I,
+    ) -> BTreeSet<String>
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
+        let available_names = available_names.into_iter();
+        if self.process_names.contains(process_name) {
+            return available_names.map(str::to_string).collect();
+        }
+
+        available_names
+            .filter(|integrand_name| {
+                self.integrand_selectors
+                    .iter()
+                    .any(|selector| match selector {
+                        ProcessLoadIntegrandSelector::Name(name) => name == *integrand_name,
+                        ProcessLoadIntegrandSelector::Qualified {
+                            process_name: selected_process,
+                            integrand_name: selected_integrand,
+                        } => {
+                            selected_process == process_name
+                                && selected_integrand == *integrand_name
+                        }
+                    })
+            })
+            .map(str::to_string)
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod process_load_selection_tests {
+    use super::{ProcessLoadIntegrandSelector, ProcessLoadSelection};
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn process_and_integrand_selectors_are_unioned() {
+        let selection = ProcessLoadSelection {
+            process_names: BTreeSet::from(["all".to_string()]),
+            integrand_selectors: vec![
+                ProcessLoadIntegrandSelector::Name("shared".to_string()),
+                ProcessLoadIntegrandSelector::Qualified {
+                    process_name: "one".to_string(),
+                    integrand_name: "specific".to_string(),
+                },
+            ],
+        };
+
+        assert_eq!(
+            selection.selected_integrand_names("all", ["a", "b"]),
+            BTreeSet::from(["a".to_string(), "b".to_string()])
+        );
+        assert_eq!(
+            selection.selected_integrand_names("one", ["shared", "specific", "other"]),
+            BTreeSet::from(["shared".to_string(), "specific".to_string()])
+        );
+        assert_eq!(
+            selection.selected_integrand_names("two", ["shared", "specific"]),
+            BTreeSet::from(["shared".to_string()])
+        );
+    }
+}
+
+fn validate_process_load_selection(
+    processes_root: &Path,
+    selection: &ProcessLoadSelection,
+) -> Result<()> {
+    let mut available: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for (directory, binary, kind) in [
+        ("amplitudes", "amp.bin", "amplitude"),
+        ("cross_sections", "cs.bin", "cross section"),
+    ] {
+        let root = processes_root.join(directory);
+        if !root.exists() {
+            continue;
+        }
+        for entry in
+            fs::read_dir(&root).with_context(|| format!("Error reading {}", root.display()))?
+        {
+            let entry = entry?;
+            if !entry.file_type()?.is_dir() {
+                continue;
+            }
+            let Some(process_name) = entry.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            let child_dirs = process::saved_child_dirs(&entry.path(), binary, kind)?;
+            let names = available.entry(process_name).or_default();
+            names.extend(child_dirs.into_iter().filter_map(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .map(str::to_owned)
+            }));
+        }
+    }
+
+    let mut errors = Vec::new();
+
+    for process_name in &selection.process_names {
+        if !available.contains_key(process_name) {
+            errors.push(format!("process '{process_name}' was not found"));
+        }
+    }
+    for selector in &selection.integrand_selectors {
+        match selector {
+            ProcessLoadIntegrandSelector::Name(integrand_name) => {
+                if !available.values().any(|names| names.contains(integrand_name)) {
+                    errors.push(format!("integrand '{integrand_name}' was not found"));
+                }
+            }
+            ProcessLoadIntegrandSelector::Qualified {
+                process_name,
+                integrand_name,
+            } => match available.get(process_name) {
+                None => errors.push(format!(
+                    "process '{process_name}' in selector '{process_name}@{integrand_name}' was not found"
+                )),
+                Some(names) if !names.contains(integrand_name) => errors.push(format!(
+                    "integrand '{integrand_name}' was not found in process '{process_name}'"
+                )),
+                Some(_) => {}
+            },
+        }
+    }
+
+    if errors.is_empty() {
+        return Ok(());
+    }
+
+    Err(eyre!(
+        "Cannot load the requested process/integrand selection: {}. Available integrands by process: {:?}",
+        errors.join("; "),
+        available,
+    ))
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(
     feature = "python_api",
@@ -347,9 +516,21 @@ impl ProcessList {
     }
 
     pub fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
+        Self::load_with_selection(path, context, None)
+    }
+
+    pub fn load_with_selection(
+        path: impl AsRef<Path>,
+        context: GammaLoopContextContainer,
+        selection: Option<&ProcessLoadSelection>,
+    ) -> Result<Self> {
         let mut process_list = Self::new();
+        let selection = selection.filter(|selection| !selection.is_unrestricted());
 
         let path = path.as_ref().join("processes");
+        if let Some(selection) = selection {
+            validate_process_load_selection(&path, selection)?;
+        }
         let amplitudes_path = path.join("amplitudes");
         if amplitudes_path.exists() {
             debug!("Looking for amplitudes in {}", amplitudes_path.display());
@@ -361,9 +542,31 @@ impl ProcessList {
                     continue;
                 };
                 let path = entry.path();
-                process_list.processes.push(
-                    Process::load_amplitude(path, context).context("Error loading amplitude")?,
-                );
+                let process_name = path.file_name().and_then(|name| name.to_str());
+                let process_selected = selection.is_some_and(|selection| {
+                    process_name.is_some_and(|name| selection.process_names.contains(name))
+                });
+                let selected_integrands = match (selection, process_name) {
+                    (Some(selection), Some(process_name)) => {
+                        let available = process::saved_child_dirs(&path, "amp.bin", "amplitude")?;
+                        Some(
+                            selection.selected_integrand_names(
+                                process_name,
+                                available.iter().filter_map(|path| {
+                                    path.file_name().and_then(|name| name.to_str())
+                                }),
+                            ),
+                        )
+                    }
+                    _ => None,
+                };
+                if selected_integrands.as_ref().is_some_and(BTreeSet::is_empty) && !process_selected
+                {
+                    continue;
+                }
+                let process = Process::load_amplitude(path, context, selected_integrands.as_ref())
+                    .context("Error loading amplitude")?;
+                process_list.processes.push(process);
             }
         }
 
@@ -377,14 +580,42 @@ impl ProcessList {
             for entry in fs::read_dir(cross_sections_path)? {
                 let entry = entry?;
                 let path = entry.path();
-                process_list
-                    .processes
-                    .push(Process::load_cross_section(path, context)?);
+                let process_name = path.file_name().and_then(|name| name.to_str());
+                let process_selected = selection.is_some_and(|selection| {
+                    process_name.is_some_and(|name| selection.process_names.contains(name))
+                });
+                let selected_integrands =
+                    match (selection, process_name) {
+                        (Some(selection), Some(process_name)) => {
+                            let available =
+                                process::saved_child_dirs(&path, "cs.bin", "cross section")?;
+                            Some(selection.selected_integrand_names(
+                                process_name,
+                                available.iter().filter_map(|path| {
+                                    path.file_name().and_then(|name| name.to_str())
+                                }),
+                            ))
+                        }
+                        _ => None,
+                    };
+                if selected_integrands.as_ref().is_some_and(BTreeSet::is_empty) && !process_selected
+                {
+                    continue;
+                }
+                let process =
+                    Process::load_cross_section(path, context, selected_integrands.as_ref())?;
+                process_list.processes.push(process);
             }
         }
         process_list
             .processes
             .sort_by_key(|p| p.definition.process_id);
+
+        if selection.is_some() {
+            for (process_id, process) in process_list.processes.iter_mut().enumerate() {
+                process.definition.process_id = process_id;
+            }
+        }
 
         Ok(process_list)
     }

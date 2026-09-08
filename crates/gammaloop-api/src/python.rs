@@ -2846,7 +2846,9 @@ impl GammaLoopAPI {
         read_only_state=false,
         settings_global_path=None,
         settings_runtime_defaults_path=None,
-        clean_state=false
+        clean_state=false,
+        processes=None,
+        integrands=None
     ))]
     pub fn new_python(
         state_folder: Option<PathBuf>,
@@ -2860,6 +2862,8 @@ impl GammaLoopAPI {
         settings_global_path: Option<PathBuf>,
         settings_runtime_defaults_path: Option<PathBuf>,
         clean_state: bool,
+        processes: Option<Vec<String>>,
+        integrands: Option<Vec<String>>,
     ) -> Result<Self> {
         let LoadedState {
             state,
@@ -2880,6 +2884,8 @@ impl GammaLoopAPI {
             read_only_state,
             settings_global_path,
             settings_runtime_defaults_path,
+            processes,
+            integrands,
         }
         .load()
         .map_err(|e| {

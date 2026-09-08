@@ -49,7 +49,7 @@ use eyre::{eyre, Context};
 use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
     initialisation::initialise,
-    processes::ProcessCollection,
+    processes::{ProcessCollection, ProcessLoadIntegrandSelector, ProcessLoadSelection},
     settings::{GlobalSettings, RuntimeSettings},
     utils::serde_utils::IsDefault,
     utils::{
@@ -203,6 +203,16 @@ pub struct OneShot {
     /// Remove the resolved state folder before startup so the session starts from a blank state
     #[arg(long, default_value_t = false)]
     pub clean_state: bool,
+
+    /// Load only the named processes (including all of their integrands).
+    /// Combined with --integrands by union; implies read-only state and no saving.
+    #[arg(long, num_args = 1.., value_name = "PROCESS")]
+    pub processes: Option<Vec<String>>,
+
+    /// Load integrands by name, or as PROCESS@INTEGRAND pairs.
+    /// Bare names match every process; implies read-only state and no saving.
+    #[arg(long, num_args = 1.., value_name = "INTEGRAND|PROCESS@INTEGRAND")]
+    pub integrands: Option<Vec<String>>,
 
     /// Optional TOML card to load at boot time
     #[arg(value_hint = clap::ValueHint::FilePath)]
@@ -534,6 +544,10 @@ pub struct StateLoadOption {
     pub read_only_state: bool,
     pub settings_global_path: Option<PathBuf>,
     pub settings_runtime_defaults_path: Option<PathBuf>,
+    /// Restrict loading to these process names (all integrands in each process).
+    pub processes: Option<Vec<String>>,
+    /// Restrict loading to these integrand names or PROCESS@INTEGRAND pairs.
+    pub integrands: Option<Vec<String>>,
 }
 
 pub struct LoadedState {
@@ -598,6 +612,8 @@ impl StateLoadOption {
         let state_folder_explicitly_set = self.state_folder.is_some();
         OneShot {
             clean_state: self.clean_state,
+            processes: self.processes,
+            integrands: self.integrands,
             boot_commands_path: self.boot_commands_path,
             state_folder: self
                 .state_folder
@@ -831,6 +847,69 @@ fn print_state_load_summary(summary: &StateLoadSummary) {
 }
 
 impl OneShot {
+    fn has_process_selection(&self) -> bool {
+        self.processes.as_ref().is_some_and(|v| !v.is_empty())
+            || self.integrands.as_ref().is_some_and(|v| !v.is_empty())
+    }
+
+    fn process_load_selection(&self) -> Result<Option<ProcessLoadSelection>> {
+        let process_names = self
+            .processes
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|name| {
+                let name = name.trim().to_string();
+                if name.is_empty() {
+                    Err(eyre!("--processes cannot contain an empty process name"))
+                } else {
+                    Ok(name)
+                }
+            })
+            .collect::<Result<std::collections::BTreeSet<_>>>()?;
+
+        let integrand_selectors = self
+            .integrands
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|selector| {
+                let selector = selector.trim();
+                if selector.is_empty() {
+                    return Err(eyre!("--integrands cannot contain an empty selector"));
+                }
+                if let Some((process_name, integrand_name)) = selector.split_once('@') {
+                    let process_name = process_name.trim();
+                    let integrand_name = integrand_name.trim();
+                    if process_name.is_empty()
+                        || integrand_name.is_empty()
+                        || integrand_name.contains('@')
+                    {
+                        return Err(eyre!(
+                            "Invalid integrand selector '{}': expected PROCESS@INTEGRAND",
+                            selector
+                        ));
+                    }
+                    Ok(ProcessLoadIntegrandSelector::Qualified {
+                        process_name: process_name.to_string(),
+                        integrand_name: integrand_name.to_string(),
+                    })
+                } else {
+                    Ok(ProcessLoadIntegrandSelector::Name(selector.to_string()))
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        if process_names.is_empty() && integrand_selectors.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(ProcessLoadSelection {
+                process_names,
+                integrand_selectors,
+            }))
+        }
+    }
+
     pub fn new_cli_settings(&self, global: GlobalSettings) -> CLISettings {
         let mut session = SessionSettings::default();
         session.set_user_requested_read_only_state(self.read_only_state);
@@ -864,6 +943,8 @@ impl OneShot {
             no_try_strings: false,
             completions: None,
             clean_state: false,
+            processes: None,
+            integrands: None,
             trace_logs_filename: None,
         }
     }
@@ -875,6 +956,12 @@ impl OneShot {
     fn clean_resolved_state_folder(&self) -> Result<()> {
         if !self.clean_state {
             return Ok(());
+        }
+
+        if self.has_process_selection() {
+            return Err(eyre!(
+                "--clean-state cannot be combined with --processes or --integrands because the selected state is loaded from disk"
+            ));
         }
 
         if self.read_only_state {
@@ -1146,6 +1233,18 @@ impl OneShot {
         RuntimeSettings,
         Option<StateLoadSummary>,
     )> {
+        let process_selection = self.process_load_selection()?;
+        if process_selection.is_some() {
+            if !matches!(state_folder_kind, StateFolderKind::Saved) {
+                return Err(eyre!(
+                    "--processes/--integrands require an existing saved state"
+                ));
+            }
+            // A filtered state is a transient view. Never allow the normal CLI
+            // exit path to overwrite the complete on-disk state with it.
+            self.no_save_state = true;
+            self.read_only_state = true;
+        }
         let startup_cli_settings = self.initial_cli_settings_for_startup(
             &state_folder_kind,
             boot_run_history,
@@ -1157,10 +1256,11 @@ impl OneShot {
             match state_folder_kind {
                 StateFolderKind::Saved => {
                     let load_started = Instant::now();
-                    let mut state = State::load(
+                    let mut state = State::load_with_selection(
                         self.state_folder.clone(),
                         self.model_file.clone(),
                         self.trace_logs_filename.clone(),
+                        process_selection.as_ref(),
                     )
                     .wrap_err_with(|| {
                         format!(
@@ -1825,6 +1925,54 @@ mod tests {
     fn oneshot_accepts_clean_state_flag() {
         let parsed = OneShot::try_parse_from(["gammaloop", "--clean-state"]).unwrap();
         assert!(parsed.clean_state);
+    }
+
+    #[test]
+    fn oneshot_parses_process_and_integrand_load_selectors() {
+        let parsed = OneShot::try_parse_from([
+            "gammaloop",
+            "--processes",
+            "process_a",
+            "process_b",
+            "--integrands",
+            "NLO",
+            "process_c@NNLO",
+        ])
+        .unwrap();
+
+        let selection = parsed.process_load_selection().unwrap().unwrap();
+        assert_eq!(
+            selection.process_names.into_iter().collect::<Vec<_>>(),
+            ["process_a", "process_b"]
+        );
+        assert_eq!(selection.integrand_selectors.len(), 2);
+        assert!(matches!(
+            &selection.integrand_selectors[0],
+            gammalooprs::processes::ProcessLoadIntegrandSelector::Name(name) if name == "NLO"
+        ));
+        assert!(matches!(
+            &selection.integrand_selectors[1],
+            gammalooprs::processes::ProcessLoadIntegrandSelector::Qualified { process_name, integrand_name }
+                if process_name == "process_c" && integrand_name == "NNLO"
+        ));
+    }
+
+    #[test]
+    fn process_selection_rejects_clean_state() {
+        let parsed =
+            OneShot::try_parse_from(["gammaloop", "--clean-state", "--processes", "process_a"])
+                .unwrap();
+        let error = parsed.clean_resolved_state_folder().unwrap_err();
+        assert!(error.to_string().contains("cannot be combined"));
+    }
+
+    #[test]
+    fn integrand_selector_rejects_malformed_qualified_name() {
+        let parsed =
+            OneShot::try_parse_from(["gammaloop", "--integrands", "process@integrand@extra"])
+                .unwrap();
+        let error = parsed.process_load_selection().unwrap_err();
+        assert!(error.to_string().contains("expected PROCESS@INTEGRAND"));
     }
 
     #[test]

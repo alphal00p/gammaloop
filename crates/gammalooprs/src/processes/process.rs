@@ -5,7 +5,7 @@ use linnet::half_edge::involution::HedgePair;
 use linnet::half_edge::involution::Orientation;
 use rayon::ThreadPool;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
@@ -139,7 +139,11 @@ fn load_settings_history(path: &Path) -> Result<Option<GlobalSettings>> {
     Ok(None)
 }
 
-fn saved_child_dirs(root: &Path, expected_binary: &str, kind: &str) -> Result<Vec<PathBuf>> {
+pub(crate) fn saved_child_dirs(
+    root: &Path,
+    expected_binary: &str,
+    kind: &str,
+) -> Result<Vec<PathBuf>> {
     let mut saved_dirs = Vec::new();
 
     for entry in fs::read_dir(root).with_context(|| format!("Error reading {}", root.display()))? {
@@ -545,6 +549,7 @@ impl Process {
     pub(crate) fn load_amplitude(
         path: impl AsRef<Path>,
         context: GammaLoopContextContainer,
+        selected_integrands: Option<&BTreeSet<String>>,
     ) -> Result<Self> {
         let binary = fs::read(path.as_ref().join("def.bin")).context(format!(
             "Error reading def.bin in {}",
@@ -559,6 +564,13 @@ impl Process {
 
         let mut collection = ProcessCollection::new_amplitude();
         for path in saved_child_dirs(path.as_ref(), "amp.bin", "amplitude")? {
+            if selected_integrands.is_some_and(|selected| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_none_or(|name| !selected.contains(name))
+            }) {
+                continue;
+            }
             debug!("loading amplitude at {}", path.display());
             let amp = Amplitude::load(path, context).context("Error loading amplitude")?;
 
@@ -575,6 +587,7 @@ impl Process {
     pub(crate) fn load_cross_section(
         path: impl AsRef<Path>,
         context: GammaLoopContextContainer,
+        selected_integrands: Option<&BTreeSet<String>>,
     ) -> Result<Self> {
         let binary = fs::read(path.as_ref().join("def.bin"))?;
         let (definition, _) =
@@ -583,6 +596,13 @@ impl Process {
         let mut collection = ProcessCollection::new_cross_section();
         let settings_history = load_settings_history(path.as_ref())?;
         for path in saved_child_dirs(path.as_ref(), "cs.bin", "cross section")? {
+            if selected_integrands.is_some_and(|selected| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_none_or(|name| !selected.contains(name))
+            }) {
+                continue;
+            }
             debug!("loading cross section at {}", path.display());
             let cs = CrossSection::load(path, context).context("Error loading cross section")?;
 
@@ -1755,10 +1775,10 @@ mod tests {
                             let path = saved.join(folder).join("export_fixture");
                             processes.processes[0] = match kind {
                                 GenerationType::Amplitude => {
-                                    Process::load_amplitude(path, context)?
+                                    Process::load_amplitude(path, context, None)?
                                 }
                                 GenerationType::CrossSection => {
-                                    Process::load_cross_section(path, context)?
+                                    Process::load_cross_section(path, context, None)?
                                 }
                             };
                         }
