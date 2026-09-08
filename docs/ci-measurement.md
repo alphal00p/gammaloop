@@ -50,6 +50,35 @@ and ineligible for paired percentages. Requested, observed, and missing
 attributes are recorded separately. The final success job is
 measured separately.
 
+If NixCI recovers an abandoned worker under the same job URL, its API and logs
+may replace the earlier attempt. Preserve the incident when first observed and
+add an explicit annotation to that suite's manifest entry:
+
+```json
+{
+  "observedInterruptions": [
+    {
+      "jobUrl": "https://nix-ci.com/gh:owner:repo/branch/FULL_SHA/JOB_UUID",
+      "observedAt": "2026-09-08T13:16:29Z",
+      "evidenceFile": "incidents/abandoned-worker.json"
+    }
+  ]
+}
+```
+
+The evidence JSON must contain the same `jobUrl` and `status: "abandoned"`.
+Keep its earlier observed metrics, such as `workerSeconds` and
+`downloadReportedBytes`, and an optional `file` pointing to the preserved raw
+log. Unknown measurements remain null. Log paths resolve relative to that
+evidence file; evidence paths resolve relative to the manifest.
+
+The report copies the incident JSON and linked raw log into
+`raw/N/interruptions/`. Earlier measurements remain in
+`observedInterruptions`, separately from current-log resource totals, to avoid
+double counting streams that might overlap. The annotation makes the suite
+incomplete even after a successful retry. Final-only collection cannot detect
+interruption history that the service has already overwritten.
+
 ## Outputs and replay
 
 The output directory contains:
@@ -87,6 +116,8 @@ To replay a snapshot, add this object to its manifest entry:
 ```
 
 Offline mode makes no network calls. These paths are relative to the manifest.
+When replaying interruption annotations, point each `evidenceFile` at its copied
+`raw/N/interruptions/N.json`; its linked log path is relative and self-contained.
 The job index is an array of objects containing `url` and `file`; absolute
 log paths are accepted, and relative log paths resolve against the job index.
 This also accepts the earlier scratch collector's `manifest.json` or

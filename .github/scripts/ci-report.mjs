@@ -121,7 +121,9 @@ export function summarizeSuite(spec, suite, checks, jobs) {
     .map(([drv, workers]) => ({ drv, workerCount: workers.size, jobUrls: [...workers] }));
   const observed = jobs.filter(job => job.logStatus === 'ok');
   const missing = jobs.filter(job => job.logStatus === 'missing');
-  const interrupted = jobs.filter(job => job.status === 'abandoned');
+  const observedInterruptions = spec.observedInterruptions ?? [];
+  const interrupted = new Set([...jobs.filter(job => job.status === 'abandoned').map(job => job.url),
+    ...observedInterruptions.map(incident => incident.jobUrl)]);
   const completedSuite = ['success', 'failure', 'failed'].includes(suite.status);
   return {
     layout: spec.layout, variant: spec.variant, scenario: spec.scenario, pair: spec.pair ?? '1', sha: spec.sha, suiteUrl: spec.suiteUrl,
@@ -137,9 +139,9 @@ export function summarizeSuite(spec, suite, checks, jobs) {
     scheduledJobs: jobs.length, cachedJobs: jobs.filter(job => job.status === 'cached').length,
     failedJobs: jobs.filter(job => ['failed', 'failure'].includes(job.status)).length,
     cancelledOrSkippedJobs: jobs.filter(job => ['cancelled', 'skipped'].includes(job.status)).length,
-    observedWorkers: observed.length, missingLogs: missing.length, interruptedJobs: interrupted.length,
-    observedResourceLowerBound: !completedSuite || missing.length > 0 || interrupted.length > 0,
-    evidenceComplete: completedSuite && wantedComplete && missing.length === 0 && interrupted.length === 0 && checks.length > 0,
+    observedWorkers: observed.length, missingLogs: missing.length, interruptedJobs: interrupted.size, observedInterruptions,
+    observedResourceLowerBound: !completedSuite || missing.length > 0 || interrupted.size > 0,
+    evidenceComplete: completedSuite && wantedComplete && missing.length === 0 && interrupted.size === 0 && checks.length > 0,
     observedWorkerMinutes: sum(observed, 'workerSeconds') / 60,
     downloadReportedBytes: sum(observed, 'downloadReportedBytes'),
     intermediateDownloadReportedBytes: sum(observed.filter(job => job.context === 'artifact-producer'), 'downloadReportedBytes'),
@@ -294,6 +296,28 @@ class Collector {
       await this.save(`${prefix}/actions.json`, actionRuns);
     } catch (error) { this.errors.push({ suiteUrl: spec.suiteUrl, stage: 'actions', error: error.message }); }
 
+    const observedInterruptions = [];
+    for (const [position, incident] of (spec.observedInterruptions ?? []).entries()) {
+      const observation = { ...incident };
+      observedInterruptions.push(observation);
+      try {
+        const evidence = await this.json(incident.evidenceFile);
+        if (evidence?.jobUrl !== incident.jobUrl || evidence.status !== 'abandoned')
+          throw new Error('incident evidence must identify the same abandoned job URL');
+        if (evidence.file) {
+          const log = await readFile(resolve(dirname(resolve(this.manifestDir, incident.evidenceFile)), evidence.file), 'utf8');
+          await this.save(`${prefix}/interruptions/${position + 1}.ndjson`, log);
+          evidence.file = `${position + 1}.ndjson`;
+        }
+        observation.evidenceFile = await this.save(`${prefix}/interruptions/${position + 1}.json`, evidence);
+        observation.evidence = evidence;
+      } catch (error) {
+        this.errors.push({ suiteUrl: spec.suiteUrl, jobUrl: incident.jobUrl, stage: 'interruption-evidence', error: error.message });
+      }
+      this.errors.push({ suiteUrl: spec.suiteUrl, jobUrl: incident.jobUrl, stage: 'observed-interruption',
+        error: 'previously observed abandonment: current logs may replace earlier work; prior observations are kept separate and totals remain lower bounds' });
+    }
+
     const runs = [...new Map(suite.runs.map(job => [job.url, job])).values()];
     const jobs = new Array(runs.length);
     let cursor = 0;
@@ -344,7 +368,7 @@ class Collector {
     }));
     await this.save(`${prefix}/jobs.json`, jobs);
     const matchingChecks = checks.filter(check => runs.some(run => check.details_url?.replace(/\/$/, '') === run.url));
-    const summary = summarizeSuite(spec, suite, matchingChecks, jobs);
+    const summary = summarizeSuite({ ...spec, observedInterruptions }, suite, matchingChecks, jobs);
     for (const job of jobs) job.completedFromSuiteSeconds = job.checkSeconds == null ? null
       : secondsBetween(timestamp(summary.suiteStartedAt), timestamp(job.checkCompletedAt));
     if (summary.missingRequiredAttributes.length) this.errors.push({ suiteUrl: spec.suiteUrl, stage: 'required-checks',
@@ -379,6 +403,11 @@ export async function createReport(manifestPath, outputDir) {
     if (spec.requiredAttributes && (!Array.isArray(spec.requiredAttributes) || !spec.requiredAttributes.length
       || !spec.requiredAttributes.every(attribute => typeof attribute === 'string' && attribute.length)))
       throw new Error('requiredAttributes must be a nonempty array of attribute names');
+    if (spec.observedInterruptions && (!Array.isArray(spec.observedInterruptions)
+      || spec.observedInterruptions.some(incident => !incident || typeof incident.jobUrl !== 'string'
+        || !incident.jobUrl.startsWith(spec.suiteUrl + '/') || !/^[^/?#]+$/.test(incident.jobUrl.slice(spec.suiteUrl.length + 1))
+        || typeof incident.observedAt !== 'string' || timestamp(incident.observedAt) == null || typeof incident.evidenceFile !== 'string' || !incident.evidenceFile)))
+      throw new Error('observedInterruptions requires exact-suite jobUrl, observedAt, and evidenceFile');
     if (spec.actionRunIds && (!Array.isArray(spec.actionRunIds) || !spec.actionRunIds.every(Number.isSafeInteger)))
       throw new Error('actionRunIds must contain integer run IDs');
     if (spec.offline) for (const key of ['suite', 'checks', 'jobs', 'actions'])
@@ -402,6 +431,7 @@ export async function createReport(manifestPath, outputDir) {
     limits: [
       'Worker minutes are the sum of observed worker log spans, not billed compute or CHF.',
       'Missing logs and abandoned workers make observed resource totals lower bounds, even after a successful retry; cached and skipped jobs are not missing workers.',
+      'Explicit interruption observations preserve overwritten history separately; their earlier resources are never added to current-log totals because streams may overlap.',
       'Download sizes are log-reported artifact sizes, not established compressed network bytes. Upload bytes may be unknown.',
       'Transfer timers include an unspecified combination of network, decompression and store import; pre-worker gaps are not proven queue time.',
       'Intervals are unioned per worker before summing across workers; download and upload intervals may overlap.',
@@ -439,6 +469,9 @@ export async function createReport(manifestPath, outputDir) {
     '|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|',
     ...suites.map(suite => `| ${[suite.layout, suite.variant, suite.scenario].map(display).join(' / ')} | [${suite.sha.slice(0, 9)}](${suite.suiteUrl}) | ${display(suite.status)} | ${display(suite.suiteSeconds)} | ${display(suite.requiredSeconds)} | ${display(suite.finalAggregateTailSeconds)} | ${display(suite.observedWorkerMinutes)} | ${display(suite.downloadReportedBytes / 1024 ** 3)} | ${display(suite.uploadWorkerSeconds)} | ${suite.repeatedDerivationCount} | ${suite.executedTestJobs} / ${suite.reusedTestJobs} / ${suite.unknownTestJobs} |`),
     '', '*Log-reported artifact sizes; not established network bytes.', '',
+    ...suites.flatMap(suite => suite.observedInterruptions.map(incident =>
+      `- Prior interruption: [${display(incident.jobUrl.split('/').at(-1))}](${incident.jobUrl}) observed ${display(incident.observedAt)}; ${display(incident.evidence?.workerSeconds)} worker seconds and ${display(incident.evidence?.downloadReportedBytes)} reported download bytes in [saved evidence](${incident.evidenceFile}). Kept separate from current totals; pair is incomplete.`)),
+    '',
     '| Layout / scenario / pair | Comparable | Worker change % | Intermediate restore change % | Required latency change % |',
     '|---|---|---:|---:|---:|',
     ...report.pairs.map(pair => '| ' + [pair.layout, pair.scenario, pair.pair].map(display).join(' / ') + ' | ' + [pair.comparable, pair.workerMinutesChangePercent, pair.intermediateRestoreChangePercent, pair.requiredChangePercent].map(display).join(' | ') + ' |'),
