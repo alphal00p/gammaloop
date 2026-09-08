@@ -1,10 +1,13 @@
 # CI measurements, 8 September 2026
 
-Merged artifact output sizes fell about 75% in both layouts, with compilation
-inputs and test inventories preserved. Remote worker savings remain unproven:
-the first four suites had cache-upload timeouts and interrupted workers, which
-prevent an accepted paired comparison. The final ungrouped comparison is now
-running sequentially; five of twelve planned suites have been submitted.
+Faster completion of tests, Clippy and doctests remains unproven. Per-crate cache
+boundaries and test inventories are preserved, and local merged artifact output
+sizes fell about 75%, but size alone does not meet the acceptance criterion.
+The first four remote suites had cache-upload timeouts and interrupted workers.
+A fifth, unchanged baseline failed before five test groups ran, after repeated
+builds of identical previously uploaded outputs and replaced job logs. Further
+benchmark pushes are paused at five of twelve planned suites. No performance
+change has been accepted for merge.
 
 [Machine-readable observations](ci-measurement-results.json) record revisions,
 derivations, clocks, limitations and remote log links. The
@@ -84,17 +87,46 @@ download errors; its completed restores covered about 6.00 GiB in 49.923s, with
 zero compilation messages. These are symptoms with unknown causes, recorded
 separately from compiler work. Repeated job phases are distinguished from retries.
 
-The new [main baseline](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589)
-was submitted at 17:13:55–17:13:57 UTC on 8 September. It and the final main
-candidate compare unchanged application code; the candidate CI configuration has
-changed since its initial run. Actual cache warmth must be established from logs.
-By 17:47:03 UTC, it had no application worker running, more than 31 minutes
-after evaluation. Thirteen nodes appeared ready in 26 saved snapshots. Another
-[phase-fix suite](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fraised_energy_cff_wip_optimized_phase_fix/32f27225460fbf5a2c9ad507355a8b8423fd237a)
-had three running jobs at 17:41:24. This overlap may confound elapsed timings;
-worker limits and the queue cause are unknown. Further benchmark pushes are held
-for this baseline to finish. The remaining scenarios use independently prepared
-FeynKit source edits, with no new Actions dispatch.
+The unchanged [main baseline](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589)
+failed after its GammaLoop dependency job became
+[hopeless](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/0a535a40-ea11-4343-acb7-dd547f530050).
+At 18:30:17 UTC it had 31 successful, 19 cached, one hopeless and 28 queued jobs,
+with no active workers. Doctest passed 43 cases, Clinnet five and Vakint 74; five
+other runtime groups never ran. The failed job's last exposed log contains only
+the initial build command, with no diagnostic explaining the failure.
+
+The first actual application worker log began 55m58s after submission,
+54m08s after evaluation. Sixty-nine sampled states preserve readiness and waiting
+observations. Another [phase-fix suite](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fraised_energy_cff_wip_optimized_phase_fix/32f27225460fbf5a2c9ad507355a8b8423fd237a)
+had active workers during this period and finished successfully at 18:15:48.
+This overlap may confound timing; the queue cause and worker limits are unknown.
+
+Eighteen verified log replacements across 11 job URLs, plus an observed WASM
+abandonment, leave resource history incomplete. Current streams contain at least
+52.67 worker minutes, 16.75 GiB of reported downloaded content and 164 compilation
+messages. Earlier streams are preserved separately to avoid double counting.
+These are lower bounds, not billed cost or network bytes. No transfer-timeout
+warning was observed in this fifth run's saved streams.
+
+The [initial doctest](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/7198fb48ea2bb5fe4baea4f904944b35bf857c89/13557053-744d-40be-939a-04c880e036d9)
+and [unchanged doctest](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/d7963413-0a33-4c65-96a4-f80a3627bc9c)
+produced the exact same full derivation and output paths. Both passed 43 cases
+and compiled the same 73 units. The earlier cache-copy hook completed successfully,
+yet the later run rebuilt the output. Cargo preparation took 6m54s then 13m07s;
+total worker spans were 8m19s then 14m42s. Those are distinct clocks, and the
+slower compilation has no established cause. Exact result identity rules out a
+source, feature or license-input identity change for this pair without inspecting
+credentials. Three raw package producers—Clinnet, Kurvst and tracing-filter
+macros—also rebuilt exact derivations that earlier logs reported as uploaded.
+The JSON includes paired job links, identities and completed-upload timestamps.
+
+Our shared doctest Cargo archive does omit additional compilation contexts, so
+it compiles when the result check actually executes. This inherited repository
+limitation is separate from failure to reuse the identical completed Nix result.
+Adding another large producer is not justified by this evidence. Cache visibility,
+substitution behavior and replaced worker histories need diagnosis first.
+The final ungrouped candidate has not been submitted; the independently prepared
+FeynKit scenarios remain paused. No remote retry or Actions dispatch was made.
 
 Both frozen Nix Actions workflows passed:
 [main, 2h10m52s](https://github.com/alphal00p/gammaloop/actions/runs/34227037456)

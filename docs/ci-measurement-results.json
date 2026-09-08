@@ -710,5 +710,293 @@
       "Five submitted suites do not establish acceptance of the final ungrouped configuration.",
       "Initial frozen measurements above remain unchanged; this is a later observation."
     ]
+  },
+  "terminalBaselineObservation": {
+    "recordedAt": "2026-09-08T18:30:17.903Z",
+    "reporterCommit": "3f81da23fbade161f047e31fc82b86372b512256",
+    "reporterTestsPassed": 20,
+    "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589",
+    "sha": "d44bf2ed781d73840175b349d2b7f15acf1a7589",
+    "status": "failed",
+    "finalCounts": {
+      "success": 31,
+      "cached": 19,
+      "hopeless": 1,
+      "queued": 28
+    },
+    "activeJobs": 0,
+    "submittedAt": "2026-09-08T17:13:55Z",
+    "submissionCompletedAt": "2026-09-08T17:13:57Z",
+    "firstApplicationWorkerLogAt": "2026-09-08 18:09:55.238321175",
+    "submissionToFirstWorkerSeconds": 3358.238,
+    "showCheckToFirstWorkerSeconds": 3248.238,
+    "readyGraphObservationCount": 69,
+    "tests": [
+      {
+        "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-doctest",
+        "status": "success",
+        "execution": "executed",
+        "passed": 43,
+        "workerSeconds": 881.836817578,
+        "compilationMessages": 73,
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/d7963413-0a33-4c65-96a4-f80a3627bc9c"
+      },
+      {
+        "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet",
+        "status": "success",
+        "execution": "executed",
+        "passed": 5,
+        "workerSeconds": 44.138844345,
+        "compilationMessages": 0,
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/edd6e7d2-20b2-4080-b3fb-7ef28320ef26"
+      },
+      {
+        "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core",
+        "status": "queued",
+        "execution": "unknown",
+        "passed": null,
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/8f32819c-9de7-491e-9f5e-249d27579548"
+      },
+      {
+        "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration",
+        "status": "queued",
+        "execution": "unknown",
+        "passed": null,
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/6a55c18d-39d2-4e9b-aec6-0ccda609733b"
+      },
+      {
+        "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet",
+        "status": "queued",
+        "execution": "unknown",
+        "passed": null,
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/27f5b69a-4ab1-43f5-b173-a431d18bd9b6"
+      },
+      {
+        "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-python-api",
+        "status": "queued",
+        "execution": "unknown",
+        "passed": null,
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/a0106878-fde9-413e-b37e-08680aa4b92c"
+      },
+      {
+        "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-spenso",
+        "status": "queued",
+        "execution": "unknown",
+        "passed": null,
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/44020abd-a7b9-4d4b-8c61-e5601ea5565d"
+      },
+      {
+        "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-vakint",
+        "status": "success",
+        "execution": "executed",
+        "passed": 74,
+        "workerSeconds": 76.377573827,
+        "compilationMessages": 0,
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/82974bba-b0fa-4bde-97cf-d108cfa1e74f"
+      }
+    ],
+    "currentStreamLowerBounds": {
+      "workerMinutes": 52.66573414598334,
+      "reportedDownloadBytes": 17984743139.2,
+      "compilationMessages": 164,
+      "transferTimeoutCount": 0
+    },
+    "logReplacements": {
+      "observations": 18,
+      "affectedJobUrls": 11,
+      "duplicateCapturesRemoved": 1,
+      "meaning": "Verified replaced raw log streams; retry trigger and worker termination are not established."
+    },
+    "terminalFailure": {
+      "attribute": "packages.x86_64-linux.crate-deps-gammalooprs",
+      "status": "hopeless",
+      "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/0a535a40-ea11-4343-acb7-dd547f530050",
+      "lastLogRecords": 1,
+      "cause": "unknown",
+      "firstObservedAt": "2026-09-08T18:27:17.025Z",
+      "completedAt": null,
+      "timeSource": "status-snapshot"
+    },
+    "repeatedDoctest": {
+      "exactResultDrvAndOutputMatch": true,
+      "compilingMessageMultisetsMatch": true,
+      "samePassedDoctestCount": true,
+      "impureInputIdentityChangeExcludedForThisPair": true,
+      "credentialValuesInspected": false,
+      "initial": {
+        "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/7198fb48ea2bb5fe4baea4f904944b35bf857c89/13557053-744d-40be-939a-04c880e036d9",
+        "jobStatus": "success",
+        "firstLog": "2026-09-08 12:24:06.797556935",
+        "lastLog": "2026-09-08 12:32:26.067493836",
+        "workerLogSpanSeconds": 499.269936901,
+        "cargoFinishedSeconds": 414,
+        "compilationMessages": 73,
+        "resultStorePaths": [
+          "/nix/store/arczg50gkwvxh7cms40kipz8hw65nfxr-gammaloop-workspace-doctest-0.1.0.drv",
+          "/nix/store/kwg4s5rf2m1w9jnzipx0hi6ar7q7k39p-gammaloop-workspace-doctest-0.1.0"
+        ],
+        "testsPassed": 43,
+        "testsFailed": 0,
+        "testsSkipped": 20
+      },
+      "current": {
+        "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/d7963413-0a33-4c65-96a4-f80a3627bc9c",
+        "jobStatus": "success",
+        "firstLog": "2026-09-08 18:10:58.661016123",
+        "lastLog": "2026-09-08 18:25:40.497833701",
+        "workerLogSpanSeconds": 881.836817578,
+        "cargoFinishedSeconds": 787,
+        "compilationMessages": 73,
+        "resultStorePaths": [
+          "/nix/store/arczg50gkwvxh7cms40kipz8hw65nfxr-gammaloop-workspace-doctest-0.1.0.drv",
+          "/nix/store/kwg4s5rf2m1w9jnzipx0hi6ar7q7k39p-gammaloop-workspace-doctest-0.1.0"
+        ],
+        "testsPassed": 43,
+        "testsFailed": 0,
+        "testsSkipped": 20
+      },
+      "interpretation": "Same result derivation/output rebuilt after an earlier successful cache-copy hook. Availability to the later worker and the reason reuse failed are unknown. The restored shared Cargo archive also lacks the complete doctest compilation context."
+    },
+    "repeatedRawProducers": [
+      {
+        "attribute": "packages.x86_64-linux.crate-test-dependencies-clinnet",
+        "initialUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/7198fb48ea2bb5fe4baea4f904944b35bf857c89/206560e6-0485-4a90-b816-139b2e8f3e99",
+        "currentUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/45800674-89f0-421e-b2a0-604ca6ee35a7",
+        "rawContextProducerDrvs": [
+          "/nix/store/px4v7ngyshr8fxahnz2384lh4v995yjn-gammaloop-crate-test-dependencies-ea619cc688fcc27d-inputs.drv",
+          "/nix/store/ralbkdajsdskmlsvnm2g68mjls0lldp4-gammaloop-crate-test-dependencies-ea619cc688fcc27d-deps-0.1.0.drv"
+        ],
+        "sameSourcePathSet": true,
+        "sameCompilingMessageMultiset": true,
+        "initialCompilationMessages": 2,
+        "currentCompilationMessages": 2,
+        "initialCompletedDependencyUploads": [
+          {
+            "at": "2026-09-08 12:27:37.270502929",
+            "message": "Uploaded gammaloop-crate-test-dependencies-ea619cc688fcc27d-inputs in 1m09s"
+          },
+          {
+            "at": "2026-09-08 12:27:39.836266740",
+            "message": "Uploaded gammaloop-crate-test-dependencies-ea619cc688fcc27d-deps in 397ms"
+          }
+        ],
+        "currentCompletedDependencyUploads": [
+          {
+            "at": "2026-09-08 18:15:49.898991732",
+            "message": "Uploaded gammaloop-crate-test-dependencies-ea619cc688fcc27d-inputs in 1m04s"
+          },
+          {
+            "at": "2026-09-08 18:15:56.740008453",
+            "message": "Uploaded gammaloop-crate-test-dependencies-ea619cc688fcc27d-deps in 2.3s"
+          }
+        ]
+      },
+      {
+        "attribute": "packages.x86_64-linux.crate-test-dependencies-kurvst",
+        "initialUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/7198fb48ea2bb5fe4baea4f904944b35bf857c89/7ff126d2-2930-445f-b63a-9469c4ffb1ec",
+        "currentUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/db8ae28d-a991-47f7-9f3c-7cc9a3a1fdea",
+        "rawContextProducerDrvs": [
+          "/nix/store/ibfhk08jrm1dq8bqgx6yxyj91935ds9g-gammaloop-crate-test-dependencies-9bd7b36c06b300b1-deps-0.1.0.drv",
+          "/nix/store/qfl5gdhsmadc2ywbf04v6i542bs7cfvx-gammaloop-crate-test-dependencies-9bd7b36c06b300b1-inputs.drv"
+        ],
+        "sameSourcePathSet": true,
+        "sameCompilingMessageMultiset": true,
+        "initialCompilationMessages": 15,
+        "currentCompilationMessages": 15,
+        "initialCompletedDependencyUploads": [
+          {
+            "at": "2026-09-08 12:29:01.333015109",
+            "message": "Uploaded gammaloop-crate-test-dependencies-9bd7b36c06b300b1-inputs in 45.3s"
+          },
+          {
+            "at": "2026-09-08 12:29:18.536663868",
+            "message": "Uploaded gammaloop-crate-test-dependencies-9bd7b36c06b300b1-deps in 2.1s"
+          }
+        ],
+        "currentCompletedDependencyUploads": [
+          {
+            "at": "2026-09-08 18:15:46.618546311",
+            "message": "Uploaded gammaloop-crate-test-dependencies-9bd7b36c06b300b1-inputs in 28.6s"
+          },
+          {
+            "at": "2026-09-08 18:16:00.590904359",
+            "message": "Uploaded gammaloop-crate-test-dependencies-9bd7b36c06b300b1-deps in 466ms"
+          }
+        ]
+      },
+      {
+        "attribute": "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter-macros",
+        "initialUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/7198fb48ea2bb5fe4baea4f904944b35bf857c89/56bf1f15-fb3a-4fbc-b3c9-83d69f949e12",
+        "currentUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/5d11b581-f89b-4bb1-855e-30d8174610d9",
+        "rawContextProducerDrvs": [
+          "/nix/store/bsq2778k6kmk73gpaqqx3i5fq1gf747x-gammaloop-crate-test-dependencies-1b17e1ec025c6580-inputs.drv",
+          "/nix/store/rwbcc6n9h30mivvpxyblhg373i8gf1rd-gammaloop-crate-test-dependencies-1b17e1ec025c6580-deps-0.1.0.drv"
+        ],
+        "sameSourcePathSet": true,
+        "sameCompilingMessageMultiset": true,
+        "initialCompilationMessages": 7,
+        "currentCompilationMessages": 7,
+        "initialCompletedDependencyUploads": [
+          {
+            "at": "2026-09-08 12:27:39.490831204",
+            "message": "Uploaded gammaloop-crate-test-dependencies-1b17e1ec025c6580-inputs in 1m08s"
+          },
+          {
+            "at": "2026-09-08 12:27:42.393746681",
+            "message": "Uploaded gammaloop-crate-test-dependencies-1b17e1ec025c6580-deps in 351ms"
+          }
+        ],
+        "currentCompletedDependencyUploads": [
+          {
+            "at": "2026-09-08 18:18:03.720907097",
+            "message": "Uploaded gammaloop-crate-test-dependencies-1b17e1ec025c6580-inputs in 2m11s"
+          },
+          {
+            "at": "2026-09-08 18:18:12.417681993",
+            "message": "Uploaded gammaloop-crate-test-dependencies-1b17e1ec025c6580-deps in 2.6s"
+          }
+        ]
+      }
+    ],
+    "overlappingSuite": {
+      "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fraised_energy_cff_wip_optimized_phase_fix/32f27225460fbf5a2c9ad507355a8b8423fd237a",
+      "status": "success",
+      "finalObservationAt": "2026-09-08T18:15:48.295Z",
+      "sampledOverlap": true,
+      "interpretation": "Other branch had displayed active workers while benchmark suite was live; observations do not establish queue cause, worker limit, or continuous overlap between samples."
+    },
+    "suitesSubmitted": 5,
+    "plannedSuites": 12,
+    "maximumSuites": 14,
+    "nextCandidateSubmitted": false,
+    "remotePushesPaused": true,
+    "acceptance": {
+      "accepted": false,
+      "requiredCompletionSeconds": null,
+      "workerSavingsPercent": null,
+      "reason": "Incomplete: observed abandonment, replaced command streams, missing hopeless-job completion timestamp, and five unexecuted test groups. No paired savings or warm acceptance."
+    },
+    "nextStep": "Establish why exact published outputs were rebuilt and why job histories were replaced before resuming paid comparisons. Keep the final ungrouped candidate frozen; no performance acceptance, PR or merge.",
+    "offlineReplay": {
+      "reporterRevision": "3f81da23fbade161f047e31fc82b86372b512256",
+      "reporterSha256": "a72c079e0bc8300cdaf6e2edc993b7677fc046784816e89627900d6306efaa2e",
+      "sourceMatchesCommit": true,
+      "networkDisabled": true,
+      "observations": 69,
+      "verifiedReplacements": 18,
+      "copiedHistoryRawFilesVerified": 36,
+      "copiedHistoryContentsEqualSource": true,
+      "failureTimestampMatchesFirstExactSnapshot": true,
+      "evidenceComplete": false,
+      "requiredPassed": false,
+      "comparisons": [
+        {
+          "comparable": false,
+          "workerMinutesChangePercent": null,
+          "suiteChangePercent": null,
+          "requiredChangePercent": null
+        }
+      ]
+    }
   }
 }
