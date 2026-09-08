@@ -143,7 +143,9 @@ fn test_integrate_1l_decorated_indices_fmft() {
 }
 
 #[test_log::test]
+#[ignore = "manual PySecDec validation"]
 fn test_integrate_1l_decorated_indices_pysecdec() {
+    test_utils::require_pysecdec_tests();
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 5, integral_normalization_factor: LoopNormalizationFactor::MSbar, mu_r_sq_symbol: "some_space::{real,scalar}::AAmursq".into(), ..VakintSettings::default()},

@@ -9,10 +9,11 @@
 //! it would have built from fully expanded syntax.
 //!
 //! The main Schoonschip convention is:
-//! 1. a compact rank-one tensor `p(rep)` used as a function argument becomes a
-//!    fresh slot in that argument position;
+//! 1. a tensor with one compact axis, such as `p(rep)`, used as a function
+//!    argument becomes a fresh slot in that argument position; any explicit
+//!    spectator slots on the tensor are preserved;
 //! 2. the tensor `p(slot)` is multiplied next to the rebuilt function;
-//! 3. compact scalar products `g(p(rep), q(rep))` and `dot(p(rep), q(rep))`
+//! 3. compact inner products `g(p(rep), q(rep))` and `dot(p(rep), q(rep))`
 //!    share one fresh self-dual slot and become the product `p(slot) * q(slot)`.
 //!
 //! Additional factors are accumulated beside the current atom and are not
@@ -229,9 +230,10 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
 
     /// Materialize a compact metric or dot product into two tensor factors.
     ///
-    /// Both arguments must be compact vectors with the same self-dual
-    /// representation. They are assigned the same fresh slot, so
-    /// `g(p(rep), q(rep))` becomes `p(slot) * q(slot)`.
+    /// Both arguments must have one compact axis with the same self-dual
+    /// representation. These axes receive the same fresh slot, so
+    /// `g(p(rep), q(rep))` becomes `p(slot) * q(slot)`. Explicit spectator slots
+    /// remain unchanged, including spectators in the contracted representation.
     fn compact_scalar_product(&self, value: FunView<'_>) -> Option<SchoonschipMaterialization> {
         let (lhs, rhs, rep) = Self::compact_scalar_product_parts(value)?;
 
@@ -293,7 +295,7 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         Some((*lhs, *rhs, rep))
     }
 
-    /// Infer the compact representation carried by a rank-one shorthand atom.
+    /// Infer the unique compact axis carried by a shorthand atom.
     ///
     /// Functions expose a compact representation through exactly one direct
     /// representation argument. Sums are accepted only when every summand exposes
@@ -343,9 +345,10 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
 
     /// Locate the compact representation argument of one tensor function.
     ///
-    /// A compact vector function is not itself a representation, is not a metric
-    /// or dot product, has no explicit slot argument, and has exactly one direct
-    /// argument matching the representation wildcard convention.
+    /// A compact tensor function is not itself a representation, is not a metric
+    /// or dot product, and has exactly one direct argument matching the
+    /// representation wildcard convention. Explicit slots are spectators: only
+    /// that unique unindexed axis is replaced during materialization.
     fn compact_tensor_rep_arg(value: FunView<'_>) -> Option<(usize, Representation<LibraryRep>)> {
         if value.get_symbol() == ETS.metric || value.get_symbol() == SPENSO_TAG.dot {
             return None;
@@ -356,18 +359,15 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         }
 
         let args = value.iter().collect::<Vec<_>>();
-        if args
-            .iter()
-            .any(|arg| Slot::<LibraryRep, Aind>::try_from(*arg).is_ok())
-        {
-            return None;
-        }
-
         let rep_args = args
             .iter()
             .enumerate()
             .filter_map(|(position, arg)| {
-                Self::compact_rep_pattern_match(*arg).map(|rep| (position, rep))
+                if Slot::<LibraryRep, Aind>::try_from(*arg).is_ok() {
+                    None
+                } else {
+                    Self::compact_rep_pattern_match(*arg).map(|rep| (position, rep))
+                }
             })
             .collect::<Vec<_>>();
 

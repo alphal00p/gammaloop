@@ -97,29 +97,62 @@ fn scalar_pole_part() {
     },"scalars")
     .unwrap();
 
-    let mut amp = Amplitude::from_graph_list("bub", sunrise).unwrap();
+    let mut results = Vec::new();
+    for project_integrated_uv_cts_onto_tensor_integrals in [true, false] {
+        let mut amp = Amplitude::from_graph_list("bub", sunrise.clone()).unwrap();
 
-    let model = load_generic_model("scalars");
+        let model = load_generic_model("scalars");
 
-    let a = amp.graphs[0]
-        .renormalization_part(&UVgenerationSettings {
+        // The two forest owners can group identical scalar-master Laurent
+        // series differently. Exercise their unchanged comparison for both
+        // finite counterterms and poles, before comparing the Vakint modes.
+        let settings = UVgenerationSettings {
             softct: false,
+            orchestrator: UVOrchestrator::Compare,
+            project_integrated_uv_cts_onto_tensor_integrals,
             vakint: VakintSettings {
                 normalization: "MSbar".to_string(),
                 additional_normalization: "1".to_string(),
+                // Compare symbolic Laurent coefficients, without rounding
+                // transcendental master constants in either input mode.
+                alphaloop: AlphaLoopSettings {
+                    susbstitute_masters: false,
+                },
                 ..Default::default()
             },
             ..Default::default()
-        })
-        .unwrap();
+        };
+        let a = amp.graphs[0].renormalization_part(&settings).unwrap();
 
-    println!("ren part: {:>}", a);
-    println!(
-        "ren part: {:>}",
-        model.apply_parameter_replacement_rules(
-            &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
-        )
-    );
+        println!("ren part: {:>}", a);
+        println!(
+            "ren part: {:>}",
+            model.apply_parameter_replacement_rules(
+                &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
+            )
+        );
+        assert!(
+            !a.is_zero(),
+            "the massive scalar sunset counterterm must be nonzero"
+        );
+        let mut pole_amp = Amplitude::from_graph_list("bub_poles", sunrise.clone()).unwrap();
+        let poles = pole_amp.graphs[0]
+            .renormalization_part(&UVgenerationSettings {
+                renormalization_prescription: RenormalizationPrescriptionSettings {
+                    log_divergent: ApproximationType::PolePart,
+                    massive_power_divergent: ApproximationType::PolePart,
+                    massless_power_divergent: ApproximationType::PolePart,
+                    ..Default::default()
+                },
+                ..settings
+            })
+            .unwrap();
+        assert!(!poles.is_zero());
+        assert!(poles.contains_symbol(GS.dim_epsilon));
+        results.push((a.expression, poles.expression));
+    }
+    assert!((&results[0].0 - &results[1].0).expand().is_zero());
+    assert!((&results[0].1 - &results[1].1).expand().is_zero());
 }
 #[test]
 fn finite_part_quark_lo() {
@@ -142,67 +175,83 @@ fn finite_part_quark_lo() {
     )
     .unwrap();
 
-    let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+    let mut results = Vec::new();
+    for project_integrated_uv_cts_onto_tensor_integrals in [true, false] {
+        let mut amp = Amplitude::from_graph_list("bub", g.clone()).unwrap();
 
-    let model = load_generic_model("sm");
+        let model = load_generic_model("sm");
 
-    // The external color projector closes this fixed-flavor open quark line:
-    // Tr(T^a T^a)/N_c = (N_c^2-1)*T_F/N_c = C_F. Restore that basis before
-    // the closed-loop RQFT alignment can mistake the projection trace for n_f.
-    let external_index = Atom::num((3, 8)) * function!(CS.cas, 2, cof!(3));
-    assert_eq!(
-        external_index.to_cof_dimension_invariants(),
-        color_idx!(2, cof!(3)).to_cof_dimension_invariants(),
-    );
-    let align_external_quark = |part: &Atom| {
-        align_to_rqft(
-            &part
-                .replace(color_idx!(2, cof!(3)))
-                .with(external_index.to_pattern()),
-            &model,
-        )
-    };
+        // The external color projector closes this fixed-flavor open quark line:
+        // Tr(T^a T^a)/N_c = (N_c^2-1)*T_F/N_c = C_F. Restore that basis before
+        // the closed-loop RQFT alignment can mistake the projection trace for n_f.
+        let external_index = Atom::num((3, 8)) * function!(CS.cas, 2, cof!(3));
+        assert_eq!(
+            external_index.to_cof_dimension_invariants(),
+            color_idx!(2, cof!(3)).to_cof_dimension_invariants(),
+        );
+        let align_external_quark = |part: &Atom| {
+            align_to_rqft(
+                &part
+                    .replace(color_idx!(2, cof!(3)))
+                    .with(external_index.to_pattern()),
+                &model,
+            )
+        };
 
-    let a = amp.graphs[0]
-        .renormalization_part(&pole_part_uv_settings())
-        .unwrap();
+        let a = amp.graphs[0]
+            .renormalization_part(&UVgenerationSettings {
+                project_integrated_uv_cts_onto_tensor_integrals,
+                ..pole_part_uv_settings()
+            })
+            .unwrap();
 
-    println!("ren part: {:>}", a.log_print(Some(80)));
-    // RQFT quark_lo_0_in.h forest order, H = p1.p1*gs^2*cf (cf = 4/3):
-    // F0 (direct) / H = +ep^-1.
-    // Sum / H = +ep^-1; native GammaLoop / RQFT = -1. With the physical
-    // one-loop Vakint measure, the two quark-gluon vertex phase differences remain.
-    let aligned_pole = align_external_quark(&a);
-    insta::assert_snapshot!(
-        aligned_pole.to_bare_ordered_string(),@"-1*cas(2,cof(3))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
-    );
+        println!("ren part: {:>}", a.log_print(Some(80)));
+        // RQFT quark_lo_0_in.h forest order, H = p1.p1*gs^2*cf (cf = 4/3):
+        // F0 (direct) / H = +ep^-1.
+        // Sum / H = +ep^-1; native GammaLoop / RQFT = -1. With the physical
+        // one-loop Vakint measure, the two quark-gluon vertex phase differences remain.
+        let aligned_pole = align_external_quark(&a);
+        insta::allow_duplicates! {
+            insta::assert_snapshot!(
+                aligned_pole.to_bare_ordered_string(),@"-1*cas(2,cof(3))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
+            );
+        }
 
-    let muv = amp.graphs[0]
-        .renormalization_part(&UVgenerationSettings {
-            softct: false,
-            ..Default::default()
-        })
-        .unwrap();
-    let muv = align_external_quark(&muv).replace(GS.dim_epsilon).with(0);
-    let log_mu_r_sq = function!(Symbol::LOG, Atom::var(GS.mu_r_sq));
-    let log_coefficients = muv.coefficient_list::<i8>(std::slice::from_ref(&log_mu_r_sq));
-    assert_eq!(log_coefficients.len(), 2);
-    let log_coefficient = log_coefficients
-        .into_iter()
-        .find_map(|(power, coefficient)| (power == log_mu_r_sq).then_some(coefficient))
-        .unwrap();
-    let contracted_log_coefficient = log_coefficient
-        .normalize_dots()
-        .metric_shorthand_to_dot()
-        .collect_factors();
-    // Vakint can leave a repeated Lorentz dummy as an indexed momentum squared. After
-    // contracting it and stripping the standard i/(16 pi^2) loop normalization,
-    // the MUV scale logarithm must be minus the already verified pole residue.
-    let normalized_log_coefficient =
-        (contracted_log_coefficient * Atom::num(-16) * Atom::i() * Atom::var(Symbol::PI).pow(2))
+        let muv = amp.graphs[0]
+            .renormalization_part(&UVgenerationSettings {
+                softct: false,
+                project_integrated_uv_cts_onto_tensor_integrals,
+                ..Default::default()
+            })
+            .unwrap();
+        let muv = align_external_quark(&muv).replace(GS.dim_epsilon).with(0);
+        assert!(!aligned_pole.is_zero());
+        assert!(!muv.is_zero());
+        results.push((aligned_pole.clone(), muv.clone()));
+        // Extract the physical scale-log coefficient by its derivative. This
+        // also covers equivalent forms such as log(mUV²/μ_R²), without imposing
+        // a particular logarithm spelling or rewriting complex branches.
+        let log_coefficient = Atom::var(GS.mu_r_sq) * muv.derivative(GS.mu_r_sq);
+        let contracted_log_coefficient = log_coefficient
+            .normalize_dots()
+            .metric_shorthand_to_dot()
             .collect_factors();
-    let pole_residue = (aligned_pole * Atom::var(GS.dim_epsilon)).collect_factors();
-    assert_eq!(normalized_log_coefficient, -pole_residue);
+        // Vakint can leave a repeated Lorentz dummy as an indexed momentum squared. After
+        // contracting it and stripping the standard i/(16 pi^2) loop normalization,
+        // the MUV scale logarithm must be minus the already verified pole residue.
+        let normalized_log_coefficient = (contracted_log_coefficient
+            * Atom::num(-16)
+            * Atom::i()
+            * Atom::var(Symbol::PI).pow(2))
+        .collect_factors();
+        let pole_residue = (aligned_pole * Atom::var(GS.dim_epsilon)).collect_factors();
+        assert_eq!(
+            normalized_log_coefficient, -pole_residue,
+            "project={project_integrated_uv_cts_onto_tensor_integrals}: the scale derivative of MUV {muv} must match its signed pole"
+        );
+    }
+    assert!((&results[0].0 - &results[1].0).expand().is_zero());
+    assert!((&results[0].1 - &results[1].1).expand().is_zero());
 }
 
 #[test]

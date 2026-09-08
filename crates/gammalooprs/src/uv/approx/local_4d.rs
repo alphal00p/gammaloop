@@ -5,7 +5,7 @@ use eyre::eyre;
 use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
     color::ColorSimplifier,
-    dirac::GammaSimplifier,
+    dirac::{AGS, GammaSimplifier},
     representations::Bispinor,
     shorthands::{
         chain::Chain,
@@ -30,7 +30,7 @@ use crate::utils::symbols::UvMomentumProvenanceRole;
 use crate::{
     debug_tags,
     graph::{FourDDenominator, Graph, LMBext, LoopMomentumBasis},
-    numerator::aind::Aind,
+    numerator::{aind::Aind, ufo::UFO},
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
@@ -925,6 +925,38 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
 ) -> Result<Local4dCts> {
     match current.renormalization_scheme() {
         ApproximationType::MUV | ApproximationType::PolePart => {
+            if ctx.settings.generate_integrated {
+                // Inspect the original UV-subgraph factors before multiplication,
+                // zero-sector pruning, or Dirac simplification can hide gamma5
+                // pairs. Chiral projectors contain gamma5 implicitly. Cograph
+                // factors and external-state projectors are outside this integral.
+                let forbidden = [
+                    AGS.gamma5, AGS.projm, AGS.projp, UFO.gamma5, UFO.projm, UFO.projp,
+                ];
+                let edges = ctx
+                    .graph
+                    .underlying
+                    .iter_edges_of(current.subgraph())
+                    .filter(|(pair, _, _)| pair.is_paired())
+                    .map(|(_, edge, data)| ("edge", edge.0, &data.data.num.value));
+                let vertices = ctx
+                    .graph
+                    .underlying
+                    .iter_nodes_of(current.subgraph())
+                    .map(|(vertex, _, data)| ("vertex", vertex.0, &data.num.value));
+                for (kind, index, numerator) in edges.chain(vertices) {
+                    if let Some(symbol) = forbidden
+                        .iter()
+                        .find(|symbol| numerator.contains_symbol(**symbol))
+                    {
+                        return Err(eyre!(
+                            "Cannot analytically integrate UV subgraph {} of graph '{}': {kind} {index} contains {symbol}. Gamma5 and chiral projectors are unsupported in d-dimensional analytic UV numerator algebra; no gamma5 prescription is implemented.",
+                            current.subgraph().string_label(),
+                            ctx.graph.name,
+                        ));
+                    }
+                }
+            }
             let marker = UvMarker::new(ctx.settings);
             let reduced_subgraph = current.reduced_subgraph(given);
             let crown = ctx
@@ -1098,6 +1130,150 @@ mod tests {
     use linnet::half_edge::subgraph::{InternalSubGraph, SubSetOps};
     use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
     use symbolica::{domains::rational::Rational, function, symbol};
+
+    #[test]
+    fn analytic_uv_rejects_gamma5_before_simplification_with_subgraph_scope() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph gamma5_uv_scope {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            a -> b [id=1 lmb_id=0]
+            b -> a [id=2]
+            b -> c [id=3]
+            c -> d [id=4 lmb_id=1]
+            d -> c [id=5]
+            d -> outgoing [id=6]
+        })?;
+        let filter = graph
+            .get_edge_subgraph(EdgeIndex(1))
+            .union(&graph.get_edge_subgraph(EdgeIndex(2)));
+        let sibling = graph
+            .get_edge_subgraph(EdgeIndex(4))
+            .union(&graph.get_edge_subgraph(EdgeIndex(5)));
+        let vertex = graph.underlying.iter_nodes_of(&filter).next().unwrap().0;
+        let sibling_vertex = graph.underlying.iter_nodes_of(&sibling).next().unwrap().0;
+        let mut current = OwnedForestNode {
+            spinney: Spinney::with_scheme(
+                InternalSubGraph::cleaned_filter_optimist(filter, graph.as_ref()),
+                &graph,
+                &graph.loop_momentum_basis,
+                ApproximationType::MUV,
+                0,
+            )
+            .expect("the scalar bubble has a compatible UV loop-momentum basis"),
+            topo_order: 0,
+        };
+        let given = OwnedForestNode {
+            spinney: Spinney::empty(&graph),
+            topo_order: 0,
+        };
+        let settings = UVgenerationSettings::default();
+        let input = Full4dCts(FourDSectors::active_atom(Atom::one()));
+        let run = |graph: &Graph, current: &OwnedForestNode, settings: &UVgenerationSettings| {
+            uv_limit(
+                &input,
+                &UVCtx::new(graph, settings),
+                current,
+                &given,
+                current,
+                &given,
+            )
+        };
+        let start = idenso::bis!(4, Atom::from(Aind::Normal(17)));
+        let end = idenso::bis!(4, Atom::from(Aind::Normal(18)));
+        let open = idenso::gamma5!(&start, &end);
+        let closed = spenso::trace!(Bispinor {}.new_rep(4).to_symbolic([]), idenso::gamma5!());
+        let pair = spenso::chain!(&start, &end, idenso::gamma5!(), idenso::gamma5!());
+        assert!(!pair.simplify_gamma().contains_symbol(AGS.gamma5));
+        let cases = [
+            ("open", open.clone()),
+            ("closed", closed),
+            ("pair", pair.clone()),
+            ("left projector", function!(AGS.projm, &start, &end)),
+            ("right projector", function!(AGS.projp, &start, &end)),
+            ("UFO gamma5", function!(UFO.gamma5, 1, 2)),
+            ("UFO left projector", function!(UFO.projm, 1, 2)),
+            ("UFO right projector", function!(UFO.projp, 1, 2)),
+        ];
+        for scheme in [ApproximationType::MUV, ApproximationType::PolePart] {
+            current.spinney.renormalization_scheme = scheme;
+            for (label, numerator) in &cases {
+                for on_vertex in [false, true] {
+                    if on_vertex {
+                        graph.underlying[vertex].num.value = numerator.clone();
+                    } else {
+                        graph.underlying[EdgeIndex(1)].num.value = numerator.clone();
+                    }
+                    let error = run(&graph, &current, &settings).unwrap_err().to_string();
+                    assert!(
+                        error.contains("d-dimensional analytic UV numerator algebra"),
+                        "{label}: {error}"
+                    );
+                    assert!(error.contains(&graph.name), "{label}: {error}");
+                    assert!(
+                        error.contains(&current.subgraph().string_label()),
+                        "{label}: {error}"
+                    );
+                    let source = if on_vertex {
+                        format!("vertex {}", vertex.0)
+                    } else {
+                        "edge 1".to_owned()
+                    };
+                    assert!(error.contains(&source), "{label}: {error}");
+                    graph.underlying[vertex].num.value = Atom::one();
+                    graph.underlying[EdgeIndex(1)].num.value = Atom::one();
+                }
+            }
+        }
+
+        let expected = run(&graph, &current, &settings)?;
+        assert!(!expected.atom().is_zero());
+        // A sibling loop, its vertices, and global external-state projectors
+        // belong to the cograph of this integration and must remain untouched.
+        graph.underlying[EdgeIndex(4)].num.value = open.clone();
+        graph.underlying[sibling_vertex].num.value = open.clone();
+        graph.global_prefactor.projector = open;
+        assert_eq!(run(&graph, &current, &settings)?, expected);
+        assert!(
+            graph.underlying[EdgeIndex(4)]
+                .num
+                .value
+                .contains_symbol(AGS.gamma5)
+        );
+        assert!(
+            graph.underlying[sibling_vertex]
+                .num
+                .value
+                .contains_symbol(AGS.gamma5)
+        );
+        assert!(graph.global_prefactor.projector.contains_symbol(AGS.gamma5));
+
+        graph.underlying[EdgeIndex(1)].num.value = pair;
+        let local_only = UVgenerationSettings {
+            generate_integrated: false,
+            ..settings
+        };
+        assert!(run(&graph, &current, &local_only).is_ok());
+        // Even a vanishing incoming sector must not bypass the source check.
+        let zero = Full4dCts(FourDSectors::active_atom(Atom::Zero));
+        assert!(
+            uv_limit(
+                &zero,
+                &UVCtx::new(&graph, &UVgenerationSettings::default()),
+                &current,
+                &given,
+                &current,
+                &given,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("Gamma5")
+        );
+        Ok(())
+    }
 
     #[test]
     fn term_projection_keeps_factorized_numerator_atoms() -> Result<()> {

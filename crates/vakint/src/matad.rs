@@ -629,8 +629,8 @@ impl Vakint {
             format!(
                 "(
                     (1𝑖*(𝜋^((4-2*{eps})/2)))\
-                  * (exp(-EulerGamma))^({eps})\
-                  * (exp(-logmUVmu-log_mu_sq))^({eps})\
+                  * exp(-({eps})*EulerGamma)\
+                  * exp(-({eps})*(logmUVmu+log_mu_sq))\
                  )^{n_loops}",
                 eps = settings.epsilon_symbol,
                 n_loops = integral.n_loops

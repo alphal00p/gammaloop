@@ -18,10 +18,9 @@ const N_DIGITS_PYSECDEC_EVALUATION_FOR_TESTS: u32 = 10;
 const MAX_PULL: f64 = 1.0e99;
 
 #[test_log::test]
+#[ignore = "manual PySecDec validation"]
 fn test_integrate_1l_simple() {
-    if test_utils::should_skip_pysecdec_tests() {
-        return;
-    }
+    test_utils::require_pysecdec_tests();
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
         VakintSettings{ number_of_terms_in_epsilon_expansion: 2, integral_normalization_factor: LoopNormalizationFactor::pySecDec, ..VakintSettings::default()},
@@ -46,10 +45,9 @@ fn test_integrate_1l_simple() {
 }
 
 #[test_log::test]
+#[ignore = "manual PySecDec validation"]
 fn test_integrate_1l_complex_and_signed_parameters() {
-    if test_utils::should_skip_pysecdec_tests() {
-        return;
-    }
+    test_utils::require_pysecdec_tests();
     let vakint = Vakint::new().unwrap();
     let euler_gamma = 0.577_215_664_901_532_9;
     let tadpole_coefficients = [
@@ -57,18 +55,35 @@ fn test_integrate_1l_complex_and_signed_parameters() {
         1.0 - euler_gamma,
         1.0 - euler_gamma + euler_gamma * euler_gamma / 2.0 + std::f64::consts::PI.powi(2) / 12.0,
     ];
-    for (coefficient, re, im, first_power) in [
-        ("user_space::phase", 1.0, 2.0, -1),
-        ("user_space::phase", -3.0, 0.0, -1),
-        ("user_space::phase/vakint::ε", 1.0, 2.0, -2),
+    for (coefficient, normalization, re, im, first_power, project_onto_tensor_integrals) in [
+        ("user_space::phase", "1", 1.0, 2.0, -1, true),
+        ("user_space::phase", "1", -3.0, 0.0, -1, true),
+        ("user_space::phase/vakint::ε", "1", 1.0, 2.0, -2, true),
+        ("user_space::phase", "eps^-1", 1.0, 2.0, -2, true),
+        ("user_space::phase*vakint::ε^2", "eps^-1", 1.0, 2.0, 0, true),
+        ("user_space::phase", "1", 1.0, 2.0, -1, false),
+        ("user_space::phase", "1", -3.0, 0.0, -1, false),
+        ("user_space::phase", "eps^-1", 1.0, 2.0, -2, false),
+        (
+            "user_space::phase*vakint::ε^2",
+            "eps^-1",
+            1.0,
+            2.0,
+            0,
+            false,
+        ),
     ] {
         let input = vakint_parse!(&format!(
             "({coefficient})*topo(prop(1,edge(1,1),k(1),muvsq,1))"
         ))
         .unwrap();
         let mut settings = VakintSettings {
+            project_onto_tensor_integrals,
             number_of_terms_in_epsilon_expansion: 2,
-            integral_normalization_factor: LoopNormalizationFactor::pySecDec,
+            integral_normalization_factor: LoopNormalizationFactor::Custom(format!(
+                "({normalization})*({})",
+                LoopNormalizationFactor::pySecDec.to_expression()
+            )),
             evaluation_order: EvaluationOrder::pysecdec_only(Some(PySecDecOptions {
                 relative_precision: 1e-7,
                 min_n_evals: 10_000,
@@ -115,6 +130,9 @@ fn test_integrate_1l_complex_and_signed_parameters() {
         // The same massive tadpole as test_integrate_1l_simple has residue one
         // and finite part 1-EulerGamma. Dividing by epsilon also requires its
         // order-epsilon coefficient to recover the requested finite part.
+        // The same applies when the pole belongs to the normalization. A
+        // quadratic evanescent numerator then requires coefficient order two
+        // despite the requested answer ending at the finite term.
         // Check both components, including zero.
         for (power, coefficient) in (first_power..=0).zip(tadpole_coefficients) {
             let actual = result.get_epsilon_coefficient(power);
@@ -144,10 +162,9 @@ fn test_integrate_1l_complex_and_signed_parameters() {
 }
 
 #[test_log::test]
+#[ignore = "manual PySecDec validation"]
 fn test_integrate_1l_cross_product() {
-    if test_utils::should_skip_pysecdec_tests() {
-        return;
-    }
+    test_utils::require_pysecdec_tests();
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 5, integral_normalization_factor: LoopNormalizationFactor::MSbar, ..VakintSettings::default()},
@@ -180,10 +197,9 @@ fn test_integrate_1l_cross_product() {
 }
 
 #[test_log::test]
+#[ignore = "manual PySecDec validation"]
 fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
-    if test_utils::should_skip_pysecdec_tests() {
-        return;
-    }
+    test_utils::require_pysecdec_tests();
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 5, integral_normalization_factor: LoopNormalizationFactor::MSbar, ..VakintSettings::default()},
@@ -216,10 +232,9 @@ fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
 }
 
 #[test_log::test]
+#[ignore = "manual PySecDec validation"]
 fn test_integrate_2l_different_masses() {
-    if test_utils::should_skip_pysecdec_tests() {
-        return;
-    }
+    test_utils::require_pysecdec_tests();
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar, allow_unknown_integrals: true, ..VakintSettings::default()},
@@ -253,10 +268,9 @@ fn test_integrate_2l_different_masses() {
 }
 
 #[test_log::test]
+#[ignore = "manual PySecDec validation"]
 fn test_integrate_3l_o_eps() {
-    if test_utils::should_skip_pysecdec_tests() {
-        return;
-    }
+    test_utils::require_pysecdec_tests();
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
         VakintSettings { integral_normalization_factor: LoopNormalizationFactor::MSbar, number_of_terms_in_epsilon_expansion: 5, ..VakintSettings::default()},
@@ -293,10 +307,9 @@ fn test_integrate_3l_o_eps() {
 
 #[allow(non_snake_case)]
 #[test_log::test]
+#[ignore = "manual PySecDec validation"]
 fn test_integrate_4l_h() {
-    if test_utils::should_skip_pysecdec_tests() {
-        return;
-    }
+    test_utils::require_pysecdec_tests();
     let vakint_default_settings = VakintSettings {
         integral_normalization_factor: LoopNormalizationFactor::MSbar,
         number_of_terms_in_epsilon_expansion: 5,
@@ -336,10 +349,9 @@ fn test_integrate_4l_h() {
 
 #[allow(non_snake_case)]
 #[test_log::test]
+#[ignore = "manual PySecDec validation"]
 fn test_integrate_4l_PR9d_from_FG_pinch() {
-    if test_utils::should_skip_pysecdec_tests() {
-        return;
-    }
+    test_utils::require_pysecdec_tests();
     let vakint_default_settings = VakintSettings {
         integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
         number_of_terms_in_epsilon_expansion: 6,
@@ -382,10 +394,9 @@ fn test_integrate_4l_PR9d_from_FG_pinch() {
 
 #[allow(non_snake_case)]
 #[test_log::test]
+#[ignore = "manual PySecDec validation"]
 fn test_integrate_4l_PR11d() {
-    if test_utils::should_skip_pysecdec_tests() {
-        return;
-    }
+    test_utils::require_pysecdec_tests();
     let vakint_default_settings = VakintSettings {
         integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
         number_of_terms_in_epsilon_expansion: 5,
@@ -423,10 +434,9 @@ fn test_integrate_4l_PR11d() {
 
 #[allow(non_snake_case)]
 #[test_log::test]
+#[ignore = "manual PySecDec validation"]
 fn test_integrate_4l_clover() {
-    if test_utils::should_skip_pysecdec_tests() {
-        return;
-    }
+    test_utils::require_pysecdec_tests();
     let vakint_default_settings = VakintSettings {
         integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
         number_of_terms_in_epsilon_expansion: 5,
@@ -464,10 +474,9 @@ fn test_integrate_4l_clover() {
 
 #[allow(non_snake_case)]
 #[test_log::test]
+#[ignore = "manual PySecDec validation"]
 fn test_integrate_4l_clover_with_numerator() {
-    if test_utils::should_skip_pysecdec_tests() {
-        return;
-    }
+    test_utils::require_pysecdec_tests();
     let vakint_default_settings = VakintSettings {
         integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
         number_of_terms_in_epsilon_expansion: 5,

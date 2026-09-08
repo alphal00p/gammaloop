@@ -7,6 +7,8 @@
 nextest-version = "0.9.115"
 
 [profile.default]
+# Physical PySecDec integrations are explicit manual checks, never automatic coverage.
+default-filter = "not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
 # Slow tests get extra time
 slow-timeout = { period = "10s", terminate-after = 6 }
 # Test threads - use all available cores for maximum parallelism
@@ -59,7 +61,7 @@ inherits = "default"
 slow-timeout = "30y"
 test-threads = 5
 retries = 0
-default-filter = "not test(/(^|::)(slow|failing)::/)"
+default-filter = "not test(/(^|::)(slow|failing)::/) and not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
 
 [[profile.test_gammaloop.overrides]]
 # These tests construct large evaluators or launch their own integration workers.
@@ -87,6 +89,7 @@ binary(=test_runs) and (
 threads-required = 5
 
 [profile.ci]
+default-filter = "not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
 slow-timeout = { period = "120s", terminate-after = 2 }
 # Use all available cores in CI for faster execution
 test-threads = "num-cpus"
@@ -107,7 +110,7 @@ path = "junit.xml"
 
 [profile.ci_gammaloop]
 inherits = "ci"
-default-filter = "not test(/(^|::)(slow|failing)::/)"
+default-filter = "not test(/(^|::)(slow|failing)::/) and not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
 
 [profile.ci_gammaloop.junit]
 path = "junit.xml"

@@ -350,3 +350,48 @@ fn tensor_reduction_preserves_symbolica_user_namespaces() {
         );
     }
 }
+
+#[test_log::test]
+fn whole_numerator_and_tensor_projection_preserve_structured_open_slots() {
+    use symbolica::{
+        atom::AtomCore,
+        domains::{algebraic_number::AlgebraicExtension, rational::Q},
+    };
+
+    let mut vakint = get_vakint(VakintSettings::default());
+    let input = vakint_parse!("(1+2𝑖)*(user_space::a+user_space::b)*tensor(user_space::chain(mink(D,mu)),mink(D,mu))*k(1,mink(D,mu))*k(1,mink(D,nu))*topo(I1L(muvsq,1))").unwrap();
+    let projected = vakint.tensor_reduce(input.as_view()).unwrap();
+    vakint.settings.project_onto_tensor_integrals = false;
+    let whole = vakint.tensor_reduce(input.as_view()).unwrap();
+    let whole = vakint::Vakint::convert_to_dot_notation(&vakint.settings, whole.as_view())
+        .unwrap_or_else(|error| panic!("{error}; whole={whole}; projected={projected}"));
+    let projected =
+        vakint::Vakint::convert_to_dot_notation(&vakint.settings, projected.as_view()).unwrap();
+    // Expansion is confined to the analytically integrated numerator. FORM
+    // distributes the complete coefficient, while the projected path keeps it,
+    // and cancels common factors in its rational projector denominators.
+    let expected = vakint_parse!("(1+2𝑖)*(user_space::a+user_space::b)*tensor(user_space::chain(mink(D,nu)),mink(D,nu))*dot(k(1),k(1))/(4-2*ε)*topo(I1L(muvsq,1))").unwrap();
+    let complex_rationals = AlgebraicExtension::new_complex(Q);
+    for (mode, actual) in [("projected", &projected), ("whole", &whole)] {
+        assert!(
+            (actual - &expected)
+                .try_to_rational_polynomial::<_, _, u32>(
+                    &complex_rationals,
+                    &complex_rationals,
+                    None
+                )
+                .expect("the analytic tensor projector is rational over Q(i)")
+                .numerator
+                .is_zero(),
+            "{mode}: actual={actual}; expected={expected}"
+        );
+    }
+    let malformed = vakint_parse!("k(1,mu)^2*p(1,mu)*topo(I1L(muvsq,1))").unwrap();
+    for project_onto_tensor_integrals in [true, false] {
+        vakint.settings.project_onto_tensor_integrals = project_onto_tensor_integrals;
+        assert!(matches!(
+            vakint.tensor_reduce(malformed.as_view()),
+            Err(vakint::VakintError::InvalidNumerator(_))
+        ));
+    }
+}

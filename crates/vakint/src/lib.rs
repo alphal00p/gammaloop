@@ -1897,8 +1897,14 @@ impl EvaluationMethod {
                 vakint.pysecdec_evaluate(settings, numerator, integral_specs, opts)
             }
         }?;
-        // Simplify logarithms and zero powers knowing that all arguments are real
-        Ok(simplify_real(result.as_view()))
+        // Projected kernels contain only real scalar integral arguments. The
+        // monolithic numerator may contain complex user coefficients, so its
+        // functions must retain their original branches.
+        Ok(if settings.project_onto_tensor_integrals {
+            simplify_real(result.as_view())
+        } else {
+            result
+        })
     }
 }
 
@@ -2036,6 +2042,9 @@ pub struct VakintSettings {
     pub number_of_terms_in_epsilon_expansion: i64,
     pub precision_for_input_float_rationalization: InputFloatRationalizationPrecision,
     pub use_dot_product_notation: bool,
+    /// Project coefficient-one tensor integrals, keeping scalar coefficients
+    /// outside the backends. False sends each complete numerator through FORM.
+    pub project_onto_tensor_integrals: bool,
     pub temporary_directory: Option<String>,
 }
 
@@ -2078,7 +2087,7 @@ impl LoopNormalizationFactor {
         match self {
             LoopNormalizationFactor::pySecDec => "(1𝑖*(𝜋^((4-2*eps)/2)))^(-n_loops)".into(),
             LoopNormalizationFactor::FMFTandMATAD => {
-                "( 1𝑖*(𝜋^((4-2*eps)/2)) * (exp(-EulerGamma))^(eps) )^(-n_loops)".into()
+                "( 1𝑖*(𝜋^((4-2*eps)/2)) * exp(-eps*EulerGamma) )^(-n_loops)".into()
             }
             LoopNormalizationFactor::MSbar => {
                 // We must include the 1/(2*𝜋)^D factor per loop which accompanies the text-book definition of MSbar
@@ -2087,7 +2096,7 @@ impl LoopNormalizationFactor {
                 //"(2*𝜋)^(-4*n_loops)*(exp(log_mu_sq)*𝜋*exp(EulerGamma))^(eps*n_loops)".into()
                 // And where it is best to keep each term taken to an epsilon power separately so that after the expansion
                 // we can easily get the expected cancellation of log(4 pi) and eulerGamma.
-                "(2*𝜋)^(-4*n_loops)*exp(log_mu_sq)^(eps*n_loops)*𝜋^(eps*n_loops)*exp(EulerGamma)^(eps*n_loops)".into()
+                "(2*𝜋)^(-4*n_loops)*exp(eps*n_loops*log_mu_sq)*𝜋^(eps*n_loops)*exp(eps*n_loops*EulerGamma)".into()
             }
             LoopNormalizationFactor::Custom(s) => s.clone(),
         }
@@ -2251,6 +2260,7 @@ impl Default for VakintSettings {
             precision_for_input_float_rationalization:
                 InputFloatRationalizationPrecision::FullPrecision,
             use_dot_product_notation: false,
+            project_onto_tensor_integrals: true,
             temporary_directory: None,
         }
     }
@@ -2330,16 +2340,84 @@ impl VakintTerm {
             self.integral = Atom::one();
             return Ok(());
         }
-        let (kernel, aliases, extra_orders) =
-            terms.backend_kernel(settings, slice::from_ref(&self.integral))?;
-        let target_order = settings.number_of_terms_in_epsilon_expansion
-            - integral_specs.canonical_topology.get_integral().n_loops as i64
-            - 1;
+        let (kernel, aliases, numerator_orders) = if settings.project_onto_tensor_integrals {
+            terms.backend_kernel(settings, slice::from_ref(&self.integral))?
+        } else {
+            let pole_order =
+                projection::ScalarTerms::epsilon_pole_order(numerator.as_view(), settings)?;
+            // One common Laurent pole is restored after backend evaluation;
+            // the complete numerator otherwise enters the backend unchanged.
+            let kernel =
+                numerator * Atom::var(vk_symbol!(&settings.epsilon_symbol)).pow(pole_order);
+            (kernel, Vec::new(), pole_order)
+        };
+        let epsilon_overflow = || VakintError::InvalidNumerator("epsilon order overflow".into());
+        let n_loops = i64::try_from(integral_specs.canonical_topology.get_integral().n_loops)
+            .map_err(|_| epsilon_overflow())?;
+        // Normalization is multiplied into the backend result after its raw
+        // integral expansion. Its poles require further raw integral orders,
+        // just like poles in the numerator coefficients. Inspect the actual
+        // loop count: a custom normalization need not scale per loop.
+        let normalization = settings
+            .get_integral_normalization_factor_atom()?
+            .replace(S.n_loops.to_pattern())
+            .with(Atom::num(n_loops).to_pattern());
+        let normalization_order = normalization
+            .series(
+                vk_symbol!(&settings.epsilon_symbol),
+                0,
+                symbolica::poly::series::SeriesDepth::relative(1),
+            )
+            .map_err(|error| {
+                VakintError::InvalidLoopNormalization(
+                    normalization.to_canonical_string(),
+                    error.to_string(),
+                    LoopNormalizationFactor::allowed_symbols(settings).join(","),
+                )
+            })?
+            .get_trailing_exponent();
+        let normalization_orders = if normalization_order.is_integer() {
+            normalization_order
+                .numerator()
+                .to_i64()
+                .and_then(i64::checked_neg)
+                .map(|order| order.max(0))
+        } else {
+            None
+        }
+        .ok_or_else(|| {
+            VakintError::InvalidLoopNormalization(
+                normalization.to_canonical_string(),
+                "normalization requires integer Laurent powers within the supported range".into(),
+                LoopNormalizationFactor::allowed_symbols(settings).join(","),
+            )
+        })?;
+        let extra_orders = numerator_orders
+            .checked_add(normalization_orders)
+            .ok_or_else(epsilon_overflow)?;
+        let target_order = settings
+            .number_of_terms_in_epsilon_expansion
+            .checked_sub(n_loops)
+            .and_then(|order| order.checked_sub(1))
+            .ok_or_else(epsilon_overflow)?;
         let mut kernel_settings = settings.clone();
+        let normalization_power =
+            Atom::var(vk_symbol!(&settings.epsilon_symbol)).pow(Atom::num(normalization_orders));
+        if normalization_orders != 0 {
+            // Restore the extracted pole only after backend evaluation. The
+            // backend must truncate the regularized result at the extra raw
+            // order, not request unavailable terms of the normalized series.
+            kernel_settings.integral_normalization_factor = LoopNormalizationFactor::Custom(
+                Vakint::serialize_expression((normalization * &normalization_power).as_view()),
+            );
+        }
         kernel_settings.number_of_terms_in_epsilon_expansion = kernel_settings
             .number_of_terms_in_epsilon_expansion
             .checked_add(extra_orders)
-            .ok_or_else(|| VakintError::InvalidNumerator("epsilon order overflow".into()))?;
+            .ok_or_else(epsilon_overflow)?;
+        let kernel_order = target_order
+            .checked_add(extra_orders)
+            .ok_or_else(epsilon_overflow)?;
         let evaluation_approach = settings
             .evaluation_order
             .0
@@ -2348,13 +2426,9 @@ impl VakintTerm {
                 approach.supports(&kernel_settings, &integral_specs.canonical_topology)
             })
             .ok_or_else(|| {
-                VakintError::NoEvaluationMethodFound(
-                    self.integral.to_string(),
-                    target_order + extra_orders,
-                )
+                VakintError::NoEvaluationMethodFound(self.integral.to_string(), kernel_order)
             })?;
         if let EvaluationMethod::PySecDec(options) = evaluation_approach {
-            let n_loops = integral_specs.canonical_topology.get_integral().n_loops as i64;
             let nonvacuum = integral_specs
                 .canonical_topology
                 .get_integral()
@@ -2364,12 +2438,18 @@ impl VakintTerm {
                 .any(|edge| edge.momentum.get_all_symbols(true).contains(&S.p));
             // Massive vacuum integrals have at most one pole per loop. A
             // general nonvacuum massless integral can have two per loop.
-            let pole_bound = if nonvacuum { 2 * n_loops } else { n_loops };
+            let pole_bound = n_loops
+                .checked_mul(if nonvacuum { 2 } else { 1 })
+                .ok_or_else(epsilon_overflow)?;
+            let coefficient_order = target_order
+                .checked_add(pole_bound)
+                .and_then(|order| order.checked_add(normalization_orders))
+                .ok_or_else(epsilon_overflow)?;
             let (numerical_kernel, numerical_options, common_power) = terms.numerical_kernel(
                 vakint,
                 settings,
                 options,
-                target_order + pole_bound,
+                coefficient_order,
                 slice::from_ref(&self.integral),
             )?;
             if numerical_kernel.is_zero() {
@@ -2378,17 +2458,21 @@ impl VakintTerm {
                 return Ok(());
             }
             let mut numerical_settings = settings.clone();
+            numerical_settings.integral_normalization_factor =
+                kernel_settings.integral_normalization_factor.clone();
             numerical_settings.number_of_terms_in_epsilon_expansion = numerical_settings
                 .number_of_terms_in_epsilon_expansion
                 .checked_sub(common_power)
-                .ok_or_else(|| VakintError::InvalidNumerator("epsilon order overflow".into()))?;
+                .and_then(|order| order.checked_add(normalization_orders))
+                .ok_or_else(epsilon_overflow)?;
             let evaluated = vakint.pysecdec_evaluate(
                 &numerical_settings,
                 numerical_kernel.as_view(),
                 &integral_specs,
                 &numerical_options,
             )? * Atom::var(vk_symbol!(&settings.epsilon_symbol))
-                .pow(Atom::num(common_power));
+                .pow(Atom::num(common_power))
+                / normalization_power;
             self.numerator = projection::ScalarTerms::epsilon_series(
                 evaluated.as_view(),
                 settings,
@@ -2411,7 +2495,14 @@ impl VakintTerm {
                     Replacement::new(alias.to_pattern(), coefficient.to_pattern())
                 })
                 .collect::<Vec<_>>(),
-        );
+        ) / normalization_power
+            / Atom::var(vk_symbol!(&settings.epsilon_symbol)).pow(
+                if settings.project_onto_tensor_integrals {
+                    0
+                } else {
+                    numerator_orders
+                },
+            );
         self.numerator = projection::ScalarTerms::epsilon_series(
             restored.as_view(),
             settings,
@@ -2631,10 +2722,15 @@ impl VakintTerm {
             .any(|edge| edge.momentum.get_all_symbols(true).contains(&S.p));
         if nonvacuum {
             self.numerator = Vakint::convert_to_dot_notation(settings, self.numerator.as_view())?;
+        } else if !settings.project_onto_tensor_integrals {
+            // Validate and contract existing Lorentz factors before FORM can
+            // cancel an odd sector; malformed dummy indices must still error.
+            let numerator = Vakint::convert_to_dot_notation(settings, self.numerator.as_view())?;
+            self.numerator = Self::tensor_reduce_form(vakint, settings, numerator)?;
         } else {
             self.numerator = projection
                 .project(self.numerator.as_view(), |monomial| {
-                    Self::project_universal_tensor(vakint, settings, monomial)
+                    Self::tensor_reduce_form(vakint, settings, monomial)
                 })?
                 .expression();
         }
@@ -2644,12 +2740,12 @@ impl VakintTerm {
         Ok(())
     }
 
-    fn project_universal_tensor(
+    fn tensor_reduce_form(
         vakint: &Vakint,
         settings: &VakintSettings,
-        monomial: Atom,
+        numerator: Atom,
     ) -> Result<Atom, VakintError> {
-        let mut form_numerator = monomial;
+        let mut form_numerator = numerator;
         // Make sure to undo the dot product notation.
         // If it was not used, the command below will do nothing.
         form_numerator = Vakint::convert_from_dot_notation(form_numerator.as_view());
@@ -2673,9 +2769,9 @@ impl VakintTerm {
             // for m in matcher {
             //     let idx = m.get(&vk_symbol!("idx_")).unwrap();
             //     vector_mapping.insert(
-            //         vk_parse!(format!("{}{}({})", vec, id, idx.to_canonical_string()).as_str())
+            //         vk_parse!(format!("{}{}({})", vec, id, Vakint::serialize_expression(idx.as_view())).as_str())
             //             .unwrap(),
-            //         vk_parse!(format!("{}({},{})", vec, id, idx.to_canonical_string()).as_str())
+            //         vk_parse!(format!("{}({},{})", vec, id, Vakint::serialize_expression(idx.as_view())).as_str())
             //             .unwrap(),
             //     );
             // }
@@ -2740,7 +2836,7 @@ impl VakintTerm {
         //     indices
         //         .clone()
         //         .iter()
-        //         .map(|idx| idx.to_canonical_string())
+        //         .map(|idx| Vakint::serialize_expression(idx.as_view()))
         //         .collect::<Vec<_>>()
         //         .join(",")
         // );
@@ -3959,18 +4055,22 @@ Evaluated (n_loops=1, mu_r=1) :
             // the order required by the integral's pole bound. Its synthetic
             // kernel is already polynomial here; truncating it again can
             // discard coefficient orders needed by multi-loop poles.
-            // let mut numerator_string = AtomPrinter::new_with_options(
-            //     processed_numerator.as_atom_view(),
-            //     PrintOptions::file_no_namespace(),
-            // )
-            // .to_string()
-            // .replace(settings.epsilon_symbol.as_str(), "eps");
-            let mut numerator_string = pysecdec_encode(
-                &undress_vakint_symbols(&processed_numerator.to_canonical_string()).replace(
+            // Keep the complete namespace and parenthesize complex numeric
+            // coefficients before encoding the expression for PySecDec.
+            let numerator_expression = Vakint::serialize_expression(processed_numerator.as_view());
+            let mut numerator_string =
+                pysecdec_encode(&undress_vakint_symbols(&numerator_expression).replace(
                     &undress_vakint_symbols(settings.epsilon_symbol.as_str()),
                     "eps",
-                ),
-            );
+                ));
+            // Serialized complex numbers always include their numeric imaginary
+            // coefficient (also +/-1). Match that token, not an imaginary
+            // character inside a namespaced user parameter identifier.
+            numerator_string =
+                Regex::new(r"(^|[^\p{L}\p{N}_:])([0-9]+(?:\.[0-9]*)?(?:[eE][+-]?[0-9]+)?)𝑖")
+                    .unwrap()
+                    .replace_all(&numerator_string, "${1}${2}*I")
+                    .into_owned();
             for (original_index, sanitized_index) in lorentz_index_replacements.iter() {
                 if original_index != sanitized_index {
                     let encoded_original_index = pysecdec_encode(original_index);
@@ -4415,22 +4515,52 @@ Evaluated (n_loops=1, mu_r=1) :
             let idx = m.get(&vk_symbol!("idx_")).unwrap();
             form_expression = form_expression
                 .replace(
-                    vk_parse!(format!("{}({},{})", v, v_id, idx.to_canonical_string()).as_str())
-                        .unwrap()
-                        .to_pattern(),
+                    vk_parse!(
+                        format!(
+                            "{}({},{})",
+                            v,
+                            v_id,
+                            Vakint::serialize_expression(idx.as_view())
+                        )
+                        .as_str()
+                    )
+                    .unwrap()
+                    .to_pattern(),
                 )
                 .with(
                     vk_parse!(
-                        format!("vec1({}{},{})", v, v_id, idx.to_canonical_string()).as_str()
+                        format!(
+                            "vec1({}{},{})",
+                            v,
+                            v_id,
+                            Vakint::serialize_expression(idx.as_view())
+                        )
+                        .as_str()
                     )
                     .unwrap()
                     .to_pattern(),
                 );
             vector_mapping.insert(
-                vk_parse!(format!("{}{}({})", v, v_id, idx.to_canonical_string()).as_str())
-                    .unwrap(),
-                vk_parse!(format!("{}({},{})", v, v_id, idx.to_canonical_string()).as_str())
-                    .unwrap(),
+                vk_parse!(
+                    format!(
+                        "{}{}({})",
+                        v,
+                        v_id,
+                        Vakint::serialize_expression(idx.as_view())
+                    )
+                    .as_str()
+                )
+                .unwrap(),
+                vk_parse!(
+                    format!(
+                        "{}({},{})",
+                        v,
+                        v_id,
+                        Vakint::serialize_expression(idx.as_view())
+                    )
+                    .as_str()
+                )
+                .unwrap(),
             );
         }
         // println!("Input expression for FORM : {}", form_expression);
@@ -4478,7 +4608,7 @@ Evaluated (n_loops=1, mu_r=1) :
         //     indices
         //         .clone()
         //         .iter()
-        //         .map(|idx| idx.to_canonical_string())
+        //         .map(|idx| Vakint::serialize_expression(idx.as_view()))
         //         .collect::<Vec<_>>()
         //         .join(",")
         // );
@@ -4558,13 +4688,15 @@ Evaluated (n_loops=1, mu_r=1) :
         // having just a logarithm of the renormalization scale so that cancellations are symbolic when using `log_mu_sq`
         // in the normalization choice.
         // We must keep the name logmUVmu as it is reserved in the alphaloop implementation and corresponds to log(mUV^2/mu^2)
-        // This is also the reason we do not simplify the expression exp(-logmUVmu+log_mu_sq)
+        // Keep those formal real logarithms inside a single exponential;
+        // taking a power of exp(...) would generate spurious log(exp(...))
+        // during the Laurent series before the scale placeholders are restored.
         let alphaloop_normalization_correction = vk_parse!(
             format!(
                 "(\
                     1𝑖*(𝜋^((4-2*{eps})/2))\
-                 * (exp(-EulerGamma))^({eps})\
-                 * (exp(-logmUVmu-log_mu_sq))^({eps})\
+                 * exp(-({eps})*EulerGamma)\
+                 * exp(-({eps})*(logmUVmu+log_mu_sq))\
                  )^{n_loops}",
                 eps = settings.epsilon_symbol,
                 n_loops = integral.n_loops
@@ -4859,6 +4991,55 @@ Evaluated (n_loops=1, mu_r=1) :
         Ok(indices.iter().cloned().collect::<Vec<_>>())
     }
 
+    fn serialize_expression(expression: AtomView) -> String {
+        // Backend input follows the exact AST, including its existing argument
+        // order and antisymmetric signs. Display callbacks must never supply
+        // algebra or symbol identities, and complex numbers need parentheses.
+        match expression {
+            AtomView::Num(number) => {
+                let literal = expression.to_canonical_string();
+                if number.get_coeff_view().is_real() {
+                    literal
+                } else {
+                    format!("({literal})")
+                }
+            }
+            AtomView::Var(variable) => get_full_name(&variable.get_symbol()),
+            AtomView::Fun(function) => format!(
+                "{}({})",
+                get_full_name(&function.get_symbol()),
+                function
+                    .iter()
+                    .map(Self::serialize_expression)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                format!(
+                    "({})^({})",
+                    Self::serialize_expression(base),
+                    Self::serialize_expression(exponent)
+                )
+            }
+            AtomView::Mul(product) => format!(
+                "({})",
+                product
+                    .iter()
+                    .map(Self::serialize_expression)
+                    .collect::<Vec<_>>()
+                    .join("*")
+            ),
+            AtomView::Add(sum) => format!(
+                "({})",
+                sum.iter()
+                    .map(Self::serialize_expression)
+                    .collect::<Vec<_>>()
+                    .join("+")
+            ),
+        }
+    }
+
     pub fn sanitize_user_expressions(
         &self,
         settings: &VakintSettings,
@@ -4897,10 +5078,8 @@ Evaluated (n_loops=1, mu_r=1) :
             }
         });
 
-        // let mut processed_str =
-        //     AtomPrinter::new_with_options(processed.as_view(), PrintOptions::file_no_namespace())
-        //         .to_string();
-        let mut processed_str = expression.to_canonical_string();
+        // Preserve namespaces, symbol attributes and complex numeric precedence.
+        let mut processed_str = Self::serialize_expression(expression.as_view());
         // println!("Original expression: {}", expression.to_canonical_string());
         // Identify user indices in p and k structures
         let mut indices = Vakint::identify_vector_indices(expression.as_view())?;
@@ -4927,7 +5106,7 @@ Evaluated (n_loops=1, mu_r=1) :
                     let pattern = vk_parse!(format!(
                         "{}(id_,{})",
                         vecsymbol,
-                        user_i.to_canonical_string()
+                        Vakint::serialize_expression(user_i.as_view())
                     ))
                     .unwrap()
                     .to_pattern();
@@ -4944,7 +5123,7 @@ Evaluated (n_loops=1, mu_r=1) :
                     let pattern = vk_parse!(format!(
                         "{}(idx1_,{})",
                         metric_symbol,
-                        user_i.to_canonical_string()
+                        Vakint::serialize_expression(user_i.as_view())
                     ))
                     .unwrap()
                     .to_pattern();
@@ -4959,7 +5138,7 @@ Evaluated (n_loops=1, mu_r=1) :
                     let pattern = vk_parse!(format!(
                         "{}({},idx2_)",
                         metric_symbol,
-                        user_i.to_canonical_string()
+                        Vakint::serialize_expression(user_i.as_view())
                     ))
                     .unwrap()
                     .to_pattern();
@@ -4973,17 +5152,20 @@ Evaluated (n_loops=1, mu_r=1) :
                     );
                 }
             } else {
-                let litteral_form_name = format!("[{}]", user_i.to_canonical_string());
+                let litteral_form_name =
+                    format!("[{}]", Vakint::serialize_expression(user_i.as_view()));
                 expression_no_indices = expression_no_indices
                     .replace(user_i.to_pattern())
                     .with(Atom::num(0));
-                processed_str =
-                    processed_str.replace(&user_i.to_canonical_string(), &litteral_form_name);
+                processed_str = processed_str.replace(
+                    &Vakint::serialize_expression(user_i.as_view()),
+                    &litteral_form_name,
+                );
                 form_header_indices.push(litteral_form_name);
             }
         }
         if substitute_indices {
-            processed_str = expression_no_indices.to_canonical_string();
+            processed_str = Self::serialize_expression(expression_no_indices.as_view());
         }
         processed_str = undress_vakint_symbols(&processed_str);
 
@@ -5270,8 +5452,12 @@ Evaluated (n_loops=1, mu_r=1) :
                             ))
                             .unwrap()
                             .to_pattern(),
-                            vk_parse!(format!("{}(id_,{})", vec, user_i.to_canonical_string()))
-                                .unwrap(),
+                            vk_parse!(format!(
+                                "{}(id_,{})",
+                                vec,
+                                Vakint::serialize_expression(user_i.as_view())
+                            ))
+                            .unwrap(),
                         ));
                     }
                     replacements.push(Replacement::new(
@@ -5285,7 +5471,7 @@ Evaluated (n_loops=1, mu_r=1) :
                         vk_parse!(format!(
                             "{}(id_,{})",
                             METRIC_SYMBOL,
-                            user_i.to_canonical_string()
+                            Vakint::serialize_expression(user_i.as_view())
                         ))
                         .unwrap(),
                     ));
@@ -5300,7 +5486,7 @@ Evaluated (n_loops=1, mu_r=1) :
                         vk_parse!(format!(
                             "{}({},id_)",
                             METRIC_SYMBOL,
-                            user_i.to_canonical_string()
+                            Vakint::serialize_expression(user_i.as_view())
                         ))
                         .unwrap(),
                     ));
@@ -5515,6 +5701,81 @@ mod tests {
     use symbolica::parse_lit;
 
     use super::*;
+
+    #[test]
+    fn form_serialization_preserves_complex_precedence_and_symbol_identity() {
+        let vakint = Vakint::new().unwrap();
+        let settings = VakintSettings::default();
+        let custom = symbolica::symbol!(
+            "user_space::serialization_custom",
+            print = |_atom, _options, _state| Some("display_only".into())
+        );
+        let real = symbolica::symbol!("user_space::serialization_real"; Real);
+        let antisymmetric = symbolica::symbol!("user_space::serialization_antisymmetric";
+            Antisymmetric;
+            print = |_atom, _options, _state| Some("display_only_antisymmetric".into()),
+            tags = ["user_space::tensor_tag"]);
+        let complex = Atom::one() + Atom::i() * 2;
+        let custom_coefficient = function!(custom, &complex) * Atom::var(real);
+        for expression in [
+            complex.clone() * vk_parse!("user_space::x+user_space::y").unwrap(),
+            complex.clone()
+                * vk_parse!("numeric_group_0(1)+numeric_group_1_suffix+numeric_group_2").unwrap(),
+            complex.clone().pow(vk_parse!("user_space::power").unwrap()),
+            vk_parse!("user_space::x").unwrap().pow(&complex),
+            custom_coefficient,
+            function!(
+                antisymmetric,
+                vk_parse!("user_space::y").unwrap(),
+                vk_parse!("user_space::x").unwrap()
+            ) * &complex,
+            complex
+                * vk_parse!("tensor(user_space::chain(mink(D,mu)),mink(D,mu))*k(1,mink(D,mu))")
+                    .unwrap(),
+        ] {
+            for substitute_indices in [false, true] {
+                let (_, serialized, indices) = vakint
+                    .sanitize_user_expressions(
+                        &settings,
+                        expression.as_view(),
+                        substitute_indices,
+                        &[],
+                    )
+                    .unwrap();
+                let restored = vakint
+                    .process_form_output(
+                        &settings,
+                        serialized.clone(),
+                        indices,
+                        BTreeMap::default(),
+                    )
+                    .unwrap();
+                assert_eq!(restored, expression, "FORM input: {serialized}");
+            }
+        }
+    }
+
+    #[test]
+    fn integral_epsilon_order_overflow_returns_an_error() {
+        let vakint = Vakint::new().unwrap();
+        for number_of_terms_in_epsilon_expansion in [i64::MIN, i64::MAX] {
+            let settings = VakintSettings {
+                number_of_terms_in_epsilon_expansion,
+                integral_normalization_factor: LoopNormalizationFactor::Custom("1".into()),
+                evaluation_order: EvaluationOrder::analytic_only(),
+                ..VakintSettings::default()
+            };
+            let mut term = VakintTerm {
+                integral: vk_parse!("topo(I1L(muvsq,1))").unwrap(),
+                numerator: vk_parse!("ε^-1").unwrap(),
+                vectors: vec![],
+            };
+            assert!(matches!(
+                term.evaluate_integral(&vakint, &settings),
+                Err(VakintError::InvalidNumerator(message)) if message == "epsilon order overflow"
+            ));
+        }
+    }
 
     #[test]
     fn pysecdec_adjust_preserves_complex_parameters_and_signed_momenta() {

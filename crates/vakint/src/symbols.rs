@@ -191,7 +191,10 @@ pub static SYMBOL_REGISTRY: LazyLock<HashSet<Symbol>> = LazyLock::new(|| {
 });
 impl VakintSymbols {
     pub fn should_symbol_be_escaped_in_form(&self, symbol: &Symbol) -> bool {
-        symbol.get_namespace() != crate::NAMESPACE
+        // Tensor interfaces are Vakint-owned symbols, but FORM treats their
+        // complete bodies and structured slots as opaque functions.
+        [self.tensor, self.tensor_index].contains(symbol)
+            || symbol.get_namespace() != crate::NAMESPACE
             || (!SYMBOL_REGISTRY.contains(symbol)
                 && !MOMENTUM_WITH_INDEX_RE.is_match(symbol.get_name()))
     }

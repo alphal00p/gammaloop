@@ -124,6 +124,9 @@ def generate(graph_name, quiet=False, draw_graph=False):
             loop_integral = loop_integral,
             real_parameters = real_parameters,
             complex_parameters = complex_parameters,
+            # Literal complex coefficients also require a complex return type,
+            # even when no complex parameter symbols remain in the numerator.
+            enforce_complex = loop_integral.numerator_input.has(sp.I),
             # the highest order of the final epsilon expansion --> change this value to whatever you think is appropriate
             requested_orders = [{max_epsilon_order}],
             contour_deformation = {contour_deformation},

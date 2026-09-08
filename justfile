@@ -470,6 +470,9 @@ test_gammaloop *args:
     else
         filterset="${known_broken_filter}"
     fi
+    # Slow/failing selections bypass the profile filter and include ignored
+    # tests. Physical PySecDec validation remains an explicit manual command.
+    filterset="(${filterset}) and not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
     cmd+=(-E "$filterset")
     if [ ${#nextest_args[@]} -gt 0 ]; then
         cmd+=("${nextest_args[@]}")

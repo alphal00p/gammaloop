@@ -1,8 +1,8 @@
 //! Vacuum projection through universal tensor kernels and opaque coefficients.
 //!
-//! All source coefficients remain Symbolica ASTs. The only distributive
-//! operations are convolution of loop degrees and contraction of tensor slots.
-//! The FORM callback receives a coefficient-one universal tensor monomial.
+//! Source coefficients remain Symbolica ASTs while loop degrees and tensor
+//! slots are reduced. The analytic numerator's epsilon dependence is then
+//! resolved before truncation; FORM receives coefficient-one tensor monomials.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -24,9 +24,9 @@ type TensorTerms = BTreeMap<Degrees, Atom>;
 pub(crate) struct ScalarTerms(pub(crate) BTreeMap<Atom, Atom>);
 
 impl ScalarTerms {
-    /// Reuse the existing AtomField series for rational epsilon dependence.
-    /// Generic epsilon-dependent functions need coefficient protection before
-    /// Symbolica's function-series branch, which expands derivatives.
+    /// Resolve the supported Laurent dependence in the analytically integrated
+    /// numerator. Opaque tensor functions cannot supply an epsilon derivative;
+    /// ordinary mathematical functions use Symbolica's existing series algebra.
     pub(crate) fn epsilon_series(
         input: AtomView<'_>,
         settings: &VakintSettings,
@@ -38,8 +38,15 @@ impl ScalarTerms {
                 return Ok(());
             }
             match view {
+                AtomView::Fun(function)
+                    if [Symbol::LOG, Symbol::EXP, Symbol::SIN, Symbol::COS]
+                        .contains(&function.get_symbol())
+                        && function.get_nargs() == 1 =>
+                {
+                    check(function.get(0), epsilon)
+                }
                 AtomView::Fun(_) => Err(VakintError::InvalidNumerator(
-                    "generic epsilon-dependent functions require protected coefficient series"
+                    "epsilon-dependent opaque functions must be resolved before Laurent expansion"
                         .into(),
                 )),
                 AtomView::Add(sum) => sum.iter().try_for_each(|term| check(term, epsilon)),
@@ -56,9 +63,17 @@ impl ScalarTerms {
         }
         let epsilon = vk_symbol!(&settings.epsilon_symbol);
         check(input, epsilon)?;
-        input
+        let series = input
             .series(epsilon, 0, depth)
-            .map_err(|error| VakintError::SymbolicaError(error.to_string()))
+            .map_err(|error| VakintError::SymbolicaError(error.to_string()))?;
+        if series.terms().any(|(power, coefficient)| {
+            !power.is_integer() || coefficient.get_all_symbols(true).contains(&epsilon)
+        }) {
+            return Err(VakintError::InvalidNumerator(
+                "the numerator requires integer Laurent powers with epsilon-independent coefficients".into(),
+            ));
+        }
+        Ok(series)
     }
 
     fn insert(&mut self, key: Atom, value: Atom) {
@@ -232,15 +247,14 @@ impl ScalarTerms {
 
     /// Batch one synthetic scalar kernel, restoring each coefficient only
     /// after the backend returns. Callers must reserve topology symbols too.
-    /// For general epsilon-dependent functions use protected series aliases;
-    /// the direct series calls here cover rational epsilon dependence.
+    /// Resolve epsilon dependence before choosing the required backend order;
+    /// opaque tensor functions must already have epsilon-independent bodies.
     #[allow(clippy::type_complexity)]
     pub(crate) fn backend_kernel(
         &self,
         settings: &VakintSettings,
         reserved: &[Atom],
     ) -> Result<(Atom, Vec<(Atom, Atom)>, i64), VakintError> {
-        use symbolica::poly::series::SeriesDepth;
         let mut used = self.expression().get_all_symbols(true);
         for expression in reserved {
             used.extend(expression.get_all_symbols(true));
@@ -253,20 +267,7 @@ impl ScalarTerms {
             if coefficient.is_zero() {
                 continue;
             }
-            let series =
-                Self::epsilon_series(coefficient.as_view(), settings, SeriesDepth::relative(1))?;
-            let valuation = series.get_trailing_exponent();
-            if !valuation.is_integer() {
-                return Err(VakintError::InvalidNumerator(
-                    "the numerator requires integer Laurent powers of epsilon".into(),
-                ));
-            }
-            let valuation = valuation.numerator().to_i64().ok_or_else(|| {
-                VakintError::InvalidNumerator("epsilon valuation exceeds i64".into())
-            })?;
-            let pole_order = valuation.checked_neg().ok_or_else(|| {
-                VakintError::InvalidNumerator("epsilon pole order exceeds i64".into())
-            })?;
+            let pole_order = Self::epsilon_pole_order(coefficient.as_view(), settings)?;
             extra_orders = extra_orders.max(pole_order);
             let symbol = loop {
                 let symbol = vk_symbol!(format!("vacuum_coefficient_{serial}"));
@@ -282,6 +283,26 @@ impl ScalarTerms {
         Ok((kernel, aliases, extra_orders))
     }
 
+    /// Keep the conservative order for regular or evanescent coefficients;
+    /// only genuine Laurent poles require additional backend terms.
+    pub(crate) fn epsilon_pole_order(
+        input: AtomView<'_>,
+        settings: &VakintSettings,
+    ) -> Result<i64, VakintError> {
+        let series = Self::epsilon_series(
+            input,
+            settings,
+            symbolica::poly::series::SeriesDepth::relative(1),
+        )?;
+        series
+            .get_trailing_exponent()
+            .numerator()
+            .to_i64()
+            .and_then(i64::checked_neg)
+            .map(|order| order.max(0))
+            .ok_or_else(|| VakintError::InvalidNumerator("epsilon pole order exceeds i64".into()))
+    }
+
     /// Every coefficient is evaluated at the supplied point before one
     /// numerical integral is constructed; ERROR therefore stays correlated.
     /// The owner supplies the inclusive coefficient order: the requested
@@ -295,7 +316,10 @@ impl ScalarTerms {
         reserved: &[Atom],
     ) -> Result<(Atom, PySecDecOptions, i64), VakintError> {
         use symbolica::{
-            domains::float::{Complex, RealLike},
+            domains::{
+                float::{Complex, RealLike},
+                rational::Rational,
+            },
             poly::series::SeriesDepth,
         };
 
@@ -375,6 +399,23 @@ impl ScalarTerms {
         let epsilon = Atom::var(vk_symbol!(&settings.epsilon_symbol));
         let mut serial = 0;
         for (monomial, power, value) in values {
+            let shifted_power = power.checked_sub(common_power).ok_or_else(|| {
+                VakintError::InvalidNumerator("epsilon power shift exceeds i64".into())
+            })?;
+            if !settings.project_onto_tensor_integrals {
+                // Numerical integration receives one complete polynomial with
+                // actual complex coefficients, rather than synthetic aliases.
+                // PySecDec forwards these literals to FORM, which requires
+                // exact rationals. Preserve every bit of the evaluated point.
+                let coefficient = Atom::num(Complex::new(
+                    Rational::try_from(value.re)
+                        .map_err(|error| VakintError::EvaluationError(error.into()))?,
+                    Rational::try_from(value.im)
+                        .map_err(|error| VakintError::EvaluationError(error.into()))?,
+                ));
+                kernel += coefficient * epsilon.clone().pow(shifted_power) * monomial;
+                continue;
+            }
             let (alias, name) = loop {
                 let symbol = vk_symbol!(format!("vacuum_numerical_coefficient_{serial}"));
                 serial += 1;
@@ -385,9 +426,6 @@ impl ScalarTerms {
                 }
             };
             options.numerical_parameters.insert(name, value);
-            let shifted_power = power.checked_sub(common_power).ok_or_else(|| {
-                VakintError::InvalidNumerator("epsilon power shift exceeds i64".into())
-            })?;
             kernel += alias * epsilon.clone().pow(Atom::num(shifted_power)) * monomial.clone();
         }
         Ok((kernel, options, common_power))
@@ -669,6 +707,41 @@ mod tests {
 
     fn rank_two_kernel(left: Atom, right: Atom, loops: &str, dimension: &Atom) -> Atom {
         VacuumProjection::metric(left, right) * atom(loops) / dimension
+    }
+
+    #[test]
+    fn whole_numerical_kernel_preserves_exact_complex_coefficients() {
+        use symbolica::domains::float::Complex;
+
+        let vakint = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            project_onto_tensor_integrals: false,
+            ..VakintSettings::default()
+        };
+        let mut options = PySecDecOptions::default();
+        options.numerical_parameters.extend([
+            ("user_space::phase".into(), Complex::new(-0.1, 0.375)),
+            ("user_space::signed".into(), Complex::new(-1.25, 0.0)),
+        ]);
+        let input = atom(
+            "user_space::phase*(ε^2*dot(k(1),k(1))+dot(k(1),p(1)))
+             +user_space::signed*ε*dot(k(1),k(1))^2",
+        );
+        let terms = ScalarTerms::parse(input.as_view()).unwrap();
+        let (kernel, returned_options, common_power) = terms
+            .numerical_kernel(&vakint, &settings, &options, 2, &[])
+            .unwrap();
+        // IEEE -0.1 is this exact binary rational, not the decimal -1/10.
+        let coefficient = atom("-3602879701896397/36028797018963968") + Atom::i() * atom("3/8");
+        let expected = &coefficient * atom("ε^2*dot(k(1),k(1))")
+            + coefficient * atom("dot(k(1),p(1))")
+            - atom("5/4*ε*dot(k(1),k(1))^2");
+        assert_eq!(kernel, expected);
+        assert_eq!(common_power, 0);
+        assert_eq!(
+            returned_options.numerical_parameters, options.numerical_parameters,
+            "whole-numerator input must not introduce coefficient aliases"
+        );
     }
 
     #[test]
@@ -1123,5 +1196,61 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn dimensional_coefficients_complete_laurent_products_before_truncation() {
+        let settings = VakintSettings {
+            epsilon_symbol: "eps".into(),
+            ..VakintSettings::default()
+        };
+        for (coefficient, expected) in [
+            ("(4-2*eps)^2", "16/eps^2+32/eps+36"),
+            ("(4-2*eps)^-1", "1/(4*eps^2)+7/(8*eps)+27/16"),
+            ("((4-2*eps)-4)^2", "4"),
+        ] {
+            let input = atom(coefficient) * atom("eps^-2+3*eps^-1+5");
+            let result = ScalarTerms::epsilon_series(
+                input.as_view(),
+                &settings,
+                symbolica::poly::series::SeriesDepth::absolute(0),
+            )
+            .unwrap()
+            .to_atom();
+            assert_eq!(result, atom(expected), "{coefficient}");
+        }
+    }
+
+    #[test]
+    fn mathematical_coefficient_functions_resolve_before_laurent_truncation() {
+        let settings = VakintSettings {
+            epsilon_symbol: "eps".into(),
+            ..VakintSettings::default()
+        };
+        for (input, expected) in [
+            ("log(4-2*eps)/eps^2", "log(4)/eps^2-1/(2*eps)-1/8"),
+            ("exp(eps)/eps^2", "eps^-2+eps^-1+1/2"),
+            ("sin(eps)/eps^2", "eps^-1"),
+            ("cos(eps)/eps^2", "eps^-2-1/2"),
+        ] {
+            let series = ScalarTerms::epsilon_series(
+                atom(input).as_view(),
+                &settings,
+                symbolica::poly::series::SeriesDepth::absolute(0),
+            )
+            .unwrap();
+            assert_eq!(series.to_atom(), atom(expected), "{input}");
+        }
+        for input in ["f(eps)", "log(f(eps))", "log(eps)", "1+eps^(1/2)"] {
+            assert!(
+                ScalarTerms::epsilon_series(
+                    atom(input).as_view(),
+                    &settings,
+                    symbolica::poly::series::SeriesDepth::absolute(1),
+                )
+                .is_err(),
+                "{input}"
+            );
+        }
     }
 }
