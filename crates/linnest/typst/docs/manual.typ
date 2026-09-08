@@ -222,7 +222,10 @@
   - `graph.build(..)` constructs one graph object from a stream of node and edge
     items.
   - `graph.map(graph, ..)` maps graph, node, edge, source, and sink records to
-    new native data without changing topology.
+    new native data or structural patches without changing topology. `node` and
+    `edge` accept a callback or a dictionary keyed by current record names.
+    Each dictionary value is a patch, a callback receiving the full record, or
+    `none`. Unlisted records remain unchanged; unknown names are errors.
   - `graph.cut(graph, left: left, right: right, boundary: patch)` opens a
     weighted directed cut into a new graph, preserving Typst data and recording
     origins. `graph.boundaries(view)` queries its current boundary endpoints.
@@ -672,6 +675,16 @@
   `momentum-arrow-shift`, not the arrow's clamped center. Near endpoints, the
   label point can therefore travel farther than the finite arrow's center;
   changing arrow length never moves the label.
+
+  Import `momentum as mom` from `examples/map-style.typ` for compact, sparse
+  options. `mom(side: "right", length: .7, shift: -.4,
+  label: (gap: .2, shift: -.75, anchor: "south-west"))` expands to the existing
+  `momentum-arrow-*` and `momentum-label-*` fields. Arrow options are `side`,
+  `offset`, `length`, and `shift`; label options are `gap`, `shift`, and `anchor`.
+  Only supplied options are emitted, so `mom(label: (gap: .2))` preserves an
+  inherited arrow offset or label shift. Combine the result with other edge
+  patches using dictionary addition, or spread it into `edge(..)`.
+
   The attached label replaces the ordinary painted edge
   label, while that ordinary label may still supply the pre-layout size used by
   label layout and side selection; attached labels do not add a second collision

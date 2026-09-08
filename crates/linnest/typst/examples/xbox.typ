@@ -3,6 +3,7 @@
 #import "../src/lib.typ": draw, graph, layout, layouts, subgraph
 #import graph: *
 #import "map-style.typ" as feynman
+#import feynman: momentum as mom
 #import "@preview/cetz:0.5.1" as cetz
 
 // Native font and stroke sizes are independent of the graph coordinate unit.
@@ -83,6 +84,7 @@
   let b = item.boundary
   (pos: pos(x: b.cut-data.x, y: b.data.crossings.at(b.crossing).y))
 }
+#let flatten-boundary = item => if item.boundary != none { (pos: pos(z: pin(0))) }
 
 // `cut-x` is in graph units; auto puts the cut just right of center.
 #let diagram(g, options: base-layout, cut-x: auto, cut-y: auto) = context {
@@ -152,7 +154,7 @@
 
 #{
   let xbox = {
-    let g = graph.build(default-edge-data: (particle: "d", momentum-arrow-offset: 0.4), master)
+    let g = graph.build(default-edge-data: (particle: "d") + mom(offset: .4), master)
     let crossings = (D3: ((group: "p1", y: top),), D4: ((group: "p2", y: bot),))
     let g = graph.cut(g,
       left: cut-side(g, in-x, crossings, sink: (<D3>, <D4>)),
@@ -160,30 +162,27 @@
       boundary: boundary-position,
     )
     let nodes = (
-      a: pos(x: start(-2), y: top), b: pos(x: start(-2), y: bot),
-      c: pos(x: start(2), y: top), d: pos(x: start(2), y: bot),
+      a: (pos: pos(x: start(-2), y: top)), b: (pos: pos(x: start(-2), y: bot)),
+      c: (pos: pos(x: start(2), y: top)), d: (pos: pos(x: start(2), y: bot)),
     )
     let edges = (
-      D1: (momentum-label-gap: 0.25), D2: (momentum-label-gap: 0.25),
-      "D3.0": (statements: ("spring-length": .3), momentum-label-gap: 0.4),
-      "D3.1": (statements: ("spring-length": .3), reverse: true,
-        momentum-label-gap: 0.4, momentum-arrow-side: "left"),
-      "D4.0": (statements: ("spring-length": .3), momentum-label-gap: 0.2, momentum-arrow-side: "right"),
-      "D4.1": (statements: ("spring-length": .3), momentum-label-gap: 0.2),
-      D5: (crossing-under: <D6>, crossing-gap: 0.9, momentum-arrow-shift: 1.5,
-        momentum-label-gap: 0.05, momentum-arrow-side: "right",
-        // momentum-arrow-offset: 0.80,
+      D1: mom(label: (gap: .25)), D2: mom(label: (gap: .25)),
+      "D3.0": (statements: ("spring-length": .3)) + mom(label: (gap: .4)),
+      "D3.1": (statements: ("spring-length": .3), reverse: true)
+        + mom(side: "left", label: (gap: .4)),
+      "D4.0": (statements: ("spring-length": .3)) + mom(side: "right", label: (gap: .2)),
+      "D4.1": (statements: ("spring-length": .3)) + mom(label: (gap: .2)),
+      D5: (crossing-under: <D6>, crossing-gap: 0.9) + mom(
+        side: "right", shift: 1.5, label: (gap: .05),
+        // offset: 0.80,
       ),
-      D6: (momentum-arrow-side: "left", momentum-label-gap: 0.2, momentum-arrow-shift: 1.5),
+      D6: mom(side: "left", shift: 1.5, label: (gap: .2)),
     )
-    graph.map(g,
-      node: n => (pos: nodes.at(str(n.name))),
-      edge: e => edges.at(str(e.name), default: (:)),
-    )
+    graph.map(g, node: nodes, edge: edges)
   }
 
   // Pull the external rows together without drawing another propagator.
-  let g = graph.build(default-edge-data: (particle: "d", momentum-arrow-offset: 0.4), master, compact)
+  let g = graph.build(default-edge-data: (particle: "d") + mom(offset: .4), master, compact)
   let xbox-opened = {
     let crossings = (
       D1: ((group: "p1", y: top),), D4: ((group: "p2", y: bot),), D6: ((group: "p1", y: mid),),
@@ -194,29 +193,27 @@
       boundary: boundary-position,
     )
     let nodes = (
-      "compact-top": pos(x: pin(0), y: top), "compact-bottom": pos(x: pin(0), y: bot),
+      "compact-top": (pos: pos(x: pin(0), y: top)),
+      "compact-bottom": (pos: pos(x: pin(0), y: bot)),
     )
     let edges = (
       compact: (statements: ("spring-length": 0.25)),
-      "D1.0": (momentum-arrow-side: "right", momentum-label-gap: 0.15, momentum-label-shift: -1.5),
-      "D1.1": (momentum-arrow-side: "left", momentum-arrow-length: 1.4, momentum-arrow-shift: -.4),
-      D2: (statements: ("spring-length": .3), momentum-label-gap: 0.2),
-      D3: (momentum-arrow-shift: 1.),
+      "D1.0": mom(side: "right", label: (gap: .15, shift: -1.5)),
+      "D1.1": mom(side: "left", length: 1.4, shift: -.4),
+      D2: (statements: ("spring-length": .3)) + mom(label: (gap: .2)),
+      D3: mom(shift: 1.),
       "D4.0": (bend: -0.18, crossing-under: <D6.0>, crossing-gap: 0.9,
-        momentum-arrow-length: 1., momentum-arrow-shift: .5, momentum-arrow-side: "left",
         // fermion-arrow-shift: 1.15,
-      ),
-      "D4.1": (statements: ("spring-length": .3), momentum-arrow-shift: -1.3, momentum-arrow-side: "left"),
+      ) + mom(side: "left", length: 1., shift: .5),
+      "D4.1": (statements: ("spring-length": .3)) + mom(side: "left", shift: -1.3),
       D5: (statements: ("spring-length": 1.5),
-        // momentum-arrow-offset: 0.80,
+        // ..mom(offset: 0.80),
       ),
-      "D6.0": (bend: -0.55, momentum-arrow-side: "right"),
-      "D6.1": (momentum-arrow-side: "left", momentum-arrow-length: 1.4, momentum-arrow-shift: -0.4),
+      "D6.0": (bend: -0.55) + mom(side: "right"),
+      "D6.1": mom(side: "left", length: 1.4, shift: -.4),
     )
-    graph.map(g,
-      node: n => if str(n.name) in nodes { (pos: nodes.at(str(n.name))) },
-      edge: e => (pos: if e.boundary != none { pos(z: pin(0)) }) + edges.at(str(e.name), default: (:)),
-    )
+    let g = graph.map(g, edge: flatten-boundary)
+    graph.map(g, node: nodes, edge: edges)
   }
 
   let xbox-opened2 = {
@@ -228,28 +225,24 @@
       right: cut-side(g, out-x, crossings, sink: (<D2>,), source: (<D3>, <D6>)),
       boundary: boundary-position,
     )
-    let nodes = (c: pos(y: start(-4)), d: pos(y: start(0)))
+    let nodes = (c: (pos: pos(y: start(-4))), d: (pos: pos(y: start(0))))
     let edges = (
       compact: (statements: ("spring-length": 0.01)),
-      D1: (momentum-arrow-side: "left", momentum-arrow-length: 1.2, momentum-label-gap: 0.2),
-      "D2.0": (momentum-arrow-side: "right", momentum-arrow-length: 1.,
-        momentum-arrow-shift: .4, momentum-label-gap: 0.2),
-      "D2.1": (momentum-arrow-side: "right", momentum-arrow-length: .7, momentum-arrow-shift: -0.4,
-        momentum-label-gap: 0.2, momentum-label-shift: -0.75, momentum-label-anchor: "south-west"),
-      "D3.1": (momentum-arrow-length: 1.2, momentum-label-gap: 0.2, momentum-arrow-shift: -.6,
-        momentum-arrow-side: "left", crossing-under: <D6.1>, crossing-gap: 0.7),
-      D4: (statements: ("spring-length": .1), momentum-arrow-side: "right",
-        momentum-arrow-shift: -0.4, momentum-label-gap: 0.1),
-      D5: (statements: ("spring-length": .5), momentum-arrow-side: "right", momentum-label-gap: 0.05,
-        // momentum-arrow-offset: 0.80,
+      D1: mom(side: "left", length: 1.2, label: (gap: .2)),
+      "D2.0": mom(side: "right", length: 1., shift: .4, label: (gap: .2)),
+      "D2.1": mom(side: "right", length: .7, shift: -.4,
+        label: (gap: .2, shift: -.75, anchor: "south-west")),
+      "D3.1": (crossing-under: <D6.1>, crossing-gap: 0.7)
+        + mom(side: "left", length: 1.2, shift: -.6, label: (gap: .2)),
+      D4: (statements: ("spring-length": .1)) + mom(side: "right", shift: -.4, label: (gap: .1)),
+      D5: (statements: ("spring-length": .5)) + mom(side: "right", label: (gap: .05),
+        // offset: 0.80,
       ),
-      "D6.0": (bend: -0.55, momentum-arrow-shift: .8, momentum-arrow-length: 1.5, momentum-arrow-side: "left"),
-      "D6.1": (momentum-arrow-shift: .8, momentum-label-gap: 0.2, momentum-arrow-side: "left"),
+      "D6.0": (bend: -0.55) + mom(side: "left", length: 1.5, shift: .8),
+      "D6.1": mom(side: "left", shift: .8, label: (gap: .2)),
     )
-    graph.map(g,
-      node: n => if str(n.name) in nodes { (pos: nodes.at(str(n.name))) },
-      edge: e => (pos: if e.boundary != none { pos(z: pin(0)) }) + edges.at(str(e.name), default: (:)),
-    )
+    let g = graph.map(g, edge: flatten-boundary)
+    graph.map(g, node: nodes, edge: edges)
   }
 
   let xbox-cut = {
@@ -266,33 +259,29 @@
     )
     let edges = (
       compact: (statements: ("spring-length": 1.8)),
-      "D1.0": (momentum-arrow-side: "left", momentum-label-shift: 1, momentum-label-gap: 0.01,momentum-label-anchor: "north",momentum-arrow-length:.8),
-      "D1.1": (momentum-arrow-side: "right", momentum-label-shift: 3.2,momentum-arrow-length: 1,momentum-arrow-shift: .5, momentum-label-gap: 0.1),
-      "D2.0": (momentum-arrow-side: "right", momentum-arrow-shift: 0.4,momentum-label-anchor: "south-east", momentum-label-gap: .2),
-      "D2.1": (momentum-arrow-side: "right", momentum-label-gap: .3, momentum-label-shift: -0.2,momentum-label-anchor: "west"),
+      "D1.0": mom(side: "left", length: .8, label: (shift: 1, gap: .01, anchor: "north")),
+      "D1.1": mom(side: "right", length: 1, shift: .5, label: (shift: 3.2, gap: .1)),
+      "D2.0": mom(side: "right", shift: .4, label: (anchor: "south-east", gap: .2)),
+      "D2.1": mom(side: "right", label: (gap: .3, shift: -.2, anchor: "west")),
       D3: (statements: ("spring-length": 1.5), crossing-under: <D6.1>, crossing-gap: 0.8,
-        fermion-arrow-shift: -0.5, momentum-arrow-shift: -.6),
-      D4: (statements: ("spring-length": .5), momentum-label-gap: 0.02),
-      D5: (crossing-under: <D6.1>, crossing-gap: 1.5, momentum-label-gap: 0.01,
-        momentum-arrow-side: "right", momentum-arrow-shift: -1.),
-      "D6.0": (momentum-arrow-side: "left", momentum-arrow-shift: 0.5,momentum-label-gap: 0.1),
-      "D6.1": (statements: ("spring-length": 3.5), momentum-arrow-side: "left",momentum-arrow-shift: 3,
-        momentum-label-shift: 2.5,momentum-label-gap: 0.1),
-      "D6.2": (momentum-arrow-side: "right",momentum-label-gap: 0.1,momentum-arrow-shift: -.4),
+        fermion-arrow-shift: -0.5) + mom(shift: -.6),
+      D4: (statements: ("spring-length": .5)) + mom(label: (gap: .02)),
+      D5: (crossing-under: <D6.1>, crossing-gap: 1.5) + mom(side: "right", shift: -1., label: (gap: .01)),
+      "D6.0": mom(side: "left", shift: .5, label: (gap: .1)),
+      "D6.1": (statements: ("spring-length": 3.5)) + mom(side: "left", shift: 3, label: (shift: 2.5, gap: .1)),
+      "D6.2": mom(side: "right", shift: -.4, label: (gap: .1)),
     )
 
     let nodes = (
       a: (pos: pos(y:group("h"))),
       d: (pos: pos(y:group("h"))),
     )
-    graph.map(g,
+    let g = graph.map(g,
       // Keep the D6 stubs free in depth, but flatten their middle endpoints.
-      node: n => (if n.boundary != none { (pos: pos(z: pin(0))) })+ nodes.at(str(n.name), default: (:)),
-      edge: e => (
-        pos: if e.boundary != none and e.origin.name != <D6> { pos(z: pin(0)) },
-        momentum-label-gap: 0.4,
-      ) + edges.at(str(e.name), default: (:)),
+      node: flatten-boundary,
+      edge: e => (if e.origin.name != <D6> { flatten-boundary(e) }) + mom(label: (gap: .4)),
     )
+    graph.map(g, node: nodes, edge: edges)
   }
 
   let diagrams = $

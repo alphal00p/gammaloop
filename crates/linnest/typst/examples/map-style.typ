@@ -54,6 +54,24 @@
   "ghG": scalar,
 )
 
+// Sparse edge options: omitted settings preserve inherited defaults. Arrow
+// shift and label.shift remain independent; only their field names are expanded.
+#let momentum(label: (:), ..arrow) = {
+  assert(arrow.pos().len() == 0, message: "momentum: expected named options")
+  assert(type(label) == dictionary, message: "momentum: label must be a dictionary")
+  let fields = (:)
+  for (kind, options, keys) in (
+    ("arrow", arrow.named(), ("side", "offset", "length", "shift")),
+    ("label", label, ("gap", "shift", "anchor")),
+  ) {
+    for (key, value) in options {
+      assert(key in keys, message: "momentum: unknown " + kind + " option " + key)
+      fields.insert("momentum-" + kind + "-" + key, value)
+    }
+  }
+  fields
+}
+
 #let _value(element, key, default) = element.fields.at(key, default: default)
 #let _text(element, key, default) = str(_value(element, key, default)).trim(
   "\"",
