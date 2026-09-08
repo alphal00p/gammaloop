@@ -73,6 +73,32 @@ test('suite clocks exclude queued deployment and unrelated attempts, while dupli
   assert.equal(summarizeSuite(spec, { status: 'running' }, [{}], jobs).evidenceComplete, false);
 });
 
+test('successful retries preserve abandoned work as lower bounds and cannot produce savings', () => {
+  const config = { type: 'config', status: 'success', checkStartedAt: '2026-09-06T00:00:00Z',
+    checkCompletedAt: '2026-09-06T00:00:01Z' };
+  const core = { ...parseLog(overlap, { type: 'test', status: 'success', attribute: attr }),
+    type: 'test', attribute: attr, status: 'success', logStatus: 'ok', url: suiteUrl + '/retry',
+    checkStartedAt: '2026-09-06T00:00:10Z', checkCompletedAt: '2026-09-06T00:00:30Z' };
+  const abandoned = { ...core, status: 'abandoned', url: suiteUrl + '/abandoned',
+    checkStartedAt: '2026-09-06T00:00:01Z', checkCompletedAt: '2026-09-06T00:01:00Z' };
+  const baseline = summarizeSuite(spec, { status: 'success' }, [{}], [config, core]);
+  const candidate = summarizeSuite({ ...spec, variant: 'candidate' }, { status: 'success' }, [{}], [config, abandoned, core]);
+  assert.equal(candidate.requiredPassed, true);
+  assert.equal(candidate.requiredSeconds, 30);
+  assert.equal(candidate.suiteSeconds, 30);
+  assert.equal(candidate.observedWorkers, 2);
+  assert.equal(candidate.observedWorkerMinutes, 28 / 60);
+  assert.equal(candidate.downloadReportedBytes, 6 * 1024 ** 2);
+  assert.equal(candidate.interruptedJobs, 1);
+  assert.equal(candidate.missingLogs, 0);
+  assert.equal(candidate.observedResourceLowerBound, true);
+  assert.equal(candidate.evidenceComplete, false);
+  assert.equal(baseline.observedResourceLowerBound, false);
+  assert.equal(summarizeSuite(spec, { status: 'failure' }, [{}],
+    [config, { ...core, status: 'failure' }]).evidenceComplete, true);
+  assert.equal(comparePairs([baseline, candidate])[0].workerMinutesChangePercent, null);
+});
+
 test('Actions attempts retain their own clock and cancelled work without completed timing', () => {
   const run = {
     id: 1, run_attempt: 2, name: 'Nix', head_sha: sha, html_url: 'https://github.com/example/repo/actions/runs/1',
@@ -141,6 +167,19 @@ test('offline collector scopes exact URLs, emits all formats and returns a faili
   assert.equal(report.suites[0].jobs[1].completedFromSuiteSeconds, 20);
   for (const name of ['manifest.json', 'report.json', 'report.md', 'suites.csv', 'jobs.csv', 'actions.csv', 'transfers.csv', 'compilations.csv', 'pairs.csv'])
     assert.ok((await readFile(join(dir, 'out', name), 'utf8')).length);
+  runs[2].status = 'abandoned';
+  await writeFile(join(dir, 'suite.json'), JSON.stringify({ commit: sha, status: 'success', runs }));
+  const recovered = await createReport(join(dir, 'manifest.json'), join(dir, 'recovered'));
+  assert.equal(recovered.complete, false);
+  assert.equal(recovered.suites[0].requiredPassed, true);
+  assert.equal(recovered.suites[0].interruptedJobs, 1);
+  assert.equal(recovered.suites[0].jobs[2].logStatus, 'ok');
+  assert.equal(recovered.suites[0].jobs[2].downloadReportedBytes, 3 * 1024 ** 2);
+  assert.equal(recovered.suites[0].jobs[2].completedFromSuiteSeconds, null);
+  assert.equal(recovered.suites[0].jobs[2].postWorkerSeconds, null);
+  assert.ok(recovered.errors.some(error => error.stage === 'interrupted-worker'));
+  runs[2].status = 'success';
+  await writeFile(join(dir, 'suite.json'), JSON.stringify({ commit: sha, status: 'success', runs }));
   await rm(join(dir, 'overlap.ndjson'));
   const partial = await createReport(join(dir, 'manifest.json'), join(dir, 'partial'));
   assert.equal(partial.complete, false);
