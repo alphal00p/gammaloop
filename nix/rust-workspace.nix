@@ -1837,8 +1837,12 @@
         '')
         artifactNames}
       ${lib.concatMapStringsSep "\n" (name: ''
-          rm -rf target/${ciCargoProfile}/.fingerprint/${lib.escapeShellArg name}-[0-9a-f]*
-          rm -rf target/${ciCargoProfile}/build/${lib.escapeShellArg name}-[0-9a-f]*
+          # Match the whole hash so stripping feynkit preserves feynkit-cff.
+          for artifact in target/${ciCargoProfile}/{.fingerprint,build}/${lib.escapeShellArg name}-*; do
+            if [[ "''${artifact##*/}" =~ ^${lib.escapeShellArg "${name}-"}[0-9a-f]+$ ]]; then
+              rm -rf "$artifact"
+            fi
+          done
         '')
         fingerprintNames}
     '';
