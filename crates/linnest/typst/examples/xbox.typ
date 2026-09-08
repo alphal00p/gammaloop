@@ -182,9 +182,9 @@
     )
   }
 
+  // Pull the external rows together without drawing another propagator.
+  let g = graph.build(default-edge-data: (particle: "d", momentum-arrow-offset: 0.4), master, compact)
   let xbox-opened = {
-    // Pull the external rows together without drawing another propagator.
-    let g = graph.build(default-edge-data: (particle: "d", momentum-arrow-offset: 0.4), master, compact)
     let crossings = (
       D1: ((group: "p1", y: top),), D4: ((group: "p2", y: bot),), D6: ((group: "p1", y: mid),),
     )
@@ -220,8 +220,6 @@
   }
 
   let xbox-opened2 = {
-    // Pull the external rows together without drawing another propagator.
-    let g = graph.build(default-edge-data: (particle: "d", momentum-arrow-offset: 0.4), master, compact)
     let crossings = (
       D2: ((group: "p2", y: bot),), D3: ((group: "p1", y: top),), D6: ((group: "p2", y: mid),),
     )
@@ -255,8 +253,6 @@
   }
 
   let xbox-cut = {
-    // Pull the external rows together without drawing another propagator.
-    let g = graph.build(default-edge-data: (particle: "d", momentum-arrow-offset: 0.4), master, compact)
     let crossings = (
       D1: ((group: "p1", y: mid2),),
       D2: ((group: "p2", y: bot),),
@@ -270,10 +266,10 @@
     )
     let edges = (
       compact: (statements: ("spring-length": 1.8)),
-      "D1.0": (momentum-arrow-side: "left", momentum-label-shift: 1, momentum-label-gap: 0.01,momentum-label-anchor: "east",momentum-arrow-length:.8),
-      "D1.1": (momentum-arrow-side: "right", momentum-label-shift: 2.,momentum-arrow-length: 2,momentum-arrow-shift: .5, momentum-label-gap: 0.1),
-      "D2.0": (momentum-arrow-side: "right", momentum-arrow-shift: 0.7, momentum-label-gap: 0.1),
-      "D2.1": (momentum-arrow-side: "right", momentum-label-gap: 0.1, momentum-label-shift: -0.5,momentum-label-anchor: "north-west"),
+      "D1.0": (momentum-arrow-side: "left", momentum-label-shift: 1, momentum-label-gap: 0.01,momentum-label-anchor: "north",momentum-arrow-length:.8),
+      "D1.1": (momentum-arrow-side: "right", momentum-label-shift: 3.2,momentum-arrow-length: 1,momentum-arrow-shift: .5, momentum-label-gap: 0.1),
+      "D2.0": (momentum-arrow-side: "right", momentum-arrow-shift: 0.4,momentum-label-anchor: "south-east", momentum-label-gap: .2),
+      "D2.1": (momentum-arrow-side: "right", momentum-label-gap: .3, momentum-label-shift: -0.2,momentum-label-anchor: "west"),
       D3: (statements: ("spring-length": 1.5), crossing-under: <D6.1>, crossing-gap: 0.8,
         fermion-arrow-shift: -0.5, momentum-arrow-shift: -.6),
       D4: (statements: ("spring-length": .5), momentum-label-gap: 0.02),
@@ -282,7 +278,7 @@
       "D6.0": (momentum-arrow-side: "left", momentum-arrow-shift: 0.5,momentum-label-gap: 0.1),
       "D6.1": (statements: ("spring-length": 3.5), momentum-arrow-side: "left",momentum-arrow-shift: 3,
         momentum-label-shift: 2.5,momentum-label-gap: 0.1),
-      "D6.2": (momentum-arrow-side: "right"),
+      "D6.2": (momentum-arrow-side: "right",momentum-label-gap: 0.1,momentum-arrow-shift: -.4),
     )
 
     let nodes = (
