@@ -784,10 +784,21 @@
   _impl.pos((x: x, y: y, z: z, ref: ref, dx: dx, dy: dy, mode: mode))
 }
 
-/// Map graph metadata to new native data.
+/// Map graph records with native-data and structural patches.
 ///
-/// The callbacks receive decoded records plus a `fields` dictionary containing
-/// merged statements and direct record fields. A callback returns `none` to
+/// `node` and `edge` accept either a callback for every record or a name-keyed
+/// dictionary. Dictionary keys are exact string names: `a` matches `<a>`, and
+/// `"D1.0"` matches the `<D1.0>` fragment produced by @cut. Each entry is a
+/// constant patch dictionary, a callback, or `none`. Unlisted records and
+/// unnamed records are skipped by name-keyed dictionaries. Every supplied name
+/// must exist, even when its entry is `none`. Unknown names and invalid mapper,
+/// entry, or callback return types are errors. There are no numeric-ID keys,
+/// array selectors, wildcard/default selectors, or recursive merges.
+/// `graph`, `source`, and `sink` still accept only a callback or `none`.
+///
+/// The callbacks receive the same full decoded records in either form, plus a
+/// `fields` dictionary merging native dictionary data, statements, and direct
+/// record fields, with later sources taking precedence. A callback returns `none` to
 /// leave the record unchanged, `(data: value)` to set new native data, or
 /// structural fields such as `pos`, `shift`, and `statements` to patch data
 /// seen by later layout calls. Unchanged fields in a returned full record are
@@ -795,10 +806,32 @@
 /// Source and sink callbacks may likewise patch `statement`, `port-label`, and
 /// `compass` before subgraph and layout operations run.
 ///
+/// Constant patches and callback results use identical semantics. Node structural
+/// keys are `pos`, `shift`, and `statements`; edges also accept `label-pos`,
+/// `label-angle`, and `bend`. With no `data` key, other keys shallow-merge into
+/// existing native dictionary data (or replace non-dictionary data with that
+/// patch). An explicit `data` key instead replaces native data, ignoring other
+/// non-structural keys; `data: none` leaves native data unchanged. Native Typst
+/// content and stored functions are preserved, not serialized or invoked.
+/// A mapper or entry of `none`, an empty name map, an empty patch, or a callback
+/// returning `none` leaves the corresponding records unchanged.
+///
 /// ```example
 /// #let g = build({ node(<a>) })
 /// #let g = map(g, node: node => (data: (label: [A])))
 /// #nodes(g).first().data.label
+/// ```
+///
+/// ```example
+/// #let g = build({
+///   node(<a>); node(<b>)
+///   edge(<D1>, source(<a>), sink(<b>), weight: 2)
+/// })
+/// #let g = map(g,
+///   node: (a: (label: [A]), b: none),
+///   edge: (D1: e => (weight: e.fields.weight + 1)),
+/// )
+/// #edge-data(g, <D1>).weight
 /// ```
 /// -> dictionary
 #let map(
@@ -806,9 +839,9 @@
   graph_,
   /// Callback for graph metadata records. -> none | function
   graph: none,
-  /// Callback for node records. -> none | function
+  /// Callback for all node records, or name-keyed patches/callbacks/no-ops. -> none | function | dictionary
   node: none,
-  /// Callback for edge records. -> none | function
+  /// Callback for all edge records, or name-keyed patches/callbacks/no-ops. -> none | function | dictionary
   edge: none,
   /// Callback for source half-edge records. -> none | function
   source: none,

@@ -154,6 +154,13 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
     )
     .unwrap();
 
+    fs::write(
+        base.path()
+            .join(".clinnet/templates/named-map-behavior.typ"),
+        include_str!("resources/named-map-behavior.typ"),
+    )
+    .unwrap();
+
     let fixture = base
         .path()
         .join(".clinnet/templates/linnest-public-behavior.typ");
@@ -323,12 +330,18 @@ fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
     let renderer = TypstRenderer::new(base.path()).typst_executable(typst);
     renderer.check_version().unwrap();
     renderer.stage_default_assets().unwrap();
+    fs::write(
+        base.path().join(".clinnet/templates/map-style.typ"),
+        include_str!("../../linnest/typst/examples/map-style.typ"),
+    )
+    .unwrap();
     let fixture = base.path().join(".clinnet/templates/invalid-cut.typ");
     let output = base.path().join("invalid-cut.svg");
     let prelude = r#"
 #set page(width: auto, height: auto)
 #import "crates/linnest/typst/src/lib.typ": graph, subgraph, layout, draw
 #import graph: node, edge, source, sink
+#import "map-style.typ": momentum
 #let g = graph.build({
   node(<a>); node(<b>); node(<c>)
   edge(<e>, source(<a>), sink(<b>))
@@ -390,6 +403,84 @@ fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
             "subgraph: expected a Linnest subgraph object",
         ),
     ];
+    for (options, expected) in [
+        ("1", "momentum: expected named options"),
+        ("gap: 0.2", "momentum: unknown arrow option gap"),
+        ("label: none", "momentum: label must be a dictionary"),
+        ("label: 1", "momentum: label must be a dictionary"),
+        ("label: ()", "momentum: label must be a dictionary"),
+        (
+            "label: (length: 1)",
+            "momentum: unknown label option length",
+        ),
+    ] {
+        cases.push((
+            format!("momentum-{options}"),
+            format!("#let _ = momentum({options})"),
+            expected,
+        ));
+    }
+    // Name maps validate every supplied key, including explicit no-op entries.
+    for (kind, key, missing) in [("node", "a", "A"), ("edge", "e", "E")] {
+        for name in [missing, "0", "*", "default"] {
+            cases.push((
+                format!("map-{kind}-unknown-{name}"),
+                format!("#let _ = graph.map(g, {kind}: (\"{name}\": none))"),
+                "no record named",
+            ));
+        }
+        for invalid in ["0", "false", "auto", "\"patch\"", "[patch]", "()"] {
+            cases.push((
+                format!("map-{kind}-invalid-mapper-{invalid}"),
+                format!("#let _ = graph.map(graph.build(), {kind}: {invalid})"),
+                "expected none, a callback, or a name-keyed dictionary",
+            ));
+            cases.push((
+                format!("map-{kind}-invalid-entry-{invalid}"),
+                format!("#let _ = graph.map(g, {kind}: ({key}: {invalid}))"),
+                "must be none, a dictionary, or a callback",
+            ));
+            for mapper in [
+                format!("_ => {invalid}"),
+                format!("({key}: _ => {invalid})"),
+            ] {
+                cases.push((
+                    format!("map-{kind}-invalid-return-{mapper}"),
+                    format!("#let _ = graph.map(g, {kind}: {mapper})"),
+                    "callback must return none or a dictionary",
+                ));
+            }
+        }
+        cases.push((
+            format!("map-{kind}-unknown-on-empty-graph"),
+            format!("#let _ = graph.map(graph.build(), {kind}: ({key}: none))"),
+            "no record named",
+        ));
+    }
+    for kind in ["graph", "source", "sink"] {
+        cases.push((
+            format!("map-{kind}-rejects-dictionary"),
+            format!("#let _ = graph.map(g, {kind}: (:))"),
+            "expected none or a callback",
+        ));
+    }
+    for name in ["D1", "D1.00", "D1.3", "d1.0"] {
+        cases.push((
+            format!("map-unknown-cut-fragment-{name}"),
+            format!(
+                r#"#let master = graph.build({{
+  node(<a>); node(<b>)
+  edge(<D1>, source(<a>), sink(<b>))
+}})
+#let opened = graph.cut(master,
+  left: subgraph.with-data(master, subgraph.select(master, source: (<D1>,)), hedge: (winding: 2)),
+  right: subgraph.select(master, sink: (<D1>,)),
+)
+#let _ = graph.map(opened, edge: ("{name}": none))"#
+            ),
+            "graph.map edge: no record named",
+        ));
+    }
     for winding in ["0", "-1", "1.5", "\"2\""] {
         cases.push((
             format!("invalid-winding-{winding}"),

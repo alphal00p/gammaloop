@@ -948,11 +948,34 @@
   }
 }
 
-#let _mapped-patch(callback, record, kind, context_) = {
-  if callback == none {
-    return (data: none, structural: none)
+#let _name-key(value, context_) = {
+  if type(value) == label {
+    _label-key(value, context_)
+  } else if type(value) == str {
+    value
+  } else {
+    panic(context_ + ": expected a Typst label or string name")
   }
-  let result = callback(record)
+}
+
+#let _record-by-name(records, key, context_) = {
+  for record in records {
+    let name = record.at("name", default: none)
+    if name != none and _name-key(name, context_) == key {
+      return record
+    }
+  }
+  panic(context_ + ": no record named " + repr(key))
+}
+
+#let _mapped-patch(mapper, record, kind, context_) = {
+  if type(mapper) == dictionary {
+    let name = record.at("name", default: none)
+    mapper = if name == none { none } else {
+      mapper.at(_name-key(name, context_), default: none)
+    }
+  }
+  let result = if type(mapper) == function { mapper(record) } else { mapper }
   if result == none {
     return (data: none, structural: none)
   }
@@ -1191,6 +1214,33 @@
   let edge = callbacks.edge
   let source = callbacks.source
   let sink = callbacks.sink
+  let records = (
+    node: if node == none { () } else { _node-records(graph_, none) },
+    edge: if edge == none and source == none and sink == none { () } else {
+      _edge-records(graph_, none)
+    },
+  )
+  for (kind, mapper) in callbacks {
+    if mapper == none or type(mapper) == function {
+      continue
+    }
+    let context_ = "graph.map " + kind
+    if kind not in ("node", "edge") {
+      panic(context_ + ": expected none or a callback")
+    }
+    if type(mapper) != dictionary {
+      panic(context_ + ": expected none, a callback, or a name-keyed dictionary")
+    }
+    for (key, entry) in mapper {
+      let _ = _record-by-name(records.at(kind), key, context_)
+      if entry != none and type(entry) not in (dictionary, function) {
+        panic(
+          context_ + ": entry for " + repr(key)
+            + " must be none, a dictionary, or a callback",
+        )
+      }
+    }
+  }
   let changed = false
   let structural-changed = false
   let structural-patches = (nodes: (), edges: (), hedges: ())
@@ -1213,7 +1263,7 @@
   }
 
   if node != none {
-    for node-record in _node-records(graph_, none) {
+    for node-record in records.node {
       let node-record = _record-with-fields(node-record, (:), (:))
       let patch = _mapped-patch(node, node-record, "node", "graph.map node")
       if patch.data != none {
@@ -1233,7 +1283,7 @@
   }
 
   if edge != none or source != none or sink != none {
-    for edge-source in _edge-records(graph_, none) {
+    for edge-source in records.edge {
       let edge-record = _record-with-fields(edge-source, (:), (:))
       let edge-fields = edge-record.fields
       let patch = _mapped-patch(edge, edge-record, "edge", "graph.map edge")
@@ -1728,26 +1778,6 @@
 #let dot(graph) = cbor(_plugin.graph_dot(graph-bytes(graph)))
 #let nodes(graph, subgraph) = _node-records(graph, subgraph)
 #let edges(graph, subgraph) = _edge-records(graph, subgraph)
-
-#let _name-key(value, context_) = {
-  if type(value) == label {
-    _label-key(value, context_)
-  } else if type(value) == str {
-    value
-  } else {
-    panic(context_ + ": expected a Typst label or string name")
-  }
-}
-
-#let _record-by-name(records, key, context_) = {
-  for record in records {
-    let name = record.at("name", default: none)
-    if name != none and _name-key(name, context_) == key {
-      return record
-    }
-  }
-  panic(context_ + ": no record named " + repr(key))
-}
 
 #let _data-update(update, record, context_) = {
   let data = record.at("data", default: none)

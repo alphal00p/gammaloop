@@ -8,6 +8,7 @@
 #curved-arrow-behavior
 #import "weighted-cut-behavior.typ": weighted-cut-behavior
 #weighted-cut-behavior
+#import "named-map-behavior.typ"
 
 #let close(a, b, epsilon: 1e-6) = calc.abs(a - b) < epsilon
 #let same-pos(a, b) = close(a.x, b.x) and close(a.y, b.y)
@@ -438,6 +439,60 @@
     label-gap: 0.1,
     label-side: "left",
   ),
+)
+
+// The shorthand emits only supplied fields and preserves their native values.
+#assert.eq(feynman.momentum(), (:))
+#assert.eq(feynman.momentum(label: (:)), (:))
+#for (key, values) in (
+  ("side", (auto, "auto", "left", "right")),
+  ("offset", (0, -.4, "0.8")),
+  ("length", (0, .7, "1.4")),
+  ("shift", (0, -.4, "1.5")),
+) {
+  for value in values {
+    assert.eq(
+      feynman.momentum(..dictionary(((key, value),))),
+      dictionary((("momentum-arrow-" + key, value),)),
+    )
+  }
+}
+#for (key, values) in (
+  ("gap", (0, .2, -.1, "0.8")),
+  ("shift", (0, -.75, "1.5")),
+  ("anchor", (auto, "auto", "east", "south-west")),
+) {
+  for value in values {
+    assert.eq(
+      feynman.momentum(label: dictionary(((key, value),))),
+      dictionary((("momentum-label-" + key, value),)),
+    )
+  }
+}
+#let compact-momentum = feynman.momentum(
+  side: "right", offset: -.4, length: .7, shift: -.4,
+  label: (gap: .2, shift: -.75, anchor: "south-west"),
+)
+#let expanded-momentum = (
+  momentum-arrow-side: "right", momentum-arrow-offset: -.4,
+  momentum-arrow-length: .7, momentum-arrow-shift: -.4,
+  momentum-label-gap: .2, momentum-label-shift: -.75,
+  momentum-label-anchor: "south-west",
+)
+#assert.eq(compact-momentum, expanded-momentum)
+#assert.eq(
+  feynman.edge-style((momentum: [$k-p_2$], fields: compact-momentum)),
+  feynman.edge-style((momentum: [$k-p_2$], fields: expanded-momentum)),
+)
+#let shorthand-graph = graph.build(
+  default-edge-data: feynman.momentum(offset: .4, label: (shift: 1)),
+  { node(<shorthand-node>); edge(<shorthand-edge>, source(<shorthand-node>), ..feynman.momentum(label: (gap: .2))) },
+)
+#let shorthand-graph = graph.map(shorthand-graph, edge: (
+  "shorthand-edge": feynman.momentum(side: auto, label: (gap: 0)),
+))
+#assert.eq(graph.edges(shorthand-graph).first().data,
+  feynman.momentum(side: auto, offset: .4, label: (gap: 0, shift: 1)),
 )
 
 // Explicit momentum sides override the old layout-label side for both the arrow
