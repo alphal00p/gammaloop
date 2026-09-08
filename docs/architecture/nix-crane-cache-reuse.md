@@ -176,6 +176,9 @@ Returning an artifact with an unhandled directory-valued base previously made
 later derivations lose the root prebuild and rebuild the heavy dependency stack.
 The expanded writable tree now stays in the build directory; the output contains
 only `target.tar.zst`, without a previous-artifact link or expanded target tree.
+CLI packaging restores that archive and declares its runtime library inputs
+explicitly: compression hides embedded store paths, so those inputs must be
+available to Nix when it discovers references in the extracted binaries.
 
 Dependency-only archives also strip dummy workspace artifacts after compiling
 third-party dependencies. The strip logic intentionally ignores binary target
