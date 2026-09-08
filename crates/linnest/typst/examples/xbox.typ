@@ -1,4 +1,4 @@
-#set page(height: auto, width: auto, margin: 5mm)
+#set page(height: auto, width: 179mm, margin: 5mm)
 
 #import "../src/lib.typ": draw, graph, layout, layouts, subgraph
 #import graph: *
@@ -87,7 +87,7 @@
 #let flatten-boundary = item => if item.boundary != none { (pos: pos(z: pin(0))) }
 
 // `cut-x` is in graph units; auto puts the cut just right of center.
-#let diagram(g, options: base-layout, cut-x: auto, cut-y: auto) = context {
+#let diagram(g, options: base-layout, cut-x: auto, cut-y: auto, draw-after: none) = context {
   draw(
     layout(
       graph.style(
@@ -148,6 +148,7 @@
         (x, calc.min(..ys) - y),
         stroke: (paint: red, thickness: diagram-style.cut-line-width, dash: "dashed"),
       )
+      if type(draw-after) == function { draw-after(g) } else { draw-after }
     },
   )
 }
@@ -172,11 +173,11 @@
         + mom(side: "left", label: (gap: .4)),
       "D4.0": (statements: ("spring-length": .3)) + mom(side: "right", label: (gap: .2)),
       "D4.1": (statements: ("spring-length": .3)) + mom(label: (gap: .2)),
-      D5: (crossing-under: <D6>, crossing-gap: 0.9) + mom(
+      D5: (statements: ("spring-length": .2),crossing-under: <D6>, crossing-gap: 0.9) + mom(
         side: "right", shift: 1.5, label: (gap: .05),
         // offset: 0.80,
       ),
-      D6: mom(side: "left", shift: 1.5, label: (gap: .2)),
+      D6:(statements: ("spring-length": .2))+ mom(side: "left", shift: 1.5, label: (gap: .2)),
     )
     graph.map(g, node: nodes, edge: edges)
   }
@@ -199,17 +200,15 @@
     let edges = (
       compact: (statements: ("spring-length": 0.25)),
       "D1.0": mom(side: "right", label: (gap: .15, shift: -1.5)),
-      "D1.1": mom(side: "left", length: 1.4, shift: -.4),
+      "D1.1": (statements: ("spring-length": .3))+mom(side: "left", length: 1.4, shift: -.4),
       D2: (statements: ("spring-length": .3)) + mom(label: (gap: .2)),
       D3: mom(shift: 1.),
-      "D4.0": (bend: -0.18, crossing-under: <D6.0>, crossing-gap: 0.9,
+      "D4.0": (statements: ("spring-length": .3), bend: -0.18, crossing-under: <D6.0>, crossing-gap: 0.9,
         // fermion-arrow-shift: 1.15,
       ) + mom(side: "left", length: 1., shift: .5),
       "D4.1": (statements: ("spring-length": .3)) + mom(side: "left", shift: -1.3),
-      D5: (statements: ("spring-length": 1.5),
-        // ..mom(offset: 0.80),
-      ),
-      "D6.0": (bend: -0.55) + mom(side: "right"),
+      D5: (statements: ("spring-length": .5),),
+      "D6.0": (statements: ("spring-length": .5))+(bend: -1.55) + mom(side: "right"),
       "D6.1": mom(side: "left", length: 1.4, shift: -.4),
     )
     let g = graph.map(g, edge: flatten-boundary)
@@ -232,14 +231,15 @@
       "D2.0": mom(side: "right", length: 1., shift: .4, label: (gap: .2)),
       "D2.1": mom(side: "right", length: .7, shift: -.4,
         label: (gap: .2, shift: -.75, anchor: "south-west")),
+      "D3.0": (statements: ("spring-length": .2)),
       "D3.1": (crossing-under: <D6.1>, crossing-gap: 0.7)
         + mom(side: "left", length: 1.2, shift: -.6, label: (gap: .2)),
       D4: (statements: ("spring-length": .1)) + mom(side: "right", shift: -.4, label: (gap: .1)),
       D5: (statements: ("spring-length": .5)) + mom(side: "right", label: (gap: .05),
         // offset: 0.80,
       ),
-      "D6.0": (bend: -0.55) + mom(side: "left", length: 1.5, shift: .8),
-      "D6.1": mom(side: "left", shift: .8, label: (gap: .2)),
+      "D6.0": (statements: ("spring-length": .3))+(bend: -0.55) + mom(side: "left", length: 1.5, shift: .8),
+      "D6.1": (statements: ("spring-length": .3))+mom(side: "left", shift: .8, label: (gap: .2)),
     )
     let g = graph.map(g, edge: flatten-boundary)
     graph.map(g, node: nodes, edge: edges)
@@ -266,9 +266,9 @@
       D3: (statements: ("spring-length": 1.5), crossing-under: <D6.1>, crossing-gap: 0.8,
         fermion-arrow-shift: -0.5) + mom(shift: -.6),
       D4: (statements: ("spring-length": .5)) + mom(label: (gap: .02)),
-      D5: (crossing-under: <D6.1>, crossing-gap: 1.5) + mom(side: "right", shift: -1., label: (gap: .01)),
+      D5: (crossing-under: <D6.1>, crossing-gap: 1.5,statements: ("spring-length": .2)) + mom(side: "right", shift: -1., label: (gap: .01)),
       "D6.0": mom(side: "left", shift: .5, label: (gap: .1)),
-      "D6.1": (statements: ("spring-length": 3.5)) + mom(side: "left", shift: 3, label: (shift: 2.5, gap: .1)),
+      "D6.1": (statements: ("spring-length": 2.)) + mom(side: "left", shift: 3, label: (shift: 2.5, gap: .1)),
       "D6.2": mom(side: "right", shift: -.4, label: (gap: .1)),
     )
 
@@ -285,9 +285,40 @@
   }
 
   let diagrams = $
-    #diagram(xbox, cut-x: -1)+
-    #diagram(xbox-opened, cut-x: 0,cut-y: 1)+
-    #diagram(xbox-opened2, cut-x: -2.1,cut-y: 1)+
+    #diagram(xbox, cut-x: -1, draw-after: g => {
+      let nodes = graph.nodes(g)
+      let xs = graph.boundaries(g).map(b => b.pos.x)
+      let ys = nodes.map(n => n.pos.y)
+      let left = calc.min(..xs) - diagram-style.endpoint-box.padding.x
+      let right = calc.max(..xs) + diagram-style.endpoint-box.padding.x
+      let top = calc.max(..ys) + 1.5
+      let bottom = calc.min(..ys) - 1.5
+      // Blue/orange open the p1/p2 initial states and cross the other external leg;
+      // the purple pair opens both, with each branch reaching the diagram boundary.
+      for (name, side, paint, both) in (
+        (<c>, 1, blue, false), (<b>, -1, orange, false),
+        (<c>, 1, purple, true), (<b>, -1, purple, true),
+      ) {
+        let p = nodes.find(n => n.name == name).pos
+        let (near, far) = if side > 0 { (top, bottom) } else { (bottom, top) }
+        let outer = if side > 0 { right } else { left }
+        let points = if both {
+          ((p.x - side * .8, near), (outer, p.y - side * 1.7),
+            (p.x - side, p.y - side * .6), (p.x + side * .1, p.y - side * .8))
+        } else {
+          ((p.x - side * 1.25, near), (outer - side, far),
+            (p.x - side * 2.6, p.y - side * 2), (p.x + side * 2.3, p.y - side * .8))
+        }
+        // Both branches cross D6 in the same direction, retaining its middle segment.
+        if side < 0 { points = (points.at(1), points.at(0), points.at(3), points.at(2)) }
+        cetz.draw.bezier(
+          ..points,
+          stroke: (paint: paint, thickness: diagram-style.cut-line-width, dash: "dashed"),
+        )
+      }
+    })+
+    #diagram(xbox-opened, cut-x: 0,cut-y: 1)#h(-2mm)+#h(-2mm)
+    #diagram(xbox-opened2, cut-x: -2.1,cut-y: 1)#h(-2mm)+
     #diagram(xbox-cut,cut-y: 0.5) = op("disc")_(p_1^2)  op("disc")_(p_2^2) integral (dif ^d k  )/(2 pi )^d (N^frak(q q')_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(  p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
   $
   diagrams
