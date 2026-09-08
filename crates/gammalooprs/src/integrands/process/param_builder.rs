@@ -1401,7 +1401,14 @@ impl<T: FloatLike> ParamBuilder<T> {
         new.add_function(
             GS.tanh,
             vec![symbol!("x")],
-            (parse_lit!(exp(x)) - parse_lit!(exp(-x))) / (parse_lit!(exp(x)) + parse_lit!(exp(-x))),
+            // Thermal arguments are real, but selecting by Re(x) also preserves
+            // complex tanh. Only bounded exponentials reach the chosen branch;
+            // both branches retain the analytic value and derivatives at x=0.
+            Symbol::IF.call_args([
+                parse_lit!(x + conj(x) + abs(x + conj(x))),
+                parse_lit!((1 - exp(-2 * x)) / (1 + exp(-2 * x))),
+                parse_lit!((exp(2 * x) - 1) / (exp(2 * x) + 1)),
+            ]),
         )
         .unwrap();
         new.add_function(
@@ -1922,6 +1929,65 @@ mod tests {
 
         param_builder.initialize_duals(4);
         assert_eq!(param_builder.values.len(), 4);
+    }
+
+    #[test]
+    fn thermal_tanh_remains_finite_at_uv_scales_and_preserves_derivatives() {
+        use symbolica::{
+            domains::dual::HyperDual,
+            prelude::{Complex as SymComplex, Dualizer},
+        };
+
+        test_initialise().unwrap();
+        let graph: Graph = dot!(
+            digraph thermal_tanh {
+                edge [num=1 mass=0]
+                node [num=1]
+                A -> B [id=0]
+            }
+        )
+        .unwrap();
+        let argument = Atom::var(symbol!("thermal_tanh_argument"));
+        let evaluator = GS
+            .tanh(argument.clone())
+            .evaluator(std::slice::from_ref(&argument))
+            .function_map(graph.param_builder.fn_map.clone())
+            .build()
+            .unwrap();
+        let mut real = evaluator
+            .clone()
+            .map_coeff(&|coefficient| coefficient.re.to_f64());
+        let dualizer = Dualizer::new(
+            HyperDual::<SymComplex<Rational>>::new(
+                crate::utils::hyperdual_utils::simple_n_deriv_shape(2),
+            ),
+            vec![],
+        );
+        let mut dual = evaluator
+            .clone()
+            .vectorize(&dualizer)
+            .unwrap()
+            .map_coeff(&|coefficient| coefficient.re.to_f64());
+        for value in [-1e12_f64, -1000., -1., 0., 1., 1000., 1e12] {
+            let tanh = value.tanh();
+            let first_derivative = 1. - tanh * tanh;
+            let expected = [tanh, first_derivative, -tanh * first_derivative];
+            assert!((real.evaluate_single(&[value]) - tanh).abs() < 1e-14);
+            let mut actual = [0.; 3];
+            dual.evaluate(&[value, 1., 0.], &mut actual);
+            for (actual, expected) in actual.into_iter().zip(expected) {
+                assert!((actual - expected).abs() < 1e-14, "tanh at {value}");
+            }
+        }
+
+        let mut complex = evaluator.map_coeff(&|coefficient| {
+            SymComplex::new(coefficient.re.to_f64(), coefficient.im.to_f64())
+        });
+        for value in [-1e12_f64, 1e12] {
+            let actual = complex.evaluate_single(&[SymComplex::new(value, 1.)]);
+            assert_eq!(actual.re, value.signum());
+            assert_eq!(actual.im, 0.);
+        }
     }
 
     #[test]
