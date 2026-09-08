@@ -50,8 +50,9 @@ explicit `requiredAttributes` array in both entries. Include every intended
 test group, Clippy, doctest, formatting, and graph/configuration check. Missing
 required attributes leave required latency unknown and make the suite incomplete
 and ineligible for paired percentages. Requested, observed, and missing
-attributes are recorded separately. The final success job is
-measured separately.
+attributes are recorded separately. Required `nix-ci-check-*` groups must have
+their test phase; the package build alone cannot satisfy them. The final success
+job is measured separately.
 
 If NixCI recovers an abandoned worker under the same job URL, its API and logs
 may replace the earlier attempt. Preserve the incident when first observed and
@@ -82,6 +83,46 @@ double counting streams that might overlap. The annotation makes the suite
 incomplete even after a successful retry. Final-only collection cannot detect
 interruption history that the service has already overwritten.
 
+Optional submission clocks come from the local push call, never the commit's
+author timestamp. Set `submittedAt` immediately before calling `git push` and,
+when available, `submissionCompletedAt` immediately after it returns. The report
+keeps suite/configuration latency and separately measures
+`submissionToRequiredSeconds` through the last required check. The two recorded
+push bounds also produce `submissionDurationSeconds` and a range for elapsed
+time after server receipt; the exact receipt time remains unknown.
+
+To inspect earlier polling evidence, add `observationFiles` containing saved
+snapshot paths to the suite's manifest entry. This reuses the existing snapshot
+shape, including files saved as `raw/N/snapshot.json` by live collection:
+
+```json
+{
+  "at": "2026-09-08T15:59:32Z",
+  "suites": [
+    {
+      "spec": { "sha": "FULL_SHA", "suiteUrl": "EXACT_SUITE_URL" },
+      "suite": { "commit": "FULL_SHA", "runs": [] }
+    }
+  ]
+}
+```
+
+Retain the actual suite API response in `suite`; the empty runs array above is
+only a shape example. For queue observations, also set
+`dependencySnapshot: { "sha": "FULL_SHA", "file": "generated-config.json" }`.
+The file must contain the generated `dependencies` mapping for that exact
+revision. The report records a queued job only when every declared prerequisite
+has exactly one successful/cached build row in the same snapshot. Missing
+dependency evidence, a running prerequisite, duplicate prerequisite rows, or a pre-worker
+gap alone cannot establish this incident. Hidden dependencies and the scheduling
+cause remain unknown; separate snapshots do not prove continuous queue time.
+
+Snapshots also retain visible restarts under one job URL and distinct URLs for
+the same type and attribute. A normal build/test pair is not a repeated attempt.
+The trigger for a repeated attempt remains unknown. Replaced or absent attempt history makes resource totals lower bounds
+and prevents accepted paired percentages. This collector never retries jobs or
+runs an unbounded watcher.
+
 ## Outputs and replay
 
 The output directory contains:
@@ -95,6 +136,9 @@ The output directory contains:
   timestamps.
 - `compilations.csv`: compiled crate descriptions with job/context identity.
 - `repeated-derivations.csv`: exact derivation paths built in multiple jobs.
+- `incidents.json`, `incidents.csv`: timestamped symptoms, job/log links, saved
+  evidence links, and known versus unknown causes; also included in report JSON
+  and its Markdown incident table.
 - `pairs.csv`: baseline/candidate percentage changes. Negative is an
   improvement; a zero baseline gives an undefined percentage.
 - `raw/N/`: suite, check, and Actions JSON plus fetched NDJSON logs and a job
@@ -121,6 +165,9 @@ To replay a snapshot, add this object to its manifest entry:
 Offline mode makes no network calls. These paths are relative to the manifest.
 When replaying interruption annotations, point each `evidenceFile` at its copied
 `raw/N/interruptions/N.json`; its linked log path is relative and self-contained.
+For observation replay, point `observationFiles` at the copied
+`raw/N/observations/N.json` snapshots and `dependencySnapshot.file` at the copied
+`raw/N/dependency-snapshot.json`. These retain the original snapshot schema.
 The job index is an array of objects containing `url` and `file`; absolute
 log paths are accepted, and relative log paths resolve against the job index.
 This also accepts the earlier scratch collector's `manifest.json` or
@@ -184,6 +231,20 @@ reported thresholds and retry attempt numbers. Request URLs and arbitrary error
 text are omitted. `transferTimeoutCount` also appears in job/suite totals; it
 does not invent durations or byte counts for unfinished attempts. Use these
 events when assessing whether a pair had comparable service conditions.
+
+`transferErrors` additionally records HTTP/2 stream/framing errors and other
+failed cache transfers, retaining direction, HTTP status and numeric retry
+fields. An HTTP status of 200 does not override a logged framing failure. Neither
+these failures nor timeout warnings count as completed transfers. Incident text
+uses fixed descriptions and omits request URLs and arbitrary error messages;
+the underlying backend/network cause is unknown.
+
+The incident table also flags service-reported job failures/interruption, exact
+derivations built under multiple job URLs, multiple check attempts sharing one
+URL, missing/reversed clocks, and a successful final aggregate completing more
+than 60 seconds after required checks. Clock defects retain available evidence
+but invalidate timing comparisons. A final-success tail is a measured gap; it
+does not identify why finalization took that time.
 
 `intermediateDownloadReportedBytes` totals content restored by jobs classified
 as artifact producers from their attribute names: per-crate dependency/test
