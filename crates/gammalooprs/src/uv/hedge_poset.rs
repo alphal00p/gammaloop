@@ -1694,7 +1694,15 @@ mod tests {
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&graph);
-        let mut forests = Wood::new(cut_structure, &graph, &settings).unfold();
+        let mut forests = Wood::new(
+            cut_structure,
+            &graph,
+            &GenerationSettings {
+                uv: settings.clone(),
+                ..Default::default()
+            },
+        )
+        .unfold();
         forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
 
         let unions = forests
@@ -2670,7 +2678,7 @@ mod tests {
         let wood = Wood::new(
             CutStructure::empty(&graph),
             &graph,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         let collective = wood
             .graph
@@ -2786,7 +2794,7 @@ mod tests {
         let wood = Wood::new(
             CutStructure::empty(&graph),
             &graph,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         let collective = wood
             .graph
@@ -2893,7 +2901,14 @@ mod tests {
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&spectacles);
-        let f = Wood::new(cut_structure, &spectacles, &settings);
+        let f = Wood::new(
+            cut_structure,
+            &spectacles,
+            &GenerationSettings {
+                uv: settings.clone(),
+                ..Default::default()
+            },
+        );
         println!("{}", f);
         insta::assert_snapshot!(
         f.graph.n_nodes(),

@@ -7,7 +7,7 @@ commands = [
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --max-n-bridges 0
       --number-of-factorized-loop-subtopologies 1 1
-      --number-of-fermion-loops 1 1
+      --number-of-anticommutating-loops 1 1
       --only-diagrams
       -p thermal_sunrise
       -i 2L

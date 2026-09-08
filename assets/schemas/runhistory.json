@@ -161,7 +161,7 @@
         "OS",
         "IR",
         "Unsubtracted",
-        "VaccuumLimit"
+        "VacuumLimit"
       ]
     },
     "Bench": {
@@ -1718,6 +1718,10 @@
         "integral_unit": {
           "$ref": "#/$defs/IntegralUnit"
         },
+        "inverse_temperature": {
+          "type": "number",
+          "format": "double"
+        },
         "load_compiled_cff": {
           "type": "boolean"
         },
@@ -1837,6 +1841,9 @@
               "type": "string"
             }
           }
+        },
+        "medium": {
+          "$ref": "#/$defs/MediumSettings"
         },
         "orientation_pattern": {
           "$ref": "#/$defs/OrientationPattern"
@@ -2694,6 +2701,26 @@
           "type": "boolean"
         },
         "susbstitute_masters": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MediumMode": {
+      "type": "string",
+      "enum": [
+        "vacuum",
+        "thermodynamic_equilibrium",
+        "zero_temperature_equilibrium"
+      ]
+    },
+    "MediumSettings": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/MediumMode"
+        },
+        "vacuum_subtraction": {
           "type": "boolean"
         }
       },
@@ -5049,7 +5076,8 @@
             "minimum": 0
           }
         },
-        "number_of_factorized_loop_subtopologies": {
+        "number_of_anticommutating_loops": {
+          "description": "Number of closed anticommutating (fermion or ghost) loops; negative disables",
           "type": [
             "array",
             "null"
@@ -5059,8 +5087,7 @@
             "format": "int32"
           }
         },
-        "number_of_anticommutating_loops": {
-          "description": "Number of closed anticommutating (fermion or ghost) loops; negative disables",
+        "number_of_factorized_loop_subtopologies": {
           "type": [
             "array",
             "null"
@@ -5461,6 +5488,20 @@
       },
       "additionalProperties": false
     },
+    "UVLimitSelection": {
+      "oneOf": [
+        {
+          "description": "One representative for every expected divergent cycle union: the generation LMB when\nsuitable, otherwise the first suitable basis in the deterministically sorted full list.",
+          "type": "string",
+          "const": "only-divergent"
+        },
+        {
+          "description": "Every nonempty loop subset in every generated physical LMB.",
+          "type": "string",
+          "const": "all"
+        }
+      ]
+    },
     "UVLocalisationSettings": {
       "type": "object",
       "properties": {
@@ -5531,6 +5572,10 @@
     "UltraVioletProfile": {
       "type": "object",
       "properties": {
+        "allow_vanishing_missing_fits": {
+          "description": "Accept missing power-law fits when the sampled limit vanishes",
+          "type": "boolean"
+        },
         "analyse_analytically": {
           "description": "Also derive analytic UV series (amplitudes only)",
           "type": "boolean"
@@ -5642,6 +5687,7 @@
         "use_f128",
         "analyse_analytically",
         "per_orientation",
+        "allow_vanishing_missing_fits",
         "uv_ray_directions",
         "uv_ray_norms"
       ]
@@ -5803,20 +5849,6 @@
       "enum": [
         "Feynman",
         "LightLikeAxial"
-      ]
-    },
-    "UVLimitSelection": {
-      "oneOf": [
-        {
-          "description": "One representative for every expected divergent cycle union: the generation LMB when\nsuitable, otherwise the first suitable basis in the deterministically sorted full list.",
-          "type": "string",
-          "const": "only-divergent"
-        },
-        {
-          "description": "Every nonempty loop subset in every generated physical LMB.",
-          "type": "string",
-          "const": "all"
-        }
       ]
     }
   }

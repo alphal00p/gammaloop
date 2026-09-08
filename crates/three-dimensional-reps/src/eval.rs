@@ -3775,3 +3775,83 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod thermal_reference_tests {
+    use super::*;
+    use crate::{Generate3DExpressionOptions, MediumMode, generate_3d_expression};
+
+    #[test]
+    fn thermal_bubble_matches_existing_bose_reference() {
+        let mut parsed = crate::graph_io::test_graphs::box_graph();
+        parsed.internal_edges.truncate(2);
+        parsed.internal_edges[1].head = 0;
+        parsed.external_edges.truncate(2);
+        parsed.node_name_to_internal.retain(|_, node| *node < 2);
+        let expression = generate_3d_expression(
+            &parsed,
+            &Generate3DExpressionOptions {
+                medium_mode: MediumMode::ThermodynamicEquilibrium,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .expression;
+        let input = EvaluationInput {
+            external_momenta: vec![[1.0, 3.0, 4.0, 5.0], [0.0; 4], [0.0; 4]],
+            loop_spatial_momenta: vec![[1.0, 2.0, 3.0]],
+            masses: vec![0.0; 2],
+            uniform_scale: None,
+        };
+        let evaluator = ExpressionEvaluator::new(&parsed, &expression, &input);
+        // The existing thermal bubble oracle uses bosonic distributions at beta=1.
+        // Evaluate those explicit test inputs without giving the model-free
+        // standalone evaluator an implicit choice of particle statistics.
+        let distribution = |edge: usize, sign: i32| {
+            (f64::from(sign) + 1.0 / (evaluator.internal_energies[edge] / 2.0).tanh()) / 2.0
+        };
+        let mut result = 0.0;
+        for variant in expression
+            .orientations
+            .iter()
+            .flat_map(|orientation| &orientation.variants)
+        {
+            assert!(variant.thermal_weight.distributions.is_empty());
+            let thermal = variant
+                .thermal_weight
+                .numerators
+                .iter()
+                .map(|numerator| {
+                    let product = |sign| {
+                        numerator
+                            .positive_energies
+                            .iter()
+                            .map(|edge| distribution(edge.0, sign))
+                            .chain(
+                                numerator
+                                    .negative_energies
+                                    .iter()
+                                    .map(|edge| distribution(edge.0, -sign)),
+                            )
+                            .product::<f64>()
+                    };
+                    product(1) - product(-1)
+                })
+                .product::<f64>();
+            let energy_product = variant
+                .half_edges
+                .iter()
+                .map(|edge| 2.0 * evaluator.internal_energies[edge.0])
+                .product::<f64>();
+            result += rational_to_f64(&variant.prefactor)
+                * thermal
+                * evaluator.tree_sum(&variant.denominator).unwrap()
+                / energy_product;
+        }
+        let reference = 9.236_597_515_492_299e-4_f64;
+        assert!(
+            ((result - reference) / result).abs() < 1.0e-15,
+            "{result:e} != {reference:e}"
+        );
+    }
+}

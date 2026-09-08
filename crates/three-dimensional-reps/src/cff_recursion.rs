@@ -263,14 +263,16 @@ impl CffGenerationGraph {
                     }),
             );
             self.remove_virtual_edges(&removed);
-            if let Some(cycle) = self.vertices.iter().find_map(|vertex| {
-                self.detachable_cycle(
-                    &vertex.nodes,
-                    &vertex.nodes,
-                    &mut vec![vertex.nodes.clone()],
-                    &mut Vec::new(),
-                )
-            }) {
+            if self.has_directed_cycle()
+                && let Some(cycle) = self.vertices.iter().find_map(|vertex| {
+                    self.detachable_cycle(
+                        &vertex.nodes,
+                        &vertex.nodes,
+                        &mut vec![vertex.nodes.clone()],
+                        &mut Vec::new(),
+                    )
+                })
+            {
                 factors.push(ThermalDistributionFactor {
                     edge_id: EdgeIndex(*cycle.iter().min().expect("cycle has edges")),
                     sign: 1,
