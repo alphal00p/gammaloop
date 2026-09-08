@@ -2091,6 +2091,7 @@ mod test {
             variants: vec![ThresholdCountertermVariantMetadata {
                 variant_id: 0,
                 name: "forced".to_string(),
+                group_id: None,
                 cut_group_id: None,
                 associations: vec![ThresholdCountertermAssociationMetadata {
                     cut_id: None,
@@ -2123,6 +2124,7 @@ mod test {
             variants: vec![ThresholdCountertermVariantMetadata {
                 variant_id: 0,
                 name: "intrinsic".to_string(),
+                group_id: None,
                 cut_group_id: Some(0),
                 associations: vec![ThresholdCountertermAssociationMetadata {
                     cut_id: Some(0),
