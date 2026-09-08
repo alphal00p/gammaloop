@@ -11,6 +11,11 @@
   unit: 2.6mm,
   line-width: 0.5pt,
   cut-line-width: 0.6pt,
+  endpoint-box: (
+    padding: (x: 0.5, y: 0.4),
+    radius: 0.25,
+    fills: (p1: blue.lighten(85%), p2: orange.lighten(85%)),
+  ),
   padding: 0.3,
 )
 #set text(size: diagram-style.font-size)
@@ -58,6 +63,33 @@
   ..feynman.draw-style,
   padding: diagram-style.padding,
   draw-after: g => {
+    // Group signed external momenta explicitly, including the through-gluon's
+    // hidden endpoints. Shading follows the solved positions, not the layout seeds.
+    let endpoints = (graph.nodes(g) + graph.edges(g)).filter(
+      item => item.data != none and item.data.at("endpoint-group", default: none) != none,
+    )
+    let box-style = diagram-style.endpoint-box
+    cetz.draw.on-layer(-1, {
+      for (momentum, fill) in box-style.fills {
+        for side in ("in", "out") {
+          let points = endpoints.filter(
+            item => item.data.endpoint-group == side + "-" + momentum,
+          ).map(item => item.pos)
+          if points.len() > 0 {
+            let xs = points.map(p => p.x)
+            let ys = points.map(p => p.y)
+            cetz.draw.rect(
+              (calc.min(..xs) - box-style.padding.x, calc.min(..ys) - box-style.padding.y),
+              (calc.max(..xs) + box-style.padding.x, calc.max(..ys) + box-style.padding.y),
+              radius: box-style.radius,
+              fill: fill,
+              stroke: none,
+            )
+          }
+        }
+      }
+    })
+
     // Exclude the invisible compactification spring and its anchor nodes.
     let nodes = graph.nodes(g).filter(n => n.name in (<a>, <b>, <c>, <d>))
     let edges = graph
@@ -110,6 +142,7 @@
 
     edge(
       source(<c>),
+      endpoint-group: "out-p1",
       momentum: D3,
       spring-length: .3,
       orientation: "reversed",
@@ -118,6 +151,7 @@
     )
     edge(
       sink(<a>),
+      endpoint-group: "in-p1",
       momentum: D3,
       reverse: true,
       orientation: "reversed",
@@ -130,6 +164,7 @@
     edge(source(<c>), sink(<d>), momentum: D1,momentum-label-gap: 0.25)
     edge(
       source(<d>),
+      endpoint-group: "out-p2",
       spring-length: .3,
       momentum: D4,
       momentum-label-gap: 0.2,
@@ -138,6 +173,7 @@
     )
     edge(
       sink(<b>),
+      endpoint-group: "in-p2",
       momentum: D4,
       momentum-label-gap: 0.2,
       spring-length: .3,
@@ -182,12 +218,14 @@
     )
     edge(
       source(<c>),
+      endpoint-group: "in-p1",
       momentum: D1,
       pos: pos(x: in-x, y: top,z:pin(0)),
       momentum-arrow-side: "right", momentum-label-gap: 0.15,  momentum-label-shift: -1.5,
     )
     edge(
       sink(<d>),
+      endpoint-group: "out-p1",
       momentum: D1,
       pos: pos(x: out-x, y: top, z: pin(0)),
       momentum-arrow-side: "left",
@@ -196,6 +234,7 @@
 
     edge(
       source(<d>),
+      endpoint-group: "out-p2",
       momentum: D4,
       pos: pos(x: out-x, y: bot, z: pin(0)),
       bend: -0.18,
@@ -207,6 +246,7 @@
     )
     edge(
       sink(<b>),
+      endpoint-group: "in-p2",
       momentum: D4,
       pos: pos(x: in-x, y: bot, z: pin(0)),
       spring-length: .3,
@@ -225,6 +265,7 @@
     edge(
       source(<b>),
       <bridge>,
+      endpoint-group: "out-p1",
       momentum: D6,
       particle: "g",
       pos: pos(x: out-x, y: mid, z: pin(0)),
@@ -234,6 +275,7 @@
     )
     edge(
       sink(<c>),
+      endpoint-group: "in-p1",
       momentum: D6,
       particle: "g",
       pos: pos(x: in-x, y:mid, z: pin(0)),
@@ -263,15 +305,17 @@
 
     edge(
       source(<c>),
+      endpoint-group: "out-p1",
       momentum: D3,
       orientation: "reversed",
       pos: pos(x: out-x, y: top, z: pin(0)),
 
     )
-    edge(sink(<a>), momentum: D3, orientation: "reversed", pos: pos(x: in-x,y: top, z: pin(0)),momentum-arrow-length: 1.2,momentum-label-gap: 0.2, momentum-arrow-shift: -.6, momentum-arrow-side: "left",crossing-under: <bridge>,
+    edge(sink(<a>), endpoint-group: "in-p1", momentum: D3, orientation: "reversed", pos: pos(x: in-x,y: top, z: pin(0)),momentum-arrow-length: 1.2,momentum-label-gap: 0.2, momentum-arrow-shift: -.6, momentum-arrow-side: "left",crossing-under: <bridge>,
     crossing-gap: 0.7,)
     edge(
       source(<a>),
+      endpoint-group: "in-p2",
       pos: pos(x: in-x, y: bot, z: pin(0)),
       momentum: D2,orientation: "reversed",
       momentum-arrow-side: "right",
@@ -279,6 +323,7 @@
     )
     edge(
       sink(<b>),
+      endpoint-group: "out-p2",
       pos: pos(x: out-x, y: bot, z: pin(0)),
       momentum: D2,orientation: "reversed", momentum-arrow-side: "right",
       momentum-arrow-length: .7, momentum-arrow-shift: -0.4, momentum-label-gap: 0.2,momentum-label-shift: -0.75,
@@ -311,6 +356,7 @@
     )
     edge(
       source(<b>),
+      endpoint-group: "out-p2",
 
       momentum: D6,
       particle: "g",
@@ -320,6 +366,7 @@
     )
     edge(
       sink(<c>),<bridge>,
+      endpoint-group: "in-p2",
       momentum: D6,
       particle: "g", momentum-arrow-shift: .8, momentum-label-gap: 0.2,
       pos: pos(x: in-x, y: mid, z: pin(0)),
@@ -358,11 +405,11 @@
       momentum-arrow-shift: -.6,
     )
 
-    edge(source(<a>), momentum:D2, pos: pos(x: in-x, y: bot,z: pin(0)), momentum-arrow-side: "right",momentum-arrow-shift: 0.7,momentum-label-gap: 0.1,orientation: "reversed")
-    edge(sink(<b>), momentum: D2, pos: pos(x: out-x, y: bot,z: pin(0)), momentum-arrow-side: "left",momentum-label-gap: 0.1,momentum-label-shift: 0.5,orientation: "reversed", )
+    edge(source(<a>), endpoint-group: "in-p2", momentum:D2, pos: pos(x: in-x, y: bot,z: pin(0)), momentum-arrow-side: "right",momentum-arrow-shift: 0.7,momentum-label-gap: 0.1,orientation: "reversed")
+    edge(sink(<b>), endpoint-group: "out-p2", momentum: D2, pos: pos(x: out-x, y: bot,z: pin(0)), momentum-arrow-side: "left",momentum-label-gap: 0.1,momentum-label-shift: 0.5,orientation: "reversed", )
 
-    node(<h1>, hidden: true, pos: pos(x: in-x, y: mid,z: pin(0)))
-    node(<h2>, hidden: true, pos: pos(x: out-x, y: mid2,z: pin(0)))
+    node(<h1>, hidden: true, endpoint-group: "in-p2", pos: pos(x: in-x, y: mid,z: pin(0)))
+    node(<h2>, hidden: true, endpoint-group: "out-p1", pos: pos(x: out-x, y: mid2,z: pin(0)))
     edge(
       source(<h1>),
       <bridge>,
@@ -375,10 +422,11 @@
       momentum-label-offset: 0.10,
     )
 
-    edge(sink(<d>), momentum: D1, momentum-arrow-side: "right",momentum-label-shift: .6,
+    edge(sink(<d>), endpoint-group: "out-p1", momentum: D1, momentum-arrow-side: "right",momentum-label-shift: .6,
     momentum-label-gap: 0.2,pos: pos(x: out-x, y: top,z: pin(0)))
     edge(
       source(<c>),
+      endpoint-group: "in-p1",
       momentum: D1,
       pos: pos(x: in-x, y: top,z: pin(0)),
       momentum-arrow-side: "right", momentum-label-shift: -.6,
@@ -406,12 +454,13 @@
     )
     edge(
       source(<b>),
+      endpoint-group: "out-p2",
       momentum: D6, momentum-arrow-side: "right",
       particle: "g",
       pos: pos(x: out-x, y: mid),
       momentum-arrow-shift: 0.5,
     )
-    edge(sink(<c>),momentum:D6, particle: "g", pos: pos(x: in-x, y:mid2), momentum-arrow-side: "left",)
+    edge(sink(<c>),endpoint-group: "in-p1",momentum:D6, particle: "g", pos: pos(x: in-x, y:mid2), momentum-arrow-side: "left",)
     // Pull the external rows together without drawing another propagator.
     node(<compact-top>, hidden: true, pos: pos(x: start(0), y: top))
     node(<compact-bottom>, hidden: true, pos: pos(x: start(0), y: bot))
