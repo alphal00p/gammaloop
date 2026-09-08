@@ -169,6 +169,28 @@ projection, marker, and backend-boundary invariants are documented in
 <cff-production-and-numerator-energy-ownership>
 GammaLoop owns production graph/source construction, UV orchestration, exact source mapping, and evaluator preparation. The `three-dimensional-reps` crate owns the shared CFF algebra. The `3Drep` command and feature-gated eager evaluator are diagnostic tools, not production contracts: GammaLoop may prepare their inputs, factors, and expressions differently.
 
+Finite-temperature and zero-temperature equilibrium share `MediumMode` and the
+structural CFF recursion in `three-dimensional-reps`. Cyclic orientations,
+thermal contraction numerators, and distribution derivatives are retained in
+`CFFVariant::thermal_weight`, separately from rational coefficients. These
+weights survive serialization, variant fusion, source-edge remapping, and
+products of disconnected components. Initial-state cuts remain external energy
+aliases and never acquire thermal distribution factors. GammaLoop's graph and
+parameter layer expands the symbolic weights using particle statistics,
+chemical potentials, and inverse temperature; the shared generator does not
+own the physics model. Thermal generation retains on-shell numerator maps and
+rejects uniform numerator sampling scales.
+
+Medium modes use direct local 3D UV subtraction. Their local UV kernels take the
+vacuum limit while the surrounding observable retains its medium dependence;
+optional vacuum subtraction is a complete-observable 3D operation. Generation
+validation rejects `local_uv_cts_from_expanded_4d_integrands` for either medium
+mode or vacuum subtraction. The diagnostic `3Drep build` command forwards the
+configured medium and records it alongside the serialized expression. Its
+model-free standalone eager evaluator rejects thermal expressions because it
+does not accept distribution inputs; production evaluation remains owned by
+GammaLoop.
+
 The shared `LinearEnergyExpr` stores exact `Rational` coefficients for indexed internal/external energies, the uniform scale and the constant term; `CFFVariant::prefactor` is also `Rational`. Arithmetic and cut handling retain that type until symbolic output converts it with `Atom::num`. Native rational serde/bincode support owns coefficient persistence; old Atom coefficient encodings are not a compatibility contract.
 
 CFF capacities belong to independently sampled denominator occurrences. Physical sources use their EMR/source-edge identities; completed UV sources additionally accept typed canonical denominator classes, which are distinct from `EdgeIndex`. LMB coordinates certify routing and fixed affine carriers. They do not authorize redistributing a physical source's energy powers or combining contours.

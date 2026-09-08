@@ -390,4 +390,47 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn thermal_initial_state_cut_remains_external_to_distribution_weights() {
+        let mut parsed = crate::graph_io::test_graphs::initial_state_cut_line_graph(1);
+        let mut second = parsed.internal_edges[1].clone();
+        second.edge_id = 2;
+        std::mem::swap(&mut second.tail, &mut second.head);
+        parsed.internal_edges.push(second);
+        let expression = generate_3d_expression(
+            &parsed,
+            &Generate3DExpressionOptions {
+                medium_mode: MediumMode::ThermodynamicEquilibrium,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .expression;
+        assert_eq!(expression.orientations.len(), 4);
+        for variant in expression
+            .orientations
+            .iter()
+            .flat_map(|orientation| &orientation.variants)
+        {
+            assert!(
+                variant
+                    .thermal_weight
+                    .numerators
+                    .iter()
+                    .flat_map(|numerator| numerator
+                        .positive_energies
+                        .iter()
+                        .chain(&numerator.negative_energies))
+                    .all(|edge| edge.0 != 0)
+            );
+            assert!(
+                variant
+                    .thermal_weight
+                    .distributions
+                    .iter()
+                    .all(|factor| factor.edge_id.0 != 0)
+            );
+        }
+    }
 }
