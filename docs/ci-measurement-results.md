@@ -4,10 +4,11 @@ Faster completion of tests, Clippy and doctests remains unproven. Per-crate cach
 boundaries and test inventories are preserved, and local merged artifact output
 sizes fell about 75%, but size alone does not meet the acceptance criterion.
 The first four remote suites had cache-upload timeouts and interrupted workers.
-A fifth, unchanged baseline failed before five test groups ran, after repeated
-builds of identical previously uploaded outputs and replaced job logs. Further
-benchmark pushes are paused at five of twelve planned suites. No performance
-change has been accepted for merge.
+An unchanged baseline reported failure while work remained queued, then continued
+executing checks for another hour. Repeated identical builds and replaced logs
+make that run unsuitable as a speed baseline. Validation has resumed: the final
+ungrouped main candidate is the sixth submitted suite, within the twelve-suite
+plan and fourteen-suite maximum. No performance change has been accepted for merge.
 
 [Machine-readable observations](ci-measurement-results.json) record revisions,
 derivations, clocks, limitations and remote log links. The
@@ -27,11 +28,12 @@ unrestricted threads. Elapsed times are observations, not guaranteed speedups.
 NAR sums count distinct store outputs, not network bytes, worker minutes or CHF.
 These timings use the frozen candidate revisions recorded in JSON, before
 grouping removal and later correctness/reporting follow-ups. The final scheduler
-has identity/graph validation, without a new cold or remote performance pair.
+has identity/graph validation. The compiled main roots retain their frozen
+identities; a remote run of the final configuration is now underway.
 
 The 11 main / 12 FeynKit roots cover archive groups, Python packaging, Clippy,
-formatting and graph validation. Local licensed execution and doctests are
-excluded. All 17/26 archive inventories match names, filters and ignored flags.
+formatting and graph validation. Licensed execution and doctests are
+excluded from those cold timings and are measured separately below. All 17/26 archive inventories match names, filters and ignored flags.
 All 58/91 artifact contexts have identical observed compilation messages
 (738/827 each), with zero compilation at the final archive stage. Both subsequent
 revision-only runs performed zero Cargo compilation.
@@ -92,8 +94,16 @@ failed after its GammaLoop dependency job became
 [hopeless](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/0a535a40-ea11-4343-acb7-dd547f530050).
 At 18:30:17 UTC it had 31 successful, 19 cached, one hopeless and 28 queued jobs,
 with no active workers. Doctest passed 43 cases, Clinnet five and Vakint 74; five
-other runtime groups never ran. The failed job's last exposed log contains only
+other runtime groups had not run at that observation. The failed job's last
+exposed log contains only
 the initial build command, with no diagnostic explaining the failure.
+
+Later saved worker and GitHub completion clocks establish real execution after
+that failed-suite snapshot: the core group passed 814 tests at 19:07 UTC and the
+integration group passed 104 at 19:29 UTC. Their workers compiled two and 54
+prerequisite units respectively before executing archived tests. By 20:13 UTC
+the suite had 42 successful, 27 cached, one hopeless and nine queued jobs. The
+18:30 metrics above remain historical lower bounds, not a final resource total.
 
 The first actual application worker log began 55m58s after submission,
 54m08s after evaluation. Sixty-nine sampled states preserve readiness and waiting
@@ -125,8 +135,10 @@ it compiles when the result check actually executes. This inherited repository
 limitation is separate from failure to reuse the identical completed Nix result.
 Adding another large producer is not justified by this evidence. Cache visibility,
 substitution behavior and replaced worker histories need diagnosis first.
-The final ungrouped candidate has not been submitted; the independently prepared
-FeynKit scenarios remain paused. No remote retry or Actions dispatch was made.
+The final ungrouped main candidate is now
+[running on NixCI](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency/9f7b4392be6d8694a845315631505714fcc26b1b).
+Independent FeynKit source scenarios are undergoing local full-consumer trials
+before submission. No Actions workflow was manually dispatched.
 
 Both frozen Nix Actions workflows passed:
 [main, 2h10m52s](https://github.com/alphal00p/gammaloop/actions/runs/34227037456)
@@ -134,6 +146,43 @@ and [FeynKit, 2h04m32s](https://github.com/alphal00p/gammaloop/actions/runs/3422
 They include packaging and other work beyond the primary NixCI selection, so
 these are not equivalent-coverage speed comparisons. Their doctest jobs passed
 43/62 cases and logged 73/81 compilation messages separately.
+
+## Resumed local validation
+
+For the same integration-test input context, exporting its complete registered
+closure to a local binary cache reduced raw content from 19.782 to 1.758 GiB
+and encoded content from 3.874 to 1.149 GiB. Both variants used xz-6 and the same
+hard eight-CPU affinity. Export took 1,185.048s versus 130.102s; two fresh-store
+imports took 203.693s / 202.824s versus 18.228s / 15.424s. This includes the
+older merged bundles retained by the baseline, which the root-only sample above
+excluded. The local restore improvement is real for this context; it does not
+measure WAN transfers or establish faster completion of the whole test suite.
+
+Both variants pass all selected Rust/Python tests, doctests and Clippy locally,
+using the supplied license. The full comparison includes an initial phase and
+a recovery phase:
+
+| Layout | Final selected tests / doctests, each variant | Integration recovery, baseline → candidate | Exact full cached repeat |
+|---|---:|---:|---:|
+| Main | 1,633 / 43 | 176.864s → 175.002s | 0.253s → 0.263s |
+| FeynKit | 1,834 / 62 | 154.516s → 159.827s | 0.276s → 0.306s |
+
+Fresh required-check results used cached build inputs in separate stores, with
+identical eight-CPU affinity and four concurrent builders within each layout.
+Both implementations hit the same two existing integration-test timeouts while
+Clippy and doctests compiled. Rerunning the identical required roots after those
+compiler checks finished rebuilt only the failed integration group; all tests
+then passed, with zero Cargo compilation. This supports contention as a possible
+cause, without establishing it uniquely. No test, timeout or filter was changed.
+
+All 11 main / 12 FeynKit required outputs are registered as successful. Exact
+full repeats started zero builders and executed no tests, demonstrating local
+result reuse. Final coverage uses the latest successful result for each group
+and does not add duplicate executions. Initial failed timings remain excluded
+from speedup claims. Nextest runtime phases compiled nothing; Clippy/doctest
+compilation-message multisets match between variants: 45/73 on main, 44/81 on
+FeynKit. Individual completion observations use Nix registration, not output
+directory appearance. Local result reuse does not prove remote cache visibility.
 
 ## Remaining acceptance
 
