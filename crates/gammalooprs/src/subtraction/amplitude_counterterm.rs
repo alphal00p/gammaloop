@@ -915,6 +915,95 @@ impl AmplitudeCountertermData {
         record_primary_timing: bool,
         record_components: bool,
     ) -> Result<AmplitudeCountertermEvaluation<T>> {
+        let candidate_ids = self
+            .variant_evaluators
+            .keys()
+            .filter(|&id| self.variant_generated_mask[id] && self.variant_active_mask[id])
+            .collect::<Vec<_>>();
+        let mut groups: Vec<(Option<usize>, Vec<ThresholdCountertermVariantId>)> = Vec::new();
+        for variant_id in candidate_ids {
+            let metadata = &self.variant_metadata[variant_id];
+            let matching = groups.iter().position(|(group_id, members)| {
+                *group_id == metadata.group_id
+                    && members.first().is_some_and(|first| {
+                        self.variant_subspaces[*first].solve_signature(&self.lmbs)
+                            == self.variant_subspaces[variant_id].solve_signature(&self.lmbs)
+                    })
+            });
+            if let Some(index) = matching {
+                groups[index].1.push(variant_id);
+            } else {
+                if let Some(group_id) = metadata.group_id {
+                    if let Some((_, members)) = groups.iter().find(|(id, _)| *id == Some(group_id))
+                    {
+                        let first = members[0];
+                        return Err(eyre!(
+                            "Amplitude graph '{}' explicit threshold group_id={} contains incompatible solve subspaces: variant {} '{}' has parent {:?} and basis {:?}, while variant {} '{}' has parent {:?} and basis {:?}",
+                            graph.name,
+                            group_id,
+                            first.0,
+                            self.variant_metadata[first].name,
+                            self.variant_subspaces[first].parent_lmb_index(),
+                            self.variant_subspaces[first].solve_signature(&self.lmbs),
+                            variant_id.0,
+                            metadata.name,
+                            self.variant_subspaces[variant_id].parent_lmb_index(),
+                            self.variant_subspaces[variant_id].solve_signature(&self.lmbs),
+                        ));
+                    }
+                }
+                groups.push((metadata.group_id, vec![variant_id]));
+            }
+        }
+
+        let mut total = Complex::new_re(momentum_sample.zero());
+        let mut local_counterterms = Vec::new();
+        let mut components = record_components.then(Vec::new);
+        for (_, members) in groups {
+            let evaluation = self.evaluate_variant_group(
+                momentum_sample,
+                graph,
+                model,
+                esurfaces,
+                rotation,
+                settings,
+                param_builder,
+                orientation,
+                evaluation_metadata,
+                record_primary_timing,
+                record_components,
+                Some(&members),
+            )?;
+            total += evaluation.total;
+            local_counterterms.extend(evaluation.local_counterterms);
+            if let (Some(all), Some(mut group_components)) =
+                (components.as_mut(), evaluation.components)
+            {
+                all.append(&mut group_components);
+            }
+        }
+        Ok(AmplitudeCountertermEvaluation {
+            total,
+            local_counterterms,
+            components,
+        })
+    }
+
+    fn evaluate_variant_group<T: FloatLike>(
+        &mut self,
+        momentum_sample: &MomentumSample<T>,
+        graph: &Graph,
+        model: &Model,
+        esurfaces: &EsurfaceCollection,
+        rotation: &Rotation,
+        settings: &RuntimeSettings,
+        param_builder: &mut ParamBuilder<f64>,
+        orientation: SingleOrAllOrientations<'_, OrientationID>,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
+        record_components: bool,
+        allowed_variant_ids: Option<&[ThresholdCountertermVariantId]>,
+    ) -> Result<AmplitudeCountertermEvaluation<T>> {
         if self.variant_evaluators.len() != self.variant_subspaces.len()
             || self.variant_evaluators.len() != self.variant_raised_esurfaces.len()
             || self.variant_evaluators.len() != self.variant_helper_evaluators.len()
@@ -946,7 +1035,9 @@ impl AmplitudeCountertermData {
             .variant_evaluators
             .keys()
             .filter(|&variant_id| {
-                self.variant_generated_mask[variant_id] && self.variant_active_mask[variant_id]
+                self.variant_generated_mask[variant_id]
+                    && self.variant_active_mask[variant_id]
+                    && allowed_variant_ids.is_none_or(|allowed| allowed.contains(&variant_id))
             })
             .collect::<Vec<_>>();
         if candidate_variant_ids.is_empty() {

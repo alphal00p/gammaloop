@@ -1871,13 +1871,49 @@ impl LUCounterTerm {
             threshold_subspaces: right_threshold_subspaces,
         };
 
-        let left_overlap = match overlap_subspace::find_maximal_overlap(
-            &left_overlap_input,
-            &left_existing_esurfaces,
-            &sample_left_transformed_f64,
-            &external_moms_f64,
-            probe_rotation,
-        ) {
+        let left_group_ids = variant_subspaces.map(|subspaces| {
+            subspaces
+                .left_variant_ids
+                .iter()
+                .map(|variant_id| {
+                    self.metadata_registry
+                        .as_ref()
+                        .and_then(|registry| registry.variants.get(variant_id.0))
+                        .and_then(|variant| variant.group_id)
+                })
+                .collect::<Vec<_>>()
+        });
+        let right_group_ids = variant_subspaces.map(|subspaces| {
+            subspaces
+                .right_variant_ids
+                .iter()
+                .map(|variant_id| {
+                    self.metadata_registry
+                        .as_ref()
+                        .and_then(|registry| registry.variants.get(variant_id.0))
+                        .and_then(|variant| variant.group_id)
+                })
+                .collect::<Vec<_>>()
+        });
+
+        let left_overlap = match if let Some(group_ids) = left_group_ids.as_deref() {
+            overlap_subspace::find_maximal_overlap_with_group_ids(
+                &left_overlap_input,
+                &left_existing_esurfaces,
+                group_ids,
+                &sample_left_transformed_f64,
+                &external_moms_f64,
+                probe_rotation,
+            )
+        } else {
+            overlap_subspace::find_maximal_overlap(
+                &left_overlap_input,
+                &left_existing_esurfaces,
+                &sample_left_transformed_f64,
+                &external_moms_f64,
+                probe_rotation,
+            )
+        } {
             Ok(left_overlap) => left_overlap,
             Err(error) => {
                 evaluation_meta_data.record_threshold_counterterm_error(format!(
@@ -1894,13 +1930,24 @@ impl LUCounterTerm {
             }
         };
 
-        let right_overlap = match overlap_subspace::find_maximal_overlap(
-            &right_overlap_input,
-            &right_existing_esurfaces,
-            &sample_right_transformed_f64,
-            &external_moms_f64,
-            probe_rotation,
-        ) {
+        let right_overlap = match if let Some(group_ids) = right_group_ids.as_deref() {
+            overlap_subspace::find_maximal_overlap_with_group_ids(
+                &right_overlap_input,
+                &right_existing_esurfaces,
+                group_ids,
+                &sample_right_transformed_f64,
+                &external_moms_f64,
+                probe_rotation,
+            )
+        } else {
+            overlap_subspace::find_maximal_overlap(
+                &right_overlap_input,
+                &right_existing_esurfaces,
+                &sample_right_transformed_f64,
+                &external_moms_f64,
+                probe_rotation,
+            )
+        } {
             Ok(right_overlap) => right_overlap,
             Err(error) => {
                 evaluation_meta_data.record_threshold_counterterm_error(format!(
