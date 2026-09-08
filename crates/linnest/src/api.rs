@@ -212,6 +212,12 @@ pub fn graph_edges_of_subgraph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, Strin
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 #[wasm_func]
+pub fn graph_cut(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    TypstGraph::cut_bytes(arg, arg2)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
 pub fn graph_subgraph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::graph_subgraph_bytes(arg, arg2)
 }
@@ -232,6 +238,12 @@ pub fn graph_compass_subgraph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String
 #[wasm_func]
 pub fn graph_archived_compass_subgraph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::graph_archived_compass_subgraph_bytes(arg, arg2)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn subgraph_size(arg: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::subgraph_size_bytes(arg)
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]

@@ -261,7 +261,7 @@
 /// A valid pair with no proper interior intersection is left unchanged.
 /// -> content
 #let draw(
-  /// Graph object with positions from `layout` or explicit graph API `pos` fields. -> bytes
+  /// Graph object with positions from `layout` or explicit graph API `pos` fields. -> dictionary
   graph,
   /// Additional values merged into node and edge callback dictionaries.
   /// -> dictionary
@@ -274,9 +274,10 @@
   /// -> none | auto | content | string
   title: none,
   /// Optional subgraph or array of subgraphs whose half-edges are shaded.
-  /// Array entries may be raw subgraphs or records like
+  /// Array entries may be subgraph objects or records like
   /// `(subgraph: sg, edge-style: (stroke: red + 2pt))`.
-  /// -> none | bytes | array
+  /// Each selection must have topology compatible with the graph.
+  /// -> none | dictionary | array
   subgraph: none,
   /// Debug level. `1` enables CeTZ canvas debug; `2` also marks edge positions.
   /// -> bool | int
@@ -308,6 +309,8 @@
   /// node and label. A callback receives `(node, box)` and should return CeTZ
   /// draw elements; `box` contains `name`, `center`, `width`, `height`, `unit`,
   /// `label`, `label-style`, `style`, `radius`, and `node`.
+  /// Generated cut boundary nodes skip this callback and all node painting;
+  /// they retain a named position and zero-size anchor box for incident edges.
   /// -> auto | function
   draw-node: auto,
   /// Additional CeTZ elements drawn after the edges, labels, and nodes in the
@@ -383,12 +386,19 @@
   /// source to edge position and from edge position to sink.
   /// A finite layer can set `shift` to move along the logical edge, with
   /// positive values moving toward its end. `label` attaches content near the
-  /// layer midpoint. `label-side` is `auto`, `"left"`, `"right"`, or a signed
-  /// number; `auto` follows the side selected by ordinary edge-label layout.
-  /// `label-gap` is clearance along the local path normal from its tangent line
-  /// to the actual CeTZ label box, including text bounds, wrapping, padding,
-  /// rotation and anchor. It is not minimum distance to the finite shaft.
-  /// `label-style` is forwarded to `cetz.draw.content`. An attached
+  /// layer midpoint; `label-shift` (default `0`) moves its reference point by
+  /// signed arc length on that derived path, clamped to the path's endpoints.
+  /// Positive values move toward its end without moving or trimming the layer.
+  /// `label-side` is `auto`, `"left"`, `"right"`, or a signed number; `auto`
+  /// follows the side selected by ordinary edge-label layout.
+  /// With `label-style.anchor` omitted or set to `auto` (also `"auto"`), the
+  /// centered label's actual CeTZ box clears the local tangent line by
+  /// `label-gap`, accounting for text bounds, wrapping, padding and rotation.
+  /// This is not minimum distance to the finite curved shaft. An explicit
+  /// anchor, including `"center"`, instead sits at the shifted reference point
+  /// plus `label-gap` along the chosen normal, without box correction.
+  /// Negative gaps are clamped to zero. Other `label-style` fields are forwarded
+  /// to `cetz.draw.content`. An attached
   /// label replaces the ordinary painted edge label, which may still provide
   /// its pre-layout measurement and side. Attached labels do not add separate
   /// pre-layout collision constraints.

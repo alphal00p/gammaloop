@@ -89,6 +89,7 @@
 #let _momentum-layers(edge) = {
   let shift = _number(edge, "momentum-arrow-shift", 0)
   let label-shift = _number(edge, "momentum-label-shift", shift)
+  let anchor = _value(edge, "momentum-label-anchor", auto)
   let offset = _number(edge, "momentum-arrow-offset", 0.62)
   let side = _value(edge, "momentum-arrow-side", auto)
   let side = if side == auto { "auto" } else { str(side).trim("\"") }
@@ -97,7 +98,7 @@
     message: "momentum-arrow-side must be auto, left, or right",
   )
   // Explicit sides are relative to source -> sink and shared with the label carrier.
-  // The label gap is in graph units, beyond the measured label box.
+  // The gap is in graph units: to the box for auto, or to an explicit anchor.
   let geometry = (
     _route(edge)
       + (
@@ -107,10 +108,9 @@
         offset-side: if side == "auto" { "label" } else { none },
         label-side: if side == "auto" { auto } else { side },
         label-gap: _number(edge, "momentum-label-gap", 0.45),
-        label-style: (anchor: _text(edge, "momentum-label-anchor", "center")),
+        label-style: (anchor: if type(anchor) == str { anchor.trim("\"") } else { anchor }),
       )
   )
-  let label = edge.momentum
   let arrow = (
     geometry
       + (
@@ -124,18 +124,22 @@
         mark-orientation: "path",
       )
   )
-  // Put the complete measured label box beyond the momentum shaft. Normally
-  // it follows that shaft; an explicit absolute shift moves an invisible copy
-  // of the same length, so both modes use the same endpoint clamps.
-  if label-shift == shift {
-    arrow += (label: label)
-    (arrow,)
-  } else {
-    (
-      arrow,
-      arrow + (stroke: none, mark: none, shift: label-shift, label: label),
-    )
-  }
+  // Auto clears the complete label box; explicit anchors use only the gap.
+  // The label defaults to the requested arrow shift, but follows a point on the
+  // full invisible path, so its endpoint clamps never depend on arrow length.
+  (
+    arrow,
+    geometry + (
+      length: none,
+      ratio: none,
+      resolve-length: "none",
+      shift: 0,
+      stroke: none,
+      mark: none,
+      label: edge.momentum,
+      label-shift: label-shift,
+    ),
+  )
 }
 
 #let edge-style(edge) = (

@@ -954,7 +954,7 @@
 #let nodes(
   /// Graph object to inspect. -> dictionary
   graph,
-  /// Optional subgraph filter; only nodes incident to selected half edges are returned. -> none | bytes
+  /// Optional subgraph filter; only nodes incident to selected half edges are returned. -> none | dictionary
   subgraph: none,
 ) = _impl.nodes(graph, subgraph)
 
@@ -974,7 +974,7 @@
 #let edges(
   /// Graph object to inspect. -> dictionary
   graph,
-  /// Optional subgraph filter; only selected edges/half-edges are returned. -> none | bytes
+  /// Optional subgraph filter; selected edges retain their full endpoint records. -> none | dictionary
   subgraph: none,
 ) = _impl.edges(graph, subgraph)
 
@@ -1057,6 +1057,73 @@
   /// Replacement data or `(data, edge) => new-data` callback. -> any | function
   update,
 ) = _impl.update-edge-data(graph_, name, update)
+
+/// Open paired edges along a weighted directed half-edge cut.
+///
+/// `left` and `right` are disjoint subgraphs containing opposite halves of each
+/// cut edge. Their names identify boundary sides, not underlying source/sink flow
+/// or superficial drawing orientation. A half-edge annotation `(winding: n)`
+/// requests `n` same-direction seam passages; absent winding defaults to one.
+/// If both sides specify a winding they must agree. Net counts of cancelling
+/// recrossings are not a supported description of an opening.
+///
+/// The input is unchanged. Every cut edge yields source and sink stubs plus
+/// `n - 1` middle segments on auxiliary, unpainted boundary nodes. Fragment
+/// names are `<original.0>` through `<original.n>` in underlying source-to-sink
+/// order. Unnamed edges use `__linnest_cut_edge_ID` as the prefix; name collisions
+/// are errors.
+/// Cut geometry is reset for re-layout, while physical data and orientation are
+/// retained. Arbitrary Typst data, including content and callbacks, is remapped
+/// without serialization. Generated middle endpoint hedges inherit the data of
+/// the opposite original hedge, corresponding to the joined boundary side.
+///
+/// Output node/edge/half-edge records have `origin` relative to the input graph.
+/// Edge origins contain `(edge, name, segment, winding)`; uncut segments are
+/// `none`. Generated nodes have no original node. Boundary nodes and dangling
+/// cut edges also have `boundary`: `(edge, node, hedge, side, crossing, data,
+/// cut-data, origin)`, where `data` is the side's hedge annotation and `cut-data`
+/// its subgraph-wide data. `crossing` counts from zero along underlying flow.
+/// Boundary `hedge` and `origin` describe the input to the cut that created that
+/// boundary, even after subsequent cuts; `edge` and `node` always locate its
+/// current anchor. This differs from each record's immediate-input `origin`.
+/// The optional callback patches only endpoints created by this operation,
+/// exactly like @map; earlier boundary placements and annotations are retained.
+///
+/// ```example
+/// #let g = build({
+///   node(<a>)
+///   node(<b>)
+///   edge(source(<a>), <e>, sink(<b>), label: [$k$])
+/// })
+/// #let left = subgraph.select(g, sink: (<e>,))
+/// #let left = subgraph.with-data(g, left, hedge: (winding: 2))
+/// #let right = subgraph.select(g, source: (<e>,))
+/// #let opened = cut(g, left: left, right: right)
+/// #edges(opened).len()
+/// ```
+/// -> dictionary
+#let cut(
+  /// Graph to open, without modifying it. -> dictionary
+  graph_,
+  /// Selected left half-edges, optionally annotated with winding. -> dictionary
+  left: none,
+  /// Involution partners defining the right side. -> dictionary
+  right: none,
+  /// Placement/data patch for each newly created boundary node or dangling edge. -> none | dictionary | function
+  boundary: none,
+) = _impl.cut(graph_, left, right, boundary)
+
+/// Inspect all generated cut endpoints with their current solved positions.
+///
+/// Returns the boundary records described by @cut plus `pos`. For a dangling
+/// endpoint, `node` is `none` and `pos` is its edge position; for a middle
+/// segment endpoint it is the auxiliary node position. This makes boundary
+/// annotations independent of their internal node/edge representation.
+/// -> array
+#let boundaries(
+  /// Graph returned by @cut, optionally styled, patched, or laid out. -> dictionary
+  graph_,
+) = _impl.boundaries(graph_)
 
 /// Join two graphs by matching dangling half-edge statements or ids on `key`.
 ///

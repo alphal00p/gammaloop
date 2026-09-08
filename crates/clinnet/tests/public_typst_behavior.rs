@@ -147,6 +147,13 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
     )
     .unwrap();
 
+    fs::write(
+        base.path()
+            .join(".clinnet/templates/weighted-cut-behavior.typ"),
+        include_str!("resources/weighted-cut-behavior.typ"),
+    )
+    .unwrap();
+
     let fixture = base
         .path()
         .join(".clinnet/templates/linnest-public-behavior.typ");
@@ -296,5 +303,159 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
             assert_close(position.0 + 0.5 * unit, center_x, 1e-3);
             assert_close(position.1 + 0.5 * unit, stroke_y, 1e-3);
         }
+    }
+}
+
+#[test]
+fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
+    let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
+    let typst = configured_typst
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("typst"));
+    match Command::new(&typst).arg("--version").output() {
+        Ok(version) if version.status.success() => {}
+        result if configured_typst.is_some() => {
+            panic!("configured Typst executable failed: {result:?}")
+        }
+        _ => return,
+    }
+    let base = tempfile::tempdir().unwrap();
+    let renderer = TypstRenderer::new(base.path()).typst_executable(typst);
+    renderer.check_version().unwrap();
+    renderer.stage_default_assets().unwrap();
+    let fixture = base.path().join(".clinnet/templates/invalid-cut.typ");
+    let output = base.path().join("invalid-cut.svg");
+    let prelude = r#"
+#set page(width: auto, height: auto)
+#import "crates/linnest/typst/src/lib.typ": graph, subgraph, layout, draw
+#import graph: node, edge, source, sink
+#let g = graph.build({
+  node(<a>); node(<b>); node(<c>)
+  edge(<e>, source(<a>), sink(<b>))
+  edge(<f>, source(<b>), sink(<c>))
+  edge(<out>, source(<c>))
+})
+#let left = subgraph.select(g, source: (<e>,))
+#let right = subgraph.select(g, sink: (<e>,))
+"#;
+    // Prove the shared setup and installed Wasm work before accepting any failure.
+    fs::write(
+        &fixture,
+        format!(
+            "{prelude}\n#let opened = graph.cut(g, left: subgraph.with-data(g, left, hedge: (winding: 2)), right: right)\n#assert(graph.boundaries(opened).len() == 4)"
+        ),
+    )
+    .unwrap();
+    renderer.compile_template(&fixture, &output, &[]).unwrap();
+
+    let mut cases = vec![
+        (
+            "overlap".to_owned(),
+            "#let _ = graph.cut(g, left: left, right: left)".to_owned(),
+            "disjoint, paired half-edges",
+        ),
+        (
+            "not-inverse".to_owned(),
+            "#let _ = graph.cut(g, left: left, right: subgraph.select(g, sink: (<f>,)))".to_owned(),
+            "right must be the involution of left",
+        ),
+        (
+            "dangling".to_owned(),
+            "#let _ = graph.cut(g, left: subgraph.select(g, source: (<out>,)), right: right)".to_owned(),
+            "select exactly one half of each paired edge on each side",
+        ),
+        (
+            "mismatched-winding".to_owned(),
+            "#let _ = graph.cut(g, left: subgraph.with-data(g, left, hedge: (winding: 2)), right: subgraph.with-data(g, right, hedge: (winding: 3)))".to_owned(),
+            "winding must be a positive integer agreeing on both sides",
+        ),
+        (
+            "unknown-name".to_owned(),
+            "#let _ = subgraph.select(g, edges: (<missing>,))".to_owned(),
+            "subgraph.select: unknown edge",
+        ),
+        (
+            "unknown-hedge".to_owned(),
+            "#let _ = subgraph.select(g, hedges: (99,))".to_owned(),
+            "subgraph.select: unknown half-edge ID",
+        ),
+        (
+            "unselected-annotation".to_owned(),
+            "#let _ = subgraph.hedge-data(left, subgraph.hedges(right).first())".to_owned(),
+            "subgraph.hedge-data: half-edge ID is not selected",
+        ),
+        (
+            "raw-bytes".to_owned(),
+            "#let _ = graph.edges(g, subgraph: left.bytes)".to_owned(),
+            "subgraph: expected a Linnest subgraph object",
+        ),
+    ];
+    for winding in ["0", "-1", "1.5", "\"2\""] {
+        cases.push((
+            format!("invalid-winding-{winding}"),
+            format!(
+                "#let _ = graph.cut(g, left: subgraph.with-data(g, left, hedge: (winding: {winding})), right: right)"
+            ),
+            "winding must be a positive integer agreeing on both sides",
+        ));
+    }
+    for (left_winding, right_winding) in [("2", "2.0"), ("2.0", "2")] {
+        cases.push((
+            format!("mixed-winding-types-{left_winding}-{right_winding}"),
+            format!(
+                "#let _ = graph.cut(g, left: subgraph.with-data(g, left, hedge: (winding: {left_winding})), right: subgraph.with-data(g, right, hedge: (winding: {right_winding})))"
+            ),
+            "winding must be a positive integer agreeing on both sides",
+        ));
+    }
+    // All-false masks have no out-of-range selected IDs to expose a size mismatch.
+    for size in [4, 6] {
+        cases.push((
+            format!("wrong-mask-size-{size}-for-5-hedges"),
+            format!(
+                r#"#let other = graph.build({{
+  node(<other>)
+  for _ in range({size}) {{ edge(source(<other>)) }}
+}})
+#let malformed = left + (bytes: subgraph.select(other).bytes)
+#assert(malformed.topology == left.topology and subgraph.hedges(malformed) == ())
+#let _ = graph.edges(g, subgraph: malformed)"#
+            ),
+            "subgraph: mask size does not match graph",
+        ));
+    }
+    // Identical sizes, names, and hedge IDs are insufficient: e's source moved.
+    let changed_source = r#"
+#let g = graph.build({
+  node(<a>); node(<b>); node(<c>)
+  edge(<e>, source(<c>), sink(<b>))
+  edge(<f>, source(<b>), sink(<c>))
+  edge(<out>, source(<c>))
+})
+"#;
+    for consumer in [
+        "#let _ = graph.nodes(g, subgraph: left)",
+        "#let _ = graph.edges(g, subgraph: left)",
+        "#let _ = layout(g, subgraph: left)",
+        "#draw(g, subgraph: left)",
+        "#let _ = subgraph.with-data(g, left)",
+        "#let _ = subgraph.complement(g, left)",
+        "#let _ = graph.cut(g, left: left, right: right)",
+    ] {
+        cases.push((
+            format!("stale-source: {consumer}"),
+            format!("{changed_source}\n{consumer}"),
+            "subgraph: topology does not match graph",
+        ));
+    }
+    for (name, body, expected) in cases {
+        fs::write(&fixture, format!("{prelude}\n{body}")).unwrap();
+        let error = renderer
+            .compile_template(&fixture, &output, &[])
+            .expect_err(&format!("{name} unexpectedly compiled"));
+        assert!(
+            error.to_string().contains(expected),
+            "{name}: expected diagnostic {expected:?}, got {error}"
+        );
     }
 }

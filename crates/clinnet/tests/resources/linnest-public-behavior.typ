@@ -6,6 +6,8 @@
 #import "@preview/cetz:0.5.1" as cetz
 #import "curved-arrow-behavior.typ": curved-arrow-behavior
 #curved-arrow-behavior
+#import "weighted-cut-behavior.typ": weighted-cut-behavior
+#weighted-cut-behavior
 
 #let close(a, b, epsilon: 1e-6) = calc.abs(a - b) < epsilon
 #let same-pos(a, b) = close(a.x, b.x) and close(a.y, b.y)
@@ -438,7 +440,8 @@
   ),
 )
 
-// Explicit momentum sides override the old layout-label side for both carrier modes.
+// Explicit momentum sides override the old layout-label side for both the arrow
+// and the full label carrier, including equal and independent requested shifts.
 #let momentum-graph = graph.build({
   node(<momentum-a>, pos: pos(x: 0, y: 0))
   node(<momentum-b>, pos: pos(x: 6, y: 0))
@@ -458,11 +461,39 @@
   }
 })
 #for side in (auto, "auto", "left", "right") {
-  for label-shift in (0, 1) {
-    let fields = (momentum-arrow-side: side, momentum-label-shift: label-shift)
+  for (arrow-shift, label-shift) in (
+    (0, 0), (0, 1), (0.5, 0.5), (0.5, none), (-100, none), (100, none),
+  ) {
+    let fields = (
+      momentum-arrow-side: side,
+      momentum-arrow-shift: arrow-shift,
+    ) + if label-shift == none { (:) } else {
+      (momentum-label-shift: label-shift)
+    }
     let layers = feynman.edge-style((momentum: [], fields: fields))
+    assert(layers.len() == 3)
     let arrow = layers.at(1)
     let label = layers.last()
+    assert(arrow.shift == arrow-shift and arrow.at("label", default: none) == none)
+    assert.eq(
+      (label.length, label.ratio, label.resolve-length), (none, none, "none"),
+    )
+    assert(label.shift == 0 and label.stroke == none and label.mark == none)
+    assert(label.label == [])
+    assert.eq(
+      label.label-shift,
+      if label-shift == none { arrow-shift } else { label-shift },
+    )
+    // Arrow length never changes the full label carrier, even for equal shifts.
+    for length in (0.2, 2, 100) {
+      let customized = feynman.edge-style((
+        momentum: [],
+        fields: fields + (momentum-arrow-length: length),
+      ))
+      assert(customized == layers.enumerate().map(((index, layer)) => {
+        if index == 1 { layer + (length: length) } else { layer }
+      }))
+    }
     let automatic = side in (auto, "auto")
     assert(arrow.offset-side == if automatic { "label" } else { none })
     assert(arrow.label-side == if automatic { auto } else { side })
@@ -470,20 +501,26 @@
     assert(label.offset == arrow.offset and label.label-side == arrow.label-side)
     assert(label.offset-side == arrow.offset-side)
     assert(arrow.label-gap == 0.45 and label.label-gap == 0.45)
-    assert(arrow.label-style.anchor == "center" and label.label-style.anchor == "center")
-    // Anchor overrides reach both carrier modes without changing shaft geometry.
-    for anchor in ("center", "south-west", "north-east", "\"south-west\"") {
+    assert(arrow.label-style.anchor == auto and label.label-style.anchor == auto)
+    // Anchor overrides reach both arrow and label layers without changing
+    // shaft geometry.
+    for anchor in (
+      auto, "auto", "\"auto\"", "center", "\"center\"", "east",
+      "south-west", "north-east", "\"south-west\"",
+    ) {
       let customized = feynman.edge-style((
         momentum: [],
         fields: fields + (momentum-label-anchor: anchor),
       ))
       assert(customized == layers.enumerate().map(((index, layer)) => {
         if index == 0 { layer } else {
-          layer + (label-style: (anchor: anchor.trim("\"")))
+          layer + (label-style: (
+            anchor: if anchor == auto { auto } else { anchor.trim("\"") },
+          ))
         }
       }))
     }
-    // Gap overrides must reach both carrier modes without moving the arrow.
+    // Gap overrides must reach both arrow and label layers without moving the arrow.
     for gap in (0, 0.15, 0.8, "0.2") {
       let customized = feynman.edge-style((
         momentum: [],

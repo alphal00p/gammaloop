@@ -586,22 +586,54 @@
         expected.map(d => d.segments),
       ))
 
-      // Measure the rendered frame, not plain Typst text metrics or label anchors.
+      // Endpoint clamps remain exact even below the arc-length accuracy.
+      let label-accuracy = drawing._style-value((:), "accuracy")
+      for length in (0, label-accuracy / 2) {
+        let segment = curve.line-segment((0, 0), (length, 0))
+        let path = curve.from-cubic(segment)
+        for (shift, t) in ((-1, 0), (1, 1)) {
+          let frame = drawing._path-mid-frame(path, label-accuracy, shift: shift)
+          assert.eq(frame.point, curve.cubic-point(segment, t))
+          assert.eq(frame.tangent, curve.cubic-tangent(segment, t))
+        }
+      }
+
+      // Measure the rendered frame for automatic clearance and the actual CeTZ
+      // anchor for explicit placement, never plain Typst text metrics.
       let label-checks = ()
-      for (path-index, path) in (straight, curved).enumerate() {
+      let halves = (
+        source: curve.segments(source),
+        sink: curve.segments(sink),
+        whole: curve.segments(path),
+      )
+      for (path-index, (path, paired)) in (
+        (straight, none),
+        (curved, none),
+        (path, (halves: halves, source: true, sink: true)),
+        (path, (halves: halves + (whole: none), source: true, sink: true)),
+        (source, (halves: halves, source: true, sink: false)),
+        (sink, (halves: halves, source: false, sink: true)),
+      ).enumerate() {
         for side in ("left", "right") {
           for (label-index, label) in (
             [$k-p_2$],
             [Hgyp],
             [Hg\ yp],
             box(width: 6pt, height: 6pt),
+            box(width: 36pt, height: 6pt),
           ).enumerate() {
             for (style-index, label-style) in (
               (:),
+              (anchor: auto),
+              (anchor: "auto"),
+              (anchor: "center"),
+              (anchor: "east"),
               (
                 wrap: body => box(width: 18pt, text(size: 9pt, body)),
                 padding: (left: 0.15, right: 0.25, top: 0.1, bottom: 0.2),
               ),
+              (anchor: "east", angle: 13deg, padding: (left: 0.15, top: 0.2)),
+              (angle: -23deg, auto-scale: true),
               (angle: 37deg, anchor: "north-east"),
               (angle: -23deg, anchor: "south-west", auto-scale: true),
             ).enumerate() {
@@ -614,38 +646,44 @@
                   label-side: side,
                   label-gap: 0.2,
                 ),
+                paired,
               ))
             }
           }
         }
       }
 
-      // Fixed xbox-opened2 sink geometry: label shifts are absolute, and switching
-      // carrier modes must not move the arrow or introduce different endpoint clamps.
-      let incoming = drawing._dangling-path(
+      // Fixed xbox-opened2 sink geometry: label shifts are absolute on the full
+      // offset path. Equal and independent shifts must not move the arrow, and
+      // arrow length must not change label placement or its endpoint clamps.
+      let endpoints = (
         (3.7141557137182426, -3.510279312439297),
         (1.5082746017729896, -2.213011602860704),
-        0,
-        (dangling-tangent: "horizontal"),
-        dangling-at-start: true,
       )
       let native = ctx + (length: 2.6mm)
-      for shift in (-1, -0.4, 1) {
+      for (side, shift, kind) in (
+        ("right", -1, "incoming"), ("right", -0.4, "incoming"),
+        ("right", 1, "incoming"), ("left", -0.4, "incoming"),
+        ("right", -0.4, "outgoing"), ("right", 0.4, "paired"),
+        ("left", -0.4, "paired"),
+      ) {
+        let path = if kind == "paired" { path } else {
+          drawing._dangling-path(
+            endpoints.at(if kind == "incoming" { 0 } else { 1 }),
+            endpoints.at(if kind == "incoming" { 1 } else { 0 }),
+            0,
+            (dangling-tangent: "horizontal"),
+            dangling-at-start: kind == "incoming",
+          )
+        }
         let fields = (
-          momentum-arrow-side: "right",
+          momentum-arrow-side: side,
           momentum-arrow-offset: 0.4,
           momentum-arrow-length: 0.7,
           momentum-arrow-shift: shift,
         )
         let reference = feynman.edge-style((momentum: [], fields: fields)).at(1)
-        let reference-path = drawing._path-layer(
-          incoming,
-          reference,
-          0,
-          0,
-          none,
-          auto,
-        )
+        let reference-path = drawing._path-layer(path, reference, 0, 0, none, auto)
         let reference-paint = cetz
           .process
           .many(
@@ -663,64 +701,70 @@
             compute-bounds: false,
           )
           .drawables
-        for (gap, label) in (
-          (0.2, [$k-p_2$]),
-          (0.6, [Hg\ yp]),
-          (0, box(width: 6pt, height: 6pt)),
+        let full-style = reference + (
+          length: none, ratio: none, resolve-length: "none", shift: 0,
+        )
+        let full-path = drawing._path-layer(path, full-style, 0, 0, none, auto)
+        let full-length = curve.length(
+          full-path, accuracy: drawing._style-value(full-style, "accuracy"),
+        )
+        let paired = if kind == "paired" {
+          (
+            halves: drawing._split-edge-geometry(
+              source, sink, path, full-style, full-style, 0, 0, none,
+              drawing._style-value(full-style, "accuracy"),
+            ),
+            source: true,
+            sink: true,
+          )
+        } else { none }
+        for (gap, label, anchor) in (
+          (0.2, [$k-p_2$], auto),
+          (0.6, [Hg\ yp], "auto"),
+          (0, box(width: 6pt, height: 6pt), auto),
+          (-0.2, [$k-p_2$], auto),
+          (0.2, box(width: 36pt, height: 6pt), "center"),
+          (0.2, box(width: 36pt, height: 6pt), "east"),
+          (0.2, box(width: 36pt, height: 6pt), "north-east"),
+          (0.2, box(width: 36pt, height: 6pt), "south-west"),
+          (-0.2, box(width: 36pt, height: 6pt), "center"),
         ) {
+          let momentum = text(size: 6pt, label)
           let centers = ()
-          for label-shift in (shift, shift - 1e-6, shift + 1e-6, -0.1) {
-            let case = "momentum " + repr((shift, label-shift, gap))
-            let layers = feynman.edge-style((
-              momentum: text(size: 6pt, label),
-              fields: fields
-                + (momentum-label-shift: label-shift, momentum-label-gap: gap),
-            ))
+          for requested in (
+            none, shift, shift - 1e-6, shift + 1e-6, -0.1, 0,
+            -full-length, full-length,
+          ) {
+            let label-shift = if requested == none { shift } else { requested }
+            let case = "momentum " + repr((side, shift, requested, gap, anchor, kind))
+            let fields = fields + (
+              momentum-label-gap: gap,
+              momentum-label-anchor: anchor,
+            ) + if requested == none { (:) } else {
+              (momentum-label-shift: requested)
+            }
+            let layers = feynman.edge-style((momentum: momentum, fields: fields))
             let arrow = layers.at(1)
             let carrier = layers.last()
+            assert.eq(layers.len(), 3, message: case + ": carrier count")
             assert.eq(
-              layers.len(),
-              if label-shift == shift { 2 } else { 3 },
-              message: case + ": carrier count",
+              (carrier.length, carrier.ratio, carrier.resolve-length, carrier.shift),
+              (none, none, "none", 0),
+              message: case + ": full unshifted label carrier",
             )
             assert.eq(
-              carrier.length,
-              arrow.length,
-              message: case + ": shared clamp length",
-            )
-            assert.eq(
-              carrier.shift,
+              carrier.label-shift,
               label-shift,
-              message: case + ": absolute label shift",
+              message: case + ": requested absolute label shift",
             )
-            if label-shift != shift {
-              assert.eq(
-                carrier.stroke,
-                none,
-                message: case + ": invisible carrier",
-              )
-              assert.eq(
-                carrier.mark,
-                none,
-                message: case + ": no duplicate head",
-              )
-            }
-            let arrow-path = drawing._path-layer(
-              incoming,
-              arrow,
-              0,
-              0,
-              none,
-              auto,
+            assert.eq(carrier.stroke, none, message: case + ": invisible carrier")
+            assert.eq(carrier.mark, none, message: case + ": no duplicate head")
+            assert.eq(
+              arrow.at("label", default: none), none,
+              message: case + ": no label attached to arrow",
             )
-            let label-path = drawing._path-layer(
-              incoming,
-              carrier,
-              0,
-              0,
-              none,
-              auto,
-            )
+            let arrow-path = drawing._path-layer(path, arrow, 0, 0, none, auto)
+            let label-path = drawing._path-layer(path, carrier, 0, 0, none, auto)
             assert.eq(
               arrow-path,
               reference-path,
@@ -741,25 +785,11 @@
               reference-paint,
               message: case + ": unchanged shaft and chord head",
             )
-            assert.eq(
-              label-path,
-              drawing._path-layer(
-                incoming,
-                arrow + (shift: label-shift),
-                0,
-                0,
-                none,
-                auto,
-              ),
-              message: case + ": independently shifted copy",
+            assert.eq(label-path, full-path, message: case + ": full offset path")
+            let frame = drawing._path-mid-frame(
+              label-path, drawing._style-value(carrier, "accuracy"),
+              shift: carrier.label-shift,
             )
-            if calc.abs(shift) == 1 and calc.abs(label-shift - shift) < 2e-6 {
-              assert.eq(
-                label-path,
-                arrow-path,
-                message: case + ": identical endpoint clamp",
-              )
-            }
             let rendered = cetz
               .process
               .many(
@@ -770,16 +800,56 @@
                 compute-bounds: false,
               )
               .drawables
-              .filter(d => d.type == "content")
-            assert.eq(rendered.len(), 1, message: case + ": one momentum label")
-            centers.push(rendered.first().pos)
-            label-checks.push((case, label-path, carrier))
+            let labels = rendered.filter(d => d.type == "content")
+            assert.eq(labels.len(), 1, message: case + ": one momentum label")
+            centers.push(labels.first().pos)
+            label-checks.push((case, label-path, carrier, paired))
+            for length in (0.2, 0.8 * full-length, 2 * full-length) {
+              let case = case + " length " + repr(length)
+              let layers = feynman.edge-style((
+                momentum: momentum,
+                fields: fields + (momentum-arrow-length: length),
+              ))
+              assert.eq(
+                layers.at(1), arrow + (length: length),
+                message: case + ": only arrow length changes",
+              )
+              let carrier = layers.last()
+              let label-path = drawing._path-layer(path, carrier, 0, 0, none, auto)
+              assert.eq(
+                label-path, full-path,
+                message: case + ": length-independent path",
+              )
+              let shifted = drawing._path-mid-frame(
+                label-path, drawing._style-value(carrier, "accuracy"),
+                shift: carrier.label-shift,
+              )
+              assert.eq(
+                shifted.point, frame.point,
+                message: case + ": unchanged label point",
+              )
+              assert.eq(
+                cetz.vector.norm(shifted.tangent), cetz.vector.norm(frame.tangent),
+                message: case + ": unchanged label normal",
+              )
+              assert.eq(
+                cetz.process.many(
+                  native,
+                  drawing
+                    ._layer-label-element(native, label-path, carrier, none, (:))
+                    .flatten(),
+                  compute-bounds: false,
+                ).drawables,
+                rendered,
+                message: case + ": unchanged final label placement",
+              )
+            }
           }
-          for center in centers.slice(1, 3) {
+          for center in centers.slice(1, 4) {
             assert(
               cetz.vector.dist(centers.first(), center) < 8 * accuracy,
               message: "equal/adjacent label continuity "
-                + repr((shift, gap, centers)),
+                + repr((side, shift, gap, anchor, kind, centers)),
             )
           }
         }
@@ -795,13 +865,39 @@
         cetz.matrix.transform-rotate-xyz(40deg, 30deg, 0deg),
       ).enumerate() {
         let local = native + (transform: transform)
-        for (case, path, style) in label-checks {
-          let case = "label box " + repr(transform-index) + " " + case
-          let frame = drawing._path-mid-frame(path, drawing._style-value(
-            style,
-            "accuracy",
-          ))
+        for (case, path, style, paired) in label-checks {
+          let case = "label placement " + repr(transform-index) + " " + case
+          let label-style = style.label-style + (name: "checked-label")
+          let style = style + (label-style: label-style)
+          let anchor = label-style.at("anchor", default: auto)
+          let automatic = anchor in (auto, "auto")
+          let gap = calc.max(0, style.label-gap)
+          let accuracy = drawing._style-value(style, "accuracy")
+          let label-shift = style.at("label-shift", default: 0)
+          let frame = drawing._path-mid-frame(path, accuracy, shift: label-shift)
+          let total = curve.length(path, accuracy: accuracy)
+          let at = calc.clamp(total / 2 + label-shift, 0, total)
+          let (segment, t) = if at == 0 {
+            (curve.segments(path).first(), 0)
+          } else if at == total {
+            (curve.segments(path).last(), 1)
+          } else {
+            (curve.segments(curve.trim(
+              path, end-outset: total - at, accuracy: accuracy,
+            )).last(), 1)
+          }
+          let tolerance = if at in (0, total) { epsilon } else { 8 * accuracy }
+          assert(
+            cetz.vector.dist(frame.point, curve.cubic-point(segment, t)) < tolerance,
+            message: case + ": shifted arc-length point and full-path endpoint clamp",
+          )
           let tangent = cetz.vector.norm(frame.tangent)
+          assert(
+            cetz.vector.dist(
+              tangent, cetz.vector.norm(curve.cubic-tangent(segment, t)),
+            ) < tolerance,
+            message: case + ": local tangent at shifted label point",
+          )
           let normal = cetz.vector.scale(
             (-tangent.at(1), tangent.at(0)),
             if style.label-side == "right" { -1 } else { 1 },
@@ -814,31 +910,54 @@
             )),
             origin,
           )
-          let rendered = cetz
-            .process
-            .many(
+          let element = if paired == none {
+            drawing._layer-label-element(local, path, style, none, (:))
+          } else {
+            drawing._paired-layer-label-element(
               local,
-              drawing
-                ._layer-label-element(local, path, style, none, (:))
-                .flatten(),
-              compute-bounds: false,
+              paired.halves,
+              if paired.source { style } else { none },
+              if paired.sink { style } else { none },
+              none,
+              (:),
             )
-            .drawables
-          let frames = rendered.filter(d => "content-frame" in d.tags)
-          assert.eq(frames.len(), 1, message: case + ": one rendered box")
-          let (start, _, commands) = frames.first().segments.first()
-          let nearest = calc.min(..(start, ..commands.map(c => c.last())).map(
-            point => (
+          }
+          let rendered = cetz.process.many(
+            local, element.flatten(), compute-bounds: false,
+          )
+          let point = (rendered.ctx.nodes.at("checked-label").anchors)(
+            if automatic { "center" } else { anchor },
+          )
+          let distance = if automatic {
+            (
               cetz.vector.dot(cetz.vector.sub(point, origin), outward)
                 / cetz.vector.dot(outward, outward)
-            ),
-          ))
+            )
+          } else { gap }
           assert(
-            calc.abs(nearest - style.label-gap) < epsilon,
-            message: case
-              + ": rendered clearance "
-              + repr((nearest, style.label-gap)),
+            cetz.vector.dist(
+              point,
+              cetz.vector.add(origin, cetz.vector.scale(outward, distance)),
+            ) < epsilon,
+            message: case + if automatic { ": centered legacy position" } else {
+              ": explicit anchor at shifted arc-length point plus signed normal gap"
+            },
           )
+          let frames = rendered.drawables.filter(d => "content-frame" in d.tags)
+          assert.eq(frames.len(), 1, message: case + ": one rendered box")
+          if automatic {
+            let (start, _, commands) = frames.first().segments.first()
+            let nearest = calc.min(..(start, ..commands.map(c => c.last())).map(
+              point => (
+                cetz.vector.dot(cetz.vector.sub(point, origin), outward)
+                  / cetz.vector.dot(outward, outward)
+              ),
+            ))
+            assert(
+              calc.abs(nearest - gap) < epsilon,
+              message: case + ": rendered clearance " + repr((nearest, gap)),
+            )
+          }
         }
       }
 
