@@ -1,3 +1,11 @@
+# GL297 IR-safe threshold test card.
+#
+# The process specification on the graph import selects the tth@NNLO process
+# cuts, while the DOT supplies the explicit threshold-counterterm metadata.
+# Run the complete workflow with
+# `... card.toml run all`; every generation/integration knob can be overridden
+# with `-D name=value`, for example `run integrate -D n_start=10000`.
+
 [cli_settings]
 
 [cli_settings.state]
@@ -16,10 +24,14 @@ commands = [
 [[command_blocks]]
 name = "generate_integrands"
 commands = [
-  "set global kv global.n_cores.generate=10",
+  "set global kv global.n_cores.generate=$(generate_cores:10)",
   "generate existing -p epem_a_tth -i NNLO",
   "save state -o",
 ]
+
+[[command_blocks]]
+name = "generate"
+commands = ["run generate_diagrams", "run generate_integrands"]
 
 [default_runtime_settings.kinematics]
 e_cm = 1000.0
@@ -116,9 +128,9 @@ escalate_for_large_weight_threshold = -1.0
 name = "integrate"
 commands = [
   "run set_model_parameters",
-  "set process -p epem_a_tth kv integrator.discrete_dim_learning_rate=0.0",
-  "set process -p epem_a_tth kv integrator.continuous_dim_learning_rate=0.25",
-  "set process -p epem_a_tth kv integrator.n_bins=16",
+  "set process -p epem_a_tth kv integrator.discrete_dim_learning_rate=$(discrete_dim_learning_rate:0.0)",
+  "set process -p epem_a_tth kv integrator.continuous_dim_learning_rate=$(continuous_dim_learning_rate:0.25)",
+  "set process -p epem_a_tth kv integrator.n_bins=$(n_bins:16)",
   """set process -p epem_a_tth string '
     [sampling]
     graphs = "monte_carlo"
@@ -130,8 +142,8 @@ commands = [
   """set process -p epem_a_tth string '
     [h_function]
     function = "poly_exponential"
-    sigma = 1.0
-    power = 3
+    sigma = $(h_sigma:1.0)
+    power = $(h_power:3)
     '""",
   """set process -p epem_a_tth string '
     [[stability.rotation_axis]]
@@ -154,16 +166,16 @@ commands = [
   "remove processes -p epem_a_tth -i NNLO_m_uv_up",
   "duplicate integrand -p epem_a_tth -i NNLO --output_process_name epem_a_tth --output_integrand_name NNLO_m_uv_up",
   """set process -p epem_a_tth -i NNLO kv
-    integrator.n_increase=0
-    integrator.n_start=100000
-    integrator.n_max=10000000000
-    integrator.seed=1337
-    general.m_uv=91.188
+    integrator.n_increase=$(n_increase:0)
+    integrator.n_start=$(n_start:100000)
+    integrator.n_max=$(n_max:10000000000)
+    integrator.seed=$(seed:1337)
+    general.m_uv=$(m_uv_reference:91.188)
     """,
-  "set process -p epem_a_tth -i NNLO_m_uv_up kv general.m_uv=1459.008",
-  """integrate -p epem_a_tth -i NNLO -p epem_a_tth -i NNLO_m_uv_up --n-cores 3
+  "set process -p epem_a_tth -i NNLO_m_uv_up kv general.m_uv=$(m_uv_shifted:1459.008)",
+  """integrate -p epem_a_tth -i NNLO -p epem_a_tth -i NNLO_m_uv_up --n-cores $(integration_cores:3)
     --renderer ratatui
-    --batch-size 1000
+    --batch-size $(batch_size:1000)
     --show-phase both
     --show-max-weight-info
     --show-top-discrete-grid
@@ -185,3 +197,7 @@ commands = [
   "set model Gf=1.166390e-05",
   "set model MZ=91.188",
 ]
+
+[[command_blocks]]
+name = "all"
+commands = ["run generate", "run integrate"]
