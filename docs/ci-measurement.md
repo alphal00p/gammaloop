@@ -299,7 +299,9 @@ match. Summary counts and visible test IDs are retained, but are not a complete
 inventory: skipped tests and successful cached runs may omit names. Therefore
 `coverageEquivalent` stays null in paired output. Validate test inventories,
 filters, features, Python behavior, licenses, and doctest/Clippy coverage
-separately before accepting performance.
+separately before accepting performance. Nextest summary `failed` includes
+ordinary failures and timed-out tests; `timedOut` records the timeout subset.
+Do not add these two fields together. Individual timeout rows retain `TIMEOUT`.
 
 License mode is a benchmark observation, not an additional Python CI gate.
 Use comparable license settings in both variants; existing tests retain their

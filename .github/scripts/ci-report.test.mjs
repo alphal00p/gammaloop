@@ -591,3 +591,21 @@ test('failure timestamps use check completion or earliest matching status observ
     assert.equal(completed.evidenceFile, undefined);
   }
 });
+
+test('Nextest timed-out tests contribute to failed outcomes and retain a separate timeout count', () => {
+  const result = parseLog(JSON.stringify({ utc_time: '2026-09-08T20:00:00Z', relative_nanoseconds: 0,
+    log_message: 'TIMEOUT [240.000s] gammaloop_integration_tests se1l_uv\n'
+      + 'TIMEOUT [240.000s] gammaloop_integration_tests sunrise_scalar_1_uv\n'
+      + 'Summary [240.125s] 104 tests run: 102 passed, 2 timed out, 67 skipped\n',
+  }), { type: 'test', status: 'failed', attribute: attr });
+  assert.deepEqual(result.testSummaries, [{ runner: 'nextest', executed: 104, passed: 102,
+    failed: 2, timedOut: 2, skipped: 67, seconds: 240.125 }]);
+  assert.deepEqual(result.tests.map(row => row.status), ['TIMEOUT', 'TIMEOUT']);
+  assert.equal(result.testExecution, 'executed');
+  const mixed = parseLog(JSON.stringify({ utc_time: '2026-09-08T20:00:00Z', relative_nanoseconds: 0,
+    log_message: 'Summary [240.125s] 3 tests run: 0 passed, 1 failed, 2 timed out, 0 skipped\n'
+      + 'test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.0s\n',
+  }));
+  assert.deepEqual(mixed.testSummaries.map(row => [row.failed, row.timedOut]), [[3, 2], [1, 0]]);
+  assert.deepEqual(parseLog(overlap).testSummaries.map(row => [row.failed, row.timedOut]), [[0, 0], [0, 0]]);
+});

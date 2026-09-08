@@ -84,10 +84,12 @@ export function parseLog(ndjson, job = {}) {
     for (const match of text.matchAll(/\bChecking ([\w-]+ v[^\s]+(?: \([^\n]+\))?)/g)) checked.push(match[1]);
     for (const match of text.matchAll(/Summary\s*\[\s*([\d.]+)s\]\s*(\d+) tests? run:([^\n]*)/g)) {
       const count = label => Number(match[3].match(new RegExp(`(\\d+) ${label}`))?.[1] ?? 0);
-      testSummaries.push({ runner: 'nextest', executed: Number(match[2]), passed: count('passed'), failed: count('failed'), skipped: count('skipped'), seconds: Number(match[1]) });
+      const timedOut = count('timed out');
+      testSummaries.push({ runner: 'nextest', executed: Number(match[2]), passed: count('passed'),
+        failed: count('failed') + timedOut, timedOut, skipped: count('skipped'), seconds: Number(match[1]) });
     }
     for (const match of text.matchAll(/test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored;[^\n]*?finished in ([\d.]+)s/g))
-      testSummaries.push({ runner: 'libtest', executed: Number(match[1]) + Number(match[2]), passed: Number(match[1]), failed: Number(match[2]), skipped: Number(match[3]), seconds: Number(match[4]) });
+      testSummaries.push({ runner: 'libtest', executed: Number(match[1]) + Number(match[2]), passed: Number(match[1]), failed: Number(match[2]), timedOut: 0, skipped: Number(match[3]), seconds: Number(match[4]) });
     for (const match of text.matchAll(/\b(PASS|FAIL|SKIP|TIMEOUT)\s+\[[^\]\n]*\]\s+([^\n]+)/g))
       tests.push({ status: match[1], name: match[2].trim() });
     for (const match of text.matchAll(/(?:^|\n|> )test ([^\n]+?) \.\.\. (ok|FAILED|ignored)\b/g))
