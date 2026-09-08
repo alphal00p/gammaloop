@@ -540,7 +540,16 @@
   `mark-shift` for a signed arc-length adjustment along the derived path. This
   positioning is independent of whether the layer is straight or patterned.
   `"center-if-dangling"` centers a dangling mark but keeps an orientation-selected
-  paired mark at the source/sink split point.
+  paired mark at the source/sink split point. Heads span a chord between two
+  points on the full carrier, not a tangent. Triangle and straight heads place
+  their geometric tip and the center of their back on the curve; other marks
+  use their declared tip/base anchors. Centered heads straddle the requested
+  arc position, so the chord midpoint can lie off the curve. Near endpoints the
+  sampling interval moves inward, and short carriers compress the head to fit.
+  Longitudinal fitting preserves the head's width and stroke thickness.
+  Interior marks overlay the unshortened curve. With shortening enabled, filled
+  end heads meet the shaft at the inward contact; straight open heads keep the
+  shaft running to their tip.
 
   ```typ
   #let oriented-arrow = (
@@ -623,19 +632,23 @@
   decorations; node outsets then trim the shifted path, so shifted paths still
   start and end outside fitted node circles. Add `edge-length` or `length` to
   center-trim the shifted path to a fixed arc length, and add `edge-ratio` or
-  `ratio` to cap it by a fraction of the base edge length. `edge-resolve-length`
+  `ratio` to cap it by a fraction of the full offset path length. `edge-resolve-length`
   / `resolve-length` decides how to combine both limits: `"min"`/`"shorter"` (default), `"max"`/`"longer"`,
   `"length"`/`"fixed"`, `"ratio"`/`"relative"`, `"none"`/`"full"`, or a function
-  receiving `(base-length, length, ratio)`.
+  receiving `(offset-path-length, length, ratio)`.
+  Lengths and shortening distances are measured after offsetting, since a curved
+  parallel path need not have the same length as its centerline.
   For a finite layer, `shift` is an arc-length displacement along the complete
-  logical edge: positive values move toward the path end and values that would
+  offset path: positive values move toward the path end and values that would
   cross an endpoint are clamped. A layer can attach `label` content to its own
   path. `label-side` chooses `"left"` or `"right"` relative to the local path
   direction; `auto` follows the side selected by ordinary edge-label layout.
-  `label-gap` is
-  measured from the label box rather than its center, and `label-style` is
-  forwarded to CeTZ content drawing. This local measurement keeps the label clear
-  of its own path layer. The attached label replaces the ordinary painted edge
+  `label-gap` measures clearance along the local path normal from its tangent
+  line to the actual CeTZ label box, not its center or the nearest point of a
+  finite shaft. The measurement includes text bounds, wrapping, padding,
+  rotation and anchor; `label-style` is forwarded to CeTZ content drawing.
+  This local measurement keeps the label clear of its own path layer.
+  The attached label replaces the ordinary painted edge
   label, while that ordinary label may still supply the pre-layout size used by
   label layout and side selection; attached labels do not add a second collision
   constraint.

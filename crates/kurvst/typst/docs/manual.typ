@@ -347,11 +347,13 @@
 
   `layer` is a convenience wrapper for drawing derived visible paths. It
   combines side-aware offsetting, endpoint outsets, and shortening into one
-  path-in/path-out operation. `length` is a fixed visible arc length, `ratio` is
-  a fraction of the input path length, and `resolve-length` decides how to
-  combine them. The default `"min"` keeps whichever limit is shorter. `shift`
-  moves the shortened interval by arc length: positive values move it toward the
-  path end and values that would cross an endpoint are clamped.
+  path-in/path-out operation. Offsetting happens first: `length` is a fixed
+  visible arc length, `ratio` is a fraction of the full offset path length before
+  trimming, and `resolve-length` decides how to combine them. The default
+  `"min"` keeps whichever limit is shorter. `start-outset`, `end-outset`, and
+  `shift` are arc distances on the offset path. Positive `shift` moves the
+  shortened interval toward the path end; it is clamped to preserve the endpoint
+  outsets.
 
   ```typ
   #let base = kurvst.hobby-spline((
@@ -375,9 +377,9 @@
   ```
 
   Use `side-point` to choose the sign of the offset from a point on the desired
-  side of the path. Drawing packages can use this to place derived layers on the
-  same side as an edge label without knowing anything about the physics or graph
-  style that requested the layer.
+  side of the original path, before offsetting or trimming. Drawing packages can
+  use this to place derived layers on the same side as an edge label without
+  knowing anything about the physics or graph style that requested the layer.
 
   == Native Drawing Primitives
 

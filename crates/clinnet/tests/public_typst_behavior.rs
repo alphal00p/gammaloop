@@ -140,6 +140,13 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
     )
     .unwrap();
 
+    fs::write(
+        base.path()
+            .join(".clinnet/templates/curved-arrow-behavior.typ"),
+        include_str!("resources/curved-arrow-behavior.typ"),
+    )
+    .unwrap();
+
     let fixture = base
         .path()
         .join(".clinnet/templates/linnest-public-behavior.typ");

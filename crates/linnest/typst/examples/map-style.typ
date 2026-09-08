@@ -107,6 +107,7 @@
         offset-side: if side == "auto" { "label" } else { none },
         label-side: if side == "auto" { auto } else { side },
         label-gap: _number(edge, "momentum-label-gap", 0.45),
+        label-style: (anchor: _text(edge, "momentum-label-anchor", "center")),
       )
   )
   let label = edge.momentum
@@ -124,21 +125,15 @@
       )
   )
   // Put the complete measured label box beyond the momentum shaft. Normally
-  // it follows that shaft; an explicit label shift gets a tiny invisible path.
+  // it follows that shaft; an explicit absolute shift moves an invisible copy
+  // of the same length, so both modes use the same endpoint clamps.
   if label-shift == shift {
     arrow += (label: label)
     (arrow,)
   } else {
     (
       arrow,
-      geometry
-        + (
-          stroke: none,
-          length: 0.02,
-          shift: label-shift,
-          resolve-length: "length",
-          label: label,
-        ),
+      arrow + (stroke: none, mark: none, shift: label-shift, label: label),
     )
   }
 }

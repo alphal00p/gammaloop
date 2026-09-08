@@ -1,4 +1,4 @@
-#set page("a4", margin: 20mm)
+#set page(height: auto, width: auto, margin: 5mm)
 
 #import "../src/lib.typ": draw, graph, layout, layouts
 #import graph: *
@@ -39,7 +39,7 @@
 )
 
 // `cut-x` is in graph units; auto puts the cut just right of center.
-#let diagram(g, options: base-layout, cut-x: auto) = draw(
+#let diagram(g, options: base-layout, cut-x: auto, cut-y: auto) = draw(
   layout(
     graph.style(
       g,
@@ -68,9 +68,13 @@
     let x = if cut-x == auto {
       calc.min(..xs) + 0.6 * (calc.max(..xs) - calc.min(..xs))
     } else { cut-x }
+    let y = if cut-y == auto {
+      1.5
+    } else { cut-y }
+
     cetz.draw.line(
-      (x, calc.max(..ys) + 1.5),
-      (x, calc.min(..ys) - 1.5),
+      (x, calc.max(..ys) + y),
+      (x, calc.min(..ys) - y),
       stroke: (
         paint: red,
         thickness: diagram-style.cut-line-width,
@@ -152,14 +156,14 @@
       // momentum-arrow-offset: 0.80,
     )
     edge(
-      source(<c>),
+      sink(<c>),
       <bridge>,
-      sink(<b>),
+      source(<b>),
       momentum: D6,
-      momentum-arrow-side: "right",
+      momentum-arrow-side: "left",
       particle: "g",
       momentum-label-gap: 0.2,
-      momentum-arrow-shift: -1.5,
+      momentum-arrow-shift: 1.5,
     )
   })
 
@@ -171,8 +175,8 @@
 
     edge(source(<c>),sink(<a>), momentum-arrow-shift: 1.,  momentum:D3, orientation: "reversed")
     edge(
-      sink(<a>),
-      source(<b>),
+      source(<a>),
+      sink(<b>),
       orientation: "reversed",  momentum: D2, momentum-label-gap: 0.2,
       spring-length: .3,
     )
@@ -189,7 +193,7 @@
       momentum-arrow-side: "left",
       momentum-arrow-length: 1.4, momentum-arrow-shift: -.4,
     )
-  
+
     edge(
       source(<d>),
       momentum: D4,
@@ -197,7 +201,7 @@
       bend: -0.18,
       crossing-under: <bridge>,
       crossing-gap: 0.9,
-       momentum-arrow-length: 1.4, momentum-arrow-shift: .5,
+       momentum-arrow-length: 1., momentum-arrow-shift: .5,
         momentum-arrow-side: "left",
       // fermion-arrow-shift: 1.15,
     )
@@ -250,34 +254,35 @@
     )
   })
 
- 
+
   let xbox-opened2 = graph.build(default-edge-data: (particle: "d",momentum-arrow-offset: 0.4), {
     node(<a> )
     node(<b>)
     node(<c>, pos: pos(y:start(-4)))
     node(<d>, pos: pos(y:start(0) ))
-    
+
     edge(
       source(<c>),
       momentum: D3,
       orientation: "reversed",
       pos: pos(x: out-x, y: top, z: pin(0)),
-      crossing-under: <bridge>,
-      crossing-gap: 0.9,
+
     )
-    edge(sink(<a>), momentum: D3, orientation: "reversed", pos: pos(x: in-x,y: top, z: pin(0)),momentum-arrow-length: 1.2,momentum-label-gap: 0.2, momentum-arrow-shift: -.6, momentum-arrow-side: "left")
+    edge(sink(<a>), momentum: D3, orientation: "reversed", pos: pos(x: in-x,y: top, z: pin(0)),momentum-arrow-length: 1.2,momentum-label-gap: 0.2, momentum-arrow-shift: -.6, momentum-arrow-side: "left",crossing-under: <bridge>,
+    crossing-gap: 0.7,)
     edge(
-      sink(<a>),
+      source(<a>),
       pos: pos(x: in-x, y: bot, z: pin(0)),
       momentum: D2,orientation: "reversed",
-      momentum-arrow-side: "left",
-      momentum-arrow-length: 1.4, momentum-arrow-shift: -1.4, momentum-label-gap: 0.2,
+      momentum-arrow-side: "right",
+      momentum-arrow-length: 1., momentum-arrow-shift: .4, momentum-label-gap: 0.2,
     )
     edge(
-      source(<b>),
+      sink(<b>),
       pos: pos(x: out-x, y: bot, z: pin(0)),
       momentum: D2,orientation: "reversed", momentum-arrow-side: "right",
-      spring-length: .3,momentum-arrow-length: .7, momentum-arrow-shift: 0.3, momentum-label-gap: 0.1,momentum-label-shift: -0.7,
+      momentum-arrow-length: .7, momentum-arrow-shift: -0.4, momentum-label-gap: 0.2,momentum-label-shift: -0.75,
+      momentum-label-anchor: "south-west",
     )
 
     edge(
@@ -291,7 +296,7 @@
       source(<d>),
       sink(<b>),
       momentum: D4,
-      momentum-arrow-side: "right",momentum-arrow-shift: -0.4, 
+      momentum-arrow-side: "right",momentum-arrow-shift: -0.4,
       spring-length: .1,momentum-label-gap: 0.1,
     )
 
@@ -306,7 +311,7 @@
     )
     edge(
       source(<b>),
-      <bridge>,
+
       momentum: D6,
       particle: "g",
       pos: pos(x: out-x, y: mid, z: pin(0)),
@@ -314,12 +319,12 @@
       momentum-arrow-side: "left",
     )
     edge(
-      sink(<c>),
+      sink(<c>),<bridge>,
       momentum: D6,
       particle: "g", momentum-arrow-shift: .8, momentum-label-gap: 0.2,
       pos: pos(x: in-x, y: mid, z: pin(0)),
       momentum-arrow-side: "left",
-      
+
     )
 
     // Pull the external rows together without drawing another propagator.
@@ -334,14 +339,14 @@
       pos: pos(x: pin(0)),
     )
   })
-  
+
   let mid2 = group("mid2", start: 2)
   let xbox-cut = graph.build(default-edge-data: (particle: "d", momentum-label-gap: 0.4,momentum-arrow-offset: 0.4), {
     node(<a> )
     node(<b>)
     node(<c>)
     node(<d>)
-    
+
     edge(
       source(<c>),
       sink(<a>),
@@ -359,13 +364,13 @@
     node(<h1>, hidden: true, pos: pos(x: in-x, y: mid,z: pin(0)))
     node(<h2>, hidden: true, pos: pos(x: out-x, y: mid2,z: pin(0)))
     edge(
-      sink(<h1>),
+      source(<h1>),
       <bridge>,
-      source(<h2>),
+      sink(<h2>),
       momentum: D6,
       spring-length: 3.5,
       particle: "g",
-      momentum-arrow-shift: -4,
+      momentum-arrow-shift: 4,
       momentum-arrow-offset: 0.40,
       momentum-label-offset: 0.10,
     )
@@ -400,11 +405,11 @@
       momentum-arrow-shift: -1.,
     )
     edge(
-      sink(<b>),
-      momentum: D6, momentum-arrow-side: "left",
+      source(<b>),
+      momentum: D6, momentum-arrow-side: "right",
       particle: "g",
       pos: pos(x: out-x, y: mid),
-      momentum-arrow-shift: -0.5,
+      momentum-arrow-shift: 0.5,
     )
     edge(sink(<c>),momentum:D6, particle: "g", pos: pos(x: in-x, y:mid2), momentum-arrow-side: "left",)
     // Pull the external rows together without drawing another propagator.
@@ -424,8 +429,8 @@
 
     #diagram(xbox, cut-x: -1)+
     #diagram(xbox-opened, cut-x: 0)+
-    #diagram(xbox-opened2, cut-x: -1)+
-    #diagram(xbox-cut) = op("disc")_(p_1^2)  op("disc")_(p_2^2) integral (dif ^4 k  )/(2 pi )^4 (cal(N)_times.square delta_+(k))/(  p_1^2 p_2^2 (p_2-k)^2 (k-p_1)^2)
+    #diagram(xbox-opened2, cut-x: -2.1)+
+    #diagram(xbox-cut,cut-y: 1) = op("disc")_(p_1^2)  op("disc")_(p_2^2) integral (dif ^d k  )/(2 pi )^d (N^frak(q q')_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(  p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
   $
   diagrams
 }
