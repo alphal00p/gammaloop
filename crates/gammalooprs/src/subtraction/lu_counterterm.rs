@@ -1725,6 +1725,20 @@ impl LUCounterTerm {
                         common_subspace.get_lmb(all_lmbs),
                     );
                     for (local_id, esurface) in thresholds.iter().enumerate() {
+                        let threshold_is_active = match side {
+                            ThresholdCountertermSide::Left => {
+                                self.active_left_thresholds[cut_group_id]
+                                    [LeftThresholdId::from(local_id)]
+                            }
+                            ThresholdCountertermSide::Right => {
+                                self.active_right_thresholds[cut_group_id]
+                                    [RightThresholdId::from(local_id)]
+                            }
+                            ThresholdCountertermSide::Amplitude => false,
+                        };
+                        if !threshold_is_active {
+                            continue;
+                        }
                         let threshold_subspace = threshold_subspaces
                             .map_or(common_subspace, |subspaces| &subspaces[local_id]);
                         let classification = esurface.classify_existence_subspace(
@@ -1876,6 +1890,19 @@ impl LUCounterTerm {
                     graph,
                     all_lmbs,
                 )?;
+                // `OverlapInput::validate_subspaces` checks the complete indexed catalogue,
+                // while this solve only owns one compatible partition. Keep the global indices
+                // stable for surface and kinematics lookup, and use harmless common-frame
+                // placeholders for surfaces belonging to other independent partitions.
+                let mut partition_threshold_subspaces = data.subspaces.clone();
+                for (index, subspace) in partition_threshold_subspaces.iter_mut().enumerate() {
+                    if !records
+                        .iter()
+                        .any(|record| record.global_surface_id.0 == index)
+                    {
+                        *subspace = common_subspace.clone();
+                    }
+                }
                 let partition_existing: ExistingThresholds = records
                     .iter()
                     .map(|record| record.global_surface_id)
@@ -1884,7 +1911,7 @@ impl LUCounterTerm {
                     graph,
                     settings,
                     subspace: &common_subspace,
-                    threshold_subspaces: Some(&data.subspaces),
+                    threshold_subspaces: Some(&partition_threshold_subspaces),
                     lmbs: all_lmbs,
                     thresholds: &data.thresholds,
                     edge_masses: masses.iter().map(|(_, mass)| F(mass.to_f64())).collect(),
@@ -2120,6 +2147,9 @@ impl LUCounterTerm {
         let left_existing_esurfaces = self.thresholds[cut_group_id]
             .0
             .iter_enumerated()
+            .filter(|(left_id, _)| {
+                self.active_left_thresholds[cut_group_id][LeftThresholdId::from(left_id.0)]
+            })
             .filter_map(|(left_id, esurface)| {
                 let threshold_subspace = left_threshold_subspaces
                     .map_or(left_subspace, |subspaces| &subspaces[left_id.0]);
@@ -2154,6 +2184,9 @@ impl LUCounterTerm {
         let right_existing_esurfaces = self.thresholds[cut_group_id]
             .1
             .iter_enumerated()
+            .filter(|(right_id, _)| {
+                self.active_right_thresholds[cut_group_id][RightThresholdId::from(right_id.0)]
+            })
             .filter_map(|(right_id, esurface)| {
                 let threshold_subspace = right_threshold_subspaces
                     .map_or(right_subspace, |subspaces| &subspaces[right_id.0]);

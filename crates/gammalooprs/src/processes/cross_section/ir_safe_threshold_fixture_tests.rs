@@ -1323,7 +1323,7 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
             assert_eq!(group.left.len(), 2);
             assert_eq!(
                 group.right.len(),
-                2,
+                3,
                 "resolved right variants: {:?}",
                 group
                     .right
@@ -1402,14 +1402,18 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
                             .collect::<Vec<_>>()
                     })
                     .collect::<BTreeSet<_>>(),
-                BTreeSet::from([vec![5, 10], vec![5, 12, 13]])
+                BTreeSet::from([
+                    vec![5, 10],
+                    vec![4, 5, 6, 12],
+                    vec![5, 12, 13],
+                ])
             );
 
             let generated =
                 &graph.derived_data.threshold_counterterms[crate::processes::CutGroupId::from(0)];
             assert_eq!(generated.left_thresholds.len(), 2);
-            assert_eq!(generated.right_thresholds.len(), 2);
-            assert_eq!(generated.iterated.iter().count(), 4);
+            assert_eq!(generated.right_thresholds.len(), 3);
+            assert_eq!(generated.iterated.iter().count(), 6);
 
             // The original-side identity is a rescaling-map statement, not an extra integrand.
             // There is exactly one O_L*O_R container, four one-sided variant containers, and the
@@ -1417,8 +1421,8 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
             let original_terms = 1;
             let single_terms = generated.left_thresholds.len() + generated.right_thresholds.len();
             let pair_terms = generated.iterated.iter().count();
-            assert_eq!((original_terms, single_terms, pair_terms), (1, 4, 4));
-            assert_eq!(original_terms + single_terms + pair_terms, 9);
+            assert_eq!((original_terms, single_terms, pair_terms), (1, 5, 6));
+            assert_eq!(original_terms + single_terms + pair_terms, 12);
 
             // Numerical LU evaluation retains all six process-valid cuts. The target-only state
             // above is a structural Cartesian-product test and is not an IR-complete integrand.
