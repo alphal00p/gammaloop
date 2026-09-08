@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { promisify } from 'node:util';
+import { isDeepStrictEqual, promisify } from 'node:util';
 
 const exec = promisify(execFile);
 const units = { B: 1, KiB: 1024, MiB: 1024 ** 2, GiB: 1024 ** 3, TiB: 1024 ** 4 };
@@ -146,12 +146,12 @@ export function summarizeSuite(spec, suite, checks, jobs) {
     .map(([drv, workers]) => ({ drv, workerCount: workers.size, jobUrls: [...workers] }));
   const incidents = jobs.flatMap(job => (job.incidents ?? []).map(incident => ({ jobUrl: job.url, logUrl: job.url ? job.url + '/logs' : null, attribute: job.attribute, ...incident })));
   for (const job of jobs) {
-    if (['failed', 'failure', 'abandoned'].includes(job.status))
+    if (['failed', 'failure', 'abandoned', 'hopeless'].includes(job.status))
       incidents.push({ kind: job.status === 'abandoned' ? 'interrupted-worker' : 'job-failure',
         time: timestamp(job.checkCompletedAt) ?? timestamp(job.workerCompletedAt), jobUrl: job.url, logUrl: job.url ? job.url + '/logs' : null,
         attribute: job.attribute, cause: 'unknown', observation: 'service reports this job as ' + job.status });
     const needsStart = !['queued', 'pending', 'skipped', 'cancelled'].includes(job.status);
-    const needsEnd = ['success', 'cached', 'failed', 'failure'].includes(job.status);
+    const needsEnd = ['success', 'cached', 'failed', 'failure', 'hopeless'].includes(job.status);
     const start = timestamp(job.checkStartedAt), end = timestamp(job.checkCompletedAt);
     if ((needsStart && start == null) || (needsEnd && end == null) || (start != null && end != null && end < start))
       incidents.push({ kind: start != null && end != null ? 'invalid-clock' : 'missing-clock', time: end ?? start,
@@ -171,10 +171,10 @@ export function summarizeSuite(spec, suite, checks, jobs) {
   for (const snapshot of snapshots) {
     for (const job of snapshot.suite.runs) {
       const previous = prior.get(job.url);
-      if (previous && ((['success', 'cached', 'failure', 'failed', 'abandoned', 'cancelled'].includes(previous.status)
+      if (previous && ((['success', 'cached', 'failure', 'failed', 'abandoned', 'cancelled', 'hopeless'].includes(previous.status)
         && ['queued', 'pending', 'running', 'started', 'in_progress'].includes(job.status))
         || (previous.status === 'abandoned' && job.status !== 'abandoned')
-        || (['failed', 'failure', 'cancelled'].includes(previous.status) && ['success', 'cached'].includes(job.status))))
+        || (['failed', 'failure', 'cancelled', 'hopeless'].includes(previous.status) && ['success', 'cached'].includes(job.status))))
         incidents.push({ kind: 'repeated-attempt', time: timestamp(snapshot.at), jobUrl: job.url, logUrl: job.url ? job.url + '/logs' : null,
           attribute: job.attribute ?? job.type, previousStatus: previous.status, status: job.status, evidenceFile: snapshot.evidenceFile,
           cause: 'unknown', observation: 'saved snapshots show a job URL restarting or recovering; trigger and replaced work are unknown' });
@@ -223,14 +223,20 @@ export function summarizeSuite(spec, suite, checks, jobs) {
   for (const incident of observedInterruptions) incidents.push({ kind: 'interrupted-worker', time: timestamp(incident.observedAt),
     jobUrl: incident.jobUrl, logUrl: incident.jobUrl + '/logs', evidenceFile: incident.evidenceFile,
     cause: 'unknown', observation: 'saved evidence records an abandoned worker; current logs may replace earlier work' });
+  const observedLogReplacements = spec.observedLogReplacements ?? [];
+  for (const incident of observedLogReplacements.filter(item => item.verified)) incidents.push({ kind: 'log-replacement',
+    time: timestamp(incident.observedAt), jobUrl: incident.jobUrl, logUrl: incident.jobUrl + '/logs',
+    evidenceFile: incident.evidenceFile, workerStartChanged: incident.evidence.verification.workerStartChanged,
+    preservesPriorPrefix: incident.evidence.verification.preservesPriorPrefix, cause: 'unknown',
+    observation: 'saved raw logs for the same job URL have a different worker start or replaced record prefix; termination and retry trigger are unknown' });
   const interrupted = new Set([...jobs.filter(job => job.status === 'abandoned').map(job => job.url),
     ...observedInterruptions.map(incident => incident.jobUrl),
     ...snapshots.flatMap(snapshot => snapshot.suite.runs.filter(job => job.status === 'abandoned').map(job => job.url))]);
-  const uncertainHistory = jobs.some(job => (job.checkAttempts?.length ?? 0) > 1)
+  const uncertainHistory = observedLogReplacements.length > 0 || jobs.some(job => (job.checkAttempts?.length ?? 0) > 1)
     || [...prior.keys()].some(url => !jobs.some(job => job.url === url))
     || incidents.some(incident => incident.kind === 'repeated-attempt' && incident.previousStatus);
   const invalidClocks = incidents.some(incident => ['invalid-clock', 'missing-clock'].includes(incident.kind));
-  const completedSuite = ['success', 'failure', 'failed'].includes(suite.status);
+  const completedSuite = ['success', 'failure', 'failed', 'hopeless'].includes(suite.status);
   return {
     layout: spec.layout, variant: spec.variant, scenario: spec.scenario, pair: spec.pair ?? '1', sha: spec.sha, suiteUrl: spec.suiteUrl,
     status: suite.status, successfulTimingSample: suite.status === 'success',
@@ -249,9 +255,9 @@ export function summarizeSuite(spec, suite, checks, jobs) {
     observedRequiredAttributes: latestWanted.map(job => job.attribute), missingRequiredAttributes,
     finalAggregateSeconds: secondsBetween(started, aggregateEnd), finalAggregateTailSeconds,
     scheduledJobs: jobs.length, cachedJobs: jobs.filter(job => job.status === 'cached').length,
-    failedJobs: jobs.filter(job => ['failed', 'failure'].includes(job.status)).length,
+    failedJobs: jobs.filter(job => ['failed', 'failure', 'hopeless'].includes(job.status)).length,
     cancelledOrSkippedJobs: jobs.filter(job => ['cancelled', 'skipped'].includes(job.status)).length,
-    observedWorkers: observed.length, missingLogs: missing.length, interruptedJobs: interrupted.size, observedInterruptions,
+    observedWorkers: observed.length, missingLogs: missing.length, interruptedJobs: interrupted.size, observedInterruptions, observedLogReplacements,
     observedResourceLowerBound: !completedSuite || missing.length > 0 || interrupted.size > 0 || uncertainHistory || invalidClocks,
     evidenceComplete: completedSuite && wantedComplete && missing.length === 0 && interrupted.size === 0 && checks.length > 0 && !uncertainHistory && !invalidClocks,
     observedWorkerMinutes: sum(observed, 'workerSeconds') / 60,
@@ -461,6 +467,36 @@ class Collector {
         error: 'previously observed abandonment: current logs may replace earlier work; prior observations are kept separate and totals remain lower bounds' });
     }
 
+    const observedLogReplacements = [];
+    for (const [position, incident] of (spec.observedLogReplacements ?? []).entries()) {
+      const observation = { ...incident, verified: false };
+      observedLogReplacements.push(observation);
+      try {
+        const evidence = await this.json(incident.evidenceFile);
+        if (evidence?.jobUrl !== incident.jobUrl || timestamp(evidence.observedAt) !== timestamp(incident.observedAt)
+          || typeof evidence.file !== 'string' || !evidence.file
+          || typeof evidence.replacement?.file !== 'string' || !evidence.replacement.file)
+          throw new Error('log replacement evidence requires the same job URL and observation time, plus both raw log files');
+        const directory = dirname(resolve(this.manifestDir, incident.evidenceFile));
+        const logs = await Promise.all([evidence.file, evidence.replacement.file].map(file => readFile(resolve(directory, file), 'utf8')));
+        const paths = [position + 1 + '-prior.ndjson', position + 1 + '-replacement.ndjson'];
+        for (const [index, log] of logs.entries()) await this.save(prefix + '/log-replacements/' + paths[index], log);
+        const metrics = logs.map(log => parseLog(log, evidence));
+        const records = logs.map(log => log.split('\n').filter(line => line.trim()).map(line => JSON.parse(line)));
+        const workerStartChanged = timestamp(metrics[0].workerStartedAt) !== timestamp(metrics[1].workerStartedAt);
+        const preservesPriorPrefix = records[0].length <= records[1].length
+          && records[0].every((record, index) => isDeepStrictEqual(record, records[1][index]));
+        if (preservesPriorPrefix) throw new Error('raw logs are identical or append-only; they do not prove log replacement');
+        observation.evidence = { ...evidence, ...metrics[0], file: paths[0],
+          replacement: { ...evidence.replacement, ...metrics[1], file: paths[1] },
+          verification: { workerStartChanged, preservesPriorPrefix } };
+        observation.evidenceFile = await this.save(prefix + '/log-replacements/' + (position + 1) + '.json', observation.evidence);
+        observation.verified = true;
+      } catch (error) {
+        this.errors.push({ suiteUrl: spec.suiteUrl, jobUrl: incident.jobUrl, stage: 'log-replacement-evidence', error: error.message });
+      }
+    }
+
     const runs = [...new Map(suite.runs.map(job => [job.url, job])).values()];
     const jobs = new Array(runs.length);
     let cursor = 0;
@@ -514,7 +550,7 @@ class Collector {
     }));
     await this.save(`${prefix}/jobs.json`, jobs);
     const matchingChecks = checks.filter(check => runs.some(run => check.details_url?.replace(/\/$/, '') === run.url));
-    const summary = summarizeSuite({ ...spec, observedInterruptions, observations, dependencies, dependencyEvidenceFile }, suite, matchingChecks, jobs);
+    const summary = summarizeSuite({ ...spec, observedInterruptions, observedLogReplacements, observations, dependencies, dependencyEvidenceFile }, suite, matchingChecks, jobs);
     for (const job of jobs) job.completedFromSuiteSeconds = job.checkSeconds == null ? null
       : secondsBetween(timestamp(summary.suiteStartedAt), timestamp(job.checkCompletedAt));
     if (summary.missingRequiredAttributes.length) this.errors.push({ suiteUrl: spec.suiteUrl, stage: 'required-checks',
@@ -549,11 +585,12 @@ export async function createReport(manifestPath, outputDir) {
     if (spec.requiredAttributes && (!Array.isArray(spec.requiredAttributes) || !spec.requiredAttributes.length
       || !spec.requiredAttributes.every(attribute => typeof attribute === 'string' && attribute.length)))
       throw new Error('requiredAttributes must be a nonempty array of attribute names');
-    if (spec.observedInterruptions && (!Array.isArray(spec.observedInterruptions)
-      || spec.observedInterruptions.some(incident => !incident || typeof incident.jobUrl !== 'string'
-        || !incident.jobUrl.startsWith(spec.suiteUrl + '/') || !/^[^/?#]+$/.test(incident.jobUrl.slice(spec.suiteUrl.length + 1))
-        || typeof incident.observedAt !== 'string' || timestamp(incident.observedAt) == null || typeof incident.evidenceFile !== 'string' || !incident.evidenceFile)))
-      throw new Error('observedInterruptions requires exact-suite jobUrl, observedAt, and evidenceFile');
+    for (const key of ['observedInterruptions', 'observedLogReplacements'])
+      if (spec[key] && (!Array.isArray(spec[key])
+        || spec[key].some(incident => !incident || typeof incident.jobUrl !== 'string'
+          || !incident.jobUrl.startsWith(spec.suiteUrl + '/') || !/^[^/?#]+$/.test(incident.jobUrl.slice(spec.suiteUrl.length + 1))
+          || typeof incident.observedAt !== 'string' || timestamp(incident.observedAt) == null || typeof incident.evidenceFile !== 'string' || !incident.evidenceFile)))
+        throw new Error(key + ' requires exact-suite jobUrl, observedAt, and evidenceFile');
     for (const key of ['submittedAt', 'submissionCompletedAt']) if (spec[key] != null && timestamp(spec[key]) == null)
       throw new Error(key + ' must be a recorded UTC timestamp');
     if (spec.submissionCompletedAt && !spec.submittedAt) throw new Error('submissionCompletedAt requires submittedAt');
@@ -584,7 +621,7 @@ export async function createReport(manifestPath, outputDir) {
     limits: [
       'Worker minutes are the sum of observed worker log spans, not billed compute or CHF.',
       'Missing logs and abandoned workers make observed resource totals lower bounds, even after a successful retry; cached and skipped jobs are not missing workers.',
-      'Explicit interruption observations preserve overwritten history separately; their earlier resources are never added to current-log totals because streams may overlap.',
+      'Explicit interruption and verified log replacement observations preserve overwritten history separately; their earlier resources are never added to current-log totals because streams may overlap.',
       'Download sizes are log-reported artifact sizes, not established compressed network bytes. Upload bytes may be unknown.',
       'Transfer timers include an unspecified combination of network, decompression and store import; pre-worker gaps are not proven queue time.',
       'Intervals are unioned per worker before summing across workers; download and upload intervals may overlap.',
@@ -641,7 +678,7 @@ export async function createReport(manifestPath, outputDir) {
       + ' | [' + display(incident.attribute ?? incident.jobUrl?.split('/').at(-1) ?? incident.layout) + '](' + (incident.jobUrl ?? incident.suiteUrl) + ') | '
       + display(incident.observation) + '; cause: ' + display(incident.cause)
       + (incident.logUrl ? ' ([log](' + incident.logUrl + '))' : '')
-      + (incident.evidenceFile ? ' ([snapshot](' + incident.evidenceFile + '))' : '') + ' |'),
+      + (incident.evidenceFile ? ' ([saved evidence](' + incident.evidenceFile + '))' : '') + ' |'),
     '',
     '| Layout / scenario / pair | Comparable | Worker change % | Intermediate restore change % | Required latency change % |',
     '|---|---|---:|---:|---:|',
