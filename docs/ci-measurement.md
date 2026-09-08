@@ -213,15 +213,45 @@ inventory: skipped tests and successful cached runs may omit names. Therefore
 filters, features, Python behavior, licenses, and doctest/Clippy coverage
 separately before accepting performance.
 
-The Python API runtime group reports `symbolica_runtime_licensed` as a JSON
-boolean using the packaged extension's pinned Symbolica API, and fails unless
-it is true. The probe discards library stdout/stderr; a probe failure reports
-null and a fixed diagnostic instead of claiming a known false status. True means
-this runtime accepts unrestricted mode; false cannot distinguish expiry, an
-unknown key, or server failure. Timestamped keys can validate locally before a
-background registration check, so true need not imply a fresh synchronous server
-round trip. This uses the group's existing Python and extension dependencies and
-preserves its Python features and test selection.
+License mode is a benchmark observation, not an additional Python CI gate.
+Use comparable license settings in both variants; existing tests retain their
+license handling. If explicit confirmation is needed, the optional diagnostic
+below uses the existing Python environment and packaged extension. Replace the
+example module path with the actual built extension path. This diagnostic is
+separate from ordinary test execution and its elapsed time must be recorded.
+
+```bash
+# Report the packaged runtime's license mode without exposing library logs.
+if python3 - "/absolute/path/to/gammaloop/_gammaloop.so" >/dev/null 2>&1 <<'PYTHON'
+import ctypes
+import sys
+
+library = ctypes.CDLL(sys.argv[1])
+check = library.is_licensed
+check.argtypes = []
+check.restype = ctypes.c_bool
+# Distinguish an unlicensed result from interpreter or library failures.
+raise SystemExit(0 if check() else 2)
+PYTHON
+then
+  echo '{"symbolica_runtime_licensed": true}'
+else
+  case $? in
+    2) echo '{"symbolica_runtime_licensed": false}' ;;
+    *)
+      echo '{"symbolica_runtime_licensed": null}'
+      echo "Symbolica license status probe failed" >&2
+      ;;
+  esac
+  exit 1
+fi
+```
+
+True means the pinned runtime accepts unrestricted mode; false cannot distinguish
+expiry, an unknown key, or server failure. A probe failure reports null.
+Timestamped keys may validate locally before background registration, so true
+does not establish a fresh synchronous server check or the state of every later
+test process. No credential values or library logs are printed.
 
 **Actions** retain all attempts separately. Creation-to-update duration matches
 the historical comparison, but GitHub keeps the original `created_at` on a
