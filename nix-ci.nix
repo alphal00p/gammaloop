@@ -4,36 +4,228 @@
     "checks.x86_64-linux.gammaloop-clippy" = [
       "packages.x86_64-linux.cargoArtifacts"
     ];
+    "checks.x86_64-linux.gammaloop-nextest-binaries-clinnet" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-test-binaries-clinnet"
+    ];
+    "checks.x86_64-linux.gammaloop-nextest-binaries-core" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-test-binaries-gammaloop-api"
+      "packages.x86_64-linux.crate-test-binaries-gammaloop-tracing-filter"
+      "packages.x86_64-linux.crate-test-binaries-gammaloop-tracing-filter-macros"
+      "packages.x86_64-linux.crate-test-binaries-gammalooprs"
+    ];
+    "checks.x86_64-linux.gammaloop-nextest-binaries-integration" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-test-binaries-gammaloop-integration-tests"
+    ];
+    "checks.x86_64-linux.gammaloop-nextest-binaries-linnet" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-test-binaries-kurvst"
+      "packages.x86_64-linux.crate-test-binaries-linnest"
+      "packages.x86_64-linux.crate-test-binaries-linnet"
+      "packages.x86_64-linux.crate-test-binaries-linnet-py"
+    ];
+    "checks.x86_64-linux.gammaloop-nextest-binaries-python-api" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-test-binaries-python-api-gammaloop-integration-tests"
+      "packages.x86_64-linux.gammaloop-python-module"
+    ];
+    "checks.x86_64-linux.gammaloop-nextest-binaries-spenso" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-test-binaries-idenso"
+      "packages.x86_64-linux.crate-test-binaries-spenso"
+      "packages.x86_64-linux.crate-test-binaries-spenso-hep-lib"
+      "packages.x86_64-linux.crate-test-binaries-spenso-macros"
+      "packages.x86_64-linux.crate-test-binaries-symbolica-utils"
+    ];
+    "checks.x86_64-linux.gammaloop-nextest-binaries-vakint" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-test-binaries-vakint"
+    ];
     "packages.x86_64-linux.cargoArtifacts" = [
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
     ];
-    "packages.x86_64-linux.ci-test-inputs" = [
+    "packages.x86_64-linux.crate-deps-gammalooprs" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-clinnet" = [
+      "packages.x86_64-linux.crate-test-dependencies-clinnet"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-gammaloop-api" = [
+      "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-gammaloop-integration-tests" = [
+      "packages.x86_64-linux.crate-test-dependencies-gammaloop-integration-tests"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-gammaloop-tracing-filter" = [
+      "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-gammaloop-tracing-filter-macros" = [
+      "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter-macros"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-gammalooprs" = [
+      "packages.x86_64-linux.crate-test-dependencies-gammalooprs"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-idenso" = [
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-kurvst" = [
+      "packages.x86_64-linux.crate-test-dependencies-kurvst"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-linnest" = [
+      "packages.x86_64-linux.crate-test-dependencies-linnest"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-linnet" = [
+      "packages.x86_64-linux.crate-test-dependencies-linnest"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-linnet-py" = [
+      "packages.x86_64-linux.crate-test-dependencies-linnet-py"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-python-api-gammaloop-integration-tests" = [
+      "packages.x86_64-linux.crate-test-dependencies-python-api-gammaloop-integration-tests"
+      "packages.x86_64-linux.gammaloop-python-module"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-spenso" = [
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-spenso-hep-lib" = [
+      "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-spenso-macros" = [
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-symbolica-utils" = [
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-vakint" = [
+      "packages.x86_64-linux.crate-test-dependencies-vakint"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-clinnet" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-gammaloop-api" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter"
+      "packages.x86_64-linux.crate-test-dependencies-gammalooprs"
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
+      "packages.x86_64-linux.crate-test-dependencies-linnest"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-gammaloop-integration-tests" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
+      "packages.x86_64-linux.crate-test-dependencies-gammalooprs"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
+      "packages.x86_64-linux.crate-test-dependencies-vakint"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter-macros"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter-macros" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-gammalooprs" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter"
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
+      "packages.x86_64-linux.crate-test-dependencies-linnest"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+      "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
+      "packages.x86_64-linux.crate-test-dependencies-vakint"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-idenso" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-linnest"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-kurvst" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-linnest" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-linnet-py" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-linnest"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-python-api-gammaloop-integration-tests" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
+      "packages.x86_64-linux.crate-test-dependencies-gammalooprs"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
+      "packages.x86_64-linux.crate-test-dependencies-vakint"
+      "packages.x86_64-linux.gammaloop-python-module"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-spenso" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-linnest"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-symbolica-utils" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-vakint" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+    ];
+    "packages.x86_64-linux.gammaloop-python-module" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-deps-gammalooprs"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-doctest" = [
       "packages.x86_64-linux.cargoArtifacts"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet" = [
-      "packages.x86_64-linux.ci-test-inputs"
+      "checks.x86_64-linux.gammaloop-nextest-binaries-clinnet"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core" = [
-      "packages.x86_64-linux.ci-test-inputs"
+      "checks.x86_64-linux.gammaloop-nextest-binaries-core"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration" = [
-      "packages.x86_64-linux.ci-test-inputs"
+      "checks.x86_64-linux.gammaloop-nextest-binaries-integration"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet" = [
-      "packages.x86_64-linux.ci-test-inputs"
+      "checks.x86_64-linux.gammaloop-nextest-binaries-linnet"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-python-api" = [
-      "packages.x86_64-linux.ci-test-inputs"
+      "checks.x86_64-linux.gammaloop-nextest-binaries-python-api"
+      "packages.x86_64-linux.gammaloop-python-module"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-spenso" = [
-      "packages.x86_64-linux.ci-test-inputs"
+      "checks.x86_64-linux.gammaloop-nextest-binaries-spenso"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-vakint" = [
-      "packages.x86_64-linux.ci-test-inputs"
+      "checks.x86_64-linux.gammaloop-nextest-binaries-vakint"
     ];
   };
   dependency-discovery = {
@@ -53,9 +245,49 @@
     "checks.x86_64-linux.gammaloop-clippy"
     "checks.x86_64-linux.gammaloop-fmt"
     "checks.x86_64-linux.gammaloop-guppy-workspace-graph"
+    "checks.x86_64-linux.gammaloop-nextest-binaries-clinnet"
+    "checks.x86_64-linux.gammaloop-nextest-binaries-core"
+    "checks.x86_64-linux.gammaloop-nextest-binaries-integration"
+    "checks.x86_64-linux.gammaloop-nextest-binaries-linnet"
+    "checks.x86_64-linux.gammaloop-nextest-binaries-python-api"
+    "checks.x86_64-linux.gammaloop-nextest-binaries-spenso"
+    "checks.x86_64-linux.gammaloop-nextest-binaries-vakint"
     "packages.x86_64-linux.cargoArtifacts"
-    "packages.x86_64-linux.ci-test-inputs"
     "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+    "packages.x86_64-linux.crate-deps-gammalooprs"
+    "packages.x86_64-linux.crate-test-binaries-clinnet"
+    "packages.x86_64-linux.crate-test-binaries-gammaloop-api"
+    "packages.x86_64-linux.crate-test-binaries-gammaloop-integration-tests"
+    "packages.x86_64-linux.crate-test-binaries-gammaloop-tracing-filter"
+    "packages.x86_64-linux.crate-test-binaries-gammaloop-tracing-filter-macros"
+    "packages.x86_64-linux.crate-test-binaries-gammalooprs"
+    "packages.x86_64-linux.crate-test-binaries-idenso"
+    "packages.x86_64-linux.crate-test-binaries-kurvst"
+    "packages.x86_64-linux.crate-test-binaries-linnest"
+    "packages.x86_64-linux.crate-test-binaries-linnet"
+    "packages.x86_64-linux.crate-test-binaries-linnet-py"
+    "packages.x86_64-linux.crate-test-binaries-python-api-gammaloop-integration-tests"
+    "packages.x86_64-linux.crate-test-binaries-spenso"
+    "packages.x86_64-linux.crate-test-binaries-spenso-hep-lib"
+    "packages.x86_64-linux.crate-test-binaries-spenso-macros"
+    "packages.x86_64-linux.crate-test-binaries-symbolica-utils"
+    "packages.x86_64-linux.crate-test-binaries-vakint"
+    "packages.x86_64-linux.crate-test-dependencies-clinnet"
+    "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
+    "packages.x86_64-linux.crate-test-dependencies-gammaloop-integration-tests"
+    "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter"
+    "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter-macros"
+    "packages.x86_64-linux.crate-test-dependencies-gammalooprs"
+    "packages.x86_64-linux.crate-test-dependencies-idenso"
+    "packages.x86_64-linux.crate-test-dependencies-kurvst"
+    "packages.x86_64-linux.crate-test-dependencies-linnest"
+    "packages.x86_64-linux.crate-test-dependencies-linnet-py"
+    "packages.x86_64-linux.crate-test-dependencies-python-api-gammaloop-integration-tests"
+    "packages.x86_64-linux.crate-test-dependencies-spenso"
+    "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
+    "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
+    "packages.x86_64-linux.crate-test-dependencies-vakint"
+    "packages.x86_64-linux.gammaloop-python-module"
     "packages.x86_64-linux.nix-ci-check-gammaloop-doctest"
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet"
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core"

@@ -90,7 +90,8 @@
         inherit pkgs craneLib wasmCraneLib ciToolchain wasmTarget system nixCiArtifactBarrier;
         workspaceRoot = ./.;
       };
-      inherit (workspace)
+      inherit
+        (workspace)
         allChecks
         hestiaChecks
         gammaloop-cli
@@ -197,7 +198,6 @@
 
           packages = devShellPackages ++ extraPackages;
         };
-
     in {
       checks = allChecks;
 
@@ -212,12 +212,6 @@
           "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
           "nix-ci-config" = nixCiConfiguration;
-          # Publish only final test archives and the Python module from one worker.
-          # Package compilation remains split into the existing cached derivations.
-          "ci-test-inputs" = nixCiArtifactBarrier "ci-test-inputs" (pkgs.linkFarm "ci-test-inputs" [
-            {name = "archives"; path = allChecks.gammaloop-nextest-binaries;}
-            {name = "python"; path = gammaloop-python-module;}
-          ]);
           inherit linnest-wasm;
           linnestWasmCargoArtifacts =
             nixCiArtifactBarrier "linnest-wasm-cargo-artifacts" linnestWasmCargoArtifacts;

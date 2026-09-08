@@ -262,6 +262,15 @@ Inspect individual-group latency so grouping does not delay independent cached
 checks, and require final success within 60 seconds of the last intended check.
 Performance targets are measurements to establish, not promised savings.
 
+The initial candidate trial grouped final test archives and the Python module
+behind one producer, retaining internal per-crate compilation. Its acceptance
+remains unproven: ready groups waited behind that shared prerequisite, and NixCI
+still uploaded intermediate outputs. Cache transfer timeouts affected baseline
+and candidate jobs, so their stalled timings cannot isolate a grouping effect.
+The proposed configuration therefore schedules archive groups independently;
+the grouping trial remains in the recorded benchmark history. Its raw compiled
+artifacts are unchanged by removing the scheduling bundle.
+
 The compact-archive implementation was also checked with a tiny local Cargo
 round trip: both dependency and application remained fresh after restoration,
 with epoch-1 timestamps. Its smaller archive validates the representation, not
