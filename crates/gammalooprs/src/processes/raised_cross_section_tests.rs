@@ -199,6 +199,7 @@ fn target_directives_from_legacy(cross_section: &CrossSection) -> ThresholdCount
         name: Some(RAISED_VARIANT_NAME.to_string()),
         subspace: None,
         parent_lmb: None,
+        group_id: None,
         disable: false,
         multiplier: Some(ThresholdCountertermMultiplier {
             expression: "2".to_string(),
@@ -496,7 +497,12 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
             cross_section
                 .build_integrand(
                     &model,
-                    "raised_cross_section",
+                    &ProcessDefinition::from_graph_list(
+                        std::slice::from_ref(&cross_section.supergraphs[0].graph),
+                        GenerationType::CrossSection,
+                        &model,
+                    )
+                    .unwrap(),
                     &GlobalSettings {
                         generation: generation.clone(),
                         ..Default::default()

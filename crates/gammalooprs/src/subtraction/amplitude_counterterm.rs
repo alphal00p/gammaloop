@@ -926,8 +926,10 @@ impl AmplitudeCountertermData {
             let matching = groups.iter().position(|(group_id, members)| {
                 *group_id == metadata.group_id
                     && members.first().is_some_and(|first| {
-                        self.variant_subspaces[*first].solve_signature(&self.lmbs)
-                            == self.variant_subspaces[variant_id].solve_signature(&self.lmbs)
+                        self.variant_subspaces[*first].parent_lmb_index()
+                            == self.variant_subspaces[variant_id].parent_lmb_index()
+                            && self.variant_subspaces[*first].solve_signature(&self.lmbs)
+                                == self.variant_subspaces[variant_id].solve_signature(&self.lmbs)
                     })
             });
             if let Some(index) = matching {
@@ -1117,6 +1119,7 @@ impl AmplitudeCountertermData {
             lmbs: &self.lmbs,
             thresholds: &thresholds,
             edge_masses: graph.get_real_mass_vector::<f64>(model),
+            surface_kinematics: None,
         };
         let overlap = find_maximal_subspace_overlap(
             &overlap_input,
@@ -1323,6 +1326,104 @@ impl AmplitudeCountertermData {
     }
 
     #[allow(clippy::too_many_arguments)]
+    fn kinematics_for_variant_approach_grouped<T: FloatLike>(
+        &self,
+        momentum_sample: &MomentumSample<T>,
+        graph: &Graph,
+        model: &Model,
+        esurfaces: &EsurfaceCollection,
+        rotation: &Rotation,
+        settings: &RuntimeSettings,
+    ) -> Result<OverlapStructureWithKinematics<T>> {
+        let candidate_ids = self
+            .variant_evaluators
+            .keys()
+            .filter(|&id| self.variant_generated_mask[id] && self.variant_active_mask[id])
+            .collect::<Vec<_>>();
+        let mut groups: Vec<(Option<usize>, LmbIndex, Vec<ThresholdCountertermVariantId>)> =
+            Vec::new();
+        for variant_id in candidate_ids {
+            let metadata = &self.variant_metadata[variant_id];
+            let parent = self.variant_subspaces[variant_id].parent_lmb_index();
+            let signature = self.variant_subspaces[variant_id].solve_signature(&self.lmbs);
+            let matching = groups.iter().position(|(group_id, group_parent, members)| {
+                *group_id == metadata.group_id
+                    && *group_parent == parent
+                    && members.first().is_some_and(|first| {
+                        self.variant_subspaces[*first].solve_signature(&self.lmbs) == signature
+                    })
+            });
+            if let Some(index) = matching {
+                groups[index].2.push(variant_id);
+            } else {
+                if let Some(group_id) = metadata.group_id {
+                    if let Some((_, _, members)) =
+                        groups.iter().find(|(id, _, _)| *id == Some(group_id))
+                    {
+                        let first = members[0];
+                        return Err(eyre!(
+                            "Amplitude graph '{}' explicit threshold group_id={} contains incompatible solve subspaces: variant {} '{}' has parent {:?} and basis {:?}, while variant {} '{}' has parent {:?} and basis {:?}",
+                            graph.name,
+                            group_id,
+                            first.0,
+                            self.variant_metadata[first].name,
+                            self.variant_subspaces[first].parent_lmb_index(),
+                            self.variant_subspaces[first].solve_signature(&self.lmbs),
+                            variant_id.0,
+                            metadata.name,
+                            parent,
+                            signature,
+                        ));
+                    }
+                }
+                groups.push((metadata.group_id, parent, vec![variant_id]));
+            }
+        }
+
+        let mut combined = OverlapStructureWithKinematics {
+            existing_esurfaces: ExistingEsurfaces::new(),
+            variant_ids: Some(TiVec::new()),
+            overlap_groups_with_kinematics: Vec::new(),
+        };
+        for (_, _, members) in groups {
+            let mut group_result = self.kinematics_for_variant_approach(
+                momentum_sample,
+                graph,
+                model,
+                esurfaces,
+                rotation,
+                settings,
+                members,
+            )?;
+            let existing_offset = combined.existing_esurfaces.len();
+            if let (Some(all_variants), Some(group_variants)) =
+                (&mut combined.variant_ids, group_result.variant_ids.take())
+            {
+                all_variants.extend(group_variants);
+            }
+            combined
+                .existing_esurfaces
+                .extend(group_result.existing_esurfaces);
+            for mut group in group_result.overlap_groups_with_kinematics {
+                group.overlap_group.existing_esurfaces = group
+                    .overlap_group
+                    .existing_esurfaces
+                    .into_iter()
+                    .map(|id| ExistingEsurfaceId::from(usize::from(id) + existing_offset))
+                    .collect();
+                group.overlap_group.complement = group
+                    .overlap_group
+                    .complement
+                    .into_iter()
+                    .map(|id| ExistingEsurfaceId::from(usize::from(id) + existing_offset))
+                    .collect();
+                combined.overlap_groups_with_kinematics.push(group);
+            }
+        }
+        Ok(combined)
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn kinematics_for_variant_approach<T: FloatLike>(
         &self,
         momentum_sample: &MomentumSample<T>,
@@ -1331,6 +1432,7 @@ impl AmplitudeCountertermData {
         esurfaces: &EsurfaceCollection,
         rotation: &Rotation,
         settings: &RuntimeSettings,
+        candidate_variant_ids: Vec<ThresholdCountertermVariantId>,
     ) -> Result<OverlapStructureWithKinematics<T>> {
         if self.variant_evaluators.len() != self.variant_subspaces.len()
             || self.variant_evaluators.len() != self.variant_raised_esurfaces.len()
@@ -1343,13 +1445,6 @@ impl AmplitudeCountertermData {
             ));
         }
 
-        let candidate_variant_ids = self
-            .variant_evaluators
-            .keys()
-            .filter(|&variant_id| {
-                self.variant_generated_mask[variant_id] && self.variant_active_mask[variant_id]
-            })
-            .collect::<Vec<_>>();
         if candidate_variant_ids.is_empty() {
             return Ok(OverlapStructureWithKinematics {
                 existing_esurfaces: ExistingEsurfaces::new(),
@@ -1444,6 +1539,7 @@ impl AmplitudeCountertermData {
             lmbs: &self.lmbs,
             thresholds: &thresholds,
             edge_masses: graph.get_real_mass_vector::<f64>(model),
+            surface_kinematics: None,
         };
         let overlap = find_maximal_subspace_overlap(
             &overlap_input,
@@ -1603,7 +1699,7 @@ impl AmplitudeCountertermData {
         settings: &RuntimeSettings,
     ) -> Result<OverlapStructureWithKinematics<T>> {
         if !self.legacy_equivalent {
-            return self.kinematics_for_variant_approach(
+            return self.kinematics_for_variant_approach_grouped(
                 momentum_sample,
                 graph,
                 model,

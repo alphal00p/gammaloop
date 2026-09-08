@@ -2150,6 +2150,7 @@ mod threshold_variant_archive_tests {
             graph_name: "graph".to_string(),
             variants: vec![ThresholdCountertermVariantMetadata {
                 variant_id: 0,
+                group_id: None,
                 name: "default".to_string(),
                 cut_group_id: None,
                 associations: vec![ThresholdCountertermAssociationMetadata {
@@ -2389,6 +2390,7 @@ mod threshold_variant_archive_tests {
                 exprs: vec!["1".to_string()],
                 additional_fn_map_entries: Vec::new(),
                 dual_shape: None,
+                parameter_override: None,
             }],
             left_variants: vec![StandaloneThresholdMultiplierVariantReference {
                 variant_id: 0,
@@ -2506,6 +2508,7 @@ mod threshold_variant_archive_tests {
                 exprs: vec!["1".to_string()],
                 additional_fn_map_entries: Vec::new(),
                 dual_shape: None,
+                parameter_override: None,
             }],
             left_variants: vec![StandaloneThresholdMultiplierVariantReference {
                 variant_id: 0,

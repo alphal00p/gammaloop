@@ -332,34 +332,34 @@ fn fixture_pool() -> rayon::ThreadPool {
         .unwrap()
 }
 
-fn selected_signature(cross_section: &CrossSection) -> String {
+fn selected_signature(cross_section: &CrossSection, expected: &str) -> String {
     let orientations = &cross_section.supergraphs[0]
         .derived_data
         .global_cff_expression
         .as_ref()
         .expect("preprocessing must store the selected CFF")
+        .expression
         .orientations;
-    assert_eq!(
-        orientations.len(),
-        1,
-        "fixture must generate exactly one orientation"
-    );
-    format!(
-        "({})",
-        orientations
-            .first()
-            .expect("validated one selected orientation")
-            .data
-            .orientation
-            .iter()
-            .map(|(_, orientation)| match orientation {
-                Orientation::Default => "+",
-                Orientation::Reversed => "-",
-                Orientation::Undirected => "0",
-            })
-            .collect::<Vec<_>>()
-            .join(",")
-    )
+    orientations
+        .iter()
+        .map(|orientation| {
+            format!(
+                "({})",
+                orientation
+                    .data
+                    .orientation
+                    .iter()
+                    .map(|(_, orientation)| match orientation {
+                        Orientation::Default => "+",
+                        Orientation::Reversed => "-",
+                        Orientation::Undirected => "0",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        })
+        .find(|signature| signature == expected)
+        .unwrap_or_else(|| panic!("fixture orientation pattern {expected} was not generated"))
 }
 
 fn preprocess_fixture(
@@ -409,6 +409,16 @@ fn build_fixture_integrand_with_settings(
 ) -> (CrossSection, Model) {
     let mut cross_section = preprocess_fixture_with_settings(dot, directives, settings);
     let model = load_generic_model("sm");
+    let definition = ProcessDefinition::from_graph_list(
+        &cross_section
+            .supergraphs
+            .iter()
+            .map(|graph| graph.graph.clone())
+            .collect::<Vec<_>>(),
+        GenerationType::CrossSection,
+        &model,
+    )
+    .unwrap();
     let runtime = runtime_settings();
     let global = GlobalSettings {
         generation: settings.clone(),
@@ -417,7 +427,7 @@ fn build_fixture_integrand_with_settings(
     cross_section
         .build_integrand(
             &model,
-            "NNLO_fixture",
+            &definition,
             &global,
             (&runtime).into(),
             &fixture_pool(),
@@ -763,7 +773,10 @@ fn gl297_selected_orientation_resolves_forced_one_loop_subspaces_with_full_uv() 
                 true,
             );
             assert_eq!(
-                selected_signature(&cross_section),
+                selected_signature(
+                    &cross_section,
+                    "(+,+,-,+,+,+,+,-,0,-,0,-,-,+,+)",
+                ),
                 "(+,+,-,+,+,+,+,-,0,-,0,-,-,+,+)"
             );
 
@@ -1001,7 +1014,7 @@ fn cross_section_dot_export_materializes_defaults_and_reimports_as_legacy() {
             cross_section
                 .build_integrand(
                     &model,
-                    "NNLO_fixture",
+                    &process_definition,
                     &global,
                     (&runtime_settings()).into(),
                     &fixture_pool(),
@@ -1026,7 +1039,7 @@ fn cross_section_dot_export_materializes_defaults_and_reimports_as_legacy() {
             round_tripped
                 .build_integrand(
                     &model,
-                    "NNLO_fixture",
+                    &normalized_process_definition,
                     &global,
                     (&runtime_settings()).into(),
                     &fixture_pool(),
@@ -1067,7 +1080,10 @@ fn gl297_full_cut_forced_one_loop_subspaces_restore_soft_scaling() {
                 build_fixture_integrand_with_settings(GL297_DOT, EMPTY_DIRECTIVES, &settings);
             assert_eq!(legacy_cross_section.supergraphs[0].cuts.len(), 9);
             assert_eq!(
-                selected_signature(&legacy_cross_section),
+                selected_signature(
+                    &legacy_cross_section,
+                    "(+,+,-,+,+,+,+,-,0,-,0,-,-,+,+)",
+                ),
                 "(+,+,-,+,+,+,+,-,0,-,0,-,-,+,+)",
             );
             let legacy_graph = &legacy_cross_section.supergraphs[0];
@@ -1166,7 +1182,10 @@ fn gl297_full_cut_forced_one_loop_subspaces_restore_soft_scaling() {
                 build_fixture_integrand_with_settings(GL297_DOT, GL297_CURE_DIRECTIVES, &settings);
             assert_eq!(forced_cross_section.supergraphs[0].cuts.len(), 9);
             assert_eq!(
-                selected_signature(&forced_cross_section),
+                selected_signature(
+                    &forced_cross_section,
+                    "(+,+,-,+,+,+,+,-,0,-,0,-,-,+,+)",
+                ),
                 "(+,+,-,+,+,+,+,-,0,-,0,-,-,+,+)",
             );
             let forced_graph = &forced_cross_section.supergraphs[0];
@@ -1281,7 +1300,10 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
                 false,
             );
             assert_eq!(
-                selected_signature(&cross_section),
+                selected_signature(
+                    &cross_section,
+                    "(+,+,+,+,-,-,-,+,-,0,+,0,+,-,+)",
+                ),
                 "(+,+,+,+,-,-,-,+,-,0,+,0,+,-,+)"
             );
 
@@ -1416,7 +1438,10 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
             );
             assert_eq!(cross_section.supergraphs[0].cuts.len(), 6);
             assert_eq!(
-                selected_signature(&cross_section),
+                selected_signature(
+                    &cross_section,
+                    "(+,+,+,+,-,-,-,+,-,0,+,0,+,-,+)",
+                ),
                 "(+,+,+,+,-,-,-,+,-,0,+,0,+,-,+)",
             );
 
@@ -1551,7 +1576,16 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
             cross_section
                 .build_integrand(
                     &model,
-                    "NNLO_fixture",
+                    &ProcessDefinition::from_graph_list(
+                        &cross_section
+                            .supergraphs
+                            .iter()
+                            .map(|graph| graph.graph.clone())
+                            .collect::<Vec<_>>(),
+                        GenerationType::CrossSection,
+                        &model,
+                    )
+                    .unwrap(),
                     &global,
                     (&runtime).into(),
                     &pool,

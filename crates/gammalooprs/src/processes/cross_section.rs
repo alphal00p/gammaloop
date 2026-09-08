@@ -4952,7 +4952,7 @@ mod tests {
         dot,
         graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
-        processes::cross_section::{RaisedEsurfaceData, RaisedEsurfaceGroup},
+        processes::cross_section::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
         settings::global::{GenerationSettings, OrientationPattern},
         utils::{GS, load_generic_model},
     };
@@ -5394,6 +5394,7 @@ mod tests {
                             thresholds: vec![ThresholdCountertermThreshold {
                                 edges: dormant_threshold_edges.clone(),
                                 counterterms: vec![ThresholdCountertermVariant {
+                                    group_id: None,
                                     name: Some("dormant".to_string()),
                                     subspace: None,
                                     parent_lmb: None,
@@ -5621,6 +5622,7 @@ mod tests {
 
         spec.cuts[0].thresholds[0].counterterms = vec![
             ThresholdCountertermVariant {
+                group_id: None,
                 name: Some("disabled".to_string()),
                 subspace: None,
                 parent_lmb: None,
@@ -5628,6 +5630,7 @@ mod tests {
                 multiplier: None,
             },
             ThresholdCountertermVariant {
+                group_id: None,
                 name: Some("duplicate".to_string()),
                 subspace: Some(vec![EdgeIndex::from(7)]),
                 parent_lmb: None,
@@ -5879,7 +5882,7 @@ mod tests {
         let f = symbol!("f");
         for left_order in 1..=3_u8 {
             for right_order in 1..=3_u8 {
-                let helper = super::CrossSectionGraph::iterated_th_prefactor_helper_atom(
+                let (_, helper) = super::CrossSectionGraph::iterated_th_prefactor_helper_atoms(
                     left_order,
                     right_order,
                     1,

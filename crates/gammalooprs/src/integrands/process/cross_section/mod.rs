@@ -608,6 +608,15 @@ struct CutEventGenerationContext<'a> {
     channel_id: Option<ChannelIndex>,
 }
 
+struct DeferredCutEvaluation<T: FloatLike> {
+    cut_group_id: CutGroupId,
+    kinematic_point: LUCTKinematicPoint<T>,
+    bare_cut_total: Complex<F<T>>,
+    threshold_counterterm_weights: Vec<Complex<F<T>>>,
+    accepted_event: Option<GenericEvent<T>>,
+    lmb_channel_prefactor: Complex<F<T>>,
+}
+
 impl CrossSectionGraphTerm {
     pub fn threshold_counterterm_metadata(&self) -> Option<&ThresholdCountertermMetadataRegistry> {
         self.counterterm.metadata_registry.as_ref()
@@ -1785,7 +1794,11 @@ impl GraphTerm for CrossSectionGraphTerm {
         let hel = context.settings.kinematics.externals.get_helicities();
         let mut cut_results: TiVec<CutGroupId, Vec<Complex<F<T>>>> =
             ti_vec![Vec::new(); self.cut_group_data.cut_groups.len()];
-        let mut cut_threshold_counterterms = TiVec::<CutGroupId, Complex<F<T>>>::new();
+        let mut cut_threshold_counterterms = ti_vec![
+            Complex::new_re(momentum_sample.zero());
+            self.cut_group_data.cut_groups.len()
+        ];
+        let mut deferred_cut_evaluations = Vec::new();
         let mut differential_result = GraphEvaluationResult::zero(momentum_sample.zero());
         let mut accepted_event_group = GenericEventGroup::default();
 
@@ -1830,7 +1843,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 for _ in 1..=max_occurrence {
                     cut_results[cut_group_id].push(zero.clone());
                 }
-                cut_threshold_counterterms.push(zero);
+                cut_threshold_counterterms[cut_group_id] = zero;
                 continue;
             }
             crate::debug_tags!(#integration, #cut;
@@ -1911,13 +1924,13 @@ impl GraphTerm for CrossSectionGraphTerm {
                 for _ in 1..=max_occurrence {
                     cut_results[cut_group_id].push(zero.clone());
                 }
-                cut_threshold_counterterms.push(zero);
+                cut_threshold_counterterms[cut_group_id] = zero;
                 continue;
             }
 
             let accepted_event = prepared_event.buffered_event;
             let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
-            let mut threshold_counterterm_weights = Vec::with_capacity(max_occurrence);
+            let threshold_counterterm_weights = Vec::with_capacity(max_occurrence);
             let mut kinematic_point = LUCTKinematicPoint::new(momentum_sample.clone());
             // LMB channel weights partition the fully subtracted LU-cut integrand. Apply the
             // sampling partition after the raised-residue derivatives: it is not part of the
@@ -2133,7 +2146,37 @@ impl GraphTerm for CrossSectionGraphTerm {
                 cut_results[cut_group_id].push(bare_contribution);
             }
 
-            let record_threshold_decomposition = accepted_event.is_some()
+            deferred_cut_evaluations.push(DeferredCutEvaluation {
+                cut_group_id,
+                kinematic_point,
+                bare_cut_total,
+                threshold_counterterm_weights,
+                accepted_event,
+                lmb_channel_prefactor,
+            });
+        }
+
+        let deferred_points = deferred_cut_evaluations
+            .iter()
+            .map(|deferred| (deferred.cut_group_id, &deferred.kinematic_point))
+            .collect_vec();
+        let shared_overlaps = if context.settings.subtraction.disable_threshold_subtraction {
+            ti_vec![None; self.cut_group_data.cut_groups.len()]
+        } else {
+            self.counterterm.prepare_shared_overlaps(
+                &deferred_points,
+                &self.graph,
+                &self.graph.get_real_mass_vector(context.model),
+                &self.reversed_edges,
+                &self.lmbs,
+                context.settings,
+                context.rotation,
+            )?
+        };
+
+        for deferred in deferred_cut_evaluations {
+            let cut_group_id = deferred.cut_group_id;
+            let record_threshold_decomposition = deferred.accepted_event.is_some()
                 && context.settings.general.store_additional_weights_in_event
                 && self.counterterm.metadata_registry.is_some();
             let counterterm_evaluation =
@@ -2144,7 +2187,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     }
                 } else {
                     self.counterterm.evaluate(
-                        &kinematic_point,
+                        &deferred.kinematic_point,
                         cut_group_id,
                         &self.reversed_edges[cut_group_id],
                         &self.lmbs,
@@ -2157,6 +2200,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         context.evaluation_metadata,
                         context.record_primary_timing,
                         record_threshold_decomposition,
+                        shared_overlaps[cut_group_id].as_ref(),
                     )?
                 };
             let threshold_decomposition = counterterm_evaluation.components.map(|components| {
@@ -2164,8 +2208,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                     original: Complex::new_re(momentum_sample.zero()),
                     components,
                 };
-                decomposition.apply_multiplicative_factor(&lmb_channel_prefactor);
-                decomposition.original = bare_cut_total.clone();
+                decomposition.apply_multiplicative_factor(&deferred.lmb_channel_prefactor);
+                decomposition.original = deferred.bare_cut_total.clone();
                 decomposition
             });
             let ct_result = if let Some(decomposition) = &threshold_decomposition {
@@ -2174,25 +2218,26 @@ impl GraphTerm for CrossSectionGraphTerm {
                     |total, component| total + &component.weighted,
                 )
             } else {
-                counterterm_evaluation.total * lmb_channel_prefactor.clone()
+                counterterm_evaluation.total * deferred.lmb_channel_prefactor.clone()
             };
 
+            let mut threshold_counterterm_weights = deferred.threshold_counterterm_weights;
             threshold_counterterm_weights.push(ct_result.clone());
-            cut_threshold_counterterms.push(ct_result.clone());
+            cut_threshold_counterterms[cut_group_id] = ct_result;
 
-            if let Some(mut event) = accepted_event {
+            if let Some(mut event) = deferred.accepted_event {
                 let threshold_counterterm_total = threshold_counterterm_weights
                     .iter()
                     .fold(Complex::new_re(momentum_sample.zero()), |acc, value| {
                         acc + value.clone()
                     });
-                event.weight = bare_cut_total.clone() + threshold_counterterm_total;
+                event.weight = deferred.bare_cut_total.clone() + threshold_counterterm_total;
 
                 if context.settings.general.store_additional_weights_in_event {
                     event
                         .additional_weights
                         .weights
-                        .insert(AdditionalWeightKey::Original, bare_cut_total);
+                        .insert(AdditionalWeightKey::Original, deferred.bare_cut_total);
                     for (subset_index, threshold_counterterm) in
                         threshold_counterterm_weights.into_iter().enumerate()
                     {

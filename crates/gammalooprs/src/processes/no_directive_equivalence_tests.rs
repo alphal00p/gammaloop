@@ -337,7 +337,7 @@ fn build_cross_section(
     let reports = cross_section
         .build_integrand(
             model,
-            "no_directive_cross_section",
+            &definition,
             &GlobalSettings {
                 generation: generation.clone(),
                 ..Default::default()

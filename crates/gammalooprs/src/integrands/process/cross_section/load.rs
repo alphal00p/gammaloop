@@ -1513,6 +1513,7 @@ mod threshold_multiplier_tests {
                 exprs: vec!["archive_weight + 1".to_owned()],
                 additional_fn_map_entries: Vec::new(),
                 dual_shape: None,
+                parameter_override: None,
             }],
             left_variants: vec![StandaloneThresholdMultiplierVariantReference {
                 variant_id: 0,

@@ -29,6 +29,7 @@ use eyre::{Result, eyre};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
 use spenso::algebra::algebraic_traits::IsZero;
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use typed_index_collections::TiVec;
 
@@ -47,6 +48,14 @@ pub struct OverlapGroup {
 pub struct OverlapStructure {
     pub overlap_groups: Vec<OverlapGroup>,
     pub existing_esurfaces: ExistingThresholds,
+}
+
+/// Kinematic data for one threshold instance. Different Cutkosky cuts may have different
+/// solved `t*` values and external data even when they share a solve signature.
+#[derive(Debug, Clone)]
+pub(crate) struct OverlapKinematics {
+    pub loop_moms: LoopMomenta<F<f64>>,
+    pub external_momenta: ExternalFourMomenta<F<f64>>,
 }
 
 impl Display for OverlapStructure {
@@ -100,6 +109,8 @@ struct PropagatorConstraint<'a> {
     mass_pointer: Option<usize>, // pointer to value of unique mass
     signature: &'a LoopExtSignature,
     subspace: &'a SubspaceData,
+    loop_moms: LoopMomenta<F<f64>>,
+    external_momenta: ExternalFourMomenta<F<f64>>,
 }
 
 impl PropagatorConstraint<'_> {
@@ -161,6 +172,11 @@ fn construct_solver(
 
         let esurface = &overlap_input.thresholds[surface_id];
         let threshold_subspace = overlap_input.threshold_subspace(surface_id);
+        let (surface_loop_moms, surface_external_momenta) = overlap_input
+            .surface_kinematics
+            .and_then(|kinematics| kinematics.get(surface_id.0))
+            .map(|kinematics| (&kinematics.loop_moms, &kinematics.external_momenta))
+            .unwrap_or((loop_moms, external_momenta));
         let lmb = threshold_subspace.get_lmb(overlap_input.lmbs);
         let edge_masses = &overlap_input.edge_masses;
 
@@ -171,6 +187,7 @@ fn construct_solver(
                 *constraint.signature == lmb.edge_signatures[edge_id]
                     && constraint.subspace.solve_signature(overlap_input.lmbs)
                         == threshold_subspace.solve_signature(overlap_input.lmbs)
+                    && overlap_input.surface_kinematics.is_none()
             }) {
                 esurface_constraint_indices.push(edge_position);
             } else {
@@ -196,6 +213,8 @@ fn construct_solver(
                     mass_pointer,
                     signature,
                     subspace: threshold_subspace,
+                    loop_moms: surface_loop_moms.clone(),
+                    external_momenta: surface_external_momenta.clone(),
                 };
 
                 propagator_constraints.push(propagator_constraint);
@@ -257,10 +276,15 @@ fn construct_solver(
         let esurface_id = existing_esurfaces[*existing_esurface_id];
         let esurface = &overlap_input.thresholds[esurface_id];
         let threshold_subspace = overlap_input.threshold_subspace(esurface_id);
+        let (surface_loop_moms, surface_external_momenta) = overlap_input
+            .surface_kinematics
+            .and_then(|kinematics| kinematics.get(esurface_id.0))
+            .map(|kinematics| (&kinematics.loop_moms, &kinematics.external_momenta))
+            .unwrap_or((loop_moms, external_momenta));
 
         let shift_part = esurface.compute_shift_part_from_momenta_in_subspace(
-            loop_moms,
-            external_momenta,
+            surface_loop_moms,
+            surface_external_momenta,
             threshold_subspace,
             overlap_input.lmbs,
             overlap_input.graph,
@@ -269,8 +293,6 @@ fn construct_solver(
         b_vector[constraint_index + 1] = -shift_part.0;
         a_matrix[constraint_index + 1][0] = -1.0;
     }
-
-    let spatial_part_of_externals = external_momenta.iter().map(|p| p.spatial).collect();
 
     // propagator constraints
     let mut vertical_offset = esurface_constraints.len() + 1;
@@ -281,8 +303,12 @@ fn construct_solver(
         let spatial_shift = compute_shift_part_subspace(
             &propagator_constraint.signature.internal,
             &propagator_constraint.signature.external,
-            loop_moms,
-            &spatial_part_of_externals,
+            &propagator_constraint.loop_moms,
+            &propagator_constraint
+                .external_momenta
+                .iter()
+                .map(|p| p.spatial)
+                .collect(),
             propagator_constraint.subspace,
         );
 
@@ -413,6 +439,9 @@ pub(crate) struct OverlapInput<'a> {
     pub lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
     pub thresholds: &'a EsurfaceCollection,
     pub edge_masses: EdgeVec<F<f64>>,
+    /// Optional per-threshold kinematics for a multi-cut solve. If absent, the single sample
+    /// passed to the overlap routine is used for every threshold.
+    pub surface_kinematics: Option<&'a [OverlapKinematics]>,
 }
 
 impl OverlapInput<'_> {
@@ -466,7 +495,12 @@ pub(crate) fn check_global_center(
     existing_esurfaces.iter().all(|esurface_id| {
         let esurface = &overlap_input.thresholds[*esurface_id];
         let threshold_subspace = overlap_input.threshold_subspace(*esurface_id);
-        let mut center_with_fixed_complement = loop_moms.clone();
+        let (surface_loop_moms, surface_external_momenta) = overlap_input
+            .surface_kinematics
+            .and_then(|kinematics| kinematics.get(esurface_id.0))
+            .map(|kinematics| (&kinematics.loop_moms, &kinematics.external_momenta))
+            .unwrap_or((loop_moms, external_momenta));
+        let mut center_with_fixed_complement = surface_loop_moms.clone();
         for loop_index in threshold_subspace.iter_lmb_indices() {
             center_with_fixed_complement[loop_index] = center[loop_index];
         }
@@ -478,7 +512,7 @@ pub(crate) fn check_global_center(
             lmb,
             edge_masses,
             &center_with_fixed_complement,
-            external_momenta,
+            surface_external_momenta,
         );
 
         esurface_value_is_strictly_inside(&esurface_val, &F(overlap_input.settings.kinematics.e_cm))
@@ -497,6 +531,15 @@ pub(crate) fn find_maximal_overlap(
     external_momenta: &ExternalFourMomenta<F<f64>>,
     probe_rotation: &Rotation,
 ) -> Result<OverlapStructure> {
+    if let Some(surface_kinematics) = overlap_input.surface_kinematics
+        && surface_kinematics.len() != overlap_input.thresholds.len()
+    {
+        return Err(eyre!(
+            "per-surface overlap kinematics has {} entries for {} threshold surfaces",
+            surface_kinematics.len(),
+            overlap_input.thresholds.len()
+        ));
+    }
     overlap_input.validate_subspaces()?;
     let mut partitions: Vec<(SubspaceData, ExistingThresholds)> = Vec::new();
     for existing_id in existing_esurfaces.iter_enumerated().map(|(id, _)| id) {
@@ -544,6 +587,7 @@ pub(crate) fn find_maximal_overlap(
             lmbs: overlap_input.lmbs,
             thresholds: overlap_input.thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
+            surface_kinematics: overlap_input.surface_kinematics,
         };
         let local = find_maximal_overlap_single(
             &partition_input,
@@ -561,7 +605,6 @@ pub(crate) fn find_maximal_overlap(
             combined.overlap_groups.push(group);
         }
     }
-    combined.fill_in_complements();
     Ok(combined)
 }
 
@@ -575,6 +618,15 @@ pub(crate) fn find_maximal_overlap_with_group_ids(
     external_momenta: &ExternalFourMomenta<F<f64>>,
     probe_rotation: &Rotation,
 ) -> Result<OverlapStructure> {
+    if let Some(surface_kinematics) = overlap_input.surface_kinematics
+        && surface_kinematics.len() != overlap_input.thresholds.len()
+    {
+        return Err(eyre!(
+            "per-surface overlap kinematics has {} entries for {} threshold surfaces",
+            surface_kinematics.len(),
+            overlap_input.thresholds.len()
+        ));
+    }
     if group_ids.len() < overlap_input.thresholds.len() {
         return Err(eyre!(
             "threshold solve-group metadata has {} entries for {} threshold surfaces",
@@ -582,7 +634,7 @@ pub(crate) fn find_maximal_overlap_with_group_ids(
             overlap_input.thresholds.len()
         ));
     }
-    let mut labelled = HashMap::<Option<usize>, ExistingThresholds>::new();
+    let mut labelled = BTreeMap::<Option<usize>, ExistingThresholds>::new();
     for existing_id in existing_esurfaces.iter_enumerated().map(|(id, _)| id) {
         let surface_id = existing_esurfaces[existing_id];
         let label = group_ids[surface_id.0];
@@ -644,7 +696,6 @@ pub(crate) fn find_maximal_overlap_with_group_ids(
             combined.overlap_groups.push(group);
         }
     }
-    combined.fill_in_complements();
     Ok(combined)
 }
 
@@ -669,6 +720,20 @@ fn find_maximal_overlap_single(
         .collect_vec();
 
     if let Some(global_center) = &settings.subtraction.overlap_settings.force_global_center {
+        if let Some(surface_kinematics) = overlap_input.surface_kinematics {
+            let first_external = &surface_kinematics
+                .first()
+                .expect("validated non-empty threshold set")
+                .external_momenta;
+            if surface_kinematics
+                .iter()
+                .any(|kinematics| kinematics.external_momenta != *first_external)
+            {
+                return Err(eyre!(
+                    "forced global threshold center cannot be transformed consistently for heterogeneous external momenta"
+                ));
+            }
+        }
         let global_center_identity: LoopMomenta<F<f64>> = global_center
             .iter()
             .map(|coordinates| ThreeMomentum {
@@ -1261,6 +1326,7 @@ mod tests {
             lmbs: &all_lmbs,
             thresholds: &thresholds,
             edge_masses: masses,
+            surface_kinematics: None,
         };
 
         let external_momenta = ExternalFourMomenta::from_iter([
@@ -1330,6 +1396,7 @@ mod tests {
             lmbs: &all_lmbs,
             thresholds: &projected_thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
+            surface_kinematics: overlap_input.surface_kinematics,
         };
         assert!(!check_global_center(
             &projected_input,
@@ -1373,6 +1440,7 @@ mod tests {
             lmbs: &all_lmbs,
             thresholds: &thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
+            surface_kinematics: overlap_input.surface_kinematics,
         };
 
         let forced_overlap = find_maximal_overlap(
@@ -1411,6 +1479,7 @@ mod tests {
             lmbs: &alternate_lmbs,
             thresholds: &empty_thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
+            surface_kinematics: overlap_input.surface_kinematics,
         };
         let rotated_external_spatial = external_momenta
             .iter()
@@ -1484,6 +1553,7 @@ mod tests {
             lmbs: &alternate_lmbs,
             thresholds: &empty_thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
+            surface_kinematics: overlap_input.surface_kinematics,
         };
         let affine_overlap = find_maximal_overlap(
             &affine_overlap_input,
@@ -1520,6 +1590,7 @@ mod tests {
             lmbs: &all_lmbs,
             thresholds: &covariant_thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
+            surface_kinematics: overlap_input.surface_kinematics,
         };
         let covariant_loop_momenta = LoopMomenta::from_iter([
             ThreeMomentum::new(F(0.3), F(-0.4), F(0.5)),
