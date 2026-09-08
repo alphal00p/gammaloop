@@ -226,16 +226,11 @@
       groups))
     (builtins.listToAttrs (map (group: {
         name = "packages.${system}.nix-ci-check-gammaloop-nextest-${group.name}";
-        value =
-          [(nextestArchiveAttr group.name)]
-          ++ (
-            if group.name == "python-api"
-            then ["packages.${system}.gammaloop-python-module"]
-            else []
-          );
+        value = ["packages.${system}.ci-test-inputs"];
       })
       groups))
     {
+      "packages.${system}.ci-test-inputs" = nextestBinaryChecks ++ ["packages.${system}.gammaloop-python-module"];
       "packages.${system}.gammaloop" = [
         gammaloopApiPackageArtifactsAttr
         "checks.${system}.gammaloop-fmt"
@@ -301,33 +296,6 @@
   assert selfDependencies
   == []
   || builtins.throw "manual NixCI dependency graph contains self dependencies: ${builtins.concatStringsSep ", " selfDependencies}"; dependencies;
-  doNotBuild = unique (
-    [
-      "checks.${system}.gammaloop"
-      "checks.${system}.gammaloop-doctest"
-      "checks.${system}.gammaloop-nextest"
-      "checks.${system}.gammaloop-nextest-binaries"
-      "packages.${system}.default"
-      "packages.${system}.crane-ci-prebuild"
-      "packages.${system}.workspaceBuildArtifacts"
-      "packages.${system}.gammaloop-llvm-coverage"
-      "packages.${system}.nix-ci-check-gammaloop-nextest"
-    ]
-    ++ map (group: "checks.${system}.gammaloop-nextest-${group.name}") groups
-    ++ [
-      (crateTestDependencyAttr "spynso3")
-      (crateTestBinaryAttr workspaceHackPackage)
-      (crateTestBinaryAttr "spynso3")
-      (workspacePackageGraphAttr workspaceHackPackage)
-    ]
-    ++ map cratePackageDepsAttr (
-      builtins.filter (
-        package: package != workspaceHackPackage && package != "gammalooprs"
-      )
-      workspacePackagesWithDependencyArtifacts
-    )
-    ++ map cratePackageAttr nonWorkspaceHackPackages
-  );
   primaryChecks =
     [
       "checks.${system}.gammaloop-clippy"
@@ -337,11 +305,12 @@
       "packages.${system}.nix-ci-passed"
     ]
     ++ map (group: "packages.${system}.nix-ci-check-gammaloop-nextest-${group.name}") groups;
-  requiredJobs = unique (map (entry: entry.key) (builtins.genericClosure {
-    startSet = map (job: {key = job;}) primaryChecks;
-    operator = entry: map (dependency: {key = dependency;}) (validatedDependencies.${entry.key} or []);
-  }));
-  onlyBuild = builtins.filter (job: !(builtins.elem job doNotBuild)) requiredJobs;
+  onlyBuild = unique (primaryChecks
+    ++ [
+      "packages.${system}.ci-test-inputs"
+      "packages.${system}.cargoArtifacts"
+      workspaceHackCacheAttr
+    ]);
   # NixCI only schedules jobs it actually builds, so a dependency edge that
   # references an unselected job is rejected as pointing at a non-existent job.
   # The manual graph above is constructed over the full crate/artifact DAG
