@@ -1742,7 +1742,7 @@
       > "$out"
   '';
 
-  guppyWorkspaceGraphCheck = pkgs.runCommand "gammaloop-guppy-workspace-graph-check" {
+  guppyWorkspaceGraphCheck = assert checkedNextestPackageGroups != []; pkgs.runCommand "gammaloop-guppy-workspace-graph-check" {
     nativeBuildInputs = [
       pkgs.diffutils
     ];
