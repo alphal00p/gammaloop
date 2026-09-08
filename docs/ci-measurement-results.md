@@ -2,8 +2,9 @@
 
 Merged artifact output sizes fell about 75% in both layouts, with compilation
 inputs and test inventories preserved. Remote worker savings remain unproven:
-four of twelve suites were launched, and cache-upload timeouts and interrupted
-workers prevent an accepted paired comparison. The remaining suites are paused.
+the first four suites had cache-upload timeouts and interrupted workers, which
+prevent an accepted paired comparison. The final ungrouped comparison is now
+running sequentially; five of twelve planned suites have been submitted.
 
 [Machine-readable observations](ci-measurement-results.json) record revisions,
 derivations, clocks, limitations and remote log links. The
@@ -49,6 +50,14 @@ bundle. Its 13 dependency compilation messages match the frozen baseline and
 candidate. Separating those context-specific dependencies is a future experiment;
 this change preserves existing features and anchor commands.
 
+One root-only encoding sample illustrates the limit of the NAR metric. Using
+identical xz-6 settings, the expanded baseline encoded to 557.62 MiB while the
+candidate encoded to 775.16 MiB, despite raw NAR size falling from 3.411 to
+0.767 GiB. Encoding took 170.858s versus 48.512s. The candidate already contains
+a zstd archive. Its registered closure also shrank from 19.782 to 1.758 GiB,
+retaining one merged bundle instead of nine. Neither this encoding proxy nor the
+closure size establishes provider network traffic or faster test completion.
+
 ## Scheduling and remote evidence
 
 The shared final-archive/Python producer experiment was removed. Ready groups
@@ -66,6 +75,21 @@ FeynKit's producer failed at two hours. Upload success messages do not establish
 visibility to later workers. Three abandoned workers also recovered under the
 same URLs with overwritten logs; saved incident annotations keep those pairs
 ineligible for improvement percentages.
+
+The completed main grouped suite reported final success 9m50s after its last
+required check; its final worker ran for about 19s. FeynKit baseline Python was
+observed queued after its displayed prerequisites had passed, with gaps of
+48m05s and 10m54s. The later FeynKit candidate attempt reported 15 HTTP/2 cache
+download errors; its completed restores covered about 6.00 GiB in 49.923s, with
+zero compilation messages. These are symptoms with unknown causes, recorded
+separately from compiler work. Repeated job phases are distinguished from retries.
+
+The new [main baseline](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589)
+was submitted at 17:13:55–17:13:57 UTC on 8 September. It and the final main
+candidate compare unchanged application code; the candidate CI configuration has
+changed since its initial run. Actual cache warmth must be established from logs.
+The remaining scenarios use independently prepared FeynKit source edits. No new
+Actions runs are dispatched for these comparisons.
 
 Both frozen Nix Actions workflows passed:
 [main, 2h10m52s](https://github.com/alphal00p/gammaloop/actions/runs/34227037456)
@@ -89,7 +113,8 @@ identical, but its binary was not retested. No application change or relaxed
 assertion is included. Main native Actions also exposes a preexisting Clippy
 warning under Rust 1.98; pinned Nix Clippy passes.
 
-Before merging, complete valid-license runtime validation and the remaining
-remote unchanged/source scenarios after cache recovery. Verify worker minutes,
+Before merging, complete equivalent runtime validation and the remaining remote
+unchanged/source comparisons for the final configuration. Faster completion of
+tests, Clippy and doctests is the primary requirement. Verify worker minutes,
 restores, repeated builds, individual-group latency and the final-success tail.
 The 80% restore, 50% warm-worker and 30% changed-worker targets remain goals.

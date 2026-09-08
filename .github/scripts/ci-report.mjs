@@ -9,10 +9,10 @@ import { promisify } from 'node:util';
 const exec = promisify(execFile);
 const units = { B: 1, KiB: 1024, MiB: 1024 ** 2, GiB: 1024 ** 3, TiB: 1024 ** 4 };
 const durationPattern = String.raw`(?:\d+(?:\.\d+)?(?:ms|s|m|h)\s*)+`;
-const excluded = new Set(['cancelled', 'skipped', 'abandoned', 'queued', 'pending', 'in_progress']);
+const excluded = new Set(['cancelled', 'skipped', 'abandoned', 'queued', 'pending', 'in_progress', 'running', 'started']);
 const sum = (rows, key) => rows.reduce((total, row) => total + (row[key] ?? 0), 0);
 const timestamp = value => {
-  if (!value) return null;
+  if (typeof value !== 'string' || !value) return null;
   const normalized = value.replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1');
   const parsed = Date.parse(/(?:Z|[+-]\d\d:\d\d)$/.test(normalized) ? normalized : `${normalized}Z`);
   return Number.isFinite(parsed) ? parsed : null;
@@ -42,20 +42,33 @@ export function parseLog(ndjson, job = {}) {
     let record;
     try { record = JSON.parse(line); } catch { throw new Error(`invalid NDJSON at line ${index + 1}`); }
     if (typeof record.log_message !== 'string' || timestamp(record.utc_time) == null)
-      throw new Error(`invalid log record at line ${index + 1}`);
+      throw new Error(`invalid log record at line ${index + 1}`, { cause: timestamp(record.utc_time) == null ? 'missing-clock' : 'invalid-record' });
     return record;
   });
   if (!records.length) throw new Error('empty log');
-  const downloads = [], uploads = [], transferTimeouts = [], builds = [], cargo = [], compiled = [], checked = [], tests = [], testSummaries = [];
-  for (const record of records) {
+  const downloads = [], uploads = [], transferTimeouts = [], transferErrors = [], incidents = [], builds = [], cargo = [], compiled = [], checked = [], tests = [], testSummaries = [];
+  for (const [index, record] of records.entries()) {
     const text = record.log_message.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
     const time = timestamp(record.utc_time);
+    const previous = records[index - 1];
+    if (previous && (time < timestamp(previous.utc_time)
+      || (Number.isFinite(record.relative_nanoseconds) && Number.isFinite(previous.relative_nanoseconds)
+        && record.relative_nanoseconds < previous.relative_nanoseconds)))
+      incidents.push({ kind: 'invalid-clock', time, line: index + 1, cause: 'unknown', observation: 'worker clock moves backwards' });
     // Retry warnings are observations, not completed transfers or measured bytes.
     // Keep numeric diagnostics only; request URLs can contain credentials.
     for (const match of text.matchAll(/unable to (upload|download) '[^'\n]+'[^\n]*?Operation too slow\. Less than ([\d.]+) bytes\/sec transferred the last (\d+) seconds(?:; retrying in (\d+) ms \(attempt (\d+)\/(\d+)\))?/g))
       transferTimeouts.push({ direction: match[1], time, minimumBytesPerSecond: Number(match[2]), windowSeconds: Number(match[3]),
         retryDelayMilliseconds: match[4] == null ? null : Number(match[4]),
         attempt: match[5] == null ? null : Number(match[5]), maximumAttempts: match[6] == null ? null : Number(match[6]) });
+    for (const match of text.matchAll(/unable to (upload|download) '[^'\n]+'([^\n]*)/g)) {
+      if (/Operation too slow/.test(match[2])) continue;
+      const kind = /HTTP\/2|HTTP2|framing layer/i.test(match[2]) ? 'http2-transfer-error' : 'cache-transfer-error';
+      transferErrors.push({ kind, direction: match[1], time, httpStatus: Number(match[2].match(/HTTP error (\d{3})/)?.[1]) || null,
+        retryDelayMilliseconds: Number(match[2].match(/retrying in (\d+) ms/)?.[1]) || null,
+        attempt: Number(match[2].match(/attempt (\d+)\//)?.[1]) || null,
+        maximumAttempts: Number(match[2].match(/attempt \d+\/(\d+)/)?.[1]) || null });
+    }
     // Ignore "Downloading cached": only the completed line has size and duration.
     for (const match of text.matchAll(new RegExp(`Downloaded cached ([^\\n]+?) \\(([\\d.]+) (B|KiB|MiB|GiB|TiB)\\) in (${durationPattern})`, 'g')))
       downloads.push({ name: match[1], reportedBytes: Number(match[2]) * units[match[3]], seconds: duration(match[4]), time });
@@ -83,8 +96,11 @@ export function parseLog(ndjson, job = {}) {
   const first = records[0], last = records.at(-1);
   const relativeSeconds = Number.isFinite(first.relative_nanoseconds) && Number.isFinite(last.relative_nanoseconds)
     ? (last.relative_nanoseconds - first.relative_nanoseconds) / 1e9 : null;
-  const workerSeconds = relativeSeconds ?? secondsBetween(timestamp(first.utc_time), timestamp(last.utc_time));
-  if (workerSeconds == null || workerSeconds < 0) throw new Error('invalid worker time range');
+  const workerSeconds = incidents.length ? null : relativeSeconds ?? secondsBetween(timestamp(first.utc_time), timestamp(last.utc_time));
+  if (workerSeconds != null && workerSeconds < 0) throw new Error('invalid worker time range', { cause: 'invalid-clock' });
+  for (const event of transferTimeouts) incidents.push({ kind: 'transfer-timeout', ...event, cause: 'unknown', observation: 'transfer failed its reported low-speed threshold' });
+  for (const event of transferErrors) incidents.push({ ...event, cause: 'unknown', observation: event.kind === 'http2-transfer-error'
+    ? 'transfer reported an HTTP/2 stream or framing error' : 'cache transfer reported a failure' });
   const resultName = job.attribute?.split('.').at(-1).replace(/^nix-ci-check-/, '');
   const testExecution = job.type !== 'test' ? 'not-applicable'
     : testSummaries.length || tests.some(test => test.status !== 'SKIP') ? 'executed'
@@ -98,19 +114,21 @@ export function parseLog(ndjson, job = {}) {
     cargoFinishedSeconds: sum(cargo, 'seconds'), cargoActiveSeconds: intervalSeconds(cargo),
     compilationMessages: compiled.length, compiled: [...new Set(compiled)],
     checkingMessages: checked.length, checked: [...new Set(checked)],
-    transferTimeoutCount: transferTimeouts.length, transferTimeouts,
+    transferTimeoutCount: transferTimeouts.length, transferTimeouts, transferErrorCount: transferErrors.length, transferErrors, incidents,
     testExecution, testSummaries, tests, downloads, uploads, builds, cargo,
   };
 }
 
 export function summarizeSuite(spec, suite, checks, jobs) {
-  const completed = job => job.checkCompletedAt && !excluded.has(job.status) && !excluded.has(job.checkConclusion);
+  const completed = job => secondsBetween(timestamp(job.checkStartedAt), timestamp(job.checkCompletedAt)) != null
+    && !excluded.has(job.status) && !excluded.has(job.checkConclusion);
   const actual = jobs.filter(completed);
   const starts = jobs.filter(job => job.type === 'config').map(job => timestamp(job.checkStartedAt)).filter(value => value != null);
   const started = min(starts);
   const finished = max(actual.map(job => timestamp(job.checkCompletedAt)));
   const wanted = jobs.filter(job => spec.requiredAttributes
     ? spec.requiredAttributes.includes(job.attribute)
+      && (!/^packages\.[^.]+\.nix-ci-check-/.test(job.attribute ?? '') || job.type === 'test')
     : job.type === 'test' || /^checks\.[^.]+\.gammaloop-(clippy|fmt|guppy-workspace-graph)$/.test(job.attribute ?? ''));
   // A failed earlier attempt remains in resource totals; latest attempt owns the result.
   const latestWanted = [...new Map(wanted.toSorted((a, b) => (timestamp(a.checkStartedAt) ?? 0) - (timestamp(b.checkStartedAt) ?? 0))
@@ -126,11 +144,92 @@ export function summarizeSuite(spec, suite, checks, jobs) {
   }
   const repeatedDerivations = [...builtBy].filter(([, workers]) => workers.size > 1)
     .map(([drv, workers]) => ({ drv, workerCount: workers.size, jobUrls: [...workers] }));
+  const incidents = jobs.flatMap(job => (job.incidents ?? []).map(incident => ({ jobUrl: job.url, logUrl: job.url ? job.url + '/logs' : null, attribute: job.attribute, ...incident })));
+  for (const job of jobs) {
+    if (['failed', 'failure', 'abandoned'].includes(job.status))
+      incidents.push({ kind: job.status === 'abandoned' ? 'interrupted-worker' : 'job-failure',
+        time: timestamp(job.checkCompletedAt) ?? timestamp(job.workerCompletedAt), jobUrl: job.url, logUrl: job.url ? job.url + '/logs' : null,
+        attribute: job.attribute, cause: 'unknown', observation: 'service reports this job as ' + job.status });
+    const needsStart = !['queued', 'pending', 'skipped', 'cancelled'].includes(job.status);
+    const needsEnd = ['success', 'cached', 'failed', 'failure'].includes(job.status);
+    const start = timestamp(job.checkStartedAt), end = timestamp(job.checkCompletedAt);
+    if ((needsStart && start == null) || (needsEnd && end == null) || (start != null && end != null && end < start))
+      incidents.push({ kind: start != null && end != null ? 'invalid-clock' : 'missing-clock', time: end ?? start,
+        jobUrl: job.url, attribute: job.attribute, cause: 'unknown', observation: 'check timestamps are missing, invalid, or reversed' });
+    if ((job.checkAttempts?.length ?? 0) > 1)
+      incidents.push({ kind: 'repeated-attempt', time: start, jobUrl: job.url, logUrl: job.url ? job.url + '/logs' : null, attribute: job.attribute,
+        checkIds: job.checkAttempts.map(check => check.id), cause: 'unknown', observation: 'multiple check attempts share one job URL; earlier logs may have been replaced' });
+  }
+  const attempts = new Map();
+  for (const job of jobs) {
+    const key = JSON.stringify([job.type, job.attribute ?? null]);
+    if (!attempts.has(key)) attempts.set(key, new Map());
+    if (job.url) attempts.get(key).set(job.url, job);
+  }
+  const snapshots = spec.observations ?? [];
+  const prior = new Map(), queued = new Map();
+  for (const snapshot of snapshots) {
+    for (const job of snapshot.suite.runs) {
+      const previous = prior.get(job.url);
+      if (previous && ((['success', 'cached', 'failure', 'failed', 'abandoned', 'cancelled'].includes(previous.status)
+        && ['queued', 'pending', 'running', 'started', 'in_progress'].includes(job.status))
+        || (previous.status === 'abandoned' && job.status !== 'abandoned')
+        || (['failed', 'failure', 'cancelled'].includes(previous.status) && ['success', 'cached'].includes(job.status))))
+        incidents.push({ kind: 'repeated-attempt', time: timestamp(snapshot.at), jobUrl: job.url, logUrl: job.url ? job.url + '/logs' : null,
+          attribute: job.attribute ?? job.type, previousStatus: previous.status, status: job.status, evidenceFile: snapshot.evidenceFile,
+          cause: 'unknown', observation: 'saved snapshots show a job URL restarting or recovering; trigger and replaced work are unknown' });
+      prior.set(job.url, job);
+      const key = JSON.stringify([job.type, job.attribute ?? null]);
+      if (!attempts.has(key)) attempts.set(key, new Map());
+      if (!attempts.get(key).has(job.url)) attempts.get(key).set(job.url, job);
+      const prerequisites = spec.dependencies?.[job.attribute];
+      if (job.status !== 'queued' || !prerequisites?.length || !prerequisites.every(attribute => {
+        const matches = snapshot.suite.runs.filter(run => run.type === 'build' && run.attribute === attribute);
+        return matches.length === 1 && ['success', 'cached'].includes(matches[0].status);
+      })) continue;
+      if (!queued.has(job.url)) queued.set(job.url, { kind: 'queued-after-declared-prerequisites', time: timestamp(snapshot.at),
+        jobUrl: job.url, attribute: job.attribute, prerequisiteAttributes: prerequisites, observations: [], evidenceFile: snapshot.evidenceFile,
+        dependencyEvidenceFile: spec.dependencyEvidenceFile ?? null, cause: 'unknown',
+        observation: 'queued in a saved snapshot while all declared prerequisites were successful or cached; hidden dependencies and scheduling cause are unknown' });
+      queued.get(job.url).observations.push({ at: snapshot.at, evidenceFile: snapshot.evidenceFile });
+    }
+  }
+  incidents.push(...queued.values());
+  for (const rows of attempts.values()) if (rows.size > 1) {
+    const attempts = [...rows.values()];
+    incidents.push({ kind: 'repeated-attempt', time: min(attempts.map(job => timestamp(job.checkStartedAt)).filter(time => time != null)),
+      attribute: attempts[0].attribute ?? attempts[0].type, type: attempts[0].type, jobUrl: attempts.at(-1).url, jobUrls: [...rows.keys()], attemptCount: rows.size, cause: 'unknown',
+      observation: 'multiple job URLs have the same type and attribute in this suite; dispatch or retry trigger is unknown' });
+  }
+  for (const event of repeatedDerivations) {
+    const starts = jobs.flatMap(job => (job.builds ?? []).filter(build => build.drv === event.drv)
+      .map(build => ({ jobUrl: job.url, time: build.time })));
+    incidents.push({ kind: 'repeated-derivation', time: min(starts.map(start => start.time)), ...event, buildStarts: starts,
+      jobUrl: event.jobUrls[0], logUrl: event.jobUrls[0] + '/logs', cause: 'unknown',
+      observation: 'the same full derivation was built under multiple job URLs; substitution or scheduling cause is unknown' });
+  }
+  const finalAggregateTailSeconds = secondsBetween(wantedEnd, aggregateEnd);
+  if (suite.status === 'success' && finalAggregateTailSeconds > 60)
+    incidents.push({ kind: 'final-success-tail', time: aggregateEnd, seconds: finalAggregateTailSeconds,
+      jobUrl: actual.find(job => job.type === 'deploy' && timestamp(job.checkCompletedAt) === aggregateEnd)?.url,
+      cause: 'unknown', observation: 'final success completed more than 60 seconds after the last required check' });
+  const submitted = timestamp(spec.submittedAt), submissionCompleted = timestamp(spec.submissionCompletedAt);
+  if (submitted != null && ((wantedEnd != null && wantedEnd < submitted)
+    || (submissionCompleted != null && submissionCompleted < submitted)))
+    incidents.push({ kind: 'invalid-clock', time: submitted, cause: 'unknown', observation: 'submission timestamps disagree with completion order' });
   const observed = jobs.filter(job => job.logStatus === 'ok');
   const missing = jobs.filter(job => job.logStatus === 'missing');
   const observedInterruptions = spec.observedInterruptions ?? [];
+  for (const incident of observedInterruptions) incidents.push({ kind: 'interrupted-worker', time: timestamp(incident.observedAt),
+    jobUrl: incident.jobUrl, logUrl: incident.jobUrl + '/logs', evidenceFile: incident.evidenceFile,
+    cause: 'unknown', observation: 'saved evidence records an abandoned worker; current logs may replace earlier work' });
   const interrupted = new Set([...jobs.filter(job => job.status === 'abandoned').map(job => job.url),
-    ...observedInterruptions.map(incident => incident.jobUrl)]);
+    ...observedInterruptions.map(incident => incident.jobUrl),
+    ...snapshots.flatMap(snapshot => snapshot.suite.runs.filter(job => job.status === 'abandoned').map(job => job.url))]);
+  const uncertainHistory = jobs.some(job => (job.checkAttempts?.length ?? 0) > 1)
+    || [...prior.keys()].some(url => !jobs.some(job => job.url === url))
+    || incidents.some(incident => incident.kind === 'repeated-attempt' && incident.previousStatus);
+  const invalidClocks = incidents.some(incident => ['invalid-clock', 'missing-clock'].includes(incident.kind));
   const completedSuite = ['success', 'failure', 'failed'].includes(suite.status);
   return {
     layout: spec.layout, variant: spec.variant, scenario: spec.scenario, pair: spec.pair ?? '1', sha: spec.sha, suiteUrl: spec.suiteUrl,
@@ -139,22 +238,29 @@ export function summarizeSuite(spec, suite, checks, jobs) {
     suiteCompletedAt: completedSuite && finished != null ? new Date(finished).toISOString() : null,
     suiteSeconds: completedSuite ? secondsBetween(started, finished) : null,
     observedCheckSpanSeconds: secondsBetween(started, finished), requiredSeconds: secondsBetween(started, wantedEnd),
+    submittedAt: spec.submittedAt ?? null, submissionCompletedAt: spec.submissionCompletedAt ?? null,
+    submissionToRequiredSeconds: secondsBetween(submitted, wantedEnd),
+    submissionDurationSeconds: secondsBetween(submitted, submissionCompleted),
+    submissionToRequiredBoundsSeconds: submitted != null && submissionCompleted != null
+      ? { minimum: wantedEnd == null ? null : Math.max(0, (wantedEnd - submissionCompleted) / 1000),
+        maximum: secondsBetween(submitted, wantedEnd) } : null,
     requiredPassed: wantedComplete && latestWanted.every(job => ['success', 'cached'].includes(job.status)),
     requiredAttributes: spec.requiredAttributes ?? latestWanted.map(job => job.attribute),
     observedRequiredAttributes: latestWanted.map(job => job.attribute), missingRequiredAttributes,
-    finalAggregateSeconds: secondsBetween(started, aggregateEnd), finalAggregateTailSeconds: secondsBetween(wantedEnd, aggregateEnd),
+    finalAggregateSeconds: secondsBetween(started, aggregateEnd), finalAggregateTailSeconds,
     scheduledJobs: jobs.length, cachedJobs: jobs.filter(job => job.status === 'cached').length,
     failedJobs: jobs.filter(job => ['failed', 'failure'].includes(job.status)).length,
     cancelledOrSkippedJobs: jobs.filter(job => ['cancelled', 'skipped'].includes(job.status)).length,
     observedWorkers: observed.length, missingLogs: missing.length, interruptedJobs: interrupted.size, observedInterruptions,
-    observedResourceLowerBound: !completedSuite || missing.length > 0 || interrupted.size > 0,
-    evidenceComplete: completedSuite && wantedComplete && missing.length === 0 && interrupted.size === 0 && checks.length > 0,
+    observedResourceLowerBound: !completedSuite || missing.length > 0 || interrupted.size > 0 || uncertainHistory || invalidClocks,
+    evidenceComplete: completedSuite && wantedComplete && missing.length === 0 && interrupted.size === 0 && checks.length > 0 && !uncertainHistory && !invalidClocks,
     observedWorkerMinutes: sum(observed, 'workerSeconds') / 60,
     downloadReportedBytes: sum(observed, 'downloadReportedBytes'),
     intermediateDownloadReportedBytes: sum(observed.filter(job => job.context === 'artifact-producer'), 'downloadReportedBytes'),
     uploadReportedBytes: observed.every(job => job.uploadReportedBytes != null) ? sum(observed, 'uploadReportedBytes') : null,
     downloadWorkerSeconds: sum(observed, 'downloadActiveSeconds'), uploadWorkerSeconds: sum(observed, 'uploadActiveSeconds'),
     transferWorkerSeconds: sum(observed, 'transferActiveSeconds'), transferTimeoutCount: sum(observed, 'transferTimeoutCount'),
+    transferErrorCount: sum(observed, 'transferErrorCount'), incidentCount: incidents.length, incidents,
     cargoFinishedSeconds: sum(observed, 'cargoFinishedSeconds'),
     compilationMessages: sum(observed, 'compilationMessages'), checkingMessages: sum(observed, 'checkingMessages'),
     executedTestJobs: jobs.filter(job => job.testExecution === 'executed').length,
@@ -223,6 +329,7 @@ export function comparePairs(suites) {
       layout, scenario, pair, baselineUrl: baseline?.suiteUrl ?? null, candidateUrl: candidate?.suiteUrl ?? null,
       comparable, coverageEquivalent: null,
       suiteChangePercent: change('suiteSeconds'), requiredChangePercent: change('requiredSeconds'),
+      submissionToRequiredChangePercent: change('submissionToRequiredSeconds'),
       workerMinutesChangePercent: change('observedWorkerMinutes'), restoreChangePercent: change('downloadReportedBytes'),
       intermediateRestoreChangePercent: change('intermediateDownloadReportedBytes'),
       uploadTimeChangePercent: change('uploadWorkerSeconds'), groups,
@@ -270,6 +377,7 @@ class Collector {
       if (suite.commit !== spec.sha) throw new Error(`suite SHA ${suite.commit} does not match manifest SHA ${spec.sha}`);
       if (!Array.isArray(suite.runs)) throw new Error('suite response has no runs array');
       await this.save(`${prefix}/suite.json`, suite);
+      if (!local) await this.save(`${prefix}/snapshot.json`, { at: new Date().toISOString(), suites: [{ spec: { sha: spec.sha, suiteUrl: spec.suiteUrl }, suite }] });
     } catch (error) {
       this.errors.push({ suiteUrl: spec.suiteUrl, stage: 'suite', error: error.message });
       return null;
@@ -303,6 +411,33 @@ class Collector {
         throw new Error('actions evidence must be an array of run attempts with jobs and run_attempt');
       await this.save(`${prefix}/actions.json`, actionRuns);
     } catch (error) { this.errors.push({ suiteUrl: spec.suiteUrl, stage: 'actions', error: error.message }); }
+
+    const observations = [];
+    let dependencies, dependencyEvidenceFile;
+    try {
+      if (spec.dependencySnapshot) {
+        const evidence = await this.json(spec.dependencySnapshot.file);
+        const mapping = evidence.dependencies;
+        if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)
+          || Object.values(mapping).some(rows => !Array.isArray(rows) || rows.some(attribute => typeof attribute !== 'string')))
+          throw new Error('dependency snapshot requires the generated dependencies mapping');
+        dependencies = mapping;
+        dependencyEvidenceFile = await this.save(prefix + '/dependency-snapshot.json', evidence);
+      }
+      for (const [index, file] of (spec.observationFiles ?? []).entries()) {
+        const snapshot = await this.json(file);
+        const entries = snapshot.suites?.filter(entry => entry.spec?.suiteUrl === spec.suiteUrl);
+        const entry = entries?.[0];
+        if (timestamp(snapshot.at) == null || entries?.length !== 1 || entry.spec.sha !== spec.sha
+          || entry.suite?.commit !== spec.sha || !Array.isArray(entry.suite.runs)
+          || entry.suite.runs.some(job => typeof job.url !== 'string' || !job.url.startsWith(spec.suiteUrl + '/')
+            || !/^[^/?#]+$/.test(job.url.slice(spec.suiteUrl.length + 1))))
+          throw new Error('observation requires a timestamp and exactly one matching suite with exact-suite job URLs');
+        const evidenceFile = await this.save(prefix + '/observations/' + (index + 1) + '.json', { at: snapshot.at, suites: [entry] });
+        observations.push({ at: snapshot.at, suite: entry.suite, evidenceFile });
+      }
+      observations.sort((a, b) => timestamp(a.at) - timestamp(b.at));
+    } catch (error) { this.errors.push({ suiteUrl: spec.suiteUrl, stage: 'observation-evidence', error: error.message }); }
 
     const observedInterruptions = [];
     for (const [position, incident] of (spec.observedInterruptions ?? []).entries()) {
@@ -340,6 +475,7 @@ class Collector {
           attribute: run.attribute ?? run.type, type: run.type, status: run.status, url: run.url,
           context: /crate-(?:test-|deps-)|cargoArtifacts|Artifacts|prebuild|nextest-binaries|ci-test-inputs/.test(run.attribute ?? '') ? 'artifact-producer'
             : /doctest/.test(run.attribute ?? '') ? 'doctest' : /clippy/.test(run.attribute ?? '') ? 'clippy' : run.type,
+          checkAttempts: [...new Map(matching.filter(check => check.id != null).map(check => [check.id, { id: check.id, startedAt: check.started_at, completedAt: check.completed_at }])).values()],
           checkId: check?.id ?? null, checkStartedAt: check?.started_at ?? null,
           checkCompletedAt: check?.completed_at ?? null, checkConclusion: check?.conclusion ?? null,
           checkSeconds: excluded.has(run.status) || excluded.has(check?.conclusion) ? null
@@ -359,13 +495,15 @@ class Collector {
             const ndjson = local
               ? await readFile(resolve(dirname(resolve(this.manifestDir, local.jobs)), stored.file), 'utf8')
               : await this.nixci(`${run.url}/logs`, 'application/x-ndjson');
-            Object.assign(job, parseLog(ndjson, job), { logStatus: 'ok' });
             job.file = await this.save(`${prefix}/logs/${position + 1}.ndjson`, ndjson);
+            Object.assign(job, parseLog(ndjson, job), { logStatus: 'ok' });
             job.preWorkerSeconds = secondsBetween(timestamp(job.checkStartedAt), timestamp(job.workerStartedAt));
             job.postWorkerSeconds = job.checkSeconds == null ? null
               : secondsBetween(timestamp(job.workerCompletedAt), timestamp(job.checkCompletedAt));
           } catch (error) {
             job.logStatus = 'missing';
+            job.incidents = [{ kind: ['missing-clock', 'invalid-clock'].includes(error.cause) ? error.cause : 'missing-log',
+              time: timestamp(job.checkStartedAt), cause: 'unknown', observation: 'worker evidence is missing or malformed; timings are unknown' }];
             this.errors.push({ suiteUrl: spec.suiteUrl, jobUrl: run.url, stage: 'log', error: error.message });
           }
         }
@@ -376,7 +514,7 @@ class Collector {
     }));
     await this.save(`${prefix}/jobs.json`, jobs);
     const matchingChecks = checks.filter(check => runs.some(run => check.details_url?.replace(/\/$/, '') === run.url));
-    const summary = summarizeSuite({ ...spec, observedInterruptions }, suite, matchingChecks, jobs);
+    const summary = summarizeSuite({ ...spec, observedInterruptions, observations, dependencies, dependencyEvidenceFile }, suite, matchingChecks, jobs);
     for (const job of jobs) job.completedFromSuiteSeconds = job.checkSeconds == null ? null
       : secondsBetween(timestamp(summary.suiteStartedAt), timestamp(job.checkCompletedAt));
     if (summary.missingRequiredAttributes.length) this.errors.push({ suiteUrl: spec.suiteUrl, stage: 'required-checks',
@@ -416,6 +554,13 @@ export async function createReport(manifestPath, outputDir) {
         || !incident.jobUrl.startsWith(spec.suiteUrl + '/') || !/^[^/?#]+$/.test(incident.jobUrl.slice(spec.suiteUrl.length + 1))
         || typeof incident.observedAt !== 'string' || timestamp(incident.observedAt) == null || typeof incident.evidenceFile !== 'string' || !incident.evidenceFile)))
       throw new Error('observedInterruptions requires exact-suite jobUrl, observedAt, and evidenceFile');
+    for (const key of ['submittedAt', 'submissionCompletedAt']) if (spec[key] != null && timestamp(spec[key]) == null)
+      throw new Error(key + ' must be a recorded UTC timestamp');
+    if (spec.submissionCompletedAt && !spec.submittedAt) throw new Error('submissionCompletedAt requires submittedAt');
+    if (spec.observationFiles && (!Array.isArray(spec.observationFiles) || spec.observationFiles.some(file => typeof file !== 'string' || !file)))
+      throw new Error('observationFiles must contain saved snapshot paths');
+    if (spec.dependencySnapshot && (spec.dependencySnapshot.sha !== spec.sha || typeof spec.dependencySnapshot.file !== 'string' || !spec.dependencySnapshot.file))
+      throw new Error('dependencySnapshot requires the same SHA and a generated config file');
     if (spec.actionRunIds && (!Array.isArray(spec.actionRunIds) || !spec.actionRunIds.every(Number.isSafeInteger)))
       throw new Error('actionRunIds must contain integer run IDs');
     if (spec.offline) for (const key of ['suite', 'checks', 'jobs', 'actions'])
@@ -445,19 +590,27 @@ export async function createReport(manifestPath, outputDir) {
       'Intervals are unioned per worker before summing across workers; download and upload intervals may overlap.',
       'Cargo Finished times are command wall times, not compiler CPU time. Repeated crate names do not establish identical Cargo units.',
       'Repeated exact .drv build starts across job URLs establish repeated build work, not physical worker identity.',
+      'Incidents identify observed symptoms; transport errors and repeated attempts do not establish their underlying cause or retry trigger.',
+      'Queued-after-prerequisites incidents require a saved suite snapshot and SHA-matched declared dependencies; snapshots do not establish continuous queue duration or hidden prerequisites.',
+      'Submission clocks use recorded push-call bounds, never commit author timestamps; submission-to-required time includes the submission call when only its start is known.',
       'Executed/reused/unknown describes visible test evidence. A cached wrapper alone does not establish result reuse; test summaries are not a complete coverage inventory.',
       'GitHub created_at persists across attempts. Compare attempt-to-last-job time for reruns; cancelled/skipped attempts have no completed timing.',
     ],
     suites, pairs: comparePairs(suites), errors: collector.errors,
+    incidents: suites.flatMap(suite => suite.incidents.map(incident => ({ layout: suite.layout, variant: suite.variant, scenario: suite.scenario,
+      pair: suite.pair, sha: suite.sha, suiteUrl: suite.suiteUrl, ...incident,
+      observedAt: incident.time == null ? null : new Date(incident.time).toISOString() })))
+      .toSorted((a, b) => (a.time ?? Infinity) - (b.time ?? Infinity)),
   };
   await collector.save('report.json', report);
+  await collector.save('incidents.json', report.incidents);
   const suiteRows = [], jobRows = [], actionRows = [], transferRows = [], repeatedRows = [], compilationRows = [];
   for (const suite of suites) {
-    const { jobs, actions, repeatedDerivations, ...summary } = suite;
+    const { jobs, actions, repeatedDerivations, incidents, ...summary } = suite;
     suiteRows.push(summary);
     const identity = { layout: suite.layout, variant: suite.variant, scenario: suite.scenario, pair: suite.pair, sha: suite.sha, suiteUrl: suite.suiteUrl };
     for (const job of jobs) {
-      const { downloads, uploads, builds, cargo, tests, testSummaries, compiled, checked, ...metrics } = job;
+      const { downloads, uploads, builds, cargo, tests, testSummaries, compiled, checked, incidents, ...metrics } = job;
       jobRows.push({ ...identity, ...metrics });
       for (const [phase, crates] of [['compile', compiled], ['check', checked]])
         for (const crate of crates ?? []) compilationRows.push({ ...identity, jobUrl: job.url, attribute: job.attribute, context: job.context, phase, crate });
@@ -468,7 +621,7 @@ export async function createReport(manifestPath, outputDir) {
     for (const repeated of repeatedDerivations) repeatedRows.push({ ...identity, ...repeated });
   }
   for (const [name, rows] of Object.entries({ suites: suiteRows, jobs: jobRows, actions: actionRows, transfers: transferRows, compilations: compilationRows,
-    pairs: report.pairs.map(({ groups, ...pair }) => pair), 'repeated-derivations': repeatedRows }))
+    pairs: report.pairs.map(({ groups, ...pair }) => pair), 'repeated-derivations': repeatedRows, incidents: report.incidents }))
     await collector.save(`${name}.csv`, csv(rows));
   const lines = [
     '# CI measurements', '',
@@ -482,10 +635,23 @@ export async function createReport(manifestPath, outputDir) {
     ...suites.filter(suite => suite.transferTimeoutCount > 0).map(suite =>
       `- [${display(suite.layout)} / ${display(suite.variant)} / ${display(suite.scenario)}](${suite.suiteUrl}): ${suite.transferTimeoutCount} transfer timeout warnings. Unfinished attempts are separate from completed-transfer totals; see per-job numeric diagnostics in report.json.`),
     '',
+    '| Incident | Observed UTC | Job / suite | Evidence |',
+    '|---|---|---|---|',
+    ...report.incidents.map(incident => '| ' + [incident.kind, incident.observedAt].map(display).join(' | ')
+      + ' | [' + display(incident.attribute ?? incident.jobUrl?.split('/').at(-1) ?? incident.layout) + '](' + (incident.jobUrl ?? incident.suiteUrl) + ') | '
+      + display(incident.observation) + '; cause: ' + display(incident.cause)
+      + (incident.logUrl ? ' ([log](' + incident.logUrl + '))' : '')
+      + (incident.evidenceFile ? ' ([snapshot](' + incident.evidenceFile + '))' : '') + ' |'),
+    '',
     '| Layout / scenario / pair | Comparable | Worker change % | Intermediate restore change % | Required latency change % |',
     '|---|---|---:|---:|---:|',
     ...report.pairs.map(pair => '| ' + [pair.layout, pair.scenario, pair.pair].map(display).join(' / ') + ' | ' + [pair.comparable, pair.workerMinutesChangePercent, pair.intermediateRestoreChangePercent, pair.requiredChangePercent].map(display).join(' | ') + ' |'),
     '', 'Negative changes indicate improvement. Comparable pairs require successful suites and complete evidence; coverage equivalence requires a separate inventory check.', '',
+    '| Layout / variant / scenario | Submitted UTC | Submission → required s | Submission call s |',
+    '|---|---|---:|---:|',
+    ...suites.map(suite => '| ' + [suite.layout, suite.variant, suite.scenario].map(display).join(' / ') + ' | '
+      + [suite.submittedAt, suite.submissionToRequiredSeconds, suite.submissionDurationSeconds].map(display).join(' | ') + ' |'),
+    '',
     '| Layout / variant / scenario | Workflow attempt | Result | Created → updated s | Attempt → last job s | Observed worker min |',
     '|---|---|---|---:|---:|---:|',
     ...actionRows.map(run => `| ${[run.layout, run.variant, run.scenario].map(display).join(' / ')} | [${display(run.name)} #${run.runId}/${run.attempt}](${run.url}) | ${display(run.conclusion ?? run.status)} | ${display(run.createdToUpdatedSeconds)} | ${display(run.attemptToLastJobSeconds)} | ${display(run.observedWorkerMinutes)} |`),

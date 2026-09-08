@@ -258,3 +258,184 @@ test('omitting an explicitly required group cannot look like a worker-time savin
   assert.equal(pair.comparable, false);
   assert.equal(pair.workerMinutesChangePercent, null);
 });
+
+test('HTTP/2 and other failed cache transfers are sanitized incidents, not completed bytes', () => {
+  const records = Array.from({ length: 15 }, (_, i) => JSON.stringify({ utc_time: `2026-09-08T15:53:${String(i).padStart(2, '0')}Z`, relative_nanoseconds: i * 1e9,
+    log_message: "error: unable to download 'https://cache.example/nar?token=private-sentinel': HTTP error 200 (curl error: Stream error in the HTTP/2 framing layer)" }));
+  records.push(JSON.stringify({ utc_time: '2026-09-08T15:53:15Z', relative_nanoseconds: 15e9,
+    log_message: "warning: unable to upload 'https://cache.example/private-sentinel': HTTP error 503; retrying in 341 ms (attempt 2/5)" }));
+  const parsed = parseLog(records.join('\n'));
+  assert.equal(parsed.transferErrorCount, 16);
+  assert.equal(parsed.incidents.filter(incident => incident.kind === 'http2-transfer-error').length, 15);
+  assert.deepEqual(parsed.transferErrors.at(-1), { kind: 'cache-transfer-error', direction: 'upload', time: Date.parse('2026-09-08T15:53:15Z'),
+    httpStatus: 503, retryDelayMilliseconds: 341, attempt: 2, maximumAttempts: 5 });
+  assert.equal(parsed.downloadReportedBytes, 0);
+  assert.equal(parsed.uploadCount, 0);
+  assert.equal(JSON.stringify(parsed).includes('private-sentinel'), false);
+  assert.ok(parsed.incidents.every(incident => incident.cause === 'unknown'));
+});
+
+test('invalid clocks, same-URL attempts and failed suites cannot become accepted comparisons', () => {
+  const config = { type: 'config', status: 'success', checkStartedAt: '2026-09-06T00:00:00Z', checkCompletedAt: '2026-09-06T00:00:01Z' };
+  const core = { type: 'test', attribute: attr, url: suiteUrl + '/test', status: 'success', logStatus: 'ok', checkStartedAt: '2026-09-06T00:00:01Z',
+    checkCompletedAt: '2026-09-06T00:00:21Z', ...parseLog(overlap) };
+  const baseline = summarizeSuite(spec, { status: 'success' }, [{}], [config, core]);
+  const backwards = parseLog(overlap.replace('2026-09-06 00:00:05', '2026-09-05 00:00:05'));
+  assert.equal(backwards.workerSeconds, null);
+  assert.equal(backwards.incidents[0].kind, 'invalid-clock');
+  const candidate = summarizeSuite({ ...spec, variant: 'candidate' }, { status: 'success' }, [{}], [config, { ...core, ...backwards }]);
+  assert.equal(candidate.evidenceComplete, false);
+  assert.equal(comparePairs([baseline, candidate])[0].comparable, false);
+  for (const change of [{ checkStartedAt: null }, { checkCompletedAt: '2026-09-05T00:00:00Z' },
+    { checkAttempts: [{ id: 1 }, { id: 2 }] }]) {
+    const result = summarizeSuite(spec, { status: 'success' }, [{}], [config, { ...core, ...change }]);
+    assert.equal(result.evidenceComplete, false);
+    assert.ok(result.incidents.length > 0);
+  }
+  const failed = summarizeSuite({ ...spec, variant: 'candidate' }, { status: 'failure' }, [{}], [config, { ...core, status: 'failure' }]);
+  assert.equal(comparePairs([baseline, failed])[0].workerMinutesChangePercent, null);
+});
+
+test('final-success tail and submission clocks retain their distinct endpoints', () => {
+  const config = { type: 'config', status: 'success', checkStartedAt: '2026-09-06T00:00:10Z', checkCompletedAt: '2026-09-06T00:00:11Z' };
+  const core = { type: 'test', attribute: attr, url: suiteUrl + '/test', status: 'success', logStatus: 'ok',
+    checkStartedAt: '2026-09-06T00:00:11Z', checkCompletedAt: '2026-09-06T00:00:30Z' };
+  const deploy = { type: 'deploy', url: suiteUrl + '/deploy', status: 'success', checkStartedAt: '2026-09-06T00:01:30Z', checkCompletedAt: '2026-09-06T00:01:31Z' };
+  const submitted = { ...spec, submittedAt: '2026-09-06T00:00:00Z', submissionCompletedAt: '2026-09-06T00:00:04Z' };
+  const result = summarizeSuite(submitted, { status: 'success' }, [{}], [config, core, deploy]);
+  assert.equal(result.requiredSeconds, 20);
+  assert.equal(result.submissionToRequiredSeconds, 30);
+  assert.equal(result.submissionDurationSeconds, 4);
+  assert.deepEqual(result.submissionToRequiredBoundsSeconds, { minimum: 26, maximum: 30 });
+  assert.equal(result.incidents.find(incident => incident.kind === 'final-success-tail').seconds, 61);
+  const atThreshold = summarizeSuite(spec, { status: 'success' }, [{}], [config, core, { ...deploy, checkCompletedAt: '2026-09-06T00:01:30Z' }]);
+  assert.equal(atThreshold.incidents.some(incident => incident.kind === 'final-success-tail'), false);
+  const impossible = summarizeSuite({ ...submitted, submittedAt: '2026-09-06T00:02:00Z' }, { status: 'success' }, [{}], [config, core, deploy]);
+  assert.equal(impossible.evidenceComplete, false);
+  assert.equal(impossible.submissionToRequiredSeconds, null);
+});
+
+test('queue incidents require same-snapshot declared prerequisites; recovery observations preserve uncertainty', () => {
+  const producer = { type: 'build', attribute: 'checks.x86_64-linux.archive', status: 'success', url: suiteUrl + '/producer' };
+  const waiting = { type: 'test', attribute: attr, status: 'queued', url: suiteUrl + '/waiting' };
+  const evidence = { ...spec, dependencies: { [attr]: [producer.attribute] }, observations: [
+    { at: '2026-09-06T00:00:00Z', evidenceFile: 'first.json', suite: { runs: [producer, waiting] } },
+    { at: '2026-09-06T00:01:00Z', evidenceFile: 'second.json', suite: { runs: [producer, waiting] } },
+  ] };
+  const result = summarizeSuite(evidence, { status: 'running' }, [], [producer, waiting]);
+  const incident = result.incidents.find(incident => incident.kind === 'queued-after-declared-prerequisites');
+  assert.equal(incident.observations.length, 2);
+  assert.equal(incident.seconds, undefined);
+  assert.equal(incident.cause, 'unknown');
+  assert.equal(summarizeSuite({ ...evidence, dependencies: undefined }, { status: 'running' }, [], [producer, waiting]).incidents.some(incident => incident.kind === 'queued-after-declared-prerequisites'), false);
+  for (const runs of [[waiting], [{ ...producer, status: 'running' }, waiting], [producer, producer, waiting], [producer, { ...waiting, status: 'running' }]]) {
+    const unproven = summarizeSuite({ ...evidence, observations: [{ ...evidence.observations[0], suite: { runs } }] }, { status: 'running' }, [], runs);
+    assert.equal(unproven.incidents.some(incident => incident.kind === 'queued-after-declared-prerequisites'), false);
+  }
+  const recovery = summarizeSuite({ ...evidence, observations: [
+    { ...evidence.observations[0], suite: { runs: [producer, { ...waiting, status: 'abandoned' }] } },
+    { ...evidence.observations[1], suite: { runs: [producer, { ...waiting, status: 'running' }] } },
+  ] }, { status: 'success' }, [], [producer, { ...waiting, status: 'success' }]);
+  assert.equal(recovery.interruptedJobs, 1);
+  assert.equal(recovery.evidenceComplete, false);
+  assert.ok(recovery.incidents.some(incident => incident.kind === 'repeated-attempt' && incident.previousStatus === 'abandoned'));
+});
+
+test('saved observations replay with incident exports and reject another revision', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'ci-report-observations-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const runs = [
+    { type: 'config', status: 'success', url: suiteUrl + '/config' },
+    { type: 'build', status: 'cached', attribute: 'checks.x86_64-linux.archive', url: suiteUrl + '/archive' },
+    { type: 'test', status: 'success', attribute: attr, url: suiteUrl + '/test' },
+  ];
+  const checks = runs.map((job, i) => ({ id: i + 1, details_url: job.url, started_at: '2026-09-06T00:00:00Z',
+    completed_at: i === 2 ? '2026-09-06T00:00:20Z' : '2026-09-06T00:00:01Z', conclusion: 'success' }));
+  const manifest = { repository: 'example/repo', runs: [{ ...spec, submittedAt: '2026-09-05T23:59:59Z',
+    observationFiles: ['snapshot.json'], dependencySnapshot: { sha, file: 'config.json' },
+    offline: { suite: 'suite.json', checks: 'checks.json', jobs: 'jobs.json', actions: 'actions.json' } }] };
+  const snapshot = { at: '2026-09-06T00:00:05Z', suites: [{ spec, suite: { commit: sha, status: 'running',
+    runs: runs.map(job => job.type === 'test' ? { ...job, status: 'queued' } : job) } }] };
+  for (const [name, value] of Object.entries({ 'manifest.json': manifest, 'snapshot.json': snapshot,
+    'suite.json': { commit: sha, status: 'success', runs }, 'checks.json': checks, 'actions.json': [],
+    'config.json': { dependencies: { [attr]: [runs[1].attribute] } },
+    'jobs.json': [{ url: runs[0].url, file: 'log.ndjson' }, { url: runs[2].url, file: 'log.ndjson' }],
+  })) await writeFile(join(dir, name), JSON.stringify(value));
+  await writeFile(join(dir, 'log.ndjson'), overlap);
+  const result = await createReport(join(dir, 'manifest.json'), join(dir, 'first'));
+  assert.equal(result.complete, true);
+  assert.equal(result.suites[0].submissionToRequiredSeconds, 21);
+  const queue = result.incidents.find(incident => incident.kind === 'queued-after-declared-prerequisites');
+  assert.equal(queue.observedAt, new Date(snapshot.at).toISOString());
+  for (const file of ['incidents.json', 'incidents.csv', 'report.md'])
+    assert.ok((await readFile(join(dir, 'first', file), 'utf8')).includes('queued-after-declared-prerequisites'));
+  manifest.runs[0].observationFiles = ['first/raw/1/observations/1.json'];
+  manifest.runs[0].dependencySnapshot.file = 'first/raw/1/dependency-snapshot.json';
+  await rm(join(dir, 'snapshot.json'));
+  await rm(join(dir, 'config.json'));
+  await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest));
+  const replay = await createReport(join(dir, 'manifest.json'), join(dir, 'replay'));
+  assert.equal(replay.complete, true);
+  assert.equal(replay.incidents.filter(incident => incident.kind === queue.kind).length, 1);
+  await writeFile(join(dir, 'log.ndjson'), '{"log_message":"clock absent"}');
+  const missingClock = await createReport(join(dir, 'manifest.json'), join(dir, 'missing-clock'));
+  assert.equal(missingClock.complete, false);
+  assert.ok(missingClock.incidents.some(incident => incident.kind === 'missing-clock'));
+  assert.ok((await readFile(join(dir, 'missing-clock/raw/1/logs/1.ndjson'), 'utf8')).includes('clock absent'));
+  manifest.runs[0].dependencySnapshot.sha = 'b'.repeat(40);
+  await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest));
+  await assert.rejects(createReport(join(dir, 'manifest.json'), join(dir, 'wrong-sha')), /same SHA/);
+});
+
+test('normal build/test phases are not repeat attempts and only build prerequisites establish readiness', () => {
+  const producer = { type: 'build', attribute: 'checks.x86_64-linux.archive', status: 'success', url: suiteUrl + '/producer' };
+  const runner = { ...producer, type: 'test', url: suiteUrl + '/runner' };
+  const waiting = { type: 'test', attribute: attr, status: 'queued', url: suiteUrl + '/waiting' };
+  const result = summarizeSuite(spec, { status: 'running' }, [], [producer, runner]);
+  assert.equal(result.incidents.some(incident => incident.kind === 'repeated-attempt'), false);
+  const repeated = summarizeSuite(spec, { status: 'running' }, [], [producer, runner, { ...producer, url: suiteUrl + '/producer-repeat' }]);
+  assert.equal(repeated.incidents.filter(incident => incident.kind === 'repeated-attempt').length, 1);
+  assert.equal(repeated.incidents.find(incident => incident.kind === 'repeated-attempt').attemptCount, 2);
+  const observations = [{ at: '2026-09-06T00:00:01Z', evidenceFile: 'snapshot.json', suite: { runs: [producer, { ...runner, status: 'started' }, waiting] } }];
+  const queued = summarizeSuite({ ...spec, observations, dependencies: { [attr]: [producer.attribute] } }, { status: 'running' }, [], [producer, runner, waiting]);
+  assert.equal(queued.incidents.filter(incident => incident.kind === 'queued-after-declared-prerequisites').length, 1);
+  const recovered = summarizeSuite({ ...spec, observations: [
+    { ...observations[0], suite: { runs: [{ ...producer, status: 'failed' }] } },
+    { ...observations[0], at: '2026-09-06T00:00:02Z', suite: { runs: [{ ...producer, status: 'started' }] } },
+  ] }, { status: 'running' }, [], [producer]);
+  assert.ok(recovered.incidents.some(incident => incident.kind === 'repeated-attempt' && incident.status === 'started'));
+});
+
+test('requested missing snapshot evidence invalidates suite pair eligibility, not only report status', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'ci-report-missing-snapshot-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const runs = [ { type: 'config', status: 'cached', url: suiteUrl + '/config' },
+    { type: 'test', attribute: attr, status: 'cached', url: suiteUrl + '/test' } ];
+  const manifest = { repository: 'example/repo', runs: [{ ...spec, observationFiles: ['missing.json'],
+    offline: { suite: 'suite.json', checks: 'checks.json', jobs: 'jobs.json', actions: 'actions.json' } }] };
+  for (const [file, data] of Object.entries({ 'manifest.json': manifest, 'suite.json': { commit: sha, status: 'success', runs },
+    'jobs.json': [], 'actions.json': [], 'checks.json': runs.map((job, i) => ({ id: i + 1, details_url: job.url,
+      started_at: '2026-09-06T00:00:00Z', completed_at: '2026-09-06T00:00:01Z', conclusion: 'success' })) }))
+    await writeFile(join(dir, file), JSON.stringify(data));
+  const report = await createReport(join(dir, 'manifest.json'), join(dir, 'out'));
+  assert.equal(report.complete, false);
+  assert.equal(report.suites[0].requiredPassed, true);
+  assert.equal(report.suites[0].evidenceComplete, false);
+  assert.ok(report.errors.some(error => error.stage === 'observation-evidence'));
+  assert.equal(comparePairs([report.suites[0], { ...report.suites[0], variant: 'candidate', evidenceComplete: true }])[0].comparable, false);
+});
+
+test('a required runtime group cannot be satisfied by its cached runner package build', () => {
+  const expectation = { ...spec, requiredAttributes: [attr] };
+  const config = { type: 'config', status: 'success', checkStartedAt: '2026-09-06T00:00:00Z', checkCompletedAt: '2026-09-06T00:00:01Z' };
+  const build = { type: 'build', attribute: attr, url: suiteUrl + '/build', status: 'cached',
+    checkStartedAt: '2026-09-06T00:00:01Z', checkCompletedAt: '2026-09-06T00:00:02Z' };
+  const omitted = summarizeSuite(expectation, { status: 'success' }, [{}], [config, build]);
+  assert.deepEqual(omitted.missingRequiredAttributes, [attr]);
+  assert.equal(omitted.requiredPassed, false);
+  assert.equal(omitted.evidenceComplete, false);
+  const present = summarizeSuite(expectation, { status: 'success' }, [{}], [config, build,
+    { ...build, type: 'test', url: suiteUrl + '/test', status: 'success', checkCompletedAt: '2026-09-06T00:00:20Z' }]);
+  assert.equal(present.requiredPassed, true);
+  assert.equal(present.requiredSeconds, 20);
+});
