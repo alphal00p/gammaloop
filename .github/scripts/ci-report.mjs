@@ -108,8 +108,8 @@ export function summarizeSuite(spec, suite, checks, jobs) {
   // A failed earlier attempt remains in resource totals; latest attempt owns the result.
   const latestWanted = [...new Map(wanted.toSorted((a, b) => (timestamp(a.checkStartedAt) ?? 0) - (timestamp(b.checkStartedAt) ?? 0))
     .map(job => [job.attribute, job])).values()];
-  const wantedComplete = latestWanted.length > 0 && latestWanted.every(completed)
-    && (!spec.requiredAttributes || spec.requiredAttributes.every(attribute => latestWanted.some(job => job.attribute === attribute)));
+  const missingRequiredAttributes = (spec.requiredAttributes ?? []).filter(attribute => !latestWanted.some(job => job.attribute === attribute));
+  const wantedComplete = latestWanted.length > 0 && latestWanted.every(completed) && missingRequiredAttributes.length === 0;
   const wantedEnd = wantedComplete ? max(latestWanted.map(job => timestamp(job.checkCompletedAt))) : null;
   const aggregateEnd = max(actual.filter(job => job.type === 'deploy').map(job => timestamp(job.checkCompletedAt)));
   const builtBy = new Map();
@@ -130,12 +130,13 @@ export function summarizeSuite(spec, suite, checks, jobs) {
     suiteSeconds: completedSuite ? secondsBetween(started, finished) : null,
     observedCheckSpanSeconds: secondsBetween(started, finished), requiredSeconds: secondsBetween(started, wantedEnd),
     requiredPassed: wantedComplete && latestWanted.every(job => ['success', 'cached'].includes(job.status)),
-    requiredAttributes: latestWanted.map(job => job.attribute),
+    requiredAttributes: spec.requiredAttributes ?? latestWanted.map(job => job.attribute),
+    observedRequiredAttributes: latestWanted.map(job => job.attribute), missingRequiredAttributes,
     finalAggregateSeconds: secondsBetween(started, aggregateEnd), finalAggregateTailSeconds: secondsBetween(wantedEnd, aggregateEnd),
     scheduledJobs: jobs.length, cachedJobs: jobs.filter(job => job.status === 'cached').length,
     failedJobs: jobs.filter(job => ['failed', 'failure'].includes(job.status)).length,
     cancelledOrSkippedJobs: jobs.filter(job => ['cancelled', 'skipped'].includes(job.status)).length,
-    observedWorkers: observed.length, missingLogs: missing.length, evidenceComplete: completedSuite && missing.length === 0 && checks.length > 0,
+    observedWorkers: observed.length, missingLogs: missing.length, evidenceComplete: completedSuite && wantedComplete && missing.length === 0 && checks.length > 0,
     observedWorkerMinutes: sum(observed, 'workerSeconds') / 60,
     downloadReportedBytes: sum(observed, 'downloadReportedBytes'),
     intermediateDownloadReportedBytes: sum(observed.filter(job => job.context === 'artifact-producer'), 'downloadReportedBytes'),
@@ -188,7 +189,7 @@ export function comparePairs(suites) {
   }
   return [...pairs.values()].map(({ layout, scenario, pair, baseline, candidate }) => {
     const comparable = Boolean(baseline?.evidenceComplete && candidate?.evidenceComplete
-      && baseline.successfulTimingSample && candidate.successfulTimingSample);
+      && baseline.successfulTimingSample && candidate.successfulTimingSample && baseline.requiredPassed && candidate.requiredPassed);
     const change = key => comparable && baseline[key] > 0 && candidate[key] != null
       ? (candidate[key] / baseline[key] - 1) * 100 : null;
     const latest = suite => new Map((suite?.jobs ?? []).filter(job => job.type === 'test')
@@ -276,7 +277,10 @@ class Collector {
         const runs = pages.flatMap(page => page.workflow_runs);
         if (spec.actionRunIds?.some(id => !runs.some(run => run.id === id))) throw new Error('selected Actions run ID not found for this SHA');
         for (const run of runs) {
-          if (spec.actionRunIds && !spec.actionRunIds.includes(run.id)) continue;
+          if (spec.requiredAttributes && (!Array.isArray(spec.requiredAttributes) || !spec.requiredAttributes.length
+      || !spec.requiredAttributes.every(attribute => typeof attribute === 'string' && attribute.length)))
+      throw new Error('requiredAttributes must be a nonempty array of attribute names');
+    if (spec.actionRunIds && !spec.actionRunIds.includes(run.id)) continue;
           for (let attempt = 1; attempt <= run.run_attempt; attempt++) {
             const endpoint = `repos/${repository}/actions/runs/${run.id}/attempts/${attempt}`;
             const metadata = await this.github(endpoint);
@@ -340,6 +344,8 @@ class Collector {
     const summary = summarizeSuite(spec, suite, matchingChecks, jobs);
     for (const job of jobs) job.completedFromSuiteSeconds = job.checkSeconds == null ? null
       : secondsBetween(timestamp(summary.suiteStartedAt), timestamp(job.checkCompletedAt));
+    if (summary.missingRequiredAttributes.length) this.errors.push({ suiteUrl: spec.suiteUrl, stage: 'required-checks',
+      error: 'missing required attributes: ' + summary.missingRequiredAttributes.join(', ') });
     summary.evidenceComplete &&= !this.errors.some(error => error.suiteUrl === spec.suiteUrl);
     return { ...summary, jobs, actions: actionRuns.filter(run => run.head_sha === spec.sha).map(summarizeActions) };
   }
@@ -367,6 +373,9 @@ export async function createReport(manifestPath, outputDir) {
     const pair = JSON.stringify([spec.layout, spec.scenario, spec.pair ?? '1', spec.variant]);
     if (pairs.has(pair)) throw new Error('duplicate layout/scenario/pair/variant; give repeated trials different pair values');
     pairs.add(pair);
+    if (spec.requiredAttributes && (!Array.isArray(spec.requiredAttributes) || !spec.requiredAttributes.length
+      || !spec.requiredAttributes.every(attribute => typeof attribute === 'string' && attribute.length)))
+      throw new Error('requiredAttributes must be a nonempty array of attribute names');
     if (spec.actionRunIds && (!Array.isArray(spec.actionRunIds) || !spec.actionRunIds.every(Number.isSafeInteger)))
       throw new Error('actionRunIds must contain integer run IDs');
     if (spec.offline) for (const key of ['suite', 'checks', 'jobs', 'actions'])
@@ -378,6 +387,7 @@ export async function createReport(manifestPath, outputDir) {
     if (identities.has(spec.suiteUrl)) throw new Error('duplicate suite URL in manifest');
     identities.add(spec.suiteUrl);
   }
+  await collector.save('manifest.json', manifest);
   const suites = [];
   for (const [index, spec] of manifest.runs.entries()) {
     const suite = await collector.collect(spec, index, manifest.repository);
