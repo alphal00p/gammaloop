@@ -998,5 +998,878 @@
         }
       ]
     }
+  },
+  "resumedObservation": {
+    "recordedAt": "2026-09-08T20:58:06.808Z",
+    "status": "local and remote validation in progress; no performance acceptance",
+    "priorObservationScope": "terminalBaselineObservation preserves the failed-suite snapshot at18:30UTC; finalCounts describes that snapshot, not the final worker history. Later workers actually executed.",
+    "laterBaselineExecution": {
+      "observedAt": "2026-09-08T20:13:31.708Z",
+      "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589",
+      "status": "failed",
+      "counts": {
+        "success": 42,
+        "cached": 27,
+        "hopeless": 1,
+        "queued": 9
+      },
+      "jobs": [
+        {
+          "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core",
+          "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/8f32819c-9de7-491e-9f5e-249d27579548",
+          "sha256": "285d2bc431514cefb8228fe9af254b42e1c0530794adb3020bcd10a1b88a0965",
+          "workerStartedAt": "2026-09-08 18:59:55.821182211",
+          "workerCompletedAt": "2026-09-08 19:07:17.806277453",
+          "workerSeconds": 441.985095242,
+          "compilationMessages": 2,
+          "testSummaries": [
+            {
+              "runner": "nextest",
+              "executed": 339,
+              "passed": 339,
+              "failed": 0,
+              "skipped": 0,
+              "seconds": 0.839
+            },
+            {
+              "runner": "nextest",
+              "executed": 19,
+              "passed": 19,
+              "failed": 0,
+              "skipped": 0,
+              "seconds": 0.02
+            },
+            {
+              "runner": "nextest",
+              "executed": 0,
+              "passed": 0,
+              "failed": 0,
+              "skipped": 0,
+              "seconds": 0
+            },
+            {
+              "runner": "nextest",
+              "executed": 456,
+              "passed": 456,
+              "failed": 0,
+              "skipped": 61,
+              "seconds": 10.207
+            }
+          ],
+          "checks": [
+            {
+              "id": 102161920479,
+              "name": "test packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-09-08T18:59:57Z",
+              "completedAt": "2026-09-08T19:07:19Z"
+            }
+          ]
+        },
+        {
+          "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration",
+          "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/6a55c18d-39d2-4e9b-aec6-0ccda609733b",
+          "sha256": "69af148a8f28a8c0b6d9e0e684591f7aedbe27fdf710aa059113555269d33249",
+          "workerStartedAt": "2026-09-08 19:08:44.846507588",
+          "workerCompletedAt": "2026-09-08 19:29:10.611270325",
+          "workerSeconds": 1225.764762737,
+          "compilationMessages": 54,
+          "testSummaries": [
+            {
+              "runner": "nextest",
+              "executed": 104,
+              "passed": 104,
+              "failed": 0,
+              "skipped": 67,
+              "seconds": 109.79
+            }
+          ],
+          "checks": [
+            {
+              "id": 102161920931,
+              "name": "test packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-09-08T19:08:49Z",
+              "completedAt": "2026-09-08T19:29:13Z"
+            }
+          ]
+        },
+        {
+          "attribute": "packages.x86_64-linux.crate-test-dependencies-gammalooprs",
+          "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589/186a0f55-3f05-49ad-84d7-18c2a2c34766",
+          "sha256": "3a96eb08cc4c6572ec1d5acf0031cca33057ff965c5935d8df6ef0ec0c47888d",
+          "workerStartedAt": "2026-09-08 18:31:01.849469275",
+          "workerCompletedAt": "2026-09-08 18:36:38.469493499",
+          "workerSeconds": 336.620024224,
+          "compilationMessages": 21,
+          "testSummaries": [],
+          "checks": [
+            {
+              "id": 102161832549,
+              "name": "build packages.x86_64-linux.crate-test-dependencies-gammalooprs",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-09-08T18:31:04Z",
+              "completedAt": "2026-09-08T18:36:39Z"
+            }
+          ]
+        }
+      ],
+      "limits": [
+        "Three later streams, not complete later resource accounting. Earlier snapshot metrics remain lower bounds."
+      ]
+    },
+    "fullClosureRestore": {
+      "context": "main integration-test merged Cargo input",
+      "method": "Export the same integration-test merged-input context and its full registered closure to separate local binary caches, then import into two fresh disposable stores per variant. Export and import clocks are separate; local files exclude WAN latency. No builders or post-build hooks are run.",
+      "settings": {
+        "affinity": "8-15",
+        "compression": "xz",
+        "compressionLevel": 6,
+        "parallelCompression": true
+      },
+      "variants": [
+        {
+          "variant": "baseline",
+          "root": "/nix/store/ybnjklk95x78khdjgc4q79w8xfqc84d6-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-inputs",
+          "narCount": 616,
+          "narBytes": 21240597768,
+          "encodedNarBytes": 4160143716,
+          "operations": [
+            {
+              "stage": "export",
+              "startedAt": "2026-09-08T20:12:20.695Z",
+              "finishedAt": "2026-09-08T20:32:05.743Z",
+              "elapsedSeconds": 1185.048,
+              "exitCode": 0
+            },
+            {
+              "stage": "import-1",
+              "startedAt": "2026-09-08T20:32:05.772Z",
+              "finishedAt": "2026-09-08T20:35:29.465Z",
+              "elapsedSeconds": 203.693,
+              "exitCode": 0
+            },
+            {
+              "stage": "import-2",
+              "startedAt": "2026-09-08T20:35:29.466Z",
+              "finishedAt": "2026-09-08T20:38:52.290Z",
+              "elapsedSeconds": 202.824,
+              "exitCode": 0
+            }
+          ]
+        },
+        {
+          "variant": "candidate",
+          "root": "/nix/store/53k5r73609w5ff89isqyr80lh8mhk4zn-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-inputs",
+          "narCount": 588,
+          "narBytes": 1887255168,
+          "encodedNarBytes": 1233376944,
+          "operations": [
+            {
+              "stage": "export",
+              "startedAt": "2026-09-08T20:38:52.291Z",
+              "finishedAt": "2026-09-08T20:41:02.393Z",
+              "elapsedSeconds": 130.102,
+              "exitCode": 0
+            },
+            {
+              "stage": "import-1",
+              "startedAt": "2026-09-08T20:41:02.419Z",
+              "finishedAt": "2026-09-08T20:41:20.647Z",
+              "elapsedSeconds": 18.228,
+              "exitCode": 0
+            },
+            {
+              "stage": "import-2",
+              "startedAt": "2026-09-08T20:41:20.647Z",
+              "finishedAt": "2026-09-08T20:41:36.071Z",
+              "elapsedSeconds": 15.424,
+              "exitCode": 0
+            }
+          ]
+        }
+      ],
+      "limits": [
+        "Same hard eight-CPU affinity, shared host, local file cache; no WAN, cache uploads or builders.",
+        "Complete registered closure differs from the earlier root-only compression proxy.",
+        "One context; does not establish whole-suite latency, NixCI network bytes or CHF."
+      ]
+    },
+    "remote": {
+      "submittedSuites": 6,
+      "plannedSuites": 12,
+      "maximumSuites": 14,
+      "latestCandidate": {
+        "sha": "9f7b4392be6d8694a845315631505714fcc26b1b",
+        "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency/9f7b4392be6d8694a845315631505714fcc26b1b",
+        "submittedAt": "2026-09-08T20:48:33Z",
+        "submissionCompletedAt": "2026-09-08T20:48:36Z",
+        "role": "first final ungrouped main configuration; warmth not assumed"
+      }
+    },
+    "runtimeValidation": {
+      "recordedAt": "2026-09-08T21:10:20.866Z",
+      "method": "Fresh required-check results with frozen cached build inputs; baseline then candidate in independent stores. Failed integration roots rerun after Clippy/doctests complete, without changing source, filters, timeout or resource limits. Successful results retained, then all required roots repeated exactly.",
+      "settings": {
+        "cores": 8,
+        "maxJobs": 4,
+        "mainAffinity": "0-7",
+        "feynkitAffinity": "24-31",
+        "sandbox": true,
+        "remoteBuilders": false,
+        "postBuildHook": false,
+        "externalCacheOnly": "https://cache.nixos.org",
+        "sharedHost": true
+      },
+      "layouts": {
+        "main": {
+          "initial": {
+            "recordedAt": "2026-09-08T21:03:07.839Z",
+            "firstRunLabel": "cached build inputs, fresh required-check results",
+            "acceptedSpeedup": false,
+            "wallTimeSavingsPercent": null,
+            "reason": "Both initial variants have the same two240-second integration test timeouts; separate recovery follows without test or timeout changes.",
+            "variants": [
+              {
+                "variant": "baseline",
+                "sourceRevision": "d44bf2ed781d73840175b349d2b7f15acf1a7589",
+                "build": {
+                  "name": "build",
+                  "startedAt": "2026-09-08T20:26:30.889Z",
+                  "hostLoadBefore": "306.76 250.79 228.83 316/48872 1786255",
+                  "finishedAt": "2026-09-08T20:42:38.350Z",
+                  "elapsedSeconds": 967.461,
+                  "exitCode": 1,
+                  "hostLoadAfter": "138.76 219.94 234.73 66/48487 1990233"
+                },
+                "nextestRun": 1633,
+                "nextestPassed": 1631,
+                "nextestFailed": 0,
+                "nextestTimedOut": 2,
+                "doctestPassed": 43,
+                "doctestFailed": 0,
+                "nextestRuntimeCompilingMessages": 0,
+                "nextestArchiveSummaryCount": 17,
+                "restrictedLicenseWarnings": 0
+              },
+              {
+                "variant": "candidate",
+                "sourceRevision": "9f7b4392be6d8694a845315631505714fcc26b1b",
+                "build": {
+                  "name": "build",
+                  "startedAt": "2026-09-08T20:43:17.571Z",
+                  "hostLoadBefore": "215.06 226.12 236.00 299/48865 1999184",
+                  "finishedAt": "2026-09-08T20:57:41.808Z",
+                  "elapsedSeconds": 864.237,
+                  "exitCode": 1,
+                  "hostLoadAfter": "231.83 237.42 245.50 303/48177 2177824"
+                },
+                "nextestRun": 1633,
+                "nextestPassed": 1631,
+                "nextestFailed": 0,
+                "nextestTimedOut": 2,
+                "doctestPassed": 43,
+                "doctestFailed": 0,
+                "nextestRuntimeCompilingMessages": 0,
+                "nextestArchiveSummaryCount": 17,
+                "restrictedLicenseWarnings": 0
+              }
+            ],
+            "compilerContextComparison": [
+              {
+                "rootName": "gammaloop-clippy",
+                "baselineMessages": 45,
+                "candidateMessages": 45,
+                "sameMessageMultiset": true
+              },
+              {
+                "rootName": "gammaloop-doctest",
+                "baselineMessages": 73,
+                "candidateMessages": 73,
+                "sameMessageMultiset": true
+              }
+            ],
+            "timedOutTests": [
+              "gammaloop-integration-tests::uv se1l_uv",
+              "gammaloop-integration-tests::uv sunrise_scalar_1_uv"
+            ],
+            "limits": [
+              "Full selected Nextest inventory executed, but timed-out cases did not pass.",
+              "No causal attribution of timeout to compiler contention is made.",
+              "Compiling messages are not proven unique compiler units.",
+              "No runtime-license mode gate was added; existing tests used the provisioned environment."
+            ]
+          },
+          "coverage": {
+            "recordedAt": "2026-09-08T21:06:10.878Z",
+            "layout": "main",
+            "variants": [
+              {
+                "variant": "baseline",
+                "sourceRevision": "d44bf2ed781d73840175b349d2b7f15acf1a7589",
+                "finalGroups": [
+                  {
+                    "rootName": "gammaloop-nextest-clinnet",
+                    "stage": "initial",
+                    "selectedRun": 5,
+                    "passed": 5,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-core",
+                    "stage": "initial",
+                    "selectedRun": 814,
+                    "passed": 814,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 4
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-integration",
+                    "stage": "recovery",
+                    "selectedRun": 104,
+                    "passed": 104,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-linnet",
+                    "stage": "initial",
+                    "selectedRun": 246,
+                    "passed": 246,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 4
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-python-api",
+                    "stage": "initial",
+                    "selectedRun": 5,
+                    "passed": 5,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-spenso",
+                    "stage": "initial",
+                    "selectedRun": 385,
+                    "passed": 385,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 5
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-vakint",
+                    "stage": "initial",
+                    "selectedRun": 74,
+                    "passed": 74,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  }
+                ],
+                "selectedNextestCases": 1633,
+                "passedNextestCases": 1633,
+                "failedNextestCases": 0,
+                "archiveSummaryCount": 17,
+                "doctestsPassed": 43,
+                "doctestsFailed": 0,
+                "requiredRootCount": 11,
+                "allRequiredRootsRegistered": true,
+                "recovery": {
+                  "name": "recovery",
+                  "startedAt": "2026-09-08T20:58:31.476Z",
+                  "hostLoadBefore": "250.33 242.47 246.84 229/48318 2189941",
+                  "compilationMessages": 0,
+                  "buildActivityCount": 1,
+                  "finishedAt": "2026-09-08T21:01:28.340Z",
+                  "elapsedSeconds": 176.864,
+                  "exitCode": 0,
+                  "hostLoadAfter": "249.94 234.31 242.19 257/48436 2235430"
+                },
+                "repeat": {
+                  "name": "repeat",
+                  "startedAt": "2026-09-08T21:01:28.377Z",
+                  "hostLoadBefore": "249.94 234.31 242.19 259/48437 2235466",
+                  "compilationMessages": 0,
+                  "buildActivityCount": 0,
+                  "finishedAt": "2026-09-08T21:01:28.630Z",
+                  "elapsedSeconds": 0.253,
+                  "exitCode": 0,
+                  "hostLoadAfter": "249.94 234.31 242.19 312/48446 2235560"
+                },
+                "exactRepeatZeroBuilds": true
+              },
+              {
+                "variant": "candidate",
+                "sourceRevision": "9f7b4392be6d8694a845315631505714fcc26b1b",
+                "finalGroups": [
+                  {
+                    "rootName": "gammaloop-nextest-clinnet",
+                    "stage": "initial",
+                    "selectedRun": 5,
+                    "passed": 5,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-core",
+                    "stage": "initial",
+                    "selectedRun": 814,
+                    "passed": 814,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 4
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-integration",
+                    "stage": "recovery",
+                    "selectedRun": 104,
+                    "passed": 104,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-linnet",
+                    "stage": "initial",
+                    "selectedRun": 246,
+                    "passed": 246,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 4
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-python-api",
+                    "stage": "initial",
+                    "selectedRun": 5,
+                    "passed": 5,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-spenso",
+                    "stage": "initial",
+                    "selectedRun": 385,
+                    "passed": 385,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 5
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-vakint",
+                    "stage": "initial",
+                    "selectedRun": 74,
+                    "passed": 74,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  }
+                ],
+                "selectedNextestCases": 1633,
+                "passedNextestCases": 1633,
+                "failedNextestCases": 0,
+                "archiveSummaryCount": 17,
+                "doctestsPassed": 43,
+                "doctestsFailed": 0,
+                "requiredRootCount": 11,
+                "allRequiredRootsRegistered": true,
+                "recovery": {
+                  "name": "recovery",
+                  "startedAt": "2026-09-08T21:01:28.701Z",
+                  "hostLoadBefore": "249.94 234.31 242.19 264/48448 2235622",
+                  "compilationMessages": 0,
+                  "buildActivityCount": 1,
+                  "finishedAt": "2026-09-08T21:04:23.703Z",
+                  "elapsedSeconds": 175.002,
+                  "exitCode": 0,
+                  "hostLoadAfter": "276.81 242.06 243.11 294/48336 2271580"
+                },
+                "repeat": {
+                  "name": "repeat",
+                  "startedAt": "2026-09-08T21:04:23.748Z",
+                  "hostLoadBefore": "276.81 242.06 243.11 275/48335 2271608",
+                  "compilationMessages": 0,
+                  "buildActivityCount": 0,
+                  "finishedAt": "2026-09-08T21:04:24.011Z",
+                  "elapsedSeconds": 0.263,
+                  "exitCode": 0,
+                  "hostLoadAfter": "276.81 242.06 243.11 289/48332 2271643"
+                },
+                "exactRepeatZeroBuilds": true
+              }
+            ],
+            "redaction": {
+              "filesScanned": 20,
+              "anyLiteralProvidedKeyRemains": false
+            },
+            "finalCoverageFrom": "For each unchanged group use its latest successful registered result: six initial groups plus recovered integration; do not sum duplicate executions.",
+            "initialFailedTrialsAcceptedForSpeedup": false,
+            "networkSavingsEstablished": false,
+            "billedCostMeasured": false,
+            "limits": [
+              "Successful isolated recovery is consistent with compiler contention but does not establish it as the unique timeout cause.",
+              "Local registered output reuse does not prove NixCI cache visibility across workers.",
+              "Source, test selection and timeout settings were unchanged."
+            ]
+          }
+        },
+        "feynkit": {
+          "initial": {
+            "recordedAt": "2026-09-08T21:00:17.360Z",
+            "firstRunLabel": "cached build inputs, fresh required-check results",
+            "acceptedSpeedup": false,
+            "wallTimeSavingsPercent": null,
+            "reason": "Both initial variants have the same two240-second integration test timeouts; separate recovery follows without test or timeout changes.",
+            "variants": [
+              {
+                "variant": "baseline",
+                "sourceRevision": "2cf939655e8925a016770614219b7bf1b4ff0758",
+                "build": {
+                  "name": "build",
+                  "startedAt": "2026-09-08T20:27:34.756Z",
+                  "hostLoadBefore": "312.93 263.51 234.71 274/48933 1802795",
+                  "finishedAt": "2026-09-08T20:43:17.289Z",
+                  "elapsedSeconds": 942.533,
+                  "exitCode": 1,
+                  "hostLoadAfter": "215.06 226.12 236.00 270/49251 1999057"
+                },
+                "nextestRun": 1834,
+                "nextestPassed": 1832,
+                "nextestFailed": 0,
+                "nextestTimedOut": 2,
+                "doctestPassed": 62,
+                "doctestFailed": 0,
+                "nextestRuntimeCompilingMessages": 0,
+                "nextestArchiveSummaryCount": 26,
+                "restrictedLicenseWarnings": 0
+              },
+              {
+                "variant": "candidate",
+                "sourceRevision": "0a00fbc08ed474b4eafac563ca927f0da6073dd9",
+                "build": {
+                  "name": "build",
+                  "startedAt": "2026-09-08T20:44:16.299Z",
+                  "hostLoadBefore": "321.49 253.62 244.76 347/49011 2013286",
+                  "finishedAt": "2026-09-08T20:58:14.938Z",
+                  "elapsedSeconds": 838.639,
+                  "exitCode": 1,
+                  "hostLoadAfter": "257.92 243.42 247.21 252/48250 2186274"
+                },
+                "nextestRun": 1834,
+                "nextestPassed": 1832,
+                "nextestFailed": 0,
+                "nextestTimedOut": 2,
+                "doctestPassed": 62,
+                "doctestFailed": 0,
+                "nextestRuntimeCompilingMessages": 0,
+                "nextestArchiveSummaryCount": 26,
+                "restrictedLicenseWarnings": 0
+              }
+            ],
+            "compilerContextComparison": [
+              {
+                "rootName": "gammaloop-clippy",
+                "baselineMessages": 44,
+                "candidateMessages": 44,
+                "sameMessageMultiset": true
+              },
+              {
+                "rootName": "gammaloop-doctest",
+                "baselineMessages": 81,
+                "candidateMessages": 81,
+                "sameMessageMultiset": true
+              }
+            ],
+            "timedOutTests": [
+              "gammaloop-integration-tests::uv se1l_uv",
+              "gammaloop-integration-tests::uv sunrise_scalar_1_uv"
+            ],
+            "limits": [
+              "Full selected Nextest inventory executed, but timed-out cases did not pass.",
+              "No causal attribution of timeout to compiler contention is made.",
+              "Compiling messages are not proven unique compiler units.",
+              "No runtime-license mode gate was added; existing tests used the provisioned environment."
+            ]
+          },
+          "coverage": {
+            "recordedAt": "2026-09-08T21:04:47.387Z",
+            "layout": "feynkit",
+            "variants": [
+              {
+                "variant": "baseline",
+                "sourceRevision": "2cf939655e8925a016770614219b7bf1b4ff0758",
+                "finalGroups": [
+                  {
+                    "rootName": "gammaloop-nextest-clinnet",
+                    "stage": "initial",
+                    "selectedRun": 5,
+                    "passed": 5,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-core",
+                    "stage": "initial",
+                    "selectedRun": 782,
+                    "passed": 782,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 4
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-feynkit",
+                    "stage": "initial",
+                    "selectedRun": 210,
+                    "passed": 210,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 9
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-integration",
+                    "stage": "recovery",
+                    "selectedRun": 106,
+                    "passed": 106,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-linnet",
+                    "stage": "initial",
+                    "selectedRun": 246,
+                    "passed": 246,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 4
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-python-api",
+                    "stage": "initial",
+                    "selectedRun": 5,
+                    "passed": 5,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-spenso",
+                    "stage": "initial",
+                    "selectedRun": 386,
+                    "passed": 386,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 5
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-vakint",
+                    "stage": "initial",
+                    "selectedRun": 94,
+                    "passed": 94,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  }
+                ],
+                "selectedNextestCases": 1834,
+                "passedNextestCases": 1834,
+                "failedNextestCases": 0,
+                "archiveSummaryCount": 26,
+                "doctestsPassed": 62,
+                "doctestsFailed": 0,
+                "requiredRootCount": 12,
+                "allRequiredRootsRegistered": true,
+                "recovery": {
+                  "name": "recovery",
+                  "startedAt": "2026-09-08T20:58:36.394Z",
+                  "hostLoadBefore": "246.78 241.86 246.62 200/48314 2191161",
+                  "compilationMessages": 0,
+                  "buildActivityCount": 1,
+                  "finishedAt": "2026-09-08T21:01:10.910Z",
+                  "elapsedSeconds": 154.516,
+                  "exitCode": 0,
+                  "hostLoadAfter": "241.15 231.94 241.56 309/48086 2228056"
+                },
+                "repeat": {
+                  "name": "repeat",
+                  "startedAt": "2026-09-08T21:01:10.946Z",
+                  "hostLoadBefore": "241.15 231.94 241.56 296/48086 2228085",
+                  "compilationMessages": 0,
+                  "buildActivityCount": 0,
+                  "finishedAt": "2026-09-08T21:01:11.222Z",
+                  "elapsedSeconds": 0.276,
+                  "exitCode": 0,
+                  "hostLoadAfter": "241.15 231.94 241.56 289/48081 2228231"
+                },
+                "exactRepeatZeroBuilds": true
+              },
+              {
+                "variant": "candidate",
+                "sourceRevision": "0a00fbc08ed474b4eafac563ca927f0da6073dd9",
+                "finalGroups": [
+                  {
+                    "rootName": "gammaloop-nextest-clinnet",
+                    "stage": "initial",
+                    "selectedRun": 5,
+                    "passed": 5,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-core",
+                    "stage": "initial",
+                    "selectedRun": 782,
+                    "passed": 782,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 4
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-feynkit",
+                    "stage": "initial",
+                    "selectedRun": 210,
+                    "passed": 210,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 9
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-integration",
+                    "stage": "recovery",
+                    "selectedRun": 106,
+                    "passed": 106,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-linnet",
+                    "stage": "initial",
+                    "selectedRun": 246,
+                    "passed": 246,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 4
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-python-api",
+                    "stage": "initial",
+                    "selectedRun": 5,
+                    "passed": 5,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-spenso",
+                    "stage": "initial",
+                    "selectedRun": 386,
+                    "passed": 386,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 5
+                  },
+                  {
+                    "rootName": "gammaloop-nextest-vakint",
+                    "stage": "initial",
+                    "selectedRun": 94,
+                    "passed": 94,
+                    "failed": 0,
+                    "timedOut": 0,
+                    "compilationMessages": 0,
+                    "archiveSummaries": 1
+                  }
+                ],
+                "selectedNextestCases": 1834,
+                "passedNextestCases": 1834,
+                "failedNextestCases": 0,
+                "archiveSummaryCount": 26,
+                "doctestsPassed": 62,
+                "doctestsFailed": 0,
+                "requiredRootCount": 12,
+                "allRequiredRootsRegistered": true,
+                "recovery": {
+                  "name": "recovery",
+                  "startedAt": "2026-09-08T21:01:11.294Z",
+                  "hostLoadBefore": "241.15 231.94 241.56 270/48071 2228297",
+                  "compilationMessages": 0,
+                  "buildActivityCount": 1,
+                  "finishedAt": "2026-09-08T21:03:51.121Z",
+                  "elapsedSeconds": 159.827,
+                  "exitCode": 0,
+                  "hostLoadAfter": "248.98 233.55 240.48 514/48425 2264776"
+                },
+                "repeat": {
+                  "name": "repeat",
+                  "startedAt": "2026-09-08T21:03:51.176Z",
+                  "hostLoadBefore": "248.98 233.55 240.48 295/48425 2264805",
+                  "compilationMessages": 0,
+                  "buildActivityCount": 0,
+                  "finishedAt": "2026-09-08T21:03:51.482Z",
+                  "elapsedSeconds": 0.306,
+                  "exitCode": 0,
+                  "hostLoadAfter": "248.98 233.55 240.48 318/48425 2264873"
+                },
+                "exactRepeatZeroBuilds": true
+              }
+            ],
+            "redaction": {
+              "filesScanned": 20,
+              "anyLiteralProvidedKeyRemains": false
+            },
+            "finalCoverageFrom": "For each unchanged group use its latest successful registered result: seven initial groups plus recovered integration; do not sum duplicate executions.",
+            "initialFailedTrialsAcceptedForSpeedup": false,
+            "networkSavingsEstablished": false,
+            "billedCostMeasured": false,
+            "limits": [
+              "Successful isolated recovery is consistent with compiler contention but does not establish it as the unique timeout cause.",
+              "Local registered output reuse does not prove NixCI cache visibility across workers.",
+              "Source, test selection and timeout settings were unchanged."
+            ]
+          }
+        }
+      }
+    }
   }
 }
