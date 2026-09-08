@@ -333,12 +333,12 @@
   # The manual graph above is constructed over the full crate/artifact DAG
   # (which keeps the drift and cycle asserts meaningful); here hidden paths are
   # contracted to their nearest built dependency so their ordering is retained.
-  doNotBuildSet = builtins.listToAttrs (map (job: {
+  selectedJobs = builtins.listToAttrs (map (job: {
       name = job;
       value = true;
     })
-    doNotBuild);
-  isBuiltJob = job: !(doNotBuildSet ? ${job});
+    onlyBuild);
+  isBuiltJob = job: selectedJobs ? ${job};
   builtDependencyFrontierFor = deps: dependent:
     unique (map (entry: entry.key) (builtins.filter (
         entry: isBuiltJob entry.key
@@ -374,7 +374,7 @@ in {
   inherit groups;
   configuration = {
     systems = [system];
-    inherit doNotBuild;
+    inherit onlyBuild;
     fail-fast = false;
     fail-on-dangling-dependencies = true;
     # Keep dependency discovery manual. With generated Rust outputs,
