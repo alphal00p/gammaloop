@@ -491,7 +491,20 @@ coverage-nix:
     nix build .#packages.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-llvm-coverage
 
 # Run all CI checks locally (same as CI)
-ci-checks: clippy-nix fmt-check-nix audit-nix deny-nix doc-nix doctest-nix test-nix
+ci-checks: clippy-nix fmt-check-nix ci-graph-check doctest-nix test-nix
+
+# Check the workspace graph and generated NixCI scheduling configuration.
+ci-graph-check:
+    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-guppy-workspace-graph
+
+# Regenerate both committed CI definitions after changing workspace manifests or groups.
+ci-update:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    graph=$(nix build --no-link --print-out-paths .#ci-workspace-graph-json)
+    cp "$graph" nix/ci-workspace-graph.json
+    configuration=$(nix build --no-link --print-out-paths .#nix-ci-config)
+    cp "$configuration" nix-ci.nix
 
 # Run tests in release mode (faster execution)
 test-release TEST_NAME="":

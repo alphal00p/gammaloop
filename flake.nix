@@ -96,6 +96,7 @@
         gammaloop-cli
         clinnet-cli
         gammaloop-python-module
+        nixCiConfiguration
         guppyWorkspaceGraphJson
         linnest-wasm
         linnestWasmCargoArtifacts
@@ -210,6 +211,7 @@
           inherit clinnet-cli;
           "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
+          "nix-ci-config" = nixCiConfiguration;
           inherit linnest-wasm;
           linnestWasmCargoArtifacts =
             nixCiArtifactBarrier "linnest-wasm-cargo-artifacts" linnestWasmCargoArtifacts;
