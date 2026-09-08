@@ -117,6 +117,28 @@ owns the shared CFF algebra. The `3Drep` command and feature-gated eager
 evaluator are diagnostic tools, not production contracts: GammaLoop may prepare
 their inputs, factors, and expressions differently.
 
+Finite-temperature and zero-temperature equilibrium share `MediumMode` and the
+structural CFF recursion in `three-dimensional-reps`. Cyclic orientations,
+thermal contraction numerators, and distribution derivatives are retained in
+`CFFVariant::thermal_weight`, separately from rational coefficients. These
+weights survive serialization, variant fusion, source-edge remapping, and
+products of disconnected components. Initial-state cuts remain external energy
+aliases and never acquire thermal distribution factors. GammaLoop's graph and
+parameter layer expands the symbolic weights using particle statistics,
+chemical potentials, and inverse temperature; the shared generator does not
+own the physics model. Thermal generation retains on-shell numerator maps and
+rejects uniform numerator sampling scales.
+
+Medium modes use direct local 3D UV subtraction. Their local UV kernels take the
+vacuum limit while the surrounding observable retains its medium dependence;
+optional vacuum subtraction is a complete-observable 3D operation. Generation
+validation rejects `local_uv_cts_from_expanded_4d_integrands` for either medium
+mode or vacuum subtraction. The diagnostic `3Drep build` command forwards the
+configured medium and records it alongside the serialized expression. Its
+model-free standalone eager evaluator rejects thermal expressions because it
+does not accept distribution inputs; production evaluation remains owned by
+GammaLoop.
+
 All CFF power and capacity questions, including numerator and finite-pole
 powers of repeated occurrences, are expressed solely in physical EMR/source-edge
 energies. LMB coordinates describe momentum routing and are never consulted to
