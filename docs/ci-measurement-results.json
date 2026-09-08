@@ -1,0 +1,515 @@
+{
+  "recordedAt": "2026-09-08T15:52:46.140Z",
+  "status": "Local compilation validation complete; remote performance and valid-license acceptance pending.",
+  "applicationRevisions": {
+    "main": "395610143576507503fd2c785db3ba62340f4277",
+    "feynkit": "6eccc26fe47651addfae2f810918809139129a5c"
+  },
+  "frozenCandidateRevisions": {
+    "main": "bf1910fdc8e185e312a1451d7ce21730571627f5",
+    "feynkit": "8a07fa8ad6be4733ec537d6ac4de8eae8d154e52"
+  },
+  "settings": {
+    "cores": 8,
+    "maxJobs": 4,
+    "sandbox": true,
+    "projectOutputSeeds": 0,
+    "substituters": [
+      "https://cache.nixos.org"
+    ],
+    "hardCpuIsolation": false
+  },
+  "cold": {
+    "main": {
+      "baseline": {
+        "started": "2026-09-08T12:31:52Z",
+        "finished": "2026-09-08T13:14:26Z",
+        "elapsedSeconds": 2554,
+        "exitCode": 0,
+        "rootCount": 11,
+        "allRootsValid": true
+      },
+      "candidate": {
+        "started": "2026-09-08T14:00:47Z",
+        "finished": "2026-09-08T14:39:25Z",
+        "elapsedSeconds": 2318,
+        "exitCode": 0,
+        "rootCount": 11,
+        "allRootsValid": true
+      },
+      "elapsedRatio": 0.9075959279561472,
+      "uniqueOutputNarSizes": {
+        "mergedCargoArtifacts": {
+          "baselineCount": 53,
+          "candidateCount": 53,
+          "baselineNarBytes": 93890141024,
+          "candidateNarBytes": 23539069264,
+          "ratio": 0.2507086367884248
+        },
+        "cargoArtifacts": {
+          "baselineCount": 58,
+          "candidateCount": 58,
+          "baselineNarBytes": 10198731840,
+          "candidateNarBytes": 10166814424,
+          "ratio": 0.9968704524738244
+        },
+        "testArchive": {
+          "baselineCount": 17,
+          "candidateCount": 17,
+          "baselineNarBytes": 689415792,
+          "candidateNarBytes": 689407376,
+          "ratio": 0.999987792562779
+        },
+        "otherProjectOutput": {
+          "baselineCount": 85,
+          "candidateCount": 86,
+          "baselineNarBytes": 280496512,
+          "candidateNarBytes": 280501120,
+          "ratio": 1.0000164280117678
+        }
+      },
+      "testInventory": {
+        "expectedArchives": 17,
+        "baselineListed": 17,
+        "candidateListed": 17,
+        "baselineSelectedTests": 1633,
+        "candidateSelectedTests": 1633,
+        "comparedArchives": 17,
+        "mismatches": [],
+        "baselineFailed": [],
+        "candidateFailed": []
+      },
+      "cargoCompilation": {
+        "baselineContexts": 58,
+        "candidateContexts": 58,
+        "baselineCompilationMessages": 738,
+        "candidateCompilationMessages": 738,
+        "contextsWithDifferentCompilationMessages": 0
+      },
+      "hostSamples": {
+        "baseline": {
+          "count": 33,
+          "first": "2026-09-08T12:42:23.473Z",
+          "last": "2026-09-08T13:14:25.381Z",
+          "load1Mean": 267.009393939394,
+          "load1Min": 169.43,
+          "load1Max": 359.02
+        },
+        "candidate": {
+          "count": 38,
+          "first": "2026-09-08T14:01:27.844Z",
+          "last": "2026-09-08T14:38:29.944Z",
+          "load1Mean": 260.58210526315787,
+          "load1Min": 168.69,
+          "load1Max": 343.79
+        }
+      },
+      "concurrentInventoryListingElapsedSeconds": {
+        "baseline": 7.854999999999999,
+        "candidate": 7.562999999999999
+      },
+      "limits": [
+        "One sequential cold pair per layout on a shared 384-logical-CPU host; this is not a statistically isolated speed estimate.",
+        "Nix --cores 8 and --max-jobs 4 are advisory; baseline custom zstd -T0 used unrestricted compression threads, candidate uses the Crane core count.",
+        "Initial main baseline host sampling covers only part of that run.",
+        "Archive inventories were listed as completed outputs became available during both runs; their small concurrent I/O and CPU cost is included in observed wall time.",
+        "NAR sums count each local project output once; they are neither network transfer bytes nor cost.",
+        "The same local Nix daemon serializes identical derivations, so these runs cannot reproduce redundant distributed worker builds or measure a change in NixCI distributed cold parallelism.",
+        "Test cases were inventoried, not executed locally; licensed runtime and doctest evidence is separate."
+      ]
+    },
+    "feynkit": {
+      "baseline": {
+        "started": "2026-09-08T13:14:40Z",
+        "finished": "2026-09-08T14:00:37Z",
+        "elapsedSeconds": 2757,
+        "exitCode": 0,
+        "rootCount": 12,
+        "allRootsValid": true
+      },
+      "candidate": {
+        "started": "2026-09-08T14:39:25Z",
+        "finished": "2026-09-08T15:16:19Z",
+        "elapsedSeconds": 2214,
+        "exitCode": 0,
+        "rootCount": 12,
+        "allRootsValid": true
+      },
+      "elapsedRatio": 0.8030467899891186,
+      "uniqueOutputNarSizes": {
+        "mergedCargoArtifacts": {
+          "baselineCount": 86,
+          "candidateCount": 86,
+          "baselineNarBytes": 135292283248,
+          "candidateNarBytes": 33921991392,
+          "ratio": 0.2507311620265782
+        },
+        "cargoArtifacts": {
+          "baselineCount": 91,
+          "candidateCount": 91,
+          "baselineNarBytes": 14573362448,
+          "candidateNarBytes": 14539108640,
+          "ratio": 0.9976495604139248
+        },
+        "testArchive": {
+          "baselineCount": 26,
+          "candidateCount": 26,
+          "baselineNarBytes": 878606192,
+          "candidateNarBytes": 878627064,
+          "ratio": 1.0000237558079945
+        },
+        "otherProjectOutput": {
+          "baselineCount": 129,
+          "candidateCount": 130,
+          "baselineNarBytes": 302384456,
+          "candidateNarBytes": 302389480,
+          "ratio": 1.00001661461064
+        }
+      },
+      "testInventory": {
+        "expectedArchives": 26,
+        "baselineListed": 26,
+        "candidateListed": 26,
+        "baselineSelectedTests": 1834,
+        "candidateSelectedTests": 1834,
+        "comparedArchives": 26,
+        "mismatches": [],
+        "baselineFailed": [],
+        "candidateFailed": []
+      },
+      "cargoCompilation": {
+        "baselineContexts": 91,
+        "candidateContexts": 91,
+        "baselineCompilationMessages": 827,
+        "candidateCompilationMessages": 827,
+        "contextsWithDifferentCompilationMessages": 0
+      },
+      "hostSamples": {
+        "baseline": {
+          "count": 46,
+          "first": "2026-09-08T13:15:25.441Z",
+          "last": "2026-09-08T14:00:27.784Z",
+          "load1Mean": 263.7919565217391,
+          "load1Min": 194.87,
+          "load1Max": 349.65
+        },
+        "candidate": {
+          "count": 37,
+          "first": "2026-09-08T14:39:29.949Z",
+          "last": "2026-09-08T15:15:31.944Z",
+          "load1Mean": 277.0556756756757,
+          "load1Min": 168.6,
+          "load1Max": 348.31
+        }
+      },
+      "concurrentInventoryListingElapsedSeconds": {
+        "baseline": 10.408000000000001,
+        "candidate": 10.353999999999997
+      },
+      "limits": [
+        "One sequential cold pair per layout on a shared 384-logical-CPU host; this is not a statistically isolated speed estimate.",
+        "Nix --cores 8 and --max-jobs 4 are advisory; baseline custom zstd -T0 used unrestricted compression threads, candidate uses the Crane core count.",
+        "Initial main baseline host sampling covers only part of that run.",
+        "Archive inventories were listed as completed outputs became available during both runs; their small concurrent I/O and CPU cost is included in observed wall time.",
+        "NAR sums count each local project output once; they are neither network transfer bytes nor cost.",
+        "The same local Nix daemon serializes identical derivations, so these runs cannot reproduce redundant distributed worker builds or measure a change in NixCI distributed cold parallelism.",
+        "Test cases were inventoried, not executed locally; licensed runtime and doctest evidence is separate."
+      ]
+    }
+  },
+  "sourceProbes": [
+    {
+      "scenario": "gammaloop-source",
+      "attribute": "crate-test-binaries-gammalooprs",
+      "derivation": "/nix/store/83c0qbagm83q4rfzcg0mhd5pwcw0z6xn-gammaloop-crate-test-binaries-gammalooprs-fe38cd0f06240674-deps-0.1.0.drv",
+      "seconds": 400.219,
+      "builderStarts": 3,
+      "compilingMessages": 5,
+      "repeatBuilderStarts": 0,
+      "stableSentinel": "crate-test-binaries-feynkit-cff",
+      "stableSentinelPreserved": true,
+      "passed": true
+    },
+    {
+      "scenario": "python-source",
+      "attribute": "crate-test-binaries-feynkit-py",
+      "derivation": "/nix/store/d49xa3qals4hrw9xf16r2msfv352nxb8-gammaloop-crate-test-binaries-feynkit-py-f97314ff69d2b9cb-deps-0.1.0.drv",
+      "seconds": 145.784,
+      "builderStarts": 3,
+      "compilingMessages": 14,
+      "repeatBuilderStarts": 0,
+      "stableSentinel": "crate-test-binaries-feynkit-cff",
+      "stableSentinelPreserved": true,
+      "passed": true
+    },
+    {
+      "scenario": "cff-source",
+      "attribute": "crate-test-binaries-feynkit-cff",
+      "derivation": "/nix/store/rsn683wn9jpzg9wk5q9zfz7ndxm3bsji-gammaloop-crate-test-binaries-feynkit-cff-3be7c5adfa6e8e60-deps-0.1.0.drv",
+      "seconds": 34.391,
+      "builderStarts": 3,
+      "compilingMessages": 4,
+      "repeatBuilderStarts": 0,
+      "stableSentinel": "crate-test-binaries-feynkit-model",
+      "stableSentinelPreserved": true,
+      "passed": true
+    },
+    {
+      "scenario": "model-source",
+      "attribute": "crate-test-binaries-feynkit-model",
+      "derivation": "/nix/store/9s7g4banwl46x23js77rx4ywrib39rfc-gammaloop-crate-test-binaries-feynkit-model-b717dca2e8b2e169-deps-0.1.0.drv",
+      "seconds": 35.472,
+      "builderStarts": 3,
+      "compilingMessages": 5,
+      "repeatBuilderStarts": 0,
+      "stableSentinel": "crate-test-binaries-feynkit-kinematics",
+      "stableSentinelPreserved": true,
+      "passed": true
+    },
+    {
+      "scenario": "embedded-fixture",
+      "attribute": "crate-test-binaries-feynkit-model",
+      "derivation": "/nix/store/5a40fxrarmszdcxif0vnji7lr3i1s8lc-gammaloop-crate-test-binaries-feynkit-model-b717dca2e8b2e169-deps-0.1.0.drv",
+      "seconds": 11.165,
+      "builderStarts": 1,
+      "compilingMessages": 1,
+      "repeatBuilderStarts": 0,
+      "stableSentinel": "crate-test-binaries-feynkit-kinematics",
+      "stableSentinelPreserved": true,
+      "passed": true
+    },
+    {
+      "scenario": "manifest",
+      "attribute": "crate-test-binaries-gammaloop-tracing-filter-macros",
+      "derivation": "/nix/store/qgh02phzxiqly8s6l9wx1x9rq7ksj5lz-gammaloop-crate-test-binaries-gammaloop-tracing-filter-macros-1b17e1ec025c6580-deps-0.1.0.drv",
+      "seconds": 120.693,
+      "builderStarts": 6,
+      "compilingMessages": 228,
+      "repeatBuilderStarts": 0,
+      "stableSentinel": null,
+      "stableSentinelPreserved": null,
+      "passed": true
+    },
+    {
+      "scenario": "lockfile",
+      "attribute": "crate-test-binaries-gammaloop-tracing-filter-macros",
+      "derivation": "/nix/store/s54r6jnmqm2rsdvjbpm9ndpx643bji2c-gammaloop-crate-test-binaries-gammaloop-tracing-filter-macros-1b17e1ec025c6580-deps-0.1.0.drv",
+      "seconds": 433.489,
+      "builderStarts": 9,
+      "compilingMessages": 453,
+      "repeatBuilderStarts": 0,
+      "stableSentinel": null,
+      "stableSentinelPreserved": null,
+      "passed": true
+    }
+  ],
+  "groupingRemoval": {
+    "main": {
+      "diff": {
+        "checks": [
+          {
+            "name": "gammaloop-guppy-workspace-graph",
+            "kind": "changed"
+          }
+        ],
+        "hydraJobs": [
+          {
+            "name": "gammaloop-guppy-workspace-graph",
+            "kind": "changed"
+          }
+        ],
+        "packages": [
+          {
+            "name": "ci-test-inputs",
+            "kind": "removed"
+          },
+          {
+            "name": "nix-ci-config",
+            "kind": "changed"
+          }
+        ]
+      },
+      "configKeys": [
+        "dependencies",
+        "dependency-discovery",
+        "deploy",
+        "fail-fast",
+        "fail-on-dangling-dependencies",
+        "onlyBuild",
+        "systems",
+        "test"
+      ],
+      "selectedCount": 55,
+      "staleBundleReferences": false,
+      "dependencyDiscovery": {
+        "enable": true,
+        "synchronous": true
+      }
+    },
+    "feynkit": {
+      "diff": {
+        "checks": [
+          {
+            "name": "gammaloop-guppy-workspace-graph",
+            "kind": "changed"
+          }
+        ],
+        "hydraJobs": [
+          {
+            "name": "gammaloop-guppy-workspace-graph",
+            "kind": "changed"
+          }
+        ],
+        "packages": [
+          {
+            "name": "ci-test-inputs",
+            "kind": "removed"
+          },
+          {
+            "name": "nix-ci-config",
+            "kind": "changed"
+          }
+        ]
+      },
+      "configKeys": [
+        "dependencies",
+        "dependency-discovery",
+        "deploy",
+        "fail-fast",
+        "fail-on-dangling-dependencies",
+        "onlyBuild",
+        "systems",
+        "test"
+      ],
+      "selectedCount": 75,
+      "staleBundleReferences": false,
+      "dependencyDiscovery": {
+        "enable": true,
+        "synchronous": true
+      }
+    }
+  },
+  "remoteSuites": [
+    {
+      "layout": "main",
+      "variant": "baseline",
+      "scenario": "initial",
+      "sha": "7198fb48ea2bb5fe4baea4f904944b35bf857c89",
+      "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/7198fb48ea2bb5fe4baea4f904944b35bf857c89",
+      "observedInterruptedWorkers": 0
+    },
+    {
+      "layout": "feynkit",
+      "variant": "baseline",
+      "scenario": "initial",
+      "sha": "e4f0a1838f922df270f05d5d858d3950cc05a3be",
+      "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-feynkit-baseline/e4f0a1838f922df270f05d5d858d3950cc05a3be",
+      "observedInterruptedWorkers": 2
+    },
+    {
+      "layout": "main",
+      "variant": "candidate",
+      "scenario": "initial",
+      "sha": "bf1910fdc8e185e312a1451d7ce21730571627f5",
+      "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency/bf1910fdc8e185e312a1451d7ce21730571627f5",
+      "observedInterruptedWorkers": 1
+    },
+    {
+      "layout": "feynkit",
+      "variant": "candidate",
+      "scenario": "initial",
+      "sha": "8a07fa8ad6be4733ec537d6ac4de8eae8d154e52",
+      "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/8a07fa8ad6be4733ec537d6ac4de8eae8d154e52",
+      "observedInterruptedWorkers": 0
+    }
+  ],
+  "cacheTimeoutLogs": [
+    {
+      "layout": "feynkit",
+      "variant": "baseline",
+      "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-feynkit-baseline/e4f0a1838f922df270f05d5d858d3950cc05a3be/5cac03d6-4989-4f7e-93b6-ed0dc5c7c3e5"
+    },
+    {
+      "layout": "main",
+      "variant": "candidate",
+      "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency/bf1910fdc8e185e312a1451d7ce21730571627f5/db2344e9-2865-4487-b852-d41fca6ed636"
+    },
+    {
+      "layout": "feynkit",
+      "variant": "candidate",
+      "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/8a07fa8ad6be4733ec537d6ac4de8eae8d154e52/5d55885a-8255-4c8a-9858-ffca53cf554e"
+    }
+  ],
+  "cli": {
+    "identity": {
+      "derivation": "/nix/store/bdfdmw6n3w9wlp43c4zfxnnwfswv90d1-gammaloop-api-0.1.0.drv",
+      "output": "/nix/store/rhxf2w7s6ag98avqyz08dx1bpmiw3i9s-gammaloop-api-0.1.0"
+    },
+    "sourceRevision": "5ce8003aea986e33007207da3d4f9e31d0906924",
+    "build": {
+      "started": "2026-09-08T15:29:00Z",
+      "finished": "2026-09-08T15:35:40Z",
+      "elapsedSeconds": 400,
+      "exitCode": 0,
+      "plannedPrerequisiteDerivations": 19,
+      "substituters": [
+        "https://cache.nixos.org"
+      ],
+      "postBuildHookConfigured": false
+    },
+    "smoke": {
+      "derivation": "/nix/store/b4bfr5npzpqbq17gg64gspa01fkj9b4b-gammaloop-public-cli-smoke.drv",
+      "expectedExitCodes": {
+        "version": 0,
+        "help": 0
+      },
+      "actualExitCodes": {
+        "version": 1,
+        "help": 1
+      },
+      "passed": false,
+      "versionTextRendered": true,
+      "helpUsageRendered": true,
+      "nativeLoaderSucceededForTheseInvocations": true,
+      "errorLocation": "crates/gammaloop-api/src/cli.rs:7:15",
+      "cause": "Unchanged CLI main propagates Clap DisplayVersion and DisplayHelp errors through color-eyre.",
+      "baselineParserAndDependencySourcesUnchanged": true,
+      "baselineBinaryRetested": false,
+      "environment": "runCommandNoCC sandbox; actual public CLI input; license variable unset; disposable working directory"
+    },
+    "output": {
+      "narSize": 162188368,
+      "references": [
+        "/nix/store/1sigmg52bb61pfngmk9k8wq5fz9r7bf1-vendor-cargo-deps",
+        "/nix/store/8lahnh9pn3lrrnhax5nk7ibvjcbjmnkm-gcc-15.2.0-lib",
+        "/nix/store/ias8xacs1h3jy7xgwi2awvim61k2ji6c-glibc-2.42-67"
+      ],
+      "gccRuntimeReferencePresent": true,
+      "glibcReferencePresent": true,
+      "closurePathCount": 589,
+      "closureNarBytes": 876588608
+    },
+    "limits": [
+      "Strict version/help exit-code smoke failed and remains failed; no application code or pass criteria were changed.",
+      "Baseline source identity was checked, but the baseline public CLI binary was not rebuilt or executed.",
+      "Public package build and startup/reference evidence are separate from the failed application exit-code assertions.",
+      "This followup is excluded from all four immutable cold benchmark timings.",
+      "Linux x86_64 only; no licensed computation or full CLI behavior was tested."
+    ]
+  },
+  "limits": [
+    "Source probes build selected targets and inspect the full derivation graph; they do not time every downstream consumer.",
+    "Manifest/lockfile probes have no unchanged sentinel because they invalidate broadly.",
+    "Frozen candidate remote suites trialed grouping. Removing that bundle preserves compiled artifacts; distributed performance must be measured separately.",
+    "Local revision-only repeats compile nothing; this does not prove reuse on another worker.",
+    "The license negative control passed; no true licensed runtime acceptance is established.",
+    "Cold timings also use frozen candidate revisions before grouping removal and later follow-ups. The final scheduler has identity/graph validation, without a new performance pair."
+  ],
+  "sourceProbeMethod": {
+    "store": "populated frozen FeynKit candidate store",
+    "order": "sequential independent source snapshots; later cases may reuse earlier outputs",
+    "edits": "comments in Rust, manifest and lockfile; whitespace in embedded fixture",
+    "runtimeTestsExecuted": false,
+    "timingPurpose": "selected-target invalidation and repeat reuse; not independent cold or downstream-consumer timing"
+  }
+}
