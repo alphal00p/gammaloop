@@ -2739,6 +2739,30 @@
       export PYO3_PYTHON=${nextestPython}/bin/python3
       export PYTHON=${nextestPython}/bin/python3
       export PYTHONPATH=${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}
+      # Report the packaged runtime's license mode without exposing library logs.
+      if ${nextestPython}/bin/python3 - "${gammaloop-python-module}/${pythonSitePackages}/gammaloop/_gammaloop.so" >/dev/null 2>&1 <<'PYTHON'
+      import ctypes
+      import sys
+
+      library = ctypes.CDLL(sys.argv[1])
+      check = library.is_licensed
+      check.argtypes = []
+      check.restype = ctypes.c_bool
+      # Distinguish an unlicensed result from interpreter or library failures.
+      raise SystemExit(0 if check() else 2)
+      PYTHON
+      then
+        echo '{"symbolica_runtime_licensed": true}'
+      else
+        case $? in
+          2) echo '{"symbolica_runtime_licensed": false}' ;;
+          *)
+            echo '{"symbolica_runtime_licensed": null}'
+            echo "Symbolica license status probe failed" >&2
+            ;;
+        esac
+        exit 1
+      fi
     '' + ''
       # Nextest runs with the workspace root as cwd, while some insta
       # snapshots are stored under each crate src. Mirror those snapshot

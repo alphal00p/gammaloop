@@ -204,6 +204,16 @@ inventory: skipped tests and successful cached runs may omit names. Therefore
 filters, features, Python behavior, licenses, and doctest/Clippy coverage
 separately before accepting performance.
 
+The Python API runtime group reports `symbolica_runtime_licensed` as a JSON
+boolean using the packaged extension's pinned Symbolica API, and fails unless
+it is true. The probe discards library stdout/stderr; a probe failure reports
+null and a fixed diagnostic instead of claiming a known false status. True means
+this runtime accepts unrestricted mode; false cannot distinguish expiry, an
+unknown key, or server failure. Timestamped keys can validate locally before a
+background registration check, so true need not imply a fresh synchronous server
+round trip. This uses the group's existing Python and extension dependencies and
+preserves its Python features and test selection.
+
 **Actions** retain all attempts separately. Creation-to-update duration matches
 the historical comparison, but GitHub keeps the original `created_at` on a
 rerun. Use attempt-start-to-last-job for rerun latency. Worker minutes use
