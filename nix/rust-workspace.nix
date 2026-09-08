@@ -1325,6 +1325,9 @@
   '';
 
   gammaloop-cli = pkgs.runCommand "gammaloop-api-${apiMeta.version}" {
+    # Compressed artifacts hide ELF references until extraction. Declare the
+    # runtime libraries so Nix can retain references in the packaged binaries.
+    buildInputs = ciArgs.buildInputs ++ [pkgs.stdenv.cc.cc.lib];
     nativeBuildInputs = [
       pkgs.coreutils
       pkgs.findutils
