@@ -511,5 +511,204 @@
     "edits": "comments in Rust, manifest and lockfile; whitespace in embedded fixture",
     "runtimeTestsExecuted": false,
     "timingPurpose": "selected-target invalidation and repeat reuse; not independent cold or downstream-consumer timing"
+  },
+  "followupObservation": {
+    "observedAt": "2026-09-08T17:47:03.644Z",
+    "reporterCommit": "215a87f55afa93efb28388bf1b677fbf160d3bbb",
+    "reporterTestsPassed": 17,
+    "suitesSubmitted": 5,
+    "plannedSuites": 12,
+    "maximumSuites": 14,
+    "frozenUngroupedCandidates": {
+      "main": "6fe4a15a104581491f522b5a0c36f8bb1ebf8df6",
+      "feynkit": "4fca6a4fa5d0fe5082f882cef2c40c6bb22e6761"
+    },
+    "initialSuiteReplay": [
+      {
+        "layout": "main",
+        "variant": "baseline",
+        "sha": "7198fb48ea2bb5fe4baea4f904944b35bf857c89",
+        "status": "success",
+        "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/7198fb48ea2bb5fe4baea4f904944b35bf857c89",
+        "requiredSeconds": 4195,
+        "suiteSeconds": 4198,
+        "finalAggregateTailSeconds": 3,
+        "requiredPassed": true,
+        "evidenceComplete": true,
+        "observedResourceLowerBound": false,
+        "executedTestJobs": 8,
+        "reusedTestJobs": 0,
+        "unknownTestJobs": 0,
+        "incidentCounts": {
+          "repeated-derivation": 18
+        },
+        "longRestoresWithoutCompilation": [
+          {
+            "attribute": "packages.x86_64-linux.crate-test-binaries-spenso-hep-lib",
+            "type": "build",
+            "status": "success",
+            "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/7198fb48ea2bb5fe4baea4f904944b35bf857c89/f8b7fc59-a633-4005-a782-19e7509299d7",
+            "downloadActiveSeconds": 64.269,
+            "downloadCount": 622,
+            "downloadReportedBytes": 8440909041.6,
+            "checkingMessages": 0,
+            "cargoFinishedSeconds": 0
+          },
+          {
+            "attribute": "packages.x86_64-linux.crate-test-dependencies-vakint",
+            "type": "build",
+            "status": "success",
+            "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/7198fb48ea2bb5fe4baea4f904944b35bf857c89/1cad6b8b-f767-4bdc-a579-21675617a4dc",
+            "downloadActiveSeconds": 50.213,
+            "downloadCount": 584,
+            "downloadReportedBytes": 2846747945.6000004,
+            "checkingMessages": 0,
+            "cargoFinishedSeconds": 0
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core",
+            "type": "test",
+            "status": "success",
+            "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/7198fb48ea2bb5fe4baea4f904944b35bf857c89/0d439597-fbc5-46d8-862a-b214ad358b4c",
+            "downloadActiveSeconds": 48.725,
+            "downloadCount": 63,
+            "downloadReportedBytes": 3805453968,
+            "checkingMessages": 0,
+            "cargoFinishedSeconds": 0.89
+          }
+        ]
+      },
+      {
+        "layout": "feynkit",
+        "variant": "baseline",
+        "sha": "e4f0a1838f922df270f05d5d858d3950cc05a3be",
+        "status": "success",
+        "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-feynkit-baseline/e4f0a1838f922df270f05d5d858d3950cc05a3be",
+        "requiredSeconds": 15732,
+        "suiteSeconds": 15732,
+        "finalAggregateTailSeconds": 0,
+        "requiredPassed": true,
+        "evidenceComplete": false,
+        "observedResourceLowerBound": true,
+        "executedTestJobs": 9,
+        "reusedTestJobs": 0,
+        "unknownTestJobs": 0,
+        "incidentCounts": {
+          "transfer-timeout": 3,
+          "repeated-derivation": 173,
+          "interrupted-worker": 2
+        },
+        "longRestoresWithoutCompilation": [
+          {
+            "attribute": "packages.x86_64-linux.crate-test-binaries-linnet-py",
+            "type": "build",
+            "status": "success",
+            "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-feynkit-baseline/e4f0a1838f922df270f05d5d858d3950cc05a3be/3c41c84d-6fbe-4d6c-bd19-7245e4f4dde6",
+            "downloadActiveSeconds": 69.6,
+            "downloadCount": 4,
+            "downloadReportedBytes": 2941150822.4,
+            "checkingMessages": 0,
+            "cargoFinishedSeconds": 0
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-vakint",
+            "type": "test",
+            "status": "success",
+            "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-feynkit-baseline/e4f0a1838f922df270f05d5d858d3950cc05a3be/bbd9de50-21bd-49a8-9dfc-66c37ad33944",
+            "downloadActiveSeconds": 61.276,
+            "downloadCount": 7,
+            "downloadReportedBytes": 5661682350.4,
+            "checkingMessages": 0,
+            "cargoFinishedSeconds": 0.57
+          }
+        ]
+      },
+      {
+        "layout": "main",
+        "variant": "candidate",
+        "sha": "bf1910fdc8e185e312a1451d7ce21730571627f5",
+        "status": "success",
+        "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency/bf1910fdc8e185e312a1451d7ce21730571627f5",
+        "requiredSeconds": 11705,
+        "suiteSeconds": 12295,
+        "finalAggregateTailSeconds": 590,
+        "requiredPassed": true,
+        "evidenceComplete": false,
+        "observedResourceLowerBound": true,
+        "executedTestJobs": 8,
+        "reusedTestJobs": 0,
+        "unknownTestJobs": 0,
+        "incidentCounts": {
+          "transfer-timeout": 4,
+          "repeated-derivation": 14,
+          "final-success-tail": 1,
+          "interrupted-worker": 1
+        },
+        "longRestoresWithoutCompilation": []
+      },
+      {
+        "layout": "feynkit",
+        "variant": "candidate",
+        "sha": "8a07fa8ad6be4733ec537d6ac4de8eae8d154e52",
+        "status": "failed",
+        "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/8a07fa8ad6be4733ec537d6ac4de8eae8d154e52",
+        "requiredSeconds": null,
+        "suiteSeconds": 11653,
+        "finalAggregateTailSeconds": null,
+        "requiredPassed": false,
+        "evidenceComplete": false,
+        "observedResourceLowerBound": true,
+        "executedTestJobs": 1,
+        "reusedTestJobs": 0,
+        "unknownTestJobs": 8,
+        "incidentCounts": {
+          "transfer-timeout": 4,
+          "http2-transfer-error": 15,
+          "job-failure": 2,
+          "missing-clock": 1,
+          "repeated-attempt": 1,
+          "repeated-derivation": 56
+        },
+        "longRestoresWithoutCompilation": [
+          {
+            "attribute": "packages.x86_64-linux.ci-test-inputs",
+            "type": "build",
+            "status": "failed",
+            "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/8a07fa8ad6be4733ec537d6ac4de8eae8d154e52/389fa8b3-af68-4b7e-99eb-80324f84572a",
+            "downloadActiveSeconds": 49.923,
+            "downloadCount": 44,
+            "downloadReportedBytes": 6440256721.6,
+            "checkingMessages": 0,
+            "cargoFinishedSeconds": 0
+          }
+        ]
+      }
+    ],
+    "initialPairsAccepted": false,
+    "pendingBaseline": {
+      "sha": "d44bf2ed781d73840175b349d2b7f15acf1a7589",
+      "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/d44bf2ed781d73840175b349d2b7f15acf1a7589",
+      "submittedAt": "2026-09-08T17:13:55Z",
+      "submissionCompletedAt": "2026-09-08T17:13:57Z",
+      "evaluationCompletedAt": "2026-09-08T17:15:47Z",
+      "firstReadyObservation": "2026-09-08T17:16:39.708Z",
+      "lastReadyObservation": "2026-09-08T17:47:03.644Z",
+      "snapshotCount": 26,
+      "readyNodes": 13,
+      "activeApplicationWorkers": 0,
+      "queuedJobs": 72
+    },
+    "overlappingSuite": {
+      "sha": "32f27225460fbf5a2c9ad507355a8b8423fd237a",
+      "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fraised_energy_cff_wip_optimized_phase_fix/32f27225460fbf5a2c9ad507355a8b8423fd237a",
+      "observedAt": "2026-09-08T17:41:24.265Z",
+      "activeJobs": 3
+    },
+    "limits": [
+      "Observed cross-branch work may confound timing; worker limits and queue cause are unknown.",
+      "Separate queue observations do not prove continuous waiting.",
+      "Five submitted suites do not establish acceptance of the final ungrouped configuration.",
+      "Initial frozen measurements above remain unchanged; this is a later observation."
+    ]
   }
 }

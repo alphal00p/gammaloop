@@ -62,8 +62,8 @@ closure size establishes provider network traffic or faster test completion.
 
 The shared final-archive/Python producer experiment was removed. Ready groups
 waited for remaining builds and uploads, and intermediate uploads continued.
-The proposal schedules 55 main / 75 FeynKit jobs with synchronous discovery and
-explicit edges. Removing the bundle preserves all compiled artifact identities.
+The proposal selects 55 main / 75 FeynKit build outputs with synchronous
+discovery and explicit edges, plus runtime checks and service stages. Removing the bundle preserves all compiled artifact identities.
 
 Five-minute low-speed upload retries occurred in the
 [main candidate](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency/bf1910fdc8e185e312a1451d7ce21730571627f5/db2344e9-2865-4487-b852-d41fca6ed636),
@@ -76,8 +76,8 @@ visibility to later workers. Three abandoned workers also recovered under the
 same URLs with overwritten logs; saved incident annotations keep those pairs
 ineligible for improvement percentages.
 
-The completed main grouped suite reported final success 9m50s after its last
-required check; its final worker ran for about 19s. FeynKit baseline Python was
+The completed main grouped suite took 3h15m05s to finish required checks,
+compared with 1h09m55s for its baseline. Its final success followed 9m50s later; its final worker ran for about 19s. FeynKit baseline Python was
 observed queued after its displayed prerequisites had passed, with gaps of
 48m05s and 10m54s. The later FeynKit candidate attempt reported 15 HTTP/2 cache
 download errors; its completed restores covered about 6.00 GiB in 49.923s, with
@@ -88,8 +88,13 @@ The new [main baseline](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-ben
 was submitted at 17:13:55–17:13:57 UTC on 8 September. It and the final main
 candidate compare unchanged application code; the candidate CI configuration has
 changed since its initial run. Actual cache warmth must be established from logs.
-The remaining scenarios use independently prepared FeynKit source edits. No new
-Actions runs are dispatched for these comparisons.
+By 17:47:03 UTC, it had no application worker running, more than 31 minutes
+after evaluation. Thirteen nodes appeared ready in 26 saved snapshots. Another
+[phase-fix suite](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fraised_energy_cff_wip_optimized_phase_fix/32f27225460fbf5a2c9ad507355a8b8423fd237a)
+had three running jobs at 17:41:24. This overlap may confound elapsed timings;
+worker limits and the queue cause are unknown. Further benchmark pushes are held
+for this baseline to finish. The remaining scenarios use independently prepared
+FeynKit source edits, with no new Actions dispatch.
 
 Both frozen Nix Actions workflows passed:
 [main, 2h10m52s](https://github.com/alphal00p/gammaloop/actions/runs/34227037456)
