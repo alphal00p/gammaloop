@@ -75,6 +75,7 @@ pub struct ResolvedThresholdCountertermAssociation {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ResolvedThresholdCountertermVariant {
     pub name: String,
+    pub group_id: Option<usize>,
     pub cut_group_id: Option<CutGroupId>,
     pub associations: Vec<ResolvedThresholdCountertermAssociation>,
     pub side: ThresholdCountertermSide,
@@ -160,6 +161,7 @@ pub struct ThresholdCountertermMultiplierMetadata {
 pub struct ThresholdCountertermVariantMetadata {
     pub variant_id: usize,
     pub name: String,
+    pub group_id: Option<usize>,
     pub cut_group_id: Option<usize>,
     pub associations: Vec<ThresholdCountertermAssociationMetadata>,
     pub side: ThresholdCountertermSide,
@@ -272,6 +274,7 @@ impl ThresholdCountertermMetadataRegistry {
                 |((variant_id, variant), status)| ThresholdCountertermVariantMetadata {
                     variant_id: variant_id.0,
                     name: variant.name.clone(),
+                    group_id: variant.group_id,
                     cut_group_id: variant.cut_group_id.map(|id| id.0),
                     associations: variant
                         .associations
@@ -753,6 +756,7 @@ impl ResolvedThresholdCounterterms {
                 if threshold.counterterms.is_empty() {
                     threshold.counterterms.push(ThresholdCountertermVariant {
                         name: Some("default".to_string()),
+                        group_id: None,
                         subspace: Some(resolved_subspace),
                         parent_lmb: resolved_parent_lmb,
                         disable: false,
@@ -869,6 +873,7 @@ mod tests {
         };
         let variant = ResolvedThresholdCountertermVariant {
             name: "default".to_string(),
+            group_id: None,
             cut_group_id: None,
             associations: vec![association],
             side: ThresholdCountertermSide::Amplitude,
@@ -979,6 +984,7 @@ mod tests {
             legacy_equivalent: true,
             variants: TiVec::from(vec![ResolvedThresholdCountertermVariant {
                 name: "default".to_string(),
+                group_id: None,
                 cut_group_id: None,
                 associations: associations.clone(),
                 side: ThresholdCountertermSide::Amplitude,
@@ -1106,6 +1112,7 @@ mod tests {
                        multiplier: Option<ThresholdCountertermMultiplier>| {
             ResolvedThresholdCountertermVariant {
                 name: name.to_string(),
+                group_id: None,
                 cut_group_id: Some(CutGroupId(0)),
                 associations: vec![association.clone()],
                 side,

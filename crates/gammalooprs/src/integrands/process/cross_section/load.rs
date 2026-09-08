@@ -96,6 +96,8 @@ pub struct StandaloneThresholdCountertermMultiplierMetadata {
 pub struct StandaloneThresholdCountertermVariantMetadata {
     pub(crate) variant_id: usize,
     pub(crate) name: String,
+    #[serde(default)]
+    pub(crate) group_id: Option<usize>,
     pub(crate) cut_group_id: Option<usize>,
     pub(crate) associations: Vec<StandaloneThresholdCountertermAssociationMetadata>,
     pub(crate) side: StandaloneThresholdCountertermSide,
@@ -1547,6 +1549,7 @@ mod threshold_multiplier_tests {
         let variant = StandaloneThresholdCountertermVariantMetadata {
             variant_id: 0,
             name: "forced_subspace".to_string(),
+            group_id: None,
             cut_group_id: Some(0),
             associations: vec![StandaloneThresholdCountertermAssociationMetadata {
                 cut_id: Some(0),

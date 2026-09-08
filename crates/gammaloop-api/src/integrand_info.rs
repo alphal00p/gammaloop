@@ -80,6 +80,7 @@ impl IntegrandThresholdCountertermDirectiveInfo {
                 cut.thresholds.iter().flat_map(move |threshold| {
                     let implicit_default = ThresholdCountertermVariant {
                         name: Some("default".to_string()),
+                        group_id: None,
                         subspace: None,
                         parent_lmb: None,
                         disable: false,

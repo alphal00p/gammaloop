@@ -169,7 +169,8 @@ fn construct_solver(
         for edge_id in threshold_subspace.contains(&esurface.energies, overlap_input.graph) {
             if let Some(edge_position) = propagator_constraints.iter().position(|constraint| {
                 *constraint.signature == lmb.edge_signatures[edge_id]
-                    && constraint.subspace.has_same_embedding(threshold_subspace)
+                    && constraint.subspace.solve_signature(overlap_input.lmbs)
+                        == threshold_subspace.solve_signature(overlap_input.lmbs)
             }) {
                 esurface_constraint_indices.push(edge_position);
             } else {
@@ -490,6 +491,164 @@ pub(crate) fn check_global_center(
 /// needed only for a configured forced center, whose coordinates are defined in the identity
 /// frame and must therefore be rotated exactly once before the cut-side LMB transform.
 pub(crate) fn find_maximal_overlap(
+    overlap_input: &OverlapInput,
+    existing_esurfaces: &ExistingThresholds,
+    loop_moms: &LoopMomenta<F<f64>>,
+    external_momenta: &ExternalFourMomenta<F<f64>>,
+    probe_rotation: &Rotation,
+) -> Result<OverlapStructure> {
+    overlap_input.validate_subspaces()?;
+    let mut partitions: Vec<(SubspaceData, ExistingThresholds)> = Vec::new();
+    for existing_id in existing_esurfaces.iter_enumerated().map(|(id, _)| id) {
+        let surface_id = existing_esurfaces[existing_id];
+        let threshold_subspace = overlap_input.threshold_subspace(surface_id);
+        if let Some((representative, members)) =
+            partitions.iter_mut().find(|(representative, _)| {
+                representative.solve_signature(overlap_input.lmbs)
+                    == threshold_subspace.solve_signature(overlap_input.lmbs)
+            })
+        {
+            let _ = representative;
+            members.push(surface_id);
+        } else {
+            let mut members = ExistingThresholds::new();
+            members.push(surface_id);
+            partitions.push((threshold_subspace.clone(), members));
+        }
+    }
+
+    let mut combined = OverlapStructure {
+        overlap_groups: Vec::new(),
+        existing_esurfaces: existing_esurfaces.clone(),
+    };
+    let mut original_ids_by_partition = Vec::new();
+    for (_, members) in &partitions {
+        original_ids_by_partition.push(
+            members
+                .iter()
+                .map(|surface_id| {
+                    existing_esurfaces
+                        .iter_enumerated()
+                        .find_map(|(id, candidate)| (candidate == surface_id).then_some(id))
+                        .expect("partition surface must belong to original threshold set")
+                })
+                .collect::<Vec<_>>(),
+        );
+    }
+    for (partition_index, (representative, members)) in partitions.into_iter().enumerate() {
+        let partition_input = OverlapInput {
+            graph: overlap_input.graph,
+            settings: overlap_input.settings,
+            subspace: &representative,
+            threshold_subspaces: None,
+            lmbs: overlap_input.lmbs,
+            thresholds: overlap_input.thresholds,
+            edge_masses: overlap_input.edge_masses.clone(),
+        };
+        let local = find_maximal_overlap_single(
+            &partition_input,
+            &members,
+            loop_moms,
+            external_momenta,
+            probe_rotation,
+        )?;
+        for mut group in local.overlap_groups {
+            group.existing_esurfaces = group
+                .existing_esurfaces
+                .into_iter()
+                .map(|id| original_ids_by_partition[partition_index][usize::from(id)])
+                .collect();
+            combined.overlap_groups.push(group);
+        }
+    }
+    combined.fill_in_complements();
+    Ok(combined)
+}
+
+/// Variant of [`find_maximal_overlap`] that keeps explicitly tagged thresholds in separate
+/// solve problems. Unlabelled thresholds still use the automatic exact-subspace partition.
+pub(crate) fn find_maximal_overlap_with_group_ids(
+    overlap_input: &OverlapInput,
+    existing_esurfaces: &ExistingThresholds,
+    group_ids: &[Option<usize>],
+    loop_moms: &LoopMomenta<F<f64>>,
+    external_momenta: &ExternalFourMomenta<F<f64>>,
+    probe_rotation: &Rotation,
+) -> Result<OverlapStructure> {
+    if group_ids.len() < overlap_input.thresholds.len() {
+        return Err(eyre!(
+            "threshold solve-group metadata has {} entries for {} threshold surfaces",
+            group_ids.len(),
+            overlap_input.thresholds.len()
+        ));
+    }
+    let mut labelled = HashMap::<Option<usize>, ExistingThresholds>::new();
+    for existing_id in existing_esurfaces.iter_enumerated().map(|(id, _)| id) {
+        let surface_id = existing_esurfaces[existing_id];
+        let label = group_ids[surface_id.0];
+        labelled.entry(label).or_default().push(surface_id);
+    }
+    for (label, members) in &labelled {
+        let Some(group_id) = label else {
+            continue;
+        };
+        let Some(first_surface_id) = members.first() else {
+            continue;
+        };
+        let first_subspace = overlap_input.threshold_subspace(*first_surface_id);
+        let first_signature = first_subspace.solve_signature(overlap_input.lmbs);
+        let incompatible = members.iter().skip(1).find(|surface_id| {
+            overlap_input
+                .threshold_subspace(**surface_id)
+                .solve_signature(overlap_input.lmbs)
+                != first_signature
+        });
+        if let Some(conflicting_surface_id) = incompatible {
+            let conflicting_subspace = overlap_input.threshold_subspace(*conflicting_surface_id);
+            return Err(eyre!(
+                "explicit threshold group_id={} contains incompatible solve subspaces: E-surface {} has signature {:?}, while E-surface {} has signature {:?}",
+                group_id,
+                first_surface_id.0,
+                first_signature,
+                conflicting_surface_id.0,
+                conflicting_subspace.solve_signature(overlap_input.lmbs),
+            ));
+        }
+    }
+    let mut combined = OverlapStructure {
+        overlap_groups: Vec::new(),
+        existing_esurfaces: existing_esurfaces.clone(),
+    };
+    for members in labelled.into_values() {
+        let local = find_maximal_overlap(
+            overlap_input,
+            &members,
+            loop_moms,
+            external_momenta,
+            probe_rotation,
+        )?;
+        for mut group in local.overlap_groups {
+            group.existing_esurfaces = group
+                .existing_esurfaces
+                .into_iter()
+                .map(|id| {
+                    let surface_id = local.existing_esurfaces[id];
+                    existing_esurfaces
+                        .iter_enumerated()
+                        .find_map(|(original_id, candidate)| {
+                            (candidate == &surface_id).then_some(original_id)
+                        })
+                        .expect("labelled overlap surface must belong to original threshold set")
+                })
+                .collect();
+            combined.overlap_groups.push(group);
+        }
+    }
+    combined.fill_in_complements();
+    Ok(combined)
+}
+
+fn find_maximal_overlap_single(
     overlap_input: &OverlapInput,
     existing_esurfaces: &ExistingThresholds,
     loop_moms: &LoopMomenta<F<f64>>,

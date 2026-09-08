@@ -126,6 +126,20 @@ pub struct SubspaceData {
 }
 
 impl SubspaceData {
+    /// Canonical coordinates constrained by one threshold solve. The parent LMB and active
+    /// topology are intentionally represented by the defining edge of each formal loop variable;
+    /// this is the identity used when deciding whether thresholds may share an SOCP center.
+    pub(crate) fn solve_signature(
+        &self,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> Vec<(LoopIndex, EdgeIndex)> {
+        self.lmb_indices
+            .iter()
+            .copied()
+            .map(|loop_index| (loop_index, all_lmbs[self.lmb].loop_edges[loop_index]))
+            .collect()
+    }
+
     pub(crate) fn has_same_embedding(&self, other: &Self) -> bool {
         self.lmb == other.lmb
             && self.lmb_indices == other.lmb_indices

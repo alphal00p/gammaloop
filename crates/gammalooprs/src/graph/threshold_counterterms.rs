@@ -58,6 +58,8 @@ pub struct ThresholdCountertermVariant {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subspace: Option<Vec<EdgeIndex>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_lmb: Option<Vec<EdgeIndex>>,
@@ -93,6 +95,27 @@ fn is_false(value: &bool) -> bool {
 }
 
 impl ThresholdCountertermSpec {
+    pub(crate) fn validate_group_ids(&self) -> Result<()> {
+        let ids = self
+            .cuts
+            .iter()
+            .flat_map(|cut| &cut.thresholds)
+            .flat_map(|threshold| &threshold.counterterms)
+            .filter_map(|variant| variant.group_id)
+            .collect::<BTreeSet<_>>();
+        if let Some(max_id) = ids.iter().next_back().copied() {
+            for expected in 0..=max_id {
+                if !ids.contains(&expected) {
+                    return Err(eyre!(
+                        "threshold_counterterms group_id values must start at 0 and be contiguous; missing group_id {} (present: {:?})",
+                        expected,
+                        ids,
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
     /// Whether all explicit entries are semantically identical to legacy subtraction.
     ///
     /// Names and explicit provenance do not affect this predicate. Process resolution can use it
@@ -234,6 +257,9 @@ impl ThresholdCountertermSpec {
             }
         }
 
+        self.validate_group_ids()
+            .map_err(|error| eyre!("graph '{}': {error:#}", graph.name))?;
+
         Ok(())
     }
 
@@ -293,6 +319,7 @@ impl ThresholdCountertermSpec {
 impl ThresholdCountertermVariant {
     pub fn is_legacy_equivalent(&self) -> bool {
         !self.disable
+            && self.group_id.is_none()
             && self.subspace.is_none()
             && self.parent_lmb.is_none()
             && self.multiplier.is_none()
@@ -386,7 +413,8 @@ mod tests {
     use linnet::{half_edge::involution::EdgeIndex, permutation::Permutation};
 
     use super::{
-        THRESHOLD_COUNTERTERM_SCHEMA_VERSION, ThresholdCountertermSpec, ThresholdCountertermVariant,
+        THRESHOLD_COUNTERTERM_SCHEMA_VERSION, ThresholdCountertermCut, ThresholdCountertermSpec,
+        ThresholdCountertermThreshold, ThresholdCountertermVariant,
     };
 
     #[test]
@@ -571,5 +599,26 @@ disable = true
         )
         .unwrap();
         assert!(!disabled.is_legacy_equivalent());
+    }
+
+    #[test]
+    fn group_ids_must_start_at_zero_and_be_contiguous() {
+        let mut spec = ThresholdCountertermSpec::default();
+        spec.cuts.push(ThresholdCountertermCut {
+            edges: vec![],
+            thresholds: vec![ThresholdCountertermThreshold {
+                edges: vec![EdgeIndex(1)],
+                counterterms: vec![ThresholdCountertermVariant {
+                    name: Some("gapped".to_string()),
+                    group_id: Some(1),
+                    subspace: None,
+                    parent_lmb: None,
+                    disable: false,
+                    multiplier: None,
+                }],
+            }],
+        });
+        let error = spec.validate_group_ids().unwrap_err();
+        assert!(error.to_string().contains("missing group_id 0"));
     }
 }
