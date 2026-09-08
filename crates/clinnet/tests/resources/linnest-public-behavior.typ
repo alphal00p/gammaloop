@@ -4,6 +4,8 @@
 #import graph: *
 #import "map-style.typ" as feynman
 #import "@preview/cetz:0.5.1" as cetz
+#import "curved-arrow-behavior.typ": curved-arrow-behavior
+#curved-arrow-behavior
 
 #let close(a, b, epsilon: 1e-6) = calc.abs(a - b) < epsilon
 #let same-pos(a, b) = close(a.x, b.x) and close(a.y, b.y)
@@ -468,6 +470,19 @@
     assert(label.offset == arrow.offset and label.label-side == arrow.label-side)
     assert(label.offset-side == arrow.offset-side)
     assert(arrow.label-gap == 0.45 and label.label-gap == 0.45)
+    assert(arrow.label-style.anchor == "center" and label.label-style.anchor == "center")
+    // Anchor overrides reach both carrier modes without changing shaft geometry.
+    for anchor in ("center", "south-west", "north-east", "\"south-west\"") {
+      let customized = feynman.edge-style((
+        momentum: [],
+        fields: fields + (momentum-label-anchor: anchor),
+      ))
+      assert(customized == layers.enumerate().map(((index, layer)) => {
+        if index == 0 { layer } else {
+          layer + (label-style: (anchor: anchor.trim("\"")))
+        }
+      }))
+    }
     // Gap overrides must reach both carrier modes without moving the arrow.
     for gap in (0, 0.15, 0.8, "0.2") {
       let customized = feynman.edge-style((

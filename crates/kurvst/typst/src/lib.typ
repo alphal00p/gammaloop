@@ -363,9 +363,9 @@
   path,
   /// Signed normal offset distance. -> int | float
   distance: 0,
-  /// Arc length removed from the start before offsetting. -> int | float
+  /// Arc length removed from the start of the offset path. -> int | float
   start-outset: 0,
-  /// Arc length removed from the end before offsetting. -> int | float
+  /// Arc length removed from the end of the offset path. -> int | float
   end-outset: 0,
   /// Geometry approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
@@ -391,11 +391,11 @@
   offset: 0,
   /// Fixed target visible length. -> none | int | float
   length: none,
-  /// Relative target visible length as a fraction of the base length. -> none | int | float
+  /// Relative target visible length as a fraction of the full offset path length. -> none | int | float
   ratio: none,
   /// Resolution strategy for fixed and relative targets. -> string | function
   resolve-length: "min",
-  /// Arc-length displacement of a shortened layer; positive moves toward the path end. -> int | float
+  /// Arc-length displacement on the offset path; positive moves toward its end. -> int | float
   shift: 0,
   /// Arc length removed from the start. -> int | float
   start-outset: 0,

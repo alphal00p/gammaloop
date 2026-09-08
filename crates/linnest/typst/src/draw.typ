@@ -329,14 +329,14 @@
   /// Maximum visible arc length for centered parallel edge paths. `none` keeps
   /// the full shifted path. -> none | int | float
   edge-length: none,
-  /// Maximum visible fraction of the base edge length for centered parallel edge
+  /// Maximum visible fraction of the full offset path length for centered edge
   /// paths. Combined with `edge-length` according to `edge-resolve-length`.
   /// -> none | int | float
   edge-ratio: none,
   /// Resolve `edge-length` and `edge-ratio`. Accepted string
   /// values are `"min"`/`"shorter"`, `"max"`/`"longer"`, `"length"`/`"fixed"`,
   /// `"ratio"`/`"relative"`, or `"none"`/`"full"`. A function receives
-  /// `(base-length, length, ratio)`. -> string | function
+  /// `(offset-path-length, length, ratio)`. -> string | function
   edge-resolve-length: "min",
   /// Arc-length accuracy for fitted parallel edge paths. -> float
   edge-accuracy: 0.001,
@@ -361,7 +361,13 @@
   /// retaining the paired-edge split point selected by `mark-orientation`.
   /// `mark-orientation: "edge"` makes a mark follow `edge.orientation` instead
   /// of raw path direction; reversed edges move the mark to the sink half and
-  /// flip it, while undirected edges suppress it.
+  /// flip it, while undirected edges suppress it. Heads span a chord between
+  /// two points on the full carrier: triangle and straight heads use their
+  /// geometric tip and back; other marks use their declared tip/base anchors.
+  /// Centered heads straddle the requested arc position, so their chord center
+  /// can lie off the curve. Near endpoints the interval moves inward; the head
+  /// fits the chord longitudinally while keeping its width. Interior marks
+  /// overlay the unshortened curve; end shafts meet the appropriate head contact.
   /// `source-anchor` may be a CeTZ anchor name such as `"north"` or `"south"`
   /// to route this endpoint from a measured node-box anchor. By default,
   /// anchored paired edges use two smooth cubic halves through the edge layout
@@ -379,9 +385,10 @@
   /// positive values moving toward its end. `label` attaches content near the
   /// layer midpoint. `label-side` is `auto`, `"left"`, `"right"`, or a signed
   /// number; `auto` follows the side selected by ordinary edge-label layout.
-  /// `label-gap` adds
-  /// path-relative clearance beyond the measured label box and `label-style` is
-  /// forwarded to `cetz.draw.content`. An attached
+  /// `label-gap` is clearance along the local path normal from its tangent line
+  /// to the actual CeTZ label box, including text bounds, wrapping, padding,
+  /// rotation and anchor. It is not minimum distance to the finite shaft.
+  /// `label-style` is forwarded to `cetz.draw.content`. An attached
   /// label replaces the ordinary painted edge label, which may still provide
   /// its pre-layout measurement and side. Attached labels do not add separate
   /// pre-layout collision constraints.

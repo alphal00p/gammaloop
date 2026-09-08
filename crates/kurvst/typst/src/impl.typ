@@ -844,8 +844,10 @@
 ///
 /// `layer` combines the common operations needed by drawing packages:
 /// optional side-aware offsetting, endpoint trimming, and shortening by a fixed
-/// `length`, a relative `ratio`, or both. `shift` moves a shortened layer along
-/// the path, with positive values moving toward the end. The return value is a normal
+/// `length`, a relative `ratio`, or both. Offsetting happens first: all arc
+/// distances refer to the offset path, and `ratio` is a fraction of its full
+/// length before trimming. `shift` moves a shortened layer toward the end when
+/// positive and is clamped at the endpoint outsets. The return value is a normal
 /// Kurvst path dictionary that can be passed to @pattern, @parallel,
 /// @trim, or @to-cetz.
 ///
@@ -884,6 +886,18 @@
   optimize: true,
 ) = {
   let distance = _offset-toward-side-point(path, offset, side-point)
+  if distance != none and distance != 0 {
+    path = parallel(
+      path,
+      distance: distance,
+      accuracy: accuracy,
+      optimize: optimize,
+    )
+    // Parallel preserves empty paths, which trim would reject.
+    if segments(path).len() == 0 {
+      return path
+    }
+  }
   let center-trim = center-outset(
     _length(path, accuracy: accuracy),
     length: length,
@@ -895,23 +909,12 @@
   let shift = calc.max(-center-trim, calc.min(center-trim, shift))
   let start-outset = start-outset + center-trim + shift
   let end-outset = end-outset + center-trim - shift
-  if distance == none or distance == 0 {
-    trim(
-      path,
-      start-outset: start-outset,
-      end-outset: end-outset,
-      accuracy: accuracy,
-    )
-  } else {
-    parallel(
-      path,
-      distance: distance,
-      start-outset: start-outset,
-      end-outset: end-outset,
-      accuracy: accuracy,
-      optimize: optimize,
-    )
-  }
+  trim(
+    path,
+    start-outset: start-outset,
+    end-outset: end-outset,
+    accuracy: accuracy,
+  )
 }
 
 /// Emit a Kurvst path as native Typst `curve` content.
