@@ -1280,9 +1280,13 @@
     nativeBuildInputs = [
       pkgs.coreutils
       pkgs.findutils
+      pkgs.gnutar
+      pkgs.zstd
+      craneLib.inheritCargoArtifactsHook
     ];
   } ''
-    target="${gammaloopApiPackageArtifacts}/target/${ciCargoProfile}"
+    inheritCargoArtifacts ${gammaloopApiPackageArtifacts} target
+    target="target/${ciCargoProfile}"
     binary="$target/gammaloop"
 
     if [ ! -x "$binary" ]; then
@@ -1752,12 +1756,13 @@
     artifactList = lib.filter (artifact: artifact != null) artifacts;
   in
     pkgs.runCommand name {
-      nativeBuildInputs = [pkgs.rsync pkgs.zstd pkgs.gnutar];
+      nativeBuildInputs = [pkgs.rsync pkgs.zstd pkgs.gnutar craneLib.installCargoArtifactsHook];
+      doCompressAndInstallFullArchive = true;
     } ''
-      mkdir -p "$out/target"
+      mkdir -p target
 
       make_target_writable() {
-        chmod -R u+w "$out/target"
+        chmod -R u+w target
       }
 
       unpack_artifact() {
@@ -1774,11 +1779,11 @@
             unpack_artifact "$(realpath "$artifact.prev")"
           fi
           make_target_writable
-          zstd -d "$artifact" --stdout | tar --no-same-permissions -x -C "$out/target"
+          zstd -d "$artifact" --stdout | tar --no-same-permissions -x -C target
           make_target_writable
         elif [ -d "$artifact" ]; then
           make_target_writable
-          rsync -a --chmod=u+w "$artifact/" "$out/target/"
+          rsync -a --chmod=u+w "$artifact/" target/
           make_target_writable
         else
           echo "unsupported cargo artifact path: $artifact" >&2
@@ -1790,7 +1795,11 @@
 
       # Crane deletes inherited Cargo locks before using an artifact tree.
       # Remove them here while the merged files are still ordinary files.
-      find "$out/target" -name .cargo-lock -delete
+      find target -name .cargo-lock -delete
+
+      # Keep the merged closure compressed without retaining its input archives.
+      # Crane normalizes archive timestamps to epoch 1 for Cargo freshness.
+      compressAndInstallCargoArtifactsDir "$out" target ""
     '';
 
   mergeCargoArtifactsOrNull = name: artifacts: let
@@ -1908,13 +1917,6 @@
         pnameSuffix = "-deps";
         pname = args.pname or crateName.pname;
         version = args.version or crateName.version;
-        nativeBuildInputs =
-          (cleanedArgs.nativeBuildInputs or [])
-          ++ lib.optionals (args.stripWorkspaceArtifacts or false) [
-            pkgs.gnutar
-            pkgs.rsync
-            pkgs.zstd
-          ];
 
         cargoArtifacts = args.cargoArtifacts or null;
         doNotLinkInheritedArtifacts = args.doNotLinkInheritedArtifacts or true;
@@ -1950,60 +1952,11 @@
           (args.postBuild or "")
           + stripWorkspaceArtifactsScriptText;
 
-        preFixup =
-          (args.preFixup or "")
-          + lib.optionalString (args.stripWorkspaceArtifacts or false) ''
-            if [ -f "$out/target.tar.zst" ] && { [ -e "$out/target.tar.zst.prev" ] || [ -L "$out/target.tar.zst.prev" ]; }; then
-              tmp="$(mktemp -d)"
-              mkdir -p "$tmp/target"
-
-              make_target_writable() {
-                chmod -R u+w "$tmp/target"
-              }
-
-              unpack_artifact() {
-                local artifact="$1"
-
-                if [ -d "$artifact" ] && [ -f "$artifact/target.tar.zst" ]; then
-                  artifact="$artifact/target.tar.zst"
-                elif [ -d "$artifact" ] && [ -d "$artifact/target" ]; then
-                  artifact="$artifact/target"
-                fi
-
-                if [ -f "$artifact" ]; then
-                  if [ -e "$artifact.prev" ] || [ -L "$artifact.prev" ]; then
-                    unpack_artifact "$(realpath "$artifact.prev")"
-                  fi
-                  make_target_writable
-                  zstd -d "$artifact" --stdout | tar --no-same-permissions -x -C "$tmp/target"
-                  make_target_writable
-                elif [ -d "$artifact" ]; then
-                  make_target_writable
-                  rsync -a --chmod=u+w "$artifact/" "$tmp/target/"
-                  make_target_writable
-                else
-                  echo "unsupported cargo artifact path: $artifact" >&2
-                  exit 1
-                fi
-              }
-
-              unpack_artifact "$(realpath "$out/target.tar.zst.prev")"
-              unpack_artifact "$out/target.tar.zst"
-
-              (
-                cd "$tmp"
-                ${stripWorkspaceArtifactsScriptText}
-              )
-
-              # Match Crane's artifact and Nix source timestamps so Cargo
-              # does not treat the compacted target as stale.
-              tar --sort=name --mtime=@1 --owner=0 --group=0 --numeric-owner -C "$tmp/target" -cf - . \
-                | zstd -T0 --stdout > "$out/target.tar.zst.tmp"
-              mv "$out/target.tar.zst.tmp" "$out/target.tar.zst"
-              rm -f "$out/target.tar.zst.prev"
-              rm -rf "$tmp"
-            fi
-          '';
+        # Publish the stripped target as a full archive so inherited dummy
+        # workspace artifacts cannot return through an incremental base link.
+        # Match Crane's artifact and Nix source timestamps so Cargo does not
+        # treat the compacted target as stale: its install hook uses epoch 1.
+        doCompressAndInstallFullArchive = args.stripWorkspaceArtifacts or false;
 
         doInstallCargoArtifacts = true;
       }
@@ -2626,13 +2579,9 @@
           ${testBinaryFeatureAnchorSourceScriptFor context ""}
           ${testBinaryFeatureAnchorDevDependencyScriptFor context package ""}
 
-          # Crane only follows file-valued incremental artifact links. The
-          # test-binary delta points directly to its materialized input
-          # directory, so inherit that base before Crane overlays the
-          # package-specific, writable delta in its post-patch hook.
-          if [ -d ${packageCargoArtifacts}/target.tar.zst.prev ]; then
-            inheritCargoArtifacts "$(realpath ${packageCargoArtifacts}/target.tar.zst.prev)" target
-          fi
+          # Crane follows the test-binary delta's file-valued link to its
+          # compressed input archive, then overlays the package-specific,
+          # writable delta in its post-patch hook.
         '';
         buildPhaseCargoCommand = ''
           mkdir -p "$out"
