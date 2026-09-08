@@ -506,6 +506,10 @@ ci-update:
     configuration=$(nix build --no-link --print-out-paths .#nix-ci-config)
     cp "$configuration" nix-ci.nix
 
+# Collect paired NixCI and GitHub Actions measurements.
+ci-report MANIFEST OUTPUT_DIR:
+    nix run .#ci-report -- {{quote(MANIFEST)}} {{quote(OUTPUT_DIR)}}
+
 # Run tests in release mode (faster execution)
 test-release TEST_NAME="":
     #!/usr/bin/env bash

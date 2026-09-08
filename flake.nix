@@ -244,6 +244,13 @@
         };
 
       apps = {
+        ci-report = flake-utils.lib.mkApp {
+          drv = pkgs.writeShellApplication {
+            name = "ci-report";
+            runtimeInputs = [pkgs.nodejs];
+            text = ''exec node ${./.github/scripts/ci-report.mjs} "$@"'';
+          };
+        };
         default = flake-utils.lib.mkApp {
           drv = gammaloop-cli;
           exePath = "/bin/gammaloop";
