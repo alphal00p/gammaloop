@@ -346,9 +346,10 @@ in {
     inherit onlyBuild;
     fail-fast = false;
     fail-on-dangling-dependencies = true;
-    # Keep dependency discovery manual. With generated Rust outputs,
-    # automatic discovery asks NixCI to compute derivation paths for many
-    # package/check attrs during `show`, including outputs that are not selected for CI.
+    # Trial synchronous discovery before jobs start. The earlier concern was
+    # evaluating derivation paths for many generated package/check attrs during
+    # `show`, including outputs not selected for CI; narrow onlyBuild selection
+    # remains important. Keep the explicit graph and its barrier ordering too.
     # The manual graph below uses the Hakari workspace-hack cache artifact as the
     # root for Symbolica-containing cache jobs and orders nextest archive jobs
     # after the package-local test-binary artifacts that the archives reuse. The
@@ -362,7 +363,10 @@ in {
     # generation can start before unrelated final package outputs.
     # See https://nix-ci.com/documentation/automatic-dependency-discovery
     # and https://nix-ci.com/documentation/manually-specified-dependencies
-    dependency-discovery.enable = false;
+    dependency-discovery = {
+      enable = true;
+      synchronous = true;
+    };
     dependencies = validatedProjectedDependencies;
     test = builtins.listToAttrs (map (name: {
       inherit name;
