@@ -493,7 +493,12 @@ class Collector {
         const records = logs.map(log => log.split('\n').filter(line => line.trim()).map(line => JSON.parse(line)));
         const workerStartChanged = timestamp(metrics[0].workerStartedAt) !== timestamp(metrics[1].workerStartedAt);
         const preservesPriorPrefix = records[0].length <= records[1].length
-          && records[0].every((record, index) => isDeepStrictEqual(record, records[1][index]));
+          && records[0].every((record, index) => {
+            const current = records[1][index];
+            return isDeepStrictEqual(record, current) || index === records[0].length - 1
+              && current.log_message.startsWith(record.log_message)
+              && isDeepStrictEqual({ ...record, log_message: current.log_message }, current);
+          });
         if (preservesPriorPrefix) throw new Error('raw logs are identical or append-only; they do not prove log replacement');
         observation.evidence = { ...evidence, ...metrics[0], file: paths[0],
           replacement: { ...evidence.replacement, ...metrics[1], file: paths[1] },
