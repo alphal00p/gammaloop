@@ -76,10 +76,11 @@ these are not equivalent-coverage speed comparisons. Their doctest jobs passed
 
 ## Remaining acceptance
 
-A boolean-only license preflight now gates the Python runtime group. Its
-unlicensed negative control and six error/redaction cases pass; a real licensed
-run is still required. Historical green jobs alone do not establish unrestricted
-license status.
+The boolean-only license probe remains an optional benchmark diagnostic; its
+extra Python CI gate was removed before the final-configuration comparison.
+Its unlicensed negative control and six historical error/redaction cases pass.
+Historical green jobs alone do not establish unrestricted license status;
+compare equivalent license settings without adding a new ordinary test gate.
 
 The current public Linux CLI builds and loads its native libraries. Strict
 help/version assertions fail: both commands exit 1 after printing expected text
