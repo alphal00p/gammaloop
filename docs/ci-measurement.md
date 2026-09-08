@@ -1,5 +1,8 @@
 # Measuring CI changes
 
+See the [recorded experiment results](ci-measurement-results.md) for current
+measurements and outstanding acceptance gates.
+
 Run `just ci-report MANIFEST OUTPUT_DIR` to collect existing NixCI jobs and
 GitHub Actions attempts. The underlying command is
 `node .github/scripts/ci-report.mjs MANIFEST OUTPUT_DIR`. It uses Node built-ins
