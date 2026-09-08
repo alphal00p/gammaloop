@@ -1,6 +1,14 @@
 {
   description = "Gammaloop";
 
+  # Substitute what NixCI has already built instead of building it again.
+  # Reading from this cache needs a token in your netrc as well, and Nix asks
+  # before it trusts these settings; see CONTRIBUTING.md.
+  nixConfig = {
+    extra-substituters = ["https://cache.nix-ci.com"];
+    extra-trusted-public-keys = ["nix-ci:g3xV5BDTLtIBZr/A00IU1x0EtKKlb7YLgBN2SgYgM6A="];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
@@ -2502,6 +2510,27 @@
           echo "All NixCI build and test jobs passed."
         '';
       };
+
+      # Nix runs this after every build in the dev shell, so that a commit
+      # whose checks already pass locally leaves NixCI with nothing to build.
+      # See https://nix-ci.com/documentation/nix-ci-cache
+      pushToNixCiCache = pkgs.writeShellScript "push-to-nix-ci-cache" ''
+        set -eu
+        set -f
+        export IFS=' '
+
+        # Keep the throwaway XDG_CACHE_HOME. Without it this machine remembers
+        # the unsigned narinfo it built locally, and then refuses to
+        # substitute back the paths it pushed itself.
+        XDG_CACHE_HOME="$(mktemp -d)"
+        export XDG_CACHE_HOME
+        trap 'rm -rf "$XDG_CACHE_HOME"' EXIT
+
+        # Nix fails the build whose post-build-hook fails, so being offline or
+        # without a token must not come out of here non-zero.
+        nix copy --to 'https://cache.nix-ci.com?compression=xz&parallel-compression=true' ''${OUT_PATHS-} \
+          || echo "push-to-nix-ci-cache: could not push to the NixCI cache." >&2
+      '';
     in {
       checks =
         {
@@ -2600,6 +2629,16 @@
           #   export CXX="${nixCxx}"
           #   export ${cargoLinkerVar}="${nixCc}"
           # '';
+
+          # The hook runs as the Nix daemon user, which finds the cache token
+          # through the netrc-file setting it inherits from here. Nix honours
+          # both settings only for a trusted user; see CONTRIBUTING.md.
+          shellHook = ''
+            if [ -r "$HOME/.netrc" ]; then
+              NIX_CONFIG="$(printf '%s\nnetrc-file = %s\npost-build-hook = %s' "''${NIX_CONFIG-}" "$HOME/.netrc" "${pushToNixCiCache}")"
+              export NIX_CONFIG
+            fi
+          '';
 
           packages = with pkgs;
             [

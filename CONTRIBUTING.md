@@ -178,6 +178,24 @@ These rules are intentionally broad and should shape most code changes.
   symbol, try building with `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T`; see `build.rs`
   for the impact of this setting.
 
+## NixCI Cache
+
+NixCI substitutes anything it has already built, and anything you have built,
+so a commit whose checks already pass locally leaves CI with nothing to build.
+Get `nix flake check` to pass before you push.
+
+All you need for that is a NixCI token in `~/.netrc`; see
+[the NixCI cache documentation](https://nix-ci.com/documentation/nix-ci-cache).
+
+With that file in place the dev shell needs no further setup: it points Nix at
+your `~/.netrc` and at a push script as its `post-build-hook`, so every
+derivation you build from `nix develop` lands in the cache. Reading back from
+it is configured in `flake.nix`.
+
+Nix honours a post-build-hook from the command line only for a trusted user,
+which `nix store info --json` reports. If nothing is being pushed, that is the
+first thing to check.
+
 ## Version Control Workflow
 
 ### jj
