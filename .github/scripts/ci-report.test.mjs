@@ -439,3 +439,126 @@ test('a required runtime group cannot be satisfied by its cached runner package 
   assert.equal(present.requiredPassed, true);
   assert.equal(present.requiredSeconds, 20);
 });
+
+test('same-URL started-to-started log replacement survives success and portable offline replay', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'ci-report-log-replacement-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const runs = [{ type: 'config', status: 'cached', url: suiteUrl + '/config' },
+    { type: 'test', status: 'success', attribute: attr, url: suiteUrl + '/test' }];
+  const replacement = overlap.replaceAll('2026-09-06 00:00:', '2026-09-06 00:01:');
+  const incident = { jobUrl: runs[1].url, observedAt: '2026-09-06T00:01:15Z', evidenceFile: 'incident.json' };
+  const manifest = { repository: 'example/repo', runs: [{ ...spec, observationFiles: ['before.json', 'after.json'],
+    offline: { suite: 'suite.json', checks: 'checks.json', jobs: 'jobs.json', actions: 'actions.json' } }] };
+  const snapshot = { suites: [{ spec, suite: { commit: sha, status: 'started',
+    runs: [runs[0], { ...runs[1], status: 'started' }] } }] };
+  const evidence = { ...incident, status: 'started', file: 'prior.ndjson', workerSeconds: 999,
+    replacement: { file: 'replacement.ndjson', observedStatus: 'started' } };
+  for (const [file, value] of Object.entries({ 'manifest.json': manifest, 'incident.json': evidence,
+    'suite.json': { commit: sha, status: 'success', runs }, 'actions.json': [],
+    'jobs.json': [{ url: runs[1].url, file: 'current.ndjson' }],
+    'checks.json': runs.map((job, i) => ({ id: i + 1, details_url: job.url, started_at: '2026-09-06T00:00:00Z',
+      completed_at: i ? '2026-09-06T00:01:20Z' : '2026-09-06T00:00:01Z', conclusion: 'success' })),
+    'before.json': { ...snapshot, at: '2026-09-06T00:00:15Z' }, 'after.json': { ...snapshot, at: incident.observedAt },
+  })) await writeFile(join(dir, file), JSON.stringify(value));
+  for (const [file, log] of Object.entries({ 'prior.ndjson': overlap, 'replacement.ndjson': replacement, 'current.ndjson': replacement }))
+    await writeFile(join(dir, file), log);
+  const finalOnly = await createReport(join(dir, 'manifest.json'), join(dir, 'final-only'));
+  assert.equal(finalOnly.complete, true);
+  manifest.runs[0].observedLogReplacements = [incident];
+  await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest));
+  const report = await createReport(join(dir, 'manifest.json'), join(dir, 'first'));
+  const suite = report.suites[0];
+  assert.equal(report.complete, false);
+  assert.equal(suite.requiredPassed, true);
+  assert.equal(suite.evidenceComplete, false);
+  assert.equal(suite.observedResourceLowerBound, true);
+  assert.equal(suite.interruptedJobs, 0);
+  assert.equal(suite.jobs[1].checkAttempts.length, 1);
+  assert.equal(suite.observedWorkerMinutes, finalOnly.suites[0].observedWorkerMinutes);
+  assert.equal(suite.downloadReportedBytes, finalOnly.suites[0].downloadReportedBytes);
+  assert.equal(suite.observedLogReplacements[0].evidence.workerSeconds, 14);
+  assert.equal(suite.observedLogReplacements[0].evidence.replacement.workerSeconds, 14);
+  assert.equal(report.incidents.filter(row => row.kind === 'log-replacement').length, 1);
+  assert.equal(report.incidents.some(row => ['interrupted-worker', 'repeated-attempt'].includes(row.kind)), false);
+  const replacementIncident = report.incidents.find(row => row.kind === 'log-replacement');
+  assert.equal(replacementIncident.workerStartChanged, true);
+  assert.equal(replacementIncident.preservesPriorPrefix, false);
+  assert.equal(replacementIncident.cause, 'unknown');
+  assert.equal(replacementIncident.observedAt, new Date(incident.observedAt).toISOString());
+  const pair = comparePairs([finalOnly.suites[0], { ...suite, variant: 'candidate' }])[0];
+  assert.equal(pair.comparable, false);
+  assert.equal(pair.workerMinutesChangePercent, null);
+  for (const file of ['incidents.json', 'incidents.csv', 'report.md'])
+    assert.ok((await readFile(join(dir, 'first', file), 'utf8')).includes('log-replacement'));
+  for (const file of ['prior.ndjson', 'replacement.ndjson', 'incident.json']) await rm(join(dir, file));
+  incident.evidenceFile = 'first/raw/1/log-replacements/1.json';
+  await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest));
+  const replay = await createReport(join(dir, 'manifest.json'), join(dir, 'replay'));
+  assert.equal(replay.errors.length, 0);
+  assert.equal(replay.suites[0].evidenceComplete, false);
+  assert.equal(replay.incidents.filter(row => row.kind === 'log-replacement').length, 1);
+  assert.equal(await readFile(join(dir, 'replay/raw/1/log-replacements/1-prior.ndjson'), 'utf8'), overlap);
+  assert.equal(await readFile(join(dir, 'replay/raw/1/log-replacements/1-replacement.ndjson'), 'utf8'), replacement);
+
+  incident.evidenceFile = 'incident.json';
+  await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest));
+  await writeFile(join(dir, 'prior.ndjson'), overlap);
+  const records = overlap.trim().split('\n');
+  for (const [name, log, valid, metadata] of [
+    ['identical', overlap, false, evidence],
+    ['append-only', overlap + JSON.stringify({ utc_time: '2026-09-06T00:00:15Z', relative_nanoseconds: 15000000000, log_message: 'more output' }) + '\n', false, evidence],
+    ['reformatted', records.map(line => JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(line)).reverse()))).join('\n'), false, evidence],
+    ['shortened-prefix', records[0] + '\n', true, evidence],
+    ['wrong-url', replacement, false, { ...evidence, jobUrl: suiteUrl + '/other' }],
+    ['wrong-time', replacement, false, { ...evidence, observedAt: '2026-09-06T00:01:16Z' }],
+    ['invalid-log', '{"log_message":"missing clock"}', false, evidence],
+  ]) {
+    await writeFile(join(dir, 'incident.json'), JSON.stringify(metadata));
+    await writeFile(join(dir, 'replacement.ndjson'), log);
+    const result = await createReport(join(dir, 'manifest.json'), join(dir, name));
+    assert.equal(result.incidents.some(row => row.kind === 'log-replacement'), valid, name);
+    assert.equal(result.errors.some(row => row.stage === 'log-replacement-evidence'), !valid, name);
+    assert.equal(result.suites[0].evidenceComplete, false, name);
+    assert.equal(result.suites[0].observedResourceLowerBound, true, name);
+    assert.equal(result.suites[0].interruptedJobs, 0, name);
+    if (valid) assert.equal(result.incidents.find(row => row.kind === 'log-replacement').workerStartChanged, false);
+  }
+});
+
+test('hopeless jobs are terminal failures with required end clocks, never accepted timing samples', () => {
+  const config = { type: 'config', status: 'success', url: suiteUrl + '/config',
+    checkStartedAt: '2026-09-06T00:00:00Z', checkCompletedAt: '2026-09-06T00:00:01Z' };
+  const hopeless = { type: 'test', status: 'hopeless', attribute: attr, url: suiteUrl + '/test',
+    checkStartedAt: '2026-09-06T00:00:01Z', checkCompletedAt: '2026-09-06T00:00:20Z', logStatus: 'ok' };
+  const queued = { type: 'test', status: 'queued', attribute: attr + '-queued', url: suiteUrl + '/queued' };
+  const stopped = summarizeSuite(spec, { status: 'failed' }, [{}], [config, hopeless, queued]);
+  assert.equal(stopped.failedJobs, 1);
+  assert.equal(stopped.interruptedJobs, 0);
+  assert.equal(stopped.suiteSeconds, 20);
+  assert.equal(stopped.requiredSeconds, null);
+  assert.equal(stopped.requiredPassed, false);
+  assert.equal(stopped.evidenceComplete, false);
+  assert.equal(stopped.successfulTimingSample, false);
+  assert.equal(stopped.incidents.find(row => row.kind === 'job-failure').observation, 'service reports this job as hopeless');
+  assert.equal(stopped.incidents.find(row => row.kind === 'job-failure').cause, 'unknown');
+  const terminal = summarizeSuite(spec, { status: 'hopeless' }, [{}], [config, hopeless]);
+  assert.equal(terminal.suiteSeconds, 20);
+  assert.equal(terminal.requiredSeconds, 20);
+  assert.equal(terminal.requiredPassed, false);
+  assert.equal(terminal.successfulTimingSample, false);
+  const pair = comparePairs([terminal, { ...terminal, variant: 'candidate' }])[0];
+  assert.equal(pair.comparable, false);
+  assert.equal(pair.workerMinutesChangePercent, null);
+  const noEnd = summarizeSuite(spec, { status: 'failed' }, [{}], [config, { ...hopeless, checkCompletedAt: null }]);
+  assert.equal(noEnd.requiredSeconds, null);
+  assert.equal(noEnd.evidenceComplete, false);
+  assert.ok(noEnd.incidents.some(row => row.kind === 'missing-clock' && row.jobUrl === hopeless.url));
+  for (const status of ['started', 'success']) {
+    const recovered = summarizeSuite({ ...spec, observations: [
+      { at: '2026-09-06T00:00:21Z', suite: { runs: [hopeless] } },
+      { at: '2026-09-06T00:00:22Z', suite: { runs: [{ ...hopeless, status }] } },
+    ] }, { status: 'success' }, [{}], [config, { ...hopeless, status: 'success' }]);
+    assert.ok(recovered.incidents.some(row => row.kind === 'repeated-attempt' && row.previousStatus === 'hopeless' && row.status === status));
+    assert.equal(recovered.evidenceComplete, false);
+  }
+});

@@ -83,6 +83,24 @@ double counting streams that might overlap. The annotation makes the suite
 incomplete even after a successful retry. Final-only collection cannot detect
 interruption history that the service has already overwritten.
 
+A log stream can also be replaced while its status stays `started` and its job
+URL and check ID stay the same. Record these separately as `observedLogReplacements`, using the
+same `jobUrl`, `observedAt`, and `evidenceFile` annotation fields. The evidence
+JSON must repeat that exact URL and observation time, with `file` pointing to
+the prior NDJSON and `replacement.file` to the later NDJSON. Both paths resolve
+relative to the evidence JSON. No abandoned status is required or inferred.
+
+The collector parses both saved streams and compares their records. Identical
+or append-only streams do not establish replacement; changed worker starts or
+loss/replacement of the prior record prefix do. It copies both raw logs and
+recomputed separate metrics into `raw/N/log-replacements/` and emits a
+`log-replacement` incident in JSON, CSV, and Markdown. A shortened stream proves
+lost visible history, not worker termination. The cause remains unknown, current
+resource totals become lower bounds, and the suite stays ineligible for paired
+percentages even if all required checks later succeed. Earlier stream totals
+are never added to current totals because their overlap is unresolved. Missing
+or invalid requested evidence also makes the suite incomplete.
+
 Optional submission clocks come from the local push call, never the commit's
 author timestamp. Set `submittedAt` immediately before calling `git push` and,
 when available, `submissionCompletedAt` immediately after it returns. The report
@@ -165,6 +183,8 @@ To replay a snapshot, add this object to its manifest entry:
 Offline mode makes no network calls. These paths are relative to the manifest.
 When replaying interruption annotations, point each `evidenceFile` at its copied
 `raw/N/interruptions/N.json`; its linked log path is relative and self-contained.
+For log replacement replay, point each `evidenceFile` at its copied
+`raw/N/log-replacements/N.json`; both linked raw logs are self-contained.
 For observation replay, point `observationFiles` at the copied
 `raw/N/observations/N.json` snapshots and `dependencySnapshot.file` at the copied
 `raw/N/dependency-snapshot.json`. These retain the original snapshot schema.
