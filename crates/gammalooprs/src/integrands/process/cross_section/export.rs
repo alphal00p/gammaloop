@@ -91,7 +91,6 @@ fn export_evaluator_stack<T: ExportAtomTo>(
             .transpose()?,
         representative_input: Vec::new(),
         start: 0,
-        override_pos: 0,
         mult_offset: 0,
     })
 }
@@ -144,7 +143,7 @@ where
             .iter()
             .map(export_item)
             .collect::<Result<Vec<_>>>()?,
-        num_left_thresholds: collection.num_left_thresholds(),
+        num_right_thresholds: collection.num_right_thresholds(),
     })
 }
 
@@ -299,7 +298,7 @@ impl CrossSectionIntegrand {
                     .map(|entry| entry.archive())
                     .collect::<Result<Vec<_>>>()?;
 
-                let raised_cut_integrands = term
+                let cut_group_integrands = term
                     .integrand
                     .iter()
                     .map(export_evaluator_map)
@@ -317,7 +316,7 @@ impl CrossSectionIntegrand {
                     orientations,
                     param_builder_params,
                     fn_map_entries,
-                    raised_cut_integrands,
+                    cut_group_integrands,
                     counterterms,
                 })
             })

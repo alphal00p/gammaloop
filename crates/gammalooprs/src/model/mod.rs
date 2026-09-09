@@ -2,7 +2,7 @@ use crate::HasModel;
 use crate::momentum::Helicity;
 use crate::numerator::aind::Aind;
 use crate::utils::serde_utils::SmartSerde;
-use crate::utils::symbolica_ext::{DOD, Replaces};
+use crate::utils::symbolica_ext::DOD;
 use crate::utils::{self, F, W_};
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
@@ -16,8 +16,10 @@ use linnet::half_edge::involution::{EdgeIndex, Flow};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde::de::DeserializeOwned;
+#[cfg(test)]
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::structure::{IndexLess, PermutedStructure};
+use symbolica_utils::{PrintSettingsExt, Replaces};
 use tabled::settings::Modify;
 use tabled::{
     builder::Builder,
@@ -274,6 +276,21 @@ fn zerosym() {
     // assert_eq!(UFOSymbol::zero().namespaceless_string(), "ZERO");
 }
 
+#[test]
+fn ufo_symbol_typst_quoting_requires_typst_mode() {
+    let atom = Atom::from(UFOSymbol::from("typst_mode_probe"));
+
+    assert_eq!(
+        atom.printer(SpensoPrintSettings::typst_options())
+            .to_string(),
+        r#""typst_mode_probe""#
+    );
+
+    let mut symbolica = SpensoPrintSettings::typst().nice_symbolica();
+    symbolica.color_builtin_symbols = false;
+    assert_eq!(atom.printer(symbolica).to_string(), "typst_mode_probe");
+}
+
 impl<T> From<T> for UFOSymbol
 where
     T: AsRef<str>,
@@ -294,14 +311,8 @@ where
                             return None;
                         };
                         match opt.custom_print_mode.get("spenso") {
-                            Some(PrintUserData::Integer(i)) => {
-                                let SpensoPrintSettings { .. } =
-                                    SpensoPrintSettings::from(*i as usize);
-                                if SpensoPrintSettings::from(*i as usize).is_typst() {
-                                    Some(format!("\"{}\"", a.get_symbol().get_stripped_name()))
-                                } else {
-                                    None
-                                }
+                            Some(PrintUserData::Integer(_)) if opt.typst_mode().is_some() => {
+                                Some(format!("\"{}\"", a.get_symbol().get_stripped_name()))
                             }
                             _ => None,
                         }
@@ -1255,13 +1266,13 @@ impl Particle {
         };
 
         // Generate base styles
-        let base_source = format!("source_stroke(c: {}, thickness: {})", color, thickness);
-        let base_sink = format!("sink_stroke(c: {}, thickness: {})", color, thickness);
+        let base_source = format!("source-stroke(c: {}, thickness: {})", color, thickness);
+        let base_sink = format!("sink-stroke(c: {}, thickness: {})", color, thickness);
 
         let (source, sink) = if self.is_ghost() {
             (
-                format!("source_stroke(c: {color}, thickness: {thickness},dash: dotted)",),
-                format!("sink_stroke(c: {color}, thickness: {thickness},dash: dotted)"),
+                format!("source-stroke(c: {color}, thickness: {thickness}, dash: dotted)",),
+                format!("sink-stroke(c: {color}, thickness: {thickness}, dash: dotted)"),
             )
         } else if self.is_fermion() {
             (base_source, base_sink)
@@ -1289,15 +1300,21 @@ impl Particle {
         } else if self.is_scalar() {
             // Scalar particles: dashed lines
             (
-                format!("source_stroke(c: {color}, thickness: {thickness},dash: dashed)",),
-                format!("sink_stroke(c: {color}, thickness: {thickness},dash: dashed)"),
+                format!("source-stroke(c: {color}, thickness: {thickness}, dash: dashed)",),
+                format!("sink-stroke(c: {color}, thickness: {thickness}, dash: dashed)"),
             )
         } else {
             // Default: solid line
             (base_source, base_sink)
         };
 
-        format!("(source:{}, sink:{}, label:{})", source, sink, label)
+        let flow_marker = if self.is_fermion() && !self.is_ghost() {
+            " + fermion-flow"
+        } else {
+            ""
+        };
+
+        format!("(source:{source}, sink:{sink}, label:{label}){flow_marker}")
     }
 
     pub(crate) fn color_reps(&self, flow: Flow) -> IndexLess {
@@ -1845,31 +1862,15 @@ n_couplings = format!("{}", self.couplings.len()).green(),
         }
 
         let mut edge_style_content = String::new();
-        edge_style_content.push_str(r#"#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, cetz,edge,hide
-#import "@preview/mitex:0.2.6": *
+        edge_style_content.push_str(
+            r#"#import "crates/linnest/typst/src/physics-edge-style.typ": mi, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag, default-edge, style
 
-#let massive = 1mm
-#let massless = 0.5mm
-#let source_stroke(c:black, thickness:0.5mm,dash:none) = (stroke:(paint:c,thickness:thickness)+dash)
-#let sink_stroke(c:black, thickness:0.5mm,dash:none) = (stroke:source_stroke(c:c.lighten(50%), thickness:thickness,dash:dash).stroke)
-#let wave = (decorations:cetz.decorations.wave.with(amplitude: 4pt,segment-length:0.2))
-#let double = (extrude:(-0.5mm, 0.5mm))
-#let arrow = (marks:((inherit:"solid",rev:false,pos:1.1,scale:50%),))
-#let antiarrow = (marks:((inherit:"solid",rev:true,pos:1.1,scale:50%),))
-#let arrowmap = orientation => if orientation == "Default"{
-  arrow
-} else if orientation == "Reversed"{
-  antiarrow
-} else{
-  (:)
-}
-#let coil = (decorations:cetz.decorations.coil.with(amplitude: 4pt,segment-length:0.2))
-#let zigzag = (decorations:cetz.decorations.zigzag.with(amplitude: 4pt,segment-length:0.2))
-#let dashed = (dash: (0.1em, 0.5em))
-#let dotted = (dash: (0.01em, 0.3em))
-// Auto-generated particle styles from model (computed in Rust)
+// Auto-generated particle styles from model (computed in Rust). The reusable
+// physics drawing callbacks live in physics-edge-style.typ; this file only
+// supplies the model-specific particle map and GammaLoop-compatible wrappers.
 #let map = (
-"#);
+"#,
+        );
 
         // Generate styles for all particles in the model
         for particle in self.particles.iter() {
@@ -1881,7 +1882,25 @@ n_couplings = format!("{}", self.couplings.len()).green(),
             ));
         }
 
-        edge_style_content.push_str(")\n");
+        edge_style_content.push_str(
+            r#")
+
+#let source-style(edge, typst-fields: "plain", ..options) = {
+  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  (callbacks.source-style)(edge)
+}
+
+#let sink-style(edge, typst-fields: "plain", ..options) = {
+  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  (callbacks.sink-style)(edge)
+}
+
+#let edge-label(edge, typst-fields: "plain", ..options) = {
+  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  (callbacks.edge-label)(edge)
+}
+"#,
+        );
 
         fs::write(&template_path, edge_style_content)?;
         info!(

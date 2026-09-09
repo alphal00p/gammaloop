@@ -4,6 +4,7 @@ use symbolica::{
     printer::{PrintOptions, PrintState, PrintUserData},
     symbol, tag,
 };
+use symbolica_utils::PrintSettingsExt;
 
 use crate::{
     shadowing::symbolica_utils::SpensoPrintSettings, structure::abstract_index::AIND_SYMBOLS,
@@ -480,7 +481,12 @@ impl SpensoTags {
 
                             let rep = args.next().unwrap();
 
-                            let mut s = String::from("Tr");
+                            let mut s = if opt.typst_mode().is_some() {
+                                r#"op("Tr")"#
+                            } else {
+                                "Tr"
+                            }
+                            .to_string();
                             if with_dim {
                                 rep.format(&mut s, opt, PrintState::new()).unwrap();
                             }
@@ -623,9 +629,11 @@ impl SpensoTags {
 #[cfg(test)]
 mod tests {
     use symbolica::{
-        atom::{Atom, AtomView},
+        atom::{Atom, AtomCore, AtomView},
         symbol,
     };
+
+    use crate::{cyclic, shadowing::symbolica_utils::SpensoPrintSettings};
 
     use super::{SPENSO_TAG, SymbolAtomExt};
 
@@ -692,5 +700,29 @@ mod tests {
             tensor_!(0; Atom::var(symbol!("a___"))).as_view(),
             AtomView::Fun(_)
         ));
+    }
+
+    #[test]
+    fn trace_uses_typst_operator_only_in_typst_print_mode() {
+        let trace = SPENSO_TAG.trace(Atom::var(symbol!("rep")), [cyclic!(Atom::num(1))]);
+
+        assert_eq!(
+            trace
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            r#"op("Tr")(1)"#
+        );
+        assert_eq!(
+            trace
+                .printer(SpensoPrintSettings::compact().nice_symbolica())
+                .to_string(),
+            "Tr(1)"
+        );
+        assert_eq!(
+            trace
+                .printer(SpensoPrintSettings::typst().nice_symbolica())
+                .to_string(),
+            "Tr(1)"
+        );
     }
 }

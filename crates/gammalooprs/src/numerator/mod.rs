@@ -12,7 +12,7 @@ use spenso::network::library::DummyLibrary;
 use spenso::network::parsing::{ParseSettings, ShadowedStructure};
 use spenso::network::store::NetworkStore;
 use spenso::network::{ContractScalars, MinResultRank, Sequential, SingleSmallestDegree, Steps};
-use spenso::shadowing::symbolica_utils::SerializableSymbol;
+use symbolica_utils::SerializableSymbol;
 
 use spenso::tensors::data::DataTensor;
 use spenso::tensors::data::GetTensorData;
@@ -25,7 +25,7 @@ use spenso::tensors::parametric::TensorSet;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
-use symbolica_ext::AtomCoreExt;
+use symbolica_ext::NumeratorAtomExt;
 use thiserror::Error;
 use tracing::{debug, instrument};
 // use crate::feyngen::dis::{DisEdge, DisVertex};

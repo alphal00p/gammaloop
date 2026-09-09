@@ -14,7 +14,6 @@ use crate::network::tags::SPENSO_TAG;
 use crate::shadowing::symbolica_utils::SpensoPrintSettings;
 use crate::tensor_symbol;
 use crate::{
-    shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
         HasName, IndexlessNamedStructure,
         abstract_index::AIND_SYMBOLS,
@@ -25,6 +24,7 @@ use crate::{
     },
     tensors::parametric::{ConcreteOrParam, MixedTensor, ParamOrConcrete, ParamTensor},
 };
+use symbolica_utils::{IntoArgs, IntoSymbol};
 
 pub type ExplicitKey<Aind> = IndexlessNamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>;
 pub type LibraryKey<Aind> = PermutedStructure<ExplicitKey<Aind>>;

@@ -127,10 +127,8 @@ impl<'a> UndoShorthands for AtomView<'a> {
 
 #[cfg(test)]
 mod tests {
-    use spenso::{
-        chain, chain_factor, mink, shadowing::symbolica_utils::AtomCoreExt,
-        structure::abstract_index::AbstractIndex, vector,
-    };
+    use spenso::{chain, chain_factor, mink, structure::abstract_index::AbstractIndex, vector};
+    use symbolica_utils::AtomPrintExt;
 
     use crate::test_support::test_initialize;
 

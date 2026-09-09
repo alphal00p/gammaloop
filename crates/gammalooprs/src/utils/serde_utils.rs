@@ -1,5 +1,5 @@
 use dirs::home_dir;
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Deserializer, Serialize, de::DeserializeOwned};
 use std::{
     env,
     io::Write,
@@ -32,6 +32,22 @@ pub enum SerdeFileError {
     UnknownExtension(String),
     #[error("Could not determine file extension of file {0}")]
     NoExtension(String),
+}
+
+pub(crate) fn deserialize_nonnegative_finite_f64<'de, D>(
+    deserializer: D,
+) -> std::result::Result<f64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = f64::deserialize(deserializer)?;
+    if value.is_finite() && value >= 0.0 {
+        Ok(value)
+    } else {
+        Err(serde::de::Error::custom(
+            "expected a finite, nonnegative floating-point value",
+        ))
+    }
 }
 
 fn current_git_commit(git_dir: &Path) -> Option<String> {

@@ -18,7 +18,7 @@ momenta = [[5.0, 0.0, 0.0, 0.0]]
 helicities = ["summed_averaged"]
 
 [default_runtime_settings.general]
-evaluator_method = "Summed"
+evaluator_method = "SingleParametric"
 enable_cache = false
 debug_cache = false
 generate_events = false

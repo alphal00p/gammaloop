@@ -120,6 +120,14 @@ pub(crate) fn strip_quotes(s: &str) -> &str {
 pub mod set;
 pub use set::GraphSet;
 
+#[cfg(feature = "rkyv")]
+pub mod archive;
+#[cfg(feature = "rkyv")]
+pub use archive::{
+    ArchivedDotEdgeEndpointsView, ArchivedDotEdgeView, ArchivedDotEndpointView,
+    ArchivedDotGraphBytesSetView, ArchivedDotGraphView, ArchivedDotVertexView, DotGraphBytesSet,
+};
+
 pub mod global;
 pub use global::GlobalData;
 
@@ -133,6 +141,11 @@ pub mod hedge;
 pub use hedge::DotHedgeData;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {
     pub global_data: GlobalData,
     pub graph: HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData, N>,
@@ -271,6 +284,28 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         Ok(())
     }
 
+    #[cfg(feature = "rkyv")]
+    pub fn to_rkyv_bytes<const BYTES: usize>(&self) -> Result<rkyv::AlignedVec, String>
+    where
+        Self: rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<BYTES>>,
+    {
+        rkyv::to_bytes::<_, BYTES>(self).map_err(|err| err.to_string())
+    }
+
+    #[cfg(feature = "rkyv")]
+    /// Returns the archived graph root without validating the byte buffer.
+    ///
+    /// # Safety
+    ///
+    /// `bytes` must contain a valid rkyv archive produced for this exact
+    /// `DotGraph` type, and the returned reference must not outlive `bytes`.
+    pub unsafe fn archived_from_bytes(bytes: &[u8]) -> &<Self as rkyv::Archive>::Archived
+    where
+        Self: rkyv::Archive,
+    {
+        unsafe { rkyv::archived_root::<Self>(bytes) }
+    }
+
     #[allow(clippy::result_large_err, clippy::type_complexity)]
     pub fn from_file<'a, P>(p: P) -> Result<Self, HedgeParseError<'a, (), (), (), ()>>
     where
@@ -403,11 +438,19 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figme
         };
 
         // println!("Built: {}", g.debug_dot());
+        g.apply_explicit_id_ordering();
+        g
+    }
+}
+
+impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
+    pub fn apply_explicit_id_ordering(&mut self) {
+        // println!("Built: {}", self.debug_dot());
 
         let mut used_edges = HashSet::new();
-        let n_edges = g.n_edges();
+        let n_edges = self.n_edges();
 
-        let mut edge_map = g.new_edgevec(|d, e, _| {
+        let mut edge_map = self.new_edgevec(|d, e, _| {
             d.edge_id.inspect(|d| {
                 assert!(
                     used_edges.insert(*d),
@@ -419,8 +462,8 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figme
 
         let mut used_hedges = HashSet::new();
 
-        let n_hedges = g.n_hedges();
-        let mut hedge_map = g.new_hedgevec(|h, d| {
+        let n_hedges = self.n_hedges();
+        let mut hedge_map = self.new_hedgevec(|h, d| {
             d.id.inspect(|d| {
                 assert!(
                     used_hedges.insert(*d),
@@ -431,8 +474,8 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figme
         });
 
         let mut used_nodes = HashSet::new();
-        let n_nodes = g.n_nodes();
-        let mut node_map = g.new_nodevec(|ni, _, v| {
+        let n_nodes = self.n_nodes();
+        let mut node_map = self.new_nodevec(|ni, _, v| {
             v.index.inspect(|i| {
                 assert!(
                     used_nodes.insert(*i),
@@ -476,13 +519,12 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figme
         // println!("Edge Perm: {edge_perm}");
         // println!("Node Perm: {node_perm}");
 
-        <HedgeGraph<_, _, _, _> as Swap<Hedge>>::permute(&mut g, &hedge_perm);
+        <HedgeGraph<_, _, _, _> as Swap<Hedge>>::permute(&mut self.graph, &hedge_perm);
         // println!("Permuted Hedge Graph: {}", g.debug_dot());
-        <HedgeGraph<_, _, _, _> as Swap<EdgeIndex>>::permute(&mut g, &edge_perm);
+        <HedgeGraph<_, _, _, _> as Swap<EdgeIndex>>::permute(&mut self.graph, &edge_perm);
         // println!("Permuted Edge Graph: {}", g.debug_dot());
-        <HedgeGraph<_, _, _, _> as Swap<NodeIndex>>::permute(&mut g, &node_perm);
+        <HedgeGraph<_, _, _, _> as Swap<NodeIndex>>::permute(&mut self.graph, &node_perm);
         // println!("Permuted Node Graph:{}", g.debug_dot());
-        g
     }
 }
 

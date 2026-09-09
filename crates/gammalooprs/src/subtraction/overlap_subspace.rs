@@ -15,6 +15,7 @@ use crate::momentum::signature::LoopExtSignature;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::settings::RuntimeSettings;
 use crate::utils::F;
+use crate::utils::Length;
 use crate::utils::compute_shift_part_subspace;
 use ahash::HashMap;
 use ahash::HashMapExt;
@@ -471,16 +472,25 @@ pub(crate) fn find_maximal_overlap(
             .collect();
         // Forced centers are configured in the graph's identity-frame LMB. Apply the probe
         // rotation once, then express that rotated point in the cut-side LMB used by the solver.
-        let global_center_probe = global_center_identity.rotate(probe_rotation).lmb_transform(
+        let mut global_center_probe = global_center_identity.rotate(probe_rotation).lmb_transform(
             &overlap_input.graph.loop_momentum_basis,
             overlap_input.subspace.get_lmb(overlap_input.lmbs),
             &rotated_external_spatial,
         );
+        // A subspace center specifies only its active coordinates. The complementary loop
+        // coordinates remain fixed at the sampled point throughout center validation, radial
+        // solving, and final CT reconstruction. Affine LMB transforms can populate inactive
+        // components even when the identity-frame center is zero, so project them out explicitly.
+        for loop_index in (0..global_center_probe.len()).map(LoopIndex::from) {
+            if !overlap_input.subspace.contains_loop_index(loop_index) {
+                global_center_probe[loop_index] = ThreeMomentum::new(F(0.0), F(0.0), F(0.0));
+            }
+        }
 
         tracing::debug!(
             graph = %overlap_input.graph.name,
             rotation_id = %probe_rotation.method,
-            center_provenance = "forced_identity_frame_rotated_and_lmb_transformed_once",
+            center_provenance = "forced_identity_frame_rotated_lmb_transformed_and_projected_once",
             identity_center = %global_center_identity,
             probe_cut_lmb_center = %global_center_probe,
             "prepared forced LU overlap center"
@@ -970,7 +980,7 @@ mod tests {
             subgraph.union_with(&graph.get_edge_subgraph(active_loop_edge));
         }
         let subspace = SubspaceData::new_with_user_selected_lmb(
-            subgraph,
+            subgraph.clone(),
             LmbIndex::from(0),
             &graph,
             &all_lmbs,
@@ -1085,11 +1095,18 @@ mod tests {
             }));
         let probe_rotation = Rotation::new(RotationMethod::Pi2Z);
         let expected_probe_center = identity_frame_center.rotate(&probe_rotation);
+        let mut expected_subspace_probe_center = expected_probe_center.clone();
+        for loop_index in (0..expected_subspace_probe_center.len()).map(LoopIndex::from) {
+            if !subspace.contains_loop_index(loop_index) {
+                expected_subspace_probe_center[loop_index] =
+                    ThreeMomentum::new(F(0.0), F(0.0), F(0.0));
+            }
+        }
         let mut forced_settings = RuntimeSettings::default();
         forced_settings
             .subtraction
             .overlap_settings
-            .force_global_center = Some(forced_center_coordinates);
+            .force_global_center = Some(forced_center_coordinates.clone());
         let forced_overlap_input = OverlapInput {
             graph: &graph,
             settings: &forced_settings,
@@ -1109,8 +1126,8 @@ mod tests {
         .unwrap();
         assert_eq!(forced_overlap.overlap_groups.len(), 1);
         assert_eq!(
-            forced_overlap.overlap_groups[0].center, expected_probe_center,
-            "an identity-frame forced center must be rotated exactly once into the probe frame"
+            forced_overlap.overlap_groups[0].center, expected_subspace_probe_center,
+            "an identity-frame forced center must be rotated exactly once and projected onto the active subspace"
         );
 
         let alternate_lmb = graph
@@ -1155,6 +1172,69 @@ mod tests {
         assert_eq!(
             alternate_overlap.overlap_groups[0].center, expected_alternate_lmb_center,
             "a forced center must be transformed from the graph LMB into the selected parent LMB after its single probe rotation"
+        );
+
+        let proper_alternate_subspace = SubspaceData::new_with_user_selected_lmb(
+            subgraph,
+            LmbIndex::from(1),
+            &graph,
+            &alternate_lmbs,
+        )
+        .expect("the non-default parent LMB must support the same proper two-loop subspace");
+        assert_eq!(proper_alternate_subspace.loopcount(), 2);
+        let affine_external_momenta = ExternalFourMomenta::from_iter([
+            FourMomentum::from_args(F(5.0), F(1.0), F(2.0), F(3.0)),
+            FourMomentum::from_args(F(-5.0), F(-1.0), F(-2.0), F(-3.0)),
+        ]);
+        let affine_external_spatial = affine_external_momenta
+            .iter()
+            .map(|momentum| momentum.spatial)
+            .collect();
+        let unprojected_affine_center = identity_frame_center.lmb_transform(
+            &graph.loop_momentum_basis,
+            proper_alternate_subspace.get_lmb(&alternate_lmbs),
+            &affine_external_spatial,
+        );
+        assert!(
+            unprojected_affine_center
+                .iter_enumerated()
+                .any(|(loop_index, momentum)| {
+                    !proper_alternate_subspace.contains_loop_index(loop_index)
+                        && momentum.norm_squared() > F(0.0)
+                }),
+            "the fixture must exercise an affine LMB transform with a nonzero inactive component"
+        );
+        let mut expected_projected_affine_center = unprojected_affine_center.clone();
+        for loop_index in (0..expected_projected_affine_center.len()).map(LoopIndex::from) {
+            if !proper_alternate_subspace.contains_loop_index(loop_index) {
+                expected_projected_affine_center[loop_index] =
+                    ThreeMomentum::new(F(0.0), F(0.0), F(0.0));
+            }
+        }
+        let mut affine_forced_settings = RuntimeSettings::default();
+        affine_forced_settings
+            .subtraction
+            .overlap_settings
+            .force_global_center = Some(forced_center_coordinates);
+        let affine_overlap_input = OverlapInput {
+            graph: &graph,
+            settings: &affine_forced_settings,
+            subspace: &proper_alternate_subspace,
+            lmbs: &alternate_lmbs,
+            thresholds: &empty_thresholds,
+            edge_masses: overlap_input.edge_masses.clone(),
+        };
+        let affine_overlap = find_maximal_overlap(
+            &affine_overlap_input,
+            &ti_vec![],
+            &sampled_momenta,
+            &affine_external_momenta,
+            &Rotation::new(RotationMethod::Identity),
+        )
+        .unwrap();
+        assert_eq!(
+            affine_overlap.overlap_groups[0].center, expected_projected_affine_center,
+            "an affine parent-LMB transform must not displace the fixed complement of a forced subspace center"
         );
 
         let support_edge = [1, 2, 3, 4]

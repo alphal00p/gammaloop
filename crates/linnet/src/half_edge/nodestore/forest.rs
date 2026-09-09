@@ -1,3 +1,5 @@
+use std::fmt;
+
 use super::{NodeStorage, NodeStorageOps, NodeStorageVec};
 use crate::{
     half_edge::{
@@ -16,7 +18,7 @@ use crate::{
 //     forest: Forest<N, Tree>,
 // }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 /// An iterator over the half-edges incident to a graph node when the node
 /// storage is implemented using a [`Forest`].
 ///
@@ -31,26 +33,46 @@ use crate::{
 /// - `P`: The type of the [`ForestNodeStore`] used by the `Forest`, which must
 ///   also implement [`ForestNodeStorePreorder`] to allow pre-order traversal
 ///   of tree nodes (representing half-edges).
-pub struct ForestNeighborIter<'a, P: ForestNodeStorePreorder + 'a> {
-    // root: Option<TreeNodeId>, // Potentially for future use or alternative iteration strategies
-    /// The underlying pre-order iterator from the forest's node store.
-    iter: P::Iterator<'a>,
+pub enum ForestNeighborIter<'a, P: ForestNodeStorePreorder + 'a> {
+    Empty,
+    Iter(P::Iterator<'a>),
+}
+
+impl<'a, P: ForestNodeStorePreorder + 'a> ForestNeighborIter<'a, P> {
+    fn from_root(nodes: &'a P, root_id: TreeNodeId) -> Self {
+        if root_id.is_empty() {
+            Self::Empty
+        } else {
+            Self::Iter(nodes.iter_preorder(root_id))
+        }
+    }
+}
+
+impl<P: ForestNodeStorePreorder> fmt::Debug for ForestNeighborIter<'_, P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => f.write_str("ForestNeighborIter::Empty"),
+            Self::Iter(_) => f.write_str("ForestNeighborIter::Iter(_)"),
+        }
+    }
 }
 
 impl<'a, P: ForestNodeStorePreorder + 'a> Iterator for ForestNeighborIter<'a, P> {
     type Item = Hedge;
     fn next(&mut self) -> Option<Self::Item> {
-        // if let Some(root) = self.root.take() {
-        //     Some(root.into())
-        // } else {
-        self.iter.next().map(|a| a.into())
-        // }
+        match self {
+            Self::Empty => None,
+            Self::Iter(iter) => iter.next().map(|a| a.into()),
+        }
     }
 }
 
 impl<'a, P: ForestNodeStorePreorder + 'a> ExactSizeIterator for ForestNeighborIter<'a, P> {
     fn len(&self) -> usize {
-        self.iter.clone().count()
+        match self {
+            Self::Empty => 0,
+            Self::Iter(iter) => iter.clone().count(),
+        }
     }
 }
 
@@ -212,22 +234,14 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
 
         // first we swap to the front all nodes that have correct pointers.
         while active_nodes_upper_bound < historical_nodes_lower_bound {
-            if self
-                .nodes
-                .root_node(self.roots[active_nodes_upper_bound.0].root_id)
-                == self.roots[active_nodes_upper_bound.0].root_id
-            {
+            if self.is_active_root(active_nodes_upper_bound.into()) {
                 //left is in the right place
 
                 active_nodes_upper_bound.0 += 1;
             } else {
                 //left needs to be swapped
                 historical_nodes_lower_bound.0 -= 1;
-                if self
-                    .nodes
-                    .root_node(self.roots[historical_nodes_lower_bound.0].root_id)
-                    == self.roots[historical_nodes_lower_bound.0].root_id
-                {
+                if self.is_active_root(historical_nodes_lower_bound.into()) {
                     //only with an extracted that is in the wrong spot
                     self.swap_roots(
                         active_nodes_upper_bound.into(),
@@ -248,7 +262,9 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         let nodeshift = TreeNodeId(self.nodes.n_nodes());
         let shift_roots_by = RootId(self.roots.len());
         self.roots.extend(other.roots.into_iter().map(|mut a| {
-            a.root_id.0 += nodeshift.0;
+            if !a.root_id.is_empty() {
+                a.root_id.0 += nodeshift.0;
+            }
             a
         }));
 
@@ -530,7 +546,9 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         }
 
         for (i, r) in overlapping_roots.iter().enumerate() {
-            extracted_nodes.set_root(r.root_id, RootId(i))
+            if !r.root_id.is_empty() {
+                extracted_nodes.set_root(r.root_id, RootId(i))
+            }
         }
         // println!("{}", extracted_nodes.debug_draw(|_| None));
         // println!("{}", self.nodes.debug_draw(|_| None));
@@ -562,10 +580,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
 
     fn get_neighbor_iterator(&self, node_id: NodeIndex) -> Self::NeighborsIter<'_> {
         let root_id = self.roots[node_id.0].root_id;
-        ForestNeighborIter {
-            // root: Some(root_id),
-            iter: self.nodes.iter_preorder(root_id),
-        }
+        ForestNeighborIter::from_root(&self.nodes, root_id)
     }
 
     fn map_data_ref_graph_result<'a, E, V2, H, Er>(
@@ -626,11 +641,27 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         node_data_merge: Self::NodeData,
     ) -> NodeIndex {
         let first = nodes[0];
-        let x = self.roots[first.0].root_id;
+        let mut root = self.roots[first.0].root_id;
 
         for i in nodes.iter().skip(1) {
             let y = self.roots[i.0].root_id;
-            self.nodes.make_root_of(x, y);
+            match (root.is_empty(), y.is_empty()) {
+                (true, true) => {
+                    self.roots[i.0].root_id = TreeNodeId::HISTORICAL_EMPTY;
+                }
+                (true, false) => {
+                    let y_root = self.nodes.root_node(y);
+                    self.nodes.set_root(y_root, first.into());
+                    root = y_root;
+                    self.roots[first.0].root_id = root;
+                }
+                (false, true) => {
+                    self.roots[i.0].root_id = TreeNodeId::HISTORICAL_EMPTY;
+                }
+                (false, false) => {
+                    self.nodes.make_root_of(root, y);
+                }
+            }
         }
 
         self.roots[first.0].data = node_data_merge;
@@ -645,10 +676,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
             let root_id = d.root_id;
             (
                 NodeIndex(i),
-                ForestNeighborIter {
-                    // root: Some(root_id),
-                    iter: self.nodes.iter_preorder(root_id),
-                },
+                ForestNeighborIter::from_root(&self.nodes, root_id),
                 &mut d.data,
             )
         })
@@ -659,7 +687,11 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         source: NodeIndex,
     ) -> Result<Self, crate::half_edge::HedgeGraphError> {
         let parent = self.roots[source.0].root_id;
-        self.nodes.add_dataless_child(parent);
+        if parent.is_empty() {
+            self.roots[source.0].root_id = self.nodes.add_dataless_root(source.into());
+        } else {
+            self.nodes.add_dataless_child(parent);
+        }
         Ok(self)
     }
 
@@ -775,10 +807,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
 
                     RootData {
                         data: node_map(
-                            ForestNeighborIter {
-                                // root: Some(root_id),
-                                iter: self.nodes.iter_preorder(root_id),
-                            },
+                            ForestNeighborIter::from_root(&self.nodes, root_id),
                             &mut r.data,
                         ),
                         root_id: r.root_id,

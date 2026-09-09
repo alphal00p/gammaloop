@@ -1,10 +1,10 @@
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::{
     network::{
         ExecutionResult, Sequential,
         library::{DummyLibrary, function_lib::Wrap},
         parsing::{ParseSettings, ShorthandParsing, StructureInferenceMode},
     },
-    shadowing::symbolica_utils::SpensoPrintSettings,
     structure::slot::{AbsInd, DummyAind, ParseableAind},
 };
 

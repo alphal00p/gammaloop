@@ -1,4 +1,4 @@
-use crate::utils::{GS, W_, symbolica_ext::CallSymbol};
+use crate::utils::{GS, W_};
 use idenso::color::CS;
 use idenso::dirac::AGS;
 use idenso::representations::{
@@ -143,34 +143,34 @@ impl UFOSymbols {
         //`P(i,j)` = $$p_j^{\mu_i}$$
         // and P(i)= $$p^{\mu_i}$$
         atom = atom
-            .replace(self.momentum.f(&[W_.a_, W_.b___]))
-            .with(self.momentum.f((&[W_.b___], &[mink.to_symbolic([W_.a_])])))
-            .replace(self.momentum.f((&[self.idx.f((&[1], &[W_.a_]))], &[W_.b_])))
-            .with(self.momentum.f(&[W_.a_, W_.b_]));
+            .replace(self.momentum.call_args([W_.a_, W_.b___]))
+            .with(self.momentum.call((W_.b___, mink.to_symbolic([W_.a_]))))
+            .replace(self.momentum.call((self.idx.call((1, W_.a_)), W_.b_)))
+            .with(self.momentum.call_args([W_.a_, W_.b_]));
 
         // Fill in representations
         let reps: Vec<_> = [
             (
-                self.gamma.f(&[W_.a_, W_.i_, W_.j_]),
-                self.gamma.f(&[
+                self.gamma.call_args([W_.a_, W_.i_, W_.j_]),
+                self.gamma.call_args([
                     mink.to_symbolic([W_.a_]),
                     bis.to_symbolic([W_.i_]),
                     bis.to_symbolic([W_.j_]),
                 ]),
             ),
             (
-                self.identityl.f(&[W_.a_, W_.b_]),
+                self.identityl.call_args([W_.a_, W_.b_]),
                 self.identityl
-                    .f(&[mink.to_symbolic([W_.a_]), mink.to_symbolic([W_.b_])]),
+                    .call_args([mink.to_symbolic([W_.a_]), mink.to_symbolic([W_.b_])]),
             ),
             (
-                self.metric.f(&[W_.a_, W_.b_]),
+                self.metric.call_args([W_.a_, W_.b_]),
                 self.metric
-                    .f(&[mink.to_symbolic([W_.a_]), mink.to_symbolic([W_.b_])]),
+                    .call_args([mink.to_symbolic([W_.a_]), mink.to_symbolic([W_.b_])]),
             ),
             (
-                self.sigma.f(&[W_.a_, W_.b_, W_.i_, W_.j_]),
-                self.sigma.f(&[
+                self.sigma.call_args([W_.a_, W_.b_, W_.i_, W_.j_]),
+                self.sigma.call_args([
                     mink.to_symbolic([W_.a_]),
                     mink.to_symbolic([W_.b_]),
                     bis.to_symbolic([W_.i_]),
@@ -178,36 +178,34 @@ impl UFOSymbols {
                 ]),
             ),
             (
-                self.pslash.f(&[W_.i_, W_.j_, W_.a___]),
-                self.pslash.f((
-                    &[bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])],
-                    &[W_.a___],
-                )),
+                self.pslash.call_args([W_.i_, W_.j_, W_.a___]),
+                self.pslash
+                    .call((bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_]), W_.a___)),
             ),
             (
-                self.identity.f(&[W_.i_, W_.j_]),
+                self.identity.call_args([W_.i_, W_.j_]),
                 self.identity
-                    .f(&[bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
+                    .call_args([bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
             ),
             (
-                self.gamma5.f(&[W_.i_, W_.j_]),
+                self.gamma5.call_args([W_.i_, W_.j_]),
                 self.gamma5
-                    .f(&[bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
+                    .call_args([bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
             ),
             (
-                self.projm.f(&[W_.i_, W_.j_]),
+                self.projm.call_args([W_.i_, W_.j_]),
                 self.projm
-                    .f(&[bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
+                    .call_args([bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
             ),
             (
-                self.projp.f(&[W_.i_, W_.j_]),
+                self.projp.call_args([W_.i_, W_.j_]),
                 self.projp
-                    .f(&[bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
+                    .call_args([bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
             ),
             (
-                self.charge_conj.f(&[W_.i_, W_.j_]),
+                self.charge_conj.call_args([W_.i_, W_.j_]),
                 self.charge_conj
-                    .f(&[bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
+                    .call_args([bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
             ),
         ]
         .into_iter()
@@ -216,11 +214,11 @@ impl UFOSymbols {
 
         atom = atom
             .replace_multiple(&reps)
-            .replace(self.levicivita.f((&[W_.a___], &[W_.i_], &[W_.b___])))
+            .replace(self.levicivita.call((W_.a___, W_.i_, W_.b___)))
             .repeat()
             .with(
                 self.levicivita
-                    .f((&[W_.a___], &[mink.to_symbolic([W_.i_])], &[W_.b___])),
+                    .call((W_.a___, mink.to_symbolic([W_.i_]), W_.b___)),
             );
 
         for (i, s) in slots.iter().enumerate() {
@@ -297,44 +295,52 @@ impl UFOSymbols {
 
         let reps: Vec<_> = [
             (
-                self.identity.f(&[bis.pattern(W_.a_), bis.pattern(W_.b_)]),
+                self.identity
+                    .call_args([bis.pattern(W_.a_), bis.pattern(W_.b_)]),
                 bis.g(W_.a_, W_.b_),
             ),
             (
                 self.identityl
-                    .f(&[mink.pattern(W_.a_), mink.pattern(W_.b_)]),
+                    .call_args([mink.pattern(W_.a_), mink.pattern(W_.b_)]),
                 mink.g(W_.a_, W_.b_),
             ),
             (
-                self.metric.f(&[mink.pattern(W_.a_), mink.pattern(W_.b_)]),
+                self.metric
+                    .call_args([mink.pattern(W_.a_), mink.pattern(W_.b_)]),
                 mink.g(W_.a_, W_.b_),
             ),
             (
                 self.gamma
-                    .f(&[mink.pattern(W_.i_), bis.pattern(W_.a_), bis.pattern(W_.b_)]),
+                    .call_args([mink.pattern(W_.i_), bis.pattern(W_.a_), bis.pattern(W_.b_)]),
                 AGS.gamma
-                    .f(&[bis.pattern(W_.a_), bis.pattern(W_.b_), mink.pattern(W_.i_)]),
+                    .call_args([bis.pattern(W_.a_), bis.pattern(W_.b_), mink.pattern(W_.i_)]),
             ),
             (
-                self.gamma5.f(&[bis.pattern(W_.a_), bis.pattern(W_.b_)]),
-                AGS.gamma5.f(&[bis.pattern(W_.a_), bis.pattern(W_.b_)]),
+                self.gamma5
+                    .call_args([bis.pattern(W_.a_), bis.pattern(W_.b_)]),
+                AGS.gamma5
+                    .call_args([bis.pattern(W_.a_), bis.pattern(W_.b_)]),
             ),
             (
-                self.projm.f(&[bis.pattern(W_.a_), bis.pattern(W_.b_)]),
-                AGS.projm.f(&[bis.pattern(W_.a_), bis.pattern(W_.b_)]),
+                self.projm
+                    .call_args([bis.pattern(W_.a_), bis.pattern(W_.b_)]),
+                AGS.projm
+                    .call_args([bis.pattern(W_.a_), bis.pattern(W_.b_)]),
             ),
             (
-                self.projp.f(&[bis.pattern(W_.a_), bis.pattern(W_.b_)]),
-                AGS.projp.f(&[bis.pattern(W_.a_), bis.pattern(W_.b_)]),
+                self.projp
+                    .call_args([bis.pattern(W_.a_), bis.pattern(W_.b_)]),
+                AGS.projp
+                    .call_args([bis.pattern(W_.a_), bis.pattern(W_.b_)]),
             ),
             (
-                self.sigma.f(&[
+                self.sigma.call_args([
                     bis.pattern(W_.a_),
                     bis.pattern(W_.b_),
                     mink.pattern(W_.i_),
                     mink.pattern(W_.j_),
                 ]),
-                AGS.sigma.f(&[
+                AGS.sigma.call_args([
                     bis.pattern(W_.a_),
                     bis.pattern(W_.b_),
                     mink.pattern(W_.i_),
@@ -402,37 +408,37 @@ impl UFOSymbols {
         // println!("out:{atom:#}");
 
         if atom
-            .replace(self.gamma.f(&[W_.a__]))
+            .replace(self.gamma.call_args([W_.a__]))
             .match_iter()
             .next()
             .is_some()
             || atom
-                .replace(self.sigma.f(&[W_.a___]))
+                .replace(self.sigma.call_args([W_.a___]))
                 .match_iter()
                 .next()
                 .is_some()
             || atom
-                .replace(self.pslash.f(&[W_.a___]))
+                .replace(self.pslash.call_args([W_.a___]))
                 .match_iter()
                 .next()
                 .is_some()
             || atom
-                .replace(self.gamma5.f(&[W_.a__]))
+                .replace(self.gamma5.call_args([W_.a__]))
                 .match_iter()
                 .next()
                 .is_some()
             || atom
-                .replace(self.projm.f(&[W_.a__]))
+                .replace(self.projm.call_args([W_.a__]))
                 .match_iter()
                 .next()
                 .is_some()
             || atom
-                .replace(self.projp.f(&[W_.a__]))
+                .replace(self.projp.call_args([W_.a__]))
                 .match_iter()
                 .next()
                 .is_some()
             || atom
-                .replace(self.charge_conj.f(&[W_.a__]))
+                .replace(self.charge_conj.call_args([W_.a__]))
                 .match_iter()
                 .next()
                 .is_some()
@@ -465,64 +471,64 @@ impl UFOSymbols {
         // Fill in representations
         let reps: Vec<_> = [
             (
-                self.t.f(&[W_.a_, W_.i_, W_.j_]),
-                self.t.f(&[
+                self.t.call_args([W_.a_, W_.i_, W_.j_]),
+                self.t.call_args([
                     adj.to_symbolic([W_.a_]),
                     fund.to_symbolic([W_.i_]),
                     antifund.to_symbolic([W_.j_]),
                 ]),
             ),
             (
-                self.f.f(&[W_.a_, W_.b_, W_.c_]),
-                self.f.f(&[
+                self.f.call_args([W_.a_, W_.b_, W_.c_]),
+                self.f.call_args([
                     adj.to_symbolic([W_.a_]),
                     adj.to_symbolic([W_.b_]),
                     adj.to_symbolic([W_.c_]),
                 ]),
             ),
             (
-                self.d.f(&[W_.a_, W_.b_, W_.c_]),
-                self.d.f(&[
+                self.d.call_args([W_.a_, W_.b_, W_.c_]),
+                self.d.call_args([
                     adj.to_symbolic([W_.a_]),
                     adj.to_symbolic([W_.b_]),
                     adj.to_symbolic([W_.c_]),
                 ]),
             ),
             (
-                self.levicivita.f(&[W_.i_, W_.j_, W_.k_]),
-                self.levicivita.f(&[
+                self.levicivita.call_args([W_.i_, W_.j_, W_.k_]),
+                self.levicivita.call_args([
                     fund.to_symbolic([W_.i_]),
                     fund.to_symbolic([W_.j_]),
                     fund.to_symbolic([W_.k_]),
                 ]),
             ),
             (
-                self.antilevicivita.f(&[W_.i_, W_.j_, W_.k_]),
-                self.levicivita.f(&[
+                self.antilevicivita.call_args([W_.i_, W_.j_, W_.k_]),
+                self.levicivita.call_args([
                     antifund.to_symbolic([W_.i_]),
                     antifund.to_symbolic([W_.j_]),
                     antifund.to_symbolic([W_.k_]),
                 ]),
             ),
             (
-                self.t6.f(&[W_.a_, W_.i_, W_.j_]),
-                self.t6.f(&[
+                self.t6.call_args([W_.a_, W_.i_, W_.j_]),
+                self.t6.call_args([
                     adj.to_symbolic([W_.a_]),
                     sext.to_symbolic([W_.i_]),
                     antisext.to_symbolic([W_.j_]),
                 ]),
             ),
             (
-                self.k6.f(&[W_.a_, W_.i_, W_.j_]),
-                self.k6.f(&[
+                self.k6.call_args([W_.a_, W_.i_, W_.j_]),
+                self.k6.call_args([
                     sext.to_symbolic([W_.a_]),
                     antifund.to_symbolic([W_.i_]),
                     antifund.to_symbolic([W_.j_]),
                 ]),
             ),
             (
-                self.k6bar.f(&[W_.a_, W_.i_, W_.j_]),
-                self.k6bar.f(&[
+                self.k6bar.call_args([W_.a_, W_.i_, W_.j_]),
+                self.k6bar.call_args([
                     antisext.to_symbolic([W_.a_]),
                     fund.to_symbolic([W_.i_]),
                     fund.to_symbolic([W_.j_]),
@@ -545,8 +551,8 @@ impl UFOSymbols {
             )
             .repeat()
             .with(
-                self.identity.f((&[W_.g_.f(&[W_.a_])], &[W_.b_]))
-                    * W_.f_.f((&[W_.a___], &[W_.g_.f(&[W_.a_])], &[W_.b___])),
+                self.identity.call((W_.g_.call_args([W_.a_]), W_.b_))
+                    * W_.f_.call((W_.a___, W_.g_.call_args([W_.a_]), W_.b___)),
             );
 
         // debug!("Postid:{}", atom);
@@ -565,17 +571,17 @@ impl UFOSymbols {
                     .replace(rep.to_symbolic([wrappedi]))
                     .level_range((1, Some(1)))
                     .with(r.to_atom())
-                    .replace(self.identity.f((&[wrappedi], &[W_.i_])))
-                    .with(self.identity.f((&[r.to_atom()], &[W_.i_])))
-                    .replace(self.identity.f((&[W_.i_], &[wrappedi])))
-                    .with(self.identity.f((&[W_.i_], &[r.to_atom()])))
+                    .replace(self.identity.call((wrappedi, W_.i_)))
+                    .with(self.identity.call((r.to_atom(), W_.i_)))
+                    .replace(self.identity.call((W_.i_, wrappedi)))
+                    .with(self.identity.call((W_.i_, r.to_atom())))
                     .replace(rep.to_symbolic([i]))
                     .level_range((1, Some(1)))
                     .with(r.to_atom())
-                    .replace(self.identity.f((&[i], &[W_.i_])))
-                    .with(self.identity.f((&[r.to_atom()], &[W_.i_])))
-                    .replace(self.identity.f((&[W_.i_], &[i])))
-                    .with(self.identity.f((&[W_.i_], &[r.to_atom()])));
+                    .replace(self.identity.call((i, W_.i_)))
+                    .with(self.identity.call((r.to_atom(), W_.i_)))
+                    .replace(self.identity.call((W_.i_, i)))
+                    .with(self.identity.call((W_.i_, r.to_atom())));
             }
         }
 
@@ -632,28 +638,28 @@ impl UFOSymbols {
 
         let reps: Vec<_> = [
             (
-                self.identity.f(&[W_.a_, W_.b_]),
-                ETS.metric.f(&[W_.a_, W_.b_]),
+                self.identity.call_args([W_.a_, W_.b_]),
+                ETS.metric.call_args([W_.a_, W_.b_]),
             ),
             (
-                self.t.f(&[
+                self.t.call_args([
                     adj.to_symbolic([W_.a__]),
                     fund.to_symbolic([W_.i__]),
                     antifund.to_symbolic([W_.j__]),
                 ]),
-                CS.t.f(&[
+                CS.t.call_args([
                     adj.to_symbolic([W_.a__]),
                     fund.to_symbolic([W_.i__]),
                     antifund.to_symbolic([W_.j__]),
                 ]),
             ),
             (
-                self.f.f(&[
+                self.f.call_args([
                     adj.to_symbolic([W_.a__]),
                     adj.to_symbolic([W_.b__]),
                     adj.to_symbolic([W_.c__]),
                 ]),
-                CS.f.f(&[
+                CS.f.call_args([
                     adj.to_symbolic([W_.a__]),
                     adj.to_symbolic([W_.b__]),
                     adj.to_symbolic([W_.c__]),
@@ -667,42 +673,42 @@ impl UFOSymbols {
         atom = atom.replace_multiple(&reps);
 
         if atom
-            .replace(self.t.f(&[W_.a___]))
+            .replace(self.t.call_args([W_.a___]))
             .match_iter()
             .next()
             .is_some()
             || atom
-                .replace(self.f.f(&[W_.a___]))
+                .replace(self.f.call_args([W_.a___]))
                 .match_iter()
                 .next()
                 .is_some()
             || atom
-                .replace(self.d.f(&[W_.a___]))
+                .replace(self.d.call_args([W_.a___]))
                 .match_iter()
                 .next()
                 .is_some()
             || atom
-                .replace(self.levicivita.f(&[W_.a___]))
+                .replace(self.levicivita.call_args([W_.a___]))
                 .match_iter()
                 .next()
                 .is_some()
             || atom
-                .replace(self.antilevicivita.f(&[W_.a___]))
+                .replace(self.antilevicivita.call_args([W_.a___]))
                 .match_iter()
                 .next()
                 .is_some()
             || atom
-                .replace(self.t6.f(&[W_.a___]))
+                .replace(self.t6.call_args([W_.a___]))
                 .match_iter()
                 .next()
                 .is_some()
             || atom
-                .replace(self.k6.f(&[W_.a___]))
+                .replace(self.k6.call_args([W_.a___]))
                 .match_iter()
                 .next()
                 .is_some()
             || atom
-                .replace(self.k6bar.f(&[W_.a___]))
+                .replace(self.k6bar.call_args([W_.a___]))
                 .match_iter()
                 .next()
                 .is_some()

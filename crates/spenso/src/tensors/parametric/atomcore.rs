@@ -37,6 +37,7 @@ use symbolica::{
     tensors::matrix::Matrix,
     utils::{BorrowedOrOwned, Settable},
 };
+use symbolica_utils::PatternReplacement;
 
 use crate::{
     iterators::IteratableTensor,
@@ -53,46 +54,6 @@ struct MatchSettings {
     level_is_tree_depth: bool,
     allow_new_wildcards_on_rhs: bool,
     rhs_cache_size: usize,
-}
-
-pub trait PatternReplacement {
-    fn replace_multiple_repeat<T: BorrowReplacement>(&self, replacements: &[T]) -> Self;
-    fn replace_multiple_mut<T: BorrowReplacement>(&mut self, replacements: &[T]);
-    fn replace_multiple_repeat_mut<T: BorrowReplacement>(&mut self, replacements: &[T]);
-    fn replace_map_mut<F: Fn(AtomView, &Context, &mut Settable<'_, Atom>)>(&mut self, m: &F);
-}
-
-impl PatternReplacement for Atom {
-    fn replace_multiple_mut<T: BorrowReplacement>(&mut self, replacements: &[T]) {
-        *self = self
-            .as_atom_view()
-            .replace_multiple(replacements.iter().map(BorrowReplacement::borrow));
-    }
-
-    fn replace_multiple_repeat<T: BorrowReplacement>(&self, replacements: &[T]) -> Atom {
-        let mut out = self.clone();
-        let mut out_mut = out.clone();
-
-        while out.replace_multiple_into(
-            replacements.iter().map(BorrowReplacement::borrow),
-            &mut out_mut,
-        ) {
-            if out == out_mut {
-                break;
-            }
-            std::mem::swap(&mut out, &mut out_mut)
-        }
-        out
-    }
-
-    fn replace_multiple_repeat_mut<T: BorrowReplacement>(&mut self, replacements: &[T]) {
-        let atom = self.replace_multiple_repeat(replacements);
-        *self = atom;
-    }
-
-    fn replace_map_mut<F: Fn(AtomView, &Context, &mut Settable<'_, Atom>)>(&mut self, m: &F) {
-        *self = self.replace_map(m);
-    }
 }
 
 pub trait ClonableAtomMap: Fn(AtomView, &mut Atom) + DynClone {}

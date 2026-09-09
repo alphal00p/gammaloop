@@ -6,15 +6,18 @@ use color_eyre::{
 };
 use gammalooprs::{
     initialisation::test_initialise,
-    numerator::symbolica_ext::AtomCoreExt,
-    utils::{FUN_LIB, GS, TENSORLIB, symbolica_ext::LogPrint},
+    numerator::symbolica_ext::NumeratorAtomExt,
+    utils::{FUN_LIB, GS, TENSORLIB},
 };
 use idenso::{
     color::ColorSimplifier,
     dirac::GammaSimplifier,
     shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
-use spenso::network::{MinResultRank, Sequential};
+use spenso::{
+    network::{MinResultRank, Sequential},
+    shadowing::symbolica_utils::LogPrint,
+};
 use symbolica::{
     atom::{Atom, AtomCore},
     parser::ParseSettings as SymbolicaParseSettings,

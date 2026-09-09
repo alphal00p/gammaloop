@@ -1,5 +1,8 @@
 use super::*;
+use crate::coad;
 use insta::assert_snapshot;
+use spenso::{antisym, g, mink, shadowing::IntoAtom};
+use symbolica::{function, symbol};
 
 macro_rules! fco {
     ($r:ident, $a:tt, $b:tt, $c:tt) => {
@@ -148,6 +151,53 @@ fn two_f_loop_contracts_to_ca_metric() {
 }
 
 #[test]
+fn metric_contraction_respects_antisymmetric_normalization() {
+    test_initialize();
+    let coad8 = ColorAdjoint {}.new_rep(8);
+    // Seed the symbol order from the three-loop graph that exposed the lost
+    // permutation parity in the old sequence-wildcard contraction.
+    let a = slot!(coad8, standalone_metric_a);
+    let x = slot!(coad8, standalone_metric_x);
+    let u = slot!(coad8, standalone_metric_u);
+    let v = slot!(coad8, standalone_metric_v);
+    let _ = (color_f!(a, x, u) * color_f!(a, x, v)).simplify_metrics();
+    let r = slot!(coad8, standalone_metric_r);
+    let s = slot!(coad8, standalone_metric_s);
+    let j = slot!(coad8, standalone_metric_j);
+
+    let contracted = (g!(r, s) * color_f!(u, j, r)).simplify_metrics();
+    // Re-normalizing f after direct slot substitution may change its displayed
+    // argument order and coefficient, so compare with a freshly built target.
+    assert_eq!(
+        contracted.to_bare_ordered_string(),
+        color_f!(u, j, s).to_bare_ordered_string(),
+    );
+
+    let closed = g!(u, v) * g!(r, s) * color_f!(u, j, r) * color_f!(v, j, s);
+    assert_eq!(
+        closed.simplify_color(),
+        Atom::num(8) * color_cas!(2, &coad8)
+    );
+}
+
+#[test]
+fn metric_contraction_only_replaces_the_immediate_slot() {
+    test_initialize();
+    let coad8 = ColorAdjoint {}.new_rep(8);
+    let u = slot!(coad8, standalone_nested_metric_u);
+    let j = slot!(coad8, standalone_nested_metric_j);
+    let r = slot!(coad8, standalone_nested_metric_r);
+    let s = slot!(coad8, standalone_nested_metric_s);
+    let probe = symbol!("spenso::standalone_metric_probe");
+    let structure = color_f!(u, j, r);
+    let r_atom = r.into_atom();
+    let s_atom = s.into_atom();
+
+    let contracted = (g!(r, s) * function!(probe, &structure, r_atom)).simplify_metrics();
+    assert_eq!(contracted, function!(probe, structure, s_atom));
+}
+
+#[test]
 fn three_f_loop_contracts_to_ca_f() {
     test_initialize();
     let expr = parse_lit!(
@@ -158,6 +208,137 @@ fn three_f_loop_contracts_to_ca_f() {
     );
 
     assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1/2*cas(2,coad(NA))*f(coad(NA,e),coad(NA,f_),coad(NA,g_))");
+}
+
+#[test]
+fn three_f_loop_preserves_antisymmetric_orientation() {
+    test_initialize();
+    let coad8 = ColorAdjoint {}.new_rep(8);
+    // Seed the symbol order that made the unoriented triangle reduction pick
+    // the wrong sign in the three-loop graph.
+    let r = slot!(coad8, standalone_triangle_r);
+    let s = slot!(coad8, standalone_triangle_s);
+    let x = slot!(coad8, standalone_triangle_x);
+    let z = slot!(coad8, standalone_triangle_z);
+    let _ = g!(r, s) * color_f!(x, z, r);
+    let u = slot!(coad8, standalone_triangle_u);
+    let y = slot!(coad8, standalone_triangle_y);
+    let triangle = color_f!(u, x, r) * color_f!(y, z, r) * color_f!(u, z, s);
+    let closing_structure = color_f!(s, x, y);
+    let expected = Atom::num(-1) * color_cas!(2, &coad8) / Atom::num(2) * color_f!(s, x, y);
+
+    assert_eq!(triangle.simplify_color(), expected);
+    // Closing the loop before or after triangle reduction must keep the same
+    // antisymmetric orientation.
+    assert_eq!(
+        (&triangle * &closing_structure).simplify_color(),
+        (triangle.simplify_color() * closing_structure).simplify_color(),
+    );
+}
+
+#[test]
+fn six_f_k33_odd_automorphism_simplifies_to_zero() {
+    test_initialize();
+    let r = TestReps::new();
+    let contraction = fco!(r, a, b, c)
+        * fco!(r, d, e, f)
+        * fco!(r, h, i, j)
+        * fco!(r, a, d, h)
+        * fco!(r, b, e, i)
+        * fco!(r, c, f, j);
+    // Exchanging the first two K3,3 vertices is a dummy relabeling, but it
+    // reverses three f tensors. Thus C=-C and the contraction is zero.
+    let odd_relabeling = fco!(r, d, e, f)
+        * fco!(r, a, b, c)
+        * fco!(r, h, i, j)
+        * fco!(r, d, a, h)
+        * fco!(r, e, b, i)
+        * fco!(r, f, c, j);
+
+    assert_eq!(odd_relabeling, -&contraction);
+    // Color simplification applies signed tensor canonicalization only to its
+    // extracted color factor.
+    assert!(contraction.simplify_color().is_zero());
+}
+
+#[test]
+fn six_f_k33_with_structured_indices_simplifies_to_zero() {
+    test_initialize();
+    let hedge = symbol!("spenso::hedge");
+    let structured_slot = |index| coad!(8, function!(hedge, Atom::num(index as i64)));
+    let a = structured_slot(1);
+    let b = structured_slot(2);
+    let c = structured_slot(3);
+    let d = structured_slot(4);
+    let e = structured_slot(5);
+    let f = structured_slot(6);
+    let h = structured_slot(7);
+    let i = structured_slot(8);
+    let j = structured_slot(9);
+    let contraction = color_f!(&a, &b, &c)
+        * color_f!(&d, &e, &f)
+        * color_f!(&h, &i, &j)
+        * color_f!(&a, &d, &h)
+        * color_f!(&b, &e, &i)
+        * color_f!(&c, &f, &j);
+
+    assert!(contraction.simplify_color().is_zero());
+}
+
+#[test]
+fn signed_pruning_reenters_color_simplification() {
+    test_initialize();
+    let r = TestReps::new();
+    let odd = fco!(r, a, b, c)
+        * fco!(r, d, e, f)
+        * fco!(r, h, i, j)
+        * fco!(r, a, d, h)
+        * fco!(r, b, e, i)
+        * fco!(r, c, f, j);
+    let vanishing_factor = fco!(r, u, v, w);
+    let surviving_factor = fco!(r, x, y, z);
+    let expected = surviving_factor.clone().pow(2).simplify_color();
+
+    assert_eq!(
+        ((odd * vanishing_factor + &surviving_factor) * surviving_factor).simplify_color(),
+        expected
+    );
+}
+
+#[test]
+fn color_simplification_does_not_canonicalize_lorentz_tensors() {
+    test_initialize();
+    let r = TestReps::new();
+    let a = mink!(4, color_only_canonicalization_a);
+    let b = mink!(4, color_only_canonicalization_b);
+    let c = mink!(4, color_only_canonicalization_c);
+    let odd_lorentz =
+        antisym!(a.clone(), b.clone()) * antisym!(b.clone(), c.clone()) * antisym!(c, a);
+    let color = fco!(r, x, y, z);
+    let expected = color.simplify_color() * &odd_lorentz;
+
+    assert!(!expected.is_zero());
+    assert_eq!((color * &odd_lorentz).simplify_color(), expected);
+    assert!(
+        odd_lorentz
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .is_zero()
+    );
+}
+
+#[test]
+fn two_f_even_automorphism_survives_canonicalization() {
+    test_initialize();
+    let r = TestReps::new();
+    let contraction = fco!(r, a, b, c) * fco!(r, a, b, c);
+
+    // Exchanging two contracted edges reverses both f tensors, so the total
+    // graph-automorphism sign is positive.
+    assert!(
+        !contraction
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .is_zero()
+    );
 }
 
 #[test]

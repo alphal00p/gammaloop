@@ -468,6 +468,51 @@ pub trait SubSetLike<ID = Hedge>:
     fn join_mut(&mut self, other: Self);
 
     fn string_label(&self) -> String;
+
+    #[cfg(feature = "symbolica")]
+    fn symbol(&self) -> symbolica::atom::Symbol {
+        use symbolica::{
+            atom::{AtomCore, AtomView},
+            get_symbol,
+            printer::PrintState,
+            symbol,
+        };
+        use symbolica_utils::{PrintSettingsExt, TypstMode};
+
+        let label = self.string_label();
+        let name = format!("S_{label}");
+
+        get_symbol!(&name).unwrap_or_else(|| {
+            symbol!(
+                &name,
+                print = move |a, opt, _state| {
+                    let mut out = match opt.typst_mode()? {
+                        TypstMode::Math | TypstMode::Markup => "#S".to_string(),
+                        TypstMode::Code => "S".to_string(),
+                    };
+
+                    let mut opt = opt.clone();
+                    opt.set_typst_mode(TypstMode::Code);
+
+                    out.push('(');
+                    out.push_str("g,");
+                    out.push('\"');
+                    out.push_str(&label);
+                    out.push('\"');
+                    if let AtomView::Fun(f) = a {
+                        for arg in f.iter() {
+                            out.push(',');
+                            arg.format(&mut out, &opt, PrintState::new()).ok()?;
+                        }
+                    }
+                    out.push(')');
+
+                    Some(out)
+                }
+            )
+        })
+    }
+
     fn from_base62(label: &str, size: usize) -> Option<Self>;
     fn included_iter(&self) -> Self::BaseIter<'_>;
     // fn included_iter_(&self) -> Self::BaseIter<'_>;

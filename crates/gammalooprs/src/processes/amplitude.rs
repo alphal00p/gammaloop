@@ -49,25 +49,23 @@ use crate::{
         GlobalSettings, RuntimeSettings, global::OrientationPattern, runtime::LockedRuntimeSettings,
     },
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{F, GS, Length, W_, symbolica_ext::LogPrint},
+    utils::{F, GS, Length, W_},
     uv::{
         RenormalizationPart, UVgenerationSettings, UltravioletGraph,
-        approx::{CutStructure, integrated::to_vakint_integrand},
-        hedge_poset::Wood as NewWood,
+        approx::{CutStructure, OrientationProjection, integrated::to_vakint_integrand},
         settings::VakintSettings,
-        wood::CutWoods,
     },
 };
 use eyre::{Context, eyre};
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        involution::{EdgeVec, HedgePair},
+        involution::{EdgeVec, Flow, HedgePair},
         subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetOps},
     },
-    num_traits::SignOrZero,
     parser::DotGraph,
 };
+use spenso::shadowing::symbolica_utils::LogPrint;
 use symbolica::{atom::Var, prelude::*};
 use tracing::{debug, info};
 use typed_index_collections::{TiVec, ti_vec};
@@ -401,6 +399,13 @@ impl Amplitude {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
+                    let graph_name = amplitude_graph.graph.name.clone();
+                    generation_progress::graph_started(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph_name,
+                        None,
+                    );
                     let _guard = parent.as_ref().map(|span| span.enter());
                     let stats =
                         amplitude_graph.preprocess(model, settings, locked_runtime_settings);
@@ -412,10 +417,17 @@ impl Amplitude {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
+                    generation_progress::graph_finished(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph_name,
+                        &stats,
+                        None,
+                    );
 
                     Ok(NamedGraphGenerationReport {
                         integrand_name: integrand_name.clone(),
-                        graph_name: amplitude_graph.graph.name.clone(),
+                        graph_name,
                         stats,
                     })
                 })
@@ -779,38 +791,11 @@ impl AmplitudeGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
-        if settings.use_legacy {
-            let mut vk_settings = settings.vakint.true_settings();
-            let wood = self.graph.wood_with_settings(
-                &self.graph.no_dummy(),
-                settings,
-                &self.graph.loop_momentum_basis,
-            );
-            //  it needs to be the max number of loops across all divergent spinneys of that graph
-            vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
-
-            let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
-
-            let vk = (crate::utils::vakint()?, &vk_settings);
-            let cuts = CutSet::empty(self.graph.n_hedges());
-            forest.compute(
-                &mut self.graph,
-                vk,
-                &cuts,
-                &valid_orientations,
-                settings,
-                &OrientationPattern::default(),
-            )?;
-
-            forest.pole_part_of_ends(&self.graph, settings.pole_part)
-        } else {
-            let cuts = CutStructure::empty(&self.graph);
-            let wood = NewWood::new(cuts, &self.graph, settings);
-            let mut forest = wood.unfold();
-            forest.integrate(&self.graph, crate::utils::vakint()?, settings)?;
-
-            forest.pole_part_of_ends(&self.graph)
-        }
+        settings.orchestrator.renormalization_part(
+            &mut self.graph,
+            OrientationProjection::new(&valid_orientations, &OrientationPattern::default()),
+            settings,
+        )
     }
 
     #[allow(dead_code)]
@@ -871,6 +856,17 @@ impl AmplitudeGraph {
 
         self.generate_cff(&settings.orientation_pattern)?;
 
+        // UV orchestration can extend the graph surface cache, while raised IDs
+        // belong to the CFF expression generated above.
+        let raised_data = settings.threshold_subtraction.enable_thresholds.then(|| {
+            self.graph.determine_raised_esurfaces_from_expression(
+                self.derived_data
+                    .cff_expression
+                    .as_ref()
+                    .expect("cff_expression should have been created"),
+            )
+        });
+
         self.build_integrands(settings, vk)?;
 
         if self.graph.is_group_master {
@@ -883,13 +879,7 @@ impl AmplitudeGraph {
             self.build_multi_channeling_channels(settings.override_lmb_heuristics);
         }
 
-        if settings.threshold_subtraction.enable_thresholds {
-            let mut raised_data = self.graph.determine_raised_esurfaces_from_expression(
-                self.derived_data
-                    .cff_expression
-                    .as_ref()
-                    .expect("cff_expression should have been created"),
-            );
+        if let Some(mut raised_data) = raised_data {
             let max_order = raised_data
                 .raised_groups
                 .iter()
@@ -1119,9 +1109,10 @@ impl AmplitudeGraph {
 
         // println!("Four-dimensional integrand: {}", four_dimensional_integrand);
 
+        let component_lmb = self.graph.lmb_of(component);
         let mom_reps = self.graph.uv_wrapped_replacement(
             &self.graph.full_filter(),
-            &self.graph.lmb_of(component),
+            &component_lmb,
             &[W_.x___],
         );
 
@@ -1154,7 +1145,7 @@ impl AmplitudeGraph {
             &self.graph.empty_subgraph::<SuBitGraph>(),
             config.settings,
             false,
-        );
+        )?;
 
         vakint_integrand.canonicalize(&true_settings, &config.vakint.topologies, false)?;
         // println!("Canonized: {}", vakint_integrand);
@@ -1204,7 +1195,7 @@ impl AmplitudeGraph {
             graph = %self.graph.name,
             subtract_uv = settings.uv.subtract_uv,
             generate_integrated = settings.uv.generate_integrated,
-            only_integrated = settings.uv.only_integrated,
+            only = %settings.uv.final_integrand,
             "Generation timing milestone"
         );
         let valid_orientations: Vec<_> = self
@@ -1224,49 +1215,19 @@ impl AmplitudeGraph {
             "Generation timing milestone"
         );
         let cutstructure = CutStructure::empty(&self.graph);
-        let woods_started = std::time::Instant::now();
-        let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv);
-        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            stage = "amplitude_graph_cut_woods_done",
-            graph = %self.graph.name,
-            wood_count = woods.woods.len(),
-            elapsed_ms = woods_started.elapsed().as_secs_f64() * 1000.0,
-            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "Generation timing milestone"
-        );
-        let unfold_started = std::time::Instant::now();
-        let mut forests = woods.unfold(&self.graph);
-        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            stage = "amplitude_graph_cut_forests_unfold_done",
-            graph = %self.graph.name,
-            forest_count = forests.forests.len(),
-            elapsed_ms = unfold_started.elapsed().as_secs_f64() * 1000.0,
-            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "Generation timing milestone"
-        );
-        let forests_started = std::time::Instant::now();
-        forests.compute(
+        let orchestration_started = std::time::Instant::now();
+        let parametric_exprs = settings.uv.orchestrator.parametric_integrands(
             &mut self.graph,
+            cutstructure,
             vakint,
-            &valid_orientations,
+            OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
             &settings.uv,
-            &settings.orientation_pattern,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            stage = "amplitude_graph_cut_forests_compute_done",
-            graph = %self.graph.name,
-            elapsed_ms = forests_started.elapsed().as_secs_f64() * 1000.0,
-            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "Generation timing milestone"
-        );
-
-        let orientation_started = std::time::Instant::now();
-        let parametric_exprs = forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
-        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            stage = "amplitude_graph_orientation_parametric_exprs_done",
+            stage = "amplitude_graph_parametric_orchestration_done",
             graph = %self.graph.name,
             parametric_integrand_count = parametric_exprs.len(),
-            elapsed_ms = orientation_started.elapsed().as_secs_f64() * 1000.0,
+            elapsed_ms = orchestration_started.elapsed().as_secs_f64() * 1000.0,
             total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );
@@ -1283,15 +1244,8 @@ impl AmplitudeGraph {
         );
 
         let assign_started = std::time::Instant::now();
-        self.derived_data.all_mighty_integrand = exprs
-            .into_iter()
-            .next()
-            .unwrap()
-            .integrands
-            .into_iter()
-            .next()
-            .unwrap()
-            .1; // should be exactly one expression
+        let integrands = exprs.into_iter().next().unwrap().integrands;
+        self.derived_data.all_mighty_integrand = integrands.iter().next().unwrap().1.clone(); // should be exactly one expression
         crate::debug_tags!(#generation, #profile, #graph, #summary;
             stage = "amplitude_graph_build_integrands_done",
             graph = %self.graph.name,
@@ -1326,14 +1280,18 @@ impl AmplitudeGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
-        let global_cff = self.derived_data.cff_expression.as_ref().unwrap(); // should always be set at this point
+        let global_cff = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .expect("cff_expression should have been created");
         let esurface_raising = &self.derived_data.raised_data;
         let mut counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom> = ti_vec![
             AmplitudeCountertermAtom::new();
             esurface_raising.raised_groups.len()
         ];
         let mut raised_esurface_ids: TiVec<EsurfaceID, Option<RaisedEsurfaceId>> =
-            ti_vec![None; self.graph.surface_cache.esurface_cache.len()];
+            ti_vec![None; global_cff.surfaces.esurface_cache.len()];
 
         for (raised_esurface_id, raised_group) in esurface_raising.raised_groups.iter_enumerated() {
             for &esurface_id in &raised_group.esurface_ids {
@@ -1351,20 +1309,18 @@ impl AmplitudeGraph {
         let mut cuts = vec![];
 
         let external_filter: SuBitGraph = self.graph.external_filter();
-        let external_signature = self.graph.get_external_signature();
-
         let mut incoming_externals = vec![];
         let mut outgoing_externals = vec![];
 
-        for ((_, edge_id, _), external_sign) in self
-            .graph
-            .iter_edges_of(&external_filter)
-            .zip(external_signature.iter())
-        {
-            match external_sign {
-                SignOrZero::Plus => incoming_externals.push(edge_id),
-                SignOrZero::Minus => outgoing_externals.push(edge_id),
-                _ => {}
+        for (edge, edge_id, _) in self.graph.iter_edges_of(&external_filter) {
+            match edge {
+                HedgePair::Unpaired {
+                    flow: Flow::Sink, ..
+                } => incoming_externals.push(edge_id),
+                HedgePair::Unpaired {
+                    flow: Flow::Source, ..
+                } => outgoing_externals.push(edge_id),
+                _ => unreachable!("the external filter must contain only unpaired edges"),
             }
         }
 
@@ -1376,7 +1332,9 @@ impl AmplitudeGraph {
                 continue;
             }
 
-            if settings.threshold_subtraction.check_esurface_at_generation {
+            let is_known_existing_at_generation =
+                settings.threshold_subtraction.check_esurface_at_generation;
+            if is_known_existing_at_generation {
                 let masses: EdgeVec<F<f64>> = self.graph.get_real_mass_vector(model);
                 let lmb = &self.graph.loop_momentum_basis;
                 if !locked_runtime_settings.existence_check(
@@ -1393,13 +1351,13 @@ impl AmplitudeGraph {
             if settings
                 .threshold_subtraction
                 .assume_positive_external_energies
+                && !is_known_existing_at_generation
+                && !esurface.external_shift_is_strictly_negative_for_positive_energies(
+                    &incoming_externals,
+                    &outgoing_externals,
+                )
             {
-                if esurface.contains_all_with_minus_sign(&incoming_externals)
-                    || esurface.contains_only_with_minus_sign(&outgoing_externals)
-                {
-                } else {
-                    continue;
-                }
+                continue;
             }
 
             let mut cut_union: SuBitGraph = self.graph.empty_subgraph();
@@ -1430,17 +1388,13 @@ impl AmplitudeGraph {
 
         let cut_structure = CutStructure { cuts };
 
-        let woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
-        let mut forests = woods.unfold(&self.graph);
-        forests.compute(
+        let exprs: Vec<_> = settings.uv.orchestrator.parametric_integrands(
             &mut self.graph,
+            cut_structure,
             vakint,
-            &valid_orientations,
+            OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
             &settings.uv,
-            &settings.orientation_pattern,
         )?;
-
-        let exprs: Vec<_> = forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
 
         for expr in exprs.into_iter() {
             let loop_number = self.graph.n_loops(&self.graph.underlying.full_filter());
@@ -1454,7 +1408,7 @@ impl AmplitudeGraph {
             let raised_esurface_id = raised_esurface_ids[raised_group.esurface_ids[0]];
             debug!("raised_esurface_id: {}", raised_esurface_id.0);
 
-            for integrand in counterterm_atom.parametric.values() {
+            for (_, integrand) in counterterm_atom.parametric.iter() {
                 debug!("counterterm integrand: {}", integrand.log_print(Some(100)));
             }
 

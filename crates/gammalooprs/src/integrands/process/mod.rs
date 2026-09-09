@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
@@ -16,7 +17,7 @@ use crate::observables::{
     AdditionalWeightKey, EventProcessingRuntime, GenericEvent, HistogramProcessInfo,
     ObservableAccumulatorBundle, ObservableFileFormat, ObservableSnapshotBundle,
 };
-use crate::processes::StandaloneExportSettings;
+use crate::processes::{GraphGroupSelectionSpec, StandaloneExportSettings};
 use crate::utils::{
     ArbPrec, F, FloatLike, f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta,
     global_inv_parameterize,
@@ -271,6 +272,64 @@ pub(crate) fn resolve_discrete_selection_for_sampling(
 }
 
 impl ProcessIntegrand {
+    pub fn clone_with_selected_graph_groups(&self, graph_names: &[String]) -> Result<Self> {
+        if graph_names.is_empty() {
+            return Ok(self.clone());
+        }
+        if !matches!(
+            self.get_settings().sampling,
+            SamplingSettings::DiscreteGraphs(_)
+        ) {
+            return Err(eyre!(
+                "Runtime graph-group selection requires graphs = 'monte_carlo'."
+            ));
+        }
+        let mut unique_names = BTreeSet::new();
+        for graph_name in graph_names {
+            if !unique_names.insert(graph_name) {
+                return Err(eyre!(
+                    "Runtime graph-group selection contains duplicate graph name '{}'.",
+                    graph_name
+                ));
+            }
+        }
+
+        let selection = GraphGroupSelectionSpec::from_master_graph_names(graph_names.to_vec());
+        let mut selected = match self {
+            Self::Amplitude(integrand) => {
+                let plan = selection.plan(&integrand.data.graph_group_structure, |graph_id| {
+                    integrand
+                        .data
+                        .graph_terms
+                        .get(graph_id)
+                        .map(|term| &term.graph)
+                })?;
+                Self::Amplitude(integrand.clone_with_graph_group_selection(&plan)?)
+            }
+            Self::CrossSection(integrand) => {
+                let plan = selection.plan(&integrand.data.graph_group_structure, |graph_id| {
+                    integrand
+                        .data
+                        .graph_terms
+                        .get(graph_id)
+                        .map(|term| &term.graph)
+                })?;
+                Self::CrossSection(integrand.clone_with_graph_group_selection(&plan)?)
+            }
+        };
+        let selected_names = selected
+            .graph_group_master_names()
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let SamplingSettings::DiscreteGraphs(sampling) = &mut selected.get_mut_settings().sampling
+        else {
+            unreachable!("validated graph sampling before constructing the selected view")
+        };
+        sampling.graph_names = selected_names;
+        Ok(selected)
+    }
+
     pub fn resume_fingerprint(&self) -> Result<String> {
         let mut bytes = match self {
             Self::Amplitude(integrand) => {
@@ -320,6 +379,23 @@ impl ProcessIntegrand {
     }
 
     pub fn warm_up(&mut self, model: &Model) -> Result<()> {
+        let settings = self.get_settings();
+        if matches!(
+            &settings.sampling,
+            SamplingSettings::DiscreteGraphs(settings) if settings.sample_orientations
+        ) {
+            if !matches!(
+                settings.general.evaluator_method,
+                evaluators::EvaluatorMethod::SingleParametric
+            ) {
+                return Err(eyre!(
+                    "Monte Carlo sampling over orientations requires general.evaluator_method=SingleParametric; got {:?}.",
+                    settings.general.evaluator_method
+                ));
+            }
+            warn!("Monte Carlo sampling over orientations is using the SingleParametric evaluator");
+        }
+
         match self {
             Self::Amplitude(a) => a.warm_up(model),
             Self::CrossSection(a) => a.warm_up(model),
@@ -419,6 +495,40 @@ impl ProcessIntegrand {
         match self {
             ProcessIntegrand::Amplitude(integrand) => integrand.data.graph_terms.len(),
             ProcessIntegrand::CrossSection(integrand) => integrand.data.graph_terms.len(),
+        }
+    }
+
+    pub fn graph_group_count(&self) -> usize {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => integrand.data.graph_group_structure.len(),
+            ProcessIntegrand::CrossSection(integrand) => integrand.data.graph_group_structure.len(),
+        }
+    }
+
+    pub fn graph_group_master_names(&self) -> Vec<&str> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => integrand
+                .data
+                .graph_group_structure
+                .iter()
+                .map(|group| {
+                    integrand.data.graph_terms[group.master()]
+                        .graph
+                        .name
+                        .as_str()
+                })
+                .collect(),
+            ProcessIntegrand::CrossSection(integrand) => integrand
+                .data
+                .graph_group_structure
+                .iter()
+                .map(|group| {
+                    integrand.data.graph_terms[group.master()]
+                        .graph
+                        .name
+                        .as_str()
+                })
+                .collect(),
         }
     }
 
@@ -3683,6 +3793,7 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
                 loop_momenta_escalation: None,
                 stability_results: Vec::new(),
                 threshold_counterterm_error: None,
+                radial_root_diagnostics: Default::default(),
             },
         })
     }
@@ -3820,6 +3931,11 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
                     )
             })?;
             let mut evaluation_metadata = EvaluationMetaData::new_empty();
+            evaluation_metadata.radial_root_diagnostics =
+                base_metadata.radial_root_diagnostics.clone();
+            evaluation_metadata
+                .radial_root_diagnostics
+                .restart_precision_pass();
             let mut context = StabilityEvaluationContext {
                 model,
                 source: &source,
@@ -3854,6 +3970,11 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
                     )
             })?;
             let mut evaluation_metadata = EvaluationMetaData::new_empty();
+            evaluation_metadata.radial_root_diagnostics =
+                base_metadata.radial_root_diagnostics.clone();
+            evaluation_metadata
+                .radial_root_diagnostics
+                .restart_precision_pass();
             let mut context = StabilityEvaluationContext {
                 model,
                 source: &source,

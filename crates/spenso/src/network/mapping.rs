@@ -71,15 +71,15 @@ use crate::{
     parametric::atomcore::ReplaceBuilderGeneric,
     parametric::{
         AtomViewOrConcrete, CompiledEvalTensor, EvalTensor, EvalTreeTensor, MixedTensor,
-        ParamTensor, SerializableCompiledCode, SerializableCompiledEvaluator,
-        SerializableExportedCode, atomcore::PatternReplacement,
+        ParamTensor, SerializableCompiledCode, SerializableCompiledEvaluator, SerializableExportedCode,
     },
     shadowing::{ShadowMapping, Shadowable},
     structure::{StructureContract, ToSymbolic},
-    symbolica_utils::{IntoArgs, IntoSymbol},
     tensor_library::{LibraryTensor, TensorLibrary},
     upgrading_arithmetic::{FallibleAdd, TrySmallestUpgrade},
 };
+#[cfg(feature = "shadowing")]
+use symbolica_utils::{IntoArgs, IntoSymbol, PatternReplacement};
 
 use crate::{
     arithmetic::ScalarMul,

@@ -18,6 +18,11 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct PointConstraint {
     pub x: Constraint,
     pub y: Constraint,
@@ -33,6 +38,11 @@ impl Default for PointConstraint {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub enum ShiftDirection {
     Any,
     PositiveOnly,
@@ -40,11 +50,26 @@ pub enum ShiftDirection {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub enum Constraint {
     Fixed,
     #[default]
     Free,
     Grouped(usize, ShiftDirection),
+}
+
+impl Constraint {
+    pub(crate) fn force_target(self, index: usize) -> Option<usize> {
+        match self {
+            Constraint::Fixed => None,
+            Constraint::Free => Some(index),
+            Constraint::Grouped(reference, _) => Some(reference),
+        }
+    }
 }
 
 pub trait Shiftable {
@@ -77,33 +102,31 @@ fn apply_directional_shift(shift_val: f64, direction: ShiftDirection) -> f64 {
 pub(crate) fn directional_force_shift(
     constraints: &PointConstraint,
     index: usize,
+    point: Point2<f64>,
     magnitude: f64,
 ) -> Vector2<f64> {
     if magnitude == 0.0 {
         return Vector2::zero();
     }
 
-    let force_x = match constraints.x {
-        Constraint::Grouped(reference, ShiftDirection::PositiveOnly) if reference == index => {
+    let component = |constraint, coordinate| match constraint {
+        Constraint::Grouped(reference, ShiftDirection::PositiveOnly)
+            if reference == index && coordinate <= 0.0 =>
+        {
             magnitude
         }
-        Constraint::Grouped(reference, ShiftDirection::NegativeOnly) if reference == index => {
+        Constraint::Grouped(reference, ShiftDirection::NegativeOnly)
+            if reference == index && coordinate >= 0.0 =>
+        {
             -magnitude
         }
         _ => 0.0,
     };
 
-    let force_y = match constraints.y {
-        Constraint::Grouped(reference, ShiftDirection::PositiveOnly) if reference == index => {
-            magnitude
-        }
-        Constraint::Grouped(reference, ShiftDirection::NegativeOnly) if reference == index => {
-            -magnitude
-        }
-        _ => 0.0,
-    };
-
-    Vector2::from((force_x, force_y))
+    Vector2::new(
+        component(constraints.x, point.x),
+        component(constraints.y, point.y),
+    )
 }
 
 impl Shiftable for PointConstraint {
@@ -396,6 +419,7 @@ where
                         let bias = directional_force_shift(
                             st.graph[v].point_constraint(),
                             v.0,
+                            st.vertex_points[v],
                             st.directional_force * step,
                         );
                         shift += bias;
@@ -407,6 +431,7 @@ where
                         let bias = directional_force_shift(
                             st.graph[e].point_constraint(),
                             e.0,
+                            st.edge_points[e],
                             st.directional_force * step,
                         );
                         shift += bias;
@@ -422,6 +447,7 @@ where
                     let vertex_bias = directional_force_shift(
                         st.graph[v].point_constraint(),
                         v.0,
+                        st.vertex_points[v],
                         st.directional_force * step,
                     );
 
@@ -436,6 +462,7 @@ where
                         let edge_bias = directional_force_shift(
                             st.graph[index].point_constraint(),
                             index.0,
+                            st.edge_points[index],
                             st.directional_force * step,
                         );
                         let edge_shift = shift + edge_bias;
@@ -787,9 +814,9 @@ pub struct SpringChargeEnergy {
     pub dangling_charge: f64,  // dangling edge charge (≈ 0.14*L^3)
     pub c_ev: f64,             // edge-vertex (≈ 0.028*L^3)
     pub c_ee_local: f64,       // edge-edge local (≈ 0.014*L^3)
-    pub c_center: f64,         // central pull (≈ 0.007*L^3)
-    pub crossing_penalty: f64, // fixed penalty per crossing
-    pub eps: f64,              // 1e-4
+    pub c_center: f64,         // central pull (dimensionless relative strength)
+    pub crossing_penalty: f64, // crossing energy penalty (≈ penalty*L^2)
+    pub eps: f64,              // softened distance (≈ eps*L)
 }
 
 impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a, E, V, H, N>>
@@ -1077,7 +1104,7 @@ impl SpringChargeEnergy {
 
     #[cfg_attr(feature = "energy_trace", inline(never))]
     fn center_term(&self, r: f64) -> f64 {
-        0.5 * self.c_center / (r + self.eps)
+        0.5 * self.c_center * r.powi(2)
     }
 
     #[cfg_attr(feature = "energy_trace", inline(never))]
@@ -1251,10 +1278,7 @@ impl SpringChargeEnergy {
             let ni = NodeIndex(i);
             let np = s.vertex_points[ni];
             if self.c_center != 0.0 {
-                let r = np.distance(EuclideanSpace::origin());
-                if r > 1.0 {
-                    energy += self.center_term(r);
-                }
+                energy += self.center_term(np.distance(EuclideanSpace::origin()));
             }
         }
         #[cfg(feature = "energy_trace")]
@@ -1418,12 +1442,8 @@ impl SpringChargeEnergy {
                 let next_np = next.vertex_points[ni];
                 let prev_r = prev_np.distance(EuclideanSpace::origin());
                 let next_r = next_np.distance(EuclideanSpace::origin());
-                if prev_r > 1.0 {
-                    delta -= self.center_term(prev_r);
-                }
-                if next_r > 1.0 {
-                    delta += self.center_term(next_r);
-                }
+                delta -= self.center_term(prev_r);
+                delta += self.center_term(next_r);
             }
         }
         #[cfg(feature = "energy_trace")]
@@ -1488,17 +1508,106 @@ impl SpringChargeEnergy {
     pub fn from_graph(n_nodes: usize, viewport_w: f64, viewport_h: f64, tune: ParamTuning) -> Self {
         let area = (viewport_w * viewport_h).max(1e-9);
         let spring_length = tune.length_scale * (area / (n_nodes.max(1) as f64)).sqrt();
+        let spring_length_sq = spring_length.powi(2);
+        let repulsion_scale = spring_length.powi(3);
 
         SpringChargeEnergy {
             spring_length,
             k_spring: tune.k_spring,
-            c_vv: tune.beta * spring_length.powi(2),
-            c_ev: tune.beta * tune.gamma_ev * spring_length.powi(2),
-            c_ee_local: tune.beta * tune.gamma_ee * spring_length.powi(2),
-            c_center: tune.beta * tune.g_center * spring_length.powi(2),
-            dangling_charge: tune.gamma_dangling * tune.beta * spring_length.powi(2),
-            crossing_penalty: tune.crossing_penalty,
-            eps: tune.eps,
+            c_vv: tune.beta * repulsion_scale,
+            c_ev: tune.beta * tune.gamma_ev * repulsion_scale,
+            c_ee_local: tune.beta * tune.gamma_ee * repulsion_scale,
+            c_center: tune.beta * tune.g_center,
+            dangling_charge: tune.gamma_dangling * tune.beta * repulsion_scale,
+            crossing_penalty: tune.crossing_penalty * spring_length_sq,
+            eps: tune.eps * spring_length,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn directional_force_only_restores_wrong_side() {
+        let constraints = PointConstraint {
+            x: Constraint::Grouped(0, ShiftDirection::PositiveOnly),
+            y: Constraint::Grouped(0, ShiftDirection::NegativeOnly),
+        };
+
+        assert_eq!(
+            directional_force_shift(&constraints, 0, Point2::new(-1.0, 1.0), 2.0),
+            Vector2::new(2.0, -2.0)
+        );
+        assert_eq!(
+            directional_force_shift(&constraints, 0, Point2::new(0.0, 0.0), 2.0),
+            Vector2::new(2.0, -2.0)
+        );
+        assert_eq!(
+            directional_force_shift(&constraints, 0, Point2::new(1.0, -1.0), 2.0),
+            Vector2::zero()
+        );
+        assert_eq!(
+            directional_force_shift(&constraints, 1, Point2::new(-1.0, 1.0), 2.0),
+            Vector2::zero()
+        );
+    }
+
+    fn test_energy(c_center: f64) -> SpringChargeEnergy {
+        SpringChargeEnergy {
+            spring_length: 1.0,
+            k_spring: 1.0,
+            c_vv: 0.0,
+            dangling_charge: 0.0,
+            c_ev: 0.0,
+            c_ee_local: 0.0,
+            c_center,
+            crossing_penalty: 0.0,
+            eps: 1e-4,
+        }
+    }
+
+    #[test]
+    fn center_term_penalizes_distance_from_origin() {
+        let energy = test_energy(2.0);
+
+        assert_eq!(energy.center_term(0.0), 0.0);
+        assert!(energy.center_term(2.0) > energy.center_term(1.0));
+    }
+
+    #[test]
+    fn length_scale_rescales_dimensional_coefficients() {
+        let tune = ParamTuning {
+            length_scale: 0.5,
+            k_spring: 11.0,
+            beta: 3.0,
+            gamma_dangling: 0.7,
+            gamma_ev: 0.2,
+            gamma_ee: 0.4,
+            g_center: 0.05,
+            crossing_penalty: 13.0,
+            eps: 1e-4,
+        };
+        let small = SpringChargeEnergy::from_graph(4, 4.0, 4.0, tune);
+        let large = SpringChargeEnergy::from_graph(
+            4,
+            4.0,
+            4.0,
+            ParamTuning {
+                length_scale: 1.0,
+                ..tune
+            },
+        );
+
+        assert_eq!(small.spring_length, 1.0);
+        assert_eq!(large.spring_length, 2.0);
+        assert_eq!(large.c_vv / small.c_vv, 8.0);
+        assert_eq!(large.c_ev / small.c_ev, 8.0);
+        assert_eq!(large.c_ee_local / small.c_ee_local, 8.0);
+        assert_eq!(large.dangling_charge / small.dangling_charge, 8.0);
+        assert_eq!(large.crossing_penalty / small.crossing_penalty, 4.0);
+        assert_eq!(large.eps / small.eps, 2.0);
+        assert_eq!(large.c_center, small.c_center);
     }
 }

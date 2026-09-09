@@ -73,11 +73,11 @@ pub struct SpensoModule;
 #[pyclass(from_py_object, eq, eq_int, module = "symbolica.community.spenso")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SymbolicParallelism {
-    /// Resolve the setting from the Symbolica license when configured.
+    /// Permit Rayon when licensed and use workload heuristics where available.
     Auto,
     /// Keep symbolic operations on the calling thread.
     Serial,
-    /// Allow symbolic operations to use Rayon workers.
+    /// Force Rayon without `Auto`'s Symbolica license safety check.
     Parallel,
 }
 
@@ -93,8 +93,11 @@ impl From<SymbolicParallelism> for spenso::symbolic_parallelism::SymbolicParalle
 
 /// Configure whether Spenso may use Rayon for Symbolica operations.
 ///
-/// `Auto` checks the Symbolica license once during this call. Tensor operations
-/// subsequently use the cached result without querying the license again.
+/// `Auto` checks the Symbolica license once during this call. When licensed,
+/// operations may use Rayon and apply workload heuristics where available;
+/// when unlicensed, symbolic operations remain serial. The returned boolean
+/// reports whether the resolved policy permits Rayon, not whether every
+/// operation will use it.
 #[cfg_attr(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.spenso")

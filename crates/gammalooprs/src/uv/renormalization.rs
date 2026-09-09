@@ -4,7 +4,6 @@ use symbolica::atom::Atom;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RenormalizationStats {
-    pub kernel_hits: usize,
     pub forest_node_count: usize,
 }
 
@@ -22,13 +21,10 @@ impl RenormalizationPart {
         }
     }
 
-    pub(crate) fn new(expression: Atom, kernel_hits: usize, forest_node_count: usize) -> Self {
+    pub(crate) fn new(expression: Atom, forest_node_count: usize) -> Self {
         Self {
             expression,
-            stats: RenormalizationStats {
-                kernel_hits,
-                forest_node_count,
-            },
+            stats: RenormalizationStats { forest_node_count },
         }
     }
 }

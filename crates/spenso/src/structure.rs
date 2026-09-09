@@ -16,7 +16,6 @@ use thiserror::Error;
 use crate::structure::slot::ParseableAind;
 #[cfg(feature = "shadowing")]
 use crate::{
-    shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     tensors::data::DenseTensor,
     tensors::parametric::{ExpandedCoefficent, FlatCoefficent, TensorCoefficient},
 };
@@ -30,6 +29,8 @@ use slot::SlotError;
 use std::fmt::Debug;
 #[cfg(feature = "shadowing")]
 use symbolica::atom::{Atom, FunctionBuilder, Symbol};
+#[cfg(feature = "shadowing")]
+use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use crate::iterators::TensorStructureIndexIterator;
 use std::collections::HashMap;

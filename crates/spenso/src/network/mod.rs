@@ -324,6 +324,9 @@ where
 
         let first = *terms.first()?;
         let structure = first.tensor.structure().clone();
+        let log_fast_sum = profile::verbose() || sum_start.is_some();
+        let collect_workload =
+            log_fast_sum || crate::symbolic_parallelism::SymbolicParallelism::adapts_to_workload();
         let mut entries = HashMap::<FlatIndex, Vec<AtomView<'_>>>::new();
         let mut input_entries = 0usize;
 
@@ -343,14 +346,25 @@ where
             }
         }
 
-        let log_fast_sum = profile::verbose() || sum_start.is_some();
+        // Forced modes keep the original grouping hot path. Licensed Auto and
+        // explicit profiling pay for the workload scan used by the selector.
+        let workload = collect_workload.then(|| FastTensorSumWorkload::from_entries(&entries));
+
         let fast_start = log_fast_sum.then(std::time::Instant::now);
         if log_fast_sum && let Some(sum_start) = sum_start {
+            let workload = workload
+                .as_ref()
+                .expect("profiling enables fast-sum workload collection");
             eprintln!(
-                "spenso_profile execute.fast_tensor_sum_start terms={} input_entries={} grouped_entries={} elapsed_ms={:.3}",
+                "spenso_profile execute.fast_tensor_sum_start terms={} input_entries={} grouped_entries={} atom_entries={} symbolic_terms={} symbolic_bytes={} max_group_terms={} max_group_bytes={} elapsed_ms={:.3}",
                 terms.len(),
                 input_entries,
                 entries.len(),
+                workload.shape.entries,
+                workload.shape.total_terms,
+                workload.shape.total_bytes,
+                workload.max_group_terms,
+                workload.max_group_bytes,
                 sum_start.elapsed().as_secs_f64() * 1000.0,
             );
         }
@@ -368,7 +382,13 @@ where
             };
             (!atom.as_view().is_zero()).then_some((index, atom))
         };
-        let merged = if crate::symbolic_parallelism::symbolica_rayon_enabled() {
+        let use_rayon = crate::symbolic_parallelism::SymbolicParallelism::rayon_enabled_for(|| {
+            workload.as_ref().is_some_and(|workload| {
+                workload.meets_parallel_shape_floor()
+                    && workload.parallel_is_profitable_for(rayon::current_num_threads())
+            })
+        });
+        let merged = if use_rayon {
             entries
                 .into_par_iter()
                 .filter_map(merge_entry)
@@ -386,11 +406,20 @@ where
         }
 
         if let Some(start) = fast_start {
+            let workload = workload
+                .as_ref()
+                .expect("profiling enables fast-sum workload collection");
             eprintln!(
-                "spenso_profile execute.fast_tensor_sum_done terms={} input_entries={} output_entries={} elapsed_ms={:.3}",
+                "spenso_profile execute.fast_tensor_sum_done terms={} input_entries={} output_entries={} atom_entries={} symbolic_terms={} symbolic_bytes={} max_group_terms={} max_group_bytes={} rayon={} elapsed_ms={:.3}",
                 terms.len(),
                 input_entries,
                 elements.len(),
+                workload.shape.entries,
+                workload.shape.total_terms,
+                workload.shape.total_bytes,
+                workload.max_group_terms,
+                workload.max_group_bytes,
+                use_rayon,
                 start.elapsed().as_secs_f64() * 1000.0,
             );
         }
@@ -400,6 +429,67 @@ where
             zero: Atom::Zero,
             structure,
         })))
+    }
+}
+
+#[cfg(feature = "shadowing")]
+#[derive(Default)]
+struct FastTensorSumWorkload {
+    shape: AtomSumShapeStats,
+    max_group_terms: usize,
+    max_group_bytes: usize,
+}
+
+#[cfg(feature = "shadowing")]
+impl FastTensorSumWorkload {
+    // These conservative floors select only shapes that showed a clear win in
+    // the fast sparse-sum benchmark. In particular, a large number of trivial
+    // atoms is not enough to pay Rayon's scheduling cost.
+    const MIN_TOTAL_TERMS: usize = 256;
+    const MIN_TOTAL_BYTES: usize = 16 * 1024;
+    const MIN_GROUPS: usize = 4;
+    const MIN_ATOMS_PER_GROUP: usize = 2;
+    const MIN_TERMS_PER_GROUP: usize = 96;
+    const MIN_BYTES_PER_GROUP: usize = 4 * 1024;
+    const MIN_TERMS_PER_LANE: usize = 64;
+    const MIN_BYTES_PER_LANE: usize = 2 * 1024;
+
+    fn from_entries(entries: &HashMap<FlatIndex, Vec<AtomView<'_>>>) -> Self {
+        let mut workload = Self::default();
+        workload.shape.logical_entries = entries.len();
+        for atoms in entries.values() {
+            let mut group_terms = 0usize;
+            let mut group_bytes = 0usize;
+            for atom in atoms {
+                let (terms, bytes) = workload.shape.observe_atom(*atom, true);
+                group_terms += terms;
+                group_bytes += bytes;
+            }
+            workload.max_group_terms = workload.max_group_terms.max(group_terms);
+            workload.max_group_bytes = workload.max_group_bytes.max(group_bytes);
+        }
+        workload
+    }
+
+    fn meets_parallel_shape_floor(&self) -> bool {
+        let groups = self.shape.logical_entries;
+        self.shape.total_terms >= Self::MIN_TOTAL_TERMS
+            && self.shape.total_bytes >= Self::MIN_TOTAL_BYTES
+            && groups >= Self::MIN_GROUPS
+            && self.shape.entries >= groups.saturating_mul(Self::MIN_ATOMS_PER_GROUP)
+            && self.shape.total_terms >= groups.saturating_mul(Self::MIN_TERMS_PER_GROUP)
+            && self.shape.total_bytes >= groups.saturating_mul(Self::MIN_BYTES_PER_GROUP)
+            && self.max_group_terms.saturating_mul(groups)
+                <= self.shape.total_terms.saturating_mul(2)
+            && self.max_group_bytes.saturating_mul(groups)
+                <= self.shape.total_bytes.saturating_mul(2)
+    }
+
+    fn parallel_is_profitable_for(&self, lanes: usize) -> bool {
+        let lanes = lanes.max(1);
+        lanes >= 2
+            && self.shape.total_terms >= lanes.saturating_mul(Self::MIN_TERMS_PER_LANE)
+            && self.shape.total_bytes >= lanes.saturating_mul(Self::MIN_BYTES_PER_LANE)
     }
 }
 
@@ -2993,18 +3083,22 @@ struct AtomSumShapeStats {
 
 #[cfg(feature = "shadowing")]
 impl AtomSumShapeStats {
-    fn observe_atom(&mut self, atom: AtomView<'_>, include_bytes: bool) {
+    fn observe_atom(&mut self, atom: AtomView<'_>, include_bytes: bool) -> (usize, usize) {
         let terms = atom.nterms();
         self.entries += 1;
         self.zero_entries += usize::from(atom.is_zero());
         self.top_level_sum_entries += usize::from(matches!(atom, AtomView::Add(_)));
         self.total_terms += terms;
         self.max_terms = self.max_terms.max(terms);
-        if include_bytes {
+        let bytes = if include_bytes {
             let bytes = atom.get_byte_size();
             self.total_bytes += bytes;
             self.max_bytes = self.max_bytes.max(bytes);
-        }
+            bytes
+        } else {
+            0
+        };
+        (terms, bytes)
     }
 
     fn merge(&mut self, other: Self) {

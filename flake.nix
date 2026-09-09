@@ -18,6 +18,7 @@
   };
 
   outputs = {
+    self,
     nixpkgs,
     crane,
     fenix,
@@ -35,6 +36,24 @@
     flake-utils.lib.eachSystem supportedSystems (system: let
       pkgs = nixpkgs.legacyPackages.${system};
       inherit (pkgs) lib;
+
+      nixCiBarrierRevision =
+        if self ? dirtyRev
+        then self.dirtyRev
+        else if self ? rev
+        then self.rev
+        else if self ? narHash
+        then self.narHash
+        else "local";
+      # NixCI memoizes successful top-level derivations across commits without
+      # re-realizing their closures. Salt only this zero-copy scheduling
+      # wrapper so each commit primes the stable artifact in the shared cache.
+      nixCiArtifactBarrier = name: artifact:
+        pkgs.runCommand "nix-ci-artifact-barrier-${name}" {
+          NIX_CI_BARRIER_REVISION = nixCiBarrierRevision;
+        } ''
+          ln -s ${artifact} "$out"
+        '';
 
       baseCraneLib = crane.mkLib pkgs;
       stableToolchain = fenix.packages.${system}.stable;
@@ -99,6 +118,12 @@
         ./.config
         ./assets
         ./crates/clinnet/templates
+        ./crates/kurvst/typst/kurvst.wasm
+        ./crates/kurvst/typst/src
+        ./crates/kurvst/typst/typst.toml
+        ./crates/linnest/typst/linnest.wasm
+        ./crates/linnest/typst/src
+        ./crates/linnest/typst/typst.toml
         ./crates/vakint/form_src
         ./crates/vakint/templates
       ];
@@ -159,6 +184,10 @@
           ./crates/clinnet/templates/figure.typ
           ./crates/clinnet/templates/grid.typ
           ./crates/clinnet/templates/layout.typ
+          ./crates/kurvst/typst/src
+          ./crates/kurvst/typst/typst.toml
+          ./crates/linnest/typst/src
+          ./crates/linnest/typst/typst.toml
         ];
       };
 
@@ -195,6 +224,7 @@
             ) [
               "${member}/benches"
               "${member}/examples"
+              "${member}/src/bin"
               "${member}/tests"
             ]
         )
@@ -271,15 +301,14 @@
           ++ map (member: workspaceRoot + "/${member}/build.rs") workspaceMemberDirs
         );
 
+      workspacePackageBuildScriptsForSourcePackages = sourcePackages:
+        lib.filter builtins.pathExists (
+          map (package: workspaceRoot + "/${workspaceMemberPackageDirs.${package}}/build.rs") sourcePackages
+        );
+
       workspaceDependencySrc = lib.fileset.toSource {
         root = workspaceRoot;
-        fileset = lib.fileset.unions (
-          workspaceDependencyManifestFiles
-          ++ workspaceDependencyBuildScripts
-          ++ [
-            ./tests/resources/fjcore
-          ]
-        );
+        fileset = lib.fileset.unions workspaceDependencyManifestFiles;
       };
 
       cargoGraphGenerationSrc = lib.fileset.toSource {
@@ -308,13 +337,13 @@
       '';
 
       normalizeWorkspaceHackBuildScriptTimestampScriptFor = prefix: ''
+        if [ -e ${prefix}crates/${workspaceHackPackage}/Cargo.toml ]; then
+          touch -d @0 ${prefix}crates/${workspaceHackPackage}/Cargo.toml
+        fi
+        if [ -e ${prefix}crates/${workspaceHackPackage}/src/lib.rs ]; then
+          touch -d @0 ${prefix}crates/${workspaceHackPackage}/src/lib.rs
+        fi
         if [ -e ${prefix}crates/${workspaceHackPackage}/build.rs ]; then
-          if [ -e ${prefix}crates/${workspaceHackPackage}/Cargo.toml ]; then
-            touch -d @0 ${prefix}crates/${workspaceHackPackage}/Cargo.toml
-          fi
-          if [ -e ${prefix}crates/${workspaceHackPackage}/src/lib.rs ]; then
-            touch -d @0 ${prefix}crates/${workspaceHackPackage}/src/lib.rs
-          fi
           touch -d @1 ${prefix}crates/${workspaceHackPackage}/build.rs
         fi
       '';
@@ -360,7 +389,7 @@
       workspaceTestComponentRepresentatives =
         sortedUnique (map workspaceTestComponentRepresentativeFor workspaceMemberPackages);
 
-      workspaceTestSupportComponentRepresentatives =
+      workspaceTestDependencyComponentRepresentatives =
         lib.filter (representative: representative != workspaceHackPackage) workspaceTestComponentRepresentatives;
 
       workspaceTestComponentMembers =
@@ -377,91 +406,135 @@
           )
         ));
 
-      workspaceTestComponentDependencyClosureFor = representative:
-        sortedUnique (lib.filter (dependencyRepresentative: dependencyRepresentative != representative) (
-          map (entry: entry.key) (builtins.genericClosure {
-            startSet = [{key = representative;}];
-            operator = entry: map (dependencyRepresentative: {key = dependencyRepresentative;}) (
-              workspaceTestComponentDependencyRepresentativesFor entry.key
-            );
-          })
-        ));
-
-      workspaceTestSyntheticConsumerExcludedPackages =
-        workspaceFeatureUnificationExcludedPackages ++ [
-          "gammaloop-api"
-          "gammaloop-integration-tests"
-          "gammalooprs"
-        ];
-
-      workspaceTestComponentSyntheticConsumerPackagesFor = representative:
-        sortedUnique (lib.filter (
-            package: let
-              consumerRepresentative = workspaceTestComponentRepresentativeFor package;
-              consumerDependencyRepresentatives =
-                workspaceTestComponentDependencyRepresentativesFor consumerRepresentative;
-              dependencyIsCoveredByIntermediate =
-                builtins.any (
-                  dependencyRepresentative:
-                    dependencyRepresentative != representative
-                    && builtins.elem representative (
-                      workspaceTestComponentDependencyClosureFor dependencyRepresentative
-                    )
-                )
-                consumerDependencyRepresentatives;
-            in
-              !(builtins.elem package workspaceTestComponentMembers.${representative})
-              && !(builtins.elem package workspaceTestSyntheticConsumerExcludedPackages)
-              && builtins.any (
-                dependency: workspaceTestComponentRepresentativeFor dependency == representative
-              )
-              (workspaceTestDependencyNamesFor package)
-              && !dependencyIsCoveredByIntermediate
-          )
-          workspaceMemberPackages);
-
-      workspaceTestComponentSyntheticConsumerSourcePackageNamesFor = representative:
-        sortedUnique (
-          lib.concatMap workspaceTestSourcePackageNamesFor
-          (workspaceTestComponentSyntheticConsumerPackagesFor representative)
-        );
-
       workspaceSourcePackageNamesFor = package: dependencies:
         sortedUnique ([package] ++ dependencies);
 
-      workspaceNormalSourcePackageNamesFor = package:
-        workspaceSourcePackageNamesFor package (workspaceResolvedDependencyNamesFor package);
+      workspaceNormalSourcePackageNamesFor =
+        workspaceDependencyClosureFor workspaceResolvedDependencyNamesFor;
 
       workspaceTestSourcePackageNamesFor = package:
-        workspaceSourcePackageNamesFor package (workspaceResolvedTestDependencyNamesFor package);
+        sortedUnique (
+          lib.concatMap workspaceNormalSourcePackageNamesFor (
+            workspaceSourcePackageNamesFor package (workspaceResolvedTestDependencyNamesFor package)
+          )
+        );
 
-      workspaceDirectNormalSourcePackageNamesFor = package:
-        workspaceSourcePackageNamesFor package (workspaceDependencyNamesFor package);
-
-      workspaceDirectTestSourcePackageNamesFor = package:
-        workspaceSourcePackageNamesFor package (workspaceTestDependencyNamesFor package);
-
-      workspaceTestComponentSourcePackageNamesFor = representative:
-        sortedUnique (lib.concatMap workspaceTestSourcePackageNamesFor workspaceTestComponentMembers.${representative});
-
-      workspacePackageExtraSourceRoots = {
+      workspacePackageProductionExtraSourceRoots = {
         "gammaloop-api" = [
-          "assets"
+          "assets/embedded"
+          "assets/models"
+          "crates/kurvst/typst/kurvst.wasm"
+          "crates/kurvst/typst/src"
+          "crates/kurvst/typst/typst.toml"
+          "crates/linnest/typst/linnest.wasm"
+          "crates/linnest/typst/src"
+          "crates/linnest/typst/typst.toml"
         ];
         gammalooprs = [
-          "assets"
+          "assets/models/json"
         ];
         "gammaloop-integration-tests" = [
-          "assets"
+          "tests/resources/fjcore"
+        ];
+        clinnet = [
+          "crates/clinnet/templates"
+          "crates/kurvst/typst/kurvst.wasm"
+          "crates/kurvst/typst/src"
+          "crates/kurvst/typst/typst.toml"
+          "crates/linnest/typst/linnest.wasm"
+          "crates/linnest/typst/src"
+          "crates/linnest/typst/typst.toml"
+        ];
+        vakint = [
+          "crates/vakint/form_src"
+          "crates/vakint/templates"
+        ];
+      };
+
+      workspacePackageTestCompileTimeExtraSourceRoots = {
+        gammalooprs = [
+          "tests/resources/graphs/scalar/dod2_bubble.dot"
+        ];
+      };
+
+      workspacePackageRuntimeTestExtraSourceRoots = {
+        "gammaloop-api" = [
+          "tests/resources/graphs/scalar_bubble.dot"
+        ];
+        "gammaloop-tracing-filter" = [
+          "tests/resources/run_cards"
+        ];
+        gammalooprs = [
+          "tests/resources/graphs/uv_tests/rqft_a_3l_no_ghost.dot"
+          "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+        ];
+        "gammaloop-integration-tests" = [
+          "assets/plot_approach_result.py"
+          "examples/api"
           "examples/cli"
+          "tests/resources"
+        ];
+      };
+
+      workspacePackageOwnTestSourceRoots = {
+        gammalooprs = [
+          "crates/gammalooprs/src/feyngen/test.rs"
+          "crates/gammalooprs/src/graph/parse/tests.rs"
+          "crates/gammalooprs/src/model/test_polarization_sums.rs"
+          "crates/gammalooprs/src/numerator/spensotests.rs"
+          "crates/gammalooprs/src/numerator/tests.rs"
+          "crates/gammalooprs/src/utils/test_utils.rs"
+          "crates/gammalooprs/src/uv/tests.rs"
+        ];
+        idenso = [
+          "crates/idenso/src/color/test"
+          "crates/idenso/src/dirac/test"
+          "crates/idenso/src/shorthands/schoonschip/test"
+          "crates/idenso/src/tensor/tests"
+          "crates/idenso/src/test_support.rs"
+        ];
+        linnet = [
+          "crates/linnet/src/half_edge/involution/test.rs"
+          "crates/linnet/src/half_edge/nodestore/test.rs"
+          "crates/linnet/src/half_edge/test_graphs.rs"
+          "crates/linnet/src/half_edge/tests.rs"
+          "crates/linnet/src/union_find/test.rs"
+        ];
+        spenso = [
+          "crates/spenso/src/data/tests.rs"
+          "crates/spenso/src/iterators/tests"
+          "crates/spenso/src/network/parsing/test.rs"
+          "crates/spenso/src/network/shadowing_tests.rs"
+          "crates/spenso/src/network/test.rs"
+          "crates/spenso/src/network/tests.rs"
+          "crates/spenso/src/shadowing/tests.rs"
+          "crates/spenso/src/tests.rs"
         ];
       };
 
       workspacePackageExtraSourceRootsForSourcePackages = sourcePackages:
-        sortedUnique (lib.concatMap (sourcePackage: workspacePackageExtraSourceRoots.${sourcePackage} or []) sourcePackages);
+        sortedUnique (lib.concatMap (sourcePackage: workspacePackageProductionExtraSourceRoots.${sourcePackage} or []) sourcePackages);
+
+      workspacePackageTestCompileTimeExtraSourceRootsForSourcePackages = sourcePackages:
+        sortedUnique (lib.concatMap (sourcePackage: workspacePackageTestCompileTimeExtraSourceRoots.${sourcePackage} or []) sourcePackages);
+
+      workspacePackageRuntimeTestExtraSourceRootsForSourcePackages = sourcePackages:
+        sortedUnique (lib.concatMap (sourcePackage: workspacePackageRuntimeTestExtraSourceRoots.${sourcePackage} or []) sourcePackages);
 
       workspacePackageExtraFilesetsForSourcePackages = sourcePackages:
         map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageExtraSourceRootsForSourcePackages sourcePackages);
+
+      workspacePackageTestCompileTimeExtraFilesetsForSourcePackages = sourcePackages:
+        map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageTestCompileTimeExtraSourceRootsForSourcePackages sourcePackages);
+
+      workspacePackageRuntimeTestExtraFilesetsForSourcePackages = sourcePackages:
+        map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageRuntimeTestExtraSourceRootsForSourcePackages sourcePackages);
+
+      workspacePackageOwnTestSourceRootsForSourcePackages = sourcePackages:
+        sortedUnique (lib.concatMap (sourcePackage: workspacePackageOwnTestSourceRoots.${sourcePackage} or []) sourcePackages);
+
+      workspacePackageOwnTestFilesetsForSourcePackages = sourcePackages:
+        map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageOwnTestSourceRootsForSourcePackages sourcePackages);
 
       workspacePackageExtraSourceRestoreInDummySrcScriptFor = sourcePackages:
         ''
@@ -477,28 +550,87 @@
           (workspacePackageExtraSourceRootsForSourcePackages sourcePackages)}
         '';
 
-      workspacePackageSrcForSourcePackages = package: sourcePackages:
+      workspacePackageSrcForSourcePackages = {
+        sourcePackages,
+        packageSourcePackages ? [],
+        testSourcePackages ? [],
+        runtimeTestSourcePackages ? [],
+        extraFilesets ? [],
+      }: let
+        productionSourceFilesets = map (sourcePackage: let
+          packageRoot = workspaceRoot + "/${workspaceMemberPackageDirs.${sourcePackage}}";
+          libraryTargetPath = workspacePackageLibTargetRelPath sourcePackage;
+          testRoots = lib.filter builtins.pathExists (map (root: packageRoot + "/${root}") [
+            "benches"
+            "examples"
+            "tests"
+          ]);
+          nonLibraryTargetEntrypoints = map (path: workspaceRoot + "/${path}") (lib.filter (
+              path:
+                lib.hasPrefix "${workspaceMemberPackageDirs.${sourcePackage}}/" path
+                && path != libraryTargetPath
+            )
+            workspaceCargoTargetRelPaths);
+          ownTestSources = workspacePackageOwnTestFilesetsForSourcePackages [sourcePackage];
+          rustSources = lib.fileset.fileFilter (file: file.hasExt "rs") packageRoot;
+        in
+          lib.fileset.difference rustSources (lib.fileset.unions (testRoots ++ nonLibraryTargetEntrypoints ++ ownTestSources)))
+        sourcePackages;
+        packageSourceFilesets = map (sourcePackage: let
+          libraryTargetPath = workspacePackageLibTargetRelPath sourcePackage;
+        in
+          map (path: workspaceRoot + "/${path}") (lib.filter (
+              path:
+                lib.hasPrefix "${workspaceMemberPackageDirs.${sourcePackage}}/" path
+                && path != libraryTargetPath
+            )
+            workspaceCargoTargetRelPaths))
+        packageSourcePackages;
+        testSourceFilesets = map (sourcePackage: let
+          packageRoot = workspaceRoot + "/${workspaceMemberPackageDirs.${sourcePackage}}";
+          testRoots = lib.filter builtins.pathExists (map (root: packageRoot + "/${root}") [
+            "benches"
+            "examples"
+            "tests"
+          ]);
+        in
+          map (testRoot: lib.fileset.fileFilter (file: file.hasExt "rs") testRoot) testRoots)
+        testSourcePackages;
+        runtimeTestSourceFilesets = map (sourcePackage: let
+          packageRoot = workspaceRoot + "/${workspaceMemberPackageDirs.${sourcePackage}}";
+        in
+          lib.fileset.fileFilter (file: file.hasExt "snap") packageRoot)
+        runtimeTestSourcePackages;
+      in
         lib.fileset.toSource {
           root = workspaceRoot;
           fileset = lib.fileset.unions (
             workspaceDependencyManifestFiles
-            ++ workspaceDependencyBuildScripts
-            ++ map (
-              sourcePackage:
-                workspaceRoot + "/${workspaceMemberPackageDirs.${sourcePackage}}"
-            ) sourcePackages
-            ++ [
-              ./tests/resources/fjcore
-            ]
-            ++ (workspacePackageExtraFilesetsForSourcePackages (sortedUnique ([package] ++ sourcePackages)))
+            ++ (workspacePackageBuildScriptsForSourcePackages sourcePackages)
+            ++ productionSourceFilesets
+            ++ lib.concatLists packageSourceFilesets
+            ++ lib.concatLists testSourceFilesets
+            ++ runtimeTestSourceFilesets
+            ++ (workspacePackageExtraFilesetsForSourcePackages sourcePackages)
+            ++ (workspacePackageTestCompileTimeExtraFilesetsForSourcePackages testSourcePackages)
+            ++ (workspacePackageRuntimeTestExtraFilesetsForSourcePackages runtimeTestSourcePackages)
+            ++ (workspacePackageOwnTestFilesetsForSourcePackages testSourcePackages)
+            ++ extraFilesets
           );
         };
 
       workspacePackageSrcFor = package:
-        workspacePackageSrcForSourcePackages package (workspaceNormalSourcePackageNamesFor package);
+        workspacePackageSrcForSourcePackages {
+          sourcePackages = workspaceNormalSourcePackageNamesFor package;
+          packageSourcePackages = [package];
+        };
 
       workspaceTestPackageSrcFor = package:
-        workspacePackageSrcForSourcePackages package (workspaceTestSourcePackageNamesFor package);
+        workspacePackageSrcForSourcePackages {
+          sourcePackages = workspaceTestSourcePackageNamesFor package;
+          packageSourcePackages = [package];
+          testSourcePackages = [package];
+        };
 
       workspacePackageIsProcMacro = package: let
         manifest = workspaceManifestFor workspaceMemberPackageDirs.${package};
@@ -515,12 +647,6 @@
         packageDir = workspaceMemberPackageDirs.${package};
       in
         manifest ? lib || builtins.pathExists (workspaceRoot + "/${packageDir}/src/lib.rs");
-
-      workspacePackageHasBinTarget = package: let
-        manifest = workspaceManifestFor workspaceMemberPackageDirs.${package};
-        packageDir = workspaceMemberPackageDirs.${package};
-      in
-        (manifest.bin or []) != [] || builtins.pathExists (workspaceRoot + "/${packageDir}/src/main.rs");
 
       workspacePackageLibTargetRelPath = package: let
         manifest = workspaceManifestFor workspaceMemberPackageDirs.${package};
@@ -544,30 +670,17 @@
         then dummyProcMacroCargoTarget
         else dummyCargoTarget;
 
-      workspaceDummyCargoTargetPathsForSourcePackages = sourcePackages:
-        lib.filter (
-          path:
-            !builtins.any (
-              sourcePackage:
-                lib.hasPrefix "${workspaceMemberPackageDirs.${sourcePackage}}/" path
-            ) sourcePackages
-        )
-        workspaceCargoTargetRelPaths;
-
-      workspaceDummyCargoTargetsScriptForSourcePackages = sourcePackages:
+      workspaceMissingCargoTargetsScript =
         ''
           ${lib.concatMapStringsSep "\n" (path: ''
             if [ ! -e ${lib.escapeShellArg path} ]; then
               install -D -m 0644 ${workspaceDummyCargoTargetForPath path} ${lib.escapeShellArg path}
             fi
           '')
-          (workspaceDummyCargoTargetPathsForSourcePackages sourcePackages)}
+          workspaceCargoTargetRelPaths}
 
           ${normalizeWorkspaceHackBuildScriptTimestampScript}
         '';
-
-      workspaceDummyCargoTargetsScriptFor = package:
-        workspaceDummyCargoTargetsScriptForSourcePackages (workspaceNormalSourcePackageNamesFor package);
 
       workspaceAllDummyCargoTargetsScript =
         ''
@@ -606,7 +719,10 @@
           ${lib.concatMapStringsSep "\n" (sourcePackage: let
             packageDir = workspaceMemberPackageDirs.${sourcePackage};
             packageParentDir = builtins.dirOf packageDir;
-            source = workspaceRoot + "/${packageDir}";
+            sourceRoot = workspacePackageSrcForSourcePackages {
+              sourcePackages = [sourcePackage];
+            };
+            source = sourceRoot + "/${packageDir}";
           in ''
             rm -rf "$out"/${lib.escapeShellArg packageDir}
             mkdir -p "$out"/${lib.escapeShellArg packageParentDir}
@@ -667,6 +783,12 @@
             package: workspaceGraph.normal_dependency_features.${package}.${dependency} or []
           ) (lib.subtractLists workspaceFeatureUnificationExcludedPackages workspaceMemberPackages));
 
+      workspaceIncomingTestDependencyFeaturesFor = packages: dependency:
+        sortedUnique (lib.concatMap (
+            package: workspaceGraph.test_dependency_features.${package}.${dependency} or []
+          )
+          packages);
+
       craneCiFeaturesFor = package:
         sortedUnique (
           craneCiCommonFeaturesFor package
@@ -681,6 +803,90 @@
       craneTestFeaturesFor = package:
         sortedUnique (craneCiFeaturesFor package ++ (craneTestExtraFeatureSets.${package} or []));
 
+      craneTestContextFeaturesFor = sourcePackages: package:
+        sortedUnique (
+          craneCiCommonFeaturesFor package
+          ++ (craneCiExtraFeatureSets.${package} or [])
+          ++ (craneTestExtraFeatureSets.${package} or [])
+          ++ (workspaceIncomingTestDependencyFeaturesFor sourcePackages package)
+        );
+
+      workspaceTestContextFor = {
+        packages,
+        extraFeatures ? {},
+      }: let
+        componentRepresentatives =
+          sortedUnique (map workspaceTestComponentRepresentativeFor packages);
+        componentPackages =
+          sortedUnique (lib.concatMap (representative: workspaceTestComponentMembers.${representative}) componentRepresentatives);
+        sourcePackages =
+          sortedUnique (lib.concatMap workspaceTestSourcePackageNamesFor componentPackages);
+        anchorPackages =
+          lib.optionals (
+            builtins.any (
+              package:
+                package != workspaceHackPackage
+                && builtins.elem package workspaceGraph.symbolica_test_packages
+            )
+            sourcePackages
+          ) [workspaceHackPackage];
+        featurePackages = sortedUnique (sourcePackages ++ anchorPackages);
+        features = lib.listToAttrs (map (package: {
+            name = package;
+            value = sortedUnique (craneTestContextFeaturesFor sourcePackages package ++ (extraFeatures.${package} or []));
+          })
+          featurePackages);
+        resolvedFeatureVector = map (package: {
+            inherit package;
+            features = features.${package};
+          })
+          featurePackages;
+        usesPythonModule = builtins.any (
+          package: builtins.elem "python-api-tests" features.${package}
+        ) featurePackages;
+        compileEnvironment = {
+          inherit (ciArgs) NO_SYMBOLICA_OEM_LICENSE;
+          inherit (commonArgs) CC CXX RUSTFLAGS;
+          PYO3_PYTHON =
+            if usesPythonModule
+            then "${nextestPython}/bin/python3"
+            else ciArgs.PYO3_PYTHON;
+        };
+        key = builtins.substring 0 16 (builtins.hashString "sha256" (builtins.toJSON {
+          inherit compileEnvironment resolvedFeatureVector;
+          profile = ciCargoProfile;
+          target = nextestTargetTriple;
+        }));
+      in {
+        inherit
+          anchorPackages
+          componentPackages
+          componentRepresentatives
+          extraFeatures
+          featurePackages
+          features
+          key
+          resolvedFeatureVector
+          sourcePackages
+          usesPythonModule
+          ;
+      };
+
+      workspaceTestDependencyContextsFor = context: let
+        dependencyRepresentatives = sortedUnique (lib.concatMap workspaceTestComponentDependencyRepresentativesFor context.componentRepresentatives);
+        dependencyContexts = map (representative:
+          workspaceTestContextFor {
+            packages = workspaceTestComponentMembers.${representative};
+            inherit (context) extraFeatures;
+          })
+        dependencyRepresentatives;
+      in
+        builtins.attrValues (builtins.removeAttrs (lib.listToAttrs (map (dependencyContext: {
+              name = dependencyContext.key;
+              value = dependencyContext;
+            })
+            dependencyContexts)) [context.key]);
+
       cargoFeatureArgs = features:
         lib.optionalString (features != []) "--features ${lib.escapeShellArg (lib.concatStringsSep "," features)}";
 
@@ -693,7 +899,7 @@
           ++ lib.optional (features != []) (cargoFeatureArgs features)
         );
 
-      cargoQualifiedFeatureArgsFor = packages: featuresFor:
+      cargoQualifiedFeaturesFor = packages: featuresFor:
         let
           features =
             lib.concatMap (
@@ -707,7 +913,10 @@
             )
             packages;
         in
-          cargoFeatureArgs (sortedUnique features);
+          sortedUnique features;
+
+      cargoQualifiedFeatureArgsFor = packages: featuresFor:
+        cargoFeatureArgs (cargoQualifiedFeaturesFor packages featuresFor);
 
       cargoPackageArgsWithFeaturePackagesFor = {
         package,
@@ -854,13 +1063,13 @@
           featurePackages = workspaceNormalSourcePackageNamesFor package;
           featuresFor = craneCiFeaturesFor;
         };
-      testSupportFeatureAnchorPackageFor = representative: "gammaloop-ci-test-support-${representative}-features";
-      testSupportFeatureAnchorPackageDirFor = representative: "crates/${testSupportFeatureAnchorPackageFor representative}";
-      testSupportFeatureAnchorDependencyPackagesFor = sourcePackages:
-        lib.filter workspacePackageHasLibTarget sourcePackages;
-      testSupportFeatureAnchorCargoTomlFor = representative: sourcePackages: pkgs.writeText "${testSupportFeatureAnchorPackageFor representative}-Cargo.toml" ''
+      testDependencyFeatureAnchorPackageFor = context: "gammaloop-ci-test-dependencies-${context.key}";
+      testDependencyFeatureAnchorPackageDirFor = context: "crates/${testDependencyFeatureAnchorPackageFor context}";
+      testDependencyFeatureAnchorDependencyPackagesFor = context:
+        lib.filter workspacePackageHasLibTarget context.sourcePackages;
+      testDependencyFeatureAnchorCargoTomlFor = context: pkgs.writeText "${testDependencyFeatureAnchorPackageFor context}-Cargo.toml" ''
         [package]
-        name = "${testSupportFeatureAnchorPackageFor representative}"
+        name = "${testDependencyFeatureAnchorPackageFor context}"
         version = "0.1.0"
         edition = "2024"
         publish = false
@@ -870,35 +1079,136 @@
 
         [dependencies]
         ${lib.concatMapStringsSep "\n" (package: let
-          features = lib.filter (feature: !lib.hasInfix "/" feature) (craneTestFeaturesFor package);
+          features = lib.filter (feature: !lib.hasInfix "/" feature) context.features.${package};
           featureEntry = lib.optionalString (features != []) ", features = ${builtins.toJSON features}";
         in ''
           ${package} = { path = "${workspacePrebuildDependencyPathFor package}"${featureEntry} }
-        '') (testSupportFeatureAnchorDependencyPackagesFor sourcePackages)}
+        '') (testDependencyFeatureAnchorDependencyPackagesFor context)}
       '';
-      testSupportFeatureAnchorSourceScriptFor = representative: sourcePackages: prefix: ''
-        install -D -m 0644 ${testSupportFeatureAnchorCargoTomlFor representative sourcePackages} "${prefix}${testSupportFeatureAnchorPackageDirFor representative}/Cargo.toml"
-        install -D -m 0644 ${dummyCargoTarget} "${prefix}${testSupportFeatureAnchorPackageDirFor representative}/src/lib.rs"
+      testDependencyFeatureAnchorSourceScriptFor = context: prefix: ''
+        install -D -m 0644 ${testDependencyFeatureAnchorCargoTomlFor context} "${prefix}${testDependencyFeatureAnchorPackageDirFor context}/Cargo.toml"
+        install -D -m 0644 ${dummyCargoTarget} "${prefix}${testDependencyFeatureAnchorPackageDirFor context}/src/lib.rs"
+        touch -d @0 "${prefix}${testDependencyFeatureAnchorPackageDirFor context}/Cargo.toml" "${prefix}${testDependencyFeatureAnchorPackageDirFor context}/src/lib.rs"
       '';
-      cargoTestSupportArgsFor = representative: packages: sourcePackages: let
-        featureAnchorPackage = testSupportFeatureAnchorPackageFor representative;
-        anchorPackages =
-          lib.optionals (
-            builtins.any (
-              featurePackage:
-                featurePackage != workspaceHackPackage
-                && builtins.elem featurePackage workspaceGraph.symbolica_test_packages
+      testBinaryFeatureAnchorPackageFor = context: "gammaloop-ci-test-binary-dependencies-${context.key}";
+      testBinaryFeatureAnchorPackageDirFor = context: "crates/${testBinaryFeatureAnchorPackageFor context}";
+      testBinaryFeatureAnchorDevDependenciesFor = context:
+        lib.foldl'
+        lib.recursiveUpdate
+        {}
+        (map (package:
+            builtins.removeAttrs (
+              (workspaceManifestFor workspaceMemberPackageDirs.${package})."dev-dependencies" or {}
             )
-            sourcePackages
-          ) [workspaceHackPackage];
-        selectedPackages = sortedUnique (packages ++ anchorPackages ++ [featureAnchorPackage]);
-        featureArgs = cargoQualifiedFeatureArgsFor (sortedUnique (sourcePackages ++ anchorPackages)) craneTestFeaturesFor;
+            context.componentPackages)
+          context.componentPackages);
+      testBinaryFeatureAnchorCrossFeaturesFor = context:
+        lib.foldl' (
+          features: feature: let
+            parts = lib.splitString "/" feature;
+            dependency = builtins.head parts;
+          in
+            features
+            // {
+              ${dependency} = sortedUnique ((features.${dependency} or []) ++ [(builtins.elemAt parts 1)]);
+            }
+        ) {} (lib.concatMap (
+            package: lib.filter (feature: lib.hasInfix "/" feature) context.features.${package}
+          )
+          context.featurePackages);
+      testBinaryFeatureAnchorDependenciesFor = context: let
+        inheritedDependencies = lib.listToAttrs (map (package: {
+            name = package;
+            value.path = workspacePrebuildDependencyPathFor package;
+          })
+          (lib.subtractLists context.componentPackages (testDependencyFeatureAnchorDependencyPackagesFor context)));
+        rawDependencies =
+          inheritedDependencies
+          // (testBinaryFeatureAnchorDevDependenciesFor context)
+          // lib.optionalAttrs (context.anchorPackages != []) {
+            ${workspaceHackPackage} = {path = "../${workspaceHackPackage}";};
+          };
+        crossFeatures = testBinaryFeatureAnchorCrossFeaturesFor context;
+        dependencyNames = sortedUnique (builtins.attrNames rawDependencies ++ builtins.attrNames crossFeatures);
+      in
+        lib.listToAttrs (map (dependency: let
+            rawDependency = rawDependencies.${dependency} or {workspace = true;};
+            dependencyAttrs =
+              if builtins.isAttrs rawDependency
+              then rawDependency
+              else {version = rawDependency;};
+            features = sortedUnique (
+              (dependencyAttrs.features or [])
+              ++ lib.filter (feature: !lib.hasInfix "/" feature) (context.features.${dependency} or [])
+              ++ (crossFeatures.${dependency} or [])
+            );
+          in {
+            name = dependency;
+            value =
+              dependencyAttrs
+              // lib.optionalAttrs (features != []) {inherit features;};
+          })
+          dependencyNames);
+      testBinaryFeatureAnchorCargoTomlFor = context:
+        (pkgs.formats.toml {}).generate "${testBinaryFeatureAnchorPackageFor context}-Cargo.toml" {
+          package = {
+            name = testBinaryFeatureAnchorPackageFor context;
+            version = "0.1.0";
+            edition = "2024";
+            publish = false;
+          };
+          lib.path = "src/lib.rs";
+          dependencies = testBinaryFeatureAnchorDependenciesFor context;
+        };
+      testBinaryFeatureAnchorSourceScriptFor = context: prefix: ''
+        install -D -m 0644 ${testBinaryFeatureAnchorCargoTomlFor context} "${prefix}${testBinaryFeatureAnchorPackageDirFor context}/Cargo.toml"
+        install -D -m 0644 ${dummyCargoTarget} "${prefix}${testBinaryFeatureAnchorPackageDirFor context}/src/lib.rs"
+        touch -d @0 "${prefix}${testBinaryFeatureAnchorPackageDirFor context}/Cargo.toml" "${prefix}${testBinaryFeatureAnchorPackageDirFor context}/src/lib.rs"
+      '';
+      testBinaryFeatureAnchorDependencyPathFor = context: package:
+        if lib.hasPrefix "crates/" workspaceMemberPackageDirs.${package}
+        then "../${testBinaryFeatureAnchorPackageFor context}"
+        else "../${testBinaryFeatureAnchorPackageDirFor context}";
+      testBinaryFeatureAnchorDevDependencyFor = context: package: pkgs.writeText "${testBinaryFeatureAnchorPackageFor context}-${package}-dev-dependency.toml" ''
+
+        [dev-dependencies.${testBinaryFeatureAnchorPackageFor context}]
+        path = "${testBinaryFeatureAnchorDependencyPathFor context package}"
+      '';
+      testBinaryFeatureAnchorDevDependencyScriptFor = context: package: prefix: ''
+        cat ${testBinaryFeatureAnchorDevDependencyFor context package} >> "${prefix}${workspaceMemberPackageDirs.${package}}/Cargo.toml"
+        touch -d @0 "${prefix}${workspaceMemberPackageDirs.${package}}/Cargo.toml"
+      '';
+      cargoTestDependencyArgsFor = context: let
+        selectedPackages = sortedUnique (context.anchorPackages ++ [
+          (testDependencyFeatureAnchorPackageFor context)
+        ]);
+        featureArgs = cargoQualifiedFeatureArgsFor context.featurePackages (package: context.features.${package});
       in
         lib.concatStringsSep " " (
           [
             "--offline"
           ]
           ++ map (selectedPackage: "-p ${lib.escapeShellArg selectedPackage}") selectedPackages
+          ++ lib.optional (featureArgs != "") featureArgs
+        );
+      cargoTestContextArgsFor = context: packages: let
+        featureArgs = cargoQualifiedFeatureArgsFor context.featurePackages (featurePackage: context.features.${featurePackage});
+      in
+        lib.concatStringsSep " " (
+          ["--offline"]
+          ++ map (package: "-p ${lib.escapeShellArg package}") (sortedUnique packages)
+          ++ lib.optional (featureArgs != "") featureArgs
+        );
+      cargoTestBinaryDependencyArgsFor = context:
+        cargoTestContextArgsFor context ([(testBinaryFeatureAnchorPackageFor context)] ++ context.componentPackages);
+      cargoTestBinaryArgsFor = context: package: let
+        featureArgs = cargoQualifiedFeatureArgsFor [package] (featurePackage: context.features.${featurePackage});
+      in
+        lib.concatStringsSep " " (
+          [
+            "--offline"
+            "-p ${lib.escapeShellArg package}"
+          ]
           ++ lib.optional (featureArgs != "") featureArgs
         );
       cranePythonExtraFeatureSets = {
@@ -1068,15 +1378,12 @@
       '';
       gammaloop-python-lib = craneLib.buildPackage (ciArgs
         // {
-          cargoArtifacts = mergeCargoArtifacts "gammaloop-python-package-inputs" [
-            cranePythonBuildArtifacts
-          ];
-          doNotLinkInheritedArtifacts = true;
+          cargoArtifacts = cranePythonBuildArtifacts;
           pname = "gammaloop-api-python";
           src = workspacePackageSrcFor "gammaloop-api";
           cargoExtraArgs = cranePythonCargoArgs;
           doCheck = false;
-          postPatch = workspaceDummyCargoTargetsScriptFor "gammaloop-api";
+          postPatch = workspaceMissingCargoTargetsScript;
         });
       gammaloop-python-lib-output = lib.getLib gammaloop-python-lib;
       pythonSitePackages = "${pkgs.python313.sitePackages}";
@@ -1097,17 +1404,116 @@
         fi
         cp "$extension" "$out/${pythonSitePackages}/gammaloop/_gammaloop.so"
       '';
-      clinnet-cli = craneLib.buildPackage (ciArgs
+      clinnetArgs = ciArgs
         // {
-          cargoArtifacts = cranePackageBuildArtifacts.clinnet;
-          doNotLinkInheritedArtifacts = true;
           pname = "clinnet";
           inherit (clinnetMeta) version;
           src = workspacePackageSrcFor "clinnet";
           cargoExtraArgs = cargoPackageCiArgsFor "clinnet";
           doCheck = false;
-          postPatch = workspaceDummyCargoTargetsScriptFor "clinnet";
+          postPatch = workspaceMissingCargoTargetsScript;
+        };
+      drawingTypstBundleAssets = ''
+        mkdir -p crates/linnest/typst/src crates/kurvst/typst/src
+        cp -R ${linnest-wasm}/templates/crates/linnest/typst/src/. crates/linnest/typst/src/
+        cp ${linnest-wasm}/templates/crates/linnest/typst/typst.toml crates/linnest/typst/typst.toml
+        cp ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm crates/linnest/typst/linnest.wasm
+        cp -R ${linnest-wasm}/templates/crates/kurvst/typst/src/. crates/kurvst/typst/src/
+        cp ${linnest-wasm}/templates/crates/kurvst/typst/typst.toml crates/kurvst/typst/typst.toml
+        cp ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm crates/kurvst/typst/kurvst.wasm
+      '';
+
+      clinnetCargoArtifacts = craneLib.buildDepsOnly (clinnetArgs
+        // {
+          preBuild = drawingTypstBundleAssets;
         });
+
+      clinnet-cli = craneLib.buildPackage (clinnetArgs
+        // {
+          cargoArtifacts = clinnetCargoArtifacts;
+          doNotLinkInheritedArtifacts = true;
+          preBuild = drawingTypstBundleAssets;
+        });
+
+      rscls = pkgs.rustPlatform.buildRustPackage rec {
+        pname = "rscls";
+        version = "0.2.3";
+        src = pkgs.fetchCrate {
+          inherit pname version;
+          sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
+        };
+        cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
+      };
+
+      devShellPackages = with pkgs;
+        [
+          tdf
+          cargo-flamegraph
+          yaml-language-server
+          just
+          dot-language-server
+          cargo-insta
+          cargo-udeps
+          cargo-machete
+          openssl
+          pyright
+          gmp
+          mpfr
+          libmpc
+          form
+          gnum4
+          nickel
+          nls
+          typst
+          cargo-nextest
+          pkg-config
+          cargo-deny
+          cargo-edit
+          cargo-guppy
+          cargo-hakari
+          cargo-watch
+          bacon
+          jq
+          gfortran
+          gcc
+          rust-script
+          uv
+          graphviz
+          mupdf
+          tinymist
+          typstyle
+          poppler-utils
+          rust-analyzer
+          maturin
+          virtualenv
+        ]
+        ++ lib.optionals (!pkgs.stdenv.isDarwin) [
+          valgrind
+        ];
+
+      mkDevShell = extraPackages:
+        craneLib.devShell {
+          # checks = self.checks.${system};
+
+          RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+          GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
+
+          CC = nixCc;
+          CXX = nixCxx;
+          "${cargoLinkerVar}" = nixCc;
+          RUSTFLAGS = "-C linker=${nixCc}";
+
+          LD_LIBRARY_PATH = runtimeLibPath;
+          DYLD_LIBRARY_PATH = runtimeLibPath;
+
+          # shellHook = ''
+          #   export CC="${nixCc}"
+          #   export CXX="${nixCxx}"
+          #   export ${cargoLinkerVar}="${nixCc}"
+          # '';
+
+          packages = devShellPackages ++ extraPackages;
+        };
 
       nextestProfile = "ci_gammaloop";
       nextestJunitPath = "target/nextest/${nextestProfile}/junit.xml";
@@ -1252,8 +1658,8 @@
 
       # Crane's documented workspace pattern is to build one shared dependency cache and
       # reuse it across workspace lint/test/doc/package checks.
-      # Keep this input to manifests and build-script inputs so source-only commits
-      # can reuse the dependency artifact from the NixCI cache.
+      # Keep this input to manifests so source-only commits can reuse the
+      # dependency artifact from the NixCI cache.
       cargoArtifacts = buildDepsOnlyWithArtifacts (ciArgs
         // {
           pname = "gammaloop-workspace-deps";
@@ -1457,7 +1863,7 @@
           local names="$tmp/$(basename "$output").names"
           : > "$names"
           while IFS= read -r package; do
-            if guppy_names "$package" all "$include_dev" | grep -Eq '^(symbolica|numerica|graphica)$'; then
+            if guppy_names "$package" all "$include_dev" | grep -E '^(symbolica|numerica|graphica)$' >/dev/null; then
               printf '%s\n' "$package" >> "$names"
             fi
           done < "$tmp/workspace-packages"
@@ -1532,6 +1938,10 @@
           }
 
           ${lib.concatMapStringsSep "\n" (artifact: "unpack_artifact ${artifact}") artifactList}
+
+          # Crane deletes inherited Cargo locks before using an artifact tree.
+          # Remove them here while the merged files are still ordinary files.
+          find "$out/target" -name .cargo-lock -delete
         '';
 
       mergeCargoArtifactsOrNull = name: artifacts: let
@@ -1736,7 +2146,9 @@
                     ${stripWorkspaceArtifactsScriptText}
                   )
 
-                  tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -C "$tmp/target" -cf - . \
+                  # Match Crane's artifact and Nix source timestamps so Cargo
+                  # does not treat the compacted target as stale.
+                  tar --sort=name --mtime=@1 --owner=0 --group=0 --numeric-owner -C "$tmp/target" -cf - . \
                     | zstd -T0 --stdout > "$out/target.tar.zst.tmp"
                   mv "$out/target.tar.zst.tmp" "$out/target.tar.zst"
                   rm -f "$out/target.tar.zst.prev"
@@ -1776,7 +2188,7 @@
           pname = "gammaloop-crate-${workspaceHackPackage}";
           src = workspacePackageSrcFor workspaceHackPackage;
           cargoExtraArgs = cargoPackageCiArgsFor workspaceHackPackage;
-          postPatch = workspaceDummyCargoTargetsScriptFor workspaceHackPackage;
+          postPatch = workspaceMissingCargoTargetsScript;
         });
 
       cranePackageDependencyModeDependencyArtifacts = lib.fix (self:
@@ -1793,7 +2205,7 @@
             dependencySourcePackages =
               lib.filter (sourcePackage: sourcePackage != package) (workspaceNormalSourcePackageNamesFor package);
             preservedWorkspaceArtifactPackages =
-              lib.filter workspacePackageIsProcMacro (workspaceResolvedDependencyNamesFor package);
+              lib.filter workspacePackageIsProcMacro dependencySourcePackages;
           in
             buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
               // {
@@ -1803,7 +2215,9 @@
                   ++ map dependencyArtifactFor dependencySourcePackages
                 );
                 pname = "gammaloop-crate-${package}-dependency-deps";
-                src = workspacePackageSrcForSourcePackages package dependencySourcePackages;
+                src = workspacePackageSrcForSourcePackages {
+                  sourcePackages = dependencySourcePackages;
+                };
                 buildPhaseCargoCommand = "cargoWithProfile build ${cargoPackageDependencyModeArgsFor package}";
                 checkPhaseCargoCommand = "";
                 doCheck = false;
@@ -1813,6 +2227,7 @@
                   ${workspaceDependencyDummyCargoTargetsScriptFor package}
                   ${workspaceConsumerSourceScriptFor package dependencySourcePackages}
                 '';
+                postPatch = workspaceMissingCargoTargetsScript;
               })));
 
       cranePackageDependencyModeArtifacts = lib.fix (self:
@@ -1827,8 +2242,7 @@
               then workspaceHackBuildArtifacts
               else self.${dependency};
             sourcePackages = workspaceNormalSourcePackageNamesFor package;
-            preservedWorkspaceArtifactPackages =
-              sortedUnique ([package] ++ workspaceResolvedDependencyNamesFor package);
+            preservedWorkspaceArtifactPackages = sourcePackages;
           in
             buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
               // {
@@ -1837,7 +2251,9 @@
                   ++ map dependencyArtifactFor (lib.filter (sourcePackage: sourcePackage != package) sourcePackages)
                 );
                 pname = "gammaloop-crate-${package}-dependency";
-                src = workspacePackageSrcForSourcePackages package sourcePackages;
+                src = workspacePackageSrcForSourcePackages {
+                  inherit sourcePackages;
+                };
                 buildPhaseCargoCommand = "cargoWithProfile build ${cargoPackageDependencyModeArgsFor package}";
                 checkPhaseCargoCommand = "";
                 doCheck = false;
@@ -1848,7 +2264,7 @@
                   ${workspacePackageSourceRestoreInDummySrcScriptFor sourcePackages}
                   ${workspaceConsumerSourceScriptFor package sourcePackages}
                 '';
-                postPatch = workspaceDummyCargoTargetsScriptForSourcePackages sourcePackages;
+                postPatch = workspaceMissingCargoTargetsScript;
               })));
 
       # Public crate-deps outputs are the reusable workspace crate artifacts.
@@ -1863,70 +2279,202 @@
           else
             craneLib.cargoBuild (ciArgs
               // {
-                cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-${package}-deps" (
-                  [
-                    cargoArtifacts
-                    cranePackageDependencyArtifacts.${package}
-                  ]
-                );
-                doNotLinkInheritedArtifacts = true;
+                cargoArtifacts =
+                  if cranePackageDependencyArtifacts.${package} == null
+                  then cargoArtifacts
+                  else cranePackageDependencyArtifacts.${package};
                 pname = "gammaloop-crate-${package}";
                 src = workspacePackageSrcFor package;
                 cargoExtraArgs =
                   cargoPackageCiArgsFor package
                   + lib.optionalString (package == "gammaloop-api") " --lib --bins";
-                postPatch = workspaceDummyCargoTargetsScriptFor package;
+                preBuild = lib.optionalString (package == "gammaloop-api") drawingTypstBundleAssets;
+                postPatch = workspaceMissingCargoTargetsScript;
               })));
 
       gammaloopApiPackageArtifacts = mergeCargoArtifacts "gammaloop-api-package-artifacts" [
         cranePackageBuildArtifacts."gammaloop-api"
       ];
 
-      craneTestSupportArtifacts = lib.fix (self:
-        lib.genAttrs workspaceTestComponentRepresentatives (representative:
-          if representative == workspaceHackPackage
+      workspaceBaseTestContexts =
+        map (package: workspaceTestContextFor {packages = [package];}) workspacePackages;
+      nextestPackageTestContexts = lib.concatMap (target:
+        map (package:
+          workspaceTestContextFor {
+            packages = [package];
+            extraFeatures = target.extraFeatures or {};
+          })
+        target.packages)
+      checkedNextestPackageGroups;
+      workspaceTestContexts = lib.listToAttrs (map (context: {
+          name = context.key;
+          value = context;
+        })
+        (workspaceBaseTestContexts ++ nextestPackageTestContexts));
+
+      craneTestDependencyArtifacts = lib.fix (self:
+        lib.mapAttrs (_: context:
+          if context.componentPackages == [workspaceHackPackage]
           then workspaceHackBuildArtifacts
           else let
-            componentPackages = workspaceTestComponentMembers.${representative};
-            dependencyComponents = workspaceTestComponentDependencyRepresentativesFor representative;
-            sourcePackages = workspaceTestComponentSourcePackageNamesFor representative;
-            syntheticConsumerPackages = workspaceTestComponentSyntheticConsumerPackagesFor representative;
-            syntheticConsumerSourcePackages = workspaceTestComponentSyntheticConsumerSourcePackageNamesFor representative;
-            selectedPackages = sortedUnique (componentPackages ++ syntheticConsumerPackages);
-            selectedBinaryPackages = lib.filter workspacePackageHasBinTarget componentPackages;
-            featureSourcePackages = sortedUnique (sourcePackages ++ syntheticConsumerSourcePackages);
-            supportCargoCommand =
-              lib.concatStringsSep "\n" (
-                lib.optional (selectedBinaryPackages != [])
-                  "cargoWithProfile build ${cargoTestSupportArgsFor representative selectedBinaryPackages featureSourcePackages} --bins"
-                ++ [
-                  "cargoWithProfile test --no-run ${cargoTestSupportArgsFor representative selectedPackages featureSourcePackages}"
-                ]
-              );
+            sourcePackages = lib.filter workspacePackageHasLibTarget context.sourcePackages;
+            dependencyContexts = workspaceTestDependencyContextsFor context;
+            procMacroPackages = lib.filter workspacePackageIsProcMacro context.componentPackages;
+            hostAnchorPackage = "${testBinaryFeatureAnchorPackageFor context}-host";
+            hostAnchorPackageDir = "crates/${hostAnchorPackage}";
+            anchorConsumerDependencies = {
+              ${testBinaryFeatureAnchorPackageFor context}.path = "../${testBinaryFeatureAnchorPackageFor context}";
+            } // lib.listToAttrs (map (package: let
+                features = lib.filter (feature: feature != "default" && !lib.hasInfix "/" feature) context.features.${package};
+              in {
+                name = package;
+                value = {
+                  path = workspacePrebuildDependencyPathFor package;
+                } // lib.optionalAttrs (features != []) {inherit features;};
+              })
+              procMacroPackages);
+            hostAnchorCargoToml = (pkgs.formats.toml {}).generate "${hostAnchorPackage}-Cargo.toml" {
+              package = {
+                name = hostAnchorPackage;
+                version = "0.1.0";
+                edition = "2024";
+                publish = false;
+              };
+              lib = {
+                path = "src/lib.rs";
+                "proc-macro" = true;
+              };
+              dependencies = anchorConsumerDependencies;
+            };
+            targetFacadeFor = package: let
+              manifest = workspaceManifestFor workspaceMemberPackageDirs.${package};
+              packageName = "${testBinaryFeatureAnchorPackageFor context}-target-${package}";
+              packageDir = "crates/${packageName}";
+              localFeatures = lib.filter (feature: feature != "default" && !lib.hasInfix "/" feature) context.features.${package};
+              resolvedDependencies = testBinaryFeatureAnchorDependenciesFor context;
+              rawDependencies = (manifest.dependencies or {}) // (manifest."dev-dependencies" or {});
+              dependencies = lib.mapAttrs (dependency: rawDependency: let
+                  dependencyAttrs =
+                    if builtins.isAttrs rawDependency
+                    then rawDependency
+                    else {version = rawDependency;};
+                  features = sortedUnique (
+                    (dependencyAttrs.features or [])
+                    ++ (resolvedDependencies.${dependency}.features or [])
+                  );
+                in
+                  dependencyAttrs // lib.optionalAttrs (features != []) {inherit features;})
+                rawDependencies
+                // anchorConsumerDependencies;
+              cargoToml = (pkgs.formats.toml {}).generate "${packageName}-Cargo.toml" {
+                package = {
+                  name = packageName;
+                  version = "0.1.0";
+                  edition = "2024";
+                  publish = false;
+                };
+                lib.path = "src/lib.rs";
+                inherit dependencies;
+                features = manifest.features or {};
+              };
+            in {
+              inherit cargoToml localFeatures packageDir packageName;
+            };
+            targetFacades = map targetFacadeFor procMacroPackages;
+            targetFacadeFeatures = lib.concatMap (facade:
+              map (feature: "${facade.packageName}/${feature}") facade.localFeatures)
+            targetFacades;
+            anchorConsumerArgs = lib.concatStringsSep " " (
+              ["--offline" "-p ${lib.escapeShellArg hostAnchorPackage}"]
+              ++ map (facade: "-p ${lib.escapeShellArg facade.packageName}") targetFacades
+              ++ lib.optional (targetFacadeFeatures != []) (cargoFeatureArgs targetFacadeFeatures)
+            );
+            hasProcMacro = procMacroPackages != [];
+            buildPhaseCargoCommand = ''
+              cargoWithProfile build ${cargoTestDependencyArgsFor context} --lib
+              cargoWithProfile build ${cargoTestBinaryDependencyArgsFor context} --lib
+            '';
+            postPatch = ''
+              ${workspaceMissingCargoTargetsScript}
+              ${testDependencyFeatureAnchorSourceScriptFor context ""}
+              ${testBinaryFeatureAnchorSourceScriptFor context ""}
+            '';
           in
             buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
               // {
-                cargoArtifacts = mergeCargoArtifactsOrNull "gammaloop-crate-test-support-${representative}-inputs" (
-                  [workspaceHackBuildArtifacts]
-                  ++ map (dependencyComponent: self.${dependencyComponent}) dependencyComponents
+                cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-test-dependencies-${context.key}-inputs" (
+                  [
+                    cargoArtifacts
+                    workspaceHackBuildArtifacts
+                  ]
+                  ++ map (dependencyContext: self.${dependencyContext.key}) dependencyContexts
                 );
-                pname = "gammaloop-crate-test-support-${representative}";
-                dummySrc = workspacePackageSrcForSourcePackages representative sourcePackages;
-                buildPhaseCargoCommand = supportCargoCommand;
+                pname = "gammaloop-crate-test-dependencies-${context.key}";
+                dummySrc = workspacePackageSrcForSourcePackages {
+                  inherit sourcePackages;
+                };
+                # Rebuild workspace library crates against the final merge's dependency metadata.
+                inherit buildPhaseCargoCommand postPatch;
                 checkPhaseCargoCommand = "";
                 doCheck = false;
-                stripWorkspaceArtifacts = syntheticConsumerPackages != [];
-                preservedWorkspaceArtifactPackages = sourcePackages;
-                postPatch = ''
-                  ${workspaceDummyCargoTargetsScriptForSourcePackages sourcePackages}
-                  ${testSupportFeatureAnchorSourceScriptFor representative featureSourcePackages ""}
+              }
+              // lib.optionalAttrs hasProcMacro {
+                buildPhaseCargoCommand = buildPhaseCargoCommand + ''
+                  cargoWithProfile build ${anchorConsumerArgs} --lib
                 '';
-              })));
+                postPatch = postPatch + ''
+                  install -D -m 0644 ${hostAnchorCargoToml} ${hostAnchorPackageDir}/Cargo.toml
+                  install -D -m 0644 ${dummyProcMacroCargoTarget} ${hostAnchorPackageDir}/src/lib.rs
+                  touch -d @0 ${hostAnchorPackageDir}/Cargo.toml ${hostAnchorPackageDir}/src/lib.rs
+                  ${lib.concatMapStringsSep "\n" (facade: ''
+                    install -D -m 0644 ${facade.cargoToml} ${facade.packageDir}/Cargo.toml
+                    install -D -m 0644 ${dummyCargoTarget} ${facade.packageDir}/src/lib.rs
+                    touch -d @0 ${facade.packageDir}/Cargo.toml ${facade.packageDir}/src/lib.rs
+                  '')
+                  targetFacades}
+                '';
+              }
+              // lib.optionalAttrs context.usesPythonModule {
+                nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [nextestPython];
+                PYO3_PYTHON = "${nextestPython}/bin/python3";
+                PYTHON = "${nextestPython}/bin/python3";
+                PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
+              }))
+        workspaceTestContexts);
+
+      craneTestBinaryArtifactFor = context: package:
+        buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
+          // {
+            cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-test-binaries-${package}-${context.key}-inputs" [
+              cargoArtifacts
+              craneTestDependencyArtifacts.${context.key}
+            ];
+            pname = "gammaloop-crate-test-binaries-${package}-${context.key}";
+            dummySrc = workspacePackageSrcForSourcePackages {
+              sourcePackages = context.sourcePackages;
+              packageSourcePackages = [package];
+              testSourcePackages = [package];
+            };
+            buildPhaseCargoCommand = "cargoWithProfile test --no-run ${cargoTestBinaryArgsFor context package}";
+            checkPhaseCargoCommand = "";
+            doCheck = false;
+            postPatch = ''
+              ${workspaceMissingCargoTargetsScript}
+              ${testBinaryFeatureAnchorSourceScriptFor context ""}
+              ${testBinaryFeatureAnchorDevDependencyScriptFor context package ""}
+            '';
+          }
+          // lib.optionalAttrs context.usesPythonModule {
+            nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [nextestPython];
+            PYO3_PYTHON = "${nextestPython}/bin/python3";
+            PYTHON = "${nextestPython}/bin/python3";
+            PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
+          });
 
       craneTestBinaryArtifacts = lib.genAttrs workspacePackages (package:
         if package == workspaceHackPackage
         then workspaceHackBuildArtifacts
-        else craneTestSupportArtifacts.${workspaceTestComponentRepresentativeFor package});
+        else craneTestBinaryArtifactFor (workspaceTestContextFor {packages = [package];}) package);
 
       workspaceCargoCheck = craneLib.mkCargoDerivation (ciArgs
         // {
@@ -2018,9 +2566,10 @@
             ) (lib.filter (sourcePackage: sourcePackage != "gammaloop-api") (workspaceNormalSourcePackageNamesFor "gammaloop-api"))
           );
           pname = "gammaloop-api-python";
-          src = workspacePackageSrcForSourcePackages "gammaloop-api" (
-            lib.filter (sourcePackage: sourcePackage != "gammaloop-api") (workspaceNormalSourcePackageNamesFor "gammaloop-api")
-          );
+          src = workspacePackageSrcForSourcePackages {
+            sourcePackages =
+              lib.filter (sourcePackage: sourcePackage != "gammaloop-api") (workspaceNormalSourcePackageNamesFor "gammaloop-api");
+          };
           buildPhaseCargoCommand = "cargoWithProfile build ${cranePythonCargoArgs}";
           checkPhaseCargoCommand = "";
           doCheck = false;
@@ -2028,18 +2577,16 @@
           stripWorkspaceArtifacts = true;
           preservedWorkspaceArtifactPackages = workspaceResolvedDependencyNamesFor "gammaloop-api";
           extraDummyScript = workspaceDependencyDummyCargoTargetsScriptFor "gammaloop-api";
+          postPatch = workspaceMissingCargoTargetsScript;
         });
 
       cranePythonBuildArtifacts = craneLib.cargoBuild (ciArgs
         // {
-          cargoArtifacts = mergeCargoArtifacts "gammaloop-python-build-inputs" [
-            cranePythonDependencyArtifacts
-          ];
-          doNotLinkInheritedArtifacts = true;
+          cargoArtifacts = cranePythonDependencyArtifacts;
           pname = "gammaloop-api-python-build";
           src = workspacePackageSrcFor "gammaloop-api";
           cargoExtraArgs = cranePythonCargoArgs;
-          postPatch = workspaceDummyCargoTargetsScriptFor "gammaloop-api";
+          postPatch = workspaceMissingCargoTargetsScript;
         });
 
       cranePackageOutputs = lib.listToAttrs (map (package: {
@@ -2050,22 +2597,33 @@
 
       cranePackageDependencyOutputs = lib.listToAttrs (map (package: {
           name = "crate-deps-${package}";
-          value = cranePackageDependencyArtifacts.${package};
+          value =
+            nixCiArtifactBarrier
+            "crate-deps-${package}"
+            cranePackageDependencyArtifacts.${package};
         })
         (lib.filter (package: cranePackageDependencyArtifacts.${package} != null)
           workspacePackages));
 
       craneTestBinaryPackageOutputs = lib.listToAttrs (map (package: {
           name = "crate-test-binaries-${package}";
-          value = craneTestBinaryArtifacts.${package};
+          value =
+            nixCiArtifactBarrier
+            "crate-test-binaries-${package}"
+            craneTestBinaryArtifacts.${package};
         })
         workspacePackages);
 
-      craneTestSupportOutputs = lib.listToAttrs (map (representative: {
-          name = "crate-test-support-${representative}";
-          value = craneTestSupportArtifacts.${representative};
+      craneTestDependencyOutputs = lib.listToAttrs (map (representative: let
+          context = workspaceTestContextFor {packages = [representative];};
+        in {
+          name = "crate-test-dependencies-${representative}";
+          value =
+            nixCiArtifactBarrier
+            "crate-test-dependencies-${representative}"
+            craneTestDependencyArtifacts.${context.key};
         })
-        workspaceTestSupportComponentRepresentatives);
+        workspaceTestDependencyComponentRepresentatives);
 
       workspaceBuildArtifacts = craneLib.cargoBuild (ciArgs
         // {
@@ -2090,7 +2648,7 @@
         doCheck = false;
         buildType = "release";
         CARGO_BUILD_TARGET = wasmTarget;
-        cargoExtraArgs = "--locked -p linnest --features custom --target ${wasmTarget}";
+        cargoExtraArgs = "--locked -p linnest -p kurvst --features linnest/custom --target ${wasmTarget}";
       };
 
       linnestWasmCargoArtifacts = wasmCraneLib.buildDepsOnly (linnestWasmArgs
@@ -2103,10 +2661,19 @@
           cargoArtifacts = linnestWasmCargoArtifacts;
           cargoBuildCommand = "cargo build --release";
           installPhaseCommand = ''
-            mkdir -p "$out/templates"
+            mkdir -p \
+              "$out/templates" \
+              "$out/templates/crates/linnest/typst" \
+              "$out/templates/crates/kurvst/typst"
             cp "target/${wasmTarget}/release/linnest.wasm" "$out/linnest.wasm"
+            cp "target/${wasmTarget}/release/kurvst.wasm" "$out/kurvst.wasm"
             cp crates/clinnet/templates/*.typ "$out/templates/"
-            cp "$out/linnest.wasm" "$out/templates/linnest.wasm"
+            cp -R crates/linnest/typst/src "$out/templates/crates/linnest/typst/"
+            cp crates/linnest/typst/typst.toml "$out/templates/crates/linnest/typst/typst.toml"
+            cp -R crates/kurvst/typst/src "$out/templates/crates/kurvst/typst/"
+            cp crates/kurvst/typst/typst.toml "$out/templates/crates/kurvst/typst/typst.toml"
+            cp "$out/linnest.wasm" "$out/templates/crates/linnest/typst/linnest.wasm"
+            cp "$out/kurvst.wasm" "$out/templates/crates/kurvst/typst/kurvst.wasm"
           '';
         });
 
@@ -2127,6 +2694,7 @@
         {
           name = "python-api";
           packages = ["gammaloop-integration-tests"];
+          runtimeTestSourcePackages = [];
           filter = "package(gammaloop-integration-tests) & binary(test_python_api)";
           extraFeatures."gammaloop-integration-tests" = ["python-api-tests"];
         }
@@ -2137,6 +2705,7 @@
         {
           name = "linnet";
           packages = [
+            "kurvst"
             "linnet"
             "linnet-py"
             "linnest"
@@ -2149,6 +2718,7 @@
             "spenso"
             "spenso-hep-lib"
             "spenso-macros"
+            "symbolica-utils"
           ];
         }
         {
@@ -2183,161 +2753,67 @@
         if target ? filter
         then "-E ${lib.escapeShellArg target.filter}"
         else nextestPackageFilter target.packages;
-      nextestUsesIntegrationTests = target: builtins.elem "gammaloop-integration-tests" target.packages;
-      nextestTargetExtraFeaturesFor = target: package:
-        if (target ? extraFeatures) && builtins.hasAttr package target.extraFeatures
-        then target.extraFeatures.${package}
-        else [];
-      nextestUsesPythonModule = target:
-        builtins.any (
-          package: builtins.elem "python-api-tests" (nextestTargetExtraFeaturesFor target package)
-        ) target.packages;
-      nextestSourcePackagesFor = target:
-        sortedUnique (
-          target.packages
-          ++ lib.concatMap workspaceResolvedTestDependencyNamesFor target.packages
-        );
-      nextestSrcFor = target: let
-        sourcePackages = nextestSourcePackagesFor target;
-      in
-        lib.fileset.toSource {
-          root = workspaceRoot;
-          fileset = lib.fileset.unions (
-            workspaceDependencyManifestFiles
-            ++ workspaceDependencyBuildScripts
-            ++ map (
-              sourcePackage:
-                workspaceRoot + "/${workspaceMemberPackageDirs.${sourcePackage}}"
-            )
-            sourcePackages
-            ++ [
-              ./.config/nextest.toml
-              ./tests/resources
-              ./examples/api
-              ./examples/cli
-            ]
-            ++ (workspacePackageExtraFilesetsForSourcePackages sourcePackages)
-          );
+      nextestContextFor = target:
+        workspaceTestContextFor {
+          inherit (target) packages;
+          extraFeatures = target.extraFeatures or {};
+        };
+      nextestPackageContextFor = target: package:
+        workspaceTestContextFor {
+          packages = [package];
+          extraFeatures = target.extraFeatures or {};
+        };
+      nextestUsesPythonModule = target: (nextestContextFor target).usesPythonModule;
+      nextestSourcePackagesFor = target: (nextestContextFor target).sourcePackages;
+      nextestSrcFor = target:
+        workspacePackageSrcForSourcePackages {
+          sourcePackages = nextestSourcePackagesFor target;
+          packageSourcePackages = target.packages;
+          testSourcePackages = target.packages;
+          extraFilesets = [./.config/nextest.toml];
+        };
+      nextestRuntimeSrcFor = target:
+        workspacePackageSrcForSourcePackages {
+          sourcePackages = nextestSourcePackagesFor target;
+          packageSourcePackages = target.packages;
+          testSourcePackages = target.packages;
+          runtimeTestSourcePackages = target.runtimeTestSourcePackages or target.packages;
+          extraFilesets = [./.config/nextest.toml];
         };
 
       nextestFeatureArgsFor = target:
-        cargoQualifiedFeatureArgsFor (nextestFeaturePackagesFor target) (
-          package:
-            sortedUnique (
-              craneCiFeaturesFor package
-              ++ nextestTargetExtraFeaturesFor target package
-            )
-        );
+        cargoQualifiedFeatureArgsFor target.packages (package:
+          (nextestPackageContextFor target package).features.${package});
 
       nextestCargoArgsFor = target:
         lib.concatStringsSep " " (
           [
             "--offline"
           ]
-          ++ map (package: "-p ${lib.escapeShellArg package}") (nextestSelectedPackagesFor target)
+          ++ map (package: "-p ${lib.escapeShellArg package}") target.packages
           ++ lib.optional (nextestFeatureArgsFor target != "") (nextestFeatureArgsFor target)
         );
 
-      nextestArchiveNameFor = target: "gammaloop-nextest-${target.name}.tar.zst";
-      nextestArchiveInputPackagesFor = target:
-        sortedUnique target.packages;
-      nextestAnchorPackagesFor = target:
-        lib.optionals (
-          builtins.any (
-            package: builtins.elem package workspaceGraph.symbolica_test_packages
-          ) (nextestSourcePackagesFor target)
-        ) [workspaceHackPackage];
-      nextestSelectedPackagesFor = target:
-        sortedUnique (target.packages ++ nextestAnchorPackagesFor target ++ [(nextestFeatureAnchorPackageFor target)]);
-      nextestFeaturePackagesFor = target:
-        sortedUnique (
-          nextestAnchorPackagesFor target
-          ++ nextestSourcePackagesFor target
-        );
-      nextestFeatureAnchorPackageFor = target: "gammaloop-ci-nextest-${target.name}-features";
-      nextestFeatureAnchorPackageDirFor = target: "crates/${nextestFeatureAnchorPackageFor target}";
-      nextestFeatureAnchorDependencyPackagesFor = target:
-        lib.filter workspacePackageHasLibTarget (nextestFeaturePackagesFor target);
-      nextestFeatureAnchorCargoTomlFor = target: pkgs.writeText "${nextestFeatureAnchorPackageFor target}-Cargo.toml" ''
-        [package]
-        name = "${nextestFeatureAnchorPackageFor target}"
-        version = "0.1.0"
-        edition = "2024"
-        publish = false
-
-        [lib]
-        path = "src/lib.rs"
-
-        [dependencies]
-        ${lib.concatMapStringsSep "\n" (package: let
-          features = lib.filter (feature: !lib.hasInfix "/" feature) (
-            sortedUnique (craneCiFeaturesFor package ++ nextestTargetExtraFeaturesFor target package)
-          );
-          featureEntry = lib.optionalString (features != []) ", features = ${builtins.toJSON features}";
-        in ''
-          ${package} = { path = "${workspacePrebuildDependencyPathFor package}"${featureEntry} }
-        '') (nextestFeatureAnchorDependencyPackagesFor target)}
-      '';
-      nextestFeatureAnchorSourceScriptFor = target: prefix: ''
-        install -D -m 0644 ${nextestFeatureAnchorCargoTomlFor target} "${prefix}${nextestFeatureAnchorPackageDirFor target}/Cargo.toml"
-        install -D -m 0644 ${dummyCargoTarget} "${prefix}${nextestFeatureAnchorPackageDirFor target}/src/lib.rs"
-      '';
-      testSupportArtifactForPackage = package:
-        if package == workspaceHackPackage
-        then workspaceHackBuildArtifacts
-        else craneTestSupportArtifacts.${workspaceTestComponentRepresentativeFor package};
+      nextestArchiveNameFor = target: package: "gammaloop-nextest-${target.name}-${package}.tar.zst";
 
       nextestPackageTestBinaryArtifactFor = target: package: let
-        packageTarget =
-          target
-          // {
-            name = "${target.name}-${package}";
-            packages = [package];
-          };
-        sourcePackages = nextestSourcePackagesFor packageTarget;
+        context = nextestPackageContextFor target package;
+        baseContext = workspaceTestContextFor {packages = [package];};
       in
-        buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
-          // {
-            cargoArtifacts = mergeCargoArtifacts "gammaloop-nextest-binaries-${target.name}-${package}-test-inputs" (
-              [cargoArtifacts]
-              ++ [(testSupportArtifactForPackage package)]
-            );
-            pname = "gammaloop-nextest-binaries-${target.name}-${package}-test";
-            dummySrc = nextestSrcFor packageTarget;
-            buildPhaseCargoCommand = ''
-              if [ -d target ]; then
-                chmod -R u+w target
-              fi
-              cargoWithProfile test --no-run ${nextestCargoArgsFor packageTarget}
-            '';
-            checkPhaseCargoCommand = "";
-            doCheck = false;
-            postPatch = ''
-              ${workspaceDummyCargoTargetsScriptForSourcePackages sourcePackages}
-              ${nextestFeatureAnchorSourceScriptFor packageTarget ""}
-            '';
-          } // lib.optionalAttrs (nextestUsesPythonModule packageTarget) {
-            nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [nextestPython];
-            PYO3_PYTHON = "${nextestPython}/bin/python3";
-            PYTHON = "${nextestPython}/bin/python3";
-            PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
-          });
+        if context.key == baseContext.key
+        then craneTestBinaryArtifacts.${package}
+        else craneTestBinaryArtifactFor context package;
 
-      nextestArchiveCargoArtifactsFor = target:
-        mergeCargoArtifacts "gammaloop-nextest-binaries-${target.name}-inputs" (
-          [
-            cargoArtifacts
-          ]
-          ++ map (nextestPackageTestBinaryArtifactFor target) target.packages
-        );
-
-      nextestArchiveFor = target:
+      nextestPackageArchiveFor = target: package: let
+        packageTarget = target // {packages = [package];};
+        context = nextestPackageContextFor target package;
+        packageCargoArtifacts = nextestPackageTestBinaryArtifactFor target package;
+      in
         craneLib.mkCargoDerivation (ciArgs
           // {
-            pname = "gammaloop-nextest-binaries-${target.name}";
-            src = nextestSrcFor target;
-            cargoArtifacts = nextestArchiveCargoArtifactsFor target;
-            doNotLinkInheritedArtifacts = true;
+            pname = "gammaloop-nextest-binaries-${target.name}-${package}";
+            src = nextestSrcFor packageTarget;
+            cargoArtifacts = packageCargoArtifacts;
             doCheck = false;
             doInstallCargoArtifacts = false;
             nativeBuildInputs =
@@ -2345,21 +2821,31 @@
               ++ [pkgs.cargo-nextest pkgs.form]
               ++ lib.optionals (nextestUsesPythonModule target) [nextestPython];
             postPatch = ''
-              ${workspaceDummyCargoTargetsScriptForSourcePackages (nextestSourcePackagesFor target)}
-              ${nextestFeatureAnchorSourceScriptFor target ""}
+              ${workspaceMissingCargoTargetsScript}
+              ${testBinaryFeatureAnchorSourceScriptFor context ""}
+              ${testBinaryFeatureAnchorDevDependencyScriptFor context package ""}
+
+              # Crane only follows file-valued incremental artifact links. The
+              # test-binary delta points directly to its materialized input
+              # directory, so inherit that base before Crane overlays the
+              # package-specific, writable delta in its post-patch hook.
+              if [ -d ${packageCargoArtifacts}/target.tar.zst.prev ]; then
+                inheritCargoArtifacts "$(realpath ${packageCargoArtifacts}/target.tar.zst.prev)" target
+              fi
             '';
             buildPhaseCargoCommand = ''
               mkdir -p "$out"
               if [ -d target ]; then
                 chmod -R u+w target
+                find target -name .cargo-lock -delete
               fi
               cargo nextest --version
               cargo nextest archive \
                 --cargo-profile ${ciCargoProfile} \
-                ${nextestCargoArgsFor target} \
-                ${nextestFilterFor target} \
+                ${nextestCargoArgsFor packageTarget} \
+                ${nextestFilterFor packageTarget} \
                 --profile ${nextestProfile} \
-                --archive-file "$out/${nextestArchiveNameFor target}"
+                --archive-file "$out/${nextestArchiveNameFor target package}"
             '';
             checkPhaseCargoCommand = "";
             installPhaseCommand = "";
@@ -2369,11 +2855,42 @@
             PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
           });
 
+      nextestArchiveFor = target: let
+        packageArchives = lib.genAttrs target.packages (nextestPackageArchiveFor target);
+      in
+        pkgs.linkFarm "gammaloop-nextest-binaries-${target.name}" (map (package: {
+            name = nextestArchiveNameFor target package;
+            path = "${packageArchives.${package}}/${nextestArchiveNameFor target package}";
+          })
+          target.packages);
+
       nextestBinarySets = lib.listToAttrs (map (target: {
           name = "gammaloop-nextest-binaries-${target.name}";
           value = nextestArchiveFor target;
         })
         checkedNextestPackageGroups);
+
+      nextestContextualTestOutputs = lib.listToAttrs (lib.concatMap (target:
+          lib.concatMap (package: let
+              context = nextestPackageContextFor target package;
+            in [
+              {
+                name = "crate-test-dependencies-${target.name}-${package}";
+                value =
+                  nixCiArtifactBarrier
+                  "crate-test-dependencies-${target.name}-${package}"
+                  craneTestDependencyArtifacts.${context.key};
+              }
+              {
+                name = "crate-test-binaries-${target.name}-${package}";
+                value =
+                  nixCiArtifactBarrier
+                  "crate-test-binaries-${target.name}-${package}"
+                  (nextestPackageTestBinaryArtifactFor target package);
+              }
+            ])
+          target.packages)
+        (lib.filter (target: target ? extraFeatures) checkedNextestPackageGroups));
 
       nextestBinarySetForTarget = target: nextestBinarySets."gammaloop-nextest-binaries-${target.name}";
 
@@ -2408,10 +2925,13 @@
           fi
 
           mkdir -p /build/source
-          cp -R ${nextestSrcFor target}/. /build/source/
+          cp -R ${nextestRuntimeSrcFor target}/. /build/source/
           chmod -R u+w /build/source
           cd /build/source
-          ${workspaceDummyCargoTargetsScriptForSourcePackages (nextestSourcePackagesFor target)}
+          # Workspace-root discovery checks these directories even for test
+          # targets that do not consume any files from them.
+          mkdir -p tests/resources examples/cli
+          ${workspaceMissingCargoTargetsScript}
         '' + lib.optionalString (nextestUsesPythonModule target) ''
           export PYO3_PYTHON=${nextestPython}/bin/python3
           export PYTHON=${nextestPython}/bin/python3
@@ -2431,12 +2951,20 @@
 
           mkdir -p target/nextest
           set +e
-          cargo nextest run \
-            --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target} \
-            --workspace-remap . \
-            ${nextestBaseExtraArgs}
-          status=$?
-          nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
+          status=0
+          ${lib.concatMapStringsSep "\n" (package: ''
+              rm -f ${lib.escapeShellArg nextestJunitPath}
+              cargo nextest run \
+                --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target package} \
+                --workspace-remap . \
+                ${nextestBaseExtraArgs}
+              package_status=$?
+              nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
+              if [ "$package_status" -ne 0 ] && [ "$status" -eq 0 ]; then
+                status="$package_status"
+              fi
+            '')
+            target.packages}
           mkdir -p "$out"
           exit "$status"
         '');
@@ -2464,15 +2992,23 @@
           {
             runnerAttr = "nix-ci-check-gammaloop-doctest";
             checkAttr = "gammaloop-doctest";
+            runtimeInputs = [cargoArtifacts];
           }
           {
             runnerAttr = "nix-ci-check-gammaloop-nextest";
             checkAttr = "gammaloop-nextest";
+            runtimeInputs = [
+              nextestBinarySetAggregate
+              gammaloop-python-module
+            ];
           }
         ]
         ++ map (target: {
           runnerAttr = "nix-ci-check-gammaloop-nextest-${target.name}";
           checkAttr = "gammaloop-nextest-${target.name}";
+          runtimeInputs =
+            [(nextestBinarySetForTarget target)]
+            ++ lib.optionals (nextestUsesPythonModule target) [gammaloop-python-module];
         })
         checkedNextestPackageGroups;
 
@@ -2480,7 +3016,9 @@
           name = target.runnerAttr;
           value = pkgs.writeShellApplication {
             name = target.runnerAttr;
-            runtimeInputs = [pkgs.nix];
+            # Retain the pure test inputs even when NixCI skips this runner as
+            # cached, so the in-repo test does not rebuild them.
+            runtimeInputs = [pkgs.nix] ++ target.runtimeInputs;
             text = ''
               set -euo pipefail
               exec nix \
@@ -2502,8 +3040,8 @@
           echo "All NixCI build and test jobs passed."
         '';
       };
-    in {
-      checks =
+
+      allChecks =
         {
           # Keep existing check names for CI compatibility.
           gammaloop = gammaloop-cli;
@@ -2524,42 +3062,67 @@
 
           gammaloop-guppy-workspace-graph = guppyWorkspaceGraphCheck;
 
-          linnest-wasm =
-            pkgs.runCommand "linnest-wasm-check" {
-              nativeBuildInputs = [pkgs.wasm-tools];
-            } ''
-              test -s ${linnest-wasm}/linnest.wasm
-              test -s ${linnest-wasm}/templates/linnest.wasm
-              cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/linnest.wasm
-              wasm-tools validate ${linnest-wasm}/linnest.wasm
-              test -s ${linnest-wasm}/templates/layout.typ
-              mkdir -p "$out"
-            '';
+          linnest-wasm = pkgs.runCommand "linnest-wasm-check" {
+            nativeBuildInputs = [pkgs.wasm-tools];
+          } ''
+            test -s ${linnest-wasm}/linnest.wasm
+            test -s ${linnest-wasm}/kurvst.wasm
+            test -s ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
+            test -s ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
+            cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
+            cmp ${linnest-wasm}/kurvst.wasm ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
+            wasm-tools validate ${linnest-wasm}/linnest.wasm
+            wasm-tools validate ${linnest-wasm}/kurvst.wasm
+            test -s ${linnest-wasm}/templates/layout.typ
+            test -s ${linnest-wasm}/templates/crates/linnest/typst/src/lib.typ
+            test -s ${linnest-wasm}/templates/crates/linnest/typst/src/curve.typ
+            test -s ${linnest-wasm}/templates/crates/kurvst/typst/src/lib.typ
+            mkdir -p "$out"
+          '';
         }
         // nextestChecks
         // {
           gammaloop-nextest = nextestAggregate;
         };
 
+      # Hestia builds the binary producers before evaluating this consumer
+      # matrix. Omit those producers and the aggregate nextest check so each
+      # nextest execution remains an independent row without racing its leaves.
+      hestiaChecks = builtins.removeAttrs allChecks (
+        [
+          "gammaloop-nextest"
+          "gammaloop-nextest-binaries"
+        ]
+        ++ map (target: "gammaloop-nextest-binaries-${target.name}") checkedNextestPackageGroups
+      );
+    in {
+      checks = allChecks;
+
+      hydraJobs = hestiaChecks;
+
       packages =
         {
           default = gammaloop-cli;
+          clinnet = clinnet-cli;
           gammaloop = gammaloop-cli;
           inherit clinnet-cli;
-          "gammaloop-python-module" = gammaloop-python-module;
+          "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
-          inherit linnest-wasm linnestWasmCargoArtifacts;
+          inherit linnest-wasm;
+          linnestWasmCargoArtifacts =
+            nixCiArtifactBarrier "linnest-wasm-cargo-artifacts" linnestWasmCargoArtifacts;
           "crane-ci-prebuild" = cargoArtifacts;
-          inherit
-            cargoArtifacts
-            gammaloopApiPackageArtifacts
-            workspaceBuildArtifacts;
+          cargoArtifacts = nixCiArtifactBarrier "cargo-artifacts" cargoArtifacts;
+          gammaloopApiPackageArtifacts =
+            nixCiArtifactBarrier "gammaloop-api-package-artifacts" gammaloopApiPackageArtifacts;
+          inherit workspaceBuildArtifacts;
           "nix-ci-passed" = nixCiPassed;
         }
         // cranePackageDependencyOutputs
         // cranePackageOutputs
-        // craneTestSupportOutputs
+        // craneTestDependencyOutputs
         // craneTestBinaryPackageOutputs
+        // nextestContextualTestOutputs
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
           gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs
@@ -2579,74 +3142,20 @@
           drv = gammaloop-cli;
           exePath = "/bin/gammaloop";
         };
+        clinnet = flake-utils.lib.mkApp {
+          drv = clinnet-cli;
+          exePath = "/bin/linnet";
+        };
+        linnet = flake-utils.lib.mkApp {
+          drv = clinnet-cli;
+          exePath = "/bin/linnet";
+        };
       };
 
-      devShells.default = craneLib.devShell ({
-          # checks = self.checks.${system};
-
-          RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
-          GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
-
-          CC = nixCc;
-          CXX = nixCxx;
-          "${cargoLinkerVar}" = nixCc;
-          RUSTFLAGS = "-C linker=${nixCc}";
-
-          LD_LIBRARY_PATH = runtimeLibPath;
-          DYLD_LIBRARY_PATH = runtimeLibPath;
-
-          # shellHook = ''
-          #   export CC="${nixCc}"
-          #   export CXX="${nixCxx}"
-          #   export ${cargoLinkerVar}="${nixCc}"
-          # '';
-
-          packages = with pkgs;
-            [
-              tdf
-              cargo-flamegraph
-              yaml-language-server
-              just
-              dot-language-server
-              cargo-insta
-              cargo-udeps
-              cargo-machete
-              openssl
-              pyright
-              gmp
-              mpfr
-              libmpc
-              form
-              gnum4
-              nickel
-              nls
-              typst
-              cargo-nextest
-              pkg-config
-              cargo-deny
-              cargo-edit
-              cargo-guppy
-              cargo-hakari
-              cargo-watch
-              bacon
-              jq
-              gfortran
-              gcc
-              rust-script
-              uv
-              graphviz
-              mupdf
-              tinymist
-              typstyle
-              poppler-utils
-              rust-analyzer
-              maturin
-              virtualenv
-              clinnet-cli
-            ]
-            ++ lib.optionals (!pkgs.stdenv.isDarwin) [
-              valgrind
-            ];
-        });
+      devShells = {
+        default = mkDevShell [clinnet-cli];
+        full = mkDevShell [clinnet-cli rscls];
+        clinnet = mkDevShell [clinnet-cli];
+      };
     });
 }

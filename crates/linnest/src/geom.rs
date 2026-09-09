@@ -2,7 +2,19 @@ use cgmath::{Angle, InnerSpace, Point2, Rad, Vector2};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Debug, Error, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Error,
+    Clone,
+    Copy,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[archive(check_bytes)]
 pub enum GeomError {
     #[error("degenerate triangle: two points coincide")]
     CoincidentPoints,

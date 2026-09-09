@@ -18,10 +18,7 @@ use spenso::{
         },
         store::NetworkStore,
     },
-    shadowing::{
-        Concretize,
-        symbolica_utils::{AtomCoreExt, IntoArgs, IntoSymbol, SpensoPrintSettings},
-    },
+    shadowing::{Concretize, symbolica_utils::SpensoPrintSettings},
     structure::{
         HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure, PermutedStructure,
         ScalarStructure, ScalarTensor, SlotIndex, StructureContract, TensorShell, TensorStructure,
@@ -34,6 +31,7 @@ use spenso::{
     },
     tensors::parametric::MixedTensor,
 };
+use symbolica_utils::{AtomPrintExt, IntoArgs, IntoSymbol};
 
 use delegate::delegate;
 use spenso::structure::StructureError;
@@ -45,6 +43,9 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     function,
 };
+
+mod canonicalize;
+pub(crate) use canonicalize::remove_antisymmetric_zero_terms;
 
 #[cfg(test)]
 pub mod tests;

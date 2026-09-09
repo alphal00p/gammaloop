@@ -1,6 +1,6 @@
 [project]
 name = "gammaloop"
-version = "0.3.3"
+version = "0.3.4"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
 readme = "README.md"
 requires-python = ">=3.11"

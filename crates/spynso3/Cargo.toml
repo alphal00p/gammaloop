@@ -5,12 +5,11 @@ edition = "2024"
 description = "Pyo3 bindings for spenso"
 
 [dependencies]
-ahash = { version = "0.8.11", features = ["serde"] }
+ahash = { workspace = true, features = ["serde"] }
 idenso = { workspace = true }
 spenso = { workspace = true, features = ["python", "shadowing"] }
 spenso-hep-lib = { workspace = true }
 spenso-macros = { workspace = true }
-
 xpct = "0.5.1"
 
 eyre = { workspace = true }

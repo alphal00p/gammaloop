@@ -82,7 +82,9 @@ commands = [
 # b = 1.0
 
 ## ##
-# Multi-channeling over loop-momentum bases, and evaluation of only one CFF orientation per sample, with discrete importance sampling over both discrete dimensions
+# Multi-channeling over loop-momentum bases, and evaluation of only one CFF
+# orientation per sample, with discrete importance sampling over both discrete
+# dimensions. Enable evaluator_method = "SingleParametric" below with this block.
 ## ##
 # [default_runtime_settings.sampling]
 # graphs = "monte_carlo"

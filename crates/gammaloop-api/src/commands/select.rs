@@ -53,6 +53,15 @@ pub struct Select {
     )]
     pub with_graph_names: Vec<String>,
 
+    /// Retain exactly these graph groups and ignore every other selection filter
+    #[arg(
+        long = "with-only-graph-names",
+        value_name = "MASTER_GRAPH",
+        num_args = 1..,
+        completion_selected_master_graph()
+    )]
+    pub with_only_graph_names: Vec<String>,
+
     /// Remove graph groups with these master graph names
     #[arg(
         long = "without-graph-names",
@@ -307,12 +316,20 @@ impl Select {
     }
 
     fn selection_spec(&self, state: &State) -> Result<GraphGroupSelectionSpec> {
+        let mode = if self.amplitude_graphs {
+            GraphGroupSelectionMode::CrossSectionAmplitudeGraphs
+        } else {
+            GraphGroupSelectionMode::MasterGraphs
+        };
+        if !self.with_only_graph_names.is_empty() {
+            return Ok(GraphGroupSelectionSpec::from_master_graph_names(
+                self.with_only_graph_names.clone(),
+            )
+            .with_mode(mode));
+        }
+
         let mut spec = GraphGroupSelectionSpec::new()
-            .with_mode(if self.amplitude_graphs {
-                GraphGroupSelectionMode::CrossSectionAmplitudeGraphs
-            } else {
-                GraphGroupSelectionMode::MasterGraphs
-            })
+            .with_mode(mode)
             .with_master_graph_names_polarity(
                 SelectionPolarity::With,
                 self.with_graph_names.clone(),
@@ -410,7 +427,7 @@ impl Select {
 
         if spec.is_empty() {
             return Err(eyre!(
-                "No graph-group selection filters were provided. Use --with-graph-names or another --with/--without selection option."
+                "No graph-group selection filters were provided. Use --with-only-graph-names, --with-graph-names, or another --with/--without selection option."
             ));
         }
 
@@ -541,6 +558,7 @@ mod tests {
             integrand_name: None,
             amplitude_graphs: false,
             with_graph_names: Vec::new(),
+            with_only_graph_names: Vec::new(),
             without_graph_names: Vec::new(),
             with_raised_propagator_signatures: Vec::new(),
             without_raised_propagator_signatures: Vec::new(),
@@ -598,5 +616,24 @@ mod tests {
 
         let spec = select.selection_spec(&state).unwrap();
         assert!(spec.has_raised_cut_rules());
+    }
+
+    #[test]
+    fn selection_spec_with_only_graph_names_ignores_other_filters() {
+        let state = State::new_test();
+        let mut select = empty_select();
+        select.amplitude_graphs = true;
+        select.with_only_graph_names = vec!["GL04".to_string(), "GL05".to_string()];
+        select.with_graph_names = vec!["ignored".to_string()];
+        select.without_graph_names = vec!["GL04".to_string()];
+        select.with_raised_propagator_signatures = vec!["not a signature".to_string()];
+
+        let spec = select.selection_spec(&state).unwrap();
+        let expected = GraphGroupSelectionSpec::from_master_graph_names(vec![
+            "GL04".to_string(),
+            "GL05".to_string(),
+        ])
+        .with_mode(GraphGroupSelectionMode::CrossSectionAmplitudeGraphs);
+        assert_eq!(spec, expected);
     }
 }

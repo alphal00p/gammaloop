@@ -26,7 +26,7 @@ use crate::{
         IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationSettings,
     },
     utils::{
-        self, F, FloatLike,
+        self, F, FloatLike, GS,
         hyperdual_utils::{DualOrNot, new_constant, simple_n_deriv_shape},
     },
 };
@@ -301,8 +301,8 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
 
     let t = symbol!("t");
 
-    let e_surface = parse!("η(r_star(t), t)");
     let rstar = parse!("r_star(t)");
+    let e_surface = function!(GS.eta, rstar.clone(), Atom::var(t));
 
     let mut rstar_derivatives = vec![];
     for i in 0..num_t_derivatives {
@@ -359,7 +359,7 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
                 Symbol::DERIVATIVE,
                 current_r_derivative_counter,
                 current_t_derivative_counter,
-                symbol!("η"),
+                GS.eta,
                 rstar.clone(),
                 Atom::var(t)
             );

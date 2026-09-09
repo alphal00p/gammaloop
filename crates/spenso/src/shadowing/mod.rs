@@ -2,7 +2,6 @@ use std::env;
 
 use crate::{
     network::{library::function_lib::INBUILTS, library::symbolic::ETS, tags::SPENSO_TAG},
-    shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
         HasName, HasStructure, TensorShell, TensorStructure, ToSymbolic,
         abstract_index::AIND_SYMBOLS,
@@ -16,6 +15,7 @@ use crate::{
         // symbolic::SymbolicTensor,
     },
 };
+use ::symbolica_utils::{IntoArgs, IntoSymbol};
 use eyre::Result;
 use linnet::permutation::Permutation;
 use symbolica::{atom::Atom, evaluate::FunctionMap, initialize};

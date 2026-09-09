@@ -5,14 +5,17 @@ use spenso::network::{
     ContractScalars, ExecutionResult, Network, NetworkState, Sequential, SequentialExtract,
     SingleSmallestDegree, SmallestDegree, Steps, tags::SPENSO_TAG,
 };
-use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    printer::PrintOptions,
+};
 
 use symbolica::symbol;
 
 use spenso::network::library::DummyLibrary;
 use spenso::network::library::panicing::ErroringLibrary;
-use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+use symbolica_utils::AtomPrintExt;
 
 // use log::trace;
 
@@ -22,7 +25,6 @@ use core::panic;
 
 use spenso::{
     chain, chain_factor, mink,
-    shadowing::symbolica_utils::TypstSettings,
     structure::{
         HasName, ToSymbolic,
         representation::{Euclidean, Lorentz, Minkowski, RepName},
@@ -349,10 +351,7 @@ fn parse_val() {
     }
     "#);
     assert_eq!(net.simple_execute::<()>(), expr);
-    let mut out = String::new();
-    expr.typst_fmt(&mut out, &TypstSettings::lowering())
-        .unwrap();
-    println!("{}", out)
+    println!("{}", expr.printer(PrintOptions::typst()))
 }
 
 #[test]
@@ -919,15 +918,15 @@ fn infinite_execution() {
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       ext1	 [style=invis];
-      0:3:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
+      0:5:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
       ext2	 [style=invis];
-      0:4:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_4"];
+      0:4:s	-> ext2	 [id=2 dir=none color="red" label="bis4|l_2"];
       ext3	 [style=invis];
-      0:1:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_2"];
+      0:3:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_3"];
       ext4	 [style=invis];
-      0:5:s	-> ext4	 [id=4 dir=none color="red" label="bis4|l_3"];
+      0:1:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_1"];
       ext5	 [style=invis];
-      0:2:s	-> ext5	 [id=5 dir=none color="red" label="mink4|l_1"];
+      0:2:s	-> ext5	 [id=5 dir=none color="red" label="mink4|l_4"];
     }
     "#
     );

@@ -4,9 +4,10 @@ use crate::{
         parsing::{StrictTensorFilter, structure_inference::TensorialSyntax},
         tags::SPENSO_TAG,
     },
-    shadowing::{static_symbols::W_, symbolica_utils::ReplaceBuilderExt},
+    shadowing::static_symbols::W_,
     structure::representation::LibraryRep,
 };
+use ::symbolica_utils::ReplaceBuilderExt;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
     function,

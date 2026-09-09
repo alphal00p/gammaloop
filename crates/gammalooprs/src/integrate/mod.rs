@@ -419,7 +419,7 @@ impl DiscreteGridAccumulatorSummary {
         metadata: &PersistedDiscreteBreakdownMetadata,
         pdfs: &[F<f64>],
     ) -> Option<DiscreteBreakdown> {
-        (self.bins.len() > 1).then(|| DiscreteBreakdown {
+        (!self.bins.is_empty()).then(|| DiscreteBreakdown {
             axis_label: metadata.axis_label.clone(),
             fixed_coordinates: metadata.fixed_coordinates.clone(),
             entries: self
@@ -910,8 +910,18 @@ fn build_persisted_discrete_breakdown_metadata(
 fn monitored_discrete_layout(
     grid: &Grid<F<f64>>,
     discrete_axis_labels: &[String],
+    monitor_explicit_graph_subset: bool,
 ) -> Option<(Vec<usize>, String, usize)> {
-    let path = first_non_trivial_discrete_path(grid)?;
+    let path = if monitor_explicit_graph_subset
+        && discrete_axis_labels
+            .first()
+            .is_some_and(|label| label == "graph")
+        && matches!(grid, Grid::Discrete(_))
+    {
+        Vec::new()
+    } else {
+        first_non_trivial_discrete_path(grid)?
+    };
     let axis_label = discrete_axis_labels.get(path.len())?.clone();
     let discrete_grid = discrete_grid_at_path(grid, &path)?;
     Some((path, axis_label, discrete_grid.bins.len()))
@@ -974,9 +984,21 @@ fn resolve_monitored_discrete_setup(
     let Some(reference_state) = sampling_states.first() else {
         return MonitoredDiscreteSetup::default();
     };
+    let Some(reference_slot) = slots.first() else {
+        return MonitoredDiscreteSetup::default();
+    };
+    let monitor_explicit_graph_subset = !reference_slot
+        .settings
+        .sampling
+        .selected_graph_names()
+        .is_empty();
 
     let Some((reference_path, reference_axis_label, reference_bin_count)) =
-        monitored_discrete_layout(&reference_state.grid, &reference_state.discrete_axis_labels)
+        monitored_discrete_layout(
+            &reference_state.grid,
+            &reference_state.discrete_axis_labels,
+            monitor_explicit_graph_subset,
+        )
     else {
         return MonitoredDiscreteSetup::default();
     };
@@ -986,6 +1008,11 @@ fn resolve_monitored_discrete_setup(
             let Some((path, axis_label, bin_count)) = monitored_discrete_layout(
                 &sampling_state.grid,
                 &sampling_state.discrete_axis_labels,
+                !slots[slot_index]
+                    .settings
+                    .sampling
+                    .selected_graph_names()
+                    .is_empty(),
             ) else {
                 return MonitoredDiscreteSetup {
                     warning: Some(
@@ -3905,6 +3932,27 @@ mod tests {
         state
     }
 
+    fn make_single_graph_discrete_integration_state() -> IntegrationState {
+        let mut state = make_discrete_integration_state();
+        let Grid::Discrete(grid) = &mut state.sampling_state_for_slot_mut(0).grid else {
+            unreachable!("discrete fixture must use a discrete grid")
+        };
+        grid.bins.truncate(1);
+        grid.bins[0].pdf = F(1.0);
+        for summaries in [&mut state.slot_re_summaries, &mut state.slot_im_summaries] {
+            for summary in summaries.iter_mut().flatten() {
+                summary.bins.truncate(1);
+            }
+        }
+        state.first_non_trivial_discrete_bin_descriptions = Some(vec!["GL22".to_string()]);
+        for metadata in &mut state.slot_first_non_trivial_discrete_breakdown_metadata {
+            if let Some(metadata) = metadata.as_mut() {
+                metadata.bin_labels = vec!["GL22".to_string()];
+            }
+        }
+        state
+    }
+
     fn default_view_options() -> IntegrationStatusViewOptions {
         IntegrationStatusViewOptions {
             phase_display: IntegrationStatusPhaseDisplay::Both,
@@ -4307,6 +4355,46 @@ mod tests {
             graph_group_description(["GL0".to_string(), "GL1".to_string(), "GL2".to_string()]);
 
         assert_eq!(description, "[GL0,GL1,GL2]");
+    }
+
+    #[test]
+    fn explicit_single_graph_subset_monitors_the_root_graph_axis() {
+        let grid = Grid::Discrete(DiscreteGrid::new(
+            vec![Some(Grid::Continuous(ContinuousGrid::new(
+                1, 64, 100, None, false,
+            )))],
+            F(10.0),
+            false,
+        ));
+        let labels = vec!["graph".to_string()];
+
+        assert!(monitored_discrete_layout(&grid, &labels, false).is_none());
+        assert_eq!(
+            monitored_discrete_layout(&grid, &labels, true),
+            Some((Vec::new(), "graph".to_string(), 1))
+        );
+    }
+
+    #[test]
+    fn tabled_single_graph_subset_keeps_the_graph_row() {
+        let state = make_single_graph_discrete_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            show_top_discrete_grid: true,
+            contribution_sort: ContributionSortMode::Index,
+            ..default_view_options()
+        };
+        let rendered = render_update(StatusUpdateBuildRequest::new(
+            IntegrationStatusKind::Iteration,
+            &state,
+            &[None, None],
+            &view_options,
+        ));
+
+        assert!(rendered.contains("Contribution (idx=graph)"), "{rendered}");
+        assert!(rendered.contains("#0: GL22"), "{rendered}");
+        assert!(!rendered.contains("GL1"), "{rendered}");
     }
 
     #[test]
@@ -5543,6 +5631,32 @@ mod tests {
         assert!(rendered.contains("pdf"), "{rendered}");
         assert!(rendered.contains("Per integrand details"), "{rendered}");
         assert!(rendered.contains("# samples"), "{rendered}");
+    }
+
+    #[test]
+    fn ratatui_single_graph_subset_keeps_the_graph_row() {
+        let state = make_single_graph_discrete_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
+        let rendered = render_ratatui_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Iteration,
+                &state,
+                &[None, None],
+                &view_options,
+            ),
+            |dashboard| dashboard.select_tab(1),
+        );
+
+        assert!(
+            rendered.contains("Discrete bins for focused integrand"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("GL22"), "{rendered}");
+        assert!(!rendered.contains("GL1"), "{rendered}");
     }
 
     #[test]

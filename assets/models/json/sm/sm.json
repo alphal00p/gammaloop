@@ -783,7 +783,7 @@
   }, {
     "name": "FFS4",
     "spins": [2, 2, 1],
-    "structure": "UFO::{}::ProjM(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::ProjP(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
+    "structure": "UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFV1",
     "spins": [2, 2, 3],

@@ -1,10 +1,9 @@
-use ahash::{HashSet, HashSetExt};
 use color_eyre::Result;
-use eyre::eyre;
-use gammaloop_tracing_filter::{LogMessage, debug_instrument};
+use eyre::{WrapErr, eyre};
+use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
     color::ColorSimplifier,
-    dirac::GammaSimplifier,
+    dirac::{GammaSimplifier, GammaSimplifySettings},
     representations::Bispinor,
     shorthands::{
         UndoShorthands,
@@ -25,100 +24,179 @@ use spenso::{
     shadowing::TensorCollectExt,
     structure::representation::{Minkowski, RepName},
 };
-use symbolica::{atom::AtomCore, prelude::*};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    domains::atom::AtomField,
+    function,
+    id::Replacement,
+    parse, parse_lit,
+    poly::series::Series,
+    solve::SolveError,
+};
+use symbolica_utils::ReplaceBuilderExt;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
 
 use crate::{
     debug_tags,
-    graph::{Graph, LMBext, LoopMomentumBasis},
+    graph::LMBext,
     numerator::aind::Aind,
-    utils::{GS, W_, symbolica_ext::CallSymbol},
+    utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
-        approx::{ApproximationKernel, ForestNodeLike, UVCtx},
+        approx::{ForestNodeLike, Rooted, UVCtx, local_4d::Local4dCts},
+        marker::{UvMarker, UvOperation},
         settings::VakintSettings,
         uv_graph::UVE,
     },
 };
 
-pub struct Integrated<'a> {
+/// Laurent projections of an integrated counterterm.
+///
+/// Connected values store their canonical expansion. Factorized values encode
+/// componentwise pole and signed nonnegative-power products under the same accessors.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct IntegratedCts {
+    expansion: Series<AtomField>,
+    scale_power: i64,
+}
+
+impl IntegratedCts {
+    pub(crate) fn factorized_product<'a>(
+        factors: impl IntoIterator<Item = &'a Self>,
+        depth: usize,
+    ) -> Result<Self> {
+        let mut factors = factors.into_iter();
+        let first = factors
+            .next()
+            .ok_or_else(|| eyre!("a factorized integrated counterterm cannot be empty"))?;
+        let mut pole = truncate(&first.expansion, false);
+        let mut finite_counterterm = -truncate(&first.expansion, true);
+        let mut scale_power = first.scale_power;
+
+        for factor in factors {
+            pole *= truncate(&factor.expansion, false);
+            finite_counterterm *= -truncate(&factor.expansion, true);
+            scale_power += factor.scale_power;
+        }
+
+        Ok(Self {
+            // The public projections add the finite-counterterm sign, so store
+            // its negative while keeping the pole product unchanged.
+            expansion: series(&(pole - finite_counterterm), depth)?,
+            scale_power,
+        })
+    }
+
+    fn projected_atom(&self, finite: bool) -> Atom {
+        truncate(&self.expansion, finite)
+            * Atom::var(GS.integrated_loop_scale).pow(self.scale_power)
+    }
+
+    pub(crate) fn pole_atom(&self) -> Atom {
+        self.projected_atom(false)
+    }
+
+    pub(crate) fn finite_counterterm_atom(&self) -> Atom {
+        -self.projected_atom(true)
+    }
+
+    pub(crate) fn physical_pole_atom(&self) -> Atom {
+        self.pole_atom()
+            .replace(GS.integrated_loop_scale)
+            .with(Atom::one())
+    }
+
+    pub(crate) fn physical_finite_counterterm_atom(&self) -> Atom {
+        self.finite_counterterm_atom()
+            .replace(GS.integrated_loop_scale)
+            .with(Atom::one())
+    }
+}
+
+fn series(expr: &Atom, depth: usize) -> Result<Series<AtomField>> {
+    Ok(expr.series(GS.dim_epsilon, 0, depth)?)
+}
+
+fn truncate(series: &Series<AtomField>, finite: bool) -> Atom {
+    let mut truncated = Atom::Zero;
+
+    for (power, p) in series.terms() {
+        if (power >= 0) == finite {
+            truncated += p * Atom::var(GS.dim_epsilon).pow(power);
+        }
+    }
+
+    truncated
+}
+
+impl Rooted for IntegratedCts {
+    fn root() -> Self {
+        Self {
+            expansion: series(&Atom::Zero, 1).expect("zero has a Laurent expansion"),
+            scale_power: 0,
+        }
+    }
+}
+
+fn simplify(integrand: &Atom) -> Result<Atom> {
+    let collected = integrand
+        .collect_rep(Minkowski {}.into())
+        .simplify_metrics()
+        .collect_rep((Bispinor {}).into())
+        .collect_gamma_chains();
+    debug_tags!(#uv,#integrated,#collect;log.expr = collected, "After gamma chain collection");
+
+    let schoonschip = collected
+        .schoonschip_with_settings(&SchoonschipSettings {
+            simplify_chain_like_functions: true,
+            schoonschip_rank1_tensors: true,
+            ..Default::default()
+        })
+        .normalize_chains();
+    debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
+        log.expr = schoonschip,
+        "After gamma schoonschip"
+    );
+    let collected = schoonschip
+        .collect_chains_and_traces()
+        .simplify_metrics()
+        .collect_gamma_chains()
+        .collect_color()
+        .collect_factors();
+    debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
+        log.expr = collected,
+        "After gamma collection"
+    );
+
+    let simplified = collected
+        .simplify_gamma_with(GammaSimplifySettings::canonical())
+        .collect_rep(Minkowski {}.into())
+        .expand_num();
+    debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #start, #gamma;
+        log.expr = simplified,
+        "After gamma simplification"
+    );
+    let schoonschipped = simplified.schoonschip_net::<Aind>();
+    debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
+        log.expr = schoonschipped,
+        "After Schoonschip net"
+    );
+    let dotted = schoonschipped.to_dots().normalize_dots();
+    debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #dots;
+        log.expr = dotted,
+        "After dots"
+    );
+
+    Ok(dotted)
+}
+
+pub(crate) struct Integrated<'a> {
     pub vakint: &'a Vakint,
     pub vakint_settings: &'a vakint::VakintSettings,
 }
 
-impl Graph {
-    pub(crate) fn uv_rescaled(
-        &self,
-        replacement_subgraph: &SuBitGraph,
-        n_loops: usize,
-        lmb: &LoopMomentumBasis,
-        atom: &Atom,
-    ) -> Atom {
-        // only apply replacements for edges in the reduced graph
-        let mom_reps = self.uv_wrapped_replacement(replacement_subgraph, lmb, &[W_.x___]);
-        let mut atomarg = atom.replace_multiple(&mom_reps);
-
-        // rescale the loop momenta in the whole subgraph, including previously expanded cycles
-        for edge in &lmb.loop_edges {
-            atomarg = atomarg
-                .replace(GS.emr_mom(*edge, W_.x___))
-                .with(GS.emr_mom(*edge, W_.x___) / GS.rescale);
-        }
-
-        // Free `mUVexp` occurrences are left untouched here: with the
-        // inverse loop-momentum expansion, soft dependence is generated by
-        // the shifted hard momenta and denominator expansion rather than by
-        // an explicit soft rescaling pass.
-
-        // Free `mUV` occurrences come from previously integrated CT coefficients.
-        // They are hard vacuum scales in the parent UV expansion and therefore
-        // carry the same weight as the parent loop momentum. The denominator
-        // rewrite below introduces the unscaled vacuum mass for the parent
-        // propagator basis.
-        atomarg = atomarg
-            .replace(GS.m_uv_vacuum)
-            .with(Atom::var(GS.m_uv_vacuum) / GS.rescale);
-
-        let tsquare = Atom::var(GS.rescale).pow(2);
-        let m_uv_expansion_sq = Atom::var(GS.m_uv_expansion).pow(2);
-        let m_uv_vacuum_sq = Atom::var(GS.m_uv_vacuum).pow(2);
-
-        debug_tags!(#uv, #integrated, #inspect;
-            log.res = atomarg,
-            "Rescaled momenta expanded"
-        );
-        atomarg = atomarg
-            .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
-            .with(
-                GS.den(
-                    W_.a_,
-                    W_.mom_,
-                    &tsquare * Atom::var(W_.mass_) + m_uv_expansion_sq.clone(),
-                    Atom::var(W_.prop_) * &tsquare + m_uv_expansion_sq.clone() * &tsquare
-                        - m_uv_vacuum_sq.clone(),
-                ) / &tsquare,
-            )
-            .replace(function!(GS.den, W_.a_, W_.mom_, W_.a___))
-            .with_map(move |m| {
-                let mut f = symbolica::atom::FunctionBuilder::new(GS.den);
-                f = f.add_arg(m.get(W_.a_).unwrap().to_atom());
-                f = f.add_arg(
-                    (m.get(W_.mom_).unwrap().to_atom() * GS.rescale)
-                        .expand()
-                        .replace(GS.rescale)
-                        .with(Atom::Zero),
-                );
-                f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
-                f.finish()
-            });
-
-        atomarg *= Atom::var(GS.rescale).pow(-4 * n_loops as i64);
-        atomarg
-    }
-}
-
 impl Integrated<'_> {
-    pub fn new<'a>(
+    pub(crate) fn new<'a>(
         vakint: &'a Vakint,
         vakint_settings: &'a vakint::VakintSettings,
     ) -> Integrated<'a> {
@@ -128,150 +206,70 @@ impl Integrated<'_> {
         }
     }
 
-    /// Add the numerator of the reduced subgraph, (without given), to the integrand.
-    /// Then, 4d -> d-dim on minkowski indices
-    #[debug_instrument(
-        current = %current.log_display(),
-        given = %given.log_display(),
-        integrand = %integrand.log_display(),
-    )]
-    pub(crate) fn start<S: super::ForestNodeLike>(
+    pub(crate) fn run<S: super::ForestNodeLike, M: super::ForestNodeLike>(
         &self,
+        integrand: &Local4dCts,
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
-        integrand: &Atom,
-    ) -> Result<Atom> {
-        let reduced = current.reduced_subgraph(given);
+        marker_current: &M,
+        marker_given: &M,
+    ) -> Result<IntegratedCts> {
         let graph = ctx.graph;
 
-        let mut t_arg = ctx
-            .graph
-            .numerator(&reduced, given.subgraph())
-            .to_d_dim(GS.dim)
-            .get_single_atom()
-            .unwrap();
+        let n_loops = graph.n_loops(current.subgraph());
 
-        t_arg /= graph.denominator(&reduced, |_| 1);
+        let scheme = current.renormalization_scheme();
+        match scheme {
+            ApproximationType::MUV | ApproximationType::PolePart => {
+                let integrand = integrand
+                    .atom()
+                    .replace(GS.integrated_loop_scale)
+                    .with(Atom::one());
+                let simplified = simplify(&integrand)?;
+                let marker = UvMarker::new(ctx.settings);
+                let integrated = marker.apply(
+                    UvOperation::Integrate,
+                    marker_current.subgraph(),
+                    marker_given.subgraph(),
+                    &self.integrate(&simplified, ctx, current, given)?,
+                );
+                let expansion_depth =
+                    usize::try_from(self.vakint_settings.number_of_terms_in_epsilon_expansion)
+                        .wrap_err("Vakint epsilon expansion depth must be nonnegative")?;
+                let expanded = series(&integrated, expansion_depth.max(n_loops + 1))?.map_coeff(
+                    |coefficient| {
+                        marker.apply(
+                            UvOperation::Series,
+                            marker_current.subgraph(),
+                            marker_given.subgraph(),
+                            coefficient,
+                        )
+                    },
+                );
+                let expansion = expanded.map_coeff(|coefficient| {
+                    marker.apply(
+                        UvOperation::Truncate,
+                        marker_current.subgraph(),
+                        marker_given.subgraph(),
+                        coefficient,
+                    )
+                });
 
-        t_arg = t_arg
-            .replace(GS.dim)
-            .max_level(0)
-            .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
-
-        debug_tags!(#uv, #integrated, #algebra, #start; log.integrand = integrand, reduced = %reduced.string_label(), "Start");
-
-        Ok((t_arg * integrand).simplify_metrics())
-    }
-
-    #[debug_instrument(
-        current = %current.log_display(),
-        given = %given.log_display(),
-        integrand = %integrand.log_display(),
-    )]
-    pub(crate) fn series_and_truncate<S: super::ForestNodeLike>(
-        &self,
-        ctx: &UVCtx<'_>,
-        current: &S,
-        given: &S,
-        integrand: &Atom,
-    ) -> Result<Atom> {
-        let graph = ctx.graph;
-
-        let n_loops = graph.n_loops(current.subgraph()) - graph.n_loops(given.subgraph());
-        let series = integrand
-            .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
-            .unwrap();
-        let series_atom = series.to_atom();
-
-        debug_tags!(#uv, #integrated, #inspect, #series;
-            log.series = series_atom,
-            "dim epsilon Series "
-        );
-
-        let mut pole_stripped = Atom::Zero;
-
-        for (power, p) in series.terms() {
-            if power < 0 {
-                pole_stripped += p * Atom::var(GS.dim_epsilon).pow(power);
+                // Retain the consumed loop measures for subsequent UV rescalings. Keep this
+                // marker independent of mUV so enclosing limits still rescale the vacuum mass.
+                Ok(IntegratedCts {
+                    expansion,
+                    scale_power: 4 * n_loops as i64,
+                })
+            }
+            ApproximationType::IR => Err(eyre!("Not yet implemented IR")),
+            ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
+            ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
+            ApproximationType::Unsubtracted => {
+                panic!("should have been kept out of the wood");
             }
         }
-
-        Ok(pole_stripped)
-    }
-
-    #[debug_instrument(
-        current = %current.log_display(),
-        given = %given.log_display(),
-    )]
-    pub(crate) fn t<S: super::ForestNodeLike>(
-        &self,
-        ctx: &UVCtx<'_>,
-        current: &S,
-        given: &S,
-        integrand: &Atom,
-    ) -> Result<Atom> {
-        let graph = ctx.graph;
-        let reduced = current.reduced_subgraph(given);
-        let n_loops = graph.n_loops(current.subgraph()) - graph.n_loops(given.subgraph());
-
-        let rescaled = graph.uv_rescaled(&reduced, n_loops, current.lmb(), integrand);
-        debug_tags!(#uv,#integrated,#rescaled;log.res = rescaled, n_loops=%n_loops,"Rescaled expanded");
-
-        let series = rescaled
-            .series(GS.rescale, Atom::Zero, 0)
-            .unwrap()
-            .to_atom();
-        debug_tags!(#uv,#integrated, #series;log.res = series, "Series expanded");
-
-        let evalutated = series.replace(GS.rescale).with(Atom::num(1));
-        debug_tags!(#uv,#integrated,#series;log.res = evalutated, "Evaluated at t = 1");
-
-        let collected = evalutated
-            .simplify_metrics()
-            .collect_rep((Bispinor {}).into())
-            .collect_gamma_chains();
-        debug_tags!(#uv,#integrated,#collect;log.expr = collected, "After gamma chain collection");
-
-        let schoonschip = collected
-            .schoonschip_with_settings(&SchoonschipSettings {
-                simplify_chain_like_functions: true,
-                schoonschip_rank1_tensors: true,
-                ..Default::default()
-            })
-            .normalize_chains();
-        debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
-            log.expr = schoonschip,
-            "After gamma schoonschip"
-        );
-        let collected = schoonschip
-            .collect_chains_and_traces()
-            .simplify_metrics()
-            .collect_gamma_chains()
-            .collect_color()
-            .collect_factors();
-        debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
-            log.expr = collected,
-            "After gamma collection"
-        );
-
-        let simplified = collected.simplify_gamma();
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #start, #gamma;
-            log.expr = simplified,
-            "After gamma simplification"
-        );
-        let schoonschipped = simplified.schoonschip_net::<Aind>();
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
-            log.expr = schoonschipped,
-            "After Schoonschip net"
-        );
-        let dotted = schoonschipped.to_dots().normalize_dots();
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #dots;
-            log.expr = dotted,
-            "After dots"
-        );
-
-        Ok(dotted)
     }
 
     #[debug_instrument(
@@ -279,12 +277,12 @@ impl Integrated<'_> {
         given = %given.log_display(),
         reduced,
     )]
-    pub(crate) fn integrate<S: super::ForestNodeLike>(
+    fn integrate<S: ForestNodeLike>(
         &self,
+        integrand: &Atom,
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
-        integrand: &Atom,
     ) -> Result<Atom> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
@@ -302,11 +300,11 @@ impl Integrated<'_> {
         let mut integrand_vakint = to_vakint_integrand(
             integrand,
             graph,
-            &reduced,
+            current.subgraph(),
             given.subgraph(),
             &settings.vakint,
             true,
-        );
+        )?;
 
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
             debug_tags!(#uv,#integrated,#vakint,#trace,#to_vakint;
@@ -369,32 +367,32 @@ impl Integrated<'_> {
 
         // apply metric
         res = res
-            .replace(vakint::symbols::S.p.f(&[W_.i_, W_.j_]))
+            .replace(vakint::symbols::S.p.call_args([W_.i_, W_.j_]))
             .when(W_.j_.filter(|r| r.is_integer()))
             .with(
-                vakint::symbols::S.p.f(&[
+                vakint::symbols::S.p.call_args([
                     Atom::var(W_.i_),
                     mink.to_symbolic([GS
                         .uvaind
-                        .f(&[Atom::num(current.topo_order()), Atom::var(W_.j_)])]),
+                        .call_args([Atom::num(current.topo_order()), Atom::var(W_.j_)])]),
                 ]),
             )
             .replace(
                 vakint::symbols::S
                     .p
-                    .f(&[Atom::var(W_.i_), vakint::symbols::S.dot_dummy_ind(W_.j_)]),
+                    .call_args([Atom::var(W_.i_), vakint::symbols::S.dot_dummy_ind(W_.j_)]),
             )
             .when(W_.j_.filter(|r| r.is_integer()))
             .with(
-                vakint::symbols::S.p.f(&[
+                vakint::symbols::S.p.call_args([
                     Atom::var(W_.i_),
                     mink.to_symbolic([GS
                         .uvaind
-                        .f(&[Atom::num(current.topo_order()), Atom::var(W_.j_)])]),
+                        .call_args([Atom::num(current.topo_order()), Atom::var(W_.j_)])]),
                 ]),
             )
-            .replace(vakint::symbols::S.p.f(&[W_.x__]))
-            .with(GS.emr_mom.f(&[W_.x__]));
+            .replace(vakint::symbols::S.p.call_args([W_.x__]))
+            .with(GS.emr_mom.call_args([W_.x__]));
         res = res
             .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))
             .with(function!(GS.emr_mom, W_.x___, W_.y_))
@@ -408,7 +406,7 @@ impl Integrated<'_> {
                 vk_metric,
                 mink.to_symbolic([GS
                     .uvaind
-                    .f(&[Atom::num(current.topo_order()), Atom::var(W_.x_)])]),
+                    .call_args([Atom::num(current.topo_order()), Atom::var(W_.x_)])]),
                 W_.y_
             ))
             .replace(function!(
@@ -421,7 +419,7 @@ impl Integrated<'_> {
                 vk_metric,
                 mink.to_symbolic([GS
                     .uvaind
-                    .f(&[Atom::num(current.topo_order()), Atom::var(W_.y_)])]),
+                    .call_args([Atom::num(current.topo_order()), Atom::var(W_.y_)])]),
                 W_.x_
             ))
             .replace(function!(vk_metric, W_.x_, W_.y_))
@@ -480,55 +478,6 @@ impl Integrated<'_> {
     }
 }
 
-impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
-    #[debug_instrument(
-        current = %current.log_display(),
-        given = %given.log_display(),
-        integrand = %integrand.log_display(),
-    )]
-    fn kernel<S: ForestNodeLike>(
-        &self,
-        ctx: &UVCtx<'_>,
-        current: &S,
-        given: &S,
-        integrand: &Atom,
-    ) -> Result<Atom> {
-        match current.renormalization_scheme() {
-            ApproximationType::MUV => {
-                let pole_part = if given.subgraph().is_empty() {
-                    integrand.clone()
-                } else {
-                    // In ordinary CT generation nested integrated insertions enter as
-                    // finite - full, i.e. minus their pole part. In pole-part mode the
-                    // terminal forest sum performs the projection, so keep the pole part
-                    // itself here.
-                    let pole_part = self.series_and_truncate(ctx, current, given, integrand)?;
-                    if ctx.settings.pole_part {
-                        pole_part
-                    } else {
-                        -pole_part
-                    }
-                };
-                let with_added_expr = self.start(ctx, current, given, &pole_part)?;
-                let top = self.t(ctx, current, given, &with_added_expr)?;
-                let result = self.integrate(ctx, current, given, &top)?;
-
-                debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #result;
-                    log.result = result,
-                    "Integrated UV after integrate_and_truncate"
-                );
-                Ok(result)
-            }
-            ApproximationType::IR => Err(eyre!("Not yet implemented IR")),
-            ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
-            ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
-            ApproximationType::Unsubtracted => {
-                panic!("should have been kept out of the wood");
-            }
-        }
-    }
-}
-
 #[debug_instrument]
 pub(crate) fn to_vakint_integrand<
     E: UVE,
@@ -543,7 +492,7 @@ pub(crate) fn to_vakint_integrand<
     dependent_subgraph: &SS,
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
-) -> VakintExpression {
+) -> Result<VakintExpression> {
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
     let mut integrand_vakint = integrand
@@ -786,7 +735,8 @@ pub(crate) fn to_vakint_integrand<
         "Vakint trace before split terms"
     );
 
-    let mut a = VakintExpression::try_from(vakint_input_atom).unwrap();
+    let mut a = VakintExpression::try_from(vakint_input_atom)
+        .wrap_err("could not split integrand into Vakint terms")?;
 
     for (term_index, t) in a.0.iter_mut().enumerate() {
         debug_tags!(#uv, #integrated, #vakint, #inspect, #trace;
@@ -837,7 +787,7 @@ pub(crate) fn to_vakint_integrand<
         }
 
         let mut system = vec![];
-        let mut vars = HashSet::new();
+        let mut momentum_variables = vec![];
 
         let mut graph: HedgeGraph<ContractibleEdge, ()> = graph.build();
         let uncontracted_propagator_count =
@@ -952,7 +902,9 @@ pub(crate) fn to_vakint_integrand<
                     .pattern_match(&mom_pat, None, None)
                     .for_each(|m| {
                         let var = mom_pat.replace_wildcards(&m).unwrap();
-                        vars.insert(var);
+                        if !momentum_variables.iter().any(|existing| existing == &var) {
+                            momentum_variables.push(var);
+                        }
                     });
 
                 // println!("{loop_expr}");
@@ -964,7 +916,6 @@ pub(crate) fn to_vakint_integrand<
             }
         }
 
-        let vars = vars.into_iter().collect::<Vec<_>>();
         let add_additional_args = [
             Replacement::new(
                 function!(GS.emr_mom, W_.i_).to_pattern(),
@@ -977,52 +928,17 @@ pub(crate) fn to_vakint_integrand<
             )
             .allow_new_wildcards_on_rhs(true),
         ];
-        let a = Atom::solve_linear_system::<u8, _, _>(&system, &vars);
-        match a {
-            Ok(a) => {
-                for (v, k) in a.iter().zip(vars.iter()) {
-                    let lhs = k.replace_multiple(&add_additional_args);
-                    let rhs = v.replace_multiple(&add_additional_args);
-                    // println!("Momentum solution: {} -> {}", lhs, rhs);
-                    t.integral = t.integral.replace(lhs.to_pattern()).with(rhs.to_pattern());
-                    t.numerator = t.numerator.replace(lhs.to_pattern()).with(rhs.to_pattern());
-                }
-            }
-            Err(SolveError::Underdetermined {
-                partial_solution, ..
-            }) => {
-                let mut reps = vec![];
-                for (p, v) in partial_solution.iter().zip(vars.iter()).rev() {
-                    let p = p.replace_multiple(&reps);
-
-                    if &p == v {
-                        reps.push(Replacement::new(
-                            p.replace_multiple(&add_additional_args).to_pattern(),
-                            Atom::Zero,
-                        ))
-                    } else {
-                        reps.push(Replacement::new(
-                            v.replace_multiple(&add_additional_args).to_pattern(),
-                            p.replace_multiple(&add_additional_args).to_pattern(),
-                        ))
-                    }
-
-                    // println!("Partial solution: {}->{}", v, p);
-                }
-                // for r in &reps {
-                //     println!("Rep: {:#}", r);
-                // }
-
-                t.integral = t.integral.replace_multiple(&reps);
-                t.numerator = t.numerator.replace_multiple(&reps);
-            }
-            Err(a) => {
-                panic!(
-                    "Could not solve momentum system for vakint integrand: {}",
-                    a
-                );
-            }
-        }
+        let momentum_solution =
+            VakintMomentumSolution::solve(&system, &momentum_variables, &add_additional_args)
+                .wrap_err("could not solve momentum system for Vakint integrand")?;
+        t.numerator = momentum_solution.rewrite_numerator(&t.numerator);
+        t.integral = momentum_solution.rewrite_integral(&t.integral, &add_additional_args);
+        momentum_solution.ensure_free_variables_eliminated(
+            term_index,
+            "integral",
+            &t.integral,
+            &add_additional_args,
+        )?;
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_momentum_solve",
             term_index = %term_index,
@@ -1103,7 +1019,187 @@ pub(crate) fn to_vakint_integrand<
         );
     }
 
-    a
+    Ok(a)
+}
+
+struct VakintMomentumSolution {
+    replacements: Vec<Replacement>,
+    free_variables: Vec<Atom>,
+}
+
+impl VakintMomentumSolution {
+    fn solve(
+        system: &[Atom],
+        variables: &[Atom],
+        add_additional_args: &[Replacement],
+    ) -> Result<Self> {
+        if variables.is_empty() {
+            return Ok(Self {
+                replacements: vec![],
+                free_variables: vec![],
+            });
+        }
+        if system.is_empty() {
+            return Ok(Self {
+                replacements: vec![],
+                free_variables: variables.to_vec(),
+            });
+        }
+
+        match Atom::solve_linear_system::<u8, _, _>(system, variables) {
+            Ok(solution) => Ok(Self::from_solution(
+                &solution,
+                variables,
+                add_additional_args,
+            )),
+            Err(SolveError::Underdetermined {
+                partial_solution, ..
+            }) => Ok(Self::from_solution(
+                &partial_solution,
+                variables,
+                add_additional_args,
+            )),
+            Err(source) => Err(eyre!("{source}")),
+        }
+    }
+
+    fn from_solution(
+        solution: &[Atom],
+        variables: &[Atom],
+        add_additional_args: &[Replacement],
+    ) -> Self {
+        debug_assert_eq!(solution.len(), variables.len());
+        let mut replacements = vec![];
+        let mut free_variables = vec![];
+
+        for index in (0..variables.len()).rev() {
+            let replacement = &solution[index];
+            let variable = &variables[index];
+            let replacement = replacement.replace_multiple(&replacements);
+            if replacement == variable {
+                free_variables.push(variable.clone());
+            } else {
+                replacements.push(Replacement::new(
+                    variable.replace_multiple(add_additional_args).to_pattern(),
+                    replacement
+                        .replace_multiple(add_additional_args)
+                        .to_pattern(),
+                ));
+            }
+        }
+
+        Self {
+            replacements,
+            free_variables,
+        }
+    }
+
+    fn ensure_free_variables_eliminated(
+        &self,
+        term_index: usize,
+        expression_kind: &str,
+        expression: &Atom,
+        add_additional_args: &[Replacement],
+    ) -> Result<()> {
+        self.ensure_variables_eliminated(
+            term_index,
+            expression_kind,
+            expression,
+            self.free_variables.iter(),
+            add_additional_args,
+        )
+    }
+
+    fn ensure_variables_eliminated<'a>(
+        &self,
+        term_index: usize,
+        expression_kind: &str,
+        expression: &Atom,
+        variables: impl IntoIterator<Item = &'a Atom>,
+        add_additional_args: &[Replacement],
+    ) -> Result<()> {
+        for variable in variables {
+            let bare_pattern = variable.to_pattern();
+            let indexed_pattern = variable.replace_multiple(add_additional_args).to_pattern();
+            if expression
+                .pattern_match(&bare_pattern, None, None)
+                .next()
+                .is_some()
+                || expression
+                    .pattern_match(&indexed_pattern, None, None)
+                    .next()
+                    .is_some()
+            {
+                return Err(eyre!(
+                    "Underdetermined Vakint momentum solve left free variable {} in {} of term {}",
+                    variable,
+                    expression_kind,
+                    term_index
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn rewrite_numerator(&self, numerator: &Atom) -> Atom {
+        numerator
+            .replace_multiple(&self.replacements)
+            .normalize_dots()
+    }
+
+    fn rewrite_integral(&self, integral: &Atom, add_additional_args: &[Replacement]) -> Atom {
+        let free_variable_zero_replacements =
+            self.free_variable_zero_replacements(add_additional_args);
+        Self::normalize_topology_momenta(
+            integral
+                .replace_multiple(&self.replacements)
+                .replace_multiple(&free_variable_zero_replacements),
+        )
+    }
+
+    fn free_variable_zero_replacements(
+        &self,
+        add_additional_args: &[Replacement],
+    ) -> Vec<Replacement> {
+        let mut replacements = Vec::with_capacity(2 * self.free_variables.len());
+        for variable in &self.free_variables {
+            replacements.push(Replacement::new(variable.to_pattern(), Atom::Zero));
+            let indexed_variable = variable.replace_multiple(add_additional_args);
+            if indexed_variable != *variable {
+                replacements.push(Replacement::new(indexed_variable.to_pattern(), Atom::Zero));
+            }
+        }
+        replacements
+    }
+
+    fn normalize_topology_momenta(expression: Atom) -> Atom {
+        if !expression
+            .replace(function!(vakint::symbols::S.topo, W_.x_))
+            .matches()
+        {
+            return expression;
+        }
+
+        expression
+            .replace(function!(
+                vakint::symbols::S.prop,
+                W_.edgeid_,
+                W_.x_,
+                W_.mom_,
+                W_.mass_,
+                W_.prop_
+            ))
+            .with_map(|matches| {
+                function!(
+                    vakint::symbols::S.prop,
+                    matches.get(W_.edgeid_).unwrap().to_atom(),
+                    matches.get(W_.x_).unwrap().to_atom(),
+                    matches.get(W_.mom_).unwrap().to_atom().expand(),
+                    matches.get(W_.mass_).unwrap().to_atom(),
+                    matches.get(W_.prop_).unwrap().to_atom()
+                )
+            })
+    }
 }
 
 #[cfg(test)]
@@ -1112,12 +1208,66 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn integrated_counterterm_projects_one_laurent_expansion() {
+        test_initialise().unwrap();
+
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let expansion = series(
+            &(Atom::num(2) * epsilon.pow(-2)
+                + Atom::num(3) * epsilon.pow(-1)
+                + Atom::num(5)
+                + Atom::num(7) * &epsilon),
+            2,
+        )
+        .unwrap();
+        let integrated = IntegratedCts {
+            expansion,
+            scale_power: 4,
+        };
+        let scale = Atom::var(GS.integrated_loop_scale).pow(4);
+
+        assert_eq!(
+            integrated.pole_atom().expand(),
+            ((Atom::num(2) * epsilon.pow(-2) + Atom::num(3) * epsilon.pow(-1)) * &scale).expand()
+        );
+        assert_eq!(
+            integrated.finite_counterterm_atom().expand(),
+            (-(Atom::num(5) + Atom::num(7) * epsilon) * scale).expand()
+        );
+        assert_eq!(
+            integrated.physical_finite_counterterm_atom(),
+            -(Atom::num(5) + Atom::num(7) * Atom::var(GS.dim_epsilon))
+        );
+    }
+
+    #[test]
+    fn factorized_product_projects_each_component() {
+        test_initialise().unwrap();
+
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let factors = [2, 3, 5].map(|finite| IntegratedCts {
+            expansion: series(&(epsilon.pow(-1) + Atom::num(finite)), 1).unwrap(),
+            scale_power: 0,
+        });
+        let product = IntegratedCts::factorized_product(&factors[..2], 1).unwrap();
+
+        assert_eq!(product.physical_pole_atom(), epsilon.pow(-2));
+        assert_eq!(product.physical_finite_counterterm_atom(), Atom::num(6));
+
+        let product = IntegratedCts::factorized_product(&factors, 1).unwrap();
+        assert_eq!(product.physical_pole_atom(), epsilon.pow(-3));
+        assert_eq!(product.physical_finite_counterterm_atom(), Atom::num(-30));
+    }
+
     // #[test]
     // fn integrated_triangle_norm_is_euclidean() {
     //     test_initialise().unwrap();
 
     //     let edge = EdgeIndex(7);
-    //     let euclidean_norm = integrated_triangle_spatial_norm_sq(edge);
+    //     let euclidean_norm = GS.emr_mom(edge, GS.cind(1)).pow(2)
+    //         + GS.emr_mom(edge, GS.cind(2)).pow(2)
+    //         + GS.emr_mom(edge, GS.cind(3)).pow(2);
     //     let minkowski_norm = Minkowski {}
     //         .new_rep(4)
     //         .inner_product(GS.emr_vec(edge), GS.emr_vec(edge));
@@ -1163,5 +1313,83 @@ mod tests {
                 function!(vakint::symbols::S.k, 1)
             )
         );
+    }
+
+    #[test]
+    fn underdetermined_vakint_momentum_solve_tracks_free_variables() {
+        test_initialise().unwrap();
+
+        let q0 = function!(GS.emr_mom, 0);
+        let q1 = function!(GS.emr_mom, 1);
+        let q2 = function!(GS.emr_mom, 2);
+        let k0 = function!(GS.loop_mom, 0);
+        let k1 = function!(GS.loop_mom, 1);
+        let edge_3 = -&q0 - &q1 - &q2;
+        let system = vec![&q0 - &k0, &edge_3 - &k1];
+        let variables = vec![q0.clone(), q1.clone(), q2.clone()];
+
+        let solution = VakintMomentumSolution::solve(&system, &variables, &[]).unwrap();
+
+        assert_eq!(solution.free_variables, vec![q2]);
+        assert!(
+            solution
+                .ensure_free_variables_eliminated(0, "numerator", &solution.free_variables[0], &[])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn underdetermined_vakint_momentum_solve_projects_topology() {
+        test_initialise().unwrap();
+
+        let q1 = function!(GS.emr_mom, 1);
+        let q2 = function!(GS.emr_mom, 2);
+        let k0 = function!(GS.loop_mom, 0);
+        let system = vec![-&q1 - &q2 - &k0];
+        let variables = vec![q1.clone(), q2.clone()];
+        let topology = function!(
+            vakint::symbols::S.topo,
+            function!(
+                vakint::symbols::S.prop,
+                1,
+                function!(vakint::symbols::S.edge, 0, 0),
+                -&q1 - &q2,
+                GS.m_uv_vacuum,
+                1
+            )
+        );
+
+        let solution = VakintMomentumSolution::solve(&system, &variables, &[]).unwrap();
+
+        solution
+            .ensure_free_variables_eliminated(0, "numerator", &Atom::from(1), &[])
+            .unwrap();
+        assert_eq!(
+            solution.rewrite_integral(&topology, &[]),
+            function!(
+                vakint::symbols::S.topo,
+                function!(
+                    vakint::symbols::S.prop,
+                    1,
+                    function!(vakint::symbols::S.edge, 0, 0),
+                    k0,
+                    GS.m_uv_vacuum,
+                    1
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn empty_vakint_momentum_solve_treats_variables_as_free() {
+        test_initialise().unwrap();
+
+        let q0 = function!(GS.emr_mom, 0);
+        let no_variables = VakintMomentumSolution::solve(&[], &[], &[]).unwrap();
+        let free_variable =
+            VakintMomentumSolution::solve(&[], std::slice::from_ref(&q0), &[]).unwrap();
+
+        assert!(no_variables.free_variables.is_empty());
+        assert_eq!(free_variable.free_variables, vec![q0]);
     }
 }

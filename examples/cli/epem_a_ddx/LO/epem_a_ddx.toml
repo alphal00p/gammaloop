@@ -84,6 +84,9 @@ commands = [
   "run set_differential_selectors",
 
   """set process string '
+    [general]
+    evaluator_method = "SingleParametric"
+
     [sampling]
     graphs = "monte_carlo"
     orientations = "monte_carlo"

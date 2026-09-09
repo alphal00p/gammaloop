@@ -7,9 +7,15 @@ use crate::half_edge::NodeIndex;
 use super::{strip_quotes, GlobalData};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct DotVertexData {
     pub name: Option<String>,
     pub index: Option<NodeIndex>,
+    pub payload: Option<Vec<u8>>,
     pub statements: BTreeMap<String, String>,
 }
 impl DotVertexData {
@@ -55,6 +61,7 @@ impl DotVertexData {
         DotVertexData {
             index: None,
             name: None,
+            payload: None,
             statements: BTreeMap::new(),
         }
     }
@@ -117,6 +124,7 @@ impl DotVertexData {
             let mut node = DotVertexData {
                 name: Some(value.id),
                 index,
+                payload: None,
                 statements,
             };
 
@@ -134,9 +142,9 @@ impl Display for DotVertexData {
         //     write!(f, "name={id}")?;
         // }
         for (key, value) in &self.statements {
-            // if key == "name" {
-            //     continue;
-            // }
+            if key.starts_with("__linnest-") {
+                continue;
+            }
             if !first {
                 write!(f, " ")?;
             }

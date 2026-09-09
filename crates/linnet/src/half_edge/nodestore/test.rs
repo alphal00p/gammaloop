@@ -87,6 +87,27 @@ fn extact_single_dangling() {
 }
 
 #[test]
+fn forest_storage_supports_empty_nodes() {
+    type Store = Forest<(), ChildVecStore<()>>;
+
+    let mut builder = HedgeGraphBuilder::<(), (), ()>::new();
+    let n1 = builder.add_node(());
+    let n2 = builder.add_node(());
+    let empty = builder.add_node(());
+    builder.add_edge(n1, n2, (), false);
+
+    let graph: HedgeGraph<(), (), (), Store> = builder.build();
+    assert_eq!(graph.iter_crown(empty).count(), 0);
+    graph.node_store.check_nodes().unwrap();
+
+    let (_, graph) = graph
+        .add_dangling_edge(empty, (), Flow::Sink, false)
+        .unwrap();
+    assert_eq!(graph.iter_crown(empty).count(), 1);
+    graph.node_store.check_nodes().unwrap();
+}
+
+#[test]
 fn extract_buggy() {
     let mut aligned: DotGraph = dot!(
     digraph {

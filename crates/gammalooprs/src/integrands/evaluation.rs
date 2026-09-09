@@ -24,7 +24,7 @@ use crate::{
     settings::runtime::{IntegrationStatisticsSnapshot, Precision},
     utils::{
         ArbPrec, F, FloatLike, duration_from_secs_f64_saturating, f128, format_evaluation_time,
-        normalize_tabled_separator_rows,
+        newton_solver::RadialRootDiagnostics, normalize_tabled_separator_rows,
     },
 };
 
@@ -661,6 +661,8 @@ pub struct EvaluationMetaData {
     pub stability_results: Vec<StabilityResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) threshold_counterterm_error: Option<String>,
+    #[serde(skip)]
+    pub(crate) radial_root_diagnostics: RadialRootDiagnostics,
 }
 
 impl Display for EvaluationMetaData {
@@ -739,6 +741,7 @@ impl EvaluationMetaData {
             loop_momenta_escalation: None,
             stability_results: Vec::new(),
             threshold_counterterm_error: None,
+            radial_root_diagnostics: RadialRootDiagnostics::default(),
         }
     }
 

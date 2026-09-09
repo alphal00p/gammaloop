@@ -3,6 +3,31 @@ use symbolica::prelude::*;
 use color_eyre::Result;
 use eyre::eyre;
 
+fn escaped_dot_string(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for c in value.chars() {
+        match c {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            _ => escaped.push(c),
+        }
+    }
+    escaped
+}
+
+/// Escapes raw text as a complete quoted DOT attribute value, including outer quotes.
+pub(crate) fn dot_attr_value(value: &str) -> String {
+    format!("\"{}\"", escaped_dot_string(value))
+}
+
+/// Escapes raw text for a DOT statement value whose writer supplies the outer quotes.
+pub(crate) fn dot_statement_value(value: &str) -> String {
+    escaped_dot_string(value)
+}
+
 pub trait ToQuoted {
     fn to_quoted(&self) -> String;
 }
@@ -118,5 +143,40 @@ impl FromStripedStr for usize {
             .strip_suffix('"')
             .unwrap_or(s)
             .parse()?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use linnet::parser::DotGraph;
+
+    use super::{dot_attr_value, dot_statement_value};
+
+    const RAW_DOT_VALUE: &str = "quote:\" slash:\\ lf:\n cr:\r tab:\t";
+    const ESCAPED_DOT_VALUE: &str = r#"quote:\" slash:\\ lf:\n cr:\r tab:\t"#;
+
+    #[test]
+    fn dot_values_escape_quoted_string_content() {
+        assert_eq!(dot_statement_value(RAW_DOT_VALUE), ESCAPED_DOT_VALUE);
+        assert_eq!(
+            dot_attr_value(RAW_DOT_VALUE),
+            format!(r#""{ESCAPED_DOT_VALUE}""#)
+        );
+    }
+
+    #[test]
+    fn dot_statement_value_survives_dot_round_trip() {
+        let mut graph: DotGraph = DotGraph::from_string("digraph G {}").unwrap();
+        graph
+            .global_data
+            .statements
+            .insert("escaped".to_string(), dot_statement_value(RAW_DOT_VALUE));
+
+        let reparsed: DotGraph = DotGraph::from_string(graph.debug_dot()).unwrap();
+
+        assert_eq!(
+            reparsed.global_data.statements["escaped"],
+            ESCAPED_DOT_VALUE
+        );
     }
 }

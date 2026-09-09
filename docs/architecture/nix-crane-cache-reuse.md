@@ -764,7 +764,11 @@ the Python API test package plus the anchor. If this remaining Python-feature
 workspace compile is too coarse, the follow-up is to split Python-feature
 per-crate artifacts rather than moving PyO3 features into the common prebuild.
 
-## Follow-up audit: nextest package boundaries
+## Historical audit: nextest package boundaries (superseded)
+
+The package-boundary and strict-reuse sections below describe the former mixed
+`crate-test-support-*` design. They are retained as investigation history and
+are superseded by [Source and test-artifact ownership split](#source-and-test-artifact-ownership-split).
 
 The nextest archive graph was changed from one test-binary derivation per group
 to one test-binary derivation per package, with the final group archive merging
@@ -1098,17 +1102,17 @@ nix build --impure .#checks.x86_64-linux.gammaloop-guppy-workspace-graph --no-li
   /nix/store/lkqg567a9ig75jjh01l6yh7wqfkvx1fq-gammaloop-guppy-workspace-graph-check
 ```
 
-The previous remaining double work was in the shared test-support SCCs:
+Historically, the remaining double work was in the shared test-support SCCs:
 `crate-test-support-spenso` compiled `linnet` after inheriting
 `crate-test-support-linnest`. Synthetic next-consumer contexts now move that
-work into the earlier cacheable support layer. The public `crate-test-binaries-*`
-attrs point at those shared support artifacts, so they do not add another
+work into the earlier cacheable support layer. The former public `crate-test-binaries-*`
+attrs pointed at those shared support artifacts, so they did not add another
 per-package test-prebuild layer on top of that.
 
-## Current strict reuse audit
+## Historical strict reuse audit (superseded)
 
-The current success criterion is stricter than "Nix derivations are ordered
-correctly": once a workspace crate has been compiled in the cacheable support
+The success criterion for that audit was stricter than "Nix derivations are
+ordered correctly": once a workspace crate had been compiled in the cacheable support
 boundary, later package-specific test-prebuilds and nextest archive derivations
 must reuse that artifact. Recompiling a generated feature-anchor crate is
 allowed; recompiling `linnet`, `spenso`, `idenso`, `spenso-hep-lib`,
@@ -1179,6 +1183,76 @@ artifacts. The Python API check intentionally compiles
 `gammaloop-integration-tests` once with `python-api-tests`, and the Python module
 path intentionally compiles a separate PyO3 feature family for `gammaloop-api`
 and its dependents. That is not reusable with the normal Rust feature family.
+
+## Source and test-artifact ownership split
+
+The test cache boundary now follows source and artifact ownership instead of
+recursively carrying dependency test units:
+
+```text
+third-party dependencies
+  -> resolved-feature library support
+  -> package-local test binaries
+  -> fixture-free nextest archive
+  -> nextest run + runtime fixtures
+```
+
+Each workspace package has two source tiers. The production tier contains the
+workspace manifests and lockfile, build scripts, library and proc-macro sources,
+and declared compile-time assets. It excludes Cargo test, bench, example, and
+binary targets, as well as separate `cfg(test)` modules. The own-test tier adds
+those sources back only for the package being tested. Inline `#[cfg(test)]`
+blocks remain part of their containing production `.rs` file.
+Cargo still validates explicitly declared target paths during library builds,
+so absent test, bench, example, and binary entrypoints are represented by
+no-op dummy files rather than by the dependency's real sources.
+
+`crate-test-dependencies-<component>` is keyed by the sorted resolved workspace
+feature vector, target, CI profile, and compile environment. It runs only
+`cargo build ... --lib`. A generated library anchor models direct dev
+dependencies and the existing dev-dependency SCCs, so build scripts, host proc
+macros, and resolver-v2 dependency variants are ready without compiling any
+workspace test target. Proc-macro SCCs additionally use generated target and
+host library facades: the target facade mirrors the proc macro's normal and dev
+dependency declarations, while the host facade preserves Cargo's proc-macro
+compilation context. Both still run only `cargo build --lib`. Identical contexts
+share the same derivation; the Python API feature context remains distinct from
+ordinary integration tests.
+
+`crate-test-binaries-<package>` is now a genuine package-local derivation. It
+consumes that context's dependency artifact, receives the own-test source for
+that package alone, and runs `cargo test --no-run -p <package>`. Each nextest
+archive consumes its matching package-local binary artifact directly. Dependency
+test sources and test binaries therefore never cross a downstream package
+boundary.
+
+The own-test tier is split again at the archive boundary. Compilation and
+packaging receive Rust test, bench, example, and binary sources plus explicitly
+declared compile-time assets. The run derivation adds package-local fixture
+paths, snapshots, shared CLI examples, and other runtime data. Consequently a
+fixture edit changes the owning run check without rebuilding or repackaging its
+test binaries.
+
+The older test-support and synthetic-consumer measurements above are retained as
+the history that led to this split; their mixed `crate-test-support-*` artifact
+shape is no longer the current implementation.
+
+The ownership boundary was checked with isolated source-tree mutations and
+`nix eval ...drvPath` comparisons:
+
+| Mutation | Changed drvPaths | Byte-identical drvPaths |
+| --- | --- | --- |
+| `vakint/tests/*` | Vakint test binary and archive | Vakint support; integration support, binary, and archive |
+| `vakint/src/*` | Vakint support and binary; integration support, binary, and archive | Linnet and Clinnet test binaries |
+| Gammalooprs test source or compile-time asset | Gammalooprs test binary and core archive | Gammalooprs support; integration support, binary, and archive |
+| Python-only integration feature | Python API archive | Ordinary integration binary and archive |
+| Integration-test `build.rs` | Integration support and binary | Global third-party artifacts; Vakint support and binary |
+| Integration runtime fixture | Integration run check | Integration test binary and archive; core and Python API run checks |
+
+`nix why-depends --derivation` also confirms that the integration test binary
+reaches Vakint's library-support derivation but does not depend on Vakint's
+test-binary derivation. The pre- and post-split Vakint archives both list the
+same 9 suites and 74 tests.
 
 ## Follow-up audit: crate-level check splits
 
@@ -1277,6 +1351,101 @@ reusable artifact producers. They consume the base dependency artifact to avoid
 starting completely cold, but they do not publish merged workspace target trees
 back to the cache.
 
+## Follow-up: cross-job producer barriers
+
+The cold NixCI fan-out exposed a scheduling problem outside Cargo and Crane:
+identical hidden derivations could start on separate workers before either copy
+reached the shared cache. The manual graph is still defined over all flake
+outputs, including `doNotBuild` outputs, but its NixCI projection now contracts
+each hidden path to the nearest job that NixCI actually builds. It stops at that
+first producer rather than adding the entire transitive closure as direct edges.
+
+An explicit producer attribute alone is not a sufficient barrier. NixCI
+memoizes a successful top-level derivation across commits and can report
+`Nothing to build: this was already built successfully before.` without asking
+a worker to realize its output or closure. If that nested Cargo artifact is no
+longer available to the next workers, every released consumer can still build
+the same derivation. A replacement run exposed 15 exact derivations built in
+two archive jobs each. Five were test-dependency producers and accounted for 25
+redundant `Compiling` lines.
+
+Scheduled Cargo artifact outputs are therefore exposed through a tiny
+revision-scoped barrier derivation. The barrier output is a symlink to the
+stable raw artifact, so building it realizes the artifact and lets NixCI's
+post-build hook publish the closure before dependent jobs start. Only the
+wrapper contains the flake revision: the Cargo artifact derivation and its
+cross-commit cache key remain unchanged. This adds no target-tree copy and
+preserves paths such as `${artifact}/target.tar.zst` through the output symlink.
+The wrappers cover the global artifact, package dependency artifacts, ordinary
+and contextual test dependencies and binaries, the Python module artifact
+chain, and the other scheduled shared Cargo artifacts. Hidden aliases such as
+the unused `spynso3` test outputs remain hidden.
+
+The ordinary Rust API and Python ABI lanes share
+`crate-deps-gammalooprs`, so that artifact is now an explicit producer barrier.
+Both lanes wait for this sequence before their distinct Cargo contexts branch:
+
+```text
+crate-deps-gammaloop-workspace-hack
+  -> cargoArtifacts
+  -> crate-deps-gammalooprs
+  -> {gammaloopApiPackageArtifacts, gammaloop-python-module}
+```
+
+Every non-hack `crate-deps-*` node also records its real `cargoArtifacts`
+dependency in the scheduling graph. The duplicate final-package and test-binary
+aliases for the workspace hack are hidden, leaving its `crate-deps-*` attribute
+as the single producer for that exact derivation. The `checks.gammaloop` alias
+is also hidden because it is the same derivation as `packages.gammaloop`.
+
+The nextest scheduling graph now matches the flake contexts:
+
+- the Spenso archive waits for `symbolica-utils`;
+- the Python API archive waits for a stable, target-named output for the
+  `python-api-tests` integration binary and its distinct dependency context;
+- the unconsumed `spynso3` test-dependency and test-binary outputs are not NixCI
+  jobs.
+
+Grouped archive commands were the remaining Cargo-context mismatch. Package
+test binaries are deliberately built from package-local sources and features,
+so each package now has a nextest archive derivation with the same singleton
+Cargo arguments. A lightweight link farm retains the existing group output. The
+corresponding group test job executes those archives sequentially, reports each
+JUnit result, and returns the first failing status. This retains one NixCI
+archive and test job per existing group without asking Cargo to reunify all
+packages in a new grouped compilation context or letting one archive command
+mutate another package's Cargo context.
+
+Three redundant materialization layers were also removed. Final crate builds
+consume their self-contained, stripped `crate-deps-*` archive directly, and the
+Python build and package phases consume their preceding self-contained archive
+instead of routing it through a one-input `mergeCargoArtifacts`. The terminal
+nextest archives consume the matching package-local incremental artifact, use
+Crane's symlink-heavy inheritance for its materialized base, and overlay its
+writable delta. Crane does not follow a `target.tar.zst.prev` link whose target
+is a directory, so the archive derivation explicitly inherits that base before
+Crane's normal post-patch hook applies the delta. This avoids both a new
+materialized group merge and publication of another Cargo target tree.
+
+The self-contained archive compaction step uses mtime epoch 1, matching Crane's
+artifact installer and Nix source timestamps. Using epoch 0 for the compacted
+target made Cargo treat every inherited artifact as older than its source when
+a consumer skipped the materializing merge layer.
+
+The static graph and derivation shapes can be checked without building the cold
+Cargo closure:
+
+```bash
+nix eval --json --file nix-ci.nix
+nix flake check --impure --no-build 'path:.'
+nix derivation show \
+  'path:.#checks.x86_64-linux.gammaloop-nextest-binaries-spenso'
+```
+
+A fresh NixCI run is still required to measure cross-worker execution counts and
+cache upload time; one local Nix daemon serializes identical derivations and
+therefore cannot reproduce the original stampede.
+
 ## Remaining caveats
 
 - Dependency-only derivations can still compile generated feature-anchor or
@@ -1284,24 +1453,18 @@ back to the cache.
   `crate-deps-*` package outputs now preserve the real current package artifact,
   and `crate-deps-gammalooprs` does not compile `linnet`, `spenso`, `idenso`,
   `vakint`, `spenso-hep-lib`, or `gammaloop-tracing-filter`.
-- The generated nextest feature anchor is a build-source-only workspace member.
-  Because it is not in `Cargo.lock`, nextest archive/test-binary Cargo commands
-  use `--offline` rather than `--locked`.
-- Test harness binaries are different Cargo units from normal library/package
-  builds. The shared `crate-test-support-*` derivations are therefore the cache
-  boundary for test binaries. The nextest package/archive derivations should
-  only add generated feature-anchor packages and package fresh binaries.
-- The fine-grained test-support SCC graph avoids downstream workspace
-  recompilation by compiling dummy next-consumer contexts in earlier support
-  derivations and stripping those dummy consumer artifacts afterward. This keeps
-  ordinary downstream source edits from invalidating the upstream support
-  derivation, but it intentionally increases the amount of work and archive size
-  in earlier cacheable layers.
+- Generated test dependency anchors are build-source-only workspace members.
+  Because they are not in `Cargo.lock`, support, test-binary, and nextest archive
+  commands use `--offline` rather than `--locked`.
+- Workspace manifests and `Cargo.lock` remain coarse inputs to every source
+  tier. Inline `#[cfg(test)]` blocks also remain part of production `.rs` source
+  hashes; moving them to separate modules is the way to narrow that boundary.
 - Python ABI builds intentionally use different `gammaloop-api` features
   (`python_abi`, `pyo3-extension-module`) and remain a separate artifact family.
   Normal Rust test archives should not depend on that family.
-- `doNotLinkInheritedArtifacts = true` still deep-copies inherited artifacts in
-  some derivations. That should not cause recompilation, but it can add wall
-  time and larger outputs. If compile reuse is fixed but CI still spends a lot
-  of time copying artifact trees, the next follow-up is to remove that override
-  and use Crane's default symlink-heavy inheritance mode where safe.
+- `doNotLinkInheritedArtifacts = true` remains on producer paths whose archive
+  and stripping behavior still needs a focused chain test before switching to
+  Crane's symlink-heavy inheritance mode. It should not cause recompilation, but
+  it can add wall time. The next publication experiment should compare Crane's
+  `use-symlink` artifact-install mode across a complete
+  root-to-package-to-test-to-archive chain.

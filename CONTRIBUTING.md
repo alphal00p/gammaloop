@@ -88,6 +88,8 @@ These rules are intentionally broad and should shape most code changes.
   keep formatting consistent.
 - Run clippy before finishing a change and address warnings where practical.
 - Naming: `snake_case` for functions/modules, `CamelCase` for types/traits.
+- Prefer narrow imports and method-call syntax over repeated fully qualified
+  paths; retain qualification for disambiguation or macro hygiene.
 - Prefer methods on types to bare functions.
 - Prefer explicit function composition over function nesting: when a value
   crosses a semantic boundary, bind it or use `From`/`TryFrom` so the
@@ -137,6 +139,28 @@ These rules are intentionally broad and should shape most code changes.
 - Architecture docs live in `docs/architecture/`:
   - `docs/architecture/architecture-current.md` for implemented architecture.
   - `docs/architecture/architecture-ideas.md` for roadmap/proposals.
+
+#### Typst Graph Debugging
+
+When debugging Linnest layout output from Typst, expose the graph records through
+Typst metadata and inspect them with `typst query`. The metadata element must be
+wrapped in markup, because Typst labels can only be attached in markup mode.
+
+```typst
+[#metadata(graph.nodes(g)) <linnest-tree-nodes>]
+[#metadata(graph.edges(g)) <linnest-tree-edges>]
+```
+
+Then query the values from the same root used for compilation:
+
+```bash
+typst query --root crates crates/linnest/typst/examples/tree.typ '<linnest-tree-nodes>' --field value --pretty
+typst query --root crates crates/linnest/typst/examples/tree.typ '<linnest-tree-edges>' --field value --pretty
+```
+
+This is useful for checking generated `pos`, `label-pos`, `layout-width`,
+`layout-height`, `label-width`, and `label-height` values without inferring them
+from the rendered PDF.
 
 ## Repository Map
 

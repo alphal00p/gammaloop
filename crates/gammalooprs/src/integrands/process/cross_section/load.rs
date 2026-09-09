@@ -6,10 +6,10 @@
 //! eyre = "0.6"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev", default-features = false, features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03", default-features = false, features = ["bincode", "serde"] }
 //! [patch.crates-io]
-//! numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-//! graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03" }
 //! ```
 
 #![allow(dead_code)]
@@ -32,7 +32,7 @@ type RationalExpressionTree = (
     ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
 );
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 5;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 8;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -56,7 +56,7 @@ pub struct StandaloneCrossSectionGraphTermArchive<A = Vec<u8>> {
     pub(crate) orientations: Vec<Vec<i8>>,
     pub(crate) param_builder_params: Vec<A>,
     pub(crate) fn_map_entries: Vec<SerializedFnMapEntry<A>>,
-    pub(crate) raised_cut_integrands: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
+    pub(crate) cut_group_integrands: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
     pub(crate) counterterms: Vec<StandaloneCountertermArchive<A>>,
 }
 
@@ -76,7 +76,7 @@ pub struct StandaloneCountertermArchive<A = Vec<u8>> {
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneIteratedCollectionArchive<T> {
     pub(crate) data: Vec<T>,
-    pub(crate) num_left_thresholds: usize,
+    pub(crate) num_right_thresholds: usize,
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -99,7 +99,6 @@ pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     pub(crate) summed: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) representative_input: Vec<Complex<f64>>,
     pub(crate) start: usize,
-    pub(crate) override_pos: usize,
     pub(crate) mult_offset: usize,
 }
 
@@ -357,7 +356,7 @@ pub struct LoadedStandaloneCrossSectionGraphTerm {
     pub graph_name: String,
     pub orientations: Vec<Vec<i8>>,
     pub param_builder_params: Vec<Atom>,
-    pub raised_cut_integrands: Vec<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>>,
+    pub cut_group_integrands: Vec<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>>,
     pub counterterms: Vec<LoadedStandaloneCounterterm>,
 }
 
@@ -378,7 +377,7 @@ pub struct LoadedStandaloneCounterterm {
 
 pub struct LoadedStandaloneIteratedCollection<T> {
     pub data: Vec<T>,
-    pub num_left_thresholds: usize,
+    pub num_right_thresholds: usize,
 }
 
 pub struct LoadedStandaloneEvaluatorStack {
@@ -493,14 +492,14 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
                     .collect::<Result<BTreeMap<_, _>>>()
             };
 
-            let raised_cut_integrands = graph
-                .raised_cut_integrands
+            let cut_group_integrands = graph
+                .cut_group_integrands
                 .into_iter()
                 .enumerate()
-                .map(|(raised_cut_id, derivative_stacks)| {
+                .map(|(cut_group_id, derivative_stacks)| {
                     build_indexed_stack_collection(
                         derivative_stacks,
-                        &format!("raised_cut[{raised_cut_id}]"),
+                        &format!("cut_group[{cut_group_id}]"),
                     )
                 })
                 .collect::<Result<Vec<_>>>()?;
@@ -522,12 +521,28 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
 
                     let build_stack_iterated =
                         |payloads: StandaloneIteratedCollectionArchive<_>,
-                         label: &str|
+                         label: &str,
+                         num_left_thresholds: usize,
+                         num_right_thresholds: usize|
                          -> Result<
                             LoadedStandaloneIteratedCollection<
                                 BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>,
                             >,
                         > {
+                            let expected_len = num_left_thresholds
+                                .checked_mul(num_right_thresholds)
+                                .ok_or_else(|| eyre!("{label} dimensions overflow usize"))?;
+                            if payloads.num_right_thresholds != num_right_thresholds
+                                || payloads.data.len() != expected_len
+                            {
+                                return Err(eyre!(
+                                    "counterterm[{cut_id}]::{label} has dimensions inconsistent with its left/right threshold collections: data_len={}, stored_right_count={}, expected={}x{}",
+                                    payloads.data.len(),
+                                    payloads.num_right_thresholds,
+                                    num_left_thresholds,
+                                    num_right_thresholds,
+                                ));
+                            }
                             let data = payloads
                                 .data
                                 .into_iter()
@@ -539,18 +554,34 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
 
                             Ok(LoadedStandaloneIteratedCollection {
                                 data,
-                                num_left_thresholds: payloads.num_left_thresholds,
+                                num_right_thresholds: payloads.num_right_thresholds,
                             })
                         };
 
                     let build_helper_iterated =
                         |payloads: StandaloneIteratedCollectionArchive<_>,
-                         label: &str|
+                         label: &str,
+                         num_left_thresholds: usize,
+                         num_right_thresholds: usize|
                          -> Result<
                             LoadedStandaloneIteratedCollection<
                                 BTreeMap<StandaloneCutCFFIndex, LoadedGenericEvaluator>,
                             >,
                         > {
+                            let expected_len = num_left_thresholds
+                                .checked_mul(num_right_thresholds)
+                                .ok_or_else(|| eyre!("{label} dimensions overflow usize"))?;
+                            if payloads.num_right_thresholds != num_right_thresholds
+                                || payloads.data.len() != expected_len
+                            {
+                                return Err(eyre!(
+                                    "counterterm[{cut_id}]::{label} has dimensions inconsistent with its left/right threshold collections: data_len={}, stored_right_count={}, expected={}x{}",
+                                    payloads.data.len(),
+                                    payloads.num_right_thresholds,
+                                    num_left_thresholds,
+                                    num_right_thresholds,
+                                ));
+                            }
                             let data = payloads
                                 .data
                                 .into_iter()
@@ -565,7 +596,7 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
 
                             Ok(LoadedStandaloneIteratedCollection {
                                 data,
-                                num_left_thresholds: payloads.num_left_thresholds,
+                                num_right_thresholds: payloads.num_right_thresholds,
                             })
                         };
 
@@ -591,63 +622,74 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
                         })
                         .collect::<Result<Vec<_>>>()?;
 
+                    let left_thresholds_evaluator = counterterm
+                        .left_thresholds_evaluator
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, payload)| {
+                            build_stack_collection(
+                                payload,
+                                &format!("left_thresholds_evaluator[{i}]"),
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let right_thresholds_evaluator = counterterm
+                        .right_thresholds_evaluator
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, payload)| {
+                            build_stack_collection(
+                                payload,
+                                &format!("right_thresholds_evaluator[{i}]"),
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let left_threshold_helpers = counterterm
+                        .left_threshold_helpers
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, payload)| {
+                            build_indexed_generic_evaluator_collection(
+                                payload,
+                                &format!(
+                                    "counterterm[{cut_id}]::left_threshold_helpers[{i}]"
+                                ),
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let right_threshold_helpers = counterterm
+                        .right_threshold_helpers
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, payload)| {
+                            build_indexed_generic_evaluator_collection(
+                                payload,
+                                &format!(
+                                    "counterterm[{cut_id}]::right_threshold_helpers[{i}]"
+                                ),
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let iterated_evaluator = build_stack_iterated(
+                        counterterm.iterated_evaluator,
+                        "iterated_evaluator",
+                        left_thresholds_evaluator.len(),
+                        right_thresholds_evaluator.len(),
+                    )?;
+                    let iterated_helpers = build_helper_iterated(
+                        counterterm.iterated_helpers,
+                        "iterated_helpers",
+                        left_threshold_helpers.len(),
+                        right_threshold_helpers.len(),
+                    )?;
+
                     Ok(LoadedStandaloneCounterterm {
-                        left_thresholds_evaluator: counterterm
-                            .left_thresholds_evaluator
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, payload)| {
-                                build_stack_collection(
-                                    payload,
-                                    &format!("left_thresholds_evaluator[{i}]"),
-                                )
-                            })
-                            .collect::<Result<Vec<_>>>()?,
-                        right_thresholds_evaluator: counterterm
-                            .right_thresholds_evaluator
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, payload)| {
-                                build_stack_collection(
-                                    payload,
-                                    &format!("right_thresholds_evaluator[{i}]"),
-                                )
-                            })
-                            .collect::<Result<Vec<_>>>()?,
-                        iterated_evaluator: build_stack_iterated(
-                            counterterm.iterated_evaluator,
-                            "iterated_evaluator",
-                        )?,
-                        left_threshold_helpers: counterterm
-                            .left_threshold_helpers
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, payload)| {
-                                build_indexed_generic_evaluator_collection(
-                                    payload,
-                                    &format!(
-                                        "counterterm[{cut_id}]::left_threshold_helpers[{i}]"
-                                    ),
-                                )
-                            })
-                            .collect::<Result<Vec<_>>>()?,
-                        right_threshold_helpers: counterterm
-                            .right_threshold_helpers
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, payload)| {
-                                build_indexed_generic_evaluator_collection(
-                                    payload,
-                                    &format!(
-                                        "counterterm[{cut_id}]::right_threshold_helpers[{i}]"
-                                    ),
-                                )
-                            })
-                            .collect::<Result<Vec<_>>>()?,
-                        iterated_helpers: build_helper_iterated(
-                            counterterm.iterated_helpers,
-                            "iterated_helpers",
-                        )?,
+                        left_thresholds_evaluator,
+                        right_thresholds_evaluator,
+                        iterated_evaluator,
+                        left_threshold_helpers,
+                        right_threshold_helpers,
+                        iterated_helpers,
                         pass_two_evaluator,
                     })
                 })
@@ -657,7 +699,7 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
                 graph_name: graph.graph_name,
                 orientations: graph.orientations,
                 param_builder_params: params,
-                raised_cut_integrands,
+                cut_group_integrands,
                 counterterms,
             });
         }
@@ -714,15 +756,15 @@ fn main() -> Result<()> {
     println!("Loaded {} graph terms", loaded.graph_terms.len());
     for graph in &loaded.graph_terms {
         println!(
-            "graph={} orientations={} raised_cuts={} counterterms={}",
+            "graph={} orientations={} cut_groups={} counterterms={}",
             graph.graph_name,
             graph.orientations.len(),
-            graph.raised_cut_integrands.len(),
+            graph.cut_group_integrands.len(),
             graph.counterterms.len()
         );
-        for (raised_cut_id, derivative_stacks) in graph.raised_cut_integrands.iter().enumerate() {
+        for (cut_group_id, derivative_stacks) in graph.cut_group_integrands.iter().enumerate() {
             println!(
-                "  raised_cut[{raised_cut_id}] derivative_evaluators={}",
+                "  cut_group[{cut_group_id}] derivative_evaluators={}",
                 derivative_stacks.len()
             );
         }

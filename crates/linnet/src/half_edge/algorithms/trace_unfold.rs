@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{self, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -293,6 +293,18 @@ where
         vec![vec![op]]
     }
 
+    /// Returns the required factors of `target` when reaching that join should combine
+    /// independent branch histories.
+    ///
+    /// Most trace-unfolded graphs only merge paths that canonicalize to the same key by normal
+    /// extension. Implement this hook for graphs where some target nodes are explicit disjoint
+    /// joins of independently unfolded factors. The returned keys are used as factor labels: the
+    /// unfold will synthesize joined histories only by selecting one incoming branch for each
+    /// returned factor, and each selected branch must enter `target` through an edge with that key.
+    fn join_factors(&self, _target: NodeIndex) -> Option<BTreeSet<Key>> {
+        None
+    }
+
     #[allow(clippy::type_complexity)]
     fn trace_unfold_of<M: NodeStorageOps<NodeData = usize>, S: SubSetLike>(
         &self,
@@ -307,6 +319,9 @@ where
         let mut q = VecDeque::new();
         let mut traces: IndexSet<(NodeIndex, TraceKey<Key, EdgeIndex>)> = IndexSet::new();
         let mut builder: HedgeGraphBuilder<EdgeIndex, usize, NoData> = HedgeGraphBuilder::new();
+        let mut join_branches: BTreeMap<NodeIndex, BTreeMap<Key, Vec<(NodeIndex, EdgeIndex)>>> =
+            BTreeMap::new();
+        let mut added_edges = BTreeSet::new();
         let (ind, _) = traces.insert_full(root);
         let nid = builder.add_node(ind);
         q.push_back((nid, start, TraceKey::empty()));
@@ -316,11 +331,74 @@ where
             for hedge in g.iter_crown_in(subgraph, nid) {
                 if g.flow(hedge) == Flow::Source {
                     if let Some(to_node) = g.involved_node_id(hedge) {
+                        let edge = g[&hedge];
+                        let edge_key = self.key(edge);
                         let op = HiddenData {
-                            order: self.key(g[&hedge]),
-                            data: g[&hedge],
+                            order: edge_key.clone(),
+                            data: edge,
                         };
-                        for realization in self.realizations_for_op(op) {
+                        let realizations = self.realizations_for_op(op);
+                        if realizations.is_empty() {
+                            continue;
+                        }
+
+                        if let Some(factors) = self.join_factors(to_node) {
+                            if factors.contains(&edge_key) {
+                                let branch = (bnid, edge);
+                                let branches_by_factor = join_branches.entry(to_node).or_default();
+                                let branches =
+                                    branches_by_factor.entry(edge_key.clone()).or_default();
+                                let is_new_branch = !branches.contains(&branch);
+                                if is_new_branch {
+                                    branches.push(branch);
+
+                                    let mut joins = Vec::new();
+                                    collect_factor_branch_joins(
+                                        &factors,
+                                        branches_by_factor,
+                                        &edge_key,
+                                        branch,
+                                        &mut joins,
+                                    );
+
+                                    for join in joins {
+                                        let mut branch_edges = BTreeSet::new();
+                                        if !join.iter().all(|(_, edge)| branch_edges.insert(*edge))
+                                        {
+                                            continue;
+                                        }
+
+                                        let keys = join.iter().map(|(parent, _)| {
+                                            &traces.get_index(parent.0).unwrap().1
+                                        });
+                                        let Some(join_key) = TraceKey::try_foata_join(keys, self)
+                                        else {
+                                            continue;
+                                        };
+
+                                        let (join_ind, is_new) =
+                                            traces.insert_full((to_node, join_key.clone()));
+                                        if is_new {
+                                            let join_node = builder.add_node(join_ind);
+                                            debug_assert_eq!(join_node.0, join_ind);
+                                            q.push_back((join_node, to_node, join_key));
+                                        }
+
+                                        for (parent, edge) in join {
+                                            add_unfolded_edge(
+                                                &mut builder,
+                                                &mut added_edges,
+                                                parent,
+                                                NodeIndex(join_ind),
+                                                edge,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        for realization in realizations {
                             let new_key = realization
                                 .into_iter()
                                 .fold(key.clone(), |acc, factor| acc.push(self, factor));
@@ -331,7 +409,13 @@ where
                                 q.push_back((bbnid, to_node, new_key.clone()))
                             }
 
-                            builder.add_edge(bnid, NodeIndex(ind), g[&hedge], true);
+                            add_unfolded_edge(
+                                &mut builder,
+                                &mut added_edges,
+                                bnid,
+                                NodeIndex(ind),
+                                edge,
+                            );
                         }
                     }
                 }
@@ -365,6 +449,85 @@ where
     ) -> UnfoldedTraceGraph<Self, TraceKey<Key, EdgeIndex>, M::OpStorage<TraceKey<Key, EdgeIndex>>>
     {
         self.trace_unfold_of::<M, _>(&self.graph().full_filter(), start)
+    }
+}
+
+fn add_unfolded_edge(
+    builder: &mut HedgeGraphBuilder<EdgeIndex, usize, NoData>,
+    added_edges: &mut BTreeSet<(usize, usize)>,
+    source: NodeIndex,
+    sink: NodeIndex,
+    edge: EdgeIndex,
+) {
+    if added_edges.insert((sink.0, edge.0)) {
+        builder.add_edge(source, sink, edge, true);
+    }
+}
+
+fn collect_factor_branch_joins<Key: Ord>(
+    factors: &BTreeSet<Key>,
+    branches_by_factor: &BTreeMap<Key, Vec<(NodeIndex, EdgeIndex)>>,
+    required_factor: &Key,
+    required_branch: (NodeIndex, EdgeIndex),
+    out: &mut Vec<Vec<(NodeIndex, EdgeIndex)>>,
+) {
+    let factors = factors.iter().collect::<Vec<_>>();
+    let mut selected = Vec::with_capacity(factors.len());
+    collect_factor_branch_joins_from(
+        &factors,
+        0,
+        branches_by_factor,
+        required_factor,
+        required_branch,
+        &mut selected,
+        out,
+    );
+}
+
+fn collect_factor_branch_joins_from<Key: Ord>(
+    factors: &[&Key],
+    index: usize,
+    branches_by_factor: &BTreeMap<Key, Vec<(NodeIndex, EdgeIndex)>>,
+    required_factor: &Key,
+    required_branch: (NodeIndex, EdgeIndex),
+    selected: &mut Vec<(NodeIndex, EdgeIndex)>,
+    out: &mut Vec<Vec<(NodeIndex, EdgeIndex)>>,
+) {
+    let Some(factor) = factors.get(index) else {
+        out.push(selected.clone());
+        return;
+    };
+    if *factor == required_factor {
+        selected.push(required_branch);
+        collect_factor_branch_joins_from(
+            factors,
+            index + 1,
+            branches_by_factor,
+            required_factor,
+            required_branch,
+            selected,
+            out,
+        );
+        selected.pop();
+        return;
+    }
+
+    let Some(branches) = branches_by_factor.get(*factor) else {
+        return;
+    };
+
+    for branch in branches {
+        selected.push(*branch);
+        collect_factor_branch_joins_from(
+            factors,
+            index + 1,
+            branches_by_factor,
+            required_factor,
+            required_branch,
+            selected,
+            out,
+        );
+        selected.pop();
     }
 }
 
@@ -1133,6 +1296,59 @@ impl<O, D> TraceKey<O, D> {
         Self { levels }
     }
 
+    /// Right-aligns independent traces into their common Foata normal form.
+    pub fn try_foata_join<'a, I>(
+        keys: impl IntoIterator<Item = &'a Self>,
+        indep: &I,
+    ) -> Option<Self>
+    where
+        I: Independence<HiddenData<O, D>>,
+        O: Clone + Eq + Ord + 'a,
+        D: Clone + 'a,
+    {
+        let keys = keys.into_iter().collect::<Vec<_>>();
+        let max_levels = keys.iter().map(|key| key.levels.len()).max().unwrap_or(0);
+        let mut seen = Vec::new();
+        let mut levels = Vec::new();
+
+        for level_index in 0..max_levels {
+            let mut level_ops = Vec::new();
+
+            for key in &keys {
+                let offset = max_levels - key.levels.len();
+                if level_index < offset {
+                    continue;
+                }
+                let level = &key.levels[level_index - offset];
+
+                for op in level {
+                    if seen.iter().any(|seen_op| seen_op == op)
+                        || level_ops.iter().any(|level_op| level_op == op)
+                    {
+                        continue;
+                    }
+
+                    if !level_ops
+                        .iter()
+                        .all(|level_op| indep.independent(op, level_op))
+                    {
+                        return None;
+                    }
+
+                    level_ops.push(op.clone());
+                }
+            }
+
+            level_ops.sort();
+            seen.extend(level_ops.iter().cloned());
+            if !level_ops.is_empty() {
+                levels.push(level_ops);
+            }
+        }
+
+        Some(Self::from_levels(levels))
+    }
+
     /// Writes the trace using explicit Foata levels and a custom label mapping.
     ///
     /// # Examples
@@ -1179,7 +1395,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
     use crate::{
         dot,
@@ -1240,6 +1456,10 @@ mod tests {
         fn key(&self, e: EdgeIndex) -> &'static str {
             self.graph[e]
         }
+
+        fn join_factors(&self, target: NodeIndex) -> Option<BTreeSet<&'static str>> {
+            (self.graph[target] == "target").then(|| ["F", "U"].into_iter().collect())
+        }
     }
 
     impl Key<String> for HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData> {
@@ -1285,6 +1505,198 @@ mod tests {
                 || sourcbn.as_str() == "empty"
                 || !has_overlap(&sourcan, &sourcbn)
         }
+    }
+
+    fn canonicalize_raw_history(
+        graph: &FrontierGraph,
+        history: &[EdgeIndex],
+    ) -> TraceKey<&'static str, EdgeIndex> {
+        history.iter().fold(TraceKey::empty(), |key, edge| {
+            key.push(
+                graph,
+                HiddenData {
+                    order: TraceUnfold::key(graph, *edge),
+                    data: *edge,
+                },
+            )
+        })
+    }
+
+    fn join_key_from_raw_histories(
+        graph: &FrontierGraph,
+        histories: &[Vec<EdgeIndex>],
+    ) -> TraceKey<&'static str, EdgeIndex> {
+        let max_len = histories.iter().map(Vec::len).max().unwrap_or(0);
+        let mut levels = Vec::new();
+
+        for depth in 0..max_len {
+            let mut level = histories
+                .iter()
+                .filter_map(|history| {
+                    let offset = max_len - history.len();
+                    (depth >= offset)
+                        .then(|| history.get(depth - offset))
+                        .flatten()
+                })
+                .copied()
+                .map(|edge| HiddenData {
+                    order: TraceUnfold::key(graph, edge),
+                    data: edge,
+                })
+                .collect::<Vec<_>>();
+            level.sort();
+            if !level.is_empty() {
+                levels.push(level);
+            }
+        }
+
+        TraceKey::from_levels(levels)
+    }
+
+    fn raw_linear_histories(
+        graph: &FrontierGraph,
+        start: NodeIndex,
+    ) -> BTreeMap<NodeIndex, Vec<Vec<EdgeIndex>>> {
+        let mut histories = BTreeMap::new();
+        let mut q = VecDeque::new();
+
+        histories.insert(start, vec![Vec::new()]);
+        q.push_back((start, Vec::new()));
+
+        while let Some((node, history)) = q.pop_front() {
+            for hedge in graph.graph.iter_crown_in(&graph.graph.full_filter(), node) {
+                if graph.graph.flow(hedge) != Flow::Source {
+                    continue;
+                }
+                let Some(target) = graph.graph.involved_node_id(hedge) else {
+                    continue;
+                };
+
+                let edge = graph.graph[&hedge];
+                let mut next_history = history.clone();
+                next_history.push(edge);
+                histories
+                    .entry(target)
+                    .or_insert_with(Vec::new)
+                    .push(next_history.clone());
+                q.push_back((target, next_history));
+            }
+        }
+
+        histories
+    }
+
+    fn collect_raw_history_joins(
+        factors: &[&'static str],
+        histories_by_factor: &BTreeMap<&'static str, Vec<Vec<EdgeIndex>>>,
+        index: usize,
+        selected: &mut Vec<Vec<EdgeIndex>>,
+        out: &mut Vec<Vec<Vec<EdgeIndex>>>,
+    ) {
+        let Some(factor) = factors.get(index) else {
+            out.push(selected.clone());
+            return;
+        };
+        let Some(histories) = histories_by_factor.get(factor) else {
+            return;
+        };
+
+        for history in histories {
+            selected.push(history.clone());
+            collect_raw_history_joins(factors, histories_by_factor, index + 1, selected, out);
+            selected.pop();
+        }
+    }
+
+    fn tree_then_foata_quotient(
+        graph: &FrontierGraph,
+        start: NodeIndex,
+    ) -> BTreeSet<(String, String)> {
+        let histories = raw_linear_histories(graph, start);
+        let mut quotient = BTreeSet::new();
+
+        for (node, node_histories) in &histories {
+            for history in node_histories {
+                quotient.insert((
+                    graph.graph[*node].to_string(),
+                    canonicalize_raw_history(graph, history).to_string(),
+                ));
+            }
+        }
+
+        for (target, _, target_label) in graph.graph.iter_nodes() {
+            let Some(factors) = TraceUnfold::join_factors(graph, target) else {
+                continue;
+            };
+
+            let mut histories_by_factor: BTreeMap<&'static str, Vec<Vec<EdgeIndex>>> =
+                BTreeMap::new();
+            for hedge in graph.graph.iter_crown(target) {
+                if graph.graph.flow(hedge) != Flow::Sink {
+                    continue;
+                }
+                let edge = graph.graph[&hedge];
+                let factor = TraceUnfold::key(graph, edge);
+                if !factors.contains(&factor) {
+                    continue;
+                }
+                let Some(parent) = graph.graph.involved_node_id(hedge) else {
+                    continue;
+                };
+                let Some(parent_histories) = histories.get(&parent) else {
+                    continue;
+                };
+                histories_by_factor
+                    .entry(factor)
+                    .or_default()
+                    .extend(parent_histories.iter().cloned());
+            }
+
+            if !factors
+                .iter()
+                .all(|factor| histories_by_factor.contains_key(factor))
+            {
+                continue;
+            }
+
+            let factors = factors.iter().copied().collect::<Vec<_>>();
+            let mut joins = Vec::new();
+            collect_raw_history_joins(
+                &factors,
+                &histories_by_factor,
+                0,
+                &mut Vec::new(),
+                &mut joins,
+            );
+
+            for join in joins {
+                quotient.insert((
+                    target_label.to_string(),
+                    join_key_from_raw_histories(graph, &join).to_string(),
+                ));
+            }
+        }
+
+        quotient
+    }
+
+    struct JoinIndep;
+
+    impl Independence<HiddenData<&'static str, ()>> for JoinIndep {
+        fn independent(
+            &self,
+            a: &HiddenData<&'static str, ()>,
+            b: &HiddenData<&'static str, ()>,
+        ) -> bool {
+            matches!(
+                (a.order, b.order),
+                ("A", "B") | ("B", "A") | ("A", "U") | ("U", "A")
+            )
+        }
+    }
+
+    fn test_op(order: &'static str) -> HiddenData<&'static str, ()> {
+        HiddenData { order, data: () }
     }
 
     // #[test]
@@ -1532,6 +1944,78 @@ mod tests {
 
         assert_eq!(unfolded.parents(node).count(), 2);
         assert_eq!(unfolded.leaf_ops(node).count(), 1);
+    }
+
+    #[test]
+    fn join_unfold_matches_tree_then_foata_quotient() {
+        let mut builder = HedgeGraphBuilder::<&'static str, &'static str>::new();
+        let empty = builder.add_node("empty");
+        let a = builder.add_node("A");
+        let b = builder.add_node("B");
+        let af = builder.add_node("AF");
+        let bu = builder.add_node("BU");
+        let target = builder.add_node("target");
+
+        builder.add_edge(empty, a, "A", true);
+        builder.add_edge(empty, b, "B", true);
+        builder.add_edge(a, af, "F", true);
+        builder.add_edge(b, bu, "U", true);
+        builder.add_edge(af, target, "U", true);
+        builder.add_edge(bu, target, "F", true);
+
+        let graph = FrontierGraph {
+            graph: builder.build::<DefaultNodeStore<&'static str>>(),
+            extra_independent_pairs: &[
+                ("A", "B"),
+                ("B", "A"),
+                ("A", "U"),
+                ("U", "A"),
+                ("B", "F"),
+                ("F", "B"),
+                ("F", "U"),
+                ("U", "F"),
+            ],
+        };
+        let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+        let actual = unfolded
+            .iter_nodes()
+            .map(|(node, _, key)| {
+                (
+                    graph.graph[unfolded.source_node(node)].to_string(),
+                    key.to_string(),
+                )
+            })
+            .collect::<BTreeSet<_>>();
+        let expected = tree_then_foata_quotient(&graph, empty);
+
+        insta::assert_snapshot!(
+            actual
+                .iter()
+                .map(|(node, key)| format!("{node}: {key}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            @r#"
+        A: {A}
+        AF: {A} · {F}
+        B: {B}
+        BU: {B} · {U}
+        empty: ∅
+        target: {A,B} · {F,U}
+        target: {A} · {F,U}
+        target: {B} · {F,U}
+        "#
+        );
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn foata_join_preserves_leaf_aligned_levels() {
+        let short = TraceKey::from_levels(vec![vec![test_op("A")]]);
+        let long = TraceKey::from_levels(vec![vec![test_op("B")], vec![test_op("U")]]);
+
+        let join = TraceKey::try_foata_join([&short, &long], &JoinIndep).expect("valid join");
+
+        insta::assert_snapshot!(join.to_string(), @"{B} · {A,U}");
     }
 
     // #[test]

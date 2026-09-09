@@ -20,10 +20,11 @@ use eyre::{Result, eyre};
 use crate::network::StructureLessDisplay;
 #[cfg(feature = "shadowing")]
 use crate::{
-    shadowing::symbolica_utils::IntoSymbol,
     structure::ToSymbolic,
     tensors::parametric::{ExpandedCoefficent, TensorCoefficient},
 };
+#[cfg(feature = "shadowing")]
+use symbolica_utils::IntoSymbol;
 
 #[cfg(feature = "shadowing")]
 use crate::{structure::FlatIndex, tensors::data::DenseTensor};

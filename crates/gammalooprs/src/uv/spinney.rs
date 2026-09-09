@@ -55,7 +55,8 @@ impl Spinney {
         g: &G,
         lmb: &LoopMomentumBasis,
     ) -> Option<Self> {
-        Self::with_scheme(subgraph, g, lmb, ApproximationType::MUV)
+        let dod = g.compute_dod(&subgraph);
+        Self::with_scheme(subgraph, g, lmb, ApproximationType::MUV, dod)
     }
 
     pub fn with_scheme<E, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>> + ?Sized>(
@@ -63,6 +64,7 @@ impl Spinney {
         g: &G,
         lmb: &LoopMomentumBasis,
         renormalization_scheme: ApproximationType,
+        dod: i32,
     ) -> Option<Self> {
         let components = g.as_ref().connected_components(&subgraph);
         let max_comp_loop_count = components
@@ -73,8 +75,6 @@ impl Spinney {
         let lmb = g
             .try_compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb)
             .ok()?;
-
-        let dod = g.compute_dod(&subgraph);
 
         if dod < 0 {
             return None;
@@ -124,7 +124,6 @@ impl PartialEq for Spinney {
     }
 }
 
-#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for Spinney {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         if self.subgraph == other.subgraph {
@@ -136,11 +135,5 @@ impl PartialOrd for Spinney {
         } else {
             None
         }
-    }
-}
-
-impl Ord for Spinney {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.filter().cmp(other.filter())
     }
 }

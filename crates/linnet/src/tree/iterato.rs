@@ -19,7 +19,7 @@ impl<'a, S: ForestNodeStore> AncestorsIter<'a, S> {
     pub fn new(store: &'a S, start_node: TreeNodeId) -> Self {
         AncestorsIter {
             store,
-            current: Some(start_node),
+            current: (!start_node.is_empty()).then_some(start_node),
         }
     }
 }
@@ -56,7 +56,9 @@ impl<'a, S: ForestNodeStoreDown> BfsIter<'a, S> {
     /// Create a new BFS iterator starting at `start`.
     pub fn new(store: &'a S, start: TreeNodeId) -> Self {
         let mut queue = VecDeque::new();
-        queue.push_back(start);
+        if !start.is_empty() {
+            queue.push_back(start);
+        }
         BfsIter { store, queue }
     }
 }
@@ -99,10 +101,12 @@ impl<S: ForestNodeStoreDown> Clone for PreorderIter<'_, S> {
 impl<'a, S: ForestNodeStoreDown> PreorderIter<'a, S> {
     /// Create a new pre-order iterator starting at `start`.
     pub fn new(store: &'a S, start: TreeNodeId) -> Self {
-        PreorderIter {
-            store,
-            stack: vec![start],
-        }
+        let stack = if start.is_empty() {
+            Vec::new()
+        } else {
+            vec![start]
+        };
+        PreorderIter { store, stack }
     }
 }
 

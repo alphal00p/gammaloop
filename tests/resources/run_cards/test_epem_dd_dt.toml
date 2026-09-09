@@ -34,7 +34,7 @@ check_esurface_at_generation = true
 [cli_settings.global.generation.uv]
 generate_integrated = true
 softct = false
-add_sigma = false
+add_marker = false
 inner_products = true
 
 [default_runtime_settings.general]

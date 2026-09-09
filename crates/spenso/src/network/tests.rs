@@ -89,6 +89,52 @@ fn auto_serializes_unlicensed_symbolic_fast_tensor_sum() {
     assert_eq!(result.elements[&FlatIndex::from(1)], parse!("b+y"));
 }
 
+#[cfg(feature = "shadowing")]
+#[test]
+fn fast_tensor_sum_parallel_candidate_rejects_light_or_unbalanced_work() {
+    use super::{AtomSumShapeStats, FastTensorSumWorkload};
+
+    let candidate =
+        |logical_entries, entries, total_terms, total_bytes, max_group_terms, max_group_bytes| {
+            FastTensorSumWorkload {
+                shape: AtomSumShapeStats {
+                    logical_entries,
+                    entries,
+                    total_terms,
+                    total_bytes,
+                    ..Default::default()
+                },
+                max_group_terms,
+                max_group_bytes,
+            }
+        };
+
+    // Many one-term atoms still lose to Rayon because each individual merge is
+    // too cheap, even though their aggregate size is substantial.
+    let trivial = candidate(256, 1_024, 1_024, 64 * 1024, 4, 256);
+    assert!(!trivial.meets_parallel_shape_floor());
+
+    // This balanced shape represents the first conservatively profitable
+    // benchmark bucket: each merge combines expression-heavy atoms.
+    let balanced = candidate(4, 16, 512, 32 * 1024, 128, 8 * 1024);
+    assert!(balanced.meets_parallel_shape_floor());
+    assert!(balanced.parallel_is_profitable_for(8));
+
+    let too_few_groups = candidate(2, 8, 512, 32 * 1024, 256, 16 * 1024);
+    assert!(!too_few_groups.meets_parallel_shape_floor());
+
+    // Disjoint sparse supports only clone one Atom per output group; they do
+    // not exercise the add-many work calibrated by the current benchmark.
+    let disjoint = candidate(8, 8, 768, 32 * 1024, 96, 4 * 1024);
+    assert!(!disjoint.meets_parallel_shape_floor());
+
+    assert!(!balanced.parallel_is_profitable_for(1));
+    assert!(!balanced.parallel_is_profitable_for(16));
+
+    let unbalanced = candidate(4, 16, 512, 32 * 1024, 400, 20 * 1024);
+    assert!(!unbalanced.meets_parallel_shape_floor());
+}
+
 #[test]
 fn executed_scaled_tensors_add_distinct_tensors() {
     use crate::{

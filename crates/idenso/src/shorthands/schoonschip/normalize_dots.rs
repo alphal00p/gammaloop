@@ -1,13 +1,13 @@
 use std::sync::LazyLock;
 
 use spenso::{
-    dot, dualizable_, dualizable_dual_, g, network::tags::SPENSO_TAG as T, rank1_, rep_,
-    self_dual_, tensors::parametric::atomcore::PatternReplacement,
+    dot, dualizable_, dualizable_dual_, g, network::tags::SPENSO_TAG as T, rank1_, rep_, self_dual_,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
     id::Replacement,
 };
+use symbolica_utils::PatternReplacement;
 
 use crate::W_;
 

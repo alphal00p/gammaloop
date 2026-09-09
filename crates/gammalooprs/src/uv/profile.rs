@@ -8,7 +8,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crate::DependentMomentaConstructor;
-use crate::cff::expression::{GraphOrientation, OrientationData};
+use crate::cff::expression::OrientationData;
+use crate::cff::orientations::GraphOrientation;
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::graph::{Graph, LmbIndex};
 use crate::integrands::evaluation::EvaluationResult;

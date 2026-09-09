@@ -7,6 +7,11 @@ use super::{
     HedgeGraph, NoData, NodeIndex,
 };
 
+#[derive(Clone, Debug)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct HedgeData<H> {
     pub data: H,
     pub is_in_subgraph: bool,
@@ -56,6 +61,10 @@ impl<H> HedgeData<H> {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// A temporary structure used during the construction of a [`HedgeGraph`].
 ///
 /// It holds the data for a node and a list of half-edges that are incident to it
@@ -80,6 +89,10 @@ impl<V> HedgeNodeBuilder<V> {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// A builder for programmatically constructing [`HedgeGraph`] instances.
 ///
 /// This builder allows for the incremental addition of nodes and edges (both

@@ -6,7 +6,7 @@ use color_eyre::{
 };
 use gammalooprs::{
     initialisation::initialise,
-    numerator::symbolica_ext::AtomCoreExt,
+    numerator::symbolica_ext::NumeratorAtomExt,
     utils::{FUN_LIB, TENSORLIB},
 };
 use spenso::network::{ExecutionResult, MinResultRank, Sequential, SequentialRef, SmallestDegree};

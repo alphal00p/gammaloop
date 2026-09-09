@@ -22,6 +22,7 @@ use tracing::debug;
 
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;
+use spenso::shadowing::symbolica_utils::LogPrint;
 use symbolica::atom::{Atom, AtomCore};
 use tracing::warn;
 use typed_index_collections::TiVec;
@@ -35,7 +36,7 @@ use crate::{
     numerator::GlobalPrefactor,
     processes::DotExportSettings,
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
-    utils::{F, Length, ose_atom_from_index, symbolica_ext::LogPrint},
+    utils::{F, Length, ose_atom_from_index},
     uv::uv_graph::UVE,
 };
 
@@ -96,6 +97,31 @@ pub(crate) enum ThresholdPinchStatus {
 }
 
 impl Graph {
+    pub(crate) fn with_global_numerator_only(&self, name: String, numerator: Atom) -> Self {
+        let mut graph = self.clone();
+        graph.name = name;
+        graph.overall_factor = Atom::one();
+        graph.global_prefactor.num = numerator;
+        graph.global_prefactor.projector = Atom::one();
+        graph.polarizations.clear();
+        graph.underlying = self.underlying.map_data_ref(
+            |_, _, vertex| {
+                let mut vertex = vertex.clone();
+                vertex.num = autogen::Autogen::explicit(Atom::one());
+                vertex
+            },
+            |_, _, _, edge| {
+                edge.map(|edge| {
+                    let mut edge = edge.clone();
+                    edge.num = autogen::Autogen::explicit(Atom::one());
+                    edge
+                })
+            },
+            |_, hedge_data| hedge_data.clone(),
+        );
+        graph
+    }
+
     pub fn debug_dot(&self) -> String {
         DotGraph::from(self).debug_dot()
     }

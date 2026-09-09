@@ -5,7 +5,6 @@ use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
     self_dual_,
     structure::representation::{LibraryRep, RepName},
-    tensors::parametric::atomcore::PatternReplacement,
     trace,
 };
 use symbolica::{
@@ -13,6 +12,7 @@ use symbolica::{
     function,
     id::{Match, Replacement},
 };
+use symbolica_utils::PatternReplacement;
 
 use crate::W_;
 static SINGLE_LENGTH_NORM: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
@@ -189,8 +189,9 @@ impl<'a> Chain for AtomView<'a> {
 mod tests {
     use insta::assert_snapshot;
     use spenso::g;
-    use spenso::{chain, shadowing::symbolica_utils::AtomCoreExt, slot};
+    use spenso::{chain, slot};
     use symbolica::{parse, parse_lit};
+    use symbolica_utils::AtomPrintExt;
 
     use crate::representations::Bispinor;
     use crate::test_support::{TestReps, test_initialize};
