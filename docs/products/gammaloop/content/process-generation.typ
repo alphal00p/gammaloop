@@ -23,7 +23,7 @@ generate help xs
 
 `xs` constructs forward-scattering graphs and filters compatible Cutkosky cuts. `amp` constructs
 ordinary amplitudes. Their final-state lists therefore have different meanings even when the
-printed particle syntax is identical. Use `generate help <mode>` inside the stateful CLI to see
+printed particle syntax is identical. Use the #link("guides/dot-input/")[GammaLoop DOT input guide] when preparing or reviewing imported graph files. Use `generate help <mode>` inside the stateful CLI to see
 the flags supported by your installed version.
 
 == Process specification grammar

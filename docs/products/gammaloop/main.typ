@@ -8,6 +8,7 @@
 #import "content/conventions.typ": conventions
 #import "content/tutorial.typ": tutorial
 #import "content/process-generation.typ": process-generation
+#import "content/dot-input.typ": dot-input
 #import "content/events.typ": events
 #import "content/diagnostics.typ": diagnostics
 #import "content/kurvst.typ": kurvst
@@ -29,6 +30,7 @@
     #conventions
     #tutorial
     #process-generation
+    #dot-input
     #events
     #api
     #diagnostics

@@ -58,5 +58,5 @@ exceptions and should remain concise indexes.
 
 User-facing references:
 
-- [GammaLoop DOT input format](docs/dot-input.md)
-- [Process and graph generation](docs/generation.md)
+- [GammaLoop DOT input format](https://alphal00p.github.io/gammaloop/products/gammaloop/latest/guides/dot-input/)
+- [Process and graph generation](https://alphal00p.github.io/gammaloop/products/gammaloop/latest/guides/process-generation/)
