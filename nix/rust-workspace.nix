@@ -1045,6 +1045,16 @@
         package: lib.filter (feature: lib.hasInfix "/" feature) context.features.${package}
       )
       context.featurePackages);
+  # Align the API's regex aliases on the target and build-script sides. Otherwise
+  # Cargo changes Symbolica's dependency graph and rebuilds its consumers.
+  testRegexDependencies = {
+    aho-corasick = {version = "1";};
+    regex-automata = {
+      version = "0.4";
+      default-features = false;
+      features = ["nfa" "perf"];
+    };
+  };
   testBinaryFeatureAnchorDependenciesFor = context: let
     inheritedDependencies = lib.listToAttrs (map (package: {
         name = package;
@@ -1056,7 +1066,9 @@
       // (testBinaryFeatureAnchorDevDependenciesFor context)
       // lib.optionalAttrs (context.anchorPackages != []) {
         ${workspaceHackPackage} = {path = "../${workspaceHackPackage}";};
-      };
+      }
+      # Keep the common regex features out of independent FeynKit crates.
+      // lib.optionalAttrs (builtins.elem "gammalooprs" context.sourcePackages) testRegexDependencies;
     crossFeatures = testBinaryFeatureAnchorCrossFeaturesFor context;
     dependencyNames = sortedUnique (builtins.attrNames rawDependencies ++ builtins.attrNames crossFeatures);
   in
@@ -1079,7 +1091,7 @@
       })
       dependencyNames);
   testBinaryFeatureAnchorCargoTomlFor = context:
-    (pkgs.formats.toml {}).generate "${testBinaryFeatureAnchorPackageFor context}-Cargo.toml" {
+    (pkgs.formats.toml {}).generate "${testBinaryFeatureAnchorPackageFor context}-Cargo.toml" ({
       package = {
         name = testBinaryFeatureAnchorPackageFor context;
         version = "0.1.0";
@@ -1088,11 +1100,16 @@
       };
       lib.path = "src/lib.rs";
       dependencies = testBinaryFeatureAnchorDependenciesFor context;
-    };
+    } // lib.optionalAttrs (builtins.elem "gammalooprs" context.sourcePackages) {
+      build-dependencies = testRegexDependencies;
+    });
   testBinaryFeatureAnchorSourceScriptFor = context: prefix: ''
     install -D -m 0644 ${testBinaryFeatureAnchorCargoTomlFor context} "${prefix}${testBinaryFeatureAnchorPackageDirFor context}/Cargo.toml"
     install -D -m 0644 ${dummyCargoTarget} "${prefix}${testBinaryFeatureAnchorPackageDirFor context}/src/lib.rs"
     touch -d @0 "${prefix}${testBinaryFeatureAnchorPackageDirFor context}/Cargo.toml" "${prefix}${testBinaryFeatureAnchorPackageDirFor context}/src/lib.rs"
+  '' + lib.optionalString (builtins.elem "gammalooprs" context.sourcePackages) ''
+    install -D -m 0644 ${dummyCargoTarget} "${prefix}${testBinaryFeatureAnchorPackageDirFor context}/build.rs"
+    touch -d @0 "${prefix}${testBinaryFeatureAnchorPackageDirFor context}/build.rs"
   '';
   testBinaryFeatureAnchorDependencyPathFor = context: package:
     if lib.hasPrefix "crates/" workspaceMemberPackageDirs.${package}
@@ -1107,19 +1124,6 @@
     cat ${testBinaryFeatureAnchorDevDependencyFor context package} >> "${prefix}${workspaceMemberPackageDirs.${package}}/Cargo.toml"
     touch -d @0 "${prefix}${workspaceMemberPackageDirs.${package}}/Cargo.toml"
   '';
-  cargoTestDependencyArgsFor = context: let
-    selectedPackages = sortedUnique (context.anchorPackages ++ [
-      (testDependencyFeatureAnchorPackageFor context)
-    ]);
-    featureArgs = cargoQualifiedFeatureArgsFor context.featurePackages (package: context.features.${package});
-  in
-    lib.concatStringsSep " " (
-      [
-        "--offline"
-      ]
-      ++ map (selectedPackage: "-p ${lib.escapeShellArg selectedPackage}") selectedPackages
-      ++ lib.optional (featureArgs != "") featureArgs
-    );
   cargoTestContextArgsFor = context: packages: let
     featureArgs = cargoQualifiedFeatureArgsFor context.featurePackages (featurePackage: context.features.${featurePackage});
   in
@@ -2201,7 +2205,6 @@
         );
         hasProcMacro = procMacroPackages != [];
         buildPhaseCargoCommand = ''
-          cargoWithProfile build ${cargoTestDependencyArgsFor context} --lib
           cargoWithProfile build ${cargoTestBinaryDependencyArgsFor context} --lib
         '';
         postPatch = ''
