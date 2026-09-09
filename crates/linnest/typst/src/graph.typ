@@ -1161,9 +1161,9 @@
   graph_,
 ) = _impl.boundaries(graph_)
 
-/// Join two graphs by matching dangling half-edge statements or ids on `key`.
+/// Join two graphs by matching dangling half-edge metadata on `key`.
 ///
-/// Supported key values are `"statement"`, `"compass"`, and `"id"`.
+/// Supported key values are `"statement"`, `"compass"`, `"port-label"`, and `"id"`. The join is partial: unmatched dangling half-edges remain. Matching identities must be unique within each flow, and node/edge names must not collide across the inputs. Native Typst data is preserved; when both sides provide a dictionary, right-only fields are retained and left-side fields take precedence.
 ///
 /// ```example
 /// #let left = build({
@@ -1182,9 +1182,23 @@
   left,
   /// Right graph object. -> dictionary
   right,
-  /// Dangling half-edge match key: `"statement"`, `"compass"`, or `"id"`. -> string
+  /// Dangling half-edge match key: `"statement"`, `"compass"`, `"port-label"`, or `"id"`. -> string
   key: "statement",
 ) = _impl.join(left, right, key)
+
+/// Join two graphs by matching dangling edge records on an edge statement key.
+///
+/// This is distinct from graph.join: it matches edge-level statements rather than
+/// half-edge metadata. The same partial-join, collision, and data-merge rules
+/// apply. -> dictionary
+#let join-edges(
+  /// Left graph object. -> dictionary
+  left,
+  /// Right graph object. -> dictionary
+  right,
+  /// Nonempty edge statement key used for matching. -> string
+  key: "statement",
+) = _impl.join-edges(left, right, key)
 
 /// Return subgraph objects for the graph's cycle basis.
 ///

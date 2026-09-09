@@ -13,6 +13,62 @@
 #let close(a, b, epsilon: 1e-6) = calc.abs(a - b) < epsilon
 #let same-pos(a, b) = close(a.x, b.x) and close(a.y, b.y)
 
+// Joining preserves Typst sidecars and merges right-only fields with left
+// precedence for conflicts.
+#let join-callback = x => x + 4
+#let join-left = graph.build(
+  name: "join-left",
+  data: (left-graph: true, conflict: "left"),
+  statements: (left-global: "yes"),
+  {
+    node(<join-left-node>, left-node: true, callback: join-callback)
+    edge(
+      sink(<join-left-node>, statement: "join-key", left-sink: true, callback: join-callback),
+      <join-left-edge>,
+      left-edge: true,
+      callback: join-callback,
+      conflict: "left",
+      statements: (edge-key: "join-edge"),
+    )
+  },
+)
+#let join-right = graph.build(
+  name: "join-right",
+  data: (right-graph: true, conflict: "right"),
+  statements: (right-global: "yes"),
+  {
+    node(<join-right-node>, right-node: true)
+    edge(
+      source(<join-right-node>, statement: "join-key", right-source: true),
+      <join-right-edge>,
+      right-edge: true,
+      conflict: "right",
+      statements: (edge-key: "join-edge"),
+    )
+    edge(source(<join-right-node>, statement: "unmatched"), <join-unmatched>)
+  },
+)
+#let joined = graph.join(join-left, join-right)
+#assert(graph.info(joined).name == "join-left")
+#assert(graph.info(joined).data == (
+  left-graph: true, right-graph: true, conflict: "left",
+))
+#assert(graph.info(joined).global-statements == (
+  left-global: "yes", right-global: "yes",
+))
+#assert((graph.nodes(joined).at(0).data.callback)(3) == 7)
+#assert(graph.nodes(joined).at(1).data == (right-node: true))
+#let joined-edge = graph.edges(joined).find(e => e.name == <join-left-edge>)
+#assert(joined-edge.data.left-edge == true)
+#assert(joined-edge.data.right-edge == true)
+#assert(joined-edge.data.conflict == "left")
+#assert((joined-edge.data.callback)(3) == 7)
+#assert(joined-edge.source.data == (right-source: true))
+#assert((joined-edge.sink.data.callback)(3) == 7)
+#assert(graph.edges(joined).len() == 2)
+#let joined-by-edge = graph.join-edges(join-left, join-right, key: "edge-key")
+#assert(graph.edges(joined-by-edge).len() == 2)
+
 // Auxiliary depth stays separate from XY, including through graph.map patches.
 #let depth-base = graph.build({
   node(<depth-origin>, pos: pos(x: pin(0), y: pin(0), z: pin(2)))
@@ -661,8 +717,13 @@
   unit: 20pt,
   node-style: after-options.node-style + (fill: rgb("#172554")),
   edge-style: (stroke: rgb("#92400e") + 0.5pt),
-  draw-after: g => {
+  draw-after: (g, bounds) => {
     assert(g == after-graph, message: "draw-after must receive the input graph")
+    assert(
+      bounds.left == -2.5 and bounds.right == 2.5 and bounds.top == 1.5
+        and bounds.bottom == 0.5 and bounds.width == 5 and bounds.height == 1,
+      message: "draw-after bounds",
+    )
     let nodes = graph.nodes(g)
     let edges = graph.edges(g)
     assert(nodes.len() == 2 and edges.len() == 1)
@@ -699,6 +760,56 @@
   }
 }
 
+
+  // Bounds remain in graph units despite rendered unit and canvas padding.
+  for unit in (10pt, 20pt) {
+    for padding in (0, 3) {
+      let checked = measure(draw(
+        after-graph, ..after-options, unit: unit, padding: padding,
+        draw-after: (g, bounds) => {
+          assert(bounds == (left: -2.5, right: 2.5, top: 1.5, bottom: 0.5, width: 5, height: 1))
+          ()
+        },
+      ))
+      assert(close(checked.width / unit, 5 + 2 * padding))
+      assert(close(checked.height / unit, 1 + 2 * padding))
+    }
+  }
+
+  // Labels and a curve contribute to the bounds. The context counter verifies
+  // that custom drawing is not evaluated again just to measure the bounds.
+  let checked = measure(draw(
+    graph.build({ node(<bounds-node>, pos: pos(x: 0, y: 0)) }),
+    ..bare-draw,
+    padding: 0,
+    draw-node: (node, node-box) => (
+      cetz.draw.set-ctx(ctx => {
+        ctx.shared-state.bounds-node-count = ctx.shared-state.at("bounds-node-count", default: 0) + 1
+        ctx
+      }),
+      cetz.draw.content((0, 0), box(width: 80pt, height: 20pt)[bounds label], padding: 0),
+      cetz.draw.bezier((-1, -1), (1, -1), (-1, -5), (1, -5), stroke: 4pt),
+    ),
+    draw-after: (g, bounds) => {
+      assert(close(bounds.left, -4) and close(bounds.right, 4))
+      assert(close(bounds.top, 1) and close(bounds.bottom, -4))
+      assert(close(bounds.width, 8) and close(bounds.height, 5))
+      cetz.draw.get-ctx(ctx => {
+        assert(ctx.shared-state.bounds-node-count == 1)
+        ()
+      })
+    },
+  ))
+  assert(close(checked.width / 10pt, 8) and close(checked.height / 10pt, 5))
+
+  let checked = measure(draw(
+    graph.build(()), ..bare-draw, padding: 0,
+    draw-after: (g, bounds) => {
+      assert(bounds == (left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0))
+      cetz.draw.rect((-1, -2), (1, 2), stroke: none)
+    },
+  ))
+  assert(close(checked.width / 10pt, 2) and close(checked.height / 10pt, 4))
 #stack(
   spacing: 12pt,
   draw(arrow-graph, edge-style: arrow-style, ..bare-draw),

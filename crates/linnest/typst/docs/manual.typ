@@ -534,6 +534,26 @@
   `edge-label-style: (anchor: "south")`, or an edge-data callback returning a
   style dictionary, to choose which point of the label is anchored there.
 
+  Add overlays with `draw-after: (g, bounds) => { ... }`. The callback receives
+  the positioned graph and its rendered bounds before overlays and canvas
+  padding. The numeric `left`, `right`, `top`, `bottom`, `width`, and `height`
+  fields use graph units; `top` is the greatest y coordinate. Bounds include
+  drawn shapes, curves, and label boxes, following CeTZ's convention of excluding
+  extra stroke thickness. An empty drawing supplies zeros for every field.
+  Overlay elements share `unit` and can enlarge the final canvas without
+  affecting graph layout. `draw-after` also accepts an array of CeTZ elements
+  or `none`.
+
+  ```typ
+  #draw(layout(g), draw-after: (g, bounds) => {
+    cetz.draw.rect(
+      (bounds.left - 0.2, bounds.bottom - 0.2),
+      (bounds.right + 0.2, bounds.top + 0.2),
+      stroke: gray,
+    )
+  })
+  ```
+
   Marks can follow graph orientation as a first-class draw option. Put the same
   mark layer on both halves and set `mark-orientation: "edge"`; default-oriented
   edges mark the source half, reversed edges mark the sink half with the marker
@@ -812,10 +832,15 @@
   current positions after placement or layout. Auxiliary nodes remain visible in
   `graph.nodes(view)`; filter with `node.boundary == none` to exclude them.
 
-  `graph.join(left, right, key: "statement")` joins matching dangling half edges.
-  The key is read from half-edge statements or numeric ids and can be
-  `"statement"`, `"compass"`, or `"id"`. Its existing Typst-sidecar data loss is
-  not fixed by the cut API; do not use it as a data-preserving inverse of `cut`.
+  `graph.join(left, right, key: "statement")` joins dangling half edges with
+  opposite flows. The supported keys are `"statement"`, `"compass"`,
+  `"port-label"`, and `"id"`; unmatched half edges remain in partial joins.
+  Matching identities must be unique within each input. Node and edge labels
+  that occur in both inputs are rejected. Graph, node, edge, and endpoint data
+  is preserved: right-only dictionary fields are retained and conflicting
+  fields use the left value. The left graph supplies the name and layout
+  configuration. Use `graph.join-edges` when the matching key is an edge-level
+  statement rather than half-edge metadata.
 
   `graph.cycles(g)` returns subgraph objects for a cycle basis.
   `graph.forests(g)` returns subgraph objects for spanning forests. Both return

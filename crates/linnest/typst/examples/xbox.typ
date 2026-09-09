@@ -115,7 +115,7 @@
     ),
     ..feynman.draw-style,
     padding: diagram-style.padding,
-    draw-after: g => {
+    draw-after: (g, bounds) => {
       // Group signed external momenta explicitly, including the through-gluon's
       // hidden endpoints. Shading follows the solved positions, not the layout seeds.
       let endpoints = graph.boundaries(g).map(b => b + (
@@ -141,23 +141,23 @@
         }
       })
 
-      // Exclude the invisible compactification spring and its anchor nodes.
+      // Exclude the invisible compactification spring and its anchor nodes
+      // when locating the cut; the renderer supplies the visible drawing bounds.
       let nodes = graph.nodes(g).filter(n => n.boundary == none and (
         n.data == none or not n.data.at("hidden", default: false)
       ))
-      let edges = graph.edges(g).filter(e => e.data.at("edge-style", default: auto) != none)
       let xs = nodes.map(n => n.pos.x)
-      let ys = (nodes + edges).map(item => item.pos.y)
       let x = if cut-x == auto {
         calc.min(..xs) + 0.6 * (calc.max(..xs) - calc.min(..xs))
       } else { cut-x }
       let y = if cut-y == auto { 1.5 } else { cut-y }
-      let outer-xs = xs + endpoints.map(b => b.pos.x)
-      let bounds = (
-        left: calc.min(..outer-xs) - box-style.padding.x,
-        right: calc.max(..outer-xs) + box-style.padding.x,
-        top: calc.max(..ys) + y,
-        bottom: calc.min(..ys) - y,
+      bounds = (
+        left: bounds.left - box-style.padding.x,
+        right: bounds.right + box-style.padding.x,
+        top: bounds.top + y,
+        bottom: bounds.bottom - y,
+        width: bounds.width + 2 * box-style.padding.x,
+        height: bounds.height + 2 * y,
       )
       cetz.draw.line(
         (x, bounds.top), (x, bounds.bottom),

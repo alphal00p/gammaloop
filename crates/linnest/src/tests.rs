@@ -1,3 +1,4 @@
+use crate::graph_api::TypstJoinResult;
 use std::{collections::BTreeMap, fs};
 
 use figment::providers::Serialized;
@@ -2127,10 +2128,230 @@ fn test_graph_join_matches_half_edge_statement() {
         &encode_cbor(&one_statement("key", "statement")),
     )
     .unwrap();
-    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&joined).unwrap());
+    let joined: TypstJoinResult = decode_cbor::<TypstJoinResult>(&joined);
+    assert_eq!(joined.nodes.len(), 2);
+    assert_eq!(joined.edges.len(), 1);
+    assert_eq!(joined.hedges.len(), 2);
+    assert_eq!(joined.edges[0].left, Some(0));
+    assert_eq!(joined.edges[0].right, Some(0));
+    assert_eq!(joined.nodes[0].left, Some(0));
+    assert_eq!(joined.nodes[1].right, Some(0));
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&joined.graph).unwrap());
     assert_eq!(edges.len(), 1);
     assert!(edges[0].source.is_some());
     assert!(edges[0].sink.is_some());
+}
+
+#[test]
+fn test_graph_join_rejects_unknown_key() {
+    let spec = TestGraphSpec {
+        name: "g".into(),
+        statements: BTreeMap::new(),
+        nodes: vec![TestNodeSpec {
+            name: "a".into(),
+            statements: BTreeMap::new(),
+        }],
+        edges: vec![TestEdgeSpec {
+            source: None,
+            sink: Some(TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: Some("x".into()),
+            }),
+            statements: BTreeMap::new(),
+        }],
+    };
+    let bytes = graph_from_spec_bytes(&encode_graph_spec(&spec)).unwrap();
+    let err = crate::graph_join_by_hedge_key_bytes(
+        &bytes,
+        &bytes,
+        &encode_cbor(&one_statement("key", "unknown")),
+    )
+    .unwrap_err();
+    assert!(err.contains("unsupported hedge key"));
+}
+
+#[test]
+fn test_graph_join_rejects_duplicate_matching_identity() {
+    let spec = TestGraphSpec {
+        name: "g".into(),
+        statements: BTreeMap::new(),
+        nodes: vec![TestNodeSpec {
+            name: "a".into(),
+            statements: BTreeMap::new(),
+        }],
+        edges: vec![
+            TestEdgeSpec {
+                source: None,
+                sink: Some(TestEndpointSpec {
+                    node: 0,
+                    compass: None,
+                    statement: Some("x".into()),
+                }),
+                statements: BTreeMap::new(),
+            },
+            TestEdgeSpec {
+                source: None,
+                sink: Some(TestEndpointSpec {
+                    node: 0,
+                    compass: None,
+                    statement: Some("x".into()),
+                }),
+                statements: BTreeMap::new(),
+            },
+        ],
+    };
+    let bytes = graph_from_spec_bytes(&encode_graph_spec(&spec)).unwrap();
+    let err = crate::graph_join_by_hedge_key_bytes(
+        &bytes,
+        &bytes,
+        &encode_cbor(&one_statement("key", "statement")),
+    )
+    .unwrap_err();
+    assert!(err.contains("duplicate dangling identity"));
+}
+
+#[test]
+fn test_graph_join_edges_rejects_duplicate_matching_identity() {
+    let spec = TestGraphSpec {
+        name: "g".into(),
+        statements: BTreeMap::new(),
+        nodes: vec![TestNodeSpec {
+            name: "a".into(),
+            statements: BTreeMap::new(),
+        }],
+        edges: vec![
+            TestEdgeSpec {
+                source: None,
+                sink: Some(TestEndpointSpec {
+                    node: 0,
+                    compass: None,
+                    statement: None,
+                }),
+                statements: one_statement("edge-key", "x"),
+            },
+            TestEdgeSpec {
+                source: None,
+                sink: Some(TestEndpointSpec {
+                    node: 0,
+                    compass: None,
+                    statement: None,
+                }),
+                statements: one_statement("edge-key", "x"),
+            },
+        ],
+    };
+    let bytes = graph_from_spec_bytes(&encode_graph_spec(&spec)).unwrap();
+    let err = crate::graph_join_by_edge_key_bytes(
+        &bytes,
+        &bytes,
+        &encode_cbor(&one_statement("key", "edge-key")),
+    )
+    .unwrap_err();
+    assert!(err.contains("duplicate dangling identity"));
+}
+
+#[test]
+fn test_graph_join_rejects_cross_input_node_label_collision() {
+    let spec = TestGraphSpec {
+        name: "g".into(),
+        statements: BTreeMap::new(),
+        nodes: vec![TestNodeSpec {
+            name: "same".into(),
+            statements: BTreeMap::new(),
+        }],
+        edges: Vec::new(),
+    };
+    let bytes = graph_from_spec_bytes(&encode_graph_spec(&spec)).unwrap();
+    let err = crate::graph_join_by_hedge_key_bytes(
+        &bytes,
+        &bytes,
+        &encode_cbor(&one_statement("key", "statement")),
+    )
+    .unwrap_err();
+    assert!(err.contains("duplicate node label"));
+}
+
+#[test]
+fn test_graph_join_rejects_cross_input_edge_label_collision() {
+    let make = |name: &str| TestGraphSpec {
+        name: name.into(),
+        statements: BTreeMap::new(),
+        nodes: vec![TestNodeSpec {
+            name: name.into(),
+            statements: BTreeMap::new(),
+        }],
+        edges: vec![TestEdgeSpec {
+            source: None,
+            sink: Some(TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: None,
+            }),
+            statements: BTreeMap::from([("__linnest-edge-name".into(), "same".into())]),
+        }],
+    };
+    let left = graph_from_spec_bytes(&encode_graph_spec(&make("left"))).unwrap();
+    let right = graph_from_spec_bytes(&encode_graph_spec(&make("right"))).unwrap();
+    let err = crate::graph_join_by_hedge_key_bytes(
+        &left,
+        &right,
+        &encode_cbor(&one_statement("key", "statement")),
+    )
+    .unwrap_err();
+    assert!(err.contains("duplicate edge label"));
+}
+
+#[test]
+fn test_graph_join_keeps_zero_match_partial_edges() {
+    let left = TestGraphSpec {
+        name: "left".into(),
+        statements: BTreeMap::new(),
+        nodes: vec![TestNodeSpec {
+            name: "a".into(),
+            statements: BTreeMap::new(),
+        }],
+        edges: vec![TestEdgeSpec {
+            source: None,
+            sink: Some(TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: Some("left".into()),
+            }),
+            statements: BTreeMap::new(),
+        }],
+    };
+    let right = TestGraphSpec {
+        name: "right".into(),
+        statements: BTreeMap::new(),
+        nodes: vec![TestNodeSpec {
+            name: "b".into(),
+            statements: BTreeMap::new(),
+        }],
+        edges: vec![TestEdgeSpec {
+            source: Some(TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: Some("right".into()),
+            }),
+            sink: None,
+            statements: BTreeMap::new(),
+        }],
+    };
+    let left = graph_from_spec_bytes(&encode_graph_spec(&left)).unwrap();
+    let right = graph_from_spec_bytes(&encode_graph_spec(&right)).unwrap();
+    let joined = crate::graph_join_by_hedge_key_bytes(
+        &left,
+        &right,
+        &encode_cbor(&one_statement("key", "statement")),
+    )
+    .unwrap();
+    let joined: TypstJoinResult = decode_cbor(&joined);
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&joined.graph).unwrap());
+    assert_eq!(edges.len(), 2);
+    assert!(edges
+        .iter()
+        .all(|edge| edge.source.is_none() || edge.sink.is_none()));
 }
 
 #[test]

@@ -173,15 +173,16 @@ incident nodes, while selected edge records retain both available endpoints.
 placement/optimization. Neither changes connectivity. Geometric `split-gap`,
 `edge-halves`, and crossing gaps likewise do not create topological endpoints.
 
-=== Unrelated join limitation
+=== Join data and identity rules
 
-The existing `graph.join` wrapper still constructs its result with
-`_empty-native-data()`. Earlier probes confirmed loss of node, edge, source, and
-sink Typst payloads, including content-valued labels and momentum. The native
-join also uses a left-biased edge-data merger. This is unrelated and unfixed:
-the cut's explicit sidecar remapping does not make join its data-preserving
-inverse. Replacing graph bytes alone cannot preserve sidecars after IDs or
-cardinalities change.
+`graph.join` now remaps graph, node, edge, and endpoint sidecars through native
+provenance records. Right-only dictionary fields survive and conflicting fields
+use the left value; unmatched records are copied from their source graph. The
+left graph remains authoritative for its name and layout configuration, while
+right-only graph statements and defaults are merged in. Joins are partial, so
+unmatched dangling half-edges remain. Unknown keys, duplicate matching
+identities, and node or edge label collisions across the two inputs are errors.
+`graph.join-edges` is the separate API for matching edge-level statements.
 
 == Sources and validation coverage
 

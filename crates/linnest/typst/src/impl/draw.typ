@@ -2572,8 +2572,8 @@
     length: _canvas-length(unit),
     debug: debug-level >= 1,
     padding: padding,
-    {
-      cetz.draw.get-ctx(ctx => {
+    (
+      ctx => {
         let nodes = graph-api.nodes(graph)
         let edges = graph-api.edges(graph)
         let elements = ()
@@ -3368,14 +3368,30 @@
           elements.push(element)
         }
 
-        for element in elements {
-          element
+        // Measure the graph before overlays and reuse its processed drawables,
+        // so custom drawing callbacks run once and named anchors remain available.
+        let rendered = cetz.process.many(
+          ctx, elements.flatten().filter(element => element != none),
+          compute-bounds: type(options.draw-after) == function,
+        )
+        let overlay = options.draw-after
+        if type(overlay) == function {
+          let low = if rendered.bounds == none { (0, 0, 0) } else { rendered.bounds.low }
+          let high = if rendered.bounds == none { (0, 0, 0) } else { rendered.bounds.high }
+          overlay = overlay(graph, (
+            left: low.at(0), right: high.at(0),
+            bottom: low.at(1), top: high.at(1),
+            width: high.at(0) - low.at(0), height: high.at(1) - low.at(1),
+          ))
         }
-      })
-      if options.draw-after != none {
-        _call(options.draw-after, graph)
-      }
-    },
+        let after = cetz.process.many(
+          rendered.ctx,
+          if overlay == none { () } else { overlay.flatten().filter(element => element != none) },
+          compute-bounds: false,
+        )
+        (ctx: after.ctx, drawables: rendered.drawables + after.drawables)
+      },
+    ),
   )
 
   if title == none {

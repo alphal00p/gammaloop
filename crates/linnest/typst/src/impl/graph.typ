@@ -1854,16 +1854,96 @@
     sink: none,
   ))
 }
-#let join(left, right, key) = {
-  _graph-object(
+#let _join-data(left, right) = {
+  if left == none { right } else if right == none { left } else if (
+    type(left) == dictionary and type(right) == dictionary
+  ) {
+    // Keep the left value when both inputs provide the same field.
+    right + left
+  } else {
+    left
+  }
+}
+
+#let _join-origin-data(origin, left, right, kind) = {
+  if origin == none { return none }
+  let left-index = origin.at("left", default: none)
+  let right-index = origin.at("right", default: none)
+  let lhs = if left-index == none { none } else {
+    _array-at(left.at(kind, default: ()), left-index)
+  }
+  let rhs = if right-index == none { none } else {
+    _array-at(right.at(kind, default: ()), right-index)
+  }
+  _join-data(lhs, rhs)
+}
+
+#let _join-origin-value(origin, left, right, kind) = {
+  if origin == none { return none }
+  let origins-left = left.at("origins", default: (:)).at(kind, default: ())
+  let origins-right = right.at("origins", default: (:)).at(kind, default: ())
+  let left-index = origin.at("left", default: none)
+  let right-index = origin.at("right", default: none)
+  let lhs = if left-index == none { none } else { _array-at(origins-left, left-index) }
+  let rhs = if right-index == none { none } else { _array-at(origins-right, right-index) }
+  _join-data(lhs, rhs)
+}
+
+#let _join-native-data(result, left, right) = {
+  let native-data = _empty-native-data()
+  native-data.graph = _join-data(left.graph, right.graph)
+  for kind in ("nodes", "edges", "hedges") {
+    let origins = result.at(kind, default: ())
+    let values = ()
+    for origin in origins {
+      values.push(_join-origin-data(origin, left, right, kind))
+    }
+    native-data.insert(kind, values)
+  }
+  native-data.origins = (
+    nodes: result.nodes.map(origin => _join-origin-value(origin, left, right, "nodes")),
+    edges: result.edges.map(origin => _join-origin-value(origin, left, right, "edges")),
+    hedges: result.hedges.map(origin => _join-origin-value(origin, left, right, "hedges")),
+  )
+  native-data
+}
+
+#let _join-validate-key(key) = {
+  assert(
+    type(key) == str and key in ("statement", "compass", "port-label", "id"),
+    message: "graph.join: unsupported half-edge key",
+  )
+}
+
+#let _join(left, right, key, edge: false) = {
+  if edge {
+    assert(type(key) == str and key != "", message: "graph.join-edges: key must be a nonempty edge statement name")
+  } else {
+    _join-validate-key(key)
+  }
+  let result = cbor((if edge {
+    _plugin.graph_join_by_edge_key(
+      graph-bytes(left),
+      graph-bytes(right),
+      cbor.encode((key: key)),
+    )
+  } else {
     _plugin.graph_join_by_hedge_key(
       graph-bytes(left),
       graph-bytes(right),
       cbor.encode((key: key)),
-    ),
-    _empty-native-data(),
+    )
+  }))
+  _graph-object(
+    result.graph,
+    _join-native-data(result, _native-data(left), _native-data(right)),
   )
 }
+
+#let join(left, right, key) = _join(left, right, key)
+
+#let join-edges(left, right, key) = _join(left, right, key, edge: true)
+
 #let cycles(graph) = {
   let topology = subgraph-impl.topology(graph)
   cbor(_plugin.graph_cycle_basis(graph-bytes(graph))).map(

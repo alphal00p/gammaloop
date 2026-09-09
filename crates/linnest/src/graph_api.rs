@@ -412,6 +412,24 @@ pub struct TypstJoinSpec {
     pub key: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct TypstJoinOrigin {
+    #[serde(default)]
+    pub left: Option<usize>,
+    #[serde(default)]
+    pub right: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct TypstJoinResult {
+    pub graph: Vec<u8>,
+    pub nodes: Vec<TypstJoinOrigin>,
+    pub edges: Vec<TypstJoinOrigin>,
+    pub hedges: Vec<TypstJoinOrigin>,
+}
+
 pub fn encode_cbor<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
     let mut buffer = Vec::new();
     ciborium::ser::into_writer(value, &mut buffer).map_err(|err| err.to_string())?;
@@ -1521,27 +1539,41 @@ pub fn graph_join_by_edge_key_bytes(
     let left = left_typst.to_dot_graph();
     let right = decode_typst_graph(arg2)?.to_dot_graph();
     let spec: TypstJoinSpec = decode_cbor(arg3, "join spec")?;
-    let key = spec.key;
-
-    let global_data = left.global_data.clone();
+    if spec.key.is_empty() {
+        return Err("graph.join: key must not be empty".into());
+    }
+    validate_join_identities(&left.graph, &spec.key, false)?;
+    validate_join_identities(&right.graph, &spec.key, false)?;
+    validate_join_names(&left.graph, &right.graph)?;
+    let left_nodes = left.graph.iter_nodes().count();
+    let left_hedges = left.graph.iter_hedges().count();
+    let left_map = edge_origin_map(&left.graph);
+    let right_map = edge_origin_map(&right.graph);
+    let mut global_data = left.global_data.clone();
+    merge_global_data(&mut global_data, &right.global_data);
     let graph = left
         .graph
         .join(
             right.graph,
             |left_flow, left_data, right_flow, right_data| {
                 left_flow == -right_flow
-                    && statement_value(left_data, &key)
-                        .zip(statement_value(right_data, &key))
+                    && statement_value(left_data, &spec.key)
+                        .zip(statement_value(right_data, &spec.key))
                         .is_some_and(|(left, right)| left == right)
             },
-            |left_flow, left_data, _, _| (left_flow, left_data),
+            |left_flow, left_data, right_flow, right_data| {
+                (
+                    left_flow,
+                    merge_edge_data(left_data, right_flow, right_data),
+                )
+            },
         )
         .map_err(|err| err.to_string())?;
-
-    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(
+    let graph = TypstGraph::from_dot_with_layout_config(
         DotGraph { global_data, graph },
         left_layout_config,
-    ))
+    );
+    encode_join_result(graph, left_nodes, left_hedges, &left_map, &right_map)
 }
 
 pub fn graph_join_by_hedge_key_bytes(
@@ -1554,27 +1586,247 @@ pub fn graph_join_by_hedge_key_bytes(
     let left = left_typst.to_dot_graph();
     let right = decode_typst_graph(arg2)?.to_dot_graph();
     let spec: TypstJoinSpec = decode_cbor(arg3, "join spec")?;
-    let key = spec.key;
-
-    let global_data = left.global_data.clone();
+    validate_hedge_key(&spec.key)?;
+    validate_join_identities(&left.graph, &spec.key, true)?;
+    validate_join_identities(&right.graph, &spec.key, true)?;
+    validate_join_names(&left.graph, &right.graph)?;
+    let left_nodes = left.graph.iter_nodes().count();
+    let left_hedges = left.graph.iter_hedges().count();
+    let left_map = edge_origin_map(&left.graph);
+    let right_map = edge_origin_map(&right.graph);
+    let mut global_data = left.global_data.clone();
+    merge_global_data(&mut global_data, &right.global_data);
     let graph = left
         .graph
         .join_with_hedge_data(
             right.graph,
             |_, left_flow, _, left_hedge, _, right_flow, _, right_hedge| {
                 left_flow == -right_flow
-                    && hedge_value(left_hedge, &key)
-                        .zip(hedge_value(right_hedge, &key))
+                    && hedge_value(left_hedge, &spec.key)
+                        .zip(hedge_value(right_hedge, &spec.key))
                         .is_some_and(|(left, right)| left == right)
             },
-            |left_flow, left_data, _, _| (left_flow, left_data),
+            |left_flow, left_data, right_flow, right_data| {
+                (
+                    left_flow,
+                    merge_edge_data(left_data, right_flow, right_data),
+                )
+            },
         )
         .map_err(|err| err.to_string())?;
-
-    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(
+    let graph = TypstGraph::from_dot_with_layout_config(
         DotGraph { global_data, graph },
         left_layout_config,
-    ))
+    );
+    encode_join_result(graph, left_nodes, left_hedges, &left_map, &right_map)
+}
+
+fn merge_edge_data(
+    left: EdgeData<DotEdgeData>,
+    _right_flow: Flow,
+    right: EdgeData<DotEdgeData>,
+) -> EdgeData<DotEdgeData> {
+    let mut data = right.data;
+    if left.data.payload.is_some() {
+        data.payload = left.data.payload;
+    }
+    for (key, value) in left.data.statements {
+        data.statements.insert(key, value);
+    }
+    for (key, value) in left.data.local_statements {
+        data.local_statements.insert(key, value);
+    }
+    if left.data.edge_id.is_some() {
+        data.edge_id = left.data.edge_id;
+    }
+    EdgeData::new(data, left.orientation)
+}
+
+fn merge_global_data(left: &mut GlobalData, right: &GlobalData) {
+    if left.payload.is_none() {
+        left.payload = right.payload.clone();
+    }
+    for (k, v) in &right.statements {
+        left.statements
+            .entry(k.clone())
+            .or_insert_with(|| v.clone());
+    }
+    for (k, v) in &right.edge_statements {
+        left.edge_statements
+            .entry(k.clone())
+            .or_insert_with(|| v.clone());
+    }
+    for (k, v) in &right.node_statements {
+        left.node_statements
+            .entry(k.clone())
+            .or_insert_with(|| v.clone());
+    }
+}
+
+fn validate_hedge_key(key: &str) -> Result<(), String> {
+    matches!(key, "statement" | "compass" | "port-label" | "id")
+        .then_some(())
+        .ok_or_else(|| format!("graph.join: unsupported hedge key {key:?}"))
+}
+
+fn validate_join_identities(
+    graph: &linnet::half_edge::HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
+    key: &str,
+    hedge_key: bool,
+) -> Result<(), String> {
+    let mut seen = HashSet::new();
+    for (pair, _, data) in graph.iter_edges() {
+        let HedgePair::Unpaired { hedge, flow } = pair else {
+            continue;
+        };
+        let value = if hedge_key {
+            hedge_value(&graph[hedge], key)
+        } else {
+            statement_value(data, key).map(str::to_owned)
+        };
+        let Some(value) = value else {
+            continue;
+        };
+        if !seen.insert((flow, value.clone())) {
+            return Err(format!(
+                "graph.join: duplicate dangling identity ({flow:?}, {value:?})"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_join_names(
+    left: &linnet::half_edge::HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
+    right: &linnet::half_edge::HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
+) -> Result<(), String> {
+    let names: HashSet<_> = left.iter_nodes().filter_map(|(_, _, n)| n.name()).collect();
+    for (_, _, n) in right.iter_nodes() {
+        if let Some(name) = n.name() {
+            if names.contains(name) {
+                return Err(format!("graph.join: duplicate node label {name:?}"));
+            }
+        }
+    }
+    let names: HashSet<_> = left
+        .iter_edges()
+        .filter_map(|(_, _, e)| {
+            e.data
+                .statements
+                .get(TYPST_EDGE_NAME_KEY)
+                .map(String::as_str)
+        })
+        .collect();
+    for (_, _, e) in right.iter_edges() {
+        if let Some(name) = e
+            .data
+            .statements
+            .get(TYPST_EDGE_NAME_KEY)
+            .map(String::as_str)
+        {
+            if names.contains(name) {
+                return Err(format!("graph.join: duplicate edge label {name:?}"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn edge_origin_map(
+    graph: &linnet::half_edge::HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
+) -> HashMap<Hedge, usize> {
+    let mut map = HashMap::new();
+    for (pair, index, _) in graph.iter_edges() {
+        match pair {
+            HedgePair::Unpaired { hedge, .. } => {
+                map.insert(hedge, index.0);
+            }
+            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                map.insert(source, index.0);
+                map.insert(sink, index.0);
+            }
+        }
+    }
+    map
+}
+
+fn encode_join_result(
+    graph: TypstGraph,
+    left_nodes: usize,
+    left_hedges: usize,
+    left_map: &HashMap<Hedge, usize>,
+    right_map: &HashMap<Hedge, usize>,
+) -> Result<Vec<u8>, String> {
+    let graph_bytes = encode_typst_graph(&graph)?;
+    let dot = graph.to_dot_graph();
+    let nodes = dot
+        .iter_nodes()
+        .enumerate()
+        .map(|(i, _)| TypstJoinOrigin {
+            left: (i < left_nodes).then_some(i),
+            right: if i >= left_nodes {
+                Some(i - left_nodes)
+            } else {
+                None
+            },
+        })
+        .collect();
+    let hedges = dot
+        .iter_hedges()
+        .map(|(h, _)| TypstJoinOrigin {
+            left: (h.0 < left_hedges).then_some(h.0),
+            right: if h.0 >= left_hedges {
+                Some(h.0 - left_hedges)
+            } else {
+                None
+            },
+        })
+        .collect();
+    let edges = dot
+        .iter_edges()
+        .map(|(pair, _, _)| {
+            let hs: Vec<_> = match pair {
+                HedgePair::Unpaired { hedge, .. } => vec![hedge],
+                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                    vec![source, sink]
+                }
+            };
+            let li = hs
+                .iter()
+                .filter(|h| h.0 < left_hedges)
+                .find_map(|h| left_map.get(h))
+                .copied();
+            let ri = hs
+                .iter()
+                .filter(|h| h.0 >= left_hedges)
+                .find_map(|h| right_map.get(&Hedge(h.0 - left_hedges)))
+                .copied();
+            match (li, ri) {
+                (Some(left), Some(right)) => TypstJoinOrigin {
+                    left: Some(left),
+                    right: Some(right),
+                },
+                (Some(index), None) => TypstJoinOrigin {
+                    left: Some(index),
+                    right: None,
+                },
+                (None, Some(index)) => TypstJoinOrigin {
+                    left: None,
+                    right: Some(index),
+                },
+                (None, None) => TypstJoinOrigin {
+                    left: None,
+                    right: None,
+                },
+            }
+        })
+        .collect();
+    encode_cbor(&TypstJoinResult {
+        graph: graph_bytes,
+        nodes,
+        edges,
+        hedges,
+    })
 }
 
 fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {

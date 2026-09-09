@@ -314,8 +314,13 @@
   /// -> auto | function
   draw-node: auto,
   /// Additional CeTZ elements drawn after the edges, labels, and nodes in the
-  /// same canvas. A callback receives this positioned graph and returns CeTZ
-  /// elements; use `graph.nodes` / `graph.edges` to inspect its coordinates.
+  /// same canvas. A callback receives `(graph, bounds)` and returns CeTZ
+  /// elements. `bounds` contains numeric `left`, `right`, `top`, `bottom`,
+  /// `width`, and `height` in graph units, enclosing the rendered graph before
+  /// overlays and canvas padding. It includes shapes, curves, and label boxes;
+  /// CeTZ does not add stroke thickness to path bounds. `top` is the greatest
+  /// y coordinate, and all fields are zero for an empty drawing.
+  /// Use `graph.nodes` / `graph.edges` to inspect the positioned graph.
   /// These elements share `unit` and contribute to canvas bounds, but do not
   /// participate in graph layout.
   /// -> none | array | function
