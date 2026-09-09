@@ -22,6 +22,7 @@
     {
       name = "python-api";
       packages = ["gammaloop-integration-tests"];
+      runtimePythonModule = true;
       runtimeTestSourcePackages = [];
       filter = "package(gammaloop-integration-tests) & binary(test_python_api)";
       extraFeatures = testFeatures;
@@ -172,11 +173,6 @@
             dependencyRepresentative: dependencyRepresentative != workspaceHackPackage
           )
           (workspaceTestComponentDependencyRepresentativesFor representative)
-        )
-        ++ (
-          if builtins.elem "gammaloop-integration-tests" workspaceTestComponentMembers.${representative}
-          then ["packages.${system}.gammaloop-python-module"]
-          else []
         );
     })
     workspaceTestDependencyComponentRepresentatives);
@@ -193,12 +189,7 @@
   nextestArchiveAttr = target: "checks.${system}.gammaloop-nextest-binaries-${target}";
   nextestArchiveDependenciesFor = target:
     ["packages.${system}.cargoArtifacts"]
-    ++ unique (map crateTestBinaryAttr nextestPackageGroups.${target})
-    ++ (
-      if builtins.elem "gammaloop-integration-tests" nextestPackageGroups.${target}
-      then ["packages.${system}.gammaloop-python-module"]
-      else []
-    );
+    ++ unique (map crateTestBinaryAttr nextestPackageGroups.${target});
   # The Hakari workspace-hack deps artifact is the root for the
   # Symbolica-containing cache DAG. Higher-level crate cache jobs reach it
   # through their Guppy-resolved workspace cache dependencies.
@@ -219,7 +210,7 @@
         value =
           [(nextestArchiveAttr group.name)]
           ++ (
-            if builtins.elem "gammaloop-integration-tests" group.packages
+            if group.runtimePythonModule or false
             then ["packages.${system}.gammaloop-python-module"]
             else []
           );
@@ -237,11 +228,9 @@
       ${gammaloopApiPackageArtifactsAttr} = [(cratePackageAttr "gammaloop-api")];
       "packages.${system}.cargoArtifacts" = [workspaceHackCacheAttr];
       ${nextestContextualTestDependencyAttr "python-api" "gammaloop-integration-tests"} =
-        workspaceTestDependencyArtifactDependencies.${crateTestDependencyAttr (workspaceTestComponentRepresentativeFor "gammaloop-integration-tests")}
-        ++ ["packages.${system}.gammaloop-python-module"];
+        workspaceTestDependencyArtifactDependencies.${crateTestDependencyAttr (workspaceTestComponentRepresentativeFor "gammaloop-integration-tests")};
       ${nextestContextualTestBinaryAttr "python-api" "gammaloop-integration-tests"} = [
         (nextestContextualTestDependencyAttr "python-api" "gammaloop-integration-tests")
-        "packages.${system}.gammaloop-python-module"
       ];
       "checks.${system}.gammaloop-check" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoArtifacts"];

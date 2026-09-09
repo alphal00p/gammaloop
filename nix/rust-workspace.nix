@@ -2248,7 +2248,7 @@
             nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [nextestPython];
             PYO3_PYTHON = "${nextestPython}/bin/python3";
             PYTHON = "${nextestPython}/bin/python3";
-            PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
+            PYTHONPATH = "${nextestPython}/${pythonSitePackages}";
           }))
     workspaceTestContexts);
 
@@ -2278,7 +2278,7 @@
         nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [nextestPython];
         PYO3_PYTHON = "${nextestPython}/bin/python3";
         PYTHON = "${nextestPython}/bin/python3";
-        PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
+        PYTHONPATH = "${nextestPython}/${pythonSitePackages}";
       });
 
   craneTestBinaryArtifacts = lib.genAttrs workspacePackages (package:
@@ -2525,7 +2525,9 @@
       packages = [package];
       extraFeatures = target.extraFeatures or {};
     };
-  nextestUsesPythonModule = target: (nextestContextFor target).usesPythonModule;
+  # The extension is imported by the Python tests at runtime; compiling their
+  # Rust harness needs the interpreter but does not need the extension build.
+  nextestUsesPythonModule = target: target.runtimePythonModule or false;
   nextestSourcePackagesFor = target: (nextestContextFor target).sourcePackages;
   nextestSrcFor = target:
     workspacePackageSrcForSourcePackages {
@@ -2581,7 +2583,7 @@
         nativeBuildInputs =
           (ciArgs.nativeBuildInputs or [])
           ++ [pkgs.cargo-nextest pkgs.form]
-          ++ lib.optionals (nextestUsesPythonModule target) [nextestPython];
+          ++ lib.optionals context.usesPythonModule [nextestPython];
         postPatch = ''
           ${workspaceMissingCargoTargetsScript}
           ${testBinaryFeatureAnchorSourceScriptFor context ""}
@@ -2607,10 +2609,10 @@
         '';
         checkPhaseCargoCommand = "";
         installPhaseCommand = "";
-      } // lib.optionalAttrs (nextestUsesPythonModule target) {
+      } // lib.optionalAttrs context.usesPythonModule {
         PYO3_PYTHON = "${nextestPython}/bin/python3";
         PYTHON = "${nextestPython}/bin/python3";
-        PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
+        PYTHONPATH = "${nextestPython}/${pythonSitePackages}";
       });
 
   nextestArchiveFor = target: let
