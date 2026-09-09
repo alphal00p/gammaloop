@@ -235,12 +235,9 @@
 #let about-affiliation(affiliation) = el("a", class: "about-affiliation", attrs: (
   href: affiliation.url,
 ))[
-  #el("span")[#affiliation.url]
-  #el("strong")[#affiliation.location]
-  #el("small")[#affiliation.name]
-
-  #affiliation.summary
-
+  #el("span")[#affiliation.location]
+  #el("strong")[#affiliation.name]
+  #el("p")[#affiliation.summary]
   #el("b", attrs: ("aria-hidden": "true"))[↗]
 ]
 #let about-next(body) = region(class: "about-next", body)
