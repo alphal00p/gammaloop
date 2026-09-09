@@ -185,7 +185,7 @@ impl<T: FixedPrecision> FixedPrecision for Complex<T> {
     const BINARY_PRECISION: usize = T::BINARY_PRECISION;
 }
 
-impl<T: EvaluationDomain + FloatLike> EvaluationDomain for Complex<T> {
+impl<T: EvaluationDomain> EvaluationDomain for Complex<T> {
     const FIXED_PRECISION: Option<u32> = T::FIXED_PRECISION;
 
     fn try_from_complex_float(f: SymComplex<Float>) -> Result<Self, String> {

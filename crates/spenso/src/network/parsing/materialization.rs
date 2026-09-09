@@ -9,10 +9,11 @@
 //! it would have built from fully expanded syntax.
 //!
 //! The main Schoonschip convention is:
-//! 1. a compact rank-one tensor `p(rep)` used as a function argument becomes a
-//!    fresh slot in that argument position;
+//! 1. a tensor with one compact axis, such as `p(rep)`, used as a function
+//!    argument becomes a fresh slot in that argument position; any explicit
+//!    spectator slots on the tensor are preserved;
 //! 2. the tensor `p(slot)` is multiplied next to the rebuilt function;
-//! 3. compact scalar products `g(p(rep), q(rep))` and `dot(p(rep), q(rep))`
+//! 3. compact inner products `g(p(rep), q(rep))` and `dot(p(rep), q(rep))`
 //!    share one fresh self-dual slot and become the product `p(slot) * q(slot)`.
 //!
 //! Additional factors are accumulated beside the current atom and are not
@@ -22,7 +23,7 @@
 //! then lets this Schoonschip helper expand compact arguments inside each factor.
 
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, MulView, Symbol, representation::FunView},
     id::MatchSettings,
 };
 
@@ -43,7 +44,7 @@ use crate::{
     shadowing,
     shadowing::Concretize,
     structure::{
-        HasStructure, ScalarStructure, TensorShell, TensorStructure,
+        HasStructure, OrderedStructure, ScalarStructure, TensorShell, TensorStructure,
         representation::{LibraryRep, RepName, Representation},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot},
     },
@@ -229,9 +230,10 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
 
     /// Materialize a compact metric or dot product into two tensor factors.
     ///
-    /// Both arguments must be compact vectors with the same self-dual
-    /// representation. They are assigned the same fresh slot, so
-    /// `g(p(rep), q(rep))` becomes `p(slot) * q(slot)`.
+    /// Both arguments must have one compact axis with the same self-dual
+    /// representation. These axes receive the same fresh slot, so
+    /// `g(p(rep), q(rep))` becomes `p(slot) * q(slot)`. Explicit spectator slots
+    /// remain unchanged, including spectators in the contracted representation.
     fn compact_scalar_product(&self, value: FunView<'_>) -> Option<SchoonschipMaterialization> {
         let (lhs, rhs, rep) = Self::compact_scalar_product_parts(value)?;
 
@@ -293,11 +295,12 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         Some((*lhs, *rhs, rep))
     }
 
-    /// Infer the compact representation carried by a rank-one shorthand atom.
+    /// Infer the unique compact axis carried by a shorthand atom.
     ///
     /// Functions expose a compact representation through exactly one direct
     /// representation argument. Sums are accepted only when every summand exposes
-    /// the same representation.
+    /// the same representation. Products are accepted only when exactly one factor
+    /// is a compact vector and every other factor is syntactically scalar.
     fn compact_vector_rep(value: AtomView<'_>) -> Option<Representation<LibraryRep>> {
         match value {
             AtomView::Fun(fun) => Self::compact_tensor_rep_arg(fun).map(|(_, rep)| rep),
@@ -306,15 +309,46 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
                 let rep = reps.next()??;
                 reps.all(|candidate| candidate == Some(rep)).then_some(rep)
             }
+            AtomView::Mul(product) => Self::compact_vector_product_parts(product)
+                .map(|(_, representation)| representation),
             _ => None,
         }
     }
 
+    /// Locate the only compact vector in a scalar-weighted product.
+    ///
+    /// Failure to identify a compact vector does not prove that a factor is
+    /// scalar: explicit-slot tensors also have no compact representation. The
+    /// ordinary syntactic structure inference is therefore the authority for
+    /// every remaining factor.
+    fn compact_vector_product_parts(
+        product: MulView<'_>,
+    ) -> Option<(usize, Representation<LibraryRep>)> {
+        let mut compact_vector = None;
+
+        for (position, factor) in product.iter().enumerate() {
+            if let Some(representation) = Self::compact_vector_rep(factor) {
+                if compact_vector.is_some() {
+                    return None;
+                }
+                compact_vector = Some((position, representation));
+            } else if !OrderedStructure::<LibraryRep, Aind>::syntactic_structure_from_atom(factor)
+                .ok()?
+                .is_scalar()
+            {
+                return None;
+            }
+        }
+
+        compact_vector
+    }
+
     /// Locate the compact representation argument of one tensor function.
     ///
-    /// A compact vector function is not itself a representation, is not a metric
-    /// or dot product, has no explicit slot argument, and has exactly one direct
-    /// argument matching the representation wildcard convention.
+    /// A compact tensor function is not itself a representation, is not a metric
+    /// or dot product, and has exactly one direct argument matching the
+    /// representation wildcard convention. Explicit slots are spectators: only
+    /// that unique unindexed axis is replaced during materialization.
     fn compact_tensor_rep_arg(value: FunView<'_>) -> Option<(usize, Representation<LibraryRep>)> {
         if value.get_symbol() == ETS.metric || value.get_symbol() == SPENSO_TAG.dot {
             return None;
@@ -325,18 +359,15 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         }
 
         let args = value.iter().collect::<Vec<_>>();
-        if args
-            .iter()
-            .any(|arg| Slot::<LibraryRep, Aind>::try_from(*arg).is_ok())
-        {
-            return None;
-        }
-
         let rep_args = args
             .iter()
             .enumerate()
             .filter_map(|(position, arg)| {
-                Self::compact_rep_pattern_match(*arg).map(|rep| (position, rep))
+                if Slot::<LibraryRep, Aind>::try_from(*arg).is_ok() {
+                    None
+                } else {
+                    Self::compact_rep_pattern_match(*arg).map(|rep| (position, rep))
+                }
             })
             .collect::<Vec<_>>();
 
@@ -367,7 +398,9 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
     ///
     /// For a function, this rebuilds the function with the matched compact
     /// representation argument replaced by `slot`. For a sum, every summand is
-    /// rebuilt with the same slot so the expansion keeps a single dummy edge.
+    /// rebuilt with the same slot so the expansion keeps a single dummy edge. A
+    /// scalar-weighted product preserves its scalar factors around that rebuilt
+    /// vector.
     fn materialize_compact_vector_with_slot(
         value: AtomView<'_>,
         rep: &Representation<LibraryRep>,
@@ -397,6 +430,24 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
                 let first = terms.next()??;
                 let rest = terms.collect::<Option<Vec<_>>>()?;
                 Some(rest.into_iter().fold(first, |sum, term| sum + term))
+            }
+            AtomView::Mul(product) => {
+                let (vector_position, matched_rep) = Self::compact_vector_product_parts(product)?;
+                if matched_rep != *rep {
+                    return None;
+                }
+
+                product
+                    .iter()
+                    .enumerate()
+                    .try_fold(Atom::num(1), |product, (position, factor)| {
+                        if position == vector_position {
+                            Self::materialize_compact_vector_with_slot(factor, rep, slot)
+                                .map(|factor| product * factor)
+                        } else {
+                            Some(product * factor)
+                        }
+                    })
             }
             _ => None,
         }

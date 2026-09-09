@@ -56,6 +56,8 @@ pub const PAIR_SCORE_ATOM_WORK: u8 = 6;
 pub const PAIR_SCORE_MAX_ENTRY_GROWTH: u8 = 7;
 pub const PAIR_SCORE_ENTRY_WORK: u8 = 8;
 pub const PAIR_SCORE_INVERSE_DEGREE: u8 = 9;
+pub const PAIR_SCORE_ESTIMATED_OUTPUT_BYTES: u8 = 10;
+pub const PAIR_SCORE_ESTIMATED_SYMBOLIC_WORK: u8 = 11;
 
 pub const DEFAULT_EXACT_JOIN_LIMIT: usize = 20_000;
 
@@ -87,6 +89,8 @@ pub const fn pair_score_order_contains(score_order: u128, component: u8) -> bool
 const fn pair_score_order_needs_sparse_estimate(score_order: u128) -> bool {
     pair_score_order_contains(score_order, PAIR_SCORE_ESTIMATED_OUTPUT_ENTRIES)
         || pair_score_order_contains(score_order, PAIR_SCORE_MAX_OUTPUT_ENTRY_PRODUCTS)
+        || pair_score_order_contains(score_order, PAIR_SCORE_ESTIMATED_OUTPUT_BYTES)
+        || pair_score_order_contains(score_order, PAIR_SCORE_ESTIMATED_SYMBOLIC_WORK)
 }
 
 const fn pair_score_order_needs_output_dense_size(score_order: u128) -> bool {
@@ -107,6 +111,26 @@ pub const PAIR_SCORE_SPARSE_ATOM_AWARE: u128 = pack_pair_score_order([
     PAIR_SCORE_INVERSE_DEGREE,
     PAIR_SCORE_ORDER_END,
     PAIR_SCORE_ORDER_END,
+]);
+
+/// Prefer small symbolic intermediates to low rank. The payload estimate counts
+/// joined entry products before cancellations; it is a cost heuristic, not an
+/// allocation measurement. For example, four products of large symbolic entries
+/// can cost more than eight products of tiny entries despite their lower rank.
+/// Dense volume remains meaningful for backends without symbolic profiles.
+pub const PAIR_SCORE_INTERMEDIATE_COST: u128 = pack_pair_score_order([
+    PAIR_SCORE_ESTIMATED_OUTPUT_BYTES,
+    PAIR_SCORE_ESTIMATED_SYMBOLIC_WORK,
+    PAIR_SCORE_ESTIMATED_OUTPUT_ENTRIES,
+    PAIR_SCORE_OUTPUT_DENSE_SIZE,
+    PAIR_SCORE_MAX_OUTPUT_ENTRY_PRODUCTS,
+    PAIR_SCORE_SIMPLE_TENSOR_PENALTY,
+    PAIR_SCORE_COMMON_FACTOR_PENALTY,
+    PAIR_SCORE_MAX_ENTRY_GROWTH,
+    PAIR_SCORE_ATOM_WORK,
+    PAIR_SCORE_ENTRY_WORK,
+    PAIR_SCORE_RESULT_RANK,
+    PAIR_SCORE_INVERSE_DEGREE,
 ]);
 
 pub const PAIR_SCORE_ATOM_AWARE: u128 = pack_pair_score_order([
@@ -156,6 +180,8 @@ pub const PAIR_SCORE_ENTRY_AWARE: u128 = pack_pair_score_order([
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ResultRankPairScore {
+    estimated_output_bytes: u128,
+    estimated_symbolic_work: u128,
     result_rank: u128,
     estimated_output_entries: u128,
     output_dense_size: u128,
@@ -186,8 +212,20 @@ impl ResultRankPairScore {
         let right_max_terms = right.max_terms.max(1) as u128;
         let left_max_bytes = left.max_bytes.max(1) as u128;
         let right_max_bytes = right.max_bytes.max(1) as u128;
+        let left_mean_bytes = left_bytes.div_ceil(left_entries);
+        let right_mean_bytes = right_bytes.div_ceil(right_entries);
+        let left_mean_terms = left_terms.div_ceil(left_entries);
+        let right_mean_terms = right_terms.div_ceil(right_entries);
 
         Self {
+            estimated_output_bytes: pair
+                .estimated_products
+                .saturating_mul(left_mean_bytes.saturating_add(right_mean_bytes)),
+            estimated_symbolic_work: pair.estimated_products.saturating_mul(
+                left_mean_bytes
+                    .saturating_mul(right_mean_terms)
+                    .saturating_add(right_mean_bytes.saturating_mul(left_mean_terms)),
+            ),
             result_rank: result_rank as u128,
             estimated_output_entries: pair.estimated_output_entries,
             output_dense_size: pair.output_dense_size,
@@ -224,6 +262,8 @@ impl ResultRankPairScore {
 
     fn component(&self, component: u8) -> u128 {
         match component {
+            PAIR_SCORE_ESTIMATED_OUTPUT_BYTES => self.estimated_output_bytes,
+            PAIR_SCORE_ESTIMATED_SYMBOLIC_WORK => self.estimated_symbolic_work,
             PAIR_SCORE_RESULT_RANK => self.result_rank,
             PAIR_SCORE_ESTIMATED_OUTPUT_ENTRIES => self.estimated_output_entries,
             PAIR_SCORE_OUTPUT_DENSE_SIZE => self.output_dense_size,
@@ -266,6 +306,11 @@ pub struct MinResultRankWith<
 
 pub type MinResultRank<COpt = ()> =
     MinResultRankWith<PAIR_SCORE_SPARSE_ATOM_AWARE, DEFAULT_EXACT_JOIN_LIMIT, (), COpt>;
+
+/// Contract using sparse overlap and symbolic intermediate cost before rank,
+/// with the same scalar, trace, library and exterior-product rules as MinResultRank.
+pub type MinIntermediateCost<COpt = ()> =
+    MinResultRankWith<PAIR_SCORE_INTERMEDIATE_COST, DEFAULT_EXACT_JOIN_LIMIT, (), COpt>;
 
 impl<const SCORE_ORDER: u128, const EXACT_JOIN_LIMIT: usize, CStrat, COpt> Default
     for MinResultRankWith<SCORE_ORDER, EXACT_JOIN_LIMIT, CStrat, COpt>
@@ -1713,7 +1758,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 } else {
                     1
                 };
-                let pair_estimate = if pair_score_order_needs_sparse_estimate(SCORE_ORDER) {
+                let mut pair_estimate = if pair_score_order_needs_sparse_estimate(SCORE_ORDER) {
                     match (left_tensor, right_tensor) {
                         (Some(left_tensor), Some(right_tensor)) => {
                             executor.tensor(*left_tensor).contraction_pair_estimate(
@@ -1740,6 +1785,31 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                         output_dense_size,
                     )
                 };
+                if (pair_score_order_contains(SCORE_ORDER, PAIR_SCORE_ESTIMATED_OUTPUT_BYTES)
+                    || pair_score_order_contains(SCORE_ORDER, PAIR_SCORE_ESTIMATED_SYMBOLIC_WORK))
+                    && left_tensor.is_some()
+                    && right_tensor.is_some()
+                {
+                    // Unique tensor coordinates admit at most one product per
+                    // output coordinate and contracted-coordinate tuple. This
+                    // cap is exact for dense support and remains conservative
+                    // for sparse support, without assuming uniform occupancy.
+                    // Lazy sums can contain several terms per coordinate, so
+                    // their Cartesian estimate must not receive this cap.
+                    let contracted_size = left_structure
+                        .external_dims_iter()
+                        .enumerate()
+                        .filter(|(axis, _)| left_matches[*axis])
+                        .map(|(_, dim)| {
+                            usize::try_from(dim)
+                                .map(|size| size as u128)
+                                .unwrap_or(u128::MAX)
+                        })
+                        .fold(1u128, u128::saturating_mul);
+                    pair_estimate.estimated_products = pair_estimate
+                        .estimated_products
+                        .min(output_dense_size.saturating_mul(contracted_size));
+                }
                 let score = ResultRankPairScore::new(
                     result_rank as u32,
                     degree,

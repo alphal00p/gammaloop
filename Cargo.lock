@@ -1659,6 +1659,7 @@ name = "gammaloop-workspace-hack"
 version = "0.1.0"
 dependencies = [
  "ahash 0.8.12",
+ "aho-corasick",
  "anstream",
  "arrayvec",
  "bincode 2.0.1",
@@ -1694,6 +1695,7 @@ dependencies = [
  "regex-automata",
  "regex-syntax",
  "rug",
+ "rust-embed-utils",
  "rustix 1.1.4",
  "serde",
  "serde_core",
@@ -1877,7 +1879,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "2.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a511209dce2ca99925fe87f8b18e4bf03"
+source = "git+https://github.com/alphal00p/symbolica?rev=4d0a833eb8e059d1f95bdae5abed2559830b235f#4d0a833eb8e059d1f95bdae5abed2559830b235f"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -2891,7 +2893,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a511209dce2ca99925fe87f8b18e4bf03"
+source = "git+https://github.com/alphal00p/symbolica?rev=4d0a833eb8e059d1f95bdae5abed2559830b235f#4d0a833eb8e059d1f95bdae5abed2559830b235f"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -4674,7 +4676,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a511209dce2ca99925fe87f8b18e4bf03"
+source = "git+https://github.com/alphal00p/symbolica?rev=4d0a833eb8e059d1f95bdae5abed2559830b235f#4d0a833eb8e059d1f95bdae5abed2559830b235f"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",

@@ -74,6 +74,8 @@ use std::{convert::Infallible, fmt::Debug};
 const LARGE_SUM_PROFILE_THRESHOLD: usize = 32;
 const MIN_LAZY_TENSOR_SUM_TERMS: usize = 2;
 #[cfg(feature = "shadowing")]
+const MAX_EAGER_TENSOR_SUM_BYTES: usize = 16 * 1024 * 1024;
+#[cfg(feature = "shadowing")]
 const MIN_LAZY_FUSED_NUMERIC_CONTRACT_TERMS: usize = 8;
 
 pub struct FastTensorSumContractTerm<T, Sc> {
@@ -226,6 +228,10 @@ impl TensorContractionProfile {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TensorContractionPairEstimate {
+    /// Nonzero entry products sharing their contracted coordinates, before
+    /// symbolic cancellation. The profile fallback is a conservative Cartesian
+    /// estimate; sparse support can supply its exact join cardinality.
+    pub estimated_products: u128,
     pub estimated_output_entries: u128,
     pub output_dense_size: u128,
     pub max_output_entry_products: u128,
@@ -243,6 +249,7 @@ impl TensorContractionPairEstimate {
         let output_dense_size = output_dense_size.max(1);
         let estimated_output_entries = output_dense_size.min(entry_work).max(1);
         Self {
+            estimated_products: entry_work,
             estimated_output_entries,
             output_dense_size,
             max_output_entry_products: div_ceil_u128(entry_work, estimated_output_entries).max(1),
@@ -616,6 +623,7 @@ where
     let right_groups = sparse_free_keys_by_match(right_sparse, right_matches, None);
     if left_groups.is_empty() || right_groups.is_empty() {
         return TensorContractionPairEstimate {
+            estimated_products: 0,
             estimated_output_entries: 1,
             output_dense_size: output_dense_size.max(1),
             max_output_entry_products: 1,
@@ -645,6 +653,7 @@ where
 
     if join_cardinality == 0 {
         return TensorContractionPairEstimate {
+            estimated_products: 0,
             estimated_output_entries: 1,
             output_dense_size: output_dense_size.max(1),
             max_output_entry_products: 1,
@@ -686,6 +695,7 @@ where
     };
 
     TensorContractionPairEstimate {
+        estimated_products: join_cardinality,
         estimated_output_entries,
         output_dense_size,
         max_output_entry_products,
@@ -1734,7 +1744,9 @@ impl ScalarAliases {
                 .get(index)
                 .expect("scalar alias references an existing scalar")
                 .clone();
-            aliased = aliased.add_alias(scalar_store_alias(index), original);
+            // Scalar references already became handles before network execution.
+            // Register their definitions without recompressing the entire result.
+            aliased.register_alias(scalar_store_alias(index), original);
         }
         aliased
     }
@@ -2907,10 +2919,10 @@ pub mod parsing;
 // use log::trace;
 pub mod contract;
 pub use contract::{
-    ContractScalars, ContractionStrategy, DEFAULT_EXACT_JOIN_LIMIT, MinResultRank,
-    MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE, PAIR_SCORE_RESULT_RANK_ONLY,
-    PAIR_SCORE_SPARSE_ATOM_AWARE, ProductContraction, SingleSmallestDegree, SmallestDegree,
-    SmallestDegreeIter,
+    ContractScalars, ContractionStrategy, DEFAULT_EXACT_JOIN_LIMIT, MinIntermediateCost,
+    MinResultRank, MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
+    PAIR_SCORE_INTERMEDIATE_COST, PAIR_SCORE_RESULT_RANK_ONLY, PAIR_SCORE_SPARSE_ATOM_AWARE,
+    ProductContraction, SingleSmallestDegree, SmallestDegree, SmallestDegreeIter,
 };
 pub trait ExecutionStrategy<E, FL, L, K, FK, Aind>
 where
@@ -3440,10 +3452,11 @@ where
         + Clone
         + Ref
         + FastTensorSum
+        + AtomSumShapeDiagnostics
         + From<LT::WithIndices>
         + ScalarMul<Store::Scalar, Output = Store::Tensor>
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
-    Store::Scalar: Clone,
+    Store::Scalar: Clone + 'static,
     LT: LibraryTensor + Clone,
     L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
     K: Display + Debug,
@@ -3478,9 +3491,38 @@ where
     let all_scalar_terms = terms
         .iter()
         .all(|term| store.tensor(term.tensor).scalar_ref().is_some());
-    let keep_lazy = profile::lazy_tensor_sums()
-        && !all_scalar_terms
-        && terms.len() >= MIN_LAZY_TENSOR_SUM_TERMS;
+    let keep_lazy = !all_scalar_terms
+        && terms.len() >= MIN_LAZY_TENSOR_SUM_TERMS
+        && (profile::lazy_tensor_sums() || {
+            #[cfg(feature = "shadowing")]
+            {
+                // Broadcasting a scalar coefficient into every component can
+                // make a small factored sum enormous before external tensors
+                // reduce its rank. Keep those coefficients outside the tensor
+                // until contraction, while still materializing small sums.
+                let mut estimated_bytes = 0usize;
+                terms.iter().any(|term| {
+                    let shape = store.tensor(term.tensor).atom_sum_shape_stats(true);
+                    let scalar_bytes = term
+                        .scale
+                        .and_then(|scale| {
+                            scalar_atom_sum_shape_stats(store.scalar_ref(scale), true)
+                        })
+                        .map_or(0, |shape| shape.total_bytes);
+                    estimated_bytes = estimated_bytes
+                        .saturating_add(shape.total_bytes)
+                        .saturating_add(
+                            shape
+                                .entries
+                                .saturating_sub(shape.zero_entries)
+                                .saturating_mul(scalar_bytes),
+                        );
+                    estimated_bytes >= MAX_EAGER_TENSOR_SUM_BYTES
+                })
+            }
+            #[cfg(not(feature = "shadowing"))]
+            false
+        });
 
     if profile::enabled()
         && (keep_lazy || targets.len() > LARGE_SUM_PROFILE_THRESHOLD || profile::verbose())
@@ -4332,9 +4374,10 @@ pub trait ExecuteOp<FL, L, K, FK, Aind>: Sized {
         FK: Display;
 }
 
-impl<S, Store: TensorScalarStore, K, FK, Aind: AbsInd> Network<Store, K, FK, Aind>
+impl<S, T, Sc, Store, K, FK, Aind: AbsInd> Network<Store, K, FK, Aind>
 where
-    Store::Tensor: HasStructure<Structure = S>,
+    Store: TensorScalarStore<Tensor = T, Scalar = Sc> + NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+    T: HasStructure<Structure = S>,
 {
     #[allow(clippy::result_large_err)]
     pub fn execute<
@@ -4352,9 +4395,15 @@ where
         K: Display + Clone + Debug,
         FK: Display + Clone + Debug,
         L: Library<S, Key = K, Value = PermutedStructure<LT>> + Sync,
-        FL: FunctionLibrary<Store::Tensor, Store::Scalar, Key = FK>,
-        LT: LibraryTensor<WithIndices = Store::Tensor>,
+        FL: FunctionLibrary<T, Sc, Key = FK>,
+        LT: LibraryTensor<WithIndices = T>,
         Store: ExecuteOp<FL, L, K, FK, Aind>,
+        T: Clone
+            + Ref
+            + FastTensorSum
+            + ScalarMul<Sc, Output = T>
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+        Sc: Clone,
     {
         {
             let _span = profile::span(Timer::MergeOps);
@@ -4363,6 +4412,25 @@ where
         }
         self.store.execute_self_loop_traces(&mut self.graph, lib)?;
         Strat::execute_all::<C>(&mut self.store, &mut self.graph, lib, fn_lib)?;
+        // Automatic deferral is internal to execution. Keep the ordinary
+        // terminal result available through result(), including sums below a
+        // negation or a product. Explicit lazy execution retains its opt-in API.
+        if !profile::lazy_tensor_sums()
+            && let Ok((NetworkNode::Leaf(leaf), root, _)) = self.graph.result()
+        {
+            let materialized = match leaf {
+                NetworkLeaf::TensorSum(indices) => {
+                    Some(materialize_tensor_sum(&mut self.store, indices, None))
+                }
+                NetworkLeaf::ScaledTensorSum(terms) => {
+                    Some(materialize_scaled_tensors(&mut self.store, terms, None))
+                }
+                _ => None,
+            };
+            if let Some(leaf) = materialized {
+                self.graph.graph[root] = NetworkNode::Leaf(leaf);
+            }
+        }
         self.state = self.graph.state();
         Ok(())
     }
@@ -4562,7 +4630,13 @@ where
         for<'a> NetworkStoreOverlay<'a, T, Sc>: ExecuteOp<FL, L, K, FK, Aind>,
         C: ContractionStrategy<NetworkStore<T, Sc>, L, K, FK, Aind>,
         for<'a> C: ContractionStrategy<NetworkStoreOverlay<'a, T, Sc>, L, K, FK, Aind>,
-        T: Clone + Send + Sync,
+        T: Clone
+            + Send
+            + Sync
+            + Ref
+            + FastTensorSum
+            + ScalarMul<Sc, Output = T>
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         Sc: Clone + Send + Sync,
         Aind: Send + Sync,
     {
@@ -4576,7 +4650,26 @@ where
             &mut self.graph,
             lib,
             fn_lib,
-        )
+        )?;
+        // Match the terminal materialization contract of sequential execution.
+        if !profile::lazy_tensor_sums()
+            && let Ok((NetworkNode::Leaf(leaf), root, _)) = self.graph.result()
+        {
+            let materialized = match leaf {
+                NetworkLeaf::TensorSum(indices) => {
+                    Some(materialize_tensor_sum(&mut self.store, indices, None))
+                }
+                NetworkLeaf::ScaledTensorSum(terms) => {
+                    Some(materialize_scaled_tensors(&mut self.store, terms, None))
+                }
+                _ => None,
+            };
+            if let Some(leaf) = materialized {
+                self.graph.graph[root] = NetworkNode::Leaf(leaf);
+            }
+        }
+        self.state = self.graph.state();
+        Ok(())
     }
 }
 
@@ -4594,7 +4687,7 @@ where
         + Contract<LCM = Store::Tensor>
         + ScalarMul<Store::Scalar, Output = Store::Tensor>
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>
-        + for<'a> AddAssign<LT::WithIndices>
+        + AddAssign<LT::WithIndices>
         + From<LT::WithIndices>
         + AtomSumShapeDiagnostics,
     L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,

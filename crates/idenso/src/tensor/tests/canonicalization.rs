@@ -34,6 +34,85 @@ fn nested_odd_summand_is_removed() {
 }
 
 #[test]
+fn pruning_nested_zero_preserves_unrelated_sum_factors() {
+    test_initialize();
+    let spectator = tensor!(signed_spectator_a) + tensor!(signed_spectator_b);
+    let expected = tensor!(signed_nested_scalar) * spectator;
+    let expression = &expected * (Atom::one() + odd_cycle());
+
+    assert_eq!(canonicalize(&expression), expected);
+}
+
+#[test]
+fn products_of_tensor_sums_keep_closed_indices_and_factorization() {
+    test_initialize();
+    let expression = |i: Atom, j: Atom| {
+        (tensor!(factorized_a, i.clone()) + tensor!(factorized_b, i.clone()))
+            * (tensor!(factorized_c, i.clone()) + tensor!(factorized_d, i))
+            + tensor!(factorized_e, j.clone()) * tensor!(factorized_f, j)
+    };
+    let original = expression(mink!(4, factorized_i), mink!(4, factorized_j));
+    let renamed = expression(mink!(4, factorized_l), mink!(4, factorized_k));
+    let canonical = canonicalize(&original);
+
+    assert_eq!(canonical, canonicalize(&renamed));
+    assert_eq!(canonical, canonicalize(&canonical));
+    assert!(canonical.list_dangling::<AbstractIndex>().is_empty());
+    let AtomView::Add(sum) = canonical.as_view() else {
+        panic!("the two original scalar summands must remain present");
+    };
+    assert!(sum.iter().any(|term| matches!(term, AtomView::Mul(product)
+        if product.iter().filter(|factor| matches!(factor, AtomView::Add(_))).count() == 2)));
+    assert_ne!(canonical, canonicalize(&(original + Atom::one())));
+}
+
+#[test]
+fn products_of_tensor_sums_preserve_genuine_external_indices() {
+    test_initialize();
+    // Native allocation must reserve true external names even when they sort
+    // before all dummy candidates, as well as when they sort after them.
+    for external in [
+        mink!(4, a_factorized_external),
+        mink!(4, z_factorized_external),
+    ] {
+        let expression = |i: Atom| {
+            (tensor!(factorized_open_a, i.clone()) + tensor!(factorized_open_b, i.clone()))
+                * (tensor!(factorized_open_c, i.clone(), external.clone())
+                    + tensor!(factorized_open_d, i, external.clone()))
+        };
+        let original = expression(mink!(4, factorized_open_i));
+        let renamed = expression(mink!(4, factorized_open_j));
+        let canonical = canonicalize(&original);
+
+        assert_eq!(canonical, canonicalize(&renamed));
+        assert_eq!(canonical, canonicalize(&canonical));
+        assert_eq!(canonical.list_dangling::<AbstractIndex>(), vec![external]);
+        assert!(matches!(canonical.as_view(), AtomView::Mul(product)
+            if product.iter().filter(|factor| matches!(factor, AtomView::Add(_))).count() == 2));
+    }
+}
+
+#[test]
+fn factorized_canonicalization_rejects_mismatched_external_indices() {
+    test_initialize();
+    let expression = tensor!(factorized_bad_a, mink!(4, factorized_bad_i))
+        + tensor!(factorized_bad_b, mink!(4, factorized_bad_j));
+
+    assert!(std::panic::catch_unwind(|| canonicalize(&expression)).is_err());
+}
+
+#[test]
+fn factorized_canonicalization_rejects_overcontracted_indices() {
+    test_initialize();
+    let index = mink!(4, factorized_overcontracted);
+    let expression = tensor!(factorized_over_a, index.clone())
+        * tensor!(factorized_over_b, index.clone())
+        * tensor!(factorized_over_c, index);
+
+    assert!(std::panic::catch_unwind(|| canonicalize(&expression)).is_err());
+}
+
+#[test]
 fn factored_expression_is_preserved_when_no_term_is_removed() {
     test_initialize();
     let a = mink!(4, signed_factored_a);
