@@ -16,9 +16,18 @@ messages. These are content and activity proxies, not network bytes or CHF costs
 One abandoned worker had no log, so worker accounting remains a lower bound.
 This sample does not demonstrate an additional feature-sharing speedup.
 
-Main is still running at the time of this interim note. Its completed report will
-be collected separately; the result above is not a main/FeynKit crate-split
-comparison.
+Main finished successfully at 14:40:57 UTC, with all 11 required checks passing.
+Required-check latency was 4h03m05s from suite start, or 4h03m34s from push start;
+whole-suite latency was 4h03m08s. The first selected build worker started 70m27s
+after push. Observed worker time was 330.82 minutes, with 16.90 GiB of reported
+intermediate restored content and 2,015 Cargo `Compiling` messages. Final success
+followed the last required check by 3s. The abandoned/replaced discovery worker
+makes resource totals lower bounds. This run does not demonstrate a speedup;
+its repeated builds and publication delays are detailed below. It is not a
+main/FeynKit crate-split comparison.
+
+The completed main JSON, CSV and readable report is in
+`/tmp/gammaloop-ci-validation/test-feature-unification/remote/reports/main-candidate-2026-09-09T14-41-08.061Z/`.
 
 ## Targeted follow-up
 
@@ -64,13 +73,51 @@ artifacts again to work around previously memoized producer results whose output
 were no longer available to consumers. The symlinks themselves are tiny, but
 realizing their targets can still restore large closures. Removing that remaining
 preparation safely needs reliable cache availability between workers, or scheduling
-that skips intermediate preparation when the final test archive is available. This pair does not establish the cold-build or changed-source
-acceptance targets.
+that skips intermediate preparation when the final test archive is available.
+This pair does not establish the cold-build or changed-source acceptance targets.
 
 The combined JSON, CSV and readable comparison is in
 `/tmp/gammaloop-ci-validation/python-runtime-only/remote/reports/watched-suites-2026-09-09T13-53-17.122Z/`.
 `paired-runtime-counts.json` records the matching execution summaries separately
 from timing, and `first-worker-timings.json` records the initial waiting boundary.
+
+## Local follow-up using Crane
+
+Following [Crane's rebuild guidance](https://crane.dev/faq/constant-rebuilds.html),
+the local trials match Cargo configuration as well as package features. The
+compile-time Symbolica marker must match between dummy dependency sources and
+real sources; this is independent of the runtime test license.
+
+| Local check, cache available | Previous | Candidate | Cache creation, separately |
+|---|---:|---:|---:|
+| Main Clippy | 275.54s | 57.22s | 231.11s |
+| FeynKit Clippy | 277.63s | 60.53s | 249.16s |
+| FeynKit doctests, full-build cache | 507.55s | 268.64s | 305.33s |
+
+All checks passed. A GammaLoop-only source probe retained the new Clippy cache
+and all nine extracted FeynKit production artifacts, and passed Clippy in
+62.62s. The doctest pair retained identical names/outcomes: 62 passed, 20 ignored.
+Its Cargo compilation messages fell from 81 to 26. Sharing Clippy's check-metadata
+cache with doctests had previously saved only 1.9% and was rejected; the new
+trial instead caches full compilation outputs.
+
+Preparation matters: creating the cache and then running Clippy took 288.84s on
+main and 310.23s on FeynKit. Creating the full-build cache and then running
+FeynKit doctests took 573.97s, 13.1% above its baseline. The doctest archive is
+413,096,542 bytes with a 1,127,488,368-byte Nix closure. These are single local
+samples with seeded prerequisites, fixed eight-CPU limits and a shared host;
+they do not establish full cold-build or NixCI latency improvements. Both cache
+experiments remain outside the pushed Python candidate. Exact repeats reused
+Nix results in under 0.2s without executing Cargo.
+
+Clippy code and measurements remain in the isolated
+`/tmp/gammaloop-ci-clippy-cache-main` and
+`/tmp/gammaloop-ci-clippy-cache-feynkit` worktrees. The final doctest trial is an
+external override, with no repository change, under
+`/tmp/gammaloop-ci-validation/doctest-full-build-cache/`; its JSON, CSV, readable
+findings and exact coverage comparison are retained there. Local ordinary
+integration and Python archive validation for the narrower scheduling change is
+recorded in [ci-python-runtime-inputs.md](ci-python-runtime-inputs.md).
 
 ## Provider observations
 
@@ -91,10 +138,19 @@ explain publication of these particular final archives. Raw evidence is in
 `/tmp/gammaloop-ci-validation/python-runtime-only/feynkit-archive-closures.json`.
 
 Main's [Python archive worker](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency/983fc214fc27a78b08c79f31cccd14380910d3a7/8e8b3bdc-24f7-4cbd-8813-115c2c6051c7)
-was still rebuilding and publishing vendored `cargo-package-*` source outputs at
-14:08 UTC, before its archive build. Its publication intervals therefore must
-not be described as time spent uploading the final Python archive.
+took 37m27s, including 561 Cargo compilation messages and 12m33s of publication
+intervals. It rebuilt and published hundreds of vendored `cargo-package-*` source
+outputs and repeated existing dependency artifacts before creating its archive.
+These overlapping intervals must not be described as time spent uploading the
+final Python archive. The subsequent Python runtime job ran its five tests in
+0.537s; its worker occupied 48.85s including setup.
 
+Across main, 38 exact Cargo dependency/artifact derivations were built under
+multiple job URLs, one under five URLs. This excludes cheap generated manifests,
+source vendoring, artifact merges and scheduling wrappers; it still does not
+imply that every Cargo unit recompiled on every build start. Exact identities
+and job links are recorded in
+`/tmp/gammaloop-ci-validation/test-feature-unification/remote/within-suite-repeated-cargo-artifacts-final.json`.
 
 - Main's [dependency-discovery job](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency/983fc214fc27a78b08c79f31cccd14380910d3a7/9fcea729-c325-4080-bee7-9c9d2f8969e6)
   reported six cache HTTP 502 retries, was observed abandoned, and later exposed a
@@ -119,7 +175,7 @@ not be described as time spent uploading the final Python archive.
   rebuilt it. Cache retention, visibility and substitution behavior need
   investigation; these logs do not establish the cause.
 
-The completed/interim JSON, CSV and readable reports and retained worker logs are
+The completed JSON, CSV and readable reports and retained worker logs are
 under `/tmp/gammaloop-ci-validation/test-feature-unification/remote/`. The paired
 follow-up manifest and reports are under
 `/tmp/gammaloop-ci-validation/python-runtime-only/remote/`.
