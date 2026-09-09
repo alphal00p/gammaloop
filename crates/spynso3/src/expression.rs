@@ -3489,6 +3489,44 @@ mod tests {
     }
 
     #[test]
+    fn default_color_simplification_preserves_external_tensor_ports() {
+        use idenso::color::ColorSimplifier;
+
+        idenso::representations::initialize();
+        Python::initialize();
+        let mink = Minkowski {}.new_rep(Dimension::from(symbol!("color_ports_D")));
+        let adjoint = ColorAdjoint {}.new_rep(8);
+        let fundamental = ColorFundamental {}.new_rep(3);
+        let [mu, nu] = [1, 2].map(|index| {
+            mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let [a, b, c, d] = [3, 4, 5, 6].map(|index| {
+            adjoint
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let color_factors = [
+            idenso::color_f!(&a, &c, &d) * idenso::color_f!(&b, &c, &d),
+            SPENSO_TAG.trace(
+                fundamental.to_symbolic([]),
+                [idenso::color_t!(&a), idenso::color_t!(&b)],
+            ),
+        ];
+
+        for color in color_factors {
+            let numerator = ETS.metric(&mu, &nu) * color;
+            let expected = infer_interface(&numerator).unwrap();
+            assert_eq!(expected.canonical().order(), 4);
+
+            // Casimir/index representation arguments are scalar metadata, not ports.
+            let simplified = numerator.simplify_color();
+            let actual = infer_interface(&simplified).unwrap();
+            assert_eq!(actual.canonical(), expected.canonical(), "{simplified}");
+        }
+    }
+
+    #[test]
     fn tensor_operand_reinfers_tensor_bearing_plain_expressions() {
         idenso::representations::initialize();
         Python::initialize();

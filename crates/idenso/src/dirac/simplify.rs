@@ -357,12 +357,14 @@ impl<'settings> DiracSimplifier<'settings> {
     }
 
     pub(crate) fn simplify(self, expr: AtomView) -> Atom {
-        let mut expr = expr.to_owned().collect_gamma_chains();
+        let mut expr = expr.to_owned();
 
         loop {
+            // Metric contraction can close a chain or connect separate chains.
+            // Include their collection in the fixed point of the complete pass.
             let next = self
                 .settings
-                .rewrite_expression(expr.clone())
+                .rewrite_expression(expr.collect_gamma_chains())
                 .simplify_epsilon()
                 .normalize_dots()
                 .schoonschip();

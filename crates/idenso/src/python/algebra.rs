@@ -206,6 +206,7 @@ impl PyColorSimplifySettings {
                 evaluate_traces,
                 expand_cross_chain_fierz,
                 substitute_cof_dimension_invariants,
+                ..ColorSimplifySettings::default()
             },
         }
     }

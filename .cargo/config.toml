@@ -17,3 +17,7 @@ rustflags = ["--cfg", "getrandom_backend=\"wasm_js\""]
 #     "-C",
 #     "link-arg=-ld_new",
 # ]
+
+[target.'cfg(target_os = "macos")']
+# GCC's Darwin driver disables compact unwind tables, breaking Rust panic handling.
+linker = "/usr/bin/clang"

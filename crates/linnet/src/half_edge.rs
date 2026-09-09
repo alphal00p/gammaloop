@@ -1634,7 +1634,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     {
         let mut self_edges: O = self.empty_subgraph();
         let n = self.identify_nodes_of_subgraph_marking_self_edges(
-            subgraph,
+            subgraph.included_iter(),
+            |hedge| subgraph.includes(&hedge),
             node_data_merge,
             &mut self_edges,
         )?;
@@ -1642,29 +1643,32 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         Some((n, self_edges))
     }
 
-    /// Identifies all nodes incident to `subgraph` and adds the half-edges in
-    /// `subgraph` that become self-edges to `self_edges`.
+    /// Identifies all nodes incident to `hedges` and adds the half-edges in
+    /// that subgraph that become self-edges to `self_edges`.
     ///
     /// This avoids allocating a temporary self-edge subgraph when the caller
-    /// already has a long-lived ignore/delete set to update.
-    pub fn identify_nodes_of_subgraph_marking_self_edges<S, O>(
+    /// already has a long-lived ignore/delete set to update. The iterator and
+    /// membership predicate must describe the same subgraph. Iterator order
+    /// determines node-identification order, so compact callers must preserve
+    /// the order of the corresponding subgraph's included iterator.
+    pub fn identify_nodes_of_subgraph_marking_self_edges<O>(
         &mut self,
-        subgraph: &S,
+        hedges: impl IntoIterator<Item = Hedge>,
+        includes: impl Fn(Hedge) -> bool,
         node_data_merge: V,
         self_edges: &mut O,
     ) -> Option<NodeIndex>
     where
-        S: SubSetLike<Base = N::Base>,
         O: ModifySubSet<Hedge> + SubSetLike<Base = N::Base>,
     {
         let mut nodes = IndexSet::new();
 
-        for hedge in subgraph.included_iter() {
+        for hedge in hedges {
             let node = self.node_id(hedge);
             nodes.insert(node);
 
             let other = self.inv(hedge);
-            if other == hedge || !subgraph.includes(&other) {
+            if other == hedge || !includes(other) {
                 continue;
             }
 
