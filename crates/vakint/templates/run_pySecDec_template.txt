@@ -101,7 +101,7 @@ def generate(graph_name, quiet=False, draw_graph=False):
             Lorentz_indices = Lorentz_indices,
             numerator = numerator,
             metric_tensor = 'g',
-            dimensionality='4-2*eps',
+            dimensionality='{dimension}-2*eps',
             powerlist=powerlist,
             replacement_rules=replacement_rules
         )

@@ -213,6 +213,11 @@ impl Vakint {
         integral_specs: &ReplacementRules,
         options: &FMFTOptions,
     ) -> Result<Atom, VakintError> {
+        if settings.dimension != 4 {
+            return Err(VakintError::FMFTError(
+                "FMFT currently supports only d=4-2*epsilon.".into(),
+            ));
+        }
         let integral = integral_specs.canonical_topology.get_integral();
 
         debug!(

@@ -349,6 +349,7 @@ pub struct VakintSettings {
 impl VakintSettings {
     pub fn true_settings(&self) -> vakint::VakintSettings {
         vakint::VakintSettings {
+            dimension: 4,
             form_exe_path: self.form_exe_path.clone(),
             python_exe_path: self.python_exe_path.clone(),
             verify_numerator_identification: false,

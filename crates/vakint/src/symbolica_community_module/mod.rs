@@ -487,7 +487,7 @@ impl VakintEvaluationMethodWrapper {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl VakintWrapper {
-    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None))]
+    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, dimension = 4))]
     #[allow(clippy::too_many_arguments)]
     #[new]
     /// Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
@@ -546,6 +546,8 @@ impl VakintWrapper {
     ///     Whether to use dot product notation for scalar products. Default is False.
     /// temporary_directory : Optional[str]
     ///     The path to the temporary directory to be used. Default is None, in which case a system temporary directory will be used.
+    /// dimension : int
+    ///     The signed integer expansion dimension in d = dimension - 2*epsilon, including zero and negative values. Default is 4. Other dimensions require pySecDec.
     pub fn new(
         run_time_decimal_precision: Option<u32>,
         evaluation_order: Option<Vec<PyRef<VakintEvaluationMethodWrapper>>>,
@@ -560,6 +562,7 @@ impl VakintWrapper {
         number_of_terms_in_epsilon_expansion: Option<i64>,
         use_dot_product_notation: Option<bool>,
         temporary_directory: Option<String>,
+        dimension: i64,
     ) -> PyResult<VakintWrapper> {
         let norm_factor = if let Some(nf) = integral_normalization_factor {
             match nf.as_str() {
@@ -602,6 +605,7 @@ impl VakintWrapper {
         };
         #[allow(clippy::needless_update)]
         let settings = VakintSettings {
+            dimension,
             run_time_decimal_precision: run_time_decimal_precision.unwrap_or(17),
             epsilon_symbol: eps_symbol,
             mu_r_sq_symbol: mu_r_sq_sym,

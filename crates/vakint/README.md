@@ -141,6 +141,45 @@ yielding:
 
 ![result_evaluation](result_2_readme.png)
 
+## Integral dimension
+
+`VakintSettings::dimension` sets the signed integer expansion dimension in
+`d = dimension - 2*epsilon`, including zero and negative values; the default is `4`.
+Other dimensions currently use pySecDec. For example, this evaluates a scalar
+vacuum integral at `d = 3 - 2*epsilon`:
+
+```rust
+use vakint::{vakint_parse, EvaluationOrder, PySecDecOptions, Vakint, VakintSettings};
+
+let settings = VakintSettings {
+    dimension: 3,
+    number_of_terms_in_epsilon_expansion: 2,
+    evaluation_order: EvaluationOrder::pysecdec_only(Some(PySecDecOptions {
+        numerical_masses: [("muvsq".into(), 1.0)].into_iter().collect(),
+        ..PySecDecOptions::default()
+    })),
+    ..VakintSettings::default()
+};
+let integral = vakint_parse!("topo(prop(1,edge(1,1),k(1),muvsq,2))").unwrap();
+let result = Vakint::new()
+    .unwrap()
+    .evaluate(&settings, integral.as_view())
+    .unwrap();
+```
+
+The mass map supplies the numerical values of the symbols in the propagator
+mass-squared expressions. pySecDec must be installed in the configured Python
+environment. The existing expansion-order convention is unchanged: for an
+`L`-loop integral, `N` terms requests powers through `epsilon^(N-L-1)`, even when
+some pole coefficients vanish. Thus `N = 2` includes the finite one-loop term.
+
+The Python constructor accepts the same setting as `Vakint(dimension=3, ...)`.
+Reused pySecDec directories must contain matching dimension metadata; use a fresh
+directory for another dimension or for runs generated before this setting existed.
+This setting controls the integral dimension; the existing external-vector and
+metric representation retains its mostly-minus Minkowski convention. The example
+above uses a scalar numerator and needs no external-vector components.
+
 ## Symbolica license
 
 This library uses `Symbolica` for some of its computations.
