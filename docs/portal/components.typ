@@ -235,9 +235,8 @@
 #let about-affiliation(affiliation) = el("a", class: "about-affiliation", attrs: (
   href: affiliation.url,
 ))[
-  #el("span")[#affiliation.url]
-  #el("strong")[#affiliation.location]
-  #el("small")[#affiliation.name]
+  #el("span")[#affiliation.location]
+  #el("strong")[#affiliation.name]
 
   #affiliation.summary
 

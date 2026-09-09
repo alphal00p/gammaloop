@@ -86,7 +86,7 @@ model import also needs the Python `ufo-model-loader` package.
 
 Diagram rendering is a separate concern and uses Clinnet and Typst. Building the CLI does
 not imply that these drawing tools are installed. Use
-#product-link("linnet", label: "the Clinnet DOT-rendering guide") for their independent
+#product-link("linnet", page: "guides/clinnet/", label: "the Clinnet DOT-rendering guide") for their independent
 versions, templates, and cache boundary.
 
 == Related crates

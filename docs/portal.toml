@@ -104,6 +104,16 @@ publications = true
 featured = true
 
 [[people]]
+id = "nic-fink"
+name = "Nic Fink"
+initials = "NF"
+role = "Master's student · ITP, University of Bern"
+url = "https://www.itp.unibe.ch/about_us/people/people/index_eng.html"
+github = "https://github.com/Fink-Nic"
+publications = false
+featured = false
+
+[[people]]
 id = "ben-ruijl"
 name = "Ben Ruijl"
 initials = "BR"

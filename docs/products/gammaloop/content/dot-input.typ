@@ -1,11 +1,11 @@
-#import "../../shared.typ": callout, boundary, source-link
+#import "../../shared.typ": callout, boundary, product-link
 
 #let dot-input = [
 = GammaLoop DOT input
 
 GammaLoop imports Feynman graphs from Graphviz `digraph` files. The generic DOT syntax and parser
-behavior are provided by #source-link("crates/linnet/README.md", label: "Linnet"); this page records
-GammaLoop's physics contract.
+behavior are covered in Linnet's #product-link("linnet", page: "reference/rust/linnet/parser/index.html", label: "Linnet DOT parser reference");
+this page records GammaLoop's physics contract.
 
 == Graph shape and half-edges
 
