@@ -299,9 +299,11 @@
       (crateTestBinaryAttr "spynso3")
       (workspacePackageGraphAttr workspaceHackPackage)
     ]
+    # A cached Python module needs no production Cargo artifacts. Let its
+    # worker realize those per-crate dependencies only when the module misses.
     ++ map cratePackageDepsAttr (
       builtins.filter (
-        package: package != workspaceHackPackage && package != "gammalooprs"
+        package: package != workspaceHackPackage
       )
       workspacePackagesWithDependencyArtifacts
     )
