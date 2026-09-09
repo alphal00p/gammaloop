@@ -2,6 +2,7 @@ use std::mem::transmute;
 
 use ref_ops::{RefAdd, RefDiv, RefMul, RefSub};
 use symbolica::{
+    atom::{AtomView, EvaluationInfo},
     coefficient::Coefficient,
     domains::{
         float::{Complex as SymComplex, FixedPrecision, Float, FloatLike, Real, SingleFloat},
@@ -9,7 +10,7 @@ use symbolica::{
     },
     evaluate::{
         CompileOptions, CompiledComplexEvaluator, CompiledNumber, EvaluationDomain,
-        EvaluatorLoader, ExportNumber, ExportSettings, ExpressionEvaluator,
+        EvaluatorLoader, ExportNumber, ExportSettings, ExpressionEvaluator, ExternalFunction,
     },
 };
 
@@ -185,7 +186,7 @@ impl<T: FixedPrecision> FixedPrecision for Complex<T> {
     const BINARY_PRECISION: usize = T::BINARY_PRECISION;
 }
 
-impl<T: EvaluationDomain> EvaluationDomain for Complex<T> {
+impl<T: EvaluationDomain + Clone + Into<Float>> EvaluationDomain for Complex<T> {
     const FIXED_PRECISION: Option<u32> = T::FIXED_PRECISION;
 
     fn try_from_complex_float(f: SymComplex<Float>) -> Result<Self, String> {
@@ -194,6 +195,37 @@ impl<T: EvaluationDomain> EvaluationDomain for Complex<T> {
             re: T::try_from_complex_float(SymComplex::new(f.re, zero.clone()))?,
             im: T::try_from_complex_float(SymComplex::new(f.im, zero))?,
         })
+    }
+
+    fn resolve_function(
+        tags: &[AtomView],
+        info: &EvaluationInfo,
+    ) -> Option<Box<dyn ExternalFunction<Self>>> {
+        if let Some(f) = info.get_evaluator::<Self>(tags) {
+            return Some(f);
+        }
+
+        if let Some(f) = info.get_evaluator::<SymComplex<T>>(tags) {
+            return Some(Box::new(move |args: &[Self]| {
+                let args = args
+                    .iter()
+                    .map(|x| SymComplex::new(x.re.clone(), x.im.clone()))
+                    .collect::<Vec<_>>();
+                let result = f(&args);
+                Self::new(result.re, result.im)
+            }));
+        }
+
+        // Preserve both components at their own precision when no callback matches their type.
+        let f = SymComplex::<Float>::resolve_function(tags, info)?;
+        Some(Box::new(move |args: &[Self]| {
+            let args = args
+                .iter()
+                .map(|x| SymComplex::new(x.re.clone().into(), x.im.clone().into()))
+                .collect::<Vec<_>>();
+            Self::try_from_complex_float(f(&args))
+                .expect("External function result cannot be represented in the evaluation domain")
+        }))
     }
 }
 
@@ -543,5 +575,66 @@ impl CompiledNumber for Complex<f64> {
         settings: ExportSettings,
     ) -> Result<String, String> {
         SymComplex::<f64>::export_cpp(eval, function_name, settings)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use symbolica::{
+        atom::Atom,
+        domains::float::DoubleFloat,
+        transcendental::{coth, csch, sech, tanh},
+    };
+
+    #[test]
+    fn complex_evaluation_domain_resolves_native_hyperbolics() {
+        let input = SymComplex::new(0.75, 0.5);
+        let cases = [
+            (tanh(), input.tanh()),
+            (coth(), input.tanh().inv()),
+            (sech(), input.cosh().inv()),
+            (csch(), input.sinh().inv()),
+        ];
+        for (symbol, expected) in cases {
+            let f = Complex::<f64>::resolve_function(&[], symbol.get_evaluation_info().unwrap())
+                .unwrap();
+            assert_eq!(f(&[input.into()]), expected.into());
+        }
+    }
+
+    #[test]
+    fn complex_evaluation_domain_preserves_tags_and_overrides() {
+        let tag = Atom::num(2);
+        let tags = [tag.as_view()];
+        let info = EvaluationInfo::new().with_tags(1).register_tagged(|tags| {
+            assert_eq!(tags[0], 2);
+            Box::new(|args: &[SymComplex<f64>]| args[0] * args[1])
+        });
+        let input = [Complex::new(2., 3.), Complex::new(5., 7.)];
+        let f = Complex::<f64>::resolve_function(&tags, &info).unwrap();
+        assert_eq!(f(&input), Complex::new(-11., 29.));
+
+        let info = info.register_tagged(|tags| {
+            assert_eq!(tags[0], 2);
+            Box::new(|args: &[Complex<f64>]| args[1])
+        });
+        let f = Complex::<f64>::resolve_function(&tags, &info).unwrap();
+        assert_eq!(f(&input), input[1]);
+        assert!(Complex::<f64>::resolve_function(&[], &EvaluationInfo::new()).is_none());
+    }
+
+    #[test]
+    fn complex_evaluation_domain_preserves_arbitrary_precision_fallback() {
+        let delta = DoubleFloat::from(Rational::from((1_i128, 1_i128 << 80)));
+        let input = Complex::new(delta.one() + delta, -delta.one() + delta);
+        let info = EvaluationInfo::new().register(|args: &[SymComplex<Float>]| {
+            SymComplex::new(args[0].im.clone(), args[0].re.clone())
+        });
+        let f = Complex::<DoubleFloat>::resolve_function(&[], &info).unwrap();
+        let result = f(&[input]);
+        assert_eq!(result, Complex::new(input.im, input.re));
+        assert_eq!(result.re + delta.one(), delta);
+        assert_eq!(result.im - delta.one(), delta);
     }
 }
