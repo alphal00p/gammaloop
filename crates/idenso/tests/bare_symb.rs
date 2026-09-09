@@ -49,7 +49,6 @@ fn bare_symb() {
         Some(gluon_rule),
         vec![Transformer::Map(Box::new(move |input, _state, out| {
             let new = input
-                .expand()
                 .replace(parse!("d(muw1_,k1_)*d(muw1_,k2_)"))
                 .min_level(0)
                 .max_level(Some(0))
@@ -70,6 +69,7 @@ fn bare_symb() {
     )));
 
     for i in 0..8 {
+        let init = Instant::now();
         r = r
             .replace(parse!(format!(
                 "vx({}, k1_, k2_, k3_, mu1_, mu2_, mu3_)",
@@ -79,11 +79,10 @@ fn bare_symb() {
             .max_level(Some(0))
             .rhs_cache_size(1000)
             .with(&rhs_subs);
-        let mut init = Instant::now();
-        r = r.expand();
-        println!("Expansion time: {:?}", init.elapsed());
-        // 479.0 ms, 454.6ms when momenta are symbols, 5% faster if not using functions
-        init = Instant::now();
+        println!("Vertex substitution time: {:?}", init.elapsed());
+        // Historical expanded-input timing: 479.0 ms, 454.6ms when momenta were
+        // symbols, 5% faster without functions. Keep the numerator factorized here.
+        let init = Instant::now();
         r = r
             .replace(parse!("d(muw1_, k1_)*vx_(x___,muw1_,y___)"))
             .min_level(0)

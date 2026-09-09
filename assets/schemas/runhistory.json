@@ -970,7 +970,8 @@
                 },
                 "hide_non_existing_thresholds": {
                   "description": "Hide generated threshold CTs that cannot exist for the active model and kinematics",
-                  "type": "boolean"
+                  "type": "boolean",
+                  "default": false
                 },
                 "integrand_name": {
                   "description": "Integrand name inside the selected process",
@@ -993,8 +994,7 @@
               },
               "required": [
                 "graphs",
-                "categories",
-                "hide_non_existing_thresholds"
+                "categories"
               ]
             }
           },

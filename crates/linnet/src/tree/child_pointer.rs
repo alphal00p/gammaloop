@@ -473,13 +473,39 @@ impl<V> ForestNodeStore for ParentChildStore<V> {
             return;
         }
 
-        // Reuse the proven swap logic from ChildVecStore to keep parent/child links consistent.
-        let tmp = ParentChildStore {
-            nodes: std::mem::take(&mut self.nodes),
+        // Apply the same pointer renaming as ChildVecStore's swap without converting
+        // the whole store. Only these nodes can contain references to a or b.
+        let mut affected = vec![a, b];
+        for id in [a, b] {
+            affected.extend(self.iter_children(id));
+            let node = &self.nodes[id.0];
+            affected.extend([node.neighbor_left, node.neighbor_right]);
+            if let ParentId::Node(parent) = node.parent_pointer.parent {
+                affected.push(parent);
+            }
+        }
+        affected.sort_unstable();
+        affected.dedup();
+
+        let rename = |id: &mut TreeNodeId| {
+            if *id == a {
+                *id = b;
+            } else if *id == b {
+                *id = a;
+            }
         };
-        let mut as_vec: ChildVecStore<V> = tmp.into();
-        as_vec.swap(a, b);
-        *self = ParentChildStore::from(as_vec);
+        for id in affected {
+            let node = &mut self.nodes[id.0];
+            if let ParentId::Node(parent) = &mut node.parent_pointer.parent {
+                rename(parent);
+            }
+            if let Some(child) = &mut node.child {
+                rename(child);
+            }
+            rename(&mut node.neighbor_left);
+            rename(&mut node.neighbor_right);
+        }
+        self.nodes.swap(a.0, b.0);
     }
 
     fn to_store(self) -> Self::Store<Self::NodeData> {
@@ -710,6 +736,151 @@ impl<V> From<ParentPointerStore<V>> for ParentChildStore<V> {
 
 #[cfg(test)]
 mod test {
+    use crate::{
+        half_edge::{
+            involution::Hedge,
+            nodestore::NodeStorageOps,
+            subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
+        },
+        tree::{
+            child_vec::ChildVecStore, Forest, ForestNodeStore, ForestNodeStoreDown, RootId,
+            TreeNodeId,
+        },
+    };
+    use std::collections::BTreeSet;
+
+    use super::ParentChildStore;
+
     #[test]
     fn create() {}
+
+    #[test]
+    fn swaps_match_child_vec_for_all_small_forests() {
+        // Each node is either a new root or a child of an earlier node. Enumerate
+        // all such six-node forests, then also change their index order serially.
+        for forest_code in 0..720 {
+            let mut code = forest_code;
+            let mut original = ParentChildStore { nodes: Vec::new() };
+            let mut roots = 0;
+            for id in 0..6 {
+                let parent = code % (id + 1);
+                code /= id + 1;
+                if parent == id {
+                    original.add_root(id, RootId(roots));
+                    roots += 1;
+                } else {
+                    original.add_child(id, TreeNodeId(parent));
+                }
+            }
+            let mut serial = original.clone();
+            let mut serial_oracle = ChildVecStore::from(original.clone());
+            for a in 0..6 {
+                for b in 0..6 {
+                    let a = TreeNodeId(a);
+                    let b = TreeNodeId(b);
+                    let mut actual = original.clone();
+                    let mut oracle = ChildVecStore::from(original.clone());
+                    actual.swap(a, b);
+                    oracle.swap(a, b);
+                    assert_eq!(
+                        actual
+                            .iter_nodes()
+                            .map(|(node, _)| node)
+                            .collect::<BTreeSet<_>>(),
+                        oracle
+                            .iter_nodes()
+                            .map(|(node, _)| node)
+                            .collect::<BTreeSet<_>>(),
+                    );
+                    for (node, data) in actual.iter_nodes() {
+                        assert_eq!(data, oracle[node].as_ref());
+                        assert_eq!(actual.parent(node), oracle.parent(node));
+                        assert_eq!(
+                            actual.iter_children(node).collect::<BTreeSet<_>>(),
+                            oracle.iter_children(node).collect::<BTreeSet<_>>(),
+                        );
+                    }
+                    actual.validate().unwrap();
+
+                    serial.swap(a, b);
+                    serial_oracle.swap(a, b);
+                    assert_eq!(
+                        serial
+                            .iter_nodes()
+                            .map(|(node, _)| node)
+                            .collect::<BTreeSet<_>>(),
+                        serial_oracle
+                            .iter_nodes()
+                            .map(|(node, _)| node)
+                            .collect::<BTreeSet<_>>(),
+                    );
+                    for (node, data) in serial.iter_nodes() {
+                        assert_eq!(data, serial_oracle[node].as_ref());
+                        assert_eq!(serial.parent(node), serial_oracle.parent(node));
+                        assert_eq!(
+                            serial.iter_children(node).collect::<BTreeSet<_>>(),
+                            serial_oracle.iter_children(node).collect::<BTreeSet<_>>(),
+                        );
+                    }
+                    serial.validate().unwrap();
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn deletion_matches_child_vec_for_every_subset() {
+        let mut forest: Forest<usize, ParentChildStore<usize>> = Forest::new();
+        let (root, _) = forest.add_root(0, 0);
+        let first = forest.add_child(root, 1);
+        forest.add_child(root, 2);
+        forest.add_child(first, 3);
+        forest.add_child(first, 4);
+        let (other, _) = forest.add_root(5, 1);
+        forest.add_child(other, 6);
+        forest.add_child(other, 7);
+        forest.add_root(8, 2);
+
+        // Include empty/full deletion, deleted roots, split trees and isolated roots.
+        for mask in 0..512 {
+            let mut deleted = SuBitGraph::empty(9);
+            for id in 0..9 {
+                if mask & (1 << id) != 0 {
+                    deleted.add(Hedge(id));
+                }
+            }
+            let mut actual = forest.clone();
+            let mut oracle = forest.clone().cast::<ChildVecStore<usize>>();
+            actual.delete(&deleted);
+            oracle.delete(&deleted);
+            let actual_values = actual
+                .iter_nodes()
+                .map(|(node, data)| {
+                    (
+                        data.copied(),
+                        actual[actual.root(node)],
+                        actual
+                            .iter_children(node)
+                            .map(|child| actual[child])
+                            .collect::<BTreeSet<_>>(),
+                    )
+                })
+                .collect::<BTreeSet<_>>();
+            let expected_values = oracle
+                .iter_nodes()
+                .map(|(node, data)| {
+                    (
+                        data.copied(),
+                        oracle[oracle.root(node)],
+                        oracle
+                            .iter_children(node)
+                            .map(|child| oracle[child])
+                            .collect::<BTreeSet<_>>(),
+                    )
+                })
+                .collect::<BTreeSet<_>>();
+            assert_eq!(actual_values, expected_values);
+            actual.validate_structure().unwrap();
+        }
+    }
 }

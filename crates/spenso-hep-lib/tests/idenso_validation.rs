@@ -117,6 +117,51 @@ fn color_trace_structure_contraction_matches_commutator() {
 }
 
 #[test]
+fn color_trace_projector_parser_matches_explicit_su3_coordinates() {
+    test_initialize();
+    let cof = ColorFundamental {}.new_rep(3);
+    let coad = ColorAdjoint {}.new_rep(8);
+    let [a, b, c] = ["projector_a", "projector_b", "projector_c"]
+        .map(|name| coad.slot::<AbstractIndex, _>(symbolica::symbol!(name)));
+    let factors = [
+        idenso::color_t!(a),
+        idenso::color_t!(b),
+        idenso::color_t!(c),
+    ];
+    let forward = trace!(&cof; factors.clone());
+    let reverse = trace!(
+        &cof,
+        factors[0].clone(),
+        factors[2].clone(),
+        factors[1].clone()
+    );
+    let symmetric = trace!(&cof, spenso::shadowing::sym(factors.clone()));
+    let antisymmetric = trace!(&cof, spenso::shadowing::antisym(factors));
+    let constants = scalar_constants();
+
+    for (expression, expected) in [
+        (symmetric.clone(), (&forward + &reverse) / 2),
+        (antisymmetric.clone(), (&forward - &reverse) / 2),
+        (&symmetric + &antisymmetric, forward),
+        (
+            (symmetric + antisymmetric) * idenso::color_f!(a, b, c),
+            Atom::i() * 6,
+        ),
+    ] {
+        // Feed the inert projector to the public parser without the validator's
+        // usual expand_projectors preprocessing, then compare every coordinate.
+        let actual = evaluate_term(expression, &constants);
+        let expected = evaluate_term(expected, &constants);
+        actual.assert_nontrivial("color projector coordinates", "actual");
+        expected.assert_nontrivial("color projector coordinates", "expected");
+        assert_hep_tensor_zero(
+            actual.tensor.sub_fallible(&expected.tensor).unwrap(),
+            "color projector coordinates",
+        );
+    }
+}
+
+#[test]
 fn color_middle_trace_structure_contraction_matches_commutator() {
     test_initialize();
 

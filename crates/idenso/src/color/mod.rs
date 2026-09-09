@@ -546,6 +546,9 @@ pub static CS, CS_INNER: ColorSymbols = || {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColorSimplifySettings {
+    /// Normalize non-color chains and metric contractions outside collected
+    /// color payloads. Disable this to preserve their factorized coefficients.
+    pub simplify_non_color: bool,
     /// Whether closed color chains should be evaluated as traces.
     pub evaluate_traces: bool,
     /// Whether contractions between generators on different open chains should
@@ -559,6 +562,7 @@ pub struct ColorSimplifySettings {
 impl Default for ColorSimplifySettings {
     fn default() -> Self {
         Self {
+            simplify_non_color: true,
             evaluate_traces: true,
             expand_cross_chain_fierz: true,
             substitute_cof_dimension_invariants: false,

@@ -178,6 +178,12 @@ impl TensorialSyntax {
             return fun.iter().any(|arg| arg.is_tensorial(filter));
         }
 
+        // A variance wrapper retains the tensor syntax of its slot or compact
+        // argument; wrapping a concrete component index still stays scalar.
+        if symbol == AIND_SYMBOLS.dind && fun.get_nargs() == 1 {
+            return fun.iter().next().unwrap().is_tensorial(filter);
+        }
+
         if symbol.has_attributes_of(SPENSO_TAG.rep_)
             || symbol == SPENSO_TAG.chain
             || symbol == SPENSO_TAG.trace
@@ -275,7 +281,9 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         }
     }
 
-    fn syntactic_structure_from_atom(value: AtomView<'_>) -> Result<Self, StructureError> {
+    pub(super) fn syntactic_structure_from_atom(
+        value: AtomView<'_>,
+    ) -> Result<Self, StructureError> {
         match value {
             AtomView::Add(add) => {
                 let Some(first) = add.iter().next() else {
@@ -344,6 +352,8 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// A direct slot argument contributes one exposed slot. An `aind(...)`
     /// bundle is flattened into its slots. Other arguments are treated as
     /// metadata for the eventual named leaf and do not erase slots already seen.
+    /// Chain projectors without direct structural arguments expose the combined
+    /// slots of their factor sequence.
     fn from_function_atom(fun: FunView<'_>) -> Result<Self, StructureError> {
         if fun.get_symbol() == AIND_SYMBOLS.aind {
             let mut slots = Vec::new();
@@ -369,6 +379,19 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
                     }
                 }
             }
+        }
+
+        if slots.is_empty()
+            && [*shadowing::SYM, *shadowing::ANTISYM, *shadowing::CYCLIC]
+                .contains(&fun.get_symbol())
+        {
+            let mut structure = OrderedStructure::empty();
+            for factor in fun.iter() {
+                structure = structure
+                    .merge(&Self::syntactic_structure_from_atom(factor)?)?
+                    .0;
+            }
+            return Ok(structure);
         }
 
         Ok(OrderedStructure::new(slots).into_canonical())
@@ -792,5 +815,43 @@ mod tests {
             .unwrap();
 
         assert_eq!(fast.canonical().order(), expanded.canonical().order());
+    }
+
+    #[test]
+    fn trace_projectors_keep_all_external_slots() {
+        let trace_rep = Lorentz {}.new_rep(4);
+        let external_rep = mink4();
+        let factors = [
+            chain_factor_with_external(
+                tensor_symbol!(projected_structure_f),
+                slot!(external_rep, a).to_atom(),
+            ),
+            chain_factor_with_external(
+                tensor_symbol!(projected_structure_g),
+                slot!(external_rep, b).to_atom(),
+            ),
+            chain_factor_with_external(
+                tensor_symbol!(projected_structure_h),
+                slot!(external_rep, c).to_atom(),
+            ),
+        ];
+        for expression in [
+            trace!(&trace_rep; factors.clone()),
+            trace!(&trace_rep, shadowing::sym(factors.clone())),
+            trace!(&trace_rep, -shadowing::antisym(factors)),
+        ] {
+            let fast = expression
+                .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
+                    StructureInferenceMode::Fast,
+                )
+                .unwrap();
+            let expanded = expression
+                .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
+                    StructureInferenceMode::Expanded,
+                )
+                .unwrap();
+            assert_eq!(fast.canonical().order(), 3);
+            assert_eq!(fast.canonical(), expanded.canonical());
+        }
     }
 }

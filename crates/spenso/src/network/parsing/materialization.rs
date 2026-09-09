@@ -9,8 +9,9 @@
 //! it would have built from fully expanded syntax.
 //!
 //! The main Schoonschip convention is:
-//! 1. a compact rank-one tensor `p(rep)` used as a function argument becomes a
-//!    fresh slot in that argument position;
+//! 1. a tensor with one compact axis, such as `p(rep)`, used as a function
+//!    argument becomes a fresh slot in that argument position; any explicit
+//!    spectator slots on the tensor are preserved;
 //! 2. the tensor `p(slot)` is multiplied next to the rebuilt function;
 //! 3. compact scalar products `g(p(rep), q(rep.dual()))` and
 //!    `dot(p(rep), q(rep.dual()))` share one fresh abstract index and become
@@ -24,7 +25,7 @@
 //! then lets this Schoonschip helper expand compact arguments inside each factor.
 
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, MulView, Symbol, representation::FunView},
     id::MatchSettings,
 };
 
@@ -231,10 +232,9 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
 
     /// Materialize a compact metric or dot product into two tensor factors.
     ///
-    /// Both arguments must be compact vectors with matching representations.
-    /// They are assigned one fresh abstract index with the orientation of each
-    /// argument, so `g(p(rep), q(rep.dual()))` becomes
-    /// `p(rep(index)) * q(rep.dual()(index))`.
+    /// Both arguments must have one compact axis with matching representations.
+    /// Assign one fresh abstract index with each argument's orientation. Explicit
+    /// spectator slots remain unchanged, including spectators in that representation.
     fn compact_scalar_product(&self, value: FunView<'_>) -> Option<SchoonschipMaterialization> {
         let (lhs, rhs, lhs_rep, rhs_rep) = Self::compact_scalar_product_parts(value)?;
 
@@ -317,11 +317,12 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         Some((*lhs, *rhs, lhs_rep, rhs_rep))
     }
 
-    /// Infer the compact representation carried by a rank-one shorthand atom.
+    /// Infer the unique compact axis carried by a shorthand atom.
     ///
     /// Tensor-tagged functions expose a compact representation through exactly
     /// one direct representation argument. Scalar products, unary broadcasts,
     /// projectors, and sums preserve it when they contain one compatible vector.
+    /// Every other product factor must be syntactically scalar.
     fn compact_vector_rep(value: AtomView<'_>) -> Option<Representation<LibraryRep>> {
         match value {
             AtomView::Fun(fun) if fun.get_symbol().has_tag(&SPENSO_TAG.broadcast) => {
@@ -353,38 +354,50 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
                 }
             }
             AtomView::Fun(fun) => Self::compact_tensor_rep_arg(fun).map(|(_, rep)| rep),
-            AtomView::Mul(mul) => {
-                let mut candidates = mul
-                    .iter()
-                    .filter_map(|factor| Self::compact_vector_rep(factor).map(|rep| (factor, rep)));
-                let (factor, rep) = candidates.next()?;
-                if candidates.next().is_some()
-                    || mul.iter().any(|candidate| {
-                        candidate != factor
-                            && candidate.is_tensorial(StrictTensorFilter::Tagged)
-                            && !Self::is_structured_scalar(candidate)
-                    })
-                {
-                    None
-                } else {
-                    Some(rep)
-                }
-            }
             AtomView::Add(add) => {
                 let mut reps = add.iter().map(Self::compact_vector_rep);
                 let rep = reps.next()??;
                 reps.all(|candidate| candidate == Some(rep)).then_some(rep)
             }
+            AtomView::Mul(product) => Self::compact_vector_product_parts(product)
+                .map(|(_, representation)| representation),
             _ => None,
         }
     }
 
+    /// Locate the only compact vector in a scalar-weighted product.
+    ///
+    /// Failure to identify a compact vector does not prove that a factor is
+    /// scalar: explicit-slot tensors also have no compact representation. The
+    /// ordinary syntactic structure inference is therefore the authority for
+    /// every remaining factor.
+    fn compact_vector_product_parts(
+        product: MulView<'_>,
+    ) -> Option<(usize, Representation<LibraryRep>)> {
+        let mut compact_vector = None;
+
+        for (position, factor) in product.iter().enumerate() {
+            if let Some(representation) = Self::compact_vector_rep(factor) {
+                if compact_vector.is_some() {
+                    return None;
+                }
+                compact_vector = Some((position, representation));
+            } else if !OrderedStructure::<LibraryRep, Aind>::syntactic_structure_from_atom(factor)
+                .ok()?
+                .is_scalar()
+            {
+                return None;
+            }
+        }
+
+        compact_vector
+    }
+
     /// Locate the compact representation argument of one tensor function.
     ///
-    /// A compact vector function is tensor-tagged, is not itself a
-    /// representation, is not a metric or dot product, has no explicit slot
-    /// argument, and has exactly one direct argument matching the representation
-    /// wildcard convention.
+    /// A compact tensor function is tensor-tagged, is not itself a representation,
+    /// metric or dot product, and has exactly one direct representation argument.
+    /// Explicit slots are spectators: only that unique unindexed axis is replaced.
     fn compact_tensor_rep_arg(value: FunView<'_>) -> Option<(usize, Representation<LibraryRep>)> {
         if !value.get_symbol().has_tag(&SPENSO_TAG.tensor)
             || value.get_symbol() == ETS.metric
@@ -398,18 +411,15 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         }
 
         let args = value.iter().collect::<Vec<_>>();
-        if args
-            .iter()
-            .any(|arg| Slot::<LibraryRep, Aind>::try_from(*arg).is_ok())
-        {
-            return None;
-        }
-
         let rep_args = args
             .iter()
             .enumerate()
             .filter_map(|(position, arg)| {
-                Self::compact_rep_pattern_match(*arg).map(|rep| (position, rep))
+                if Slot::<LibraryRep, Aind>::try_from(*arg).is_ok() {
+                    None
+                } else {
+                    Self::compact_rep_pattern_match(*arg).map(|rep| (position, rep))
+                }
             })
             .collect::<Vec<_>>();
 
@@ -442,7 +452,9 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
     ///
     /// For a function, this rebuilds the function with the matched compact
     /// representation argument replaced by `slot`. For a sum, every summand is
-    /// rebuilt with the same slot so the expansion keeps a single dummy edge.
+    /// rebuilt with the same slot so the expansion keeps a single dummy edge. A
+    /// scalar-weighted product preserves its scalar factors around that rebuilt
+    /// vector.
     fn materialize_compact_vector_with_slot(
         &self,
         value: AtomView<'_>,
@@ -499,24 +511,6 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
                 }
                 Some(tensor.finish())
             }
-            AtomView::Mul(mul) => {
-                let mut changed = false;
-                let mut product = Atom::num(1);
-                for factor in mul.iter() {
-                    product *= if Self::compact_vector_rep(factor) == Some(*rep) {
-                        if changed {
-                            return None;
-                        }
-                        changed = true;
-                        self.materialize_compact_vector_with_slot(factor, rep, slot)?
-                    } else {
-                        self.materialize_shorthand_root(factor)
-                            .map(SchoonschipMaterialization::into_expression)
-                            .unwrap_or_else(|| factor.to_owned())
-                    };
-                }
-                changed.then_some(product)
-            }
             AtomView::Add(add) => {
                 let mut terms = add
                     .iter()
@@ -524,6 +518,28 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
                 let first = terms.next()??;
                 let rest = terms.collect::<Option<Vec<_>>>()?;
                 Some(rest.into_iter().fold(first, |sum, term| sum + term))
+            }
+            AtomView::Mul(product) => {
+                let (vector_position, matched_rep) = Self::compact_vector_product_parts(product)?;
+                if matched_rep != *rep {
+                    return None;
+                }
+
+                product
+                    .iter()
+                    .enumerate()
+                    .try_fold(Atom::num(1), |product, (position, factor)| {
+                        if position == vector_position {
+                            self.materialize_compact_vector_with_slot(factor, rep, slot)
+                                .map(|factor| product * factor)
+                        } else {
+                            let scalar = self
+                                .materialize_shorthand_root(factor)
+                                .map(SchoonschipMaterialization::into_expression)
+                                .unwrap_or_else(|| factor.to_owned());
+                            Some(product * scalar)
+                        }
+                    })
             }
             _ => None,
         }
@@ -602,6 +618,19 @@ where
             symbol == SPENSO_TAG.chain && !settings.shorthand_parsing.expands_chain();
         let root_trace_disabled =
             symbol == SPENSO_TAG.trace && !settings.shorthand_parsing.expands_trace();
+
+        if ((symbol == SPENSO_TAG.chain && !root_chain_disabled)
+            || (symbol == SPENSO_TAG.trace && !root_trace_disabled))
+            && let Some(expanded) = shadowing::expand_chain_like_projector(value.as_view())
+        {
+            return Self::try_from_view_impl(
+                expanded.as_view(),
+                state,
+                library,
+                function_library,
+                settings,
+            );
+        }
 
         if symbol == SPENSO_TAG.chain && !root_chain_disabled {
             return Self::materialize_chain_shorthand(

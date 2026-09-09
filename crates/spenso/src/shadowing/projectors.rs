@@ -122,7 +122,7 @@ fn expand_projectors_impl(expression: AtomView) -> Atom {
     }
 }
 
-fn expand_chain_like_projector(arg: AtomView) -> Option<Atom> {
+pub(crate) fn expand_chain_like_projector(arg: AtomView) -> Option<Atom> {
     let AtomView::Fun(f) = arg else {
         return None;
     };

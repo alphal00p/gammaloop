@@ -30,6 +30,7 @@ pub mod symbolica_utils;
 
 pub use atom_conversion::IntoAtom;
 pub use collect::{COLLECT, Collectable, TensorCollectExt, TensorCollectFilter};
+pub(crate) use projectors::expand_chain_like_projector;
 pub use projectors::{ANTISYM, CYCLIC, ProjectorExpander, SYM, antisym, cyclic, sym};
 pub use trace::{trace, trace_factor_views, trace_parts, trace_sym};
 

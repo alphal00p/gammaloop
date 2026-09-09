@@ -71,10 +71,9 @@ type SlotsByHedge<Aind> = BTreeMap<Hedge, SlotCopies<Aind>>;
 
 /// Remove Spenso tensor monomials that are fixed by a negative automorphism.
 ///
-/// Products and positive powers are expanded only when they contain a sum.
-/// Sums that remain inside functions stay opaque. If parsing fails or no term
-/// vanishes, the original expression is returned so its factorization is
-/// preserved.
+/// Recurse through sums, products and positive powers without distributing
+/// them. Sums inside functions stay opaque. If parsing fails or no term
+/// vanishes, the original expression and its factorization are preserved.
 pub(crate) fn remove_antisymmetric_zero_terms<Aind: AbsInd + DummyAind + ParseableAind>(
     expression: AtomView<'_>,
 ) -> Atom {
@@ -91,35 +90,35 @@ pub(crate) fn remove_antisymmetric_zero_terms<Aind: AbsInd + DummyAind + Parseab
         return expression.to_owned();
     }
 
-    let expanded = requires_term_expansion(&network).then(|| expression.expand());
-    let candidate = expanded
-        .as_ref()
-        .map_or(expression, |expanded| expanded.as_view());
-    let terms = match candidate {
-        AtomView::Add(add) => add.iter().collect::<Vec<_>>(),
-        _ => vec![candidate],
+    let candidate = match expression {
+        AtomView::Add(add) => add
+            .iter()
+            .map(remove_antisymmetric_zero_terms::<Aind>)
+            .sum(),
+        AtomView::Mul(product) => product
+            .iter()
+            .map(remove_antisymmetric_zero_terms::<Aind>)
+            .fold(Atom::one(), |product, factor| product * factor),
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            if i64::try_from(exponent).is_ok_and(|power| power > 0) {
+                remove_antisymmetric_zero_terms::<Aind>(base).pow(exponent)
+            } else {
+                expression.to_owned()
+            }
+        }
+        _ => expression.to_owned(),
     };
-
-    let mut removed = false;
-    let retained = terms
-        .into_iter()
-        .filter(|term| {
-            let cooked = term.cook_indices();
-            let vanishes = cooked
-                .as_view()
-                .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
-                .is_ok_and(|network| has_odd_automorphism(&network));
-            removed |= vanishes;
-            !vanishes
-        })
-        .map(|term| term.to_owned())
-        .collect::<Vec<_>>();
-
-    if removed {
-        retained.into_iter().sum()
+    let vanishes = if candidate.as_view() == expression {
+        has_odd_automorphism(&network)
     } else {
-        expression.to_owned()
-    }
+        candidate
+            .cook_indices()
+            .as_view()
+            .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
+            .is_ok_and(|network| has_odd_automorphism(&network))
+    };
+    if vanishes { Atom::zero() } else { candidate }
 }
 
 fn contains_antisymmetric_tensor<Aind: AbsInd>(network: &SymbolicNet<Aind>) -> bool {
@@ -130,30 +129,6 @@ fn contains_antisymmetric_tensor<Aind: AbsInd>(network: &SymbolicNet<Aind>) -> b
         network.store.tensors[*index]
             .name()
             .is_some_and(|head| head.is_antisymmetric())
-    })
-}
-
-fn requires_term_expansion<Aind: AbsInd>(network: &SymbolicNet<Aind>) -> bool {
-    let tree = network.graph.expr_tree();
-    network.graph.graph.iter_nodes().any(|(node, _, data)| {
-        if !matches!(data, NetworkNode::Op(NetworkOp::Sum)) {
-            return false;
-        }
-
-        let mut below_product_or_power = false;
-        for ancestor in tree
-            .ancestor_iter_node(node, network.graph.graph.as_ref())
-            .skip(1)
-        {
-            match network.graph.graph[ancestor] {
-                NetworkNode::Op(NetworkOp::Function(_)) => return false,
-                NetworkNode::Op(NetworkOp::Product | NetworkOp::Power(1..)) => {
-                    below_product_or_power = true;
-                }
-                _ => {}
-            }
-        }
-        below_product_or_power
     })
 }
 
@@ -221,9 +196,9 @@ fn project_expression<Aind: AbsInd + ParseableAind>(
                 .next()?;
             project_expression(network, tree, child, graph, slot_copies)
         }
-        // `expand` deliberately leaves function arguments opaque. An
-        // automorphism confined to one summand there does not multiply the
-        // enclosing function, but independent factors remain analyzable.
+        // Sums stay factorized, and function arguments stay opaque. An
+        // automorphism confined to one summand does not multiply its parent,
+        // but independent factors remain analyzable.
         NetworkNode::Op(NetworkOp::Sum) => Some(graph.add_node(TensorGraphNode::Opaque(node))),
         NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => add_tensor(
             network,
