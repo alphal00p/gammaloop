@@ -800,15 +800,18 @@
 /// `fields` dictionary merging native dictionary data, statements, and direct
 /// record fields, with later sources taking precedence. A callback returns `none` to
 /// leave the record unchanged, `(data: value)` to set new native data, or
-/// structural fields such as `pos`, `shift`, and `statements` to patch data
-/// seen by later layout calls. Unchanged fields in a returned full record are
-/// not reapplied; this preserves partial XY placements when patching z or data.
+/// structural fields such as `pos`, `shift`, `spring-length`, and `statements`
+/// to patch data seen by later layout calls. `spring-length` is validated as a
+/// positive finite multiplier and stored in the edge statements used by the layout
+/// engine. Structural patches are applied separately from native Typst data, so
+/// content and stored functions in the existing `data` value are preserved.
+/// Unchanged fields in a returned full record are not reapplied; this preserves partial XY placements when patching z or data.
 /// Source and sink callbacks may likewise patch `statement`, `port-label`, and
 /// `compass` before subgraph and layout operations run.
 ///
 /// Constant patches and callback results use identical semantics. Node structural
 /// keys are `pos`, `shift`, and `statements`; edges also accept `label-pos`,
-/// `label-angle`, and `bend`. With no `data` key, other keys shallow-merge into
+/// `label-angle`, `bend`, and `spring-length`. With no `data` key, other keys shallow-merge into
 /// existing native dictionary data (or replace non-dictionary data with that
 /// patch). An explicit `data` key instead replaces native data, ignoring other
 /// non-structural keys; `data: none` leaves native data unchanged. Native Typst
