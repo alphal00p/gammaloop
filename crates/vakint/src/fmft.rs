@@ -485,7 +485,7 @@ impl Vakint {
         let fmft_normalization_correction = vk_parse!(
             format!(
                 "(
-                (𝑖*(𝜋^((4-2*{eps})/2)))\
+                (1𝑖*(𝜋^((4-2*{eps})/2)))\
               * (exp(-EulerGamma))^({eps})\
               * (exp(-logmUVmu-log_mu_sq))^({eps})\
              )^{n_loops}",

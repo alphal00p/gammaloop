@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{
     network::{
         library::symbolic::ETS,
@@ -7,11 +9,10 @@ use crate::{
     shadowing::static_symbols::W_,
     structure::representation::LibraryRep,
 };
-use ::symbolica_utils::ReplaceBuilderExt;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
-    function,
-    id::Context,
+    coefficient::CoefficientView,
+    id::{AliasedAtom, Context},
     symbol,
     utils::Settable,
 };
@@ -70,9 +71,36 @@ impl Collectable for Atom {
 }
 impl Collectable for AtomView<'_> {
     fn collect_collects(self) -> Atom {
-        self.replace(COLLECT.call(W_.a_) * COLLECT.call(W_.b_))
-            .repeat()
-            .with(COLLECT.call(W_.a_ * W_.b_))
+        // A repeated tensor belongs to the complete collected monomial. Keep
+        // its power compressed while exposing all copies to mapping callbacks.
+        self.replace_map(|arg, _context, out| {
+            let AtomView::Pow(power) = arg else { return };
+            let (AtomView::Fun(base), AtomView::Num(exponent)) = power.get_base_exp() else {
+                return;
+            };
+            let coefficient = exponent.get_coeff_view();
+            if base.get_symbol() != *COLLECT
+                || base.get_nargs() != 1
+                || !matches!(
+                    coefficient,
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                )
+                || !coefficient.is_integer()
+                || coefficient.to_owned().is_negative()
+                || coefficient.to_owned().is_zero()
+            {
+                return;
+            }
+            **out = base
+                .iter()
+                .next()
+                .unwrap()
+                .pow(AtomView::Num(exponent))
+                .wrap_in_collect();
+        })
+        .replace(COLLECT.call(W_.a_) * COLLECT.call(W_.b_))
+        .repeat()
+        .with(COLLECT.call(W_.a_ * W_.b_))
     }
 
     fn map_collects<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
@@ -112,11 +140,43 @@ impl Collectable for AtomView<'_> {
         if !hit {
             return self.to_owned();
         }
-        wrapped
-            .collect_symbol::<i16>(*COLLECT)
-            .replace(COLLECT.call(W_.a_) * COLLECT.call(W_.b_))
-            .repeat()
-            .with(COLLECT.call(W_.a_ * W_.b_))
+        // Keep complete unselected coefficients opaque. Symbolica's polynomial
+        // collector otherwise statistically tests their growing sums for zero,
+        // repeatedly traversing the whole momentum numerator. Collection needs
+        // only the selected tensor factors; it is not scalar simplification.
+        let mut used = wrapped.get_all_symbols(true);
+        let mut aliases = BTreeMap::<Atom, Atom>::new();
+        let mut serial = 0usize;
+        let protected = wrapped.replace_map(|arg, _context, out| {
+            if matches!(arg, AtomView::Fun(fun) if fun.get_symbol() == *COLLECT) {
+                // Setting the unchanged output also stops traversal into the
+                // selected tensor, preserving its complete slots and payload.
+                **out = arg.to_owned();
+            } else if !matches!(arg, AtomView::Num(_) | AtomView::Var(_))
+                && !arg.contains_symbol(*COLLECT)
+            {
+                let alias = aliases.entry(arg.to_owned()).or_insert_with(|| {
+                    loop {
+                        let symbol = symbol!(&format!("spenso::collect_coefficient_{serial}"));
+                        serial += 1;
+                        if used.insert(symbol) {
+                            break Atom::var(symbol);
+                        }
+                    }
+                });
+                **out = alias.clone();
+            }
+        });
+        let mut protected = AliasedAtom::from(protected);
+        for (original, alias) in aliases {
+            protected.register_alias(alias, original);
+        }
+        // Resolve through the existing alias owner before exposing any tensor
+        // group to map_collects callbacks. Identical coefficients can still
+        // cancel after restoration; opaque polynomial coefficients stay intact.
+        protected
+            .map_root(|root| root.collect_symbol::<i16>(*COLLECT).collect_collects())
+            .into_inner()
     }
 
     fn unwrap_collect(self) -> Atom {
@@ -185,7 +245,8 @@ impl<const N: usize> TensorCollectFilter<N> {
             .unwrap_collect()
     }
 
-    fn matches(self, arg: AtomView<'_>) -> bool {
+    /// Match one complete tensor leaf for composition with custom collectors.
+    pub fn matches(self, arg: AtomView<'_>) -> bool {
         let AtomView::Fun(fun) = arg else {
             return false;
         };
@@ -221,12 +282,14 @@ impl<const N: usize> TensorCollectFilter<N> {
             return matches!(args.as_slice(), [AtomView::Fun(arg)] if Self::function_contains_rep(*arg, reps));
         }
 
-        for a in fun.iter() {
-            for r in reps {
-                if a.replace(function!(r.symbol(), W_.a__)).matches() {
-                    return true;
-                }
-            }
+        // Match rep(a__) against the whole argument, as matches() does through
+        // partial(false). Only the recognized shorthand branches below recurse.
+        if fun.iter().any(|arg| {
+            matches!(arg, AtomView::Fun(inner)
+                if inner.get_nargs() > 0
+                    && reps.iter().any(|rep| inner.get_symbol() == rep.symbol()))
+        }) {
+            return true;
         }
 
         if symbol == SPENSO_TAG.chain {

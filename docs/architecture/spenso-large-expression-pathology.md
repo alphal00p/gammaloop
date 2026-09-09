@@ -1,15 +1,17 @@
 # Spenso Large Expression Pathology
 
-This note tracks the current status of the large root-level Spenso diagnostic
+This note records investigations of the large root-level Spenso diagnostic
 inputs:
 
 - `spenso_eval_input_0.txt`
 - `symbolica_expression.txt`
 - `examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_unfiltered_pre_network.sym`
 
-The focus is the actual GammaLoop tensor-network path. The current reruns use
-the sparse-aware contraction order through `MinResultRank` and scalar aliasing
-before execution where execution is attempted.
+The focus is the actual GammaLoop tensor-network path. The reruns recorded here
+use the sparse-aware contraction order through `MinResultRank` and scalar
+aliasing before execution where execution is attempted. These measurements
+predate the intermediate-cost preset; the current production selection is
+documented in [the architecture overview](architecture-current.md#33-tensor-network-contraction-order).
 
 ## Current Status
 
@@ -51,8 +53,9 @@ CARGO_BUILD_JOBS=2
 SPENSO_ALIAS_SCALAR_THRESHOLD=4096
 ```
 
-The contraction order is the current default `MinResultRank`, which is the
-sparse-aware pair score. `spenso_eval_input_0.txt` was attempted both with and
+The contraction order in these measurements is `MinResultRank`, the sparse-aware
+pair score that was the production default when they were recorded.
+`spenso_eval_input_0.txt` was attempted both with and
 without component-level Hornering; both runs failed before producing a scalar
 result because the product executor reached disconnected tensor operands.
 

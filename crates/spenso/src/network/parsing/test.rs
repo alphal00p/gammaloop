@@ -1,6 +1,7 @@
 use super::*;
 use crate::network::NetworkState;
 use crate::network::library::symbolic::ETS;
+use crate::structure::abstract_index::AIND_SYMBOLS;
 use crate::structure::representation::{Lorentz, Minkowski, RepName};
 use crate::{chain, mink, p, q, slot, tensor, tensor_symbol, trace, vector};
 use symbolica::{atom::FunctionBuilder, function, symbol};
@@ -547,6 +548,127 @@ fn parse_schoonschipped_dot_product() {
 
     assert!(parsed.state.is_scalar());
     assert!(parsed.graph.dangling_indices().is_empty());
+}
+
+#[test]
+fn scalar_weighted_compact_vector_contracts_to_minkowski_inner_product() {
+    let rep = mink4();
+    let p = vector!(weighted_p, rep.to_symbolic([]));
+    let a = Atom::var(symbol!("weighted_a"));
+    let b = Atom::var(symbol!("weighted_b"));
+    let inner_product = (0..4).fold(Atom::Zero, |sum, component| {
+        let index = function!(AIND_SYMBOLS.cind, component);
+        let sign = if component == 0 { 1 } else { -1 };
+        sum + Atom::num(sign) * tensor!(weighted_f, &index) * vector!(weighted_p, index)
+    });
+
+    for weight in [Atom::num(-2), a.clone(), a + b] {
+        let expression = tensor!(weighted_f, &weight * &p);
+        let mut parsed = expression
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        parsed.simple_execute();
+        let actual: Atom = parsed.result_scalar().unwrap().into();
+        assert!((actual - &weight * &inner_product).expand().is_zero());
+    }
+}
+
+#[test]
+fn parsing_preserves_two_compact_vectors_in_an_opaque_argument() {
+    let rep = mink4();
+    let product =
+        vector!(ambiguous_p, rep.to_symbolic([])) * vector!(ambiguous_q, rep.to_symbolic([]));
+    let expression = tensor!(ambiguous_f, product);
+
+    let mut parsed = expression
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    parsed.simple_execute();
+    let actual: Atom = parsed.result_scalar().unwrap().into();
+    assert!((actual - &expression).expand().is_zero());
+}
+
+#[test]
+fn parsing_preserves_compact_and_explicit_tensors_in_an_opaque_argument() {
+    let rep = mink4();
+    let product =
+        vector!(ambiguous_p, rep.to_symbolic([])) * tensor!(ambiguous_explicit, slot!(rep, i));
+    let expression = tensor!(ambiguous_f, product);
+
+    let mut parsed = expression
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    parsed.simple_execute();
+    let actual: Atom = parsed.result_scalar().unwrap().into();
+    assert!((actual - &expression).expand().is_zero());
+}
+
+#[test]
+fn compact_inner_product_preserves_explicit_spectator_slots() {
+    let compact = mink4();
+    let spectators = [Lorentz {}.new_rep(4).to_lib(), compact.to_lib()];
+    for spectator in spectators {
+        let slots = [
+            slot!(spectator, a).to_atom(),
+            slot!(spectator, b).to_atom(),
+            slot!(spectator, c).to_atom(),
+            slot!(spectator, d).to_atom(),
+        ];
+        let left = tensor!(compact_left, &slots[0], &slots[1], compact.to_symbolic([]));
+        let right = tensor!(compact_right, &slots[2], &slots[3], compact.to_symbolic([]));
+        for head in [SPENSO_TAG.dot, ETS.metric] {
+            let expr = function!(head, &left, &right);
+            let parsed = expr
+                .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+                .unwrap();
+            let external = parsed.graph.dangling_indices();
+            assert_eq!(external.len(), slots.len());
+            for slot in &slots {
+                assert!(external.contains(
+                    &Slot::<LibraryRep, AbstractIndex>::try_from(slot.as_view()).unwrap()
+                ));
+            }
+        }
+    }
+}
+
+#[test]
+fn compact_inner_product_contracts_only_repeated_spectators() {
+    let rep = mink4();
+    let a = slot!(rep, a).to_atom();
+    let b = slot!(rep, b).to_atom();
+    let c = slot!(rep, c).to_atom();
+    let expr = function!(
+        SPENSO_TAG.dot,
+        tensor!(compact_left, &a, &b, rep.to_symbolic([])),
+        tensor!(compact_right, &b, &c, rep.to_symbolic([]))
+    );
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    let external = parsed.graph.dangling_indices();
+    assert_eq!(external.len(), 2);
+    for slot in [&a, &c] {
+        assert!(
+            external
+                .contains(&Slot::<LibraryRep, AbstractIndex>::try_from(slot.as_view()).unwrap())
+        );
+    }
+}
+
+#[test]
+fn multiple_compact_axes_do_not_choose_an_implicit_contraction() {
+    let rep = mink4();
+    for other in [rep.to_symbolic([]), Lorentz {}.new_rep(4).to_symbolic([])] {
+        let expr = function!(
+            SPENSO_TAG.dot,
+            tensor!(compact_left, rep.to_symbolic([]), &other),
+            tensor!(compact_right, rep.to_symbolic([]), &other)
+        );
+        assert!(
+            !materialization::SchoonschipMaterializer::<AbstractIndex>::contains_schoonschip_shorthand(expr.as_view())
+        );
+    }
 }
 
 #[test]

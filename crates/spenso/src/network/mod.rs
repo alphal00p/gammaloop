@@ -66,13 +66,15 @@ use symbolica::id::AliasedAtom;
 #[cfg(feature = "shadowing")]
 pub mod tags;
 #[cfg(feature = "shadowing")]
-use tags::scalar_store_alias;
+use tags::{SPENSO_TAG, scalar_store_alias, scalar_store_alias_index};
 // use eyre::Result;
 
 use std::{convert::Infallible, fmt::Debug};
 
 const LARGE_SUM_PROFILE_THRESHOLD: usize = 32;
 const MIN_LAZY_TENSOR_SUM_TERMS: usize = 2;
+#[cfg(feature = "shadowing")]
+const MAX_EAGER_TENSOR_SUM_BYTES: usize = 16 * 1024 * 1024;
 #[cfg(feature = "shadowing")]
 const MIN_LAZY_FUSED_NUMERIC_CONTRACT_TERMS: usize = 8;
 
@@ -226,6 +228,10 @@ impl TensorContractionProfile {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TensorContractionPairEstimate {
+    /// Nonzero entry products sharing their contracted coordinates, before
+    /// symbolic cancellation. The profile fallback is a conservative Cartesian
+    /// estimate; sparse support can supply its exact join cardinality.
+    pub estimated_products: u128,
     pub estimated_output_entries: u128,
     pub output_dense_size: u128,
     pub max_output_entry_products: u128,
@@ -243,6 +249,7 @@ impl TensorContractionPairEstimate {
         let output_dense_size = output_dense_size.max(1);
         let estimated_output_entries = output_dense_size.min(entry_work).max(1);
         Self {
+            estimated_products: entry_work,
             estimated_output_entries,
             output_dense_size,
             max_output_entry_products: div_ceil_u128(entry_work, estimated_output_entries).max(1),
@@ -616,6 +623,7 @@ where
     let right_groups = sparse_free_keys_by_match(right_sparse, right_matches, None);
     if left_groups.is_empty() || right_groups.is_empty() {
         return TensorContractionPairEstimate {
+            estimated_products: 0,
             estimated_output_entries: 1,
             output_dense_size: output_dense_size.max(1),
             max_output_entry_products: 1,
@@ -645,6 +653,7 @@ where
 
     if join_cardinality == 0 {
         return TensorContractionPairEstimate {
+            estimated_products: 0,
             estimated_output_entries: 1,
             output_dense_size: output_dense_size.max(1),
             max_output_entry_products: 1,
@@ -661,7 +670,8 @@ where
     let (estimated_output_entries, max_output_entry_products) = if exact_combinations
         <= exact_join_limit
     {
-        let mut output_counts = HashMap::<(Vec<ConcreteIndex>, Vec<ConcreteIndex>), u128>::new();
+        // Both groups stay immutable, so count coordinate contents without copying their vectors.
+        let mut output_counts = HashMap::<(&[ConcreteIndex], &[ConcreteIndex]), u128>::new();
         for (key, left_free_keys) in &left_groups {
             let Some(right_free_keys) = right_groups.get(key) else {
                 continue;
@@ -669,7 +679,7 @@ where
             for left_key in left_free_keys {
                 for right_key in right_free_keys {
                     *output_counts
-                        .entry((left_key.clone(), right_key.clone()))
+                        .entry((left_key.as_slice(), right_key.as_slice()))
                         .or_default() += 1;
                 }
             }
@@ -686,6 +696,7 @@ where
     };
 
     TensorContractionPairEstimate {
+        estimated_products: join_cardinality,
         estimated_output_entries,
         output_dense_size,
         max_output_entry_products,
@@ -1734,16 +1745,41 @@ impl ScalarAliases {
                 .get(index)
                 .expect("scalar alias references an existing scalar")
                 .clone();
-            aliased = aliased.add_alias(scalar_store_alias(index), original);
+            // Scalar references already became handles before network execution.
+            // Register their definitions without recompressing the entire result.
+            aliased.register_alias(scalar_store_alias(index), original);
         }
         aliased
     }
 
-    pub fn resolve_atom<T>(&self, store: &NetworkStore<T, Atom>, root: Atom) -> Atom {
+    pub fn resolve_atom<T>(&self, store: &NetworkStore<T, Atom>, mut root: Atom) -> Atom {
         if self.is_empty() {
             return root;
         }
-        self.to_aliased_atom(store, root).into_inner()
+
+        // Store aliases are indexed handles: hashing arbitrary subtrees would
+        // repeatedly scan large scalar bodies that cannot be alias keys. Borrow
+        // definitions directly, and avoid copying an already alias-free result.
+        while root.contains_symbol(SPENSO_TAG.scalar) {
+            let resolved = root.replace_map(|view, _, out| {
+                if let Some(index) = scalar_store_alias_index(view)
+                    && self.is_aliased(index)
+                {
+                    let original = store
+                        .scalar
+                        .get(index)
+                        .expect("scalar alias references an existing scalar");
+                    out.set_from_view(&original.as_view());
+                }
+            });
+            // Definitions can contain other aliases, and normalization can
+            // expose a new handle. Preserve the exact substitution fixed point.
+            if resolved == root {
+                break;
+            }
+            root = resolved;
+        }
+        root
     }
 }
 
@@ -2491,6 +2527,81 @@ impl<T: Display> Display for ExecutionResult<T> {
     }
 }
 
+impl<K, Aind> NetworkLeaf<K, Aind> {
+    /// Scalar-valued lazy leaves retain their scales and do not require tensor
+    /// materialization. A leaf with open indices has no scalar interpretation.
+    fn result_scalar<'a, T, S>(
+        &self,
+        get_tensor: impl Fn(usize) -> &'a T,
+        get_scalar: impl Fn(graph::ScalarRef) -> &'a S,
+    ) -> Option<ExecutionResult<Cow<'a, S>>>
+    where
+        T: Clone + HasStructure + 'a,
+        T::Scalar: Into<S>,
+        S: Clone
+            + Ref
+            + for<'b> AddAssign<<S as Ref>::Ref<'b>>
+            + for<'b> MulAssign<<S as Ref>::Ref<'b>>
+            + 'a,
+    {
+        let tensor_scalar = |tensor: usize| -> Option<S> {
+            let tensor = get_tensor(tensor);
+            tensor.scalar_ref()?;
+            tensor.clone().scalar().map(Into::into)
+        };
+
+        let scaled_tensor_scalar = |term: &ScaledTensorRef| -> Option<S> {
+            let mut scalar: S = tensor_scalar(term.tensor)?;
+            if let Some(factor) = term.scale {
+                scalar *= get_scalar(factor).refer();
+            }
+            Some(scalar)
+        };
+
+        let tensor_sum_scalar = |indices: &[usize]| -> Option<ExecutionResult<Cow<'a, S>>> {
+            let mut iter = indices.iter();
+            let Some(first) = iter.next() else {
+                return Some(ExecutionResult::Zero);
+            };
+            let mut accumulator = tensor_scalar(*first)?;
+            for tensor in iter {
+                let term_scalar = tensor_scalar(*tensor)?;
+                accumulator += term_scalar.refer();
+            }
+            Some(ExecutionResult::Val(Cow::Owned(accumulator)))
+        };
+
+        let scaled_tensor_sum_scalar =
+            |terms: &[ScaledTensorRef]| -> Option<ExecutionResult<Cow<'a, S>>> {
+                let mut iter = terms.iter();
+                let Some(first) = iter.next() else {
+                    return Some(ExecutionResult::Zero);
+                };
+                let mut accumulator = scaled_tensor_scalar(first)?;
+                for term in iter {
+                    let term_scalar = scaled_tensor_scalar(term)?;
+                    accumulator += term_scalar.refer();
+                }
+                Some(ExecutionResult::Val(Cow::Owned(accumulator)))
+            };
+
+        match self {
+            NetworkLeaf::Scalar(index) => {
+                Some(ExecutionResult::Val(Cow::Borrowed(get_scalar(*index))))
+            }
+            NetworkLeaf::LocalTensor(index) => {
+                Some(ExecutionResult::Val(Cow::Owned(tensor_scalar(*index)?)))
+            }
+            NetworkLeaf::TensorSum(indices) => tensor_sum_scalar(indices),
+            NetworkLeaf::ScaledTensor(term) => Some(ExecutionResult::Val(Cow::Owned(
+                scaled_tensor_scalar(term)?,
+            ))),
+            NetworkLeaf::ScaledTensorSum(terms) => scaled_tensor_sum_scalar(terms),
+            NetworkLeaf::LibraryKey { .. } => None,
+        }
+    }
+}
+
 impl<
     T: TensorStructure,
     S,
@@ -2700,66 +2811,14 @@ where
             + for<'b> AddAssign<<S as Ref>::Ref<'b>>
             + for<'b> MulAssign<<S as Ref>::Ref<'b>>,
     {
-        let tensor_scalar = |tensor: usize| -> Result<S, TensorNetworkError<K, FK>> {
-            self.store
-                .get_tensor(tensor)
-                .clone()
-                .scalar()
-                .ok_or(TensorNetworkError::NoScalar)
-                .map(Into::into)
-        };
-
-        let scaled_tensor_scalar =
-            |term: &ScaledTensorRef| -> Result<S, TensorNetworkError<K, FK>> {
-                let mut scalar: S = tensor_scalar(term.tensor)?;
-                if let Some(factor) = term.scale {
-                    scalar *= self.store.get_scalar_ref(factor).refer();
-                }
-                Ok(scalar)
-            };
-
-        let tensor_sum_scalar =
-            |indices: &[usize]| -> Result<ExecutionResult<Cow<'a, S>>, TensorNetworkError<K, FK>> {
-                let mut iter = indices.iter();
-                let Some(first) = iter.next() else {
-                    return Ok(ExecutionResult::Zero);
-                };
-                let mut accumulator = tensor_scalar(*first)?;
-                for tensor in iter {
-                    let term_scalar = tensor_scalar(*tensor)?;
-                    accumulator += term_scalar.refer();
-                }
-                Ok(ExecutionResult::Val(Cow::Owned(accumulator)))
-            };
-
-        let scaled_tensor_sum_scalar = |terms: &[ScaledTensorRef]| -> Result<
-            ExecutionResult<Cow<'a, S>>,
-            TensorNetworkError<K, FK>,
-        > {
-            let mut iter = terms.iter();
-            let Some(first) = iter.next() else {
-                return Ok(ExecutionResult::Zero);
-            };
-            let mut accumulator = scaled_tensor_scalar(first)?;
-            for term in iter {
-                let term_scalar = scaled_tensor_scalar(term)?;
-                accumulator += term_scalar.refer();
-            }
-            Ok(ExecutionResult::Val(Cow::Owned(accumulator)))
-        };
-
         let (node, _, _) = self.graph.result()?;
         if let NetworkNode::Leaf(leaf) = node {
-            match leaf {
-                NetworkLeaf::TensorSum(indices) => return tensor_sum_scalar(indices),
-                NetworkLeaf::ScaledTensor(term) => {
-                    return Ok(ExecutionResult::Val(Cow::Owned(scaled_tensor_scalar(
-                        term,
-                    )?)));
-                }
-                NetworkLeaf::ScaledTensorSum(terms) => return scaled_tensor_sum_scalar(terms),
-                _ => {}
-            }
+            return leaf
+                .result_scalar(
+                    |tensor| self.store.get_tensor(tensor),
+                    |scalar| self.store.get_scalar_ref(scalar),
+                )
+                .ok_or(TensorNetworkError::NoScalar);
         }
 
         Ok(match self.result()? {
@@ -2907,10 +2966,10 @@ pub mod parsing;
 // use log::trace;
 pub mod contract;
 pub use contract::{
-    ContractScalars, ContractionStrategy, DEFAULT_EXACT_JOIN_LIMIT, MinResultRank,
-    MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE, PAIR_SCORE_RESULT_RANK_ONLY,
-    PAIR_SCORE_SPARSE_ATOM_AWARE, ProductContraction, SingleSmallestDegree, SmallestDegree,
-    SmallestDegreeIter,
+    ContractScalars, ContractionStrategy, DEFAULT_EXACT_JOIN_LIMIT, MinIntermediateCost,
+    MinResultRank, MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
+    PAIR_SCORE_INTERMEDIATE_COST, PAIR_SCORE_RESULT_RANK_ONLY, PAIR_SCORE_SPARSE_ATOM_AWARE,
+    ProductContraction, SingleSmallestDegree, SmallestDegree, SmallestDegreeIter,
 };
 pub trait ExecutionStrategy<E, FL, L, K, FK, Aind>
 where
@@ -2955,7 +3014,7 @@ where
     let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
     graph
         .identify_subgraph_nodes_without_deleting_self_edges(
-            operation.subgraph(),
+            operation.hedges(),
             NetworkNode::Leaf(replacement),
             &mut ignored,
         )
@@ -2994,7 +3053,7 @@ where
     let replacement = executor.execute::<C>(graph, operation, lib, fnlib)?;
     graph
         .identify_subgraph_nodes_without_deleting_self_edges(
-            operation.subgraph(),
+            operation.hedges(),
             NetworkNode::Leaf(replacement),
             ignored,
         )
@@ -3025,10 +3084,7 @@ where
     };
     let batch_len = planned.len();
     let batch_subgraph_hedges = if profile::enabled() {
-        planned
-            .iter()
-            .map(|op| op.subgraph().n_included())
-            .sum::<usize>()
+        planned.iter().map(|op| op.hedges().len()).sum::<usize>()
     } else {
         0
     };
@@ -3412,16 +3468,28 @@ fn try_balanced_scalar_sum<K, Aind, Store>(
 ) -> Option<NetworkLeaf<K, Aind>>
 where
     Store: NetworkStoreAccess,
-    Store::Scalar: Clone + Ref + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>,
+    Store::Tensor: Clone + HasStructure,
+    <Store::Tensor as HasStructure>::Scalar: Into<Store::Scalar>,
+    Store::Scalar: Clone
+        + Ref
+        + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>
+        + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>,
 {
     let mut terms = Vec::with_capacity(targets.len());
     for (_, leaf) in targets {
-        let NetworkLeaf::Scalar(index) = leaf else {
-            return None;
-        };
-        terms.push(store.scalar_ref(*index).clone());
+        match leaf.result_scalar(
+            |tensor| store.tensor(tensor),
+            |scalar| store.scalar_ref(scalar),
+        )? {
+            ExecutionResult::Val(value) => terms.push(value.into_owned()),
+            ExecutionResult::Zero => {}
+            ExecutionResult::One => unreachable!("leaf conversion does not produce implicit one"),
+        }
     }
 
+    if terms.is_empty() {
+        return None;
+    }
     let result = balanced_ref_sum(terms, sum_start);
     Some(NetworkLeaf::Scalar(store.push_scalar(result).into()))
 }
@@ -3440,10 +3508,11 @@ where
         + Clone
         + Ref
         + FastTensorSum
+        + AtomSumShapeDiagnostics
         + From<LT::WithIndices>
         + ScalarMul<Store::Scalar, Output = Store::Tensor>
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
-    Store::Scalar: Clone,
+    Store::Scalar: Clone + 'static,
     LT: LibraryTensor + Clone,
     L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
     K: Display + Debug,
@@ -3478,9 +3547,38 @@ where
     let all_scalar_terms = terms
         .iter()
         .all(|term| store.tensor(term.tensor).scalar_ref().is_some());
-    let keep_lazy = profile::lazy_tensor_sums()
-        && !all_scalar_terms
-        && terms.len() >= MIN_LAZY_TENSOR_SUM_TERMS;
+    let keep_lazy = !all_scalar_terms
+        && terms.len() >= MIN_LAZY_TENSOR_SUM_TERMS
+        && (profile::lazy_tensor_sums() || {
+            #[cfg(feature = "shadowing")]
+            {
+                // Broadcasting a scalar coefficient into every component can
+                // make a small factored sum enormous before external tensors
+                // reduce its rank. Keep those coefficients outside the tensor
+                // until contraction, while still materializing small sums.
+                let mut estimated_bytes = 0usize;
+                terms.iter().any(|term| {
+                    let shape = store.tensor(term.tensor).atom_sum_shape_stats(true);
+                    let scalar_bytes = term
+                        .scale
+                        .and_then(|scale| {
+                            scalar_atom_sum_shape_stats(store.scalar_ref(scale), true)
+                        })
+                        .map_or(0, |shape| shape.total_bytes);
+                    estimated_bytes = estimated_bytes
+                        .saturating_add(shape.total_bytes)
+                        .saturating_add(
+                            shape
+                                .entries
+                                .saturating_sub(shape.zero_entries)
+                                .saturating_mul(scalar_bytes),
+                        );
+                    estimated_bytes >= MAX_EAGER_TENSOR_SUM_BYTES
+                })
+            }
+            #[cfg(not(feature = "shadowing"))]
+            false
+        });
 
     if profile::enabled()
         && (keep_lazy || targets.len() > LARGE_SUM_PROFILE_THRESHOLD || profile::verbose())
@@ -3586,7 +3684,13 @@ fn try_atom_scalar_sum<K, Aind, Store>(
 ) -> Option<NetworkLeaf<K, Aind>>
 where
     Store: NetworkStoreAccess,
-    Store::Scalar: 'static,
+    Store::Tensor: Clone + HasStructure,
+    <Store::Tensor as HasStructure>::Scalar: Into<Store::Scalar>,
+    Store::Scalar: Clone
+        + Ref
+        + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>
+        + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>
+        + 'static,
 {
     use std::{
         any::{Any, TypeId},
@@ -3612,12 +3716,22 @@ where
     let atoms = targets
         .iter()
         .map(|(_, leaf)| {
-            let NetworkLeaf::Scalar(index) = leaf else {
-                return None;
-            };
-            (store.scalar_ref(*index) as &dyn Any)
-                .downcast_ref::<Atom>()
-                .cloned()
+            // Closed tensor and lazy leaves have the same scalar meaning as
+            // literal scalar leaves. Keep their scales and alias handles, and
+            // move owned results into the bulk sum without another Atom clone.
+            match leaf.result_scalar(
+                |tensor| store.tensor(tensor),
+                |scalar| store.scalar_ref(scalar),
+            )? {
+                ExecutionResult::Val(value) => {
+                    let scalar: Box<dyn Any> = Box::new(value.into_owned());
+                    scalar.downcast::<Atom>().ok().map(|atom| *atom)
+                }
+                ExecutionResult::Zero => Some(Atom::Zero),
+                ExecutionResult::One => {
+                    unreachable!("leaf conversion does not produce implicit one")
+                }
+            }
         })
         .collect::<Option<Vec<_>>>()?;
 
@@ -3638,10 +3752,16 @@ where
         );
 
         for atom in atoms {
-            stream.push(atom);
+            // Explicit zero leaves must not become terms in the stream.
+            if !atom.is_zero() {
+                stream.push(atom);
+            }
         }
 
-        let result = stream.to_expression();
+        let mut result = stream.to_expression();
+        if result.nterms() == 0 {
+            result = Atom::Zero;
+        }
         if let Some(start) = start {
             eprintln!(
                 "spenso_profile execute.sum_term_stream_done leaves={} terms={} bytes={} elapsed_ms={:.3}",
@@ -3660,7 +3780,7 @@ where
             );
         }
 
-        let result = Atom::add_many(&atoms);
+        let result = Atom::add_many(atoms);
         if profile::verbose()
             && let Some(start) = start
         {
@@ -3715,7 +3835,9 @@ where
         if <C as ContractionStrategy<E, L, K, FK, Aind>>::SUPPORTS_PARTIAL_GRAPH_REWRITE {
             let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
             for _ in 0..N {
-                while executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {}
+                while executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {
+                    executor.retain_graph_tensors(graph);
+                }
 
                 profile::bump(Counter::ExecuteIteration, 1);
                 let planned = plan_ready_operation_batch(graph, &ignored);
@@ -3741,6 +3863,7 @@ where
                 if !did_progress {
                     break;
                 }
+                executor.retain_graph_tensors(graph);
             }
 
             if !ignored.is_empty() {
@@ -3751,7 +3874,9 @@ where
         }
 
         for _ in 0..N {
-            while executor.execute_self_loop_traces(graph, lib)? {}
+            while executor.execute_self_loop_traces(graph, lib)? {
+                executor.retain_graph_tensors(graph);
+            }
 
             // find the *one* ready op
             if let Some((mut extracted_graph, _op)) = graph.extract_next_ready_op() {
@@ -3794,6 +3919,7 @@ where
                 );
 
                 graph.splice_descendents_of(extracted_graph);
+                executor.retain_graph_tensors(graph);
             }
         }
 
@@ -3821,7 +3947,9 @@ where
         if <C as ContractionStrategy<E, L, K, FK, Aind>>::SUPPORTS_PARTIAL_GRAPH_REWRITE {
             let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
             for _ in 0..N {
-                while executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {}
+                while executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {
+                    executor.retain_graph_tensors(graph);
+                }
 
                 profile::bump(Counter::ExecuteIteration, 1);
                 let planned = plan_ready_operation_batch(graph, &ignored);
@@ -3847,6 +3975,7 @@ where
                 if !did_progress {
                     break;
                 }
+                executor.retain_graph_tensors(graph);
             }
 
             if !ignored.is_empty() {
@@ -3857,7 +3986,9 @@ where
         }
 
         for _ in 0..N {
-            while executor.execute_self_loop_traces(graph, lib)? {}
+            while executor.execute_self_loop_traces(graph, lib)? {
+                executor.retain_graph_tensors(graph);
+            }
 
             // find the *one* ready op
             if let Some((mut extracted_graph, _op)) = graph.extract_next_ready_op() {
@@ -3872,6 +4003,7 @@ where
                     executor.execute::<C>(&extracted_graph, &operation, lib, fnlib)?;
                 collapse_operation_subgraph(&mut extracted_graph, &operation, replacement)?;
                 graph.splice_descendents_of(extracted_graph);
+                executor.retain_graph_tensors(graph);
             }
         }
 
@@ -3915,6 +4047,7 @@ where
                     executor.execute::<C>(&extracted_graph, &operation, lib, fnlib)?;
                 collapse_operation_subgraph(&mut extracted_graph, &operation, replacement)?;
                 graph.splice_descendents_of(extracted_graph);
+                executor.retain_graph_tensors(graph);
                 true
             } else {
                 false
@@ -3959,6 +4092,7 @@ where
                     executor.execute::<C>(&extracted_graph, &operation, lib, fnlib)?;
                 collapse_operation_subgraph(&mut extracted_graph, &operation, replacement)?;
                 graph.splice_descendents_of(extracted_graph);
+                executor.retain_graph_tensors(graph);
                 true
             } else {
                 false
@@ -3990,6 +4124,7 @@ where
         if <C as ContractionStrategy<E, L, K, FK, Aind>>::SUPPORTS_PARTIAL_GRAPH_REWRITE {
             loop {
                 if executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {
+                    executor.retain_graph_tensors(graph);
                     continue;
                 }
 
@@ -4017,6 +4152,7 @@ where
                 if !did_progress {
                     break;
                 }
+                executor.retain_graph_tensors(graph);
             }
 
             if !ignored.is_empty() {
@@ -4030,6 +4166,7 @@ where
 
         loop {
             if executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {
+                executor.retain_graph_tensors(graph);
                 continue;
             }
 
@@ -4058,7 +4195,7 @@ where
                             planned.len(),
                             planned_op.op().display_with(|fun| fun.to_string()),
                             planned_op.leaf_count(),
-                            planned_op.subgraph().n_included(),
+                            planned_op.hedges().len(),
                         );
                     }
                     Some(std::time::Instant::now())
@@ -4076,7 +4213,7 @@ where
                             elapsed.as_secs_f64() * 1000.0,
                             planned_op.op().display_with(|fun| fun.to_string()),
                             planned_op.leaf_count(),
-                            planned_op.subgraph().n_included(),
+                            planned_op.hedges().len(),
                         );
                     }
                     if planned.len() <= 1024 && (op_index + 1) % 64 == 0 {
@@ -4104,7 +4241,7 @@ where
             for (planned_op, replacement) in planned.into_iter().zip(replacements) {
                 graph
                     .identify_subgraph_nodes_without_deleting_self_edges(
-                        planned_op.subgraph(),
+                        planned_op.hedges(),
                         NetworkNode::Leaf(replacement),
                         &mut ignored,
                     )
@@ -4115,6 +4252,7 @@ where
                     })?;
             }
             graph.finish_deferred_node_identifications();
+            executor.retain_graph_tensors(graph);
             batch_index += 1;
         }
 
@@ -4140,31 +4278,14 @@ fn remap_parallel_replacement<K, Aind>(
     tensor_offset: usize,
     scalar_offset: usize,
 ) {
-    fn rebase_index(index: &mut usize, base: usize, offset: usize) {
-        if *index >= base {
-            *index = offset + (*index - base);
-        }
-    }
-
     replacement.map_scalar_refs(|scalar| scalar.rebase_from(base_scalars, scalar_offset));
-
-    match replacement {
-        NetworkLeaf::LocalTensor(index) => rebase_index(index, base_tensors, tensor_offset),
-        NetworkLeaf::TensorSum(indices) => {
-            for index in indices {
-                rebase_index(index, base_tensors, tensor_offset);
-            }
+    replacement.map_tensor_refs(|index| {
+        if index >= base_tensors {
+            tensor_offset + (index - base_tensors)
+        } else {
+            index
         }
-        NetworkLeaf::ScaledTensor(term) => {
-            rebase_index(&mut term.tensor, base_tensors, tensor_offset);
-        }
-        NetworkLeaf::ScaledTensorSum(terms) => {
-            for term in terms {
-                rebase_index(&mut term.tensor, base_tensors, tensor_offset);
-            }
-        }
-        NetworkLeaf::Scalar(_) | NetworkLeaf::LibraryKey { .. } => {}
-    }
+    });
 }
 
 impl Parallel {
@@ -4176,8 +4297,9 @@ impl Parallel {
         fnlib: &FL,
     ) -> Result<(), TensorNetworkError<K, FK>>
     where
-        NetworkStore<T, Sc>: ExecuteOp<FL, L, K, FK, Aind>,
-        for<'a> NetworkStoreOverlay<'a, T, Sc>: ExecuteOp<FL, L, K, FK, Aind>,
+        NetworkStore<T, Sc>: ExecuteOp<FL, L, K, FK, Aind, Tensor = T, Scalar = Sc>,
+        for<'a> NetworkStoreOverlay<'a, T, Sc>:
+            ExecuteOp<FL, L, K, FK, Aind, Tensor = T, Scalar = Sc>,
         C: ContractionStrategy<NetworkStore<T, Sc>, L, K, FK, Aind>,
         for<'a> C: ContractionStrategy<NetworkStoreOverlay<'a, T, Sc>, L, K, FK, Aind>,
         T: Clone + Send + Sync,
@@ -4275,7 +4397,7 @@ impl Parallel {
             for (planned_op, replacement) in planned.into_iter().zip(replacements) {
                 graph
                     .identify_subgraph_nodes_without_deleting_self_edges(
-                        planned_op.subgraph(),
+                        planned_op.hedges(),
                         NetworkNode::Leaf(replacement),
                         &mut ignored,
                     )
@@ -4286,6 +4408,7 @@ impl Parallel {
                     })?;
             }
             graph.finish_deferred_node_identifications();
+            executor.retain_graph_tensors(graph);
         }
 
         if !ignored.is_empty() {
@@ -4296,7 +4419,7 @@ impl Parallel {
     }
 }
 
-pub trait ExecuteOp<FL, L, K, FK, Aind>: Sized {
+pub trait ExecuteOp<FL, L, K, FK, Aind>: Sized + NetworkStoreAccess {
     // type LibStruct;
     #[allow(clippy::result_large_err)]
     fn execute_self_loop_traces(
@@ -4332,9 +4455,10 @@ pub trait ExecuteOp<FL, L, K, FK, Aind>: Sized {
         FK: Display;
 }
 
-impl<S, Store: TensorScalarStore, K, FK, Aind: AbsInd> Network<Store, K, FK, Aind>
+impl<S, T, Sc, Store, K, FK, Aind: AbsInd> Network<Store, K, FK, Aind>
 where
-    Store::Tensor: HasStructure<Structure = S>,
+    Store: TensorScalarStore<Tensor = T, Scalar = Sc> + NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+    T: HasStructure<Structure = S>,
 {
     #[allow(clippy::result_large_err)]
     pub fn execute<
@@ -4352,17 +4476,45 @@ where
         K: Display + Clone + Debug,
         FK: Display + Clone + Debug,
         L: Library<S, Key = K, Value = PermutedStructure<LT>> + Sync,
-        FL: FunctionLibrary<Store::Tensor, Store::Scalar, Key = FK>,
-        LT: LibraryTensor<WithIndices = Store::Tensor>,
+        FL: FunctionLibrary<T, Sc, Key = FK>,
+        LT: LibraryTensor<WithIndices = T>,
         Store: ExecuteOp<FL, L, K, FK, Aind>,
+        T: Clone
+            + Ref
+            + FastTensorSum
+            + ScalarMul<Sc, Output = T>
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
+        Sc: Clone,
     {
         {
             let _span = profile::span(Timer::MergeOps);
             profile::bump(Counter::MergeOps, 1);
             self.merge_ops();
         }
-        self.store.execute_self_loop_traces(&mut self.graph, lib)?;
+        if self.store.execute_self_loop_traces(&mut self.graph, lib)? {
+            self.store.retain_graph_tensors(&mut self.graph);
+        }
         Strat::execute_all::<C>(&mut self.store, &mut self.graph, lib, fn_lib)?;
+        // Automatic deferral is internal to execution. Keep the ordinary
+        // terminal result available through result(), including sums below a
+        // negation or a product. Explicit lazy execution retains its opt-in API.
+        if !profile::lazy_tensor_sums()
+            && let Ok((NetworkNode::Leaf(leaf), root, _)) = self.graph.result()
+        {
+            let materialized = match leaf {
+                NetworkLeaf::TensorSum(indices) => {
+                    Some(materialize_tensor_sum(&mut self.store, indices, None))
+                }
+                NetworkLeaf::ScaledTensorSum(terms) => {
+                    Some(materialize_scaled_tensors(&mut self.store, terms, None))
+                }
+                _ => None,
+            };
+            if let Some(leaf) = materialized {
+                self.graph.graph[root] = NetworkNode::Leaf(leaf);
+            }
+        }
+        self.store.retain_graph_tensors(&mut self.graph);
         self.state = self.graph.state();
         Ok(())
     }
@@ -4558,11 +4710,18 @@ where
         L: Library<S, Key = K, Value = PermutedStructure<LT>> + Sync,
         FL: FunctionLibrary<T, Sc, Key = FK> + Sync,
         LT: LibraryTensor<WithIndices = T>,
-        NetworkStore<T, Sc>: ExecuteOp<FL, L, K, FK, Aind>,
-        for<'a> NetworkStoreOverlay<'a, T, Sc>: ExecuteOp<FL, L, K, FK, Aind>,
+        NetworkStore<T, Sc>: ExecuteOp<FL, L, K, FK, Aind, Tensor = T, Scalar = Sc>,
+        for<'a> NetworkStoreOverlay<'a, T, Sc>:
+            ExecuteOp<FL, L, K, FK, Aind, Tensor = T, Scalar = Sc>,
         C: ContractionStrategy<NetworkStore<T, Sc>, L, K, FK, Aind>,
         for<'a> C: ContractionStrategy<NetworkStoreOverlay<'a, T, Sc>, L, K, FK, Aind>,
-        T: Clone + Send + Sync,
+        T: Clone
+            + Send
+            + Sync
+            + Ref
+            + FastTensorSum
+            + ScalarMul<Sc, Output = T>
+            + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         Sc: Clone + Send + Sync,
         Aind: Send + Sync,
     {
@@ -4576,7 +4735,27 @@ where
             &mut self.graph,
             lib,
             fn_lib,
-        )
+        )?;
+        // Match the terminal materialization contract of sequential execution.
+        if !profile::lazy_tensor_sums()
+            && let Ok((NetworkNode::Leaf(leaf), root, _)) = self.graph.result()
+        {
+            let materialized = match leaf {
+                NetworkLeaf::TensorSum(indices) => {
+                    Some(materialize_tensor_sum(&mut self.store, indices, None))
+                }
+                NetworkLeaf::ScaledTensorSum(terms) => {
+                    Some(materialize_scaled_tensors(&mut self.store, terms, None))
+                }
+                _ => None,
+            };
+            if let Some(leaf) = materialized {
+                self.graph.graph[root] = NetworkNode::Leaf(leaf);
+            }
+        }
+        self.store.retain_graph_tensors(&mut self.graph);
+        self.state = self.graph.state();
+        Ok(())
     }
 }
 
@@ -4594,7 +4773,7 @@ where
         + Contract<LCM = Store::Tensor>
         + ScalarMul<Store::Scalar, Output = Store::Tensor>
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>
-        + for<'a> AddAssign<LT::WithIndices>
+        + AddAssign<LT::WithIndices>
         + From<LT::WithIndices>
         + AtomSumShapeDiagnostics,
     L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
@@ -4758,7 +4937,7 @@ where
                         "spenso_profile execute.sum_start leaves={} children={} subgraph_hedges={}",
                         operation.leaf_count(),
                         operation.children().len(),
-                        operation.subgraph().n_included(),
+                        operation.hedges().len(),
                     );
                 }
 
@@ -5230,13 +5409,10 @@ where
                                 },
                                 _ => {
                                     let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
+                                    let square = t.contract(&t)?;
 
                                     if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
+                                        for _ in 0..squares {
                                             t = square.contract(&t)?;
                                         }
 
@@ -5284,13 +5460,10 @@ where
                                 1 => NetworkLeaf::LocalTensor(*ti),
                                 _ => {
                                     let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
+                                    let square = t.contract(&t)?;
 
                                     if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
+                                        for _ in 0..squares {
                                             t = square.contract(&t)?;
                                         }
                                         if pow < 0 {
@@ -5342,13 +5515,10 @@ where
                                 1 => NetworkLeaf::LocalTensor(ti),
                                 _ => {
                                     let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
+                                    let square = t.contract(&t)?;
 
                                     if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
+                                        for _ in 0..squares {
                                             t = square.contract(&t)?;
                                         }
                                         if pow < 0 {
@@ -5403,13 +5573,10 @@ where
                                 1 => NetworkLeaf::LocalTensor(ti),
                                 _ => {
                                     let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
+                                    let square = t.contract(&t)?;
 
                                     if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
+                                        for _ in 0..squares {
                                             t = square.contract(&t)?;
                                         }
                                         if pow < 0 {
@@ -5461,13 +5628,10 @@ where
                                 1 => NetworkLeaf::LocalTensor(ti),
                                 _ => {
                                     let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
+                                    let square = t.contract(&t)?;
 
                                     if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
+                                        for _ in 0..squares {
                                             t = square.contract(&t)?;
                                         }
                                         if pow < 0 {
