@@ -60,7 +60,7 @@ e_cm = 1.0
 override_lmb_heuristics = true
 
 [cli_settings.global.generation.compile]
-compilation_mode = "assembly"
+compilation_mode = "symjit"
 optimization_level = "O3"
 fast_math = true
 unsafe_math = true
