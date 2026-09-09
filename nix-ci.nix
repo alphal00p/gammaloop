@@ -30,7 +30,6 @@
     "checks.x86_64-linux.gammaloop-nextest-binaries-integration" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-test-binaries-gammaloop-integration-tests"
-      "packages.x86_64-linux.gammaloop-python-module"
     ];
     "checks.x86_64-linux.gammaloop-nextest-binaries-linnet" = [
       "packages.x86_64-linux.cargoArtifacts"
@@ -42,7 +41,6 @@
     "checks.x86_64-linux.gammaloop-nextest-binaries-python-api" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-test-binaries-gammaloop-integration-tests"
-      "packages.x86_64-linux.gammaloop-python-module"
     ];
     "checks.x86_64-linux.gammaloop-nextest-binaries-spenso" = [
       "packages.x86_64-linux.cargoArtifacts"
@@ -238,7 +236,6 @@
       "packages.x86_64-linux.crate-test-dependencies-spenso"
       "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
       "packages.x86_64-linux.crate-test-dependencies-vakint"
-      "packages.x86_64-linux.gammaloop-python-module"
     ];
     "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter" = [
       "packages.x86_64-linux.cargoArtifacts"
@@ -328,7 +325,6 @@
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-integration"
-      "packages.x86_64-linux.gammaloop-python-module"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-linnet"
