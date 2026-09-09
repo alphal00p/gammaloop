@@ -7,20 +7,21 @@
 #import "@preview/cetz:0.5.1" as cetz
 
 // Native font and stroke sizes are independent of the graph coordinate unit.
+#let graph-style = feynman.graph-style(unit: 2.6mm, line-width: 0.5pt)
 #let diagram-style = (
   font-size: 6pt,
-  unit: 2.6mm,
-  line-width: 0.5pt,
-  cut-line-width: 1pt,
+  cut-line-width: 0.8pt,
 
   endpoint-box: (
     padding: (x: 0.5, y: 0.4),
     radius: 0.25,
-    fills: (p1: green.lighten(85%), p2: orange.lighten(85%)),
+    fills: (p1: blue.lighten(85%), p2: orange.lighten(85%)),
   ),
   padding: 0.3,
 )
 #set text(size: diagram-style.font-size)
+
+#let draw-initials = false;
 
 // One stroke per opening: original, p1 replaced, p2 replaced, both replaced.
 #let initial-cut-styles = (
@@ -99,18 +100,7 @@
 #let diagram(g, options: base-layout, cut-x: auto, cut-y: auto, initial-cut: none, draw-after: none) = context {
   draw(
     layout(
-      graph.style(
-        g,
-        ..feynman.graph-style,
-        unit: diagram-style.unit,
-        node-style: node => {
-          let style = feynman.node-style(node)
-          if style.stroke != none {
-            style.stroke += (thickness: diagram-style.line-width)
-          }
-          style
-        },
-      ),
+      graph.style(g, ..graph-style),
       ..options,
     ),
     ..feynman.draw-style,
@@ -163,7 +153,7 @@
         (x, bounds.top), (x, bounds.bottom),
         stroke: (paint: red, thickness: diagram-style.cut-line-width, dash: "dashed"),
       )
-      if initial-cut != none {
+      if initial-cut != none and draw-initials {
         for side in ("left", "right") {
           let side-xs = endpoints.filter(b => b.side == side).map(b => b.pos.x)
           if side-xs.len() > 0 {
@@ -309,7 +299,9 @@
   }
 
   let diagrams = $
-    #diagram(xbox, cut-x: -1, initial-cut: 0, draw-after: (g, bounds) => {
+    #diagram(xbox, cut-x: -1, initial-cut: 0,
+      draw-after: (g, bounds) => {
+      if draw-initials{
       let nodes = graph.nodes(g)
       // The two single-replacement cuts cross the other external leg;
       // the matching pair opens both, with each branch reaching the diagram boundary.
@@ -335,10 +327,12 @@
           stroke: initial-cut-styles.at(style),
         )
       }
-    })+
-    #diagram(xbox-opened, cut-x: 0,cut-y: 1, initial-cut: 1)#h(-2mm)+#h(-2mm)
-    #diagram(xbox-opened2, cut-x: -2.1,cut-y: 1, initial-cut: 2)#h(-2mm)+
-    #diagram(xbox-cut,cut-y: 0.5, initial-cut: 3) = op("disc")_(p_1^2)  op("disc")_(p_2^2) integral (dif ^d k  )/(2 pi )^d (N^frak(q q')_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(  p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
+    }
+    }
+    )+
+    #diagram(xbox-opened, cut-x: 1.25,cut-y: 1, initial-cut: 1)#h(-2mm)+#h(-2mm)
+    #diagram(xbox-opened2, cut-x: -2.5,cut-y: 1, initial-cut: 2)#h(-2mm)+
+    #diagram(xbox-cut,cut-y: 0.5, initial-cut: 3) = op("disc")_(p_1^2)  op("disc")_(p_2^2) integral (dif ^d k  )/(2 pi )^d (N^(q overline(q))_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(  p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
   $
   diagrams
 }

@@ -618,6 +618,51 @@
   #draw(layout(g, layout-algo: "stable-layered"), edge-style: edge-style)
   ```
 
+  The Feynman example style is configured before layout. `graph-style` is a
+  function returning options for `graph.style`; `draw-style` remains a dictionary
+  of drawing callbacks and defaults:
+
+  ```typ
+  #import "../examples/map-style.typ" as feynman
+  #let styled = graph.style(g, ..feynman.graph-style(
+    unit: 1.35, line-width: 0.7pt, node-radius: 0.2,
+    momentum-line-width: 0.4pt,
+  ))
+  #draw(layout(styled), ..feynman.draw-style)
+  ```
+
+  Call `feynman.graph-style()` for the original appearance; replace the former
+  dictionary spread `..feynman.graph-style` with `..feynman.graph-style()`.
+  Its named options are:
+
+  - `unit: 1.35`: graph coordinate unit; a number multiplies the current `1em`,
+    or supply an absolute length such as `10pt`.
+  - `line-width: 0.5pt`: ordinary particle stroke thickness.
+  - `node-radius: 0.18`: visible node radius in graph units.
+  - `node-line-width: auto`: node outline, defaulting to `line-width`.
+  - `massive-line-width: auto`: scalar/ghost stroke, defaulting to
+    `2 * line-width`.
+  - `fermion-arrow-line-width: auto`: fermion arrowhead outline, defaulting to
+    `0.4 * line-width`.
+  - `momentum-line-width: auto`: momentum shaft and arrowhead thickness, both
+    defaulting to `0.8 * line-width`.
+
+  Width overrides are Typst lengths, independent of the graph unit and node
+  radius. With all defaults, the node and ordinary edge strokes are `0.5pt`,
+  scalar/ghost strokes `1pt`, fermion arrowheads `0.2pt`, and momentum strokes
+  `0.4pt`. The constructor stores resolved `node-style`, `fermion`, `particles`,
+  `momentum-stroke`, and `momentum-mark` presets in `scope.feynman`.
+  `graph.style` uses this scope for measurement, and `draw` inherits it after
+  layout; no repeated draw-time configuration is needed. Separate styles do not
+  share configuration. Direct calls to the exported `feynman.node-style` and
+  `feynman.edge-style` without scope still use the original defaults.
+
+  Particle aliases remain `a`/`photon`, `g`/`gluon`, and `scalar`/`ghG`;
+  other particle names use the fermion preset. Hidden nodes always have radius
+  zero and no fill or stroke. Per-edge momentum fields, including sparse
+  `mom(...)` patches described below, retain priority over inherited edge data
+  and keep their arrow/label placement independent of these width options.
+
   An edge can sparsely patch the `edge-style` passed to `draw` with
   `style: (...)`, compute the patch with a callback, use `auto` to delegate, or
   use `none` to hide its paint while

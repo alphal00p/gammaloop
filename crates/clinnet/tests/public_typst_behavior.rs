@@ -640,6 +640,116 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
 }
 
 #[test]
+fn public_configurable_map_style_behavior_is_observable() {
+    let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
+    let typst = configured_typst
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("typst"));
+    let version = match Command::new(&typst).arg("--version").output() {
+        Ok(version) if version.status.success() => version,
+        result if configured_typst.is_some() => {
+            panic!("configured Typst executable failed: {result:?}")
+        }
+        _ => return,
+    };
+    let version = String::from_utf8_lossy(&version.stdout);
+    let probe_svg = version.starts_with("typst 0.15.");
+    if configured_typst.is_some() && !probe_svg {
+        panic!("SVG behavior fixture requires Typst 0.15.x, found {version}");
+    }
+    let base = tempfile::tempdir().unwrap();
+    let renderer = TypstRenderer::new(base.path()).typst_executable(typst);
+    renderer.stage_default_assets().unwrap();
+    for (name, content) in [
+        (
+            "map-style.typ",
+            include_str!("../../linnest/typst/examples/map-style.typ"),
+        ),
+        (
+            "map-style-behavior.typ",
+            include_str!("resources/map-style-behavior.typ"),
+        ),
+    ] {
+        fs::write(base.path().join(".clinnet/templates").join(name), content).unwrap();
+    }
+
+    let fixture = base.path().join(".clinnet/templates/map-style-case.typ");
+    let output = base.path().join("map-style-case.svg");
+    let mut default_svg = None;
+    for (case, unit, radius, node_width, widths) in [
+        ("defaults", 13.5, 0.18, "0.5", ["0.2", "0.4", "0.5", "1"]),
+        ("legacy", 13.5, 0.18, "0.5", ["0.2", "0.4", "0.5", "1"]),
+        ("scaled", 20.0, 0.3, "0.5", ["0.2", "0.4", "0.5", "1"]),
+        ("derived", 10.0, 0.3, "1.25", ["0.5", "1", "1.25", "2.5"]),
+        (
+            "overrides",
+            10.0,
+            0.3,
+            "1.75",
+            ["0.625", "0.875", "1.25", "3"],
+        ),
+    ] {
+        fs::write(
+            &fixture,
+            format!(
+                "#set page(width: auto, height: auto, margin: 0pt, fill: none)\n\
+                 #set text(size: 10pt)\n\
+                 #import \"map-style-behavior.typ\": cases\n\
+                 #cases.at(\"{case}\")\n"
+            ),
+        )
+        .unwrap();
+        renderer
+            .compile_template(&fixture, &output, &[])
+            .unwrap_or_else(|error| panic!("map-style case {case}: {error:?}"));
+        if !probe_svg {
+            continue;
+        }
+        let svg = fs::read_to_string(&output).unwrap();
+        if case == "defaults" {
+            default_svg = Some(svg.clone());
+        } else if case == "legacy" {
+            assert_eq!(
+                Some(&svg),
+                default_svg.as_ref(),
+                "default rendering changed"
+            );
+        }
+        let nodes = paths_with_attr(&svg, "fill", "#ffffff");
+        assert_eq!(nodes.len(), 2, "{case}: hidden nodes must not be painted");
+        assert_close(
+            own_translation(nodes[1].1).0 - own_translation(nodes[0].1).0,
+            6.0 * unit,
+            1e-3,
+        );
+        for (_, node) in nodes {
+            assert_eq!(svg_attr(node, "stroke-width"), Some(node_width), "{case}");
+            let coordinates = svg_numbers(svg_attr(node, "d").unwrap());
+            let xs: Vec<_> = coordinates.iter().step_by(2).copied().collect();
+            let min = xs.iter().copied().fold(f64::INFINITY, f64::min);
+            let max = xs.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            assert_close(max - min, 2.0 * radius * unit, 1e-3);
+        }
+        let strokes = paths_with_attr(&svg, "stroke", "#000000");
+        for width in widths {
+            assert!(
+                strokes
+                    .iter()
+                    .any(|(_, path)| svg_attr(path, "stroke-width") == Some(width)),
+                "{case}: missing {width}pt stroke"
+            );
+        }
+        assert!(
+            strokes.iter().all(|(_, path)| {
+                svg_attr(path, "stroke-width")
+                    .is_some_and(|width| width == node_width || widths.contains(&width))
+            }),
+            "{case}: unexpected inherited stroke width"
+        );
+    }
+}
+
+#[test]
 fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
     let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
     let typst = configured_typst

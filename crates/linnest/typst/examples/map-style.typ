@@ -58,14 +58,20 @@
 // shift and label.shift remain independent; only their field names are expanded.
 #let momentum(label: (:), ..arrow) = {
   assert(arrow.pos().len() == 0, message: "momentum: expected named options")
-  assert(type(label) == dictionary, message: "momentum: label must be a dictionary")
+  assert(
+    type(label) == dictionary,
+    message: "momentum: label must be a dictionary",
+  )
   let fields = (:)
   for (kind, options, keys) in (
     ("arrow", arrow.named(), ("side", "offset", "length", "shift")),
     ("label", label, ("gap", "shift", "anchor")),
   ) {
     for (key, value) in options {
-      assert(key in keys, message: "momentum: unknown " + kind + " option " + key)
+      assert(
+        key in keys,
+        message: "momentum: unknown " + kind + " option " + key,
+      )
       fields.insert("momentum-" + kind + "-" + key, value)
     }
   }
@@ -89,8 +95,17 @@
 }
 
 #let _particle-layer(edge) = {
+  let config = edge.at("feynman", default: (:))
   let particle = _text(edge, "particle", "d")
-  let style = particles.at(particle, default: fermion) + _route(edge)
+  let style = (
+    config
+      .at("particles", default: particles)
+      .at(
+        particle,
+        default: config.at("fermion", default: fermion),
+      )
+      + _route(edge)
+  )
   if _enabled(edge, "cut") {
     style.split-gap = _number(edge, "cut-gap", 0.55)
   }
@@ -105,6 +120,7 @@
 }
 
 #let _momentum-layers(edge) = {
+  let config = edge.at("feynman", default: (:))
   let shift = _number(edge, "momentum-arrow-shift", 0)
   let label-shift = _number(edge, "momentum-label-shift", shift)
   let anchor = _value(edge, "momentum-label-anchor", auto)
@@ -126,7 +142,9 @@
         offset-side: if side == "auto" { "label" } else { none },
         label-side: if side == "auto" { auto } else { side },
         label-gap: _number(edge, "momentum-label-gap", 0.45),
-        label-style: (anchor: if type(anchor) == str { anchor.trim("\"") } else { anchor }),
+        label-style: (
+          anchor: if type(anchor) == str { anchor.trim("\"") } else { anchor },
+        ),
       )
   )
   let arrow = (
@@ -136,8 +154,12 @@
         shift: shift,
         ratio: none,
         resolve-length: "length",
-        stroke: (paint: black, thickness: 0.4pt, cap: "round"),
-        mark: momentum-mark,
+        stroke: config.at("momentum-stroke", default: (
+          paint: black,
+          thickness: 0.4pt,
+          cap: "round",
+        )),
+        mark: config.at("momentum-mark", default: momentum-mark),
         mark-position: "end",
         mark-orientation: "path",
       )
@@ -147,16 +169,17 @@
   // full invisible path, so its endpoint clamps never depend on arrow length.
   (
     arrow,
-    geometry + (
-      length: none,
-      ratio: none,
-      resolve-length: "none",
-      shift: 0,
-      stroke: none,
-      mark: none,
-      label: edge.momentum,
-      label-shift: label-shift,
-    ),
+    geometry
+      + (
+        length: none,
+        ratio: none,
+        resolve-length: "none",
+        shift: 0,
+        stroke: none,
+        mark: none,
+        label: edge.momentum,
+        label-shift: label-shift,
+      ),
   )
 }
 
@@ -168,18 +191,67 @@
 #let node-style(node) = if _enabled(node, "hidden") {
   (radius: 0, fill: none, stroke: none)
 } else {
-  (radius: 0.18, fill: white, stroke: edge-stroke)
+  node
+    .at("feynman", default: (:))
+    .at(
+      "node-style",
+      default: (radius: 0.18, fill: white, stroke: edge-stroke),
+    )
 }
 
 // The hidden ordinary label participates in layout and selects the automatic side;
 // an explicit momentum-arrow-side moves the visible label and momentum shaft together.
-#let graph-style = (
+#let graph-style(
   unit: 1.35,
-  node-label: none,
-  node-style: node-style,
-  edge-label: edge => hide([$p_(#edge.eid)$]),
-  edge-label-style: (anchor: "center", padding: 0.05),
-)
+  line-width: massless,
+  node-radius: 0.18,
+  node-line-width: auto,
+  massive-line-width: auto,
+  fermion-arrow-line-width: auto,
+  momentum-line-width: auto,
+) = {
+  // Preserve the original width ratios unless a component is explicitly overridden.
+  if node-line-width == auto { node-line-width = line-width }
+  if massive-line-width == auto { massive-line-width = 2 * line-width }
+  if fermion-arrow-line-width == auto {
+    fermion-arrow-line-width = 0.4 * line-width
+  }
+  if momentum-line-width == auto { momentum-line-width = 0.8 * line-width }
+  let stroke = edge-stroke + (thickness: line-width)
+  let fermion = fermion
+  fermion.stroke = stroke
+  fermion.mark.end.stroke = black + fermion-arrow-line-width
+  let momentum-mark = momentum-mark
+  momentum-mark.end.stroke = black + momentum-line-width
+  let particle-styles = (:)
+  for (name, style) in particles {
+    style.stroke.thickness = if style == scalar { massive-line-width } else {
+      line-width
+    }
+    particle-styles.insert(name, style)
+  }
+  (
+    unit: unit,
+    // Linnest stores this scope for both layout measurement and drawing callbacks.
+    scope: (
+      feynman: (
+        node-style: (
+          radius: node-radius,
+          fill: white,
+          stroke: stroke + (thickness: node-line-width),
+        ),
+        fermion: fermion,
+        particles: particle-styles,
+        momentum-stroke: stroke + (thickness: momentum-line-width),
+        momentum-mark: momentum-mark,
+      ),
+    ),
+    node-label: none,
+    node-style: node-style,
+    edge-label: edge => hide([$p_(#edge.eid)$]),
+    edge-label-style: (anchor: "center", padding: 0.05),
+  )
+}
 #let draw-style = (
   edge-style: edge-style,
   padding: 1.5,
