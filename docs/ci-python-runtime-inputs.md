@@ -35,8 +35,9 @@ Main's ordinary integration group also passed locally: 104 passed, 67 skipped,
 in 161.17s overall (157.49s in nextest), with no Cargo compilation at runtime.
 Its new integration and Python archive inventories match the previous main
 candidate: 171 and five entries, including names, kinds, ignored flags and
-filters under the actual `ci_gammaloop` profile. The new main Python runtime
-was not executed locally; FeynKit covers that runtime path.
+filters under the actual `ci_gammaloop` profile. The later
+[matched native/Nix main comparison](ci-main-native-comparison.md)
+also executed the main Python runtime: all five tests passed through both routes.
 
 Main archive preparation took 1,622.33s after seeding current external dependency
 artifacts, with 123 Cargo compilation messages; an unchanged repeat took 0.19s

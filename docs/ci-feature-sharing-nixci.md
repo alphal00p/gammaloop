@@ -37,7 +37,9 @@ pushed at 13:20:05 UTC. It removes build-time Python extension inputs and stops
 scheduling the production GammaLoop artifact separately from the Python module.
 The local tests, dependency proof and rationale are in
 [ci-python-runtime-inputs.md](ci-python-runtime-inputs.md). This uses suite 14,
-the campaign's last reserved suite; no further experiments were pushed.
+the campaign's last reserved suite. A subsequently requested additional main
+suite and matched local native Cargo comparison are recorded in
+[ci-main-native-comparison.md](ci-main-native-comparison.md).
 
 Both FeynKit revisions passed all 12 required checks, with matching reported
 runtime counts in all nine executing test/doctest groups. The changed archives
