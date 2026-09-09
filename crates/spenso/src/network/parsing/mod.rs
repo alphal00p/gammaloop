@@ -17,7 +17,13 @@ use crate::structure::{
 };
 use crate::tensors::parametric::ParamTensor;
 
-use std::{cell::Cell, fmt::Display, marker::PhantomData, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashSet,
+    fmt::Display,
+    marker::PhantomData,
+    rc::Rc,
+};
 
 use store::TensorScalarStore;
 // use log::trace;
@@ -280,6 +286,7 @@ impl ParseSettings {
 pub struct ParseState<Aind = AbstractIndex> {
     depth: usize,
     next_dummy: Rc<Cell<usize>>,
+    reserved_indices: Rc<RefCell<HashSet<Atom>>>,
     _aind: PhantomData<fn() -> Aind>,
 }
 
@@ -289,16 +296,22 @@ impl<Aind> Default for ParseState<Aind> {
         Self {
             depth: 0,
             next_dummy: Rc::new(Cell::new(1_000_000)),
+            reserved_indices: Rc::default(),
             _aind: PhantomData,
         }
     }
 }
 
-impl<Aind: DummyAind> ParseState<Aind> {
+impl<Aind: DummyAind + ParseableAind> ParseState<Aind> {
     fn next(&self) -> Aind {
-        let index = self.next_dummy.get();
-        self.next_dummy.set(index + 1);
-        Aind::new_dummy_at(index)
+        loop {
+            let index = self.next_dummy.get();
+            self.next_dummy.set(index + 1);
+            let dummy = Aind::new_dummy_at(index);
+            if self.reserved_indices.borrow_mut().insert(dummy.to_atom()) {
+                return dummy;
+            }
+        }
     }
 
     fn slot(&self, rep: &Representation<LibraryRep>) -> Slot<LibraryRep, Aind> {
@@ -358,6 +371,17 @@ where
     {
         value.validate_chain_like_nesting()?;
         let state = ParseState::<Aind>::default();
+        // Parsed indices can serialize like fresh dummies even when their Rust
+        // variants differ. Reserve written names once across all parser clones.
+        {
+            let mut reserved = state.reserved_indices.borrow_mut();
+            value.visitor(&mut |atom| {
+                if let Ok(slot) = Slot::<LibraryRep, Aind>::try_from(atom) {
+                    reserved.insert(slot.aind().to_atom());
+                }
+                true
+            });
+        }
         Self::try_from_view_impl(value, state, library, function_library, settings)
     }
 
@@ -824,11 +848,18 @@ where
         if !settings.depth_is_product_depth {
             state.depth += 1;
         }
-        let (base, exp) = value.get_base_exp();
+        let (base_expression, exp) = value.get_base_exp();
 
         if let Ok(n) = i8::try_from(exp) {
-            // println!("base:{base}");
-            let base = Self::try_from_view_impl(base, state, library, function_library, settings)?;
+            // println!("base:{base_expression}");
+            let next_dummy = state.next_dummy.get();
+            let base = Self::try_from_view_impl(
+                base_expression,
+                state.clone(),
+                library,
+                function_library,
+                settings,
+            )?;
 
             // println!("base state {:?}", base.state);
             if settings.precontract_scalars
@@ -857,7 +888,23 @@ where
                     )))
                 }
             } else {
-                let out = base.pow(n);
+                let out = if n > 1 && state.next_dummy.get() != next_dummy {
+                    // Each lowered shorthand copy needs independent internal indices.
+                    let rest = (1..n)
+                        .map(|_| {
+                            Self::try_from_view_impl(
+                                base_expression,
+                                state.clone(),
+                                library,
+                                function_library,
+                                settings,
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    base.n_mul(rest)
+                } else {
+                    base.pow(n)
+                };
                 // println!("{:?}", out.state);
                 Ok(out)
             }

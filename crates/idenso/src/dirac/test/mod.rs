@@ -47,6 +47,49 @@ use crate::test_support::test_initialize;
 use crate::{CookMode, CookSettings, Cookable};
 
 #[test]
+fn gamma_simplification_reaches_fixed_point_after_metric_contraction() {
+    let r = test_initialize();
+    // An identity propagator closes this loop when its bispinor metric contracts.
+    let expr = g!(slot!(r.bis4, a), slot!(r.bis4, b))
+        * gamma!(b, c, slot!(r.mink_d, mu))
+        * gamma!(c, a, slot!(r.mink_d, nu));
+
+    let once = expr.simplify_gamma();
+    let twice = once.simplify_gamma();
+    let expected = Atom::num(4) * g!(slot!(r.mink_d, mu), slot!(r.mink_d, nu));
+
+    assert_eq!(twice, expected);
+    assert_eq!(
+        once, twice,
+        "gamma simplification must reach its fixed point"
+    );
+}
+
+#[test]
+fn gamma_simplification_joins_chains_after_metric_contraction() {
+    let r = test_initialize();
+    let coefficient = parse_lit!((x + y) ^ 8 * (z + w));
+    let expr = gamma!(a, b, slot!(r.mink_d, mu))
+        * g!(slot!(r.bis4, b), slot!(r.bis4, c))
+        * gamma!(c, e, slot!(r.mink_d, nu));
+    let joined = chain!(
+        slot!(r.bis4, a),
+        slot!(r.bis4, e),
+        gamma!(slot!(r.mink_d, mu)),
+        gamma!(slot!(r.mink_d, nu)),
+    );
+
+    for settings in [
+        GammaSimplifySettings::repeated_pairs(),
+        GammaSimplifySettings::canonical(),
+    ] {
+        let result = (&coefficient * &expr).simplify_gamma_with(settings);
+        assert_eq!(result, &coefficient * joined.simplify_gamma_with(settings));
+        assert_eq!(result.simplify_gamma_with(settings), result);
+    }
+}
+
+#[test]
 fn gamma_construct() {
     test_initialize();
 
@@ -569,7 +612,7 @@ fn gammaloop_uv_factored_vertex_chain_reduces_in_d_dimensions() {
         .expand_num();
 
     // 4 (d - 4) q_rho slash(p) + 8 p_rho slash(q) + 8 (p.q) gamma_rho.
-    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-16*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))+4*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*d)*q(mink(d,rho))+8*chain(bis(d,i),bis(d,j),gamma(in,out,mink(d,rho)))*g(p(mink(d)),q(mink(d)))+8*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*p(mink(d,rho))");
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-16+4*d)*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*q(mink(d,rho))+8*chain(bis(d,i),bis(d,j),gamma(in,out,mink(d,rho)))*g(p(mink(d)),q(mink(d)))+8*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*p(mink(d,rho))");
 }
 
 #[test]

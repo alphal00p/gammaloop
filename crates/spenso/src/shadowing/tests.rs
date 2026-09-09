@@ -74,6 +74,162 @@ fn collect_tensors_keeps_scalar_products_factored() {
 }
 
 #[test]
+fn collect_tensors_keeps_shared_coefficient_outside_tensor_sum() {
+    let (a, b, c) = symbol!(
+        "shared_coefficient_a",
+        "shared_coefficient_b",
+        "shared_coefficient_c"
+    );
+    let coefficient = (Atom::var(a) + Atom::var(b)).pow(9) * (Atom::var(a) + Atom::var(c));
+    let expression = coefficient * (p!(mink!(4)) + q!(mink!(4)));
+
+    let collected = expression.collect_tensors();
+    assert_eq!(collected, expression);
+    assert_eq!(collected.collect_tensors(), collected);
+}
+
+#[test]
+fn collect_rep_keeps_unrelated_traces_outside_tensor_sum() {
+    let coefficient = trace_sym!(
+        euc!(3),
+        chain_factor!(collect_spectator_a, in, out),
+        chain_factor!(collect_spectator_b, in, out),
+    ) + trace!(euc!(3), chain_factor!(collect_spectator_c, in, out));
+    let expression = coefficient * (p!(mink!(4)) + q!(mink!(4)));
+    let rep = LibraryRep::from(Minkowski {});
+
+    let collected = expression.collect_rep(rep);
+    assert_eq!(collected, expression);
+    assert_eq!(collected.collect_rep(rep), collected);
+}
+
+#[test]
+fn collect_tensors_preserves_symbolic_powers_and_repeated_coefficients() {
+    let (a, b, c) = symbol!("coefficient_a", "coefficient_b", "coefficient_c");
+    let sum = Atom::var(a) + Atom::var(b);
+    let coefficient = Atom::var(c).pow(sum.clone()) * sum.pow(3);
+    let expression = coefficient.clone() * p!(mink!(4)) + coefficient * q!(mink!(4));
+
+    let collected = expression.collect_tensors();
+    assert_eq!(collected, expression);
+    assert_eq!(collected.collect_tensors(), collected);
+}
+
+#[test]
+fn collect_tensors_coefficient_aliases_do_not_capture_input_symbols() {
+    let (reserved, a, b) = symbol!(
+        "spenso::collect_coefficient_0",
+        "coefficient_capture_a",
+        "coefficient_capture_b"
+    );
+    let coefficient = (Atom::var(reserved) + Atom::var(a)).pow(3) * (Atom::var(a) + Atom::var(b));
+    let expression = coefficient * p!(mink!(4));
+
+    let collected = expression.collect_tensors();
+    assert_eq!(collected, expression);
+    assert!(collected.contains_symbol(reserved));
+}
+
+#[test]
+fn collect_tensors_restores_linear_coefficient_cancellation() {
+    let (a, b) = symbol!("coefficient_cancel_a", "coefficient_cancel_b");
+    let tensor = p!(mink!(4));
+    let expression =
+        (Atom::var(a) + Atom::var(b)) * &tensor - Atom::var(a) * &tensor - Atom::var(b) * tensor;
+
+    assert!(expression.collect_tensors().is_zero());
+}
+
+#[test]
+fn collect_tensors_keeps_opaque_polynomial_coefficients_intact() {
+    let (a, b) = symbol!("coefficient_zero_a", "coefficient_zero_b");
+    let a = Atom::var(a);
+    let b = Atom::var(b);
+    let coefficient = (&a + &b).pow(2) - a.pow(2) - Atom::num(2) * &a * &b - b.pow(2);
+    let expression = coefficient * p!(mink!(4));
+
+    // Tensor collection groups tensor factors; it does not expand a protected
+    // coefficient merely to prove a polynomial identity inside that factor.
+    assert_eq!(expression.collect_tensors(), expression);
+}
+
+#[test]
+fn collect_rep_callback_receives_complete_unaliased_tensor_payload() {
+    use crate::shadowing::Collectable;
+    use symbolica::atom::FunctionBuilder;
+
+    let (a, b, c, target) = symbol!(
+        "coefficient_callback_a",
+        "coefficient_callback_b",
+        "coefficient_callback_c",
+        "coefficient_callback_tensor"
+    );
+    let sum = Atom::var(a) + Atom::var(b);
+    let tensor = FunctionBuilder::new(target)
+        .add_arg(sum.clone().pow(3))
+        .add_arg(mink!(4, mu))
+        .finish();
+    let coefficient = Atom::var(c).pow(sum);
+    let expression = coefficient.clone() * &tensor + Atom::var(a) * &tensor;
+    let replacement = p!(mink!(4));
+    let collected =
+        expression.collect_rep_with_map(LibraryRep::from(Minkowski {}), |wrapped, _, out| {
+            assert_eq!(wrapped, tensor.clone().wrap_in_collect().as_view());
+            **out = replacement.clone();
+        });
+
+    assert_eq!(collected, (coefficient + Atom::var(a)) * replacement);
+}
+
+#[test]
+fn collect_rep_callback_receives_complete_contractions_across_tensor_sum() {
+    use crate::shadowing::Collectable;
+
+    let (a, b) = symbol!("contracted_coefficient_a", "contracted_coefficient_b");
+    let coefficient = (Atom::var(a) + Atom::var(b)).pow(3);
+    let p = p!(mink!(4, mu));
+    let q = q!(mink!(4, mu));
+    let r = symbol!("contracted_callback_r").call(mink!(4, mu));
+    let pq = (&p * &q).wrap_in_collect();
+    let pr = (&p * &r).wrap_in_collect();
+    let expression = &coefficient * p * (q + r);
+    let mut seen = [0, 0];
+
+    let result =
+        expression.collect_rep_with_map(LibraryRep::from(Minkowski {}), |wrapped, _, out| {
+            if wrapped == pq.as_view() {
+                seen[0] += 1;
+                **out = Atom::num(7);
+            } else {
+                assert_eq!(wrapped, pr.as_view());
+                seen[1] += 1;
+                **out = Atom::num(11);
+            }
+        });
+
+    assert_eq!(seen, [1, 1]);
+    assert_eq!(result, Atom::num(18) * coefficient);
+}
+
+#[test]
+fn collect_rep_callback_receives_complete_compressed_tensor_powers() {
+    use crate::shadowing::Collectable;
+
+    let (a, b) = symbol!("powered_coefficient_a", "powered_coefficient_b");
+    let coefficient = (Atom::var(a) + Atom::var(b)).pow(9);
+    let tensor = p!(mink!(4, mu));
+    let power = tensor.pow(3);
+    let result = (coefficient.clone() * &power).collect_rep_with_map(
+        LibraryRep::from(Minkowski {}),
+        |wrapped, _, out| {
+            assert_eq!(wrapped, power.clone().wrap_in_collect().as_view());
+            **out = Atom::num(7);
+        },
+    );
+    assert_eq!(result, Atom::num(7) * coefficient);
+}
+
+#[test]
 fn collect_tensors_marks_chain_like_forms_as_maximal_factors() {
     let (a, b) = symbol!("a", "b");
     let mu = mink!(4, mu);
@@ -127,6 +283,107 @@ fn collect_rep_only_wraps_matching_representations() {
             .to_bare_ordered_string(),
         @"(a+b)*p(mink(4))+a*q(euc(3))+b*q(euc(3))"
     );
+}
+
+#[test]
+fn representation_collection_scan_matches_pattern_oracle() {
+    use crate::{
+        broadcast_symbol,
+        shadowing::{collect::TensorCollectFilter, static_symbols::W_},
+        structure::representation::Euclidean,
+    };
+    use symbolica::{
+        atom::{FunctionBuilder, representation::FunView},
+        function,
+    };
+    use symbolica_utils::ReplaceBuilderExt;
+
+    // Retain the original matcher as an independent oracle for the direct scan,
+    // including guards that apply only at the outer function boundary.
+    fn pattern_matches(fun: FunView<'_>, reps: &[LibraryRep]) -> bool {
+        let symbol = fun.get_symbol();
+        if symbol == SPENSO_TAG.pure_scalar || symbol == SPENSO_TAG.bracket {
+            return false;
+        }
+        if symbol.has_tag(&SPENSO_TAG.broadcast) {
+            let args = fun.iter().collect::<Vec<_>>();
+            return matches!(args.as_slice(), [AtomView::Fun(arg)] if pattern_matches(*arg, reps));
+        }
+        for arg in fun.iter() {
+            for rep in reps {
+                if arg.replace(function!(rep.symbol(), W_.a__)).matches() {
+                    return true;
+                }
+            }
+        }
+        if symbol == SPENSO_TAG.chain {
+            return fun
+                .iter()
+                .skip(2)
+                .any(|arg| matches!(arg, AtomView::Fun(arg) if pattern_matches(arg, reps)));
+        }
+        if symbol == SPENSO_TAG.trace {
+            return fun
+                .iter()
+                .skip(1)
+                .any(|arg| matches!(arg, AtomView::Fun(arg) if pattern_matches(arg, reps)));
+        }
+        false
+    }
+
+    let mink = LibraryRep::from(Minkowski {});
+    let euc = LibraryRep::from(Euclidean {});
+    let (outer, nested, x) = symbol!("scan_outer", "scan_nested", "scan_x");
+    let mink_arg = function!(mink.symbol(), 4);
+    let payloads = [
+        Atom::num(1),
+        Atom::var(mink.symbol()),
+        FunctionBuilder::new(mink.symbol()).finish(),
+        mink_arg.clone(),
+        function!(mink.symbol(), 4, Atom::var(x)),
+        function!(euc.symbol(), 3),
+        function!(nested, mink_arg.clone()),
+        function!(SPENSO_TAG.pure_scalar, mink_arg.clone()),
+        function!(SPENSO_TAG.bracket, mink_arg.clone()),
+        mink_arg.clone().pow(2),
+        mink_arg.clone().pow(-1),
+        Atom::var(x).pow(mink_arg.clone()),
+        mink_arg.clone() + Atom::var(x),
+        mink_arg * Atom::var(x),
+    ];
+    let heads = [
+        outer,
+        SPENSO_TAG.pure_scalar,
+        SPENSO_TAG.bracket,
+        broadcast_symbol!(scan_broadcast),
+        SPENSO_TAG.chain,
+        SPENSO_TAG.trace,
+    ];
+    for head in heads {
+        for payload in &payloads {
+            for arity in 0..=3 {
+                let mut builder = FunctionBuilder::new(head);
+                for _ in 0..arity {
+                    builder = builder.add_arg(payload);
+                }
+                let expression = builder.finish();
+                // Linear heads may normalize to sums or scalar factors. Check
+                // every resulting function, including the normalized branches.
+                expression.visitor(&mut |atom| {
+                    if let AtomView::Fun(fun) = atom {
+                        for reps in [&[][..], &[mink][..], &[euc][..], &[mink, euc][..]] {
+                            assert_eq!(
+                                TensorCollectFilter::<0>::function_contains_rep(fun, reps),
+                                pattern_matches(fun, reps),
+                                "representation scan differs for {atom} in {expression} and {reps:?}",
+                            );
+                        }
+                    }
+                    true
+                });
+            }
+        }
+    }
 }
 
 #[test]
