@@ -44,6 +44,13 @@ exact details URL; another job attempt on the same SHA cannot supply its clock.
 
 Required-check latency defaults to the latest attempt of each NixCI test plus
 `gammaloop-clippy`, `gammaloop-fmt`, and `gammaloop-guppy-workspace-graph`.
+NixCI's explicit attempt number takes precedence over check timestamps when
+selecting the latest attempt. A retry without its own exact-URL GitHub check
+keeps unknown timing; another attempt's clock is never borrowed. If NixCI and
+the attached GitHub check disagree on success versus failure, both outcomes
+are retained as a `check-result-mismatch` incident. That check's duration is
+untrusted, and the suite cannot supply accepted paired percentages.
+
 Packaging, documentation, and WASM checks are excluded from this primary set. For a
 controlled comparison of different scheduling layouts, provide the same
 explicit `requiredAttributes` array in both entries. Include every intended

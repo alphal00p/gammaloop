@@ -123,7 +123,7 @@ export function parseLog(ndjson, job = {}) {
 
 export function summarizeSuite(spec, suite, checks, jobs) {
   const completed = job => secondsBetween(timestamp(job.checkStartedAt), timestamp(job.checkCompletedAt)) != null
-    && !excluded.has(job.status) && !excluded.has(job.checkConclusion);
+    && !job.checkResultMismatch && !excluded.has(job.status) && !excluded.has(job.checkConclusion);
   const actual = jobs.filter(completed);
   const starts = jobs.filter(job => job.type === 'config').map(job => timestamp(job.checkStartedAt)).filter(value => value != null);
   const started = min(starts);
@@ -133,7 +133,8 @@ export function summarizeSuite(spec, suite, checks, jobs) {
       && (!/^packages\.[^.]+\.nix-ci-check-/.test(job.attribute ?? '') || job.type === 'test')
     : job.type === 'test' || /^checks\.[^.]+\.gammaloop-(clippy|fmt|guppy-workspace-graph)$/.test(job.attribute ?? ''));
   // A failed earlier attempt remains in resource totals; latest attempt owns the result.
-  const latestWanted = [...new Map(wanted.toSorted((a, b) => (timestamp(a.checkStartedAt) ?? 0) - (timestamp(b.checkStartedAt) ?? 0))
+  const latestWanted = [...new Map(wanted.toSorted((a, b) => (a.attempt ?? 1) - (b.attempt ?? 1)
+    || (timestamp(a.checkStartedAt) ?? 0) - (timestamp(b.checkStartedAt) ?? 0))
     .map(job => [job.attribute, job])).values()];
   const missingRequiredAttributes = (spec.requiredAttributes ?? []).filter(attribute => !latestWanted.some(job => job.attribute === attribute));
   const wantedComplete = latestWanted.length > 0 && latestWanted.every(completed) && missingRequiredAttributes.length === 0;
@@ -243,7 +244,7 @@ export function summarizeSuite(spec, suite, checks, jobs) {
   const uncertainHistory = observedLogReplacements.length > 0 || jobs.some(job => (job.checkAttempts?.length ?? 0) > 1)
     || [...prior.keys()].some(url => !jobs.some(job => job.url === url))
     || incidents.some(incident => incident.kind === 'repeated-attempt' && incident.previousStatus);
-  const invalidClocks = incidents.some(incident => ['invalid-clock', 'missing-clock'].includes(incident.kind));
+  const invalidChecks = incidents.some(incident => ['invalid-clock', 'missing-clock', 'check-result-mismatch'].includes(incident.kind));
   const completedSuite = ['success', 'failure', 'failed', 'hopeless'].includes(suite.status);
   return {
     layout: spec.layout, variant: spec.variant, scenario: spec.scenario, pair: spec.pair ?? '1', sha: spec.sha, suiteUrl: spec.suiteUrl,
@@ -266,8 +267,8 @@ export function summarizeSuite(spec, suite, checks, jobs) {
     failedJobs: jobs.filter(job => ['failed', 'failure', 'hopeless'].includes(job.status)).length,
     cancelledOrSkippedJobs: jobs.filter(job => ['cancelled', 'skipped'].includes(job.status)).length,
     observedWorkers: observed.length, missingLogs: missing.length, interruptedJobs: interrupted.size, observedInterruptions, observedLogReplacements,
-    observedResourceLowerBound: !completedSuite || missing.length > 0 || interrupted.size > 0 || uncertainHistory || invalidClocks,
-    evidenceComplete: completedSuite && wantedComplete && missing.length === 0 && interrupted.size === 0 && checks.length > 0 && !uncertainHistory && !invalidClocks,
+    observedResourceLowerBound: !completedSuite || missing.length > 0 || interrupted.size > 0 || uncertainHistory || invalidChecks,
+    evidenceComplete: completedSuite && wantedComplete && missing.length === 0 && interrupted.size === 0 && checks.length > 0 && !uncertainHistory && !invalidChecks,
     observedWorkerMinutes: sum(observed, 'workerSeconds') / 60,
     downloadReportedBytes: sum(observed, 'downloadReportedBytes'),
     intermediateDownloadReportedBytes: sum(observed.filter(job => job.context === 'artifact-producer'), 'downloadReportedBytes'),
@@ -326,7 +327,8 @@ export function comparePairs(suites) {
     const change = key => comparable && baseline[key] > 0 && candidate[key] != null
       ? (candidate[key] / baseline[key] - 1) * 100 : null;
     const latest = suite => new Map((suite?.jobs ?? []).filter(job => job.type === 'test')
-      .toSorted((a, b) => (timestamp(a.checkStartedAt) ?? 0) - (timestamp(b.checkStartedAt) ?? 0)).map(job => [job.attribute, job]));
+      .toSorted((a, b) => (a.attempt ?? 1) - (b.attempt ?? 1)
+        || (timestamp(a.checkStartedAt) ?? 0) - (timestamp(b.checkStartedAt) ?? 0)).map(job => [job.attribute, job]));
     const beforeGroups = latest(baseline), afterGroups = latest(candidate);
     const groups = [...new Set([...beforeGroups.keys(), ...afterGroups.keys()])].map(attribute => {
       const before = beforeGroups.get(attribute), after = afterGroups.get(attribute);
@@ -521,7 +523,7 @@ class Collector {
         const matching = checks.filter(check => check.details_url?.replace(/\/$/, '') === run.url?.replace(/\/$/, ''));
         const check = matching.toSorted((a, b) => (timestamp(a.started_at) ?? 0) - (timestamp(b.started_at) ?? 0)).at(-1);
         const job = {
-          attribute: run.attribute ?? run.type, type: run.type, status: run.status, url: run.url,
+          attribute: run.attribute ?? run.type, type: run.type, status: run.status, url: run.url, attempt: run.attempt ?? 1,
           context: /crate-(?:test-|deps-)|cargoArtifacts|Artifacts|prebuild|nextest-binaries|ci-test-inputs/.test(run.attribute ?? '') ? 'artifact-producer'
             : /doctest/.test(run.attribute ?? '') ? 'doctest' : /clippy/.test(run.attribute ?? '') ? 'clippy' : run.type,
           checkAttempts: [...new Map(matching.filter(check => check.id != null).map(check => [check.id, { id: check.id, startedAt: check.started_at, completedAt: check.completed_at }])).values()],
@@ -555,6 +557,17 @@ class Collector {
               time: timestamp(job.checkStartedAt), cause: 'unknown', observation: 'worker evidence is missing or malformed; timings are unknown' }];
             this.errors.push({ suiteUrl: spec.suiteUrl, jobUrl: run.url, stage: 'log', error: error.message });
           }
+        }
+        job.checkResultMismatch = ['failed', 'failure', 'hopeless'].includes(run.status) && check?.conclusion === 'success'
+          || ['success', 'cached'].includes(run.status) && check?.conclusion === 'failure';
+        if (job.checkResultMismatch) {
+          // A retry can update a GitHub check while its details URL still names the failed attempt.
+          // Retain both raw outcomes, but do not assign that check's duration to this worker.
+          job.checkSeconds = job.preWorkerSeconds = job.postWorkerSeconds = null;
+          job.incidents ??= [];
+          job.incidents.push({ kind: 'check-result-mismatch', time: timestamp(check.completed_at), timeSource: 'check-metadata',
+            status: run.status, checkConclusion: check.conclusion, cause: 'unknown',
+            observation: 'NixCI job outcome disagrees with the GitHub check attached to its exact URL; attempt clocks are untrusted' });
         }
         if (run.status === 'abandoned') this.errors.push({ suiteUrl: spec.suiteUrl, jobUrl: run.url, stage: 'interrupted-worker',
           error: 'abandoned worker: observed resource totals are lower bounds, including after a successful retry' });

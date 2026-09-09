@@ -648,3 +648,42 @@ test('only a final log record may extend its message without proving history rep
   await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest));
   assert.equal((await createReport(join(dir, 'manifest.json'), join(dir, 'normalized'))).complete, true);
 });
+
+test('explicit retry numbers preserve missing clocks and detect a check attached to the failed URL', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'ci-report-retry-clock-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const runs = [
+    { type: 'config', status: 'cached', url: suiteUrl + '/config' },
+    { type: 'test', attribute: attr, status: 'success', attempt: 2, url: suiteUrl + '/retry' },
+    { type: 'test', attribute: attr, status: 'failed', url: suiteUrl + '/first' },
+  ];
+  const checks = [
+    { id: 1, details_url: runs[0].url, started_at: '2026-09-06T00:00:00Z', completed_at: '2026-09-06T00:00:01Z', conclusion: 'success' },
+    { id: 2, details_url: runs[2].url, started_at: '2026-09-06T00:00:10Z', completed_at: '2026-09-06T00:00:30Z', conclusion: 'success' },
+  ];
+  const manifest = { repository: 'example/repo', runs: [{ ...spec, requiredAttributes: [attr],
+    offline: { suite: 'suite.json', checks: 'checks.json', jobs: 'jobs.json', actions: 'actions.json' } }] };
+  for (const [file, value] of Object.entries({ 'manifest.json': manifest,
+    'suite.json': { commit: sha, status: 'success', runs }, 'checks.json': checks, 'actions.json': [],
+    'jobs.json': runs.slice(1).map(run => ({ url: run.url, file: 'overlap.ndjson' })),
+  })) await writeFile(join(dir, file), JSON.stringify(value));
+  await writeFile(join(dir, 'overlap.ndjson'), overlap);
+  const report = await createReport(join(dir, 'manifest.json'), join(dir, 'out'));
+  const suite = report.suites[0], retry = suite.jobs[1], first = suite.jobs[2];
+  assert.equal(retry.attempt, 2);
+  assert.equal(first.attempt, 1);
+  assert.equal(retry.checkId, null);
+  assert.equal(retry.checkCompletedAt, null);
+  assert.equal(first.checkConclusion, 'success');
+  assert.equal(first.status, 'failed');
+  assert.equal(first.checkSeconds, null);
+  assert.equal(first.postWorkerSeconds, null);
+  assert.equal(suite.requiredSeconds, null);
+  assert.equal(suite.finalAggregateTailSeconds, null);
+  assert.equal(suite.requiredPassed, false);
+  assert.equal(suite.observedWorkerMinutes, 28 / 60);
+  assert.equal(suite.failedJobs, 1);
+  assert.equal(report.complete, false);
+  assert.ok(report.errors.some(error => error.jobUrl === retry.url && error.stage === 'checks'));
+  assert.ok(report.incidents.some(incident => incident.kind === 'check-result-mismatch' && incident.jobUrl === first.url));
+});
