@@ -3,6 +3,9 @@
 See the [recorded experiment results](ci-measurement-results.md) for current
 measurements and outstanding acceptance gates.
 
+The [shared test-feature experiment](ci-test-feature-sharing.md) has separate
+local validation; its effect is not included in the earlier NixCI comparisons.
+
 Run `just ci-report MANIFEST OUTPUT_DIR` to collect existing NixCI jobs and
 GitHub Actions attempts. The underlying command is
 `node .github/scripts/ci-report.mjs MANIFEST OUTPUT_DIR`. It uses Node built-ins

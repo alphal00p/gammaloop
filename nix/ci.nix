@@ -2,6 +2,8 @@
   workspaceGraph,
   system ? "x86_64-linux",
 }: let
+  # Compile the integration crate once; groups select disjoint test binaries.
+  testFeatures."gammaloop-integration-tests" = ["python-api-tests"];
   groups = [
     {
       name = "core";
@@ -15,13 +17,14 @@
     {
       name = "integration";
       packages = ["gammaloop-integration-tests"];
+      filter = "package(gammaloop-integration-tests) & not binary(test_python_api)";
     }
     {
       name = "python-api";
       packages = ["gammaloop-integration-tests"];
       runtimeTestSourcePackages = [];
       filter = "package(gammaloop-integration-tests) & binary(test_python_api)";
-      extraFeatures."gammaloop-integration-tests" = ["python-api-tests"];
+      extraFeatures = testFeatures;
     }
     {
       name = "clinnet";
@@ -169,6 +172,11 @@
             dependencyRepresentative: dependencyRepresentative != workspaceHackPackage
           )
           (workspaceTestComponentDependencyRepresentativesFor representative)
+        )
+        ++ (
+          if builtins.elem "gammaloop-integration-tests" workspaceTestComponentMembers.${representative}
+          then ["packages.${system}.gammaloop-python-module"]
+          else []
         );
     })
     workspaceTestDependencyComponentRepresentatives);
@@ -183,15 +191,11 @@
     })
     groups);
   nextestArchiveAttr = target: "checks.${system}.gammaloop-nextest-binaries-${target}";
-  nextestPackageArtifactAttrFor = target: package:
-    if target == "python-api"
-    then nextestContextualTestBinaryAttr target package
-    else crateTestBinaryAttr package;
   nextestArchiveDependenciesFor = target:
     ["packages.${system}.cargoArtifacts"]
-    ++ unique (map (nextestPackageArtifactAttrFor target) nextestPackageGroups.${target})
+    ++ unique (map crateTestBinaryAttr nextestPackageGroups.${target})
     ++ (
-      if target == "python-api"
+      if builtins.elem "gammaloop-integration-tests" nextestPackageGroups.${target}
       then ["packages.${system}.gammaloop-python-module"]
       else []
     );
@@ -215,7 +219,7 @@
         value =
           [(nextestArchiveAttr group.name)]
           ++ (
-            if group.name == "python-api"
+            if builtins.elem "gammaloop-integration-tests" group.packages
             then ["packages.${system}.gammaloop-python-module"]
             else []
           );
@@ -373,7 +377,7 @@
   == []
   || builtins.throw "projected NixCI dependency graph contains cycles through: ${builtins.concatStringsSep ", " projectedDependencyCycles}"; projectedDependencies;
 in {
-  inherit groups;
+  inherit groups testFeatures;
   configuration = {
     systems = [system];
     inherit onlyBuild;

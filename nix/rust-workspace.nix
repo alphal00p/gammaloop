@@ -736,6 +736,7 @@
       craneCiCommonFeaturesFor package
       ++ (craneCiExtraFeatureSets.${package} or [])
       ++ (craneTestExtraFeatureSets.${package} or [])
+      ++ (ci.testFeatures.${package} or [])
       ++ (workspaceIncomingTestDependencyFeaturesFor sourcePackages package)
     );
 
