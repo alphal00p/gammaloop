@@ -1,6 +1,6 @@
 {
-  "recordedAt": "2026-09-08T15:52:46.140Z",
-  "status": "Local compilation validation complete; remote performance and valid-license acceptance pending.",
+  "recordedAt": "2026-09-09T06:14:21.248Z",
+  "status": "Main unchanged pair and strict pre-fix cold pairs validated; fixed FeynKit correctness passes. Suite10 fixed FeynKit remote and current source validations running. No merge acceptance yet.",
   "applicationRevisions": {
     "main": "395610143576507503fd2c785db3ba62340f4277",
     "feynkit": "6eccc26fe47651addfae2f810918809139129a5c"
@@ -1871,5 +1871,953 @@
         }
       }
     }
-  }
+  },
+  "priorSnapshotRecordedAt": "2026-09-08T15:52:46.140Z",
+  "latestObservation": {
+    "recordedAt": "2026-09-09T06:14:21.248Z",
+    "suitesSubmitted": 11,
+    "maximumSuites": 14,
+    "priorObservationScope": "Earlier fields are historical snapshots; their pending states and provisional totals are not current.",
+    "mainUnchanged": {
+      "recordedAt": "2026-09-08T22:38:46.078Z",
+      "method": "One serial application-unchanged baseline/candidate pair, final ungrouped main CI configuration before the separate fingerprint fix. Exact reporter16bd replay passed offline and preserved evidence hashes.",
+      "suites": [
+        {
+          "layout": "main",
+          "variant": "baseline",
+          "scenario": "unchanged-followup",
+          "sha": "64cdbfff2dffcae199d9ea41d1e5a3cd1debee4a",
+          "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/64cdbfff2dffcae199d9ea41d1e5a3cd1debee4a",
+          "suiteStartedAt": "2026-09-08T21:41:50.000Z",
+          "suiteCompletedAt": "2026-09-08T22:20:21.000Z",
+          "requiredSeconds": 2277,
+          "suiteSeconds": 2311,
+          "submittedAt": null,
+          "submissionCompletedAt": null,
+          "submissionToRequiredSeconds": null,
+          "submissionToRequiredBoundsSeconds": null,
+          "finalAggregateTailSeconds": 34,
+          "requiredPassed": true,
+          "evidenceComplete": true,
+          "observedWorkerMinutes": 145.84972876048332,
+          "downloadReportedBytes": 107873172910.4,
+          "intermediateDownloadReportedBytes": 76159390905.59999,
+          "downloadWorkerSeconds": 1132.5769999999998,
+          "uploadWorkerSeconds": 2815.91,
+          "compilationMessages": 404,
+          "checkingMessages": 0,
+          "repeatedDerivationCount": 26,
+          "executedTestJobs": 8,
+          "reusedTestJobs": 0,
+          "unknownTestJobs": 0,
+          "transferErrorCount": 0,
+          "interruptedJobs": 0
+        },
+        {
+          "layout": "main",
+          "variant": "candidate",
+          "scenario": "unchanged-followup",
+          "sha": "7e6dc57327fbd6ab3e6181151d66963e8e93675c",
+          "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency/7e6dc57327fbd6ab3e6181151d66963e8e93675c",
+          "suiteStartedAt": "2026-09-08T22:21:26.000Z",
+          "suiteCompletedAt": "2026-09-08T22:30:20.000Z",
+          "requiredSeconds": 507,
+          "suiteSeconds": 534,
+          "submittedAt": "2026-09-08T22:21:16.990Z",
+          "submissionCompletedAt": "2026-09-08T22:21:19.549Z",
+          "submissionToRequiredSeconds": 516.01,
+          "submissionToRequiredBoundsSeconds": {
+            "minimum": 513.451,
+            "maximum": 516.01
+          },
+          "finalAggregateTailSeconds": 27,
+          "requiredPassed": true,
+          "evidenceComplete": true,
+          "observedWorkerMinutes": 23.630137749833334,
+          "downloadReportedBytes": 5719226033.599999,
+          "intermediateDownloadReportedBytes": 5035344766.400001,
+          "downloadWorkerSeconds": 119.10500000000002,
+          "uploadWorkerSeconds": 187.36800000000005,
+          "compilationMessages": 103,
+          "checkingMessages": 0,
+          "repeatedDerivationCount": 0,
+          "executedTestJobs": 7,
+          "reusedTestJobs": 0,
+          "unknownTestJobs": 1,
+          "transferErrorCount": 0,
+          "interruptedJobs": 0
+        }
+      ],
+      "pair": {
+        "layout": "main",
+        "scenario": "unchanged-followup",
+        "pair": "resumed-main-unchanged",
+        "baselineUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-main-baseline/64cdbfff2dffcae199d9ea41d1e5a3cd1debee4a",
+        "candidateUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency/7e6dc57327fbd6ab3e6181151d66963e8e93675c",
+        "comparable": true,
+        "coverageEquivalent": null,
+        "suiteChangePercent": -76.8931198615318,
+        "requiredChangePercent": -77.733860342556,
+        "submissionToRequiredChangePercent": null,
+        "workerMinutesChangePercent": -83.79829846057574,
+        "restoreChangePercent": -94.69819429678738,
+        "intermediateRestoreChangePercent": -93.3884125036644,
+        "uploadTimeChangePercent": -93.34609415783885,
+        "groups": [
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-doctest",
+            "baselineCheckSeconds": 590,
+            "candidateCheckSeconds": 374,
+            "baselineCompletedSeconds": 670,
+            "candidateCompletedSeconds": 507,
+            "completionChangeSeconds": -163
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-vakint",
+            "baselineCheckSeconds": 7,
+            "candidateCheckSeconds": 17,
+            "baselineCompletedSeconds": 87,
+            "candidateCompletedSeconds": 90,
+            "completionChangeSeconds": 3
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet",
+            "baselineCheckSeconds": 54,
+            "candidateCheckSeconds": 5,
+            "baselineCompletedSeconds": 289,
+            "candidateCompletedSeconds": 74,
+            "completionChangeSeconds": -215
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-spenso",
+            "baselineCheckSeconds": 467,
+            "candidateCheckSeconds": 8,
+            "baselineCompletedSeconds": 881,
+            "candidateCompletedSeconds": 81,
+            "completionChangeSeconds": -800
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet",
+            "baselineCheckSeconds": 323,
+            "candidateCheckSeconds": 48,
+            "baselineCompletedSeconds": 922,
+            "candidateCompletedSeconds": 121,
+            "completionChangeSeconds": -801
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration",
+            "baselineCheckSeconds": 202,
+            "candidateCheckSeconds": 127,
+            "baselineCompletedSeconds": 1596,
+            "candidateCompletedSeconds": 199,
+            "completionChangeSeconds": -1397
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core",
+            "baselineCheckSeconds": 90,
+            "candidateCheckSeconds": 8,
+            "baselineCompletedSeconds": 1912,
+            "candidateCompletedSeconds": 80,
+            "completionChangeSeconds": -1832
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-python-api",
+            "baselineCheckSeconds": 80,
+            "candidateCheckSeconds": 28,
+            "baselineCompletedSeconds": 2277,
+            "candidateCompletedSeconds": 161,
+            "completionChangeSeconds": -2116
+          }
+        ]
+      },
+      "acceptance": {
+        "requiredChecksPassed": true,
+        "matchingInventoriesVerifiedLocally": true,
+        "intermediateRestoreReduction80Percent": true,
+        "workerMinutesReduction50Percent": true,
+        "zeroCargoRecompilation": false,
+        "noWithinSuiteRepeatedDerivationInCandidate": true,
+        "finalSuccessWithin60Seconds": true,
+        "feynkitAcceptancePending": true
+      },
+      "limits": [
+        "Configuration-start clocks are comparable; precise baseline submission time was not recorded.",
+        "One serial pair on shared remote infrastructure, not a statistical estimate or proof of the cause of every difference.",
+        "Restored content and observed worker time are operational proxies, not network bytes or billed CHF.",
+        "Clinnet passed but its log cannot distinguish execution from successful-result reuse.",
+        "103 Cargo Compiling messages remained, including an exact repeated successful doctest derivation; zero-recompilation goal is unmet."
+      ]
+    },
+    "strictCold": {
+      "main": {
+        "layout": "main",
+        "affinity": "0-7",
+        "baselineSeconds": 3779.129,
+        "candidateSeconds": 3262.895,
+        "eligibleLocalObservation": true,
+        "elapsedChangePercent": -13.660131739350522,
+        "archiveInventoriesEqual": true,
+        "compilationMessageContextDifferences": [],
+        "uniqueMergedNarBytes": {
+          "baseline": 93890141640,
+          "candidate": 23539100240
+        },
+        "limits": [
+          "Single hard-affinity pair on a shared host; no repeated statistical estimate or causal attribution of all elapsed differences.",
+          "Not a full CI completion measurement; runtime coverage and licensed doctests are independently validated.",
+          "No NixCI service latency, remote duplication, cache wire traffic or financial savings inference."
+        ],
+        "phases": [
+          {
+            "variant": "baseline",
+            "sourceRevision": "64cdbfff2dffcae199d9ea41d1e5a3cd1debee4a",
+            "build": [
+              {
+                "name": "build",
+                "startedAt": "2026-09-08T21:32:08.167Z",
+                "finishedAt": "2026-09-08T22:35:07.296Z",
+                "elapsedSeconds": 3779.129,
+                "exitCode": 0,
+                "buildActivityCount": 237
+              },
+              {
+                "name": "repeat",
+                "startedAt": "2026-09-08T22:35:07.344Z",
+                "finishedAt": "2026-09-08T22:35:07.564Z",
+                "elapsedSeconds": 0.22,
+                "exitCode": 0,
+                "buildActivityCount": 0
+              }
+            ],
+            "allRootsRegistered": true,
+            "exactRepeatZeroBuilds": true
+          },
+          {
+            "variant": "candidate",
+            "sourceRevision": "7e6dc57327fbd6ab3e6181151d66963e8e93675c",
+            "build": [
+              {
+                "name": "build",
+                "startedAt": "2026-09-08T22:35:22.804Z",
+                "finishedAt": "2026-09-08T23:29:45.699Z",
+                "elapsedSeconds": 3262.895,
+                "exitCode": 0,
+                "buildActivityCount": 238
+              },
+              {
+                "name": "repeat",
+                "startedAt": "2026-09-08T23:29:45.733Z",
+                "finishedAt": "2026-09-08T23:29:45.934Z",
+                "elapsedSeconds": 0.201,
+                "exitCode": 0,
+                "buildActivityCount": 0
+              }
+            ],
+            "allRootsRegistered": true,
+            "exactRepeatZeroBuilds": true
+          }
+        ]
+      },
+      "feynkit": {
+        "layout": "feynkit",
+        "affinity": "24-31",
+        "baselineSeconds": 3365.285,
+        "candidateSeconds": 3167.544,
+        "eligibleLocalObservation": true,
+        "elapsedChangePercent": -5.875906498260919,
+        "archiveInventoriesEqual": true,
+        "compilationMessageContextDifferences": [],
+        "uniqueMergedNarBytes": {
+          "baseline": 135292282120,
+          "candidate": 33922019192
+        },
+        "limits": [
+          "Single hard-affinity pair on a shared host; no repeated statistical estimate or causal attribution of all elapsed differences.",
+          "Not a full CI completion measurement; runtime coverage and licensed doctests are independently validated.",
+          "No NixCI service latency, remote duplication, cache wire traffic or financial savings inference."
+        ],
+        "phases": [
+          {
+            "variant": "baseline",
+            "sourceRevision": "2cf939655e8925a016770614219b7bf1b4ff0758",
+            "build": [
+              {
+                "name": "build",
+                "startedAt": "2026-09-08T21:31:21.311Z",
+                "finishedAt": "2026-09-08T22:27:26.596Z",
+                "elapsedSeconds": 3365.285,
+                "exitCode": 0,
+                "buildActivityCount": 388
+              },
+              {
+                "name": "repeat",
+                "startedAt": "2026-09-08T22:27:26.630Z",
+                "finishedAt": "2026-09-08T22:27:26.859Z",
+                "elapsedSeconds": 0.229,
+                "exitCode": 0,
+                "buildActivityCount": 0
+              }
+            ],
+            "allRootsRegistered": true,
+            "exactRepeatZeroBuilds": true
+          },
+          {
+            "variant": "candidate",
+            "sourceRevision": "652fc1d947559c436f4db63c647726d9b368a031",
+            "build": [
+              {
+                "name": "build",
+                "startedAt": "2026-09-08T22:27:40.144Z",
+                "finishedAt": "2026-09-08T23:20:27.688Z",
+                "elapsedSeconds": 3167.544,
+                "exitCode": 0,
+                "buildActivityCount": 389
+              },
+              {
+                "name": "repeat",
+                "startedAt": "2026-09-08T23:20:27.724Z",
+                "finishedAt": "2026-09-08T23:20:27.956Z",
+                "elapsedSeconds": 0.232,
+                "exitCode": 0,
+                "buildActivityCount": 0
+              }
+            ],
+            "allRootsRegistered": true,
+            "exactRepeatZeroBuilds": true
+          }
+        ]
+      }
+    },
+    "fixedFeynkit": {
+      "revision": "19a6460c658f411e7362060603c87d1d1e990af4",
+      "acceptedCorrectness": true,
+      "allRequiredRootsRegistered": true,
+      "exactRepeatsZeroBuilders": true,
+      "recoveryPerformed": false,
+      "selectedTests": 1834,
+      "doctests": 62,
+      "inventory": {
+        "baseline": "frozen initial candidate before fingerprint fix",
+        "fixedRevision": "19a6460c658f411e7362060603c87d1d1e990af4",
+        "expectedArchives": 26,
+        "listedArchives": 26,
+        "initialSelectedTests": 1834,
+        "fixedSelectedTests": 1834,
+        "equal": true,
+        "mismatchingArchives": [],
+        "mode": "archive listing only, no runtime tests",
+        "normalization": "binary ID, package, kind/status, case name, ignored flag and filter-match; source/output paths excluded"
+      },
+      "compilerContextChanges": {
+        "oldContextCount": 91,
+        "rebuiltComparedContexts": 90,
+        "oldCompilingMessages": 827,
+        "newCompilingMessagesInComparedContexts": 822,
+        "differences": [
+          {
+            "context": "gammaloop-crate-gammalooprs-dependency-deps-0.1.0",
+            "removedCompiling": [
+              "Compiling feynkit-cff v0.1.0 (/build/source/crates/feynkit-cff)"
+            ],
+            "addedCompiling": [],
+            "rebuilt": true
+          },
+          {
+            "context": "gammaloop-api-python-deps-0.1.0",
+            "removedCompiling": [
+              "Compiling feynkit-cff v0.1.0 (/build/source/crates/feynkit-cff)"
+            ],
+            "addedCompiling": [],
+            "rebuilt": true
+          },
+          {
+            "context": "gammaloop-crate-gammalooprs-dependency-deps-deps-0.1.0",
+            "removedCompiling": [
+              "Compiling feynkit-cff v0.1.0 (/build/source/crates/feynkit-cff)"
+            ],
+            "addedCompiling": [],
+            "rebuilt": true
+          },
+          {
+            "context": "gammaloop-api-python-build-build-0.1.0",
+            "removedCompiling": [
+              "Compiling feynkit-cff v0.1.0 (/build/source/crates/feynkit-cff)",
+              "Compiling gammalooprs v0.3.4 (/build/source/crates/gammalooprs)"
+            ],
+            "addedCompiling": [],
+            "rebuilt": true
+          }
+        ],
+        "limits": [
+          "Old artifact-context inventory excludes Clippy and terminal archive listings.",
+          "Contexts not rebuilt are represented by zero new compiler work; compiled-message differences do not imply exact rustc unit differences."
+        ]
+      },
+      "phases": [
+        {
+          "name": "seed",
+          "startedAt": "2026-09-08T22:23:12.074Z",
+          "finishedAt": "2026-09-08T22:23:53.408Z",
+          "elapsedSeconds": 41.334,
+          "exitCode": 0,
+          "buildActivityCount": 0,
+          "compilationMessages": 0,
+          "checkingMessages": 0
+        },
+        {
+          "name": "pure-definitions",
+          "startedAt": "2026-09-08T22:23:53.669Z",
+          "finishedAt": "2026-09-08T22:23:54.798Z",
+          "elapsedSeconds": 1.129,
+          "exitCode": 0,
+          "buildActivityCount": 0,
+          "compilationMessages": 0,
+          "checkingMessages": 0
+        },
+        {
+          "name": "pure-build",
+          "startedAt": "2026-09-08T22:23:54.831Z",
+          "finishedAt": "2026-09-08T23:14:22.987Z",
+          "elapsedSeconds": 3028.156,
+          "exitCode": 0,
+          "buildActivityCount": 215,
+          "compilationMessages": 866,
+          "checkingMessages": 374
+        },
+        {
+          "name": "pure-repeat",
+          "startedAt": "2026-09-08T23:14:23.058Z",
+          "finishedAt": "2026-09-08T23:14:23.299Z",
+          "elapsedSeconds": 0.241,
+          "exitCode": 0,
+          "buildActivityCount": 0,
+          "compilationMessages": 0,
+          "checkingMessages": 0
+        },
+        {
+          "name": "runtime-definitions",
+          "startedAt": "2026-09-08T23:14:47.429Z",
+          "finishedAt": "2026-09-08T23:14:48.848Z",
+          "elapsedSeconds": 1.419,
+          "exitCode": 0,
+          "buildActivityCount": 0,
+          "compilationMessages": 0,
+          "checkingMessages": 0
+        },
+        {
+          "name": "runtime-build",
+          "startedAt": "2026-09-08T23:14:48.881Z",
+          "finishedAt": "2026-09-08T23:24:02.146Z",
+          "elapsedSeconds": 553.265,
+          "exitCode": 0,
+          "buildActivityCount": 10,
+          "compilationMessages": 81,
+          "checkingMessages": 0
+        },
+        {
+          "name": "runtime-repeat",
+          "startedAt": "2026-09-08T23:24:02.211Z",
+          "finishedAt": "2026-09-08T23:24:02.473Z",
+          "elapsedSeconds": 0.262,
+          "exitCode": 0,
+          "buildActivityCount": 0,
+          "compilationMessages": 0,
+          "checkingMessages": 0
+        }
+      ],
+      "restrictedLicenseWarnings": 0,
+      "scope": "Unpaired final correctness validation, no cold percentage attributed to this run."
+    },
+    "feynkitBaseline": {
+      "sha": "2cf939655e8925a016770614219b7bf1b4ff0758",
+      "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-feynkit-baseline/2cf939655e8925a016770614219b7bf1b4ff0758",
+      "status": "success",
+      "requiredSeconds": 3097,
+      "suiteSeconds": 3264,
+      "submittedAt": "2026-09-08T22:33:00.462Z",
+      "submissionCompletedAt": "2026-09-08T22:33:02.298Z",
+      "submissionToRequiredSeconds": 3104.538,
+      "finalAggregateTailSeconds": 167,
+      "requiredPassed": true,
+      "evidenceComplete": false,
+      "observedResourceLowerBound": true,
+      "observedWorkerMinutes": 184.34961192758328,
+      "downloadReportedBytes": 118665711368.00002,
+      "intermediateDownloadReportedBytes": 99743698625.6,
+      "downloadWorkerSeconds": 1572.2099999999996,
+      "uploadWorkerSeconds": 4874.320999999999,
+      "compilationMessages": 488,
+      "checkingMessages": 33,
+      "executedTestJobs": 9,
+      "reusedTestJobs": 0,
+      "unknownTestJobs": 0,
+      "repeatedDerivationCount": 19,
+      "verifiedLogReplacements": [
+        {
+          "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-feynkit-baseline/2cf939655e8925a016770614219b7bf1b4ff0758/dbaacae1-c750-4b6b-9401-21367019e30f",
+          "observedAt": "2026-09-08T23:01:15.802Z",
+          "attribute": "packages.x86_64-linux.crate-test-dependencies-gammaloop-api",
+          "oldWorkerStart": "2026-09-08 22:58:31.103882203",
+          "newWorkerStart": "2026-09-08 23:00:36.168229423"
+        }
+      ],
+      "performancePairEligible": false,
+      "extraCliPublication": {
+        "recordedAt": "2026-09-09T06:19:24.812Z",
+        "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-feynkit-baseline/2cf939655e8925a016770614219b7bf1b4ff0758",
+        "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-feynkit-baseline/2cf939655e8925a016770614219b7bf1b4ff0758/7acc4078-f189-4a7a-94dc-c689e6acb5d2",
+        "attribute": "packages.x86_64-linux.gammaloopApiPackageArtifacts",
+        "status": "success",
+        "workerStartedAt": "2026-09-08 22:35:23.628817087",
+        "workerCompletedAt": "2026-09-08 23:27:27.489437842",
+        "workerSeconds": 3123.860620755,
+        "uploadActiveSeconds": 2438.423,
+        "compilationMessages": 71,
+        "finalAggregateTailSeconds": 167,
+        "classification": "Extra CLI bundle, absent from all12required derivation closures. Standalone job delays final success after required checks finish. Underlying prerequisites may be shared with required checks, so the whole job is not assigned as exclusive removable worker time.",
+        "limits": [
+          "Publication intervals overlap other work and do not measure pure network time.",
+          "Suite resource totals remain lower bounds because another job history was replaced."
+        ]
+      }
+    },
+    "feynkitCandidate": {
+      "sha": "19a6460c658f411e7362060603c87d1d1e990af4",
+      "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/19a6460c658f411e7362060603c87d1d1e990af4",
+      "status": "success",
+      "branch": "codex/ci-efficiency-feynkit",
+      "command": [
+        "git",
+        "push",
+        "origin",
+        "19a6460c658f411e7362060603c87d1d1e990af4:refs/heads/codex/ci-efficiency-feynkit"
+      ],
+      "submittedAt": "2026-09-09T06:06:54.375Z",
+      "submissionCompletedAt": "2026-09-09T06:06:56.850Z",
+      "pushProcessObservedFinishedAt": "2026-09-09T06:06:56.850Z",
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "cacheState": "First remote fixed configuration; not proven warm.",
+      "requiredSeconds": null,
+      "suiteSeconds": 4769,
+      "requiredPassed": false,
+      "finalAggregateTailSeconds": null,
+      "evidenceComplete": false,
+      "observedResourceLowerBound": true,
+      "observedWorkerMinutes": 235.99703887360002,
+      "downloadReportedBytes": 47738790251.200005,
+      "intermediateDownloadReportedBytes": 42276150553.6,
+      "downloadWorkerSeconds": 842.619,
+      "uploadWorkerSeconds": 6855.474999999999,
+      "compilationMessages": 1297,
+      "checkingMessages": 374,
+      "repeatedDerivationCount": 93,
+      "failedJobs": 1,
+      "executedTestJobs": 10,
+      "reusedTestJobs": 0,
+      "unknownTestJobs": 0,
+      "transferErrorCount": 0,
+      "transferTimeoutCount": 0,
+      "latestRequiredServiceOutcomesPassed": true,
+      "limits": [
+        "Initial fingerprint-fix configuration, not a warm unchanged candidate.",
+        "GitHub check metadata remains attached to the first failed integration URL while reporting the successful retry outcome and clocks.",
+        "All twelve latest required service outcomes passed, independently verified; strict required-check timing is unknown.",
+        "Earlier pinned report requiredSeconds=4749 and final-tail=20 are superseded by null after correcting attempt selection.",
+        "No accepted paired speed percentages. Both the failed integration worker and successful retry remain in observed resource totals."
+      ]
+    },
+    "preFixSourcePairs": {
+      "scope": "Eight archive groups, Python and Clippy; excludes runtime/doctests; one independent pair per edit on shared host.",
+      "gammaloop": {
+        "baselineSeconds": 1566.9894499679795,
+        "candidateSeconds": 1298.343441885023
+      },
+      "cff": {
+        "baselineSeconds": 1391.4659055430093,
+        "candidateSeconds": 1648.6166705969954
+      },
+      "archiveInventoriesMatch": true,
+      "selectedTests": 1834,
+      "compilerMessagesMatch": true,
+      "exactRepeatsZeroBuilders": true
+    },
+    "maintainerReview": {
+      "observedAt": "2026-09-08T23:05:00Z",
+      "pr104": {
+        "url": "https://github.com/alphal00p/gammaloop/pull/104",
+        "sha": "cf73376934ecfa207fe769bde7a8792cd25cb4ba",
+        "summary": "Synchronous discovery, removes ordinary manual edges/per-crate exclusions, retains impure-runner and formatting ordering. Candidate also narrows required selection and retains generated explicit edges."
+      },
+      "pr105": {
+        "url": "https://github.com/alphal00p/gammaloop/pull/105",
+        "sha": "13d6826ddee00d7cb4cbd733a837d23c248658f3",
+        "summary": "Both reviewed revisions have temporary cache metadata; rewrite simplifies hook wrapper. No explicit signature diagnostic in saved repeated-build logs."
+      }
+    },
+    "acceptance": {
+      "mergeAccepted": false,
+      "mainWarmObservedRestoreGoalMet": true,
+      "mainWarmObservedWorkerGoalMet": true,
+      "mainWarmZeroCargoGoalMet": false,
+      "mainWarmFinalTailGoalMet": true,
+      "localPreFixColdScopeGoalMet": true,
+      "currentFeynkitSourceRemotePending": true
+    },
+    "fixedSourceValidation": {
+      "recordedAt": "2026-09-09T07:01:22.819Z",
+      "baseRevision": "19a6460c658f411e7362060603c87d1d1e990af4",
+      "acceptedForPlannedSourceSuites": true,
+      "scenarios": [
+        {
+          "scenario": "gammaloop-source",
+          "revision": "16456b956be72397abb6e60b7da019cee967fd4b",
+          "buildSeconds": 1287.9881300409907,
+          "seedSeconds": 86.60691772500286,
+          "builders": 31,
+          "compilationMessages": 81,
+          "checkingMessages": 374,
+          "rootReadySeconds": {
+            "gammaloop-nextest-binaries-clinnet": 0,
+            "gammaloop-nextest-binaries-feynkit": 0,
+            "gammaloop-nextest-binaries-linnet": 0,
+            "gammaloop-nextest-binaries-spenso": 0,
+            "gammaloop-nextest-binaries-vakint": 0,
+            "gammaloop-clippy": 486.6903184609837,
+            "gammaloop-python-module": 743.7758262369898,
+            "gammaloop-nextest-binaries-core": 913.947114065988,
+            "gammaloop-nextest-binaries-python-api": 1284.6382700289832,
+            "gammaloop-nextest-binaries-integration": 1287.9534749810118
+          },
+          "repeatSeconds": 0.75129152496811,
+          "repeatBuilders": 0,
+          "stableRootNarHashesAndReferencesPreserved": true,
+          "inventory": {
+            "baselineArchiveCount": 26,
+            "candidateArchiveCount": 26,
+            "baselineSelectedTests": 1834,
+            "candidateSelectedTests": 1834,
+            "equal": true,
+            "mismatchingArchives": [],
+            "normalization": "binary ID, package, kind, status, test name, ignored flag, filter-match; excludes source/output paths",
+            "runtimeTestsExecuted": false
+          }
+        },
+        {
+          "scenario": "cff-source",
+          "revision": "fcc2c510ed9187b3905cec0de699bf434a6e7609",
+          "buildSeconds": 1441.8195947660133,
+          "seedSeconds": 70.6406365900184,
+          "builders": 53,
+          "compilationMessages": 108,
+          "checkingMessages": 374,
+          "rootReadySeconds": {
+            "gammaloop-nextest-binaries-clinnet": 0,
+            "gammaloop-nextest-binaries-linnet": 0,
+            "gammaloop-nextest-binaries-spenso": 0,
+            "gammaloop-nextest-binaries-vakint": 0,
+            "gammaloop-nextest-binaries-feynkit": 354.4256680230028,
+            "gammaloop-clippy": 451.1740934330155,
+            "gammaloop-python-module": 963.3269621260115,
+            "gammaloop-nextest-binaries-core": 1061.3283627810306,
+            "gammaloop-nextest-binaries-integration": 1437.3628313799854,
+            "gammaloop-nextest-binaries-python-api": 1441.7821130509838
+          },
+          "repeatSeconds": 0.6174525789683685,
+          "repeatBuilders": 0,
+          "stableRootNarHashesAndReferencesPreserved": true,
+          "inventory": {
+            "baselineArchiveCount": 26,
+            "candidateArchiveCount": 26,
+            "baselineSelectedTests": 1834,
+            "candidateSelectedTests": 1834,
+            "equal": true,
+            "mismatchingArchives": [],
+            "normalization": "binary ID, package, kind, status, test name, ignored flag, filter-match; excludes source/output paths",
+            "runtimeTestsExecuted": false
+          }
+        }
+      ],
+      "limits": [
+        "Candidate-only changed-source correctness and reuse validation; no new paired elapsed-time percentage.",
+        "Runtime tests and doctests were validated on fixed19a and will run on each source scenario in NixCI.",
+        "Build/activity accounting uses Python arbitrary-precision IDs and validates final Nix registration."
+      ]
+    },
+    "fixedFeynkitIntegrationAttempts": {
+      "observedAt": "2026-09-09T07:13:00.034574+00:00",
+      "classification": "Repository test isolation defect strongly supported by existing shared clean-and-save path; concurrent deletion not traced directly.",
+      "ciChangedTestCode": false,
+      "attempts": [
+        {
+          "uuid": "a222820f-9f79-492e-8abe-a478c273a4e7",
+          "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/19a6460c658f411e7362060603c87d1d1e990af4/a222820f-9f79-492e-8abe-a478c273a4e7",
+          "status": "failed",
+          "workerStartedAt": "2026-09-09 07:00:03.758328137",
+          "workerCompletedAt": "2026-09-09 07:03:21.681804821",
+          "workerSeconds": 197.923476684,
+          "compilationMessages": 0,
+          "nextestSummary": {
+            "runner": "nextest",
+            "executed": 106,
+            "passed": 105,
+            "failed": 1,
+            "timedOut": 0,
+            "skipped": 67,
+            "seconds": 124.884
+          }
+        },
+        {
+          "uuid": "69f787dc-0497-4809-8a91-082fd653e4bf",
+          "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/19a6460c658f411e7362060603c87d1d1e990af4/69f787dc-0497-4809-8a91-082fd653e4bf",
+          "status": "success",
+          "workerStartedAt": "2026-09-09 07:03:27.478357356",
+          "workerCompletedAt": "2026-09-09 07:06:56.266048293",
+          "workerSeconds": 208.787690937,
+          "compilationMessages": 0,
+          "nextestSummary": {
+            "runner": "nextest",
+            "executed": 106,
+            "passed": 106,
+            "failed": 0,
+            "timedOut": 0,
+            "skipped": 67,
+            "seconds": 98.914
+          }
+        }
+      ],
+      "failure": "could not write model data: tests/artifacts/feyn_gen_generation_test/model.json: No such file or directory (os error 2)",
+      "sharedPathCallsites": [
+        {
+          "line": 1115,
+          "test": "cp_fix_from_symbolica"
+        },
+        {
+          "line": 1130,
+          "test": "test_generate_sm_full_a_ddx"
+        },
+        {
+          "line": 1145,
+          "test": "test_vacuum_amplitude_kaapo"
+        },
+        {
+          "line": 1225,
+          "test": "graph_count_from_amplitude_load"
+        },
+        {
+          "line": 1240,
+          "test": "example_graph_count"
+        },
+        {
+          "line": 1265,
+          "test": "single_test"
+        },
+        {
+          "line": 1289,
+          "test": "test_generate_sm_a_ddx"
+        },
+        {
+          "line": 1321,
+          "test": "test_slow_generate_sm_h_n_j"
+        },
+        {
+          "line": 1333,
+          "test": "test_generate_a_qqh"
+        },
+        {
+          "line": 1356,
+          "test": "test_generate_aa_ttx_amplitude"
+        },
+        {
+          "line": 1375,
+          "test": "test_generate_aa_ttx_cross_section_slow_filter"
+        },
+        {
+          "line": 1388,
+          "test": "test_dis_isr"
+        },
+        {
+          "line": 1430,
+          "test": "test_generate_amplitude_1l_sm_jets"
+        },
+        {
+          "line": 1453,
+          "test": "test_generate_amplitude_1l_sm_jets_with_grouping"
+        },
+        {
+          "line": 1480,
+          "test": "test_generate_epem_a_qqh"
+        },
+        {
+          "line": 1514,
+          "test": "test_generate_aa_ttx_cross_section"
+        },
+        {
+          "line": 1533,
+          "test": "test_vacuum_amplitude_generation"
+        },
+        {
+          "line": 1565,
+          "test": "test_vaccuum_amplitude_generation_full_sm"
+        }
+      ],
+      "proposedFix": "Use each existing test function name as its scratch subdirectory; no new helper or changed assertion, filter, feature, timeout, or retry. Patch prepared for review only; test source unchanged.",
+      "patch": "proposed-test-isolation.patch",
+      "approvalRequiredBy": "AGENTS.md: If a test is failing, and you want to change the test itself explicitly ask whether this is intended.",
+      "retryTrigger": "Provider attempt: 2 observed; no retry was dispatched by this task. Trigger not otherwise known.",
+      "unchangedFileProof": [
+        {
+          "path": "tests/tests/test_feyngen.rs",
+          "baselineBlob": "b06eec5d807c106b1f9f14f0cdb9bbfb1399ac11",
+          "candidateBlob": "b06eec5d807c106b1f9f14f0cdb9bbfb1399ac11"
+        },
+        {
+          "path": "tests/src/lib.rs",
+          "baselineBlob": "be0edab5be823f7b6c3c905640974cb60140916e",
+          "candidateBlob": "be0edab5be823f7b6c3c905640974cb60140916e"
+        },
+        {
+          "path": ".config/nextest.toml",
+          "baselineBlob": "37bc7b5ff47dc7fb6236239ac57235dab63a0fe9",
+          "candidateBlob": "37bc7b5ff47dc7fb6236239ac57235dab63a0fe9"
+        }
+      ]
+    },
+    "updatedAt": "2026-09-09T07:56:14.283911+00:00",
+    "fixedFeynkitGammaPublication": {
+      "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/19a6460c658f411e7362060603c87d1d1e990af4/0ede29a8-8d18-4460-87b7-265ca3dfc144",
+      "attribute": "packages.x86_64-linux.crate-deps-gammalooprs",
+      "status": "success",
+      "workerStartedAt": "2026-09-09 06:15:44.371149300",
+      "workerCompletedAt": "2026-09-09 07:02:20.518292171",
+      "workerSeconds": 2796.147142871,
+      "downloadReportedBytes": 1363991956.8000002,
+      "downloadActiveSeconds": 33.876,
+      "uploadActiveSeconds": 2523.22,
+      "compilationMessages": 74,
+      "checkingMessages": 0,
+      "interpretation": "Publication intervals can include overlapping service work; not pure network time. First remote fingerprint-fix run, changed artifact identities."
+    },
+    "fixedFeynkitGammaPublicationCategories": {
+      "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/19a6460c658f411e7362060603c87d1d1e990af4/0ede29a8-8d18-4460-87b7-265ca3dfc144",
+      "workerSeconds": 2796.147142871,
+      "publicationIntervalUnionSeconds": 2523.22,
+      "categories": [
+        {
+          "classification": "Source and generated inputs",
+          "count": 94,
+          "completedIntervalUnionSeconds": 176.81999945640564,
+          "individualDurationSumSeconds": 176.82,
+          "largestDurationSeconds": 28.2
+        },
+        {
+          "classification": "Cargo artifact bundles and merges",
+          "count": 64,
+          "completedIntervalUnionSeconds": 2344.6999995708466,
+          "individualDurationSumSeconds": 2344.7000000000003,
+          "largestDurationSeconds": 175
+        },
+        {
+          "classification": "Other outputs",
+          "count": 1,
+          "completedIntervalUnionSeconds": 1.7000000476837158,
+          "individualDurationSumSeconds": 1.7,
+          "largestDurationSeconds": 1.7
+        }
+      ],
+      "limits": [
+        "Heuristic names classify recorded publication operations, not exclusive build ownership.",
+        "Category unions can overlap and must not be summed as CPU or network time.",
+        "No content sizes or billed CHF are inferred from these durations.",
+        "This initial fingerprint-fix run has new artifact identities; source-edit reuse is a separate measurement."
+      ]
+    },
+    "fixedFeynkitRepeatedWorkspaceDependency": {
+      "at": "2026-09-09T07:38:27.981092+00:00",
+      "derivation": "/nix/store/h3fwjfsra58risirfsn5f08b589zi9is-gammaloop-workspace-deps-deps-0.1.0.drv",
+      "rows": [
+        {
+          "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/19a6460c658f411e7362060603c87d1d1e990af4/c6858f76-c99b-4c5d-b48b-4e31fd546c3e",
+          "attribute": "packages.x86_64-linux.cargoArtifacts",
+          "workerStartedAt": "2026-09-09 06:13:34.397574542",
+          "workerCompletedAt": "2026-09-09 06:15:04.391531049",
+          "build": {
+            "drv": "/nix/store/h3fwjfsra58risirfsn5f08b589zi9is-gammaloop-workspace-deps-deps-0.1.0.drv",
+            "time": 1788934446005
+          },
+          "publication": {
+            "name": "gammaloop-workspace-deps-deps",
+            "reportedBytes": null,
+            "seconds": 24.9,
+            "time": 1788934503259
+          },
+          "compilationMessages": 219
+        },
+        {
+          "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/19a6460c658f411e7362060603c87d1d1e990af4/f1d07b96-965e-4897-a0d9-fafd25bf500e",
+          "attribute": "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor",
+          "workerStartedAt": "2026-09-09 06:28:05.162767099",
+          "workerCompletedAt": "2026-09-09 06:33:09.982654172",
+          "build": {
+            "drv": "/nix/store/h3fwjfsra58risirfsn5f08b589zi9is-gammaloop-workspace-deps-deps-0.1.0.drv",
+            "time": 1788935289562
+          },
+          "publication": {
+            "name": "gammaloop-workspace-deps-deps",
+            "reportedBytes": null,
+            "seconds": 26.1,
+            "time": 1788935353634
+          },
+          "compilationMessages": 219
+        }
+      ],
+      "identicalCompilationMultisets": true,
+      "rebuildStartedAfterPublicationSeconds": 786.303,
+      "explicitDirectDependencyPresent": true,
+      "declaredDependencies": [
+        "packages.x86_64-linux.cargoArtifacts",
+        "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack",
+        "packages.x86_64-linux.crate-test-dependencies-feynkit-graph",
+        "packages.x86_64-linux.crate-test-dependencies-feynkit-model",
+        "packages.x86_64-linux.crate-test-dependencies-idenso",
+        "packages.x86_64-linux.crate-test-dependencies-spenso"
+      ],
+      "interpretation": "Exact dependency derivation and 219 compilation messages repeated after producer completion and publication. These are observed source compilation messages, not inferred from restore activity. Cause of failed reuse is unknown; ordering absence does not explain this example."
+    },
+    "reporterValidation": {
+      "revision": "27fc8721b",
+      "regressionsPassed": 23,
+      "offlineFeynkitReplayPreservesOriginalEvidence": true,
+      "offlineMainPairMetricsUnchanged": true,
+      "networkDisabledForReplays": true,
+      "checkResultMismatchIncidents": 1,
+      "latestAttemptClocksNeverBorrowed": true
+    },
+    "sourceRemoteProgress": {
+      "suiteNumber": 11,
+      "sha": "58909af3eaf0e42b8ecbb6c39526f1ebc42b6858",
+      "variant": "baseline",
+      "scenario": "gammaloop-source",
+      "status": "started",
+      "observation": "First artifact worker marked abandoned without usable logs; watch continues without dispatching a retry.",
+      "jobUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-benchmark-feynkit-baseline-gammaloop/58909af3eaf0e42b8ecbb6c39526f1ebc42b6858/9d21561c-635c-4977-808d-15c7957fe2fb",
+      "workerSeconds": null,
+      "remainingUnsubmittedSuiteNumbers": [
+        12,
+        13,
+        14
+      ],
+      "singleCheckRetryRequest": {
+        "at": "2026-09-09T07:54:04.307Z",
+        "checkId": 102378090275,
+        "httpStatus": 404,
+        "accepted": false,
+        "newPush": false,
+        "scope": "One abandoned check only; no further retry request made."
+      },
+      "otherBranchObservation": "Four other branch heads had older completed suites, not contemporaneous evidence of a wider outage."
+    }
+  },
+  "latestPartialUpdateAt": "2026-09-09T07:01:22.819Z"
 }
