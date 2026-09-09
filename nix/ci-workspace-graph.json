@@ -105,6 +105,9 @@
       "spenso-macros"
     ],
     "symbolica-utils": [],
+    "three-dimensional-reps": [
+      "linnet"
+    ],
     "vakint": []
   },
   "normal_dependency_features": {
@@ -305,6 +308,13 @@
       "spenso-macros": []
     },
     "symbolica-utils": {},
+    "three-dimensional-reps": {
+      "linnet": [
+        "bincode",
+        "serde",
+        "symbolica"
+      ]
+    },
     "vakint": {}
   },
   "package_dirs": {
@@ -331,6 +341,7 @@
     "spenso-macros": "crates/spenso-macros",
     "spynso3": "crates/spynso3",
     "symbolica-utils": "crates/symbolica-utils",
+    "three-dimensional-reps": "crates/three-dimensional-reps",
     "vakint": "crates/vakint"
   },
   "packages": [
@@ -357,6 +368,7 @@
     "spenso-macros",
     "spynso3",
     "symbolica-utils",
+    "three-dimensional-reps",
     "vakint"
   ],
   "resolved_normal_dependencies": {
@@ -482,6 +494,11 @@
       "symbolica-utils"
     ],
     "symbolica-utils": [],
+    "three-dimensional-reps": [
+      "gammaloop-workspace-hack",
+      "linnet",
+      "symbolica-utils"
+    ],
     "vakint": []
   },
   "resolved_test_dependencies": {
@@ -609,6 +626,11 @@
       "symbolica-utils"
     ],
     "symbolica-utils": [],
+    "three-dimensional-reps": [
+      "gammaloop-workspace-hack",
+      "linnet",
+      "symbolica-utils"
+    ],
     "vakint": []
   },
   "symbolica_normal_packages": [
@@ -624,6 +646,7 @@
     "spenso-hep-lib",
     "spynso3",
     "symbolica-utils",
+    "three-dimensional-reps",
     "vakint"
   ],
   "symbolica_test_packages": [
@@ -639,6 +662,7 @@
     "spenso-hep-lib",
     "spynso3",
     "symbolica-utils",
+    "three-dimensional-reps",
     "vakint"
   ],
   "test_dependencies": {
@@ -750,6 +774,9 @@
       "spenso-macros"
     ],
     "symbolica-utils": [],
+    "three-dimensional-reps": [
+      "linnet"
+    ],
     "vakint": []
   },
   "test_dependency_features": {
@@ -957,6 +984,13 @@
       "spenso-macros": []
     },
     "symbolica-utils": {},
+    "three-dimensional-reps": {
+      "linnet": [
+        "bincode",
+        "serde",
+        "symbolica"
+      ]
+    },
     "vakint": {}
   },
   "workspace_root": "."
