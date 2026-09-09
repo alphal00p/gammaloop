@@ -40,7 +40,12 @@ fn external_syms() -> Vec<Atom> {
 
 /// The loop/external momenta in bare form (loop `K(0)` -> k, externals `P(0..)` -> q1..).
 fn bare_momenta(heads: &GammaloopHeads) -> Vec<(Atom, Atom)> {
-    let mut moms = vec![bare_momentum(heads.loop_mom, 0, Atom::var(S.k), heads.index)];
+    let mut moms = vec![bare_momentum(
+        heads.loop_mom,
+        0,
+        Atom::var(S.k),
+        heads.index,
+    )];
     for (j, q) in external_syms().into_iter().enumerate() {
         moms.push(bare_momentum(heads.external_mom, j as i64, q, heads.index));
     }
@@ -57,7 +62,12 @@ fn known_momentum(head: Symbol, id: i64, oneloop_sym: Atom, index: Symbol) -> (A
 /// The loop/external momenta the bridge recognizes (loop `K(0)` -> k, externals `P(0..)` -> q1..),
 /// built dynamically up to `MAX_MOMENTUM_ID` so pentagons and beyond (`P(3,·)`, …) are handled.
 fn known_momenta(heads: &GammaloopHeads) -> Vec<(Atom, Atom)> {
-    let mut moms = vec![known_momentum(heads.loop_mom, 0, Atom::var(S.k), heads.index)];
+    let mut moms = vec![known_momentum(
+        heads.loop_mom,
+        0,
+        Atom::var(S.k),
+        heads.index,
+    )];
     for (j, q) in external_syms().into_iter().enumerate() {
         moms.push(known_momentum(heads.external_mom, j as i64, q, heads.index));
     }

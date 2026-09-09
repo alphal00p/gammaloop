@@ -32,12 +32,10 @@ pub(crate) fn reduce_graph_numerator(graph: &Graph, num: &Atom) -> ReduceOutcome
         return ReduceOutcome::NotOneLoop(n_loops);
     }
 
-    // Complete the Dirac traces to a scalar
-    let scalar = num
-        .collect_gamma_chains()
-        .simplify_gamma()
-        .expand()
-        .simplify_metrics();
+    // Complete the Dirac traces to a scalar. `simplify_gamma` already collects
+    // gamma chains itself, so no separate `collect_gamma_chains()` is needed
+    // here (and the caller in `serialization` has gamma-simplified already).
+    let scalar = num.simplify_gamma().expand().simplify_metrics();
 
     // Collapse the graph grouping / symmetry / sign bookkeeping symbols
     // (`NumeratorDependentGrouping`, `AutG`, `InternalFermionLoopSign`, …) into
@@ -93,10 +91,7 @@ pub(crate) fn reduce_graph_numerator(graph: &Graph, num: &Atom) -> ReduceOutcome
         };
     }
 
-    let show = |a: &Atom| {
-        a.printer(SpensoPrintSettings::typst().typst_symbolica())
-            .to_string()
-    };
+    let show = |a: &Atom| a.printer(SpensoPrintSettings::typst_options()).to_string();
 
     // Fold the reduction into a single atom `Σ coeff · master`, then
     // `collect_factors` to pull the common coupling / colour / polarization

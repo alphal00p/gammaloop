@@ -42,8 +42,10 @@ projectors with `FunctionBuilder::new(AGS.projp)`.)
 
 ## The fix — three surgical additions to `dirac/simplify.rs`
 
-1. **`CHIRALITY_PROJECTORS`** — a `[Replacement; 2]` applied at
-   `DiracSimplifier::simplify` **entry, before `collect_gamma_chains`**:
+1. **`expand_chirality_projector`** (chain nodes) and
+   **`expand_chirality_projector_trace`** (trace nodes) — Rust-side rules
+   **guarded on four-dimensional bispinor endpoints**, mirroring every other
+   dimension-sensitive rule in this file:
 
    ```
    ℙ₊(a,b) → ½ ( δ(a,b) + γ5(a,b) )
@@ -56,20 +58,38 @@ projectors with `FunctionBuilder::new(AGS.projp)`.)
    job. The projector-free (`δ`) part and the `γ5` part are both things the
    evaluator already knows how to reduce.
 
-2. **`chain(i,i) → trace`** in `simplify_chain_node` — the `δ` from the
-   projector's identity part links the loop closed as an equal-endpoint chain
-   `chain(bis(4,i), bis(4,i), …)`, which `collect_gamma_chains` does **not**
-   auto-close. A chain whose two endpoints coincide *is* a trace over that
-   bispinor index, so it is re-expressed as `trace!(rep; factors)` and the trace
-   evaluator takes over. This fires only for a genuine equal-endpoint bispinor
-   chain, so open chains are untouched.
+   The **four-dimensional guard is load-bearing**: every downstream `γ5` rule
+   (anticommutation, adjacent-pair contraction, trace recursion) is itself
+   4D-only, so expanding a projector on `bis(d, …)` endpoints would strand an
+   irreducible `γ5` and leave the expression *worse* than the inert `projp` it
+   replaced. In `d` dimensions the projector is therefore left untouched, and
+   output is byte-identical to before this change.
+
+2. **`chain(i,i) → trace`** in `simplify_chain_node` — a chain whose two
+   endpoints coincide *is* a trace over that bispinor index, so it is
+   re-expressed as `trace!(rep; factors)` and the trace evaluator takes over.
+   This fires only for a genuine equal-endpoint bispinor chain, so open chains
+   are untouched, and it is gated on `settings.evaluate_traces` so
+   `without_trace_evaluation()` keeps its historical output shape.
+
+   Note: now that the expansion in (1) splices the projector out *in place*
+   rather than injecting a free `δ`, chain endpoints no longer change, and
+   `collect_gamma_chains` already closes genuine loops itself. This rule is
+   consequently **unexercised by the current test suite** — it is retained as
+   defensive, and is a candidate for removal.
 
 3. **`bispinor_rep_of_slot`** — small helper recovering the representation
    `bis(dim)` from a slot `bis(dim, index)`, needed to build the trace in (2).
 
-Nothing else changes: the projector replacement is a no-op when no projector is
-present, and the chain-closing rule is inert for open chains, so every existing
-gamma/trace path is byte-identical.
+Scope of the behaviour change — stated honestly, because this is a shared
+crate. In `d` dimensions and on projector-free input, every gamma/trace path is
+byte-identical. **In four dimensions it is not**: a `projp`/`projm` on a 4D
+fermion line now leaves `simplify_gamma` as a two-term `γ5` polynomial instead
+of a compact projector factor. That is mathematically equal but a different
+representation, and it reaches every caller of the public `simplify_gamma()` —
+i.e. every UFO `ProjM`/`ProjP`, which is every chiral electroweak and Yukawa
+vertex. The results below are unchanged; downstream consumers that pattern-match
+on `projp` are not.
 
 ## Why it is correct
 
@@ -101,6 +121,9 @@ convention folds the `i`). For the parity-even `gg→h` scalar coupling the `γ5
 
 - `crates/idenso/src/dirac/simplify.rs` — the three additions above.
 - `crates/idenso/src/dirac/test/mod.rs` — the unit test + `bis!` import.
+- `crates/idenso/src/dirac/test/chirality_projector.rs` — regression tests for
+  the 4D guard, the `evaluate_traces` gate, idempotency, the lone-projector
+  (Yukawa `ū ℙ± v`) case, and projector-position epsilon sign.
 
 See [the app integration](05-app.md) for how the reduced numerator reaches the
 browser, and the app-coverage note for what this un-blocks.

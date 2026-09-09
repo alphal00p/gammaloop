@@ -35,6 +35,7 @@ let
           "gammaloop-workspace-hack",
           "idenso",
           "linnet",
+          "oneloop",
           "spenso",
           "spenso-hep-lib",
           "symbolica-utils",
@@ -57,6 +58,7 @@ let
         "linnet-py": [
           "linnet"
         ],
+        "oneloop": [],
         "spenso": [
           "gammaloop-workspace-hack",
           "linnet",
@@ -130,6 +132,7 @@ let
             "serde",
             "symbolica"
           ],
+          "oneloop": [],
           "spenso": [
             "shadowing"
           ],
@@ -160,6 +163,7 @@ let
         "linnet-py": {
           "linnet": []
         },
+        "oneloop": {},
         "spenso": {
           "gammaloop-workspace-hack": [],
           "linnet": [
@@ -205,6 +209,7 @@ let
         "linnest": "crates/linnest",
         "linnet": "crates/linnet",
         "linnet-py": "crates/linnet-py",
+        "oneloop": "crates/oneloop",
         "spenso": "crates/spenso",
         "spenso-hep-lib": "crates/spenso-hep-lib",
         "spenso-macros": "crates/spenso-macros",
@@ -225,6 +230,7 @@ let
         "linnest",
         "linnet",
         "linnet-py",
+        "oneloop",
         "spenso",
         "spenso-hep-lib",
         "spenso-macros",
@@ -241,6 +247,7 @@ let
           "gammalooprs",
           "idenso",
           "linnet",
+          "oneloop",
           "spenso",
           "spenso-hep-lib",
           "spenso-macros",
@@ -255,6 +262,7 @@ let
           "gammalooprs",
           "idenso",
           "linnet",
+          "oneloop",
           "spenso",
           "spenso-hep-lib",
           "spenso-macros",
@@ -277,6 +285,7 @@ let
           "gammaloop-workspace-hack",
           "idenso",
           "linnet",
+          "oneloop",
           "spenso",
           "spenso-hep-lib",
           "spenso-macros",
@@ -303,6 +312,7 @@ let
           "gammaloop-workspace-hack",
           "linnet"
         ],
+        "oneloop": [],
         "spenso": [
           "gammaloop-workspace-hack",
           "linnet",
@@ -339,6 +349,7 @@ let
           "gammalooprs",
           "idenso",
           "linnet",
+          "oneloop",
           "spenso",
           "spenso-hep-lib",
           "spenso-macros",
@@ -353,6 +364,7 @@ let
           "gammalooprs",
           "idenso",
           "linnet",
+          "oneloop",
           "spenso",
           "spenso-hep-lib",
           "spenso-macros",
@@ -375,6 +387,7 @@ let
           "gammaloop-workspace-hack",
           "idenso",
           "linnet",
+          "oneloop",
           "spenso",
           "spenso-hep-lib",
           "spenso-macros",
@@ -401,6 +414,19 @@ let
         "linnet-py": [
           "gammaloop-workspace-hack",
           "linnet"
+        ],
+        "oneloop": [
+          "gammaloop-tracing-filter",
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "gammalooprs",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "symbolica-utils",
+          "vakint"
         ],
         "spenso": [
           "gammaloop-workspace-hack",
@@ -444,6 +470,7 @@ let
         "linnest",
         "linnet",
         "linnet-py",
+        "oneloop",
         "spenso",
         "spenso-hep-lib",
         "spenso-macros",
@@ -461,6 +488,7 @@ let
         "linnest",
         "linnet",
         "linnet-py",
+        "oneloop",
         "spenso",
         "spenso-hep-lib",
         "spenso-macros",
@@ -499,6 +527,7 @@ let
           "gammaloop-workspace-hack",
           "idenso",
           "linnet",
+          "oneloop",
           "spenso",
           "spenso-hep-lib",
           "symbolica-utils",
@@ -521,6 +550,9 @@ let
         ],
         "linnet-py": [
           "linnet"
+        ],
+        "oneloop": [
+          "gammalooprs"
         ],
         "spenso": [
           "gammaloop-workspace-hack",
@@ -598,6 +630,7 @@ let
             "serde",
             "symbolica"
           ],
+          "oneloop": [],
           "spenso": [
             "shadowing"
           ],
@@ -628,6 +661,9 @@ let
         },
         "linnet-py": {
           "linnet": []
+        },
+        "oneloop": {
+          "gammalooprs": []
         },
         "spenso": {
           "gammaloop-workspace-hack": [],
@@ -819,6 +855,7 @@ let
       "spenso-macros"
       "symbolica-utils"
     ];
+    oneloop = ["oneloop"];
     vakint = ["vakint"];
   };
   nextestArchiveAttr = target: "checks.${system}.gammaloop-nextest-binaries-${target}";

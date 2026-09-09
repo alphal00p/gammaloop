@@ -600,7 +600,15 @@ fn main() {
     for (off, msq) in [(&OFF_A, &MSQ_A), (&OFF_B, &MSQ_B)] {
         let q1q2q3 = &(&dot_lq(0) * &dot_lq(1)) * &dot_lq(2);
         // box (N=4), rank-3
-        emit_num("mix_q1q2q3_N4", off, msq, 4, vec![1; 4], q1q2q3.clone(), "q1q2q3");
+        emit_num(
+            "mix_q1q2q3_N4",
+            off,
+            msq,
+            4,
+            vec![1; 4],
+            q1q2q3.clone(),
+            "q1q2q3",
+        );
         emit_num(
             "mix_q1q1q2_N4",
             off,
@@ -611,7 +619,15 @@ fn main() {
             "q1q1q2",
         );
         // pentagon (N=5), rank-3 and rank-4
-        emit_num("mix_q1q2q3_N5", off, msq, 5, vec![1; 5], q1q2q3.clone(), "q1q2q3");
+        emit_num(
+            "mix_q1q2q3_N5",
+            off,
+            msq,
+            5,
+            vec![1; 5],
+            q1q2q3.clone(),
+            "q1q2q3",
+        );
         emit_num(
             "mix_q1q2q3q4_N5",
             off,
@@ -631,7 +647,15 @@ fn main() {
             "llq1q2",
         );
         // hexagon (N=6), rank-3 and rank-5
-        emit_num("mix_q1q2q3_N6", off, msq, 6, vec![1; 6], q1q2q3.clone(), "q1q2q3");
+        emit_num(
+            "mix_q1q2q3_N6",
+            off,
+            msq,
+            6,
+            vec![1; 6],
+            q1q2q3.clone(),
+            "q1q2q3",
+        );
         emit_num(
             "mix_llq1q2q3_N6",
             off,
@@ -673,7 +697,15 @@ fn main() {
         // heptagon (N=7) MIXED tensor: N=7's 6 external momenta are linearly dependent in 4D,
         // so the reducible-direction Gram is rank-deficient -> handled by gram_solve's subset
         // pseudo-inverse (validated here vs the moment oracle). See docs/04-frontier.md.
-        emit_num("mix_q1q2q3_N7", off, msq, 7, vec![1; 7], q1q2q3.clone(), "q1q2q3");
+        emit_num(
+            "mix_q1q2q3_N7",
+            off,
+            msq,
+            7,
+            vec![1; 7],
+            q1q2q3.clone(),
+            "q1q2q3",
+        );
     }
 
     // (on-shell / SINV scaffolding — ms_/ggh_/ggho_/reg_ — removed: the offset-based

@@ -29,10 +29,7 @@ fn projm(a: Atom, b: Atom) -> Atom {
 #[test]
 fn d_dimensional_projector_is_not_expanded() {
     let r = test_initialize();
-    let expr = projp(
-        slot!(r.bis_d, a).into_atom(),
-        slot!(r.bis_d, b).into_atom(),
-    );
+    let expr = projp(slot!(r.bis_d, a).into_atom(), slot!(r.bis_d, b).into_atom());
 
     assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),projp(in,out))");
 }
@@ -180,5 +177,35 @@ fn projector_position_flips_the_epsilon_sign() {
     assert_snapshot!(
         projector_first.simplify_gamma().expand().to_bare_ordered_string(),
         @"-2*g(mink(4,mu),mink(4,rho))*g(mink(4,nu),mink(4,sigma))+2*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))+2*g(mink(4,mu),mink(4,nu))*g(mink(4,rho),mink(4,sigma))+2*g(mink(4,mu),mink(4,sigma))*g(mink(4,nu),mink(4,rho))"
+    );
+}
+
+// ------------------------------------------------------------------------
+// A projector with no other factor on the line: `chain(a, b, projp)`.
+// This is the shape of a Yukawa vertex (`ubar ℙ± v`, the UFO SM Higgs-fermion
+// coupling) and it exercises the one-factor splice in `chain_factors`.
+// ------------------------------------------------------------------------
+
+#[test]
+fn lone_four_dimensional_projector_expands() {
+    let r = test_initialize();
+    let expr = projp(slot!(r.bis4, a).into_atom(), slot!(r.bis4, b).into_atom());
+
+    // ℙ₊ = ½(𝟙 + γ5)
+    assert_snapshot!(
+        expr.simplify_gamma().to_bare_ordered_string(),
+        @"1/2*chain(bis(4,a),bis(4,b),gamma5(in,out))+1/2*g(bis(4,a),bis(4,b))"
+    );
+}
+
+#[test]
+fn lone_four_dimensional_antiprojector_expands() {
+    let r = test_initialize();
+    let expr = projm(slot!(r.bis4, a).into_atom(), slot!(r.bis4, b).into_atom());
+
+    // ℙ₋ = ½(𝟙 − γ5)
+    assert_snapshot!(
+        expr.simplify_gamma().to_bare_ordered_string(),
+        @"-1/2*chain(bis(4,a),bis(4,b),gamma5(in,out))+1/2*g(bis(4,a),bis(4,b))"
     );
 }

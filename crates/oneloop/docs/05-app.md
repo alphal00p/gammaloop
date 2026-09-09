@@ -101,7 +101,7 @@ frontend and downstream tooling expect:
 | Box      | `D0(p1², p2², p3², p4², s, t; m1², m2², m3², m4²)`         |
 
 Coefficients and invariants are printed through Symbolica's Typst printer
-(`SpensoPrintSettings::typst().typst_symbolica()`), and the whole string has its
+(`SpensoPrintSettings::typst_options()`), and the whole string has its
 inner quotes escaped so it survives embedding in a `.dot` attribute.
 
 ---

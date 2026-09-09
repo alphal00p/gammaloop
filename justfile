@@ -320,6 +320,7 @@ test_gammaloop *args:
         idenso
         linnest
         linnet
+        oneloop
         spenso
         spenso-hep-lib
         spenso-macros
@@ -519,6 +520,7 @@ _test-ci TEST_NAME="" NEXTEST_FILTERSET="":
         idenso
         linnest
         linnet
+        oneloop
         spenso
         spenso-hep-lib
         spenso-macros
