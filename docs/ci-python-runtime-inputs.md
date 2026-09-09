@@ -29,7 +29,25 @@ removed from both archive build graphs and the ordinary integration runner, and
 retained by the Python API runner. Its underlying derivation is unchanged;
 revision-specific scheduling wrappers differ as intended. Clippy, doctests,
 formatting and all other test-group derivations are unchanged. Generated CI graph
-checks pass on both layouts. New runtime builds were executed on FeynKit only.
+checks pass on both layouts.
+
+Main's ordinary integration group also passed locally: 104 passed, 67 skipped,
+in 161.17s overall (157.49s in nextest), with no Cargo compilation at runtime.
+Its new integration and Python archive inventories match the previous main
+candidate: 171 and five entries, including names, kinds, ignored flags and
+filters under the actual `ci_gammaloop` profile. The new main Python runtime
+was not executed locally; FeynKit covers that runtime path.
+
+Main archive preparation took 1,622.33s after seeding current external dependency
+artifacts, with 123 Cargo compilation messages; an unchanged repeat took 0.19s
+with no builders. That store lacked current package-context artifacts, so this
+is correctness and preparation evidence, not a paired warm timing or a measured
+cost of the Python-input change alone. Its Python extension was physically
+absent. An earlier 238.49s attempt used an older seed and was stopped when the
+exact base dependency output was found in the newer Clippy validation store.
+Both attempts remain recorded. The first inventory listing used the generic
+`ci` profile; the authoritative comparison is
+`main-warm-validation/inventory-ci-gammaloop-comparison.json`.
 
 The first disposable-store attempt was stopped after 219s: its seed retained
 final archives but lacked intermediate dependency outputs, so it began rebuilding
