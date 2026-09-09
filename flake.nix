@@ -2722,6 +2722,10 @@
           ];
         }
         {
+          name = "oneloop";
+          packages = ["oneloop"];
+        }
+        {
           name = "vakint";
           packages = ["vakint"];
         }

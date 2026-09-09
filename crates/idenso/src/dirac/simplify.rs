@@ -381,6 +381,23 @@ impl<'settings> DiracSimplifier<'settings> {
             return None;
         };
 
+        // A chain whose endpoints coincide is a closed fermion loop, i.e. a
+        // trace over that bispinor index. Re-express it so the trace evaluator
+        // takes over — but only when the caller actually wants traces
+        // evaluated, since `without_trace_evaluation()` promises to leave
+        // closed loops in whatever shape chain collection produced.
+        if self.settings.evaluate_traces
+            && start == end
+            && !factors.is_empty()
+            && let Some(rep) = bispinor_rep_of_slot(*start)
+        {
+            let factor_atoms = factors
+                .iter()
+                .map(|factor| factor.to_owned())
+                .collect::<Vec<_>>();
+            return Some(trace!(rep; factor_atoms));
+        }
+
         let mut factor_kinds = DiracFactorKinds::default();
         let factors = factors
             .iter()
@@ -425,6 +442,12 @@ impl<'settings> DiracSimplifier<'settings> {
                 factor_kinds
                     .has_projector
                     .then(|| Self::move_projector_right_of_gamma(*start, *end, &factors))
+                    .flatten()
+            })
+            .or_else(|| {
+                factor_kinds
+                    .has_projector
+                    .then(|| Self::expand_chirality_projector(*start, *end, &factors))
                     .flatten()
             })
             .or_else(|| match self.settings.chain_ordering {
@@ -734,7 +757,10 @@ impl DiracSimplifier<'_> {
         right: usize,
         middle: impl IntoIterator<Item = M>,
     ) -> Vec<Atom> {
-        let mut result = Vec::with_capacity(factors.len() - 2);
+        // `left == right` splices out a single factor, so the removed count is
+        // not always two; saturate rather than underflow on a one-factor chain
+        // (e.g. `chain(a, b, projp)` from a Yukawa vertex).
+        let mut result = Vec::with_capacity(factors.len().saturating_sub(2));
         Self::extend_factors(&mut result, &factors[..left]);
         result.extend(middle.into_iter().map(IntoAtom::into_atom));
         Self::extend_factors(&mut result, &factors[right + 1..]);
@@ -848,6 +874,64 @@ impl DiracSimplifier<'_> {
         }
 
         None
+    }
+
+    /// Expands a chirality projector inside a chain into its gamma-basis
+    /// definition:
+    /// `...[P+]... -> ½ ...[]... + ½ ...[gamma5]...` (and `-` for `P-`).
+    ///
+    /// This is what lets a fermion line carrying a projector reduce through
+    /// the ordinary gamma / gamma5 machinery instead of stalling on an inert
+    /// `projp` factor.
+    ///
+    /// Four-dimensional only. `gamma5` has no D-dimensional definition here:
+    /// every rule that could consume the injected factor
+    /// (`FOUR_DIM_GAMMA5_ANTICOMMUTATION`, `TRACE_GAMMA5_RECURSION`, the
+    /// `gamma5 gamma5 -> 1` involution) is `FourDimensional`, so expanding a
+    /// D-dimensional projector would trade a compact inert `projp` for a
+    /// `gamma5` polynomial that nothing can ever collapse — and one that also
+    /// blocks the surrounding gammas from becoming adjacent. The guard mirrors
+    /// the other four-dimensional chain rules exactly.
+    fn expand_chirality_projector(
+        start: AtomView<'_>,
+        end: AtomView<'_>,
+        factors: &[DiracFactor<'_>],
+    ) -> Option<Atom> {
+        if !has_four_dimensional_spin_endpoints(start, end) {
+            return None;
+        }
+
+        let (position, sign) = Self::first_chirality_projector(factors)?;
+
+        // Halve each term separately rather than dividing the sum: the
+        // simplifier is re-entrant (`reduce_bridge` runs after `serialization`
+        // has already gamma-simplified), and only the distributed form is a
+        // fixed point of a second pass.
+        let without_projector =
+            Self::chain_factors(factors, position, position, std::iter::empty::<Atom>());
+        let with_gamma5 = Self::chain_factors(factors, position, position, [gamma5_factor()]);
+
+        let identity_term = chain!(start, end; without_projector) / Atom::num(2);
+        let gamma5_term = chain!(start, end; with_gamma5) / Atom::num(2);
+
+        Some(if sign == 1 {
+            identity_term + gamma5_term
+        } else {
+            identity_term - gamma5_term
+        })
+    }
+
+    /// Locates the leftmost chirality projector, together with the sign its
+    /// `gamma5` half carries (`+1` for `P+`, `-1` for `P-`).
+    fn first_chirality_projector(factors: &[DiracFactor<'_>]) -> Option<(usize, i64)> {
+        factors
+            .iter()
+            .enumerate()
+            .find_map(|(position, factor)| match factor {
+                DiracFactor::ProjectorPlus(_) => Some((position, 1)),
+                DiracFactor::ProjectorMinus(_) => Some((position, -1)),
+                _ => None,
+            })
     }
 
     fn anticommute_adjacent_gamma_pair(
@@ -1064,6 +1148,24 @@ fn bispinor_dimension(atom: AtomView<'_>) -> Option<AtomView<'_>> {
     f.iter().next()
 }
 
+/// Recovers the bispinor representation `bis(dim)` from a bispinor slot
+/// `bis(dim, index)`, so a closed chain can be re-expressed as a trace over
+/// that representation.
+fn bispinor_rep_of_slot(slot: AtomView<'_>) -> Option<Atom> {
+    let AtomView::Fun(f) = slot else {
+        return None;
+    };
+    if f.get_symbol() != *BISPINOR_SYMBOL || f.get_nargs() == 0 {
+        return None;
+    }
+    let dimension = f.iter().next()?;
+    Some(
+        FunctionBuilder::new(*BISPINOR_SYMBOL)
+            .add_arg(dimension)
+            .finish(),
+    )
+}
+
 fn endpoint_factor(symbol: Symbol) -> Atom {
     FunctionBuilder::new(symbol)
         .add_arg(Atom::var(T.chain_in))
@@ -1128,6 +1230,12 @@ impl DiracSimplifier<'_> {
 
         if factor_kinds.has_gamma5
             && let Some(rewritten) = Self::simplify_gamma5_trace_node(rep, &factors)
+        {
+            return Some(rewritten);
+        }
+
+        if factor_kinds.has_projector
+            && let Some(rewritten) = Self::expand_chirality_projector_trace(rep, &factors)
         {
             return Some(rewritten);
         }
@@ -1197,6 +1305,47 @@ impl DiracSimplifier<'_> {
         }
 
         None
+    }
+
+    /// Trace-side counterpart of [`Self::expand_chirality_projector`]:
+    /// `Tr(... P+ ...) -> ½ Tr(...) + ½ Tr(... gamma5 ...)` (and `-` for `P-`).
+    ///
+    /// This is the rule a closed fermion loop carrying a projector (a `gg->h`
+    /// top loop, say) goes through: chain collection closes the loop into a
+    /// `trace(...)` with the projector still an opaque factor, and the ordinary
+    /// gamma-trace recursion refuses to consume it. Expanding here hands both
+    /// halves to the existing trace evaluators.
+    ///
+    /// Four-dimensional only, for the same reason as the chain-side rule:
+    /// `TRACE_GAMMA5_RECURSION` is `FourDimensional`, so a D-dimensional
+    /// expansion would merely split one inert trace into two.
+    fn expand_chirality_projector_trace(
+        rep: AtomView<'_>,
+        factors: &[DiracFactor<'_>],
+    ) -> Option<Atom> {
+        if !has_four_dimensional_trace_rep(rep) {
+            return None;
+        }
+
+        let (position, sign) = Self::first_chirality_projector(factors)?;
+
+        let mut without_projector = Vec::with_capacity(factors.len() - 1);
+        Self::extend_factors(&mut without_projector, &factors[..position]);
+        Self::extend_factors(&mut without_projector, &factors[position + 1..]);
+
+        let mut with_gamma5 = Vec::with_capacity(factors.len());
+        Self::extend_factors(&mut with_gamma5, &factors[..position]);
+        with_gamma5.push(gamma5_factor());
+        Self::extend_factors(&mut with_gamma5, &factors[position + 1..]);
+
+        let identity_term = Self::trace_or_terminal(rep, without_projector) / Atom::num(2);
+        let gamma5_term = Self::trace_or_terminal(rep, with_gamma5) / Atom::num(2);
+
+        Some(if sign == 1 {
+            identity_term + gamma5_term
+        } else {
+            identity_term - gamma5_term
+        })
     }
 
     fn simplify_gamma5_trace_node(rep: AtomView<'_>, factors: &[DiracFactor<'_>]) -> Option<Atom> {

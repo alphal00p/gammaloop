@@ -45,6 +45,7 @@ json5 = { workspace = true }
 # humantime = "2.1.0"
 # vakint = { git = "https://github.com/alphal00p/vakint", rev = "a32723f7c56ce73dd6a35713880e3a924e72c51b" } # "e44c210ded3936048615d39872022a0b6ef18454"
 momtrop = { workspace = true }
+oneloop = { path = "../oneloop" }
 # log = { version = "*", features = ["release_max_level_debug"] }
 nu-ansi-term = { workspace = true }
 paste = "1.0.15"
