@@ -41,3 +41,24 @@ a shared host and no uploads. Evidence is under
 `/tmp/gammaloop-ci-validation/python-runtime-only/`, including inventories,
 `identity-summary.json`, build phases and runtime summaries. The original working
 checkout and shared application branches are unchanged.
+
+## Avoid preparing production artifacts for a cached module
+
+The feature-sharing FeynKit suite spent 3,343.80s in the
+[GammaLoop production dependency job](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/1a2e7a1998d87e5dcdddaf95c54875293379bf5c/1d44ff3d-72f9-49f9-befa-e02b83f5537b),
+including 3,032.72s of overlapping publication intervals. The subsequent
+[Python module job](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-efficiency-feynkit/1a2e7a1998d87e5dcdddaf95c54875293379bf5c/27299f65-fe10-444e-b5bb-39e3f8adb6c3)
+completed in 25.22s with no Cargo compilation, reusing its cached result.
+
+The module is now the entry point for its production dependencies. NixCI no longer
+schedules the GammaLoop production artifact separately. The same per-crate build
+derivations remain available and are realized by the module job if needed. Test
+artifact producers remain separate. The generated graph retains the selected
+shared prerequisites by contracting the hidden production dependency paths.
+
+A local probe realized the module's scheduling wrapper in 0.50s with its final
+module output cached and four GammaLoop production artifacts absent. It ran only
+the wrapper builder, confirming that the final result can be reused without
+reconstructing those intermediates. This verifies the intended dependency
+behavior; it does not predict remote queue time or guarantee a 55-minute saving.
+The regenerated graph checks and CI-definition formatting pass on both layouts.

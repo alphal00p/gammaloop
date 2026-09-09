@@ -57,10 +57,6 @@
     "packages.x86_64-linux.cargoArtifacts" = [
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
     ];
-    "packages.x86_64-linux.crate-deps-gammalooprs" = [
-      "packages.x86_64-linux.cargoArtifacts"
-      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
-    ];
     "packages.x86_64-linux.crate-test-binaries-clinnet" = [
       "packages.x86_64-linux.crate-test-dependencies-clinnet"
     ];
@@ -309,7 +305,6 @@
     "packages.x86_64-linux.gammaloop-python-module" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
-      "packages.x86_64-linux.crate-deps-gammalooprs"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-doctest" = [
       "packages.x86_64-linux.cargoArtifacts"
@@ -367,7 +362,6 @@
     "checks.x86_64-linux.gammaloop-nextest-binaries-vakint"
     "packages.x86_64-linux.cargoArtifacts"
     "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
-    "packages.x86_64-linux.crate-deps-gammalooprs"
     "packages.x86_64-linux.crate-test-binaries-clinnet"
     "packages.x86_64-linux.crate-test-binaries-feynkit"
     "packages.x86_64-linux.crate-test-binaries-feynkit-cff"
