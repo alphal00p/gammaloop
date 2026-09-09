@@ -55,3 +55,8 @@ See [www.alphaloop.ch](https://www.alphaloop.ch) for the broader project and lit
 Read [`CONTRIBUTING.typ`](CONTRIBUTING.typ) before editing. Typst is the canonical format for
 authored documentation; files named exactly `README.md` and `AGENTS.md` are compatibility
 exceptions and should remain concise indexes.
+
+User-facing references:
+
+- [GammaLoop DOT input format](docs/dot-input.md)
+- [Process and graph generation](docs/generation.md)
