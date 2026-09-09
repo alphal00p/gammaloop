@@ -61,6 +61,7 @@ symbolica-utils = { path = "crates/symbolica-utils/", default-features = false }
 symbolica = { version = "3.0.0", default-features = false }
 sysinfo = "0.33.1"
 tabled = "0.22.0"
+three-dimensional-reps = { path = "crates/three-dimensional-reps/" }
 thiserror = "2.0"
 tiny_http = "0.12.0"
 toml = "0.9.12"
