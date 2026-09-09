@@ -910,6 +910,7 @@ let
       "checks.${system}.gammaloop-nextest-binaries-python-api" = nextestArchiveDependenciesFor "python-api";
       "checks.${system}.gammaloop-nextest-binaries-linnet" = nextestArchiveDependenciesFor "linnet";
       "checks.${system}.gammaloop-nextest-binaries-spenso" = nextestArchiveDependenciesFor "spenso";
+      "checks.${system}.gammaloop-nextest-binaries-oneloop" = nextestArchiveDependenciesFor "oneloop";
       "checks.${system}.gammaloop-nextest-binaries-vakint" = nextestArchiveDependenciesFor "vakint";
       "checks.${system}.gammaloop-nextest-binaries" = nextestBinaryChecks;
       "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
@@ -930,6 +931,7 @@ let
       ];
       "packages.${system}.nix-ci-check-gammaloop-nextest-linnet" = ["checks.${system}.gammaloop-nextest-binaries-linnet"];
       "packages.${system}.nix-ci-check-gammaloop-nextest-spenso" = ["checks.${system}.gammaloop-nextest-binaries-spenso"];
+      "packages.${system}.nix-ci-check-gammaloop-nextest-oneloop" = ["checks.${system}.gammaloop-nextest-binaries-oneloop"];
       "packages.${system}.nix-ci-check-gammaloop-nextest-vakint" = ["checks.${system}.gammaloop-nextest-binaries-vakint"];
     }
   ];
@@ -976,6 +978,7 @@ let
       "checks.${system}.gammaloop-nextest-python-api"
       "checks.${system}.gammaloop-nextest-linnet"
       "checks.${system}.gammaloop-nextest-spenso"
+      "checks.${system}.gammaloop-nextest-oneloop"
       "checks.${system}.gammaloop-nextest-vakint"
       "packages.${system}.default"
       "packages.${system}.crane-ci-prebuild"
@@ -1108,6 +1111,13 @@ in {
 
     gammaloop-nextest-spenso = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-spenso";
+      system = system;
+      in-repo = true;
+      secrets = ["SYMBOLICA_LICENSE"];
+    };
+
+    gammaloop-nextest-oneloop = {
+      package = "packages.${system}.nix-ci-check-gammaloop-nextest-oneloop";
       system = system;
       in-repo = true;
       secrets = ["SYMBOLICA_LICENSE"];
