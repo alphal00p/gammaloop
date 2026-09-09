@@ -592,6 +592,19 @@ title = "Engineering investigations"
 summary = "Dated measurements and diagnostic records. Treat their results as experiment context, not timeless API guarantees."
 
 [[section.note]]
+id = "symbolica-evaluation-domain-fix"
+title = "Symbolica evaluation-domain bug and fix"
+summary = "Historical thermal callback-dispatch fix for GammaLoop and Spenso numeric wrappers, including precision and original validation."
+source = "docs/architecture/symbolica-evaluation-domain-fix.typ"
+kind = "Correctness investigation"
+status = "Historical fix record"
+lifecycle = "archived"
+owner = "unassigned"
+evidence_revision = "2fde2185a5989b08f702083b5f58567a3dc3486f"
+products = ["gammaloop", "spenso"]
+topics = ["thermal", "evaluation", "precision"]
+
+[[section.note]]
 id = "gammaloop-drawing-evaluated-fields-history"
 title = "GammaLoop Evaluated-Field Proposal"
 summary = "The superseded proposal for executable Typst fields in DOT drawing data, preserved separately from the maintained callback-based drawing architecture."

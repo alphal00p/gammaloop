@@ -26,6 +26,7 @@ use rug::ops::{CompleteRound, Pow};
 use rug::{Assign, Float};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
+use smallvec::SmallVec;
 use spenso::algebra::algebraic_traits::RefOne;
 use spenso::algebra::algebraic_traits::RefZero;
 use spenso::algebra::complex::Complex;
@@ -1720,6 +1721,9 @@ impl<T: FloatLike> ToCoefficient for F<T> {
 
 use symbolica::evaluate::{EvaluationDomain, ExportNumber};
 
+#[cfg(test)]
+mod evaluation_domain_tests;
+
 impl ExportNumber for QuadFloat {
     fn export(&self) -> String {
         self.to_string()
@@ -1759,6 +1763,21 @@ impl<const N: u32> FixedPrecision for VarFloat<N> {
 impl EvaluationDomain for QuadFloat {
     const FIXED_PRECISION: Option<u32> = <DoubleFloat as EvaluationDomain>::FIXED_PRECISION;
 
+    fn resolve_function(
+        tags: &[AtomView],
+        info: &EvaluationInfo,
+    ) -> Option<Box<dyn ExternalFunction<Self>>> {
+        if let Some(f) = info.get_evaluator::<Self>(tags) {
+            return Some(f);
+        }
+
+        let f = DoubleFloat::resolve_function(tags, info)?;
+        Some(Box::new(move |args: &[Self]| {
+            let args: SmallVec<[DoubleFloat; 4]> = args.iter().map(|x| x.0).collect();
+            Self(f(&args))
+        }))
+    }
+
     fn try_from_complex_float(
         f: symbolica::domains::float::Complex<symbolica::domains::float::Float>,
     ) -> Result<Self, String> {
@@ -1775,6 +1794,21 @@ impl EvaluationDomain for QuadFloat {
 
 impl<const N: u32> EvaluationDomain for VarFloat<N> {
     const FIXED_PRECISION: Option<u32> = Some(N);
+
+    fn resolve_function(
+        tags: &[AtomView],
+        info: &EvaluationInfo,
+    ) -> Option<Box<dyn ExternalFunction<Self>>> {
+        if let Some(f) = info.get_evaluator::<Self>(tags) {
+            return Some(f);
+        }
+
+        let f = SymbolicaFloat::resolve_function(tags, info)?;
+        Some(Box::new(move |args: &[Self]| {
+            let args: SmallVec<[SymbolicaFloat; 4]> = args.iter().map(Into::into).collect();
+            Self::from(f(&args))
+        }))
+    }
 
     fn try_from_complex_float(
         f: symbolica::domains::float::Complex<symbolica::domains::float::Float>,
@@ -1810,6 +1844,21 @@ impl<T: FloatLike + FixedPrecision> FixedPrecision for F<T> {
 
 impl<T: FloatLike + EvaluationDomain> EvaluationDomain for F<T> {
     const FIXED_PRECISION: Option<u32> = T::FIXED_PRECISION;
+
+    fn resolve_function(
+        tags: &[AtomView],
+        info: &EvaluationInfo,
+    ) -> Option<Box<dyn ExternalFunction<Self>>> {
+        if let Some(f) = info.get_evaluator::<Self>(tags) {
+            return Some(f);
+        }
+
+        let f = T::resolve_function(tags, info)?;
+        Some(Box::new(move |args: &[Self]| {
+            let args: SmallVec<[T; 4]> = args.iter().map(|x| x.0.clone()).collect();
+            Self(f(&args))
+        }))
+    }
 
     fn try_from_complex_float(
         f: symbolica::domains::float::Complex<symbolica::domains::float::Float>,
