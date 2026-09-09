@@ -192,16 +192,16 @@
     )
     let edges = (
       D1: mom(label: (gap: .25)), D2: mom(label: (gap: .25)),
-      "D3.0": (statements: ("spring-length": .3)) + mom(label: (gap: .4)),
-      "D3.1": (statements: ("spring-length": .3), reverse: true)
+      "D3.0": (spring-length: .3) + mom(label: (gap: .4)),
+      "D3.1": (spring-length: .3, reverse: true)
         + mom(side: "left", label: (gap: .4)),
-      "D4.0": (statements: ("spring-length": .3)) + mom(side: "right", label: (gap: .2)),
-      "D4.1": (statements: ("spring-length": .3)) + mom(label: (gap: .2)),
-      D5: (statements: ("spring-length": .2),crossing-under: <D6>, crossing-gap: 0.9) + mom(
+      "D4.0": (spring-length: .3) + mom(side: "right", label: (gap: .2)),
+      "D4.1": (spring-length: .3) + mom(label: (gap: .2)),
+      D5: (spring-length: .2,crossing-under: <D6>, crossing-gap: 0.9) + mom(
         side: "right", shift: 1.5, label: (gap: .05),
         // offset: 0.80,
       ),
-      D6:(statements: ("spring-length": .2))+ mom(side: "left", shift: 1.5, label: (gap: .2)),
+      D6:(spring-length: .2)+ mom(side: "left", shift: 1.5, label: (gap: .2)),
     )
     graph.map(g, node: nodes, edge: edges)
   }
@@ -222,17 +222,17 @@
       "compact-bottom": (pos: pos(x: pin(0), y: bot)),
     )
     let edges = (
-      compact: (statements: ("spring-length": 0.25)),
+      compact: (spring-length: 0.25),
       "D1.0": mom(side: "right", label: (gap: .15, shift: -1.5)),
-      "D1.1": (statements: ("spring-length": .3))+mom(side: "left", length: 1.4, shift: -.4),
-      D2: (statements: ("spring-length": .3)) + mom(label: (gap: .2)),
+      "D1.1": (spring-length: .3)+mom(side: "left", length: 1.4, shift: -.4),
+      D2: (spring-length: .3) + mom(label: (gap: .2)),
       D3: mom(shift: 1.),
-      "D4.0": (statements: ("spring-length": .3), bend: -0.18, crossing-under: <D6.0>, crossing-gap: 0.9,
+      "D4.0": (spring-length: .3, bend: -0.18, crossing-under: <D6.0>, crossing-gap: 0.9,
         // fermion-arrow-shift: 1.15,
       ) + mom(side: "left", length: 1., shift: .5),
-      "D4.1": (statements: ("spring-length": .3)) + mom(side: "left", shift: -1.3),
-      D5: (statements: ("spring-length": .5),),
-      "D6.0": (statements: ("spring-length": .5))+(bend: -1.55) + mom(side: "right"),
+      "D4.1": (spring-length: .3) + mom(side: "left", shift: -1.3),
+      D5: (spring-length: .5,),
+      "D6.0": (spring-length: .5)+(bend: -1.55) + mom(side: "right"),
       "D6.1": mom(side: "left", length: 1.4, shift: -.4),
     )
     let g = graph.map(g, edge: flatten-boundary)
@@ -250,20 +250,20 @@
     )
     let nodes = (c: (pos: pos(y: start(-4))), d: (pos: pos(y: start(0))))
     let edges = (
-      compact: (statements: ("spring-length": 0.01)),
+      compact: (spring-length: 0.01),
       D1: mom(side: "left", length: 1.2, label: (gap: .2)),
       "D2.0": mom(side: "right", length: 1., shift: .4, label: (gap: .2)),
       "D2.1": mom(side: "right", length: .7, shift: -.4,
         label: (gap: .2, shift: -.75, anchor: "south-west")),
-      "D3.0": (statements: ("spring-length": .2)),
+      "D3.0": (spring-length: .2),
       "D3.1": (crossing-under: <D6.1>, crossing-gap: 0.7)
         + mom(side: "left", length: 1.2, shift: -.6, label: (gap: .2)),
-      D4: (statements: ("spring-length": .1)) + mom(side: "right", shift: -.4, label: (gap: .1)),
-      D5: (statements: ("spring-length": .5)) + mom(side: "right", label: (gap: .05),
+      D4: (spring-length: .1) + mom(side: "right", shift: -.4, label: (gap: .1)),
+      D5: (spring-length: .5) + mom(side: "right", label: (gap: .05),
         // offset: 0.80,
       ),
-      "D6.0": (statements: ("spring-length": .3))+(bend: -0.55) + mom(side: "left", length: 1.5, shift: .8),
-      "D6.1": (statements: ("spring-length": .3))+mom(side: "left", shift: .8, label: (gap: .2)),
+      "D6.0": (spring-length: .3)+(bend: -0.55) + mom(side: "left", length: 1.5, shift: .8),
+      "D6.1": (spring-length: .3)+mom(side: "left", shift: .8, label: (gap: .2)),
     )
     let g = graph.map(g, edge: flatten-boundary)
     graph.map(g, node: nodes, edge: edges)
@@ -282,17 +282,17 @@
       boundary: boundary-position,
     )
     let edges = (
-      compact: (statements: ("spring-length": 1.8)),
+      compact: (spring-length: 1.8),
       "D1.0": mom(side: "left", length: .8, label: (shift: 1, gap: .01, anchor: "north")),
       "D1.1": mom(side: "right", length: 1, shift: .5, label: (shift: 3.2, gap: .1)),
       "D2.0": mom(side: "right", shift: .4, label: (anchor: "south-east", gap: .2)),
       "D2.1": mom(side: "right", label: (gap: .3, shift: -.2, anchor: "west")),
-      D3: (statements: ("spring-length": 1.5), crossing-under: <D6.1>, crossing-gap: 0.8,
+      D3: (spring-length: 1.5, crossing-under: <D6.1>, crossing-gap: 0.8,
         fermion-arrow-shift: -0.5) + mom(shift: -.6),
-      D4: (statements: ("spring-length": .5)) + mom(label: (gap: .02)),
-      D5: (crossing-under: <D6.1>, crossing-gap: 1.5,statements: ("spring-length": .2)) + mom(side: "right", shift: -1., label: (gap: .01)),
+      D4: (spring-length: .5) + mom(label: (gap: .02)),
+      D5: (crossing-under: <D6.1>, crossing-gap: 1.5,spring-length: .2) + mom(side: "right", shift: -1., label: (gap: .01)),
       "D6.0": mom(side: "left", shift: .5, label: (gap: .1)),
-      "D6.1": (statements: ("spring-length": 2.)) + mom(side: "left", shift: 3, label: (shift: 2.5, gap: .1)),
+      "D6.1": (spring-length: 2.) + mom(side: "left", shift: 3, label: (shift: 2.5, gap: .1)),
       "D6.2": mom(side: "right", shift: -.4, label: (gap: .1)),
     )
 

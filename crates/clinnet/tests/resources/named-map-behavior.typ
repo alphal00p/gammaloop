@@ -38,6 +38,12 @@
   }
   assert(graph.map(graph.build(), node: (:), edge: (:)) == graph.build())
 
+  let mapped-spring = graph.map(base, edge: (D1: (spring-length: 1.25)))
+  let mapped-spring-edge = graph.edges(mapped-spring).find(e => e.name == <D1>)
+  assert(mapped-spring-edge.statements.at("spring-length", default: none) == "1.25")
+  assert(mapped-spring-edge.data == payload)
+  assert((mapped-spring-edge.data.callback)(3) == 10)
+
   // Constant patches use the same structural/native split and shallow merge.
   let node-patch = (
     pos: pos(z: pin(7)), statements: (mapped: true),
@@ -140,7 +146,8 @@
   assert(graph.edge-data(updated, <D1>) == replacement)
   assert(graph.edges(updated).first().statements == original-edge.statements)
 
-  // Cut fragment names are exact selectors; synthetic unnamed nodes are skipped.
+  // Cut fragment names are exact selectors; synthetic nodes have no origin and
+  // carry boundary metadata.
   let opened = graph.cut(base,
     left: subgraph.with-data(base, subgraph.select(base, source: (<D1>,)), hedge: (winding: 2)),
     right: subgraph.select(base, sink: (<D1>,)),
@@ -149,7 +156,8 @@
     .filter(e => e.origin.edge == original-edge.edge)
     .sorted(key: e => e.origin.segment)
   assert(fragments.map(e => e.name) == (<D1.0>, <D1.1>, <D1.2>))
-  assert(graph.nodes(opened).any(n => n.origin == none and n.name == none))
+  let synthetic-nodes = graph.nodes(opened).filter(n => n.origin == none)
+  assert(synthetic-nodes.len() == 2 and synthetic-nodes.all(n => n.boundary != none))
   let cut-mapped = graph.map(opened, node: (a: (label: [cut node])), edge: (
     "D1.0": (label: [left fragment]),
     "D1.1": e => {

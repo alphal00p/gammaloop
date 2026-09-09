@@ -940,7 +940,7 @@
   if kind == "node" {
     ("pos", "shift", "statements")
   } else if kind == "edge" {
-    ("pos", "shift", "label-pos", "label-angle", "bend", "statements")
+    ("pos", "shift", "label-pos", "label-angle", "bend", "statements", "spring-length")
   } else if kind == "hedge" {
     ("statement", "port-label", "compass")
   } else {
@@ -993,7 +993,7 @@
       }
       if key == "statements" {
         let statements = _flat-statements(value, context_ + " statements")
-        let previous = record.at(key, default: (:))
+        let previous = record.at(key, default: (:)) + structural.at(key, default: (:))
         let changed = (:)
         for (name, value) in statements {
           if value != previous.at(name, default: none) {
@@ -1002,6 +1002,23 @@
         }
         if changed.len() != 0 {
           structural.insert(key, changed)
+        }
+      } else if key == "spring-length" {
+        if value != none and (
+          type(value) not in (int, float)
+            or not (value > 0 and value < calc.inf)
+        ) {
+          panic(context_ + ": spring-length must be a positive finite number or none")
+        }
+        if value != none {
+          let previous = record.statements.at("spring-length", default: none)
+          let rendered = _statement-value(value, context_)
+          if rendered != previous {
+            structural.insert(
+              "statements",
+              structural.at("statements", default: (:)) + ("spring-length": rendered),
+            )
+          }
         }
       } else {
         structural.insert(key, value)

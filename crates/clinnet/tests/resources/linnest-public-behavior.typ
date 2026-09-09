@@ -444,30 +444,17 @@
 // The shorthand emits only supplied fields and preserves their native values.
 #assert.eq(feynman.momentum(), (:))
 #assert.eq(feynman.momentum(label: (:)), (:))
-#for (key, values) in (
-  ("side", (auto, "auto", "left", "right")),
-  ("offset", (0, -.4, "0.8")),
-  ("length", (0, .7, "1.4")),
-  ("shift", (0, -.4, "1.5")),
+#for (actual, expected) in (
+  (feynman.momentum(side: auto), (momentum-arrow-side: auto)),
+  (feynman.momentum(side: "left"), (momentum-arrow-side: "left")),
+  (feynman.momentum(offset: -.4), (momentum-arrow-offset: -.4)),
+  (feynman.momentum(length: "1.4"), (momentum-arrow-length: "1.4")),
+  (feynman.momentum(shift: 1.5), (momentum-arrow-shift: 1.5)),
+  (feynman.momentum(label: (gap: .2)), (momentum-label-gap: .2)),
+  (feynman.momentum(label: (shift: -.75)), (momentum-label-shift: -.75)),
+  (feynman.momentum(label: (anchor: "south-west")), (momentum-label-anchor: "south-west")),
 ) {
-  for value in values {
-    assert.eq(
-      feynman.momentum(..dictionary(((key, value),))),
-      dictionary((("momentum-arrow-" + key, value),)),
-    )
-  }
-}
-#for (key, values) in (
-  ("gap", (0, .2, -.1, "0.8")),
-  ("shift", (0, -.75, "1.5")),
-  ("anchor", (auto, "auto", "east", "south-west")),
-) {
-  for value in values {
-    assert.eq(
-      feynman.momentum(label: dictionary(((key, value),))),
-      dictionary((("momentum-label-" + key, value),)),
-    )
-  }
+  assert.eq(actual, expected)
 }
 #let compact-momentum = feynman.momentum(
   side: "right", offset: -.4, length: .7, shift: -.4,

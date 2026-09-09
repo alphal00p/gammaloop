@@ -225,7 +225,9 @@
     new native data or structural patches without changing topology. `node` and
     `edge` accept a callback or a dictionary keyed by current record names.
     Each dictionary value is a patch, a callback receiving the full record, or
-    `none`. Unlisted records remain unchanged; unknown names are errors.
+    `none`. Edge patches may set `spring-length` directly; it is validated and
+    stored as the layout statement. Unlisted records remain unchanged; unknown
+    names are errors.
   - `graph.cut(graph, left: left, right: right, boundary: patch)` opens a
     weighted directed cut into a new graph, preserving Typst data and recording
     origins. `graph.boundaries(view)` queries its current boundary endpoints.
