@@ -11,15 +11,24 @@
   font-size: 6pt,
   unit: 2.6mm,
   line-width: 0.5pt,
-  cut-line-width: 0.6pt,
+  cut-line-width: 1pt,
+
   endpoint-box: (
     padding: (x: 0.5, y: 0.4),
     radius: 0.25,
-    fills: (p1: blue.lighten(85%), p2: orange.lighten(85%)),
+    fills: (p1: green.lighten(85%), p2: orange.lighten(85%)),
   ),
   padding: 0.3,
 )
 #set text(size: diagram-style.font-size)
+
+// One stroke per opening: original, p1 replaced, p2 replaced, both replaced.
+#let initial-cut-styles = (
+  (paint: blue.darken(45%), dash: "dotted",thickness:1pt),
+  (paint: blue.darken(15%), dash: "dashed",thickness:1pt),
+  (paint: blue.lighten(10%), dash: (4pt, 1.5pt, 1pt, 1.5pt),thickness:1pt),
+  (paint: blue.lighten(30%), dash: (4pt, 1.5pt, 1pt, 1.5pt, 1pt, 1.5pt),thickness:1pt),
+).map(style => (thickness: diagram-style.cut-line-width) + style)
 
 #let base-layout = layouts.options(
   spring: (strength: 18, length: 0.25),
@@ -87,7 +96,7 @@
 #let flatten-boundary = item => if item.boundary != none { (pos: pos(z: pin(0))) }
 
 // `cut-x` is in graph units; auto puts the cut just right of center.
-#let diagram(g, options: base-layout, cut-x: auto, cut-y: auto, draw-after: none) = context {
+#let diagram(g, options: base-layout, cut-x: auto, cut-y: auto, initial-cut: none, draw-after: none) = context {
   draw(
     layout(
       graph.style(
@@ -143,12 +152,27 @@
         calc.min(..xs) + 0.6 * (calc.max(..xs) - calc.min(..xs))
       } else { cut-x }
       let y = if cut-y == auto { 1.5 } else { cut-y }
+      let outer-xs = xs + endpoints.map(b => b.pos.x)
+      let bounds = (
+        left: calc.min(..outer-xs) - box-style.padding.x,
+        right: calc.max(..outer-xs) + box-style.padding.x,
+        top: calc.max(..ys) + y,
+        bottom: calc.min(..ys) - y,
+      )
       cetz.draw.line(
-        (x, calc.max(..ys) + y),
-        (x, calc.min(..ys) - y),
+        (x, bounds.top), (x, bounds.bottom),
         stroke: (paint: red, thickness: diagram-style.cut-line-width, dash: "dashed"),
       )
-      if type(draw-after) == function { draw-after(g) } else { draw-after }
+      if initial-cut != none {
+        for side in ("left", "right") {
+          let side-xs = endpoints.filter(b => b.side == side).map(b => b.pos.x)
+          if side-xs.len() > 0 {
+            let x = side-xs.first()
+            cetz.draw.line((x, bounds.top), (x, bounds.bottom), stroke: initial-cut-styles.at(initial-cut))
+          }
+        }
+      }
+      if type(draw-after) == function { draw-after(g, bounds) } else { draw-after }
     },
   )
 }
@@ -285,41 +309,36 @@
   }
 
   let diagrams = $
-    #diagram(xbox, cut-x: -1, draw-after: g => {
+    #diagram(xbox, cut-x: -1, initial-cut: 0, draw-after: (g, bounds) => {
       let nodes = graph.nodes(g)
-      let xs = graph.boundaries(g).map(b => b.pos.x)
-      let ys = nodes.map(n => n.pos.y)
-      let left = calc.min(..xs) - diagram-style.endpoint-box.padding.x
-      let right = calc.max(..xs) + diagram-style.endpoint-box.padding.x
-      let top = calc.max(..ys) + 1.5
-      let bottom = calc.min(..ys) - 1.5
-      // Blue/orange open the p1/p2 initial states and cross the other external leg;
-      // the purple pair opens both, with each branch reaching the diagram boundary.
-      for (name, side, paint, both) in (
-        (<c>, 1, blue, false), (<b>, -1, orange, false),
-        (<c>, 1, purple, true), (<b>, -1, purple, true),
+      // The two single-replacement cuts cross the other external leg;
+      // the matching pair opens both, with each branch reaching the diagram boundary.
+      for (name, side, style, both) in (
+        (<c>, 1, 1, false), (<b>, -1, 2, false),
+        (<c>, 1, 3, true), (<b>, -1, 3, true),
       ) {
         let p = nodes.find(n => n.name == name).pos
-        let (near, far) = if side > 0 { (top, bottom) } else { (bottom, top) }
-        let outer = if side > 0 { right } else { left }
+        let (near, far) = if side > 0 { (bounds.top, bounds.bottom) } else { (bounds.bottom, bounds.top) }
+        let outer = if side > 0 { bounds.right } else { bounds.left }
+        // Meet the top/bottom normally; the paired cut also exits the sides horizontally.
         let points = if both {
           ((p.x - side * .8, near), (outer, p.y - side * 1.7),
-            (p.x - side, p.y - side * .6), (p.x + side * .1, p.y - side * .8))
+            (p.x - side * .8, p.y - side * .6), (p.x + side * .1, p.y - side * 1.7))
         } else {
           ((p.x - side * 1.25, near), (outer - side, far),
-            (p.x - side * 2.6, p.y - side * 2), (p.x + side * 2.3, p.y - side * .8))
+            (p.x - side * 1.25, p.y - side * 2), (outer - side, p.y - side * .8))
         }
         // Both branches cross D6 in the same direction, retaining its middle segment.
         if side < 0 { points = (points.at(1), points.at(0), points.at(3), points.at(2)) }
         cetz.draw.bezier(
           ..points,
-          stroke: (paint: paint, thickness: diagram-style.cut-line-width, dash: "dashed"),
+          stroke: initial-cut-styles.at(style),
         )
       }
     })+
-    #diagram(xbox-opened, cut-x: 0,cut-y: 1)#h(-2mm)+#h(-2mm)
-    #diagram(xbox-opened2, cut-x: -2.1,cut-y: 1)#h(-2mm)+
-    #diagram(xbox-cut,cut-y: 0.5) = op("disc")_(p_1^2)  op("disc")_(p_2^2) integral (dif ^d k  )/(2 pi )^d (N^frak(q q')_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(  p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
+    #diagram(xbox-opened, cut-x: 0,cut-y: 1, initial-cut: 1)#h(-2mm)+#h(-2mm)
+    #diagram(xbox-opened2, cut-x: -2.1,cut-y: 1, initial-cut: 2)#h(-2mm)+
+    #diagram(xbox-cut,cut-y: 0.5, initial-cut: 3) = op("disc")_(p_1^2)  op("disc")_(p_2^2) integral (dif ^d k  )/(2 pi )^d (N^frak(q q')_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(  p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
   $
   diagrams
 }

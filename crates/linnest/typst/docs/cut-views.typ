@@ -75,13 +75,20 @@ $ Q_("xbox") &= p_1 + p_2 \\
 The cuts need not be graph-theoretic separating partitions: cutting D3 alone
 does not disconnect $K_4$. Terminal-cut or bond enumeration is not a prerequisite
 for opening an explicitly selected edge set. The red Cutkosky line remains a
-separate drawing annotation. On the first view, blue and orange Bezier overlays
-cross D1/D6 near `c` and D2/D6 near `b`, respectively, replacing the corresponding
-initial-state seam. Blue also crosses the right dangling D4 ($p_2$), and orange
-the left dangling D3 ($p_1$), completing each cut with its retained external leg.
-The purple pair represents the combined opening: both branches extend to the
-diagram boundary and cross D6 in the same direction, without crossing external
-legs. These overlays never cross D5 and do not change topology or layout.
+separate drawing annotation. Four blue shades and dash patterns identify the
+original opening, the $p_1$ replacement, the $p_2$ replacement, and the combined
+replacement. Each view has two matching vertical cuts through its left and
+right free endpoints exactly, including the auxiliary endpoints of the
+through-gluon. The endpoints on each side share their solved x coordinate.
+
+On the first view, the $p_1$ Bezier crosses D1/D6 and the right dangling D4
+($p_2$); the $p_2$ Bezier crosses D2/D6 and the left dangling D3 ($p_1$).
+The combined pair crosses D6 twice in the same direction without crossing
+external legs. Each alternative uses exactly the stroke of its resulting view.
+All top/bottom endpoints share the red final-state cut's vertical extent and
+arrive perpendicularly; the combined pair also meets the side boundaries
+perpendicularly. These overlays never cross D5 and do not change topology or
+layout.
 
 == Winding two retains the middle segment
 
