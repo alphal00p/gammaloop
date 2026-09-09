@@ -55,6 +55,7 @@ symbolica-utils = { path = "crates/symbolica-utils/" }
 symbolica = { version = "2.2.0", default-features = false, features = ["gmp", "native_code_generation"] }
 sysinfo = "0.33.1"
 tabled = "0.20.0"
+three-dimensional-reps = { path = "crates/three-dimensional-reps/" }
 thiserror = "2.0"
 toml = "0.9.12"
 tracing = "0.1.44"
