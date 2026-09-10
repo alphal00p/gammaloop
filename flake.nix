@@ -8,6 +8,12 @@
       url = "github:ipetkov/crane";
     };
 
+    # Refresh deliberately with `just ci-cache-base REVISION` after a green run.
+    ci-cache-base = {
+      url = "github:alphal00p/gammaloop/5181661ec340ebfb181a0045dac79fcec4f35525";
+      flake = false;
+    };
+
     fenix = {
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -48,12 +54,26 @@
       # NixCI memoizes successful top-level derivations across commits without
       # re-realizing their closures. Salt only this zero-copy scheduling
       # wrapper so each commit primes the stable artifact in the shared cache.
-      nixCiArtifactBarrier = name: artifact:
+      nixCiArtifactBarrier = name: artifact: let
+        compilerState =
+          if artifact ? incrementalBase
+          then artifact.incrementalBase.incremental
+          else artifact.incremental or null;
+      in
         pkgs.runCommand "nix-ci-artifact-barrier-${name}" {
           NIX_CI_BARRIER_REVISION = nixCiBarrierRevision;
-        } ''
+          passthru = { inherit artifact; };
+        } (if compilerState != null then ''
+          # Publish compiler state once per producer, keeping it out of the
+          # dependency archives restored by other crates and runtime checks.
+          mkdir -p "$out"
+          for entry in ${artifact}/*; do
+            ln -s "$entry" "$out/"
+          done
+          ln -s ${compilerState} "$out/incremental"
+        '' else ''
           ln -s ${artifact} "$out"
-        '';
+        '');
 
       baseCraneLib = crane.mkLib pkgs;
       stableToolchain = fenix.packages.${system}.stable;
@@ -89,6 +109,7 @@
       workspace = import ./nix/rust-workspace.nix {
         inherit pkgs craneLib wasmCraneLib ciToolchain wasmTarget system nixCiArtifactBarrier;
         workspaceRoot = ./.;
+        incrementalBaselineRoot = /. + builtins.unsafeDiscardStringContext self.inputs.ci-cache-base.outPath;
       };
       inherit
         (workspace)

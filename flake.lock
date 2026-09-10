@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "ci-cache-base": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1788965609,
+        "narHash": "sha256-b0PouxW8MrkX2gPL0IQM3GS+3JBdC0QWzMI258wRg84=",
+        "owner": "alphal00p",
+        "repo": "gammaloop",
+        "rev": "5181661ec340ebfb181a0045dac79fcec4f35525",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alphal00p",
+        "repo": "gammaloop",
+        "rev": "5181661ec340ebfb181a0045dac79fcec4f35525",
+        "type": "github"
+      }
+    },
     "crane": {
       "locked": {
         "lastModified": 1788465171,
@@ -72,6 +89,7 @@
     },
     "root": {
       "inputs": {
+        "ci-cache-base": "ci-cache-base",
         "crane": "crane",
         "fenix": "fenix",
         "flake-utils": "flake-utils",

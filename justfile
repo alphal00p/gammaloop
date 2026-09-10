@@ -506,6 +506,17 @@ ci-update:
     configuration=$(nix build --no-link --print-out-paths .#nix-ci-config)
     cp "$configuration" nix-ci.nix
 
+# Pin a compatible application revision for per-crate compiler-state reuse.
+# The current CI implementation builds the seed once; source edits reuse it.
+ci-cache-base REVISION:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    revision={{quote(REVISION)}}
+    [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || { echo 'Use a full commit hash' >&2; exit 1; }
+    sed -E "s@github:alphal00p/gammaloop/[0-9a-f]{40}@github:alphal00p/gammaloop/$revision@" flake.nix > flake.nix.tmp
+    mv flake.nix.tmp flake.nix
+    nix flake update ci-cache-base
+
 # Collect paired NixCI and GitHub Actions measurements.
 ci-report MANIFEST OUTPUT_DIR:
     nix run .#ci-report -- {{quote(MANIFEST)}} {{quote(OUTPUT_DIR)}}
