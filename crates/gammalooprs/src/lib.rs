@@ -118,7 +118,7 @@ pub(crate) fn set_interrupted(flag: bool) {
 
 #[inline]
 pub fn clear_interrupt_request() {
-    set_interrupted(false);
+    INTERRUPTED.store(false, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[inline]
