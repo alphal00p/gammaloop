@@ -2028,6 +2028,13 @@
       outputs = ["out"];
       passthru = (old.passthru or {}) // { incrementalBase = previousArtifacts; };
       postBuild = postBuildScriptText + ''
+        # Rustc can restore newly named metadata files with epoch-1 timestamps.
+        # Include those files in Crane's delta without repacking inherited files.
+        comm -z -13 "$TMPDIR/ci-inherited-cargo-files" <(
+          find target -path '*/incremental' -prune -o -type f -printf '%P\0' | sort -z
+        ) | while IFS= read -r -d "" artifact; do
+          touch "target/$artifact"
+        done
         rm -rf target/${ciCargoProfile}/incremental
       '';
       preBuild = ''
@@ -2037,7 +2044,10 @@
         mkdir -p target/${ciCargoProfile}/incremental
         chmod -R u+w target/${ciCargoProfile}/incremental
         find target -name '.cargo*lock' -delete
-      '' + (old.preBuild or "");
+      '' + (old.preBuild or "") + ''
+        find target -path '*/incremental' -prune -o -type f -printf '%P\0' \
+          | sort -z > "$TMPDIR/ci-inherited-cargo-files"
+      '';
     });
 
   rootPackageDependencyArtifactsFor = package:
