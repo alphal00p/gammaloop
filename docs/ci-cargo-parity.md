@@ -3,7 +3,11 @@
 The objective is comparable **edit-to-test completion**, including Nix evaluation,
 artifact restoration and export, compilation, and execution of the same tests.
 A cached successful result that does not execute tests is a separate measurement.
-The current change improves main, but **does not achieve Cargo parity**.
+The current change improves local main source-edit completion, but **does not
+achieve Cargo parity**.
+Local correctness and cold-latency gates pass. Remote zero-recompilation and
+final-success goals remain unmet; the integrated compiler-state candidate is
+not accepted for merge as a remote performance improvement.
 
 ## Integrated cache implementation, 10 September 2026
 
@@ -54,13 +58,14 @@ restorations passed the standalone regression probe.
 All seven FeynKit invalidation scenarios match the previous implementation.
 A GammaLoop edit selects six affected library/test producers for compiler-state
 reuse; the extracted libraries remain unchanged. Python selects two, CFF twelve,
-model twenty-four, and a fixture six. Manifest and lockfile edits select zero.
+model twenty-four, and a fixture six. Manifest and lockfile edits disable
+prior-state reuse and retain their broad derivation invalidation.
 The existing Python consumer-expectation discrepancy described below is unchanged.
 
 Publishing the baseline state adds that archive to the producer wrapper's closure.
-Warm NixCI measurements must include this transfer, even though downstream build
-and runtime outputs do not retain compiler state. Intermediate multi-output cache
-publication and skipped-wrapper behavior still need remote verification.
+The NixCI measurements below include this transfer, even though downstream build
+and runtime outputs do not retain compiler state. Publication wrappers still
+restore state on unchanged commits, and remote output reuse remains unreliable.
 
 The integrated main source-edit run finishes in **6m35s**, versus **17m47s** for
 the earlier candidate and **3m47s** for native Cargo. It executes the same 1,628
@@ -121,8 +126,71 @@ measure a speedup against FeynKit's earlier implementation or native Cargo.
 FeynKit cache preparation takes 33m49s for archives, then 18m33s for the runtime
 phase including its separate Python-module preparation (90 compilation messages).
 These are preparation timings on the existing local store, not cold results.
+FeynKit's boundary checker and its self-test pass; all nine extracted libraries
+remain independent of GammaLoop and its private workspace-hack dependency.
+Its Python-stub workflow is preserved, but stub generation/staleness checking is
+not part of these cold builds and was not rerun. That workflow builds a separate
+`python_stubgen` executable with additional optional dependencies and a different
+profile; the measured Python module cannot substitute for that check.
 The main-only NixCI measurements below assess the integrated implementation;
 the historical experiments later in this document describe earlier implementations.
+
+## Controlled local cold follow-up
+
+All four builds pass the complete measured scope: seven/eight runtime groups,
+Python, Clippy, licensed doctests, formatting and generated graph/configuration
+checks. The baseline is the earlier narrow CI candidate, before the four changes
+above, **not original main CI** (`b9d6071fc` versus `5b87a850e` on main).
+FeynKit uses the same application revision within its own pair.
+
+| Layout | Baseline | Candidate | Completion change | Passing tests / doctests per variant |
+|---|---:|---:|---:|---:|
+| Main | 46m26s | 44m01s | −5.19% | 1,633 / 43 |
+| FeynKit | 48m15s | 48m04s | −0.38% | 1,834 / 62 |
+
+Exact archive inventories match across all 17/26 packages, including filters and
+ignored cases. All selected nextest cases execute successfully; exact doctest
+names and outcomes match, with 20 ignored per variant. Archive steps compile
+nothing. All 19/21 selected roots pass. Exact repeats take 0.70–0.77 seconds with
+zero builders; those repeats reuse results and do not execute tests again.
+Both pairs meet the no-more-than-10%-slower cold goal. The FeynKit difference is
+too small to treat as a meaningful improvement in one shared-host observation.
+
+Combined builder occupancy increases: **123.32 → 126.57 minutes** on main (+2.64%)
+and **162.64 → 163.70 minutes** on FeynKit (+0.65%). These are sums of overlapping
+builder wall intervals, not CPU or billed time. Main has 807 → 794 Cargo compilation
+messages; FeynKit has 896 in each variant. The new compiler-state outputs increase
+total produced project NAR content from 29.88 → 31.54 GiB and 44.20 → 46.69 GiB
+respectively, despite slightly smaller ordinary artifact totals. This is local
+output storage, not restored content or network traffic. There is **no demonstrated
+cold resource saving**.
+
+Completion improvements are uneven. Main core/Python/integration groups finish
+roughly 2½–3 minutes earlier. On FeynKit, extracted-crate tests finish 1m56s earlier
+and core 1m42s earlier, while Clippy finishes 1m10s later, doctests 1m33s later and
+Python 1m02s later. Integration finishes 24 seconds earlier; Python is last.
+
+Waiting matters independently of build speed. FeynKit Clinnet waits **505 → 302
+seconds** after all direct inputs are ready, with all four build slots occupied
+during over 98% of that wait. Its archive becomes ready 237 seconds later, so its
+runtime group still finishes 35 seconds later. These are observed local delays,
+not a NixCI anomaly or guaranteed removable critical-path time. The portable JSON
+records direct-input readiness, waiting and completion for every runtime group.
+
+Each variant starts in a fresh store with the same external seed within its
+layout, no project outputs or compiler state, CPU affinity 8–15, eight cores and
+four Nix jobs. Remote substitution, remote builders and upload hooks are disabled.
+Evaluation/graph inspection and setup copies are separately recorded. Store
+validation and other preflight work are excluded; those fields do not sum to
+launch-to-finish time. Memory, storage and other host workloads remain shared.
+
+Evidence is under `/tmp/ci-dependency-reuse-audit/cold-followup/`, including each
+layout's `comparison.json` and `detailed-summary.json`. After all four builds,
+postprocessing needed a missing extraction directory created for nextest. The
+original collector and failed logs are preserved alongside the corrected copy.
+The scratch summary parser also needed to handle nextest's `(3 slow)` annotation
+before `67 skipped`; corrected counts match 127 skipped on both FeynKit variants.
+Original summaries are retained. No timed build or test assertion changed or was rerun.
 
 ## Integrated NixCI measurements, 10 September 2026
 
@@ -130,6 +198,8 @@ All three approved runs pass, but **the unchanged run misses the zero-Cargo-
 recompilation and final-success goals**. These scenarios use the same implementation;
 the seed is not an implementation baseline and cannot supply a causal speedup
 percentage. It also uses shared caches, so it is not a controlled cold run.
+The [9 September remote improvement](ci-measurement-results.md) predates this
+implementation. These three runs do not isolate an additional NixCI speedup.
 
 | Main scenario | Required checks | Whole suite | Push to required | Observed worker minutes | Reported restored content |
 |---|---:|---:|---:|---:|---:|
@@ -169,6 +239,17 @@ Two distinct problems remain:
   starts five and sixteen minutes after its first successful upload. The unchanged
   doctest output is also rebuilt after its seed upload. Successful upload messages
   do not establish later cache availability; the logs do not identify the root cause.
+
+Three package archives (`gammaloop-tracing-filter-macros`, `symbolica-utils` and
+`linnet-py`) list zero test cases in both layouts. Their unchanged-run binary
+workers consume 100.44 observed worker-seconds and restore 1.12 GiB, compiling
+nothing. A separate `linnet-py` dependency producer takes 64.92 seconds and logs
+32 Cargo compilation messages, although no other workspace package depends on
+`linnet-py`. Its own test binaries still consume that library. The other two
+libraries are needed by real test consumers. These are additional preparation
+costs, but no completion-time saving is established: the binary workers start
+after the ordinary groups finish. Empty inventories alone do not establish that
+compile-only coverage is redundant, so no coverage removal is included.
 
 A build-free scheduling probe removes only the per-commit identity change. Across
 the controlled GammaLoop edit, **7 wrappers change instead of 33**, exactly matching
@@ -215,13 +296,37 @@ experiment below is not part of these runs. The final five Python tests execute
 in 0.47 seconds, while their check completes last at 19m10s. Final success follows
 11 seconds later, meeting the final-tail goal for this scenario.
 
-The four controlled local cold runs are still in progress. No integrated cold
-speedup or causal remote implementation speedup is claimed yet.
+The controlled local cold follow-up is reported above. It does not establish
+a causal remote implementation speedup.
 
 Detailed JSON, CSV, raw logs, replaced streams and snapshots are retained under
 `/tmp/gammaloop-ci-validation/cargo-parity-main/nixci-approved-three/`. The portable
 JSON beside this document includes all three final scenarios, per-check completion
 and execution labels, and their limitations.
+
+## Syd's suggestions and the remaining cache question
+
+Synchronous dependency discovery is already enabled in this candidate. We retain
+our explicit generated graph, so this does not adopt all of [PR #104](https://github.com/alphal00p/gammaloop/pull/104).
+[PR #105](https://github.com/alphal00p/gammaloop/pull/105) remains a separate local
+cache-upload setup; neither PR was merged during this experiment. Local validation
+runs with upload hooks disabled so transfers do not contaminate its build clock.
+
+There is one conditional correction to propose for #105: its
+[pinned hook](https://github.com/alphal00p/gammaloop/blob/13d6826ddee00d7cb4cbd733a837d23c248658f3/flake.nix#L2517-L2533)
+changes only `XDG_CACHE_HOME`, but Nix 2.34.7
+[uses `NIX_CACHE_HOME` first when inherited](https://github.com/NixOS/nix/blob/2.34.7/src/libutil/users.cc#L15-L24).
+Explicitly setting `NIX_CACHE_HOME="$XDG_CACHE_HOME/nix"` in that hook would preserve
+its intended temporary cache isolation. A minimal patch is saved locally; it has
+not been applied or sent.
+
+Nix also [caches missing paths for one hour by default](https://github.com/NixOS/nix/blob/2.34.7/src/libstore/include/nix/store/globals.hh#L55-L73),
+and [checks process memory before its disk cache](https://github.com/NixOS/nix/blob/2.34.7/src/libstore/store-api.cc#L608-L650).
+A separate upload cache does not clear another consumer's earlier missing-path
+entry. This is a source-supported mechanism to investigate with Syd, **not the
+established cause of our duplicate builds**: hosted worker environments, cache
+sharing and actual expiry settings are unknown. The source audit and proposed
+local-hook patch are under `/tmp/ci-dependency-reuse-audit/narinfo-cache-audit/`.
 
 ## Separate Python artifact-reuse experiment
 
@@ -230,19 +335,47 @@ test-library artifacts. Its Python features, ABI, interpreter, fixtures and test
 selection stay unchanged. The old production preparation graph is absent from
 both the candidate module and its runtime check.
 
-Module preparation takes **245.37 seconds** with 14 Cargo compilation messages;
-Symbolica and vakint are reused. The remaining Python-specific variants still
-compile. Packaging compiles nothing. The runtime check takes **1.77 seconds**,
-including **0.70 seconds executing the same five passing tests**, with an exact
-inventory match. There is no previous-revision incremental state for this Python
-variant yet.
+A controlled pair starts from two fresh stores seeded with exactly the same
+ordinary test artifacts and external prerequisites (16.39 GiB of logical NAR
+content). Python-specific/production preparation and compiler-state outputs are
+absent from both seeds. Both variants use CPUs 8–15, eight cores, four Nix jobs,
+no remote builders/substitution and no upload hook. This measures **Python
+preparation after ordinary artifacts are available**, not a project-cold build
+or a source edit. Seed copies and validation are outside the timing.
 
-This experiment is not included in commit `5b87a850e` or its three approved NixCI
-runs. The older 914.17-second runtime phase included ordinary tests in parallel,
-so it cannot supply an isolated Python speedup percentage. A paired preparation
-measurement and the FeynKit Python layout still need validation before integration.
-Evidence: `python-graph-probe/timing-v1/{phases,result}.json` under the main
-measurement directory.
+| Measurement | Existing production preparation | Reuse API test-library artifacts |
+|---|---:|---:|
+| Python module preparation | 14m36s | 3m26s |
+| Same five-test check | 1.62s | 1.66s |
+| Preparation plus test check | 14m38s | 3m27s |
+| Cargo compilation messages | 288 | 14 |
+| Preparation builders | 108 | 3 |
+| Module builder occupancy (minutes) | 18.72 | 3.42 |
+
+Module preparation improves by **76.53%** in this pair; preparation plus the
+five-test check improves by **76.38%**. Exact executed test names match and all
+five pass. Runtime checks compile nothing; exact unchanged repeats start zero
+builders. Module runtime-closure NAR content is slightly smaller, 188.46 → 186.88
+MB across seven paths, so this does not expand that final closure. These sizes
+are local logical content, not transferred bytes. Builder occupancy sums local
+builder wall intervals, not CPU or billed time. No prior-revision incremental
+state is used for this Python variant.
+
+The earlier unpaired candidate observation was 245.37 seconds. It is retained
+as history, not combined with this pair. The older 914.17-second mixed runtime
+phase also ran ordinary tests and is not an isolated Python baseline.
+
+**This experiment remains unintegrated.** It is not part of `5b87a850e` or the three
+approved NixCI runs, and does not establish full CI completion savings. In the
+measured main cold candidate, the Python module was already ready roughly 170
+seconds before the final integration group completed; an isolated module gain
+cannot simply be subtracted from that total. Full required-check latency and
+FeynKit's Python layout/cache boundaries still need validation before integration.
+
+Evidence: `/tmp/ci-dependency-reuse-audit/cold-followup/python-pair/`, including
+`plan.json`, `comparison.json`, exact five-test inventories and redacted phase
+logs. The prior observation remains under `python-graph-probe/timing-v1/` in the
+main measurement directory.
 
 ## Main source-edit measurement, 9 September 2026
 
@@ -293,12 +426,11 @@ binaries, preserving fixture-only invalidation boundaries. Source filters, profi
 archive commands, output names and scheduling are unchanged.
 
 In the source-edit measurement, 13 of 16 package test archives stay unchanged.
-The remaining work is still substantial: GammaLoop's dependency stage recompiles
-Symbolica and several unchanged workspace libraries, and each affected package
-still has separate library and test compilation. This change does not provide
-previous-revision incremental compiler state.
+That earlier candidate still rebuilt Symbolica and several unchanged workspace
+libraries and lacked previous-revision incremental compiler state. Each affected
+package retained separate library and test compilation.
 
-## FeynKit and rejected approaches
+## Earlier FeynKit and rejected approaches
 
 On the isolated FeynKit integration revision `07d0efc91`, the candidate has exactly
 the baseline's invalidation sets for GammaLoop, Python-binding, CFF, model, embedded
@@ -314,7 +446,7 @@ A trial that made downstream libraries inherit their parents' combined library/t
 artifacts was rejected: an embedded fixture edit invalidated 13 FeynKit test-cache
 entries instead of seven. The smaller candidate preserves seven.
 
-## Incremental-state experiment
+## Earlier incremental-state experiment
 
 A separate, unintegrated GammaLoop-only probe explicitly gives the edited Nix
 producer the preceding revision's compiler cache. It rebuilds GammaLoop in
@@ -383,8 +515,8 @@ Local evidence is under `/tmp/gammaloop-ci-validation/cargo-parity-main/`:
 The previous Cargo and Nix measurements are documented in
 [the native comparison](ci-main-native-comparison.md). The integrated implementation above applies the resulting compiler-state experiment
 separately to each affected library and test producer. The integrated results
-above measure remote transfer overhead; controlled cold completion and the
-remaining artifact-merge overhead are separate validation steps.
+above measure remote transfer overhead. The completed cold pairs are reported
+above; eliminating remaining artifact-merge overhead is a separate experiment.
 
 The portable [timing and validation summary](ci-cargo-parity-results.json) is
 committed alongside this document. Detailed integrated evidence in the same directory:

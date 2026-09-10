@@ -382,6 +382,9 @@ resource limits within each pair. Record the exact revisions and suite URLs
 before comparing. Do not call the first remote run cold: shared caches may
 already contain its inputs. Allow one ambiguous pair to repeat, for **14 suites
 maximum**; the collector itself launches none.
+The user subsequently approved one additional main suite and then three integrated
+main suites, raising the campaign allowance to 18. Those three integrated suites
+are complete; [their results](ci-cargo-parity.md) do not authorize further submissions.
 
 In addition, run project-cold builds locally in disposable stores with identical
 limits for both variants of both layouts. Inspect derivations and use targeted

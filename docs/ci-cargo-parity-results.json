@@ -3,7 +3,7 @@
   "craneRevision": "eb35abda9f232cc6610b1d1e3200d15c49b7ac54",
   "baselineSourceRevision": "5181661ec340ebfb181a0045dac79fcec4f35525",
   "comparisonScope": {
-    "scenario": "equivalent GammaLoop implementation edit from independently prepared application revision",
+    "scenario": "local equivalent GammaLoop implementation edit from independently prepared application revision",
     "cpus": [
       8,
       9,
@@ -88,14 +88,27 @@
       "doctestsIgnored": 20,
       "totalSeconds": 613.9324829440448
     },
-    "feynkitRuntime": "passed"
+    "feynkitRuntime": "passed",
+    "feynkitBoundaries": {
+      "checker": "passed",
+      "selfTest": "passed",
+      "extractedLibrariesIndependentOfGammaLoopAndPrivateWorkspaceHack": true
+    },
+    "feynkitPythonStubs": {
+      "workflowPreserved": true,
+      "generationCheckRerun": false,
+      "reason": "Separate python_stubgen executable, optional dependencies and default dev profile are outside the measured CI roots; the Python module is not that generator",
+      "command": "cargo run --locked -p feynkit-py --features python_stubgen --bin feynkit-stubgen",
+      "workflowSource": "FeynKit .github/workflows/continuous-integration.yml:202-206"
+    }
   },
   "limitations": [
-    "No controlled cold comparison",
+    "Controlled cold pairs passed full measured coverage; single observations on a shared host, with no cold builder-time saving.",
     "Compiler-state baseline refresh is deliberate, not automatic",
     "Remote seed and warm scenarios do not form a baseline/candidate implementation pair.",
     "Warm resource accounting is incomplete after a replaced worker log; the seed observer also had a recorded gap.",
-    "No network byte or CHF measurement; log-reported content and worker spans are proxies."
+    "No network byte or CHF measurement; log-reported content and worker spans are proxies.",
+    "FeynKit Python-stub workflow is preserved; its separate generation/staleness check was not rerun."
   ],
   "implementationCommit": "5b87a850e",
   "compilerStateStorage": {
@@ -105,10 +118,10 @@
     "note": "Separate from normal compiled-artifact outputs; producer wrappers publish this state."
   },
   "remainingAcceptance": [
-    "Four controlled project-cold runs, paired within main and FeynKit",
     "Reliable cross-worker reuse: unchanged NixCI outputs are still rebuilt",
     "Warm zero-recompilation and final-success goals failed in this sample",
-    "No causal remote baseline/candidate speedup established; the source edit includes retries and duplicate builds"
+    "No additional remote speedup established for the 10 September integrated implementation; the source edit includes retries and duplicate builds",
+    "Python artifact-sharing experiment passes isolated main preparation and five-test checks; full-suite completion benefit and FeynKit Python validation remain unmeasured."
   ],
   "feynkit": {
     "applicationRevision": "07d0efc910cf4c3175142c808e476fe7e393f815",
@@ -603,5 +616,966 @@
       "gammaloop-python-module"
     ],
     "matchesRawArtifactChanges": true
+  },
+  "coldFollowup": {
+    "status": "All four cold builds and exact archive/nextest/doctest coverage gates passed",
+    "baselineMeaning": "Earlier narrow CI candidate before b365086c8 and 5b87a850e; not original main CI",
+    "scope": "Full runtime groups including Python, Clippy, licensed doctests, formatting, generated graph/configuration and package archives",
+    "settings": {
+      "cores": 8,
+      "maxJobs": 4,
+      "sandbox": true,
+      "substituters": [],
+      "postBuildHook": "",
+      "builders": "",
+      "runtimeTests": true,
+      "licensedDoctests": true,
+      "sourceEvaluationTimed": false,
+      "sequentialWithinLayout": true,
+      "affinity": "8-15"
+    },
+    "samplesPerVariant": 1,
+    "projectCold": true,
+    "sharedHost": true,
+    "main": {
+      "trials": {
+        "baseline": {
+          "sourceRevision": "b9d6071fc3fbd8c5dc42d31052d1ea90daf02cb4",
+          "sourceSnapshotHash": "872501d54a7a5339fbe5bb4cf81cacdb89ddb611e2ec606597a998c8573ffc11",
+          "rootCount": 19,
+          "runtimeGroupCount": 7,
+          "archiveCount": 17,
+          "allRootsRegistered": true,
+          "exactRepeatZeroBuilds": true,
+          "fullScopeSeconds": 2786.023496719,
+          "evaluationSeconds": 13.512167277,
+          "repeatSeconds": 0.7021380660003051,
+          "groupCompletionSeconds": {
+            "gammaloop-nextest-clinnet": 770.894838014,
+            "gammaloop-nextest-core": 2565.487947244,
+            "gammaloop-nextest-integration": 2785.962400949,
+            "gammaloop-nextest-linnet": 1813.695707618,
+            "gammaloop-nextest-python-api": 2630.965709726,
+            "gammaloop-nextest-spenso": 1822.695351053,
+            "gammaloop-nextest-vakint": 850.909658534
+          },
+          "rootCompletionSeconds": {
+            "gammaloop-clippy": 1282.154998681,
+            "gammaloop-doctest": 1795.770438112,
+            "gammaloop-fmt": 4.475795803999994,
+            "gammaloop-guppy-workspace-graph": 35.290085309,
+            "gammaloop-nextest-binaries-clinnet": 753.707631593,
+            "gammaloop-nextest-binaries-core": 2542.03554877,
+            "gammaloop-nextest-binaries-integration": 2630.973279422,
+            "gammaloop-nextest-binaries-linnet": 1780.143690148,
+            "gammaloop-nextest-binaries-python-api": 2628.660971454,
+            "gammaloop-nextest-binaries-spenso": 1812.874421585,
+            "gammaloop-nextest-binaries-vakint": 770.985583392,
+            "gammaloop-nextest-clinnet": 770.894838014,
+            "gammaloop-nextest-core": 2565.487947244,
+            "gammaloop-nextest-integration": 2785.962400949,
+            "gammaloop-nextest-linnet": 1813.695707618,
+            "gammaloop-nextest-python-api": 2630.965709726,
+            "gammaloop-nextest-spenso": 1822.695351053,
+            "gammaloop-nextest-vakint": 850.909658534,
+            "gammaloop-python-module": 2231.8536500789996
+          },
+          "builderOccupancySeconds": 7399.143977691003,
+          "compilationMessages": 807,
+          "artifactNarBytes": {
+            "otherProjectOutput": 378716648,
+            "testArchive": 689394560,
+            "mergedCargoArtifacts": 21326328496,
+            "cargoArtifacts": 9687148352
+          },
+          "localRuntimeQueueing": {
+            "gammaloop-nextest-clinnet": {
+              "lastDirectInputReadySeconds": 753.707631593,
+              "startSeconds": 770.2612566569999,
+              "stopSeconds": 770.894838014,
+              "waitAfterDirectInputsSeconds": 16.553625063999903,
+              "waitWithFourBuildersSeconds": 16.09816825900009,
+              "fractionWithFourBuilders": 0.9724859779511184
+            },
+            "gammaloop-nextest-core": {
+              "lastDirectInputReadySeconds": 2542.03554877,
+              "startSeconds": 2542.0964962979997,
+              "stopSeconds": 2565.487947244,
+              "waitAfterDirectInputsSeconds": 0.060947527999815065,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-integration": {
+              "lastDirectInputReadySeconds": 2630.973279422,
+              "startSeconds": 2631.0172349319996,
+              "stopSeconds": 2785.962400949,
+              "waitAfterDirectInputsSeconds": 0.0439555099997051,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-linnet": {
+              "lastDirectInputReadySeconds": 1780.143690148,
+              "startSeconds": 1809.517045837,
+              "stopSeconds": 1813.695707618,
+              "waitAfterDirectInputsSeconds": 29.373355689000164,
+              "waitWithFourBuildersSeconds": 28.539697968000155,
+              "fractionWithFourBuilders": 0.9716185739952007
+            },
+            "gammaloop-nextest-python-api": {
+              "lastDirectInputReadySeconds": 2628.660971454,
+              "startSeconds": 2628.7083460559998,
+              "stopSeconds": 2630.965709726,
+              "waitAfterDirectInputsSeconds": 0.0473746019997634,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-spenso": {
+              "lastDirectInputReadySeconds": 1812.874421585,
+              "startSeconds": 1812.972538888,
+              "stopSeconds": 1822.695351053,
+              "waitAfterDirectInputsSeconds": 0.0981173029999809,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-vakint": {
+              "lastDirectInputReadySeconds": 770.985583392,
+              "startSeconds": 820.702532953,
+              "stopSeconds": 850.909658534,
+              "waitAfterDirectInputsSeconds": 49.71694956099998,
+              "waitWithFourBuildersSeconds": 49.49213625999994,
+              "fractionWithFourBuilders": 0.9954781356663042
+            }
+          },
+          "archiveCompilationMessages": 0,
+          "setupCopySeconds": 9.580438428,
+          "nextest": {
+            "executed": 1633,
+            "passed": 1633,
+            "skippedOrIgnored": 155
+          },
+          "doctests": {
+            "passed": 43,
+            "ignored": 20
+          },
+          "normalizedArchiveInventorySha256": "ed4138af91d3433690a98eb8e915fad86fd8a71689510e286340b9439ab4ad89",
+          "exactDoctestCasesSha256": "05387680ded191c43f557d723e2687e2dbb6f58141280d98236aff7362f55b8e"
+        },
+        "candidate": {
+          "sourceRevision": "5b87a850e77900029a487b3b8c77d1c7138fa8da",
+          "sourceSnapshotHash": "acce4376c8acb5ec4beb42f0c8b6e5aa5d60d5c62c593e546e4acda27cf44c78",
+          "rootCount": 19,
+          "runtimeGroupCount": 7,
+          "archiveCount": 17,
+          "allRootsRegistered": true,
+          "exactRepeatZeroBuilds": true,
+          "fullScopeSeconds": 2641.4578385340005,
+          "evaluationSeconds": 18.359288335,
+          "repeatSeconds": 0.7697692849999294,
+          "groupCompletionSeconds": {
+            "gammaloop-nextest-clinnet": 772.1596299220002,
+            "gammaloop-nextest-core": 2377.744646485,
+            "gammaloop-nextest-integration": 2641.385359003,
+            "gammaloop-nextest-linnet": 1680.2364061679998,
+            "gammaloop-nextest-python-api": 2480.834304222,
+            "gammaloop-nextest-spenso": 1691.5948287359997,
+            "gammaloop-nextest-vakint": 893.177848671
+          },
+          "rootCompletionSeconds": {
+            "gammaloop-clippy": 1300.035810383,
+            "gammaloop-doctest": 1760.1338589850002,
+            "gammaloop-fmt": 4.642258793000132,
+            "gammaloop-guppy-workspace-graph": 35.361728134999986,
+            "gammaloop-nextest-binaries-clinnet": 761.4063964430001,
+            "gammaloop-nextest-binaries-core": 2342.756375631,
+            "gammaloop-nextest-binaries-integration": 2481.874869425,
+            "gammaloop-nextest-binaries-linnet": 1493.6351648089997,
+            "gammaloop-nextest-binaries-python-api": 2479.419062881,
+            "gammaloop-nextest-binaries-spenso": 1685.4591387790003,
+            "gammaloop-nextest-binaries-vakint": 817.1999533200003,
+            "gammaloop-nextest-clinnet": 772.1596299220002,
+            "gammaloop-nextest-core": 2377.744646485,
+            "gammaloop-nextest-integration": 2641.385359003,
+            "gammaloop-nextest-linnet": 1680.2364061679998,
+            "gammaloop-nextest-python-api": 2480.834304222,
+            "gammaloop-nextest-spenso": 1691.5948287359997,
+            "gammaloop-nextest-vakint": 893.177848671,
+            "gammaloop-python-module": 2470.8719206340006
+          },
+          "builderOccupancySeconds": 7594.422540633005,
+          "compilationMessages": 794,
+          "artifactNarBytes": {
+            "cargoArtifacts": 9581933544,
+            "mergedCargoArtifacts": 20811596728,
+            "otherProjectOutput": 378713688,
+            "testArchive": 684101824,
+            "compilerState": 2410262024
+          },
+          "localRuntimeQueueing": {
+            "gammaloop-nextest-clinnet": {
+              "lastDirectInputReadySeconds": 761.4063964430001,
+              "startSeconds": 771.0987031390001,
+              "stopSeconds": 772.1596299220002,
+              "waitAfterDirectInputsSeconds": 9.69230669600006,
+              "waitWithFourBuildersSeconds": 9.324622531999808,
+              "fractionWithFourBuilders": 0.9620643283861423
+            },
+            "gammaloop-nextest-core": {
+              "lastDirectInputReadySeconds": 2342.756375631,
+              "startSeconds": 2342.83974019,
+              "stopSeconds": 2377.744646485,
+              "waitAfterDirectInputsSeconds": 0.08336455900007422,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-integration": {
+              "lastDirectInputReadySeconds": 2481.874869425,
+              "startSeconds": 2481.921706167,
+              "stopSeconds": 2641.385359003,
+              "waitAfterDirectInputsSeconds": 0.046836742000323284,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-linnet": {
+              "lastDirectInputReadySeconds": 1493.6351648089997,
+              "startSeconds": 1678.7332851529998,
+              "stopSeconds": 1680.2364061679998,
+              "waitAfterDirectInputsSeconds": 185.0981203440001,
+              "waitWithFourBuildersSeconds": 183.14628489100278,
+              "fractionWithFourBuilders": 0.989455130882097
+            },
+            "gammaloop-nextest-python-api": {
+              "lastDirectInputReadySeconds": 2479.419062881,
+              "startSeconds": 2479.4686193129996,
+              "stopSeconds": 2480.834304222,
+              "waitAfterDirectInputsSeconds": 0.0495564319994628,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-spenso": {
+              "lastDirectInputReadySeconds": 1685.4591387790003,
+              "startSeconds": 1685.517050229,
+              "stopSeconds": 1691.5948287359997,
+              "waitAfterDirectInputsSeconds": 0.05791144999966491,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-vakint": {
+              "lastDirectInputReadySeconds": 817.1999533200003,
+              "startSeconds": 870.8762698900001,
+              "stopSeconds": 893.177848671,
+              "waitAfterDirectInputsSeconds": 53.67631656999981,
+              "waitWithFourBuildersSeconds": 53.40278623500001,
+              "fractionWithFourBuilders": 0.9949040777669031
+            }
+          },
+          "archiveCompilationMessages": 0,
+          "setupCopySeconds": 10.246908059999813,
+          "nextest": {
+            "executed": 1633,
+            "passed": 1633,
+            "skippedOrIgnored": 155
+          },
+          "doctests": {
+            "passed": 43,
+            "ignored": 20
+          },
+          "normalizedArchiveInventorySha256": "ed4138af91d3433690a98eb8e915fad86fd8a71689510e286340b9439ab4ad89",
+          "exactDoctestCasesSha256": "05387680ded191c43f557d723e2687e2dbb6f58141280d98236aff7362f55b8e"
+        }
+      },
+      "candidateToBaselineRatio": 0.9481103952083502,
+      "coldWithinTenPercent": true,
+      "exactArchiveInventoryMatch": true,
+      "executedNextestMatchesSelectedInventory": true,
+      "exactDoctestNamesAndStatusesMatch": true,
+      "builderOccupancyChangePercent": 2.6392047989711065,
+      "compiledMessageChanges": {
+        "Compiling env_filter v1.0.1": {
+          "baseline": 4,
+          "candidate": 3
+        },
+        "Compiling env_logger v0.11.10": {
+          "baseline": 4,
+          "candidate": 3
+        },
+        "Compiling gammaloop-tracing-filter v0.1.0 (/build/source/crates/gammaloop-tracing-filter)": {
+          "baseline": 7,
+          "candidate": 6
+        },
+        "Compiling idenso v0.3.0 (/build/source/crates/idenso)": {
+          "baseline": 7,
+          "candidate": 6
+        },
+        "Compiling linnet v0.17.0 (/build/source/crates/linnet)": {
+          "baseline": 14,
+          "candidate": 13
+        },
+        "Compiling spenso v0.6.0 (/build/source/crates/spenso)": {
+          "baseline": 10,
+          "candidate": 9
+        },
+        "Compiling spenso-hep-lib v0.1.7 (/build/source/crates/spenso-hep-lib)": {
+          "baseline": 7,
+          "candidate": 6
+        },
+        "Compiling spenso-macros v0.3.2 (/build/source/crates/spenso-macros)": {
+          "baseline": 10,
+          "candidate": 9
+        },
+        "Compiling string-template-plus v0.4.3": {
+          "baseline": 3,
+          "candidate": 2
+        },
+        "Compiling symbolica v2.2.0 (https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a)": {
+          "baseline": 6,
+          "candidate": 5
+        },
+        "Compiling symbolica-utils v0.1.0 (/build/source/crates/symbolica-utils)": {
+          "baseline": 8,
+          "candidate": 7
+        },
+        "Compiling titlecase v2.2.1": {
+          "baseline": 3,
+          "candidate": 2
+        },
+        "Compiling vakint v0.1.2 (/build/source/crates/vakint)": {
+          "baseline": 8,
+          "candidate": 7
+        }
+      },
+      "evidence": "/tmp/ci-dependency-reuse-audit/cold-followup/main/detailed-summary.json"
+    },
+    "feynkit": {
+      "trials": {
+        "baseline": {
+          "sourceRevision": "07d0efc910cf4c3175142c808e476fe7e393f815",
+          "sourceSnapshotHash": "829b07dfce694c887efcb986d5600050e8f88e85b92242e9e762c08e66e4aef7",
+          "rootCount": 21,
+          "runtimeGroupCount": 8,
+          "archiveCount": 26,
+          "allRootsRegistered": true,
+          "exactRepeatZeroBuilds": true,
+          "fullScopeSeconds": 2894.680808483,
+          "evaluationSeconds": 26.399187773,
+          "repeatSeconds": 0.7065198679999448,
+          "groupCompletionSeconds": {
+            "gammaloop-nextest-clinnet": 1591.7746741160001,
+            "gammaloop-nextest-core": 2523.0577693500004,
+            "gammaloop-nextest-feynkit": 2382.16542256,
+            "gammaloop-nextest-integration": 2894.599743626,
+            "gammaloop-nextest-linnet": 1594.392860847,
+            "gammaloop-nextest-python-api": 2821.7708111,
+            "gammaloop-nextest-spenso": 1601.306916911,
+            "gammaloop-nextest-vakint": 1645.8170540209999
+          },
+          "rootCompletionSeconds": {
+            "gammaloop-clippy": 2282.0228307469997,
+            "gammaloop-doctest": 2721.645359477,
+            "gammaloop-fmt": 4.993656374999999,
+            "gammaloop-guppy-workspace-graph": 50.099161591,
+            "gammaloop-nextest-binaries-clinnet": 1085.335272885,
+            "gammaloop-nextest-binaries-core": 2492.0616022060003,
+            "gammaloop-nextest-binaries-feynkit": 2369.610446816,
+            "gammaloop-nextest-binaries-integration": 2702.460171288,
+            "gammaloop-nextest-binaries-linnet": 1566.5713920160001,
+            "gammaloop-nextest-binaries-python-api": 2697.3144833590004,
+            "gammaloop-nextest-binaries-spenso": 1590.457181981,
+            "gammaloop-nextest-binaries-vakint": 1590.57821098,
+            "gammaloop-nextest-clinnet": 1591.7746741160001,
+            "gammaloop-nextest-core": 2523.0577693500004,
+            "gammaloop-nextest-feynkit": 2382.16542256,
+            "gammaloop-nextest-integration": 2894.599743626,
+            "gammaloop-nextest-linnet": 1594.392860847,
+            "gammaloop-nextest-python-api": 2821.7708111,
+            "gammaloop-nextest-spenso": 1601.306916911,
+            "gammaloop-nextest-vakint": 1645.8170540209999,
+            "gammaloop-python-module": 2820.5862740449998
+          },
+          "builderOccupancySeconds": 9758.551017738002,
+          "compilationMessages": 896,
+          "artifactNarBytes": {
+            "otherProjectOutput": 437552240,
+            "testArchive": 878601776,
+            "cargoArtifacts": 14057585416,
+            "mergedCargoArtifacts": 32086442464
+          },
+          "localRuntimeQueueing": {
+            "gammaloop-nextest-clinnet": {
+              "lastDirectInputReadySeconds": 1085.335272885,
+              "startSeconds": 1590.632153677,
+              "stopSeconds": 1591.7746741160001,
+              "waitAfterDirectInputsSeconds": 505.2968807919999,
+              "waitWithFourBuildersSeconds": 498.47517816099935,
+              "fractionWithFourBuilders": 0.9864996146021954
+            },
+            "gammaloop-nextest-core": {
+              "lastDirectInputReadySeconds": 2492.0616022060003,
+              "startSeconds": 2492.172429104,
+              "stopSeconds": 2523.0577693500004,
+              "waitAfterDirectInputsSeconds": 0.11082689799968648,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-feynkit": {
+              "lastDirectInputReadySeconds": 2369.610446816,
+              "startSeconds": 2375.277443576,
+              "stopSeconds": 2382.16542256,
+              "waitAfterDirectInputsSeconds": 5.666996760000075,
+              "waitWithFourBuildersSeconds": 5.2269547519995285,
+              "fractionWithFourBuilders": 0.9223500512464489
+            },
+            "gammaloop-nextest-integration": {
+              "lastDirectInputReadySeconds": 2702.460171288,
+              "startSeconds": 2702.562197594,
+              "stopSeconds": 2894.599743626,
+              "waitAfterDirectInputsSeconds": 0.10202630599997065,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-linnet": {
+              "lastDirectInputReadySeconds": 1566.5713920160001,
+              "startSeconds": 1591.877510562,
+              "stopSeconds": 1594.392860847,
+              "waitAfterDirectInputsSeconds": 25.30611854599988,
+              "waitWithFourBuildersSeconds": 24.561623986000313,
+              "fractionWithFourBuilders": 0.970580452365847
+            },
+            "gammaloop-nextest-python-api": {
+              "lastDirectInputReadySeconds": 2820.5862740449998,
+              "startSeconds": 2820.6353889310003,
+              "stopSeconds": 2821.7708111,
+              "waitAfterDirectInputsSeconds": 0.04911488600055236,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-spenso": {
+              "lastDirectInputReadySeconds": 1590.457181981,
+              "startSeconds": 1594.455709244,
+              "stopSeconds": 1601.306916911,
+              "waitAfterDirectInputsSeconds": 3.9985272629999145,
+              "waitWithFourBuildersSeconds": 3.7227930890003336,
+              "fractionWithFourBuilders": 0.9310410669070417
+            },
+            "gammaloop-nextest-vakint": {
+              "lastDirectInputReadySeconds": 1590.57821098,
+              "startSeconds": 1601.359984685,
+              "stopSeconds": 1645.8170540209999,
+              "waitAfterDirectInputsSeconds": 10.781773704999978,
+              "waitWithFourBuildersSeconds": 10.50907839100023,
+              "fractionWithFourBuilders": 0.9747077501846206
+            }
+          },
+          "archiveCompilationMessages": 0,
+          "setupCopySeconds": 10.657182580999994,
+          "nextest": {
+            "executed": 1834,
+            "passed": 1834,
+            "skippedOrIgnored": 127
+          },
+          "doctests": {
+            "passed": 62,
+            "ignored": 20
+          },
+          "normalizedArchiveInventorySha256": "9f5204885c853c6f2a30c09a70bb85383c720157b940cb5904e5e8e1fa881887",
+          "exactDoctestCasesSha256": "c9e99f96bbd46a13632a69a9d4d8bdea02199646a3e60839688cbf10f6d2c074"
+        },
+        "candidate": {
+          "sourceRevision": "07d0efc910cf4c3175142c808e476fe7e393f815",
+          "sourceSnapshotHash": "a480ac2775381ad5152de35c5e03336aa8782709010ce3a8536434457648ffdf",
+          "rootCount": 21,
+          "runtimeGroupCount": 8,
+          "archiveCount": 26,
+          "allRootsRegistered": true,
+          "exactRepeatZeroBuilds": true,
+          "fullScopeSeconds": 2883.7439732929997,
+          "evaluationSeconds": 22.623534846000002,
+          "repeatSeconds": 0.7468403599997983,
+          "groupCompletionSeconds": {
+            "gammaloop-nextest-clinnet": 1626.3064449850003,
+            "gammaloop-nextest-core": 2420.930369427,
+            "gammaloop-nextest-feynkit": 2266.2033914100007,
+            "gammaloop-nextest-integration": 2870.9810567100003,
+            "gammaloop-nextest-linnet": 1631.680603565,
+            "gammaloop-nextest-python-api": 2883.662451297,
+            "gammaloop-nextest-spenso": 1647.4216233120003,
+            "gammaloop-nextest-vakint": 1714.0263172660004
+          },
+          "rootCompletionSeconds": {
+            "gammaloop-clippy": 2351.995643747,
+            "gammaloop-doctest": 2814.4009857410006,
+            "gammaloop-fmt": 4.7233601610003975,
+            "gammaloop-guppy-workspace-graph": 51.23623427599995,
+            "gammaloop-nextest-binaries-clinnet": 1322.4926084209997,
+            "gammaloop-nextest-binaries-core": 2394.5143191290003,
+            "gammaloop-nextest-binaries-feynkit": 2199.2938706910004,
+            "gammaloop-nextest-binaries-integration": 2609.6573300560003,
+            "gammaloop-nextest-binaries-linnet": 1591.378857163,
+            "gammaloop-nextest-binaries-python-api": 2607.5705415900006,
+            "gammaloop-nextest-binaries-spenso": 1613.4727813990005,
+            "gammaloop-nextest-binaries-vakint": 1626.5583047700002,
+            "gammaloop-nextest-clinnet": 1626.3064449850003,
+            "gammaloop-nextest-core": 2420.930369427,
+            "gammaloop-nextest-feynkit": 2266.2033914100007,
+            "gammaloop-nextest-integration": 2870.9810567100003,
+            "gammaloop-nextest-linnet": 1631.680603565,
+            "gammaloop-nextest-python-api": 2883.662451297,
+            "gammaloop-nextest-spenso": 1647.4216233120003,
+            "gammaloop-nextest-vakint": 1714.0263172660004,
+            "gammaloop-python-module": 2882.5024795820004
+          },
+          "builderOccupancySeconds": 9821.823288183994,
+          "compilationMessages": 896,
+          "artifactNarBytes": {
+            "compilerState": 2958720344,
+            "cargoArtifacts": 14022800992,
+            "mergedCargoArtifacts": 31840964224,
+            "otherProjectOutput": 437551664,
+            "testArchive": 870365064
+          },
+          "localRuntimeQueueing": {
+            "gammaloop-nextest-clinnet": {
+              "lastDirectInputReadySeconds": 1322.4926084209997,
+              "startSeconds": 1624.8963298209999,
+              "stopSeconds": 1626.3064449850003,
+              "waitAfterDirectInputsSeconds": 302.4037214000002,
+              "waitWithFourBuildersSeconds": 297.3922496789994,
+              "fractionWithFourBuilders": 0.9834278768204312
+            },
+            "gammaloop-nextest-core": {
+              "lastDirectInputReadySeconds": 2394.5143191290003,
+              "startSeconds": 2394.6422368390004,
+              "stopSeconds": 2420.930369427,
+              "waitAfterDirectInputsSeconds": 0.12791771000001972,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-feynkit": {
+              "lastDirectInputReadySeconds": 2199.2938706910004,
+              "startSeconds": 2259.4542958040006,
+              "stopSeconds": 2266.2033914100007,
+              "waitAfterDirectInputsSeconds": 60.1604251130002,
+              "waitWithFourBuildersSeconds": 59.65194097999938,
+              "fractionWithFourBuilders": 0.9915478633662291
+            },
+            "gammaloop-nextest-integration": {
+              "lastDirectInputReadySeconds": 2609.6573300560003,
+              "startSeconds": 2609.710728573,
+              "stopSeconds": 2870.9810567100003,
+              "waitAfterDirectInputsSeconds": 0.05339851699955034,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-linnet": {
+              "lastDirectInputReadySeconds": 1591.378857163,
+              "startSeconds": 1626.6795226410004,
+              "stopSeconds": 1631.680603565,
+              "waitAfterDirectInputsSeconds": 35.30066547800038,
+              "waitWithFourBuildersSeconds": 34.25768712400122,
+              "fractionWithFourBuilders": 0.9704544279866579
+            },
+            "gammaloop-nextest-python-api": {
+              "lastDirectInputReadySeconds": 2882.5024795820004,
+              "startSeconds": 2882.5507008060003,
+              "stopSeconds": 2883.662451297,
+              "waitAfterDirectInputsSeconds": 0.04822122399991713,
+              "waitWithFourBuildersSeconds": 0,
+              "fractionWithFourBuilders": 0.0
+            },
+            "gammaloop-nextest-spenso": {
+              "lastDirectInputReadySeconds": 1613.4727813990005,
+              "startSeconds": 1631.8473515729997,
+              "stopSeconds": 1647.4216233120003,
+              "waitAfterDirectInputsSeconds": 18.374570173999246,
+              "waitWithFourBuildersSeconds": 17.756461250000257,
+              "fractionWithFourBuilders": 0.9663606322136646
+            },
+            "gammaloop-nextest-vakint": {
+              "lastDirectInputReadySeconds": 1626.5583047700002,
+              "startSeconds": 1647.533336239,
+              "stopSeconds": 1714.0263172660004,
+              "waitAfterDirectInputsSeconds": 20.97503146899976,
+              "waitWithFourBuildersSeconds": 20.575352663000103,
+              "fractionWithFourBuilders": 0.9809450199590706
+            }
+          },
+          "archiveCompilationMessages": 0,
+          "setupCopySeconds": 10.383283320000395,
+          "nextest": {
+            "executed": 1834,
+            "passed": 1834,
+            "skippedOrIgnored": 127
+          },
+          "doctests": {
+            "passed": 62,
+            "ignored": 20
+          },
+          "normalizedArchiveInventorySha256": "9f5204885c853c6f2a30c09a70bb85383c720157b940cb5904e5e8e1fa881887",
+          "exactDoctestCasesSha256": "c9e99f96bbd46a13632a69a9d4d8bdea02199646a3e60839688cbf10f6d2c074"
+        }
+      },
+      "candidateToBaselineRatio": 0.9962217474348297,
+      "coldWithinTenPercent": true,
+      "exactArchiveInventoryMatch": true,
+      "executedNextestMatchesSelectedInventory": true,
+      "exactDoctestNamesAndStatusesMatch": true,
+      "builderOccupancyChangePercent": 0.6483777184848716,
+      "compiledMessageChanges": {},
+      "evidence": "/tmp/ci-dependency-reuse-audit/cold-followup/feynkit/detailed-summary.json"
+    },
+    "limits": [
+      "One sequential within-layout pair on a shared host; affinity controls CPUs but not memory/storage contention.",
+      "Full runtime groups including Python, Clippy, doctests, formatting and graph validation; external input preparation/evaluation is untimed and separately recorded.",
+      "No compiler-state/project output was seeded; an exact repeat reuses test results and does not execute tests again.",
+      "NAR sizes and worker activity cannot establish network-byte or CHF costs."
+    ],
+    "evidenceDirectory": "/tmp/ci-dependency-reuse-audit/cold-followup",
+    "clockDefinitions": {
+      "buildSeconds": "Monotonic full-scope Nix build command span after store preparation",
+      "evaluationSeconds": "Source evaluation, recursive derivation inspection and metadata preparation",
+      "setupCopySeconds": "Derivation and input copy phases only; excludes validation/preflight",
+      "builderOccupancySeconds": "Sum of overlapping builder wall spans; not CPU or billed time",
+      "readyWaitingSeconds": "Observed delay after requested direct inputs are ready; not guaranteed removable critical-path time",
+      "launchToCompletionMeasured": false,
+      "acceptanceGate": "Require both archive comparison and detailed-summary exact nextest/doctest gates"
+    },
+    "postprocessing": {
+      "orchestrationResume": "The four measured builds completed, but no orchestration process remained to run their collectors. Root resumed only unfinished postprocessing and the Python pair. Original status files were retained.",
+      "extractionCorrection": {
+        "at": "2026-09-10T14:46:03.041152+00:00",
+        "originalSha256": "03e6560e907ec61653becf83fc6cc76f2003bddd7eb8187ed1c24278a86f1ec8",
+        "correctedSha256": "7334e9189824f4c53d50e8c3a54ad08fe09c9975ad5d8727e73ceb915f77338a",
+        "change": "Create the empty extraction destination required by cargo-nextest before listing each archive. Original collector, failed logs and empty attempt directory preserved. No measured build or assertion changed.",
+        "failureEvidence": "collect-main.stderr",
+        "scope": "Postprocessing only; all four cold build timings and original frozen inputs remain unchanged"
+      },
+      "timedBuildsRerun": false,
+      "projectTestsOrAssertionsChanged": false,
+      "nextestSummaryCountCorrection": {
+        "at": "2026-09-10T15:11:42.832024+00:00",
+        "sourceSha256": "463f0cb1a2b0e8826ba7dc25b5c12bc48b41871133356be2d21a7b54d5232c05",
+        "correctedSha256": "94e84f8ef950cf1b3416a6594dcc826b923d272dcd025d598aef8e449d967c77",
+        "observedLine": "Summary [ 258.232s] 106 tests run: 106 passed (3 slow), 67 skipped",
+        "issue": "The fixed-position scratch regex missed skipped after the slow-test annotation. Use outcome extraction from the summary tail, as the existing repository ci-report.mjs already does.",
+        "scope": "Read-only postprocessing; no test/assertion, build input or timing changed. Original summaries and parser preserved."
+      },
+      "countCorrectionChangesOnlySkippedFields": true
+    }
+  },
+  "emptyArchiveAudit": {
+    "evidence": "/tmp/ci-dependency-reuse-audit/empty-archive-audit/evidence.json",
+    "scope": "Three packages have zero listed cases in both main and FeynKit; all nine extracted FeynKit crates have tests",
+    "packages": [
+      {
+        "package": "gammaloop-tracing-filter-macros",
+        "emptyBinariesPerLayout": 1,
+        "listedCasesPerLayout": 0,
+        "libraryNeededByOtherWorkspaceConsumers": true,
+        "mainWarmBinaryWorker": {
+          "attribute": "packages.x86_64-linux.crate-test-binaries-gammaloop-tracing-filter-macros",
+          "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/0b446551-13c5-4e40-9731-d5df15e2ba2b",
+          "workerSeconds": 34.774582042,
+          "downloadReportedBytes": 359823974.4,
+          "compilationMessages": 0
+        }
+      },
+      {
+        "package": "symbolica-utils",
+        "emptyBinariesPerLayout": 1,
+        "listedCasesPerLayout": 0,
+        "libraryNeededByOtherWorkspaceConsumers": true,
+        "mainWarmBinaryWorker": {
+          "attribute": "packages.x86_64-linux.crate-test-binaries-symbolica-utils",
+          "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/36fc48d5-fd3c-4ed1-a26d-121fb7848e97",
+          "workerSeconds": 33.524976038,
+          "downloadReportedBytes": 367211315.2,
+          "compilationMessages": 0
+        }
+      },
+      {
+        "package": "linnet-py",
+        "emptyBinariesPerLayout": 2,
+        "listedCasesPerLayout": 0,
+        "libraryNeededByOtherWorkspaceConsumers": false,
+        "mainWarmBinaryWorker": {
+          "attribute": "packages.x86_64-linux.crate-test-binaries-linnet-py",
+          "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/fecbb698-5502-4f60-a509-72efc4718a5c",
+          "workerSeconds": 32.138625738,
+          "downloadReportedBytes": 477206937.59999996,
+          "compilationMessages": 0
+        }
+      }
+    ],
+    "binaryWorkerSeconds": 100.438183818,
+    "binaryWorkerDownloadReportedBytes": 1204242227.1999998,
+    "decision": "No removal: no test-completion saving established, and empty inventories alone do not prove compile-only coverage is redundant",
+    "additionalLinnetPyDependencyWorker": {
+      "attribute": "packages.x86_64-linux.crate-test-dependencies-linnet-py",
+      "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/2fec6ed3-4c89-4e25-872d-a33b24c7d373",
+      "workerSeconds": 64.9194207,
+      "downloadReportedBytes": 51862118.400000006,
+      "compilationMessages": 32
+    }
+  },
+  "cacheMetadataSourceAudit": {
+    "recordedAt": "2026-09-10T13:57:05.448156+00:00",
+    "nixVersion": "2.34.7",
+    "sources": {
+      "directoryPrecedence": "https://github.com/NixOS/nix/blob/2.34.7/src/libutil/users.cc#L15-L24",
+      "xdgFallback": "https://github.com/NixOS/nix/blob/2.34.7/src/libutil/unix/xdg-dirs.cc#L7-L15",
+      "databaseLocation": "https://github.com/NixOS/nix/blob/2.34.7/src/libstore/nar-info-disk-cache.cc#L84-L94",
+      "negativeTtlDefault": "https://github.com/NixOS/nix/blob/2.34.7/src/libstore/include/nix/store/globals.hh#L55-L73",
+      "diskEntryReplacement": "https://github.com/NixOS/nix/blob/2.34.7/src/libstore/nar-info-disk-cache.cc#L108-L118",
+      "diskEntryLookup": "https://github.com/NixOS/nix/blob/2.34.7/src/libstore/nar-info-disk-cache.cc#L249-L267",
+      "diskEntryUpdate": "https://github.com/NixOS/nix/blob/2.34.7/src/libstore/nar-info-disk-cache.cc#L322-L350",
+      "clientCacheLookup": "https://github.com/NixOS/nix/blob/2.34.7/src/libstore/store-api.cc#L608-L650",
+      "memoryExpiry": "https://github.com/NixOS/nix/blob/2.34.7/src/libstore/store-api.cc#L372-L383",
+      "memoryTimestamp": "https://github.com/NixOS/nix/blob/2.34.7/src/libstore/include/nix/store/store-api.hh#L313-L330",
+      "uploadUpdates": "https://github.com/NixOS/nix/blob/2.34.7/src/libstore/binary-cache-store.cc#L124-L136",
+      "nixciHookDocumentation": "https://nix-ci.com/documentation/nix-ci-cache",
+      "pr105": "https://github.com/alphal00p/gammaloop/pull/105",
+      "pr105PinnedHook": "https://github.com/alphal00p/gammaloop/blob/13d6826ddee00d7cb4cbd733a837d23c248658f3/flake.nix#L2517-L2533"
+    },
+    "findings": [
+      {
+        "id": "directory_precedence",
+        "claim": "NIX_CACHE_HOME is recognized by Nix itself and, when present, is returned verbatim before consulting XDG_CACHE_HOME. On Unix the fallback is XDG_CACHE_HOME/nix, then HOME/.cache/nix.",
+        "sources": [
+          "directoryPrecedence",
+          "xdgFallback"
+        ]
+      },
+      {
+        "id": "database_location",
+        "claim": "The default narinfo SQLite database is getCacheDir()/binary-cache-v7.sqlite.",
+        "sources": [
+          "databaseLocation"
+        ]
+      },
+      {
+        "id": "negative_entry",
+        "claim": "A missing path has a timestamped present=0 disk row keyed by cache and path hash; negative entries default to a 3600-second TTL. A fresh entry is returned as invalid without querying the server.",
+        "sources": [
+          "negativeTtlDefault",
+          "diskEntryReplacement",
+          "diskEntryLookup",
+          "clientCacheLookup"
+        ]
+      },
+      {
+        "id": "upload_updates",
+        "claim": "After uploading narinfo, the uploader updates its own in-memory entry and selected disk database using its local narinfo object. It does not fetch server-modified metadata in this function.",
+        "sources": [
+          "uploadUpdates"
+        ]
+      },
+      {
+        "id": "separate_upload_cache",
+        "claim": "An actually separate temporary uploader cache prevents its locally generated metadata from replacing normal consumer cache records, but also leaves pre-existing consumer negative entries untouched. This follows from the selected database and process-local memory update paths.",
+        "kind": "inference_from_source",
+        "sources": [
+          "databaseLocation",
+          "uploadUpdates",
+          "clientCacheLookup"
+        ]
+      },
+      {
+        "id": "shared_disk_distinct_memory",
+        "claim": "When an uploader and consumer share a database, upload can replace the negative disk row, but a different live process can still return a fresh negative memory entry before consulting disk.",
+        "kind": "inference_from_source",
+        "sources": [
+          "diskEntryReplacement",
+          "diskEntryUpdate",
+          "clientCacheLookup",
+          "memoryExpiry"
+        ]
+      },
+      {
+        "id": "conditional_hook_issue",
+        "claim": "A hook that changes only XDG_CACHE_HOME does not isolate the narinfo database if NIX_CACHE_HOME is inherited. A temporary NIX_CACHE_HOME override, or unsetting it within the hook before using temporary XDG_CACHE_HOME, would address directory selection. No such change was applied.",
+        "kind": "conditional_inference_from_source",
+        "sources": [
+          "directoryPrecedence",
+          "databaseLocation",
+          "nixciHookDocumentation",
+          "pr105PinnedHook"
+        ]
+      }
+    ],
+    "pr105": {
+      "state": "open",
+      "base": "dev",
+      "head": "13d6826ddee00d7cb4cbd733a837d23c248658f3",
+      "updatedAt": "2026-09-08T16:21:59Z",
+      "verification": "Public GitHub pull-request API and pinned raw flake source checked during this audit.",
+      "hookLines": {
+        "start": 2517,
+        "end": 2533
+      },
+      "temporaryXdgCache": true,
+      "changesNixCacheHome": false,
+      "compression": "xz",
+      "conditionalIssue": "Only if NIX_CACHE_HOME is inherited by the hook process; this is not evidence of hosted worker behavior."
+    },
+    "hostedCausality": {
+      "established": false,
+      "unknown": [
+        "Actual worker and hook environments, including NIX_CACHE_HOME inheritance",
+        "Whether hosted workers share this cache database",
+        "Actual positive and negative TTL settings",
+        "Whether observed duplicate builds involved relevant negative or unsigned cache entries"
+      ],
+      "interpretation": "Mechanisms only. Do not attribute observed hosted rebuilds to these mechanisms without additional direct evidence."
+    },
+    "proposedPatch": {
+      "path": "/tmp/ci-dependency-reuse-audit/narinfo-cache-audit/pr105-local-hook-cache-isolation.patch",
+      "baseCommit": "13d6826ddee00d7cb4cbd733a837d23c248658f3",
+      "file": "flake.nix",
+      "sourceUrl": "https://raw.githubusercontent.com/alphal00p/gammaloop/13d6826ddee00d7cb4cbd733a837d23c248658f3/flake.nix",
+      "baseFileSha256": "48d566e7d03baa57c303388fd361721b800f14e462c70ae2d6057ead430be074",
+      "patchSha256": "7f33564301a4759db0d1c7645b1bc7f8f62099fbeba16052f13fdcdfcb5338b7",
+      "status": "Proposed scratch patch only; not applied to either repository branch, not executed or uploaded.",
+      "change": "Set NIX_CACHE_HOME to temporary XDG_CACHE_HOME/nix and export both. Preserve existing comments and cleanup trap, adding one precedence explanation.",
+      "scope": "Local post-build hook correction conditional on inherited NIX_CACHE_HOME; not a hosted worker fix."
+    }
+  },
+  "upstreamVerification": {
+    "at": "2026-09-10T14:51:16.996303+00:00",
+    "main": "395610143576507503fd2c785db3ba62340f4277",
+    "latestCrane": "eb35abda9f232cc6610b1d1e3200d15c49b7ac54",
+    "craneCommitDate": "2026-09-03T19:52:51Z",
+    "method": "GitHub API read-only; measured inputs unchanged"
+  },
+  "pythonArtifactReuseExperiment": {
+    "status": "Paired local preparation and five-test validation complete; not integrated or remotely measured",
+    "applicationRevision": "5b87a850e77900029a487b3b8c77d1c7138fa8da",
+    "resources": {
+      "affinity": "8-15",
+      "cores": 8,
+      "maxJobs": 4,
+      "substituters": [],
+      "builders": [],
+      "postBuildHook": ""
+    },
+    "samplesPerVariant": 1,
+    "projectCold": false,
+    "sharedHost": true,
+    "sharedSeedNarBytes": 17594610832,
+    "sharedOrdinaryArtifactRoots": 84,
+    "sharedSeedContainsCompilerState": false,
+    "sharedSeedContainsPythonSpecificOrProductionPreparation": false,
+    "sourceHashes": {
+      "experiment.nix": "4d5f19a6d967e6dffc4c6a844b56a7faeae60d6f5739d318cd89f703cebaab9e",
+      "rust-workspace.nix": "9717ea88590f365642b3b0b0211e7f08fdd393f40239d4caddd2028ff742b29c",
+      "ci.nix": "cf5d45142a965cfaa652f58477f36e46f61de84562eb064696112d65b22fc5a0",
+      "prepare.mjs": "44f98a991681de968cf4355f3e905c09ab3f8234908b649ee5b6070a06de1ad9"
+    },
+    "comparison": {
+      "purpose": "Fair isolated module preparation comparison with identical pre-existing ordinary test artifacts, followed by the same five Python tests.",
+      "variants": [
+        {
+          "moduleNarBytes": 140215184,
+          "moduleClosureNarBytes": 188460864,
+          "moduleClosurePaths": 7,
+          "variant": "baseline",
+          "modulePreparationSeconds": 875.9581088720588,
+          "runtimeCheckSeconds": 1.6246040619444102,
+          "completionSeconds": 877.5827129340032,
+          "executedTests": [
+            "python_evaluate_sample_honors_generate_events_and_observable_snapshots",
+            "python_evaluate_sample_preserves_graph_grouping_and_incoming_pdgs",
+            "python_evaluate_samples_batch_and_momentum_space_have_expected_shape",
+            "python_session_getters_return_live_toml_and_command_blocks",
+            "python_settings_wrappers_expose_nested_runtime_and_global_settings"
+          ],
+          "exactInventoryMatch": true,
+          "runtimeCargoCompilations": 0,
+          "exactRepeatZeroBuilds": true,
+          "moduleCompilationMessages": 288,
+          "seedNarBytes": 17594610832,
+          "roots": {
+            "module": {
+              "derivation": "/nix/store/ygfi485z4n2gs43hga83a4k8s4ldsm5p-gammaloop-python-module.drv",
+              "output": "/nix/store/y8kqbx97md4646xbrsjnv27znb4p7r5h-gammaloop-python-module"
+            },
+            "runtime": {
+              "derivation": "/nix/store/dmr5i47bki5lajh7d4mqz2a5razljmpp-gammaloop-nextest-python-api.drv",
+              "output": "/nix/store/sml93b65gl3l7rxdbnzlpfr65r1qspqa-gammaloop-nextest-python-api"
+            }
+          }
+        },
+        {
+          "moduleNarBytes": 138638728,
+          "moduleClosureNarBytes": 186884408,
+          "moduleClosurePaths": 7,
+          "variant": "candidate",
+          "modulePreparationSeconds": 205.62514509703033,
+          "runtimeCheckSeconds": 1.6618784129386768,
+          "completionSeconds": 207.287023509969,
+          "executedTests": [
+            "python_evaluate_sample_honors_generate_events_and_observable_snapshots",
+            "python_evaluate_sample_preserves_graph_grouping_and_incoming_pdgs",
+            "python_evaluate_samples_batch_and_momentum_space_have_expected_shape",
+            "python_session_getters_return_live_toml_and_command_blocks",
+            "python_settings_wrappers_expose_nested_runtime_and_global_settings"
+          ],
+          "exactInventoryMatch": true,
+          "runtimeCargoCompilations": 0,
+          "exactRepeatZeroBuilds": true,
+          "moduleCompilationMessages": 14,
+          "seedNarBytes": 17594610832,
+          "roots": {
+            "module": {
+              "derivation": "/nix/store/f25jv8w0pr1a04nv7zckwv4cr8mk6viw-gammaloop-python-module.drv",
+              "output": "/nix/store/ic103x0nss5643xris5yqzdj5fyr2ssg-gammaloop-python-module"
+            },
+            "runtime": {
+              "derivation": "/nix/store/0n3348sm2q285bylassrhiqvlk7p98rb-gammaloop-nextest-python-api.drv",
+              "output": "/nix/store/mmj85sa9aw4v7djhahhkaa0kg8bqxza9-gammaloop-nextest-python-api"
+            }
+          }
+        }
+      ],
+      "candidateToBaselineModuleRatio": 0.23474312642850784,
+      "candidateToBaselineCompletionRatio": 0.2362022638492397,
+      "inventoryExactlyEqual": true,
+      "limit": "Both ordinary test-artifact closures are warm; Python-specific preparation starts absent. This is not project-cold and excludes identical seed-copy time. Integration requires required-test latency and branch cache-boundary checks."
+    },
+    "evidence": "/tmp/ci-dependency-reuse-audit/cold-followup/python-pair/comparison.json",
+    "fullCiCompletionImprovementEstablished": false,
+    "feynkitPythonLayoutValidated": false,
+    "requiresBeforeIntegration": [
+      "Full required-check/test completion measurement",
+      "FeynKit Python features, behavior and cache boundaries"
+    ],
+    "mainColdContext": [
+      {
+        "moduleReadySeconds": 2231.8536500789996,
+        "lastRuntimeGroupSeconds": 2785.962400949,
+        "note": "Earlier measured full cold configuration; isolated module gains cannot simply be subtracted from this total."
+      },
+      {
+        "moduleReadySeconds": 2470.8719206340006,
+        "lastRuntimeGroupSeconds": 2641.385359003,
+        "note": "Earlier measured full cold configuration; isolated module gains cannot simply be subtracted from this total."
+      }
+    ],
+    "moduleBuilderOccupancy": {
+      "variants": [
+        {
+          "variant": "baseline",
+          "builders": 108,
+          "builderOccupancySeconds": 1123.149124145275,
+          "compilationMessages": 288
+        },
+        {
+          "variant": "candidate",
+          "builders": 3,
+          "builderOccupancySeconds": 205.20068942510989,
+          "compilationMessages": 14
+        }
+      ],
+      "isCpuTimeOrBilling": false,
+      "evidence": "/tmp/ci-dependency-reuse-audit/cold-followup/python-pair/work-summary.json"
+    }
   }
 }

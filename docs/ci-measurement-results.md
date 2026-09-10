@@ -1,5 +1,9 @@
 # CI measurements, 9 September 2026
 
+For the subsequent Crane update, incremental-state implementation and three
+additional approved main suites, see [the 10 September results](ci-cargo-parity.md).
+The experiments and suite counts below describe the earlier campaign.
+
 The completed unchanged-main pair finished required checks in **8m27s instead of
 37m57s**, with **84% fewer observed worker minutes** and **93% less reported
 intermediate restored content**. Both variants passed all 11 required checks.
