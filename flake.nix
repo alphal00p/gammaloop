@@ -103,7 +103,6 @@
         cargoArtifacts
         cargoCheckArtifacts
         ciCompilerState
-        cranePythonBuildArtifacts
         gammaloopApiPackageArtifacts
         workspaceBuildArtifacts
         nixCiPassed

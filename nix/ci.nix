@@ -385,8 +385,8 @@ in {
     # after the package-local test-binary artifacts that the archives reuse. The
     # exported artifact attrs are stable symlinks around Cargo artifacts. Keep
     # their ordering while avoiding per-commit cache publication; workers realize
-    # the underlying closure when a check actually needs it. The
-    # graph is constructed over the full crate/artifact DAG so the drift and
+    # the underlying closure when a check actually needs it. The graph is
+    # constructed over the full crate/artifact DAG so the drift and
     # cycle asserts stay meaningful, then hidden paths are contracted to their
     # nearest built producer because NixCI rejects edges to jobs it does not
     # build. Ordinary crate package attrs are not CI roots, so test-binary

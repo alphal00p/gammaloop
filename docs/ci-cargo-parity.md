@@ -9,7 +9,13 @@ Local correctness and cold-latency gates pass. Remote zero-recompilation and
 final-success goals remain unmet; the integrated compiler-state candidate is
 not accepted for merge as a remote performance improvement.
 
-## Integrated cache implementation, 10 September 2026
+The latest [artifact-preparation follow-up](ci-artifact-preparation.md) removes
+redundant merges and cache references, shares Python/static-check dependencies,
+and makes publication stable. Its fresh main source-edit pair, including Python,
+finishes in **4m53s versus 10m12s**. The measurements below describe the preceding
+implementation; they remain useful baseline evidence.
+
+## Earlier integrated cache implementation, 10 September 2026
 
 The follow-up combines four changes:
 
@@ -32,8 +38,9 @@ source fingerprints and dependency outputs. The library/test split is preserved.
 
 The seed has separate `out` and `incremental` outputs. A changed producer exports
 only its compiled artifacts: its newly generated query cache would be unused by
-subsequent builds from the fixed baseline. NixCI producer wrappers publish the
-current artifacts and reusable baseline state; ordinary consumers use raw `out`.
+subsequent builds from the fixed baseline. Normal NixCI producer wrappers now publish only the
+current artifacts; ordinary consumers use raw `out`. The optional
+`ci-compiler-state` output exposes the pinned seeds for local/cache preparation.
 The initial baseline should be prepared before comparing changed revisions.
 
 Refresh deliberately after a green application revision:
@@ -62,10 +69,11 @@ model twenty-four, and a fixture six. Manifest and lockfile edits disable
 prior-state reuse and retain their broad derivation invalidation.
 The existing Python consumer-expectation discrepancy described below is unchanged.
 
-Publishing the baseline state adds that archive to the producer wrapper's closure.
-The NixCI measurements below include this transfer, even though downstream build
-and runtime outputs do not retain compiler state. Publication wrappers still
-restore state on unchanged commits, and remote output reuse remains unreliable.
+The earlier NixCI measurements below include baseline-state publication in each
+producer wrapper, even though downstream build and runtime outputs do not retain
+compiler state. That version restores state on unchanged commits. The latest
+follow-up removes those links and the revision salt; reliable remote retrieval
+of stable artifacts and separately published seeds remains to verify.
 
 The integrated main source-edit run finishes in **6m35s**, versus **17m47s** for
 the earlier candidate and **3m47s** for native Cargo. It executes the same 1,628

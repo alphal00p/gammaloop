@@ -1,4 +1,198 @@
-# Artifact preparation investigation
+# CI artifact preparation
+
+## Implemented follow-up, 10 September 2026
+
+The changes are on `codex/ci-cargo-parity-libraries`, with FeynKit validated in the
+isolated `codex/ci-artifact-feynkit-local` integration branch. The shared FeynKit
+branch and application code are unchanged. These are local measurements; no new
+NixCI suite has been launched.
+
+The implementation removes repeated archive work while retaining each package's
+compilation boundary. A single artifact input is inherited directly; multiple
+inputs retain only independent dependency contexts. FeynKit's separate UFO input
+is preserved. Compilation-artifact producers no longer embed nonexistent output
+`/lib` paths in their helper binaries, which previously retained obsolete archives.
+Actual native-library dependencies are preserved and runtime checks pass.
+
+NixCI publication wrappers now depend on their artifacts, without a commit marker
+or eager compiler-state links. All 34 selected wrappers, including the new static
+check dependency producer, have identical derivations across a revision-only
+change. None requests an `incremental` output. Optional `ci-compiler-state` exposes
+only the scheduled producers' pinned seeds, independently of the automatic jobs:
+
+```sh
+nix build .#ci-compiler-state --out-link result-ci-compiler-state
+```
+
+The result link keeps the prepared seeds available locally. Publishing them still
+requires the configured cache upload mechanism; the command alone does not upload
+them. An existing local build verified that the collection adds just one symlink
+farm, with no otherwise-unused producer compilation. Remote seed availability,
+substitution, worker minutes and final-success timing still need a NixCI check.
+The earlier 4m35s tail has **not** been remeasured remotely.
+
+Python preparation inherits the API's test-library artifacts, retaining its
+Python-specific features, ABI, interpreter and optional FeynKit dependencies.
+Its own pinned compiler state is reusable after an edit. Packaging inherits these
+artifacts without compiling again. Cargo check, Clippy and doctests now share a
+dependency producer built with their exact workspace features and compilation
+modes. Ordinary test producers retain their narrower inputs. This does not make
+workspace Clippy/doctest source inputs granular.
+
+### Correctness and an archive bug found during validation
+
+The complete prepared revisions pass 1,633 tests and 43 doctests on main, and
+1,834 tests and 62 doctests on FeynKit. There are 155/127 skipped nextest cases and
+20 ignored doctests per layout. Package inventories, names, target kinds, ignored
+flags and filters match the earlier measurements exactly. Python contributes five
+passing cases in each layout. Cargo check, Clippy, formatting and generated
+workspace/CI configuration checks pass. FeynKit's boundary guard and self-test pass;
+its eighth group and nine extracted crates remain intact. Its existing Python-stub
+workflow is preserved, but stub generation was not rerun in these local suites.
+
+The first FeynKit changed-source candidate compiled the Python extension twice.
+A Cargo fingerprint trace identified missing `.rmeta` files: rustc restored newly
+named metadata from its query cache with epoch-1 timestamps, so Crane's normal
+mtime-based delta omitted them. The existing seeded-artifact helper now records
+inherited filenames and touches newly created files before publication. It retains
+compact deltas; it does not repack every inherited file or combine query caches.
+Both layouts now perform zero Cargo compilation during final Python packaging.
+A negative control still rejects a real compile error with source mtime set to
+zero, confirming that restored state does not bypass changed source.
+
+The derivation-boundary probes retain GammaLoop-only isolation for all nine
+extracted libraries, CFF/model reverse dependencies, fixture-only test changes,
+and broad manifest/lockfile invalidation. One pre-existing assertion still expects
+a `feynkit-py` edit to affect only that package; the actual graph also invalidates
+its API consumer. That discrepancy predates these changes. The assertion was not
+changed and its failure remains in the evidence.
+
+An earlier main baseline timing attempt had two intermittent state-file failures.
+The identical tests passed on an unchanged retry. Several feyngen cases share and
+clean a workspace directory; the logs preserve this possible race for separate
+investigation. No failing tests, filters or retry policy were changed. The failed
+attempt is not presented as a successful full-suite measurement.
+
+### Local timings
+
+| Same-layout source edit, all runtime groups | Before | After | Change |
+|---|---:|---:|---:|
+| Main: completion including evaluation/setup | 10m12s | 4m53s | −52.0% |
+| FeynKit: completion including evaluation/setup | 9m58s | 5m00s | −49.8% |
+| Main: artifact preparation alone | 138.32s | 93.84s | −32.2% |
+| FeynKit: artifact preparation alone | 155.72s | 97.58s | −37.3% |
+
+The main pair sums 15.63 versus 8.68 builder-minutes (−44.5%); FeynKit sums
+14.98 versus 8.70 minutes (−41.9%). Main's Python module
+is ready 449 versus 101 seconds into the runtime phase; the final candidate Python
+packaging step compiles nothing. The candidate's integration tests finish last.
+Python preparation still has 14/20 Cargo compilation messages on main/FeynKit,
+using its distinct feature context and restored query caches. This does not
+invalidate the ordinary per-crate FeynKit test artifacts.
+
+The fresh main artifact-preparation breakdown is:
+
+| Work on the completion path | Before | After |
+|---|---:|---:|
+| Cargo commands | 49.35s | 50.20s |
+| Archive merging | 60.19s | 12.89s |
+| Other builder work, including restore/export | 27.64s | 29.76s |
+| Waiting and command completion | 1.14s | 0.99s |
+
+This follows the last completed direct input through the build graph and does not
+sum overlapping branches. Most of this preparation gain removes filesystem work,
+not compiler work. The older 44.18s native Cargo / 185.90s Nix observations below
+are historical, not the baseline of this fresh pair.
+
+Warm reruns force test execution while reusing the same artifacts. Main passes
+1,633 cases with zero Cargo compilation: 0.17s artifact preparation and 167.30s
+runtime phase. FeynKit passes 1,834 cases with zero Cargo compilation: 0.18s and
+162.38s respectively. Evaluation/setup adds approximately 17s/26s. These warm
+results execute tests; the cold experiment's exact repeats instead reuse successful
+results and run zero builders.
+
+These are single sequential observations on a shared host with eight selected
+CPUs, eight Nix cores and four jobs. Each layout compares the same application
+source between implementations; source edits start independently from their clean
+pinned revision. Test execution is forced for the warm measurement. A cached
+successful result that executes no tests is reported separately. The changed-source
+rows include all runtime groups and Python, but exclude Clippy/doctests.
+
+| Project-cold full scope | Earlier controlled baseline | New candidate |
+|---|---:|---:|
+| Main: all required checks | 44m01s | 38m21s (−12.9%) |
+| Main: combined builder occupancy | 126.57 minutes | 106.18 minutes (−16.1%) |
+| FeynKit: all required checks | 48m04s | 42m13s (−12.2%) |
+| FeynKit: combined builder occupancy | 163.70 minutes | 141.86 minutes (−13.3%) |
+
+All seven main runtime groups finish earlier. The static checks have a cold-start
+trade-off: Clippy finishes at 31m20s instead of 21m40s, and doctests at 37m13s
+instead of 29m20s, after waiting for the shared dependency producer. Both still
+finish before the final integration group. A separate source-edit pair runs Clippy and doctests concurrently, with the
+dependency caches already prepared. Completion improves from 9m00s to 8m14s
+(8.6%), and combined builder time falls 11.0%. Clippy itself takes 372s versus
+318s; doctests take 540s versus 493s. All 43 doctests have identical names and
+outcomes. This is a modest warm benefit with a cold-start trade-off; these checks
+still compile the broad workspace inputs and do not reuse per-crate query caches.
+The static timings exclude the ordinary runtime groups.
+
+Main's exact repeat takes 0.26s with no builders. All 19 roots succeed; 1,633 test
+cases and 43 doctests match the baseline, including exact names and statuses.
+No archive step compiles anything. FeynKit passes all 21 roots, with the same
+1,834 test cases and 62 doctests, including exact names and statuses. Its exact
+repeat takes 0.27s with no builders. All eight FeynKit runtime groups, Clippy and
+doctests finish earlier than in its baseline; the static-check cold regression
+above is specific to the main observation.
+
+The main cold completion path contains 24m30s of Cargo commands, 1m28s of archive
+merges, 1m51s of other builder work, 3m22s in the final runtime group, and 7m10s of
+waiting/command completion. The earlier path spent 6m25s in merges. These are
+non-overlapping wall intervals along one completion path, not aggregate CPU usage;
+other required checks execute in parallel.
+
+The cold candidate starts in a disposable store containing no project outputs or
+compiler state. Its complete external seed closure and baseline derivation
+identities match the earlier same-day controlled measurement. The comparison uses
+that historical baseline, not a fresh contemporaneous baseline run. Both use CPUs
+8–15, eight cores, four jobs, sandboxing, and no substituters, remote builders or
+upload hooks. Shared memory/storage and host activity are not isolated.
+
+### Stored closures
+
+| Main output | Previous closure | New closure |
+|---|---:|---:|
+| GammaLoop test-library artifacts | 3.44 GiB | 1.11 GiB |
+| GammaLoop test-binary artifacts | 1.78 GiB | 1.22 GiB |
+| API test-library artifacts | 1.70 GiB | 1.13 GiB |
+| Integration test-binary artifacts | 1.94 GiB | 1.38 GiB |
+
+The GammaLoop library closure falls 67.6%. Its own compressed archive remains
+about 36.5 MB; most savings remove retained ancestor copies. Compiler-artifact
+content within that closure falls 82.2%, but this is **not** a whole-suite 80%
+transfer reduction. These are NAR storage/closure sizes, not network bytes or CHF
+cost estimates. Inspected ordinary closures contain no compiler-state outputs.
+
+### Evidence and rollout
+
+Machine-readable observations are in
+[ci-artifact-preparation-results.json](ci-artifact-preparation-results.json).
+Raw phases, redacted activity logs, inventories, derivations and negative controls
+are under `/tmp/ci-artifact-implementation`; frozen cold inputs are under its
+`cold/` directory. The final source-edit snapshots are independent of the working
+application checkout. Commands and source/CI hashes are recorded with each run.
+
+The existing report collector retains the earlier NixCI anomaly evidence. No new
+remote observations have been made, and the local missing-metadata bug and flaky
+state-file failures are not attributed to NixCI. Stable publication is locally
+verified, but remote cache retrieval must be tested before claiming the late-job
+and transfer goals are met. Synchronous dependency discovery remains integrated;
+Syd's local post-build upload hook still needs deployment-specific setup. No new
+paid suite is authorized by this follow-up.
+
+The investigation below records the earlier implementation and diagnostics; its
+"current" references describe that historical snapshot.
+
+## Earlier investigation
 
 Follow-up to the controlled Cargo/Nix and NixCI measurements in
 [ci-cargo-parity.md](ci-cargo-parity.md). Application and CI source files were not

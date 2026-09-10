@@ -1,5 +1,1848 @@
 {
-  "scope": "Local investigation only. No production code or project tests changed; no additional NixCI suites.",
+  "scope": "Current local implementation and validation, followed by the preserved historical investigation. No new NixCI suites.",
+  "implementation": {
+    "implementationCommits": [
+      "08cead344",
+      "c8c8b51aa"
+    ],
+    "feynkitIntegrationCommit": "f59860bcc",
+    "evidenceRoot": "/tmp/ci-artifact-implementation",
+    "scope": "Local implementation and validation. No new NixCI suites or shared-branch changes.",
+    "resources": {
+      "mainFinalPairCpuAffinity": "40-47",
+      "feynkitEditPairCpuAffinity": "40-47",
+      "nixCores": 8,
+      "nixMaxJobs": 4,
+      "sandbox": true,
+      "substituters": [],
+      "remoteBuilders": [],
+      "postBuildHook": "",
+      "host": "shared, memory and I/O not isolated"
+    },
+    "changedSource": {
+      "main": {
+        "baseline": {
+          "run": "prepare-main-final-baseline",
+          "layout": "main",
+          "phases": [
+            {
+              "phase": "archive-evaluation",
+              "elapsedSeconds": 9.853290623985231,
+              "exitStatus": 0
+            },
+            {
+              "phase": "runtime-evaluation",
+              "elapsedSeconds": 12.028610330075026,
+              "exitStatus": 0
+            },
+            {
+              "phase": "definitions",
+              "elapsedSeconds": 1.1715728210983798,
+              "exitStatus": 0
+            },
+            {
+              "phase": "artifacts",
+              "elapsedSeconds": 138.31896864506416,
+              "exitStatus": 0
+            },
+            {
+              "phase": "tests",
+              "elapsedSeconds": 450.3377700330457,
+              "exitStatus": 0
+            }
+          ],
+          "builders": 33,
+          "compiling": 39,
+          "workerSeconds": 937.732419417589,
+          "archiveCompiling": 0,
+          "selectedCases": 1633,
+          "inventoryMatchesPrevious": true,
+          "passed": 1633,
+          "skipped": 155,
+          "totalSeconds": 611.7102124532685,
+          "pythonPreparation": [
+            {
+              "derivation": "/nix/store/hkl9ba9jrms1w8jf7zls1140dqhvaif6-gammaloop-crate-gammalooprs-dependency-deps-0.1.0.drv",
+              "seconds": 164.0600521210581,
+              "compiling": [
+                "Compiling tracing-error v0.2.1",
+                "Compiling gammalooprs v0.3.4 (/build/source/crates/gammalooprs)",
+                "Compiling tracing-appender v0.2.5",
+                "Compiling momtrop v0.3.0",
+                "Compiling tracing-indicatif v0.3.14",
+                "Compiling color-spantrace v0.3.0",
+                "Compiling color-eyre v0.6.5",
+                "Compiling gammaloop-ci-consumer-gammalooprs v0.1.0 (/build/source/crates/gammaloop-ci-consumer-gammalooprs)"
+              ]
+            },
+            {
+              "derivation": "/nix/store/wcxhcry33ls3qazwpcqsg103lbacf093-gammaloop-python-deps-inputs.drv",
+              "seconds": 28.946029955986887,
+              "compiling": []
+            },
+            {
+              "derivation": "/nix/store/a7702kb4h69haky31kyx1gyaj3z4fd2h-gammaloop-api-python-deps-0.1.0.drv",
+              "seconds": 157.74870669504162,
+              "compiling": [
+                "Compiling target-lexicon v0.13.5",
+                "Compiling gammaloop-workspace-hack v0.1.0 (/build/source/crates/gammaloop-workspace-hack)",
+                "Compiling symbolica-utils v0.1.0 (/build/source/crates/symbolica-utils)",
+                "Compiling spenso-macros v0.3.2 (/build/source/crates/spenso-macros)",
+                "Compiling gammalooprs v0.3.4 (/build/source/crates/gammalooprs)",
+                "Compiling vakint v0.1.2 (/build/source/crates/vakint)",
+                "Compiling linnet v0.17.0 (/build/source/crates/linnet)",
+                "Compiling pyo3-build-config v0.28.3",
+                "Compiling pyo3-macros-backend v0.28.3",
+                "Compiling pyo3-ffi v0.28.3",
+                "Compiling pyo3 v0.28.3",
+                "Compiling numpy v0.28.0",
+                "Compiling gammaloop-api v0.1.0 (/build/source/crates/gammaloop-api)",
+                "Compiling spenso v0.6.0 (/build/source/crates/spenso)",
+                "Compiling idenso v0.3.0 (/build/source/crates/idenso)",
+                "Compiling pyo3-macros v0.28.3",
+                "Compiling spenso-hep-lib v0.1.7 (/build/source/crates/spenso-hep-lib)",
+                "Compiling gammaloop-tracing-filter v0.1.0 (/build/source/crates/gammaloop-tracing-filter)"
+              ]
+            },
+            {
+              "derivation": "/nix/store/hfkw0zf8jk4k0c3y91pqmyk0mqc0yqga-gammaloop-api-python-build-build-0.1.0.drv",
+              "seconds": 70.60755484900437,
+              "compiling": [
+                "Compiling gammaloop-api v0.1.0 (/build/source/crates/gammaloop-api)"
+              ]
+            },
+            {
+              "derivation": "/nix/store/l8q1ag0yxnxjxhapvgbxfjmva1whawnx-gammaloop-api-python-0.1.0.drv",
+              "seconds": 8.354454386048019,
+              "compiling": []
+            },
+            {
+              "derivation": "/nix/store/hkx8xwb3q46m3451b78l70q6g22c7w54-gammaloop-python-module.drv",
+              "seconds": 1.2753299950854853,
+              "compiling": []
+            },
+            {
+              "derivation": "/nix/store/y6s4a0z0g6ywbzfqzq4zcaad8j5v7zjf-gammaloop-nextest-python-api.drv",
+              "seconds": 1.0377152060391381,
+              "compiling": []
+            }
+          ],
+          "runtimeBuilderCompiling": 0,
+          "groupCompletions": [
+            {
+              "group": "clinnet",
+              "completeAtSeconds": 0.7255424699978903,
+              "builderSeconds": 0.38089280994609,
+              "passed": 5,
+              "skipped": 0
+            },
+            {
+              "group": "core",
+              "completeAtSeconds": 26.932897649006918,
+              "builderSeconds": 26.556365321041085,
+              "passed": 814,
+              "skipped": 61
+            },
+            {
+              "group": "integration",
+              "completeAtSeconds": 205.6508997400524,
+              "builderSeconds": 205.24214227311313,
+              "passed": 104,
+              "skipped": 67
+            },
+            {
+              "group": "linnet",
+              "completeAtSeconds": 2.692290393053554,
+              "builderSeconds": 2.207878307090141,
+              "passed": 246,
+              "skipped": 0
+            },
+            {
+              "group": "spenso",
+              "completeAtSeconds": 9.851498011965305,
+              "builderSeconds": 9.086593442945741,
+              "passed": 385,
+              "skipped": 27
+            },
+            {
+              "group": "vakint",
+              "completeAtSeconds": 35.47897201194428,
+              "builderSeconds": 32.74724557995796,
+              "passed": 74,
+              "skipped": 0
+            },
+            {
+              "group": "python-api",
+              "completeAtSeconds": 450.31498167000245,
+              "builderSeconds": 1.0377152060391381,
+              "passed": 5,
+              "skipped": 0
+            }
+          ]
+        },
+        "candidate": {
+          "run": "prepare-main-final-candidate",
+          "layout": "main",
+          "phases": [
+            {
+              "phase": "archive-evaluation",
+              "elapsedSeconds": 8.621470078011043,
+              "exitStatus": 0
+            },
+            {
+              "phase": "runtime-evaluation",
+              "elapsedSeconds": 9.296576321008615,
+              "exitStatus": 0
+            },
+            {
+              "phase": "definitions",
+              "elapsedSeconds": 0.5953413400566205,
+              "exitStatus": 0
+            },
+            {
+              "phase": "artifacts",
+              "elapsedSeconds": 93.84441442799289,
+              "exitStatus": 0
+            },
+            {
+              "phase": "tests",
+              "elapsedSeconds": 181.01917392003816,
+              "exitStatus": 0
+            }
+          ],
+          "builders": 24,
+          "compiling": 23,
+          "workerSeconds": 520.5804716967978,
+          "archiveCompiling": 0,
+          "selectedCases": 1633,
+          "inventoryMatchesPrevious": true,
+          "passed": 1633,
+          "skipped": 155,
+          "totalSeconds": 293.3769760871073,
+          "pythonPreparation": [
+            {
+              "derivation": "/nix/store/ygnp3lj34hhh4k82r00m7hand9903m05-gammaloop-api-python-build-deps-0.1.0.drv",
+              "seconds": 89.18474870198406,
+              "compiling": [
+                "Compiling target-lexicon v0.13.5",
+                "Compiling linnet v0.17.0 (/build/source/crates/linnet)",
+                "Compiling gammalooprs v0.3.4 (/build/source/crates/gammalooprs)",
+                "Compiling pyo3-build-config v0.28.3",
+                "Compiling spenso v0.6.0 (/build/source/crates/spenso)",
+                "Compiling idenso v0.3.0 (/build/source/crates/idenso)",
+                "Compiling spenso-hep-lib v0.1.7 (/build/source/crates/spenso-hep-lib)",
+                "Compiling pyo3-macros-backend v0.28.3",
+                "Compiling pyo3-ffi v0.28.3",
+                "Compiling pyo3 v0.28.3",
+                "Compiling numpy v0.28.0",
+                "Compiling gammaloop-api v0.1.0 (/build/source/crates/gammaloop-api)",
+                "Compiling pyo3-macros v0.28.3",
+                "Compiling gammaloop-tracing-filter v0.1.0 (/build/source/crates/gammaloop-tracing-filter)"
+              ]
+            },
+            {
+              "derivation": "/nix/store/y2w6lcrr3m3iaa3f89p8g7zdxzfzk9bj-gammaloop-api-python-0.1.0.drv",
+              "seconds": 9.794724444043823,
+              "compiling": []
+            },
+            {
+              "derivation": "/nix/store/87i15kmvhnpc13l3hk929bzmdyw3xk8h-gammaloop-python-module.drv",
+              "seconds": 1.4308589909924194,
+              "compiling": []
+            },
+            {
+              "derivation": "/nix/store/7x8gxc3ipyx67m1ppwd8pir6lj2f53x7-gammaloop-nextest-python-api.drv",
+              "seconds": 1.0293788469862193,
+              "compiling": []
+            }
+          ],
+          "runtimeBuilderCompiling": 0,
+          "groupCompletions": [
+            {
+              "group": "clinnet",
+              "completeAtSeconds": 0.7005639229901135,
+              "builderSeconds": 0.3662601459072903,
+              "passed": 5,
+              "skipped": 0
+            },
+            {
+              "group": "core",
+              "completeAtSeconds": 27.1367669000756,
+              "builderSeconds": 26.768727330025285,
+              "passed": 814,
+              "skipped": 61
+            },
+            {
+              "group": "integration",
+              "completeAtSeconds": 181.00349649600685,
+              "builderSeconds": 180.60158332192805,
+              "passed": 104,
+              "skipped": 67
+            },
+            {
+              "group": "linnet",
+              "completeAtSeconds": 2.005468313000165,
+              "builderSeconds": 1.5704485069727525,
+              "passed": 246,
+              "skipped": 0
+            },
+            {
+              "group": "spenso",
+              "completeAtSeconds": 12.874041802017018,
+              "builderSeconds": 10.824616256984882,
+              "passed": 385,
+              "skipped": 27
+            },
+            {
+              "group": "vakint",
+              "completeAtSeconds": 43.98274114902597,
+              "builderSeconds": 31.059311709948815,
+              "passed": 74,
+              "skipped": 0
+            },
+            {
+              "group": "python-api",
+              "completeAtSeconds": 102.38506869599223,
+              "builderSeconds": 1.0293788469862193,
+              "passed": 5,
+              "skipped": 0
+            }
+          ]
+        },
+        "totalReductionFraction": 0.520398760533167,
+        "workerReductionFraction": 0.4448517925613341
+      },
+      "feynkit": {
+        "baseline": {
+          "run": "prepare-edit-feynkit-baseline-v1",
+          "layout": "feynkit",
+          "phases": [
+            {
+              "phase": "archive-evaluation",
+              "elapsedSeconds": 13.422734919004142,
+              "exitStatus": 0
+            },
+            {
+              "phase": "runtime-evaluation",
+              "elapsedSeconds": 18.796944968984462,
+              "exitStatus": 0
+            },
+            {
+              "phase": "definitions",
+              "elapsedSeconds": 1.2041588589781895,
+              "exitStatus": 0
+            },
+            {
+              "phase": "artifacts",
+              "elapsedSeconds": 155.7248478080146,
+              "exitStatus": 0
+            },
+            {
+              "phase": "tests",
+              "elapsedSeconds": 408.609442420071,
+              "exitStatus": 0
+            }
+          ],
+          "builders": 34,
+          "compiling": 25,
+          "workerSeconds": 898.8327289405279,
+          "archiveCompiling": 0,
+          "selectedCases": 1834,
+          "inventoryMatchesPrevious": true,
+          "passed": 1834,
+          "skipped": 127,
+          "totalSeconds": 597.7581289750524,
+          "pythonPreparation": [
+            {
+              "derivation": "/nix/store/igs2qzk5p9i2r47gfvcmk6nya70p5q54-gammaloop-crate-gammalooprs-dependency-deps-0.1.0.drv",
+              "seconds": 142.69811369490344,
+              "compiling": [
+                "Compiling gammalooprs v0.3.4 (/build/source/crates/gammalooprs)",
+                "Compiling gammaloop-ci-consumer-gammalooprs v0.1.0 (/build/source/crates/gammaloop-ci-consumer-gammalooprs)"
+              ]
+            },
+            {
+              "derivation": "/nix/store/s8dl3jv4jd5wdhbjpz0a0kxhfc8dsd28-gammaloop-python-deps-inputs.drv",
+              "seconds": 41.87245992699172,
+              "compiling": []
+            },
+            {
+              "derivation": "/nix/store/ybhl1pi8ipzbl15snyg2k5vzsvd4504y-gammaloop-api-python-deps-0.1.0.drv",
+              "seconds": 122.72597597690765,
+              "compiling": [
+                "Compiling pyo3-build-config v0.28.3",
+                "Compiling gammalooprs v0.3.4 (/build/source/crates/gammalooprs)",
+                "Compiling pyo3-macros-backend v0.28.3",
+                "Compiling pyo3-ffi v0.28.3",
+                "Compiling pyo3 v0.28.3",
+                "Compiling numpy v0.28.0",
+                "Compiling gammaloop-api v0.1.0 (/build/source/crates/gammaloop-api)",
+                "Compiling pyo3-macros v0.28.3",
+                "Compiling gammaloop-tracing-filter v0.1.0 (/build/source/crates/gammaloop-tracing-filter)",
+                "Compiling feynkit-ufo v0.1.0 (/build/source/crates/feynkit-ufo)"
+              ]
+            },
+            {
+              "derivation": "/nix/store/aw1b2c3ycf8kpmkhvg4ckh4w6d96rz65-gammaloop-api-python-build-build-0.1.0.drv",
+              "seconds": 69.43812944204547,
+              "compiling": [
+                "Compiling gammaloop-api v0.1.0 (/build/source/crates/gammaloop-api)"
+              ]
+            },
+            {
+              "derivation": "/nix/store/1zx1ckgb8a1dwkqi5ns1gp684d8f0f8l-gammaloop-api-python-0.1.0.drv",
+              "seconds": 8.065978054888546,
+              "compiling": []
+            },
+            {
+              "derivation": "/nix/store/n2mgvsk4al44x5s0brmk3wczb7z8nvj6-gammaloop-python-module.drv",
+              "seconds": 1.1766908180434257,
+              "compiling": []
+            },
+            {
+              "derivation": "/nix/store/3apzg1rfy6r3awkhbqhj16w0ini0gqm4-gammaloop-nextest-python-api.drv",
+              "seconds": 1.0346946130739525,
+              "compiling": []
+            }
+          ],
+          "runtimeBuilderCompiling": 0,
+          "groupCompletions": [
+            {
+              "group": "clinnet",
+              "completeAtSeconds": 0.7497340590925887,
+              "builderSeconds": 0.3962741669965908,
+              "passed": 5,
+              "skipped": 0
+            },
+            {
+              "group": "core",
+              "completeAtSeconds": 22.020013875095174,
+              "builderSeconds": 21.630240936996415,
+              "passed": 782,
+              "skipped": 31
+            },
+            {
+              "group": "feynkit",
+              "completeAtSeconds": 4.377555901068263,
+              "builderSeconds": 3.954448895994574,
+              "passed": 210,
+              "skipped": 1
+            },
+            {
+              "group": "integration",
+              "completeAtSeconds": 192.37117718707304,
+              "builderSeconds": 191.9158928580582,
+              "passed": 106,
+              "skipped": 67
+            },
+            {
+              "group": "linnet",
+              "completeAtSeconds": 2.7109617050737143,
+              "builderSeconds": 1.9225760630797595,
+              "passed": 246,
+              "skipped": 0
+            },
+            {
+              "group": "spenso",
+              "completeAtSeconds": 13.626053338055499,
+              "builderSeconds": 10.874887324986048,
+              "passed": 386,
+              "skipped": 27
+            },
+            {
+              "group": "vakint",
+              "completeAtSeconds": 39.102695130044594,
+              "builderSeconds": 34.620405943947844,
+              "passed": 94,
+              "skipped": 1
+            },
+            {
+              "group": "python-api",
+              "completeAtSeconds": 408.5741417100653,
+              "builderSeconds": 1.0346946130739525,
+              "passed": 5,
+              "skipped": 0
+            }
+          ]
+        },
+        "candidate": {
+          "run": "prepare-edit-feynkit-candidate-v2",
+          "layout": "feynkit",
+          "phases": [
+            {
+              "phase": "archive-evaluation",
+              "elapsedSeconds": 11.967635483015329,
+              "exitStatus": 0
+            },
+            {
+              "phase": "runtime-evaluation",
+              "elapsedSeconds": 13.171344842994586,
+              "exitStatus": 0
+            },
+            {
+              "phase": "definitions",
+              "elapsedSeconds": 0.5637409980408847,
+              "exitStatus": 0
+            },
+            {
+              "phase": "artifacts",
+              "elapsedSeconds": 97.57736565696541,
+              "exitStatus": 0
+            },
+            {
+              "phase": "tests",
+              "elapsedSeconds": 176.722607751959,
+              "exitStatus": 0
+            }
+          ],
+          "builders": 25,
+          "compiling": 29,
+          "workerSeconds": 522.2506632957375,
+          "archiveCompiling": 0,
+          "selectedCases": 1834,
+          "inventoryMatchesPrevious": true,
+          "passed": 1834,
+          "skipped": 127,
+          "totalSeconds": 300.0026947329752,
+          "pythonPreparation": [
+            {
+              "derivation": "/nix/store/m5y6qmkad4jv71ajqrk2ml75wii08y2j-gammaloop-api-python-build-deps-0.1.0.drv",
+              "seconds": 90.16961564100347,
+              "compiling": [
+                "Compiling pyo3-build-config v0.28.3",
+                "Compiling spenso v0.6.0 (/build/source/crates/spenso)",
+                "Compiling feynkit-kinematics v0.1.0 (/build/source/crates/feynkit-kinematics)",
+                "Compiling gammaloop-workspace-hack v0.1.0 (/build/source/crates/gammaloop-workspace-hack)",
+                "Compiling gammalooprs v0.3.4 (/build/source/crates/gammalooprs)",
+                "Compiling feynkit-graph v0.1.0 (/build/source/crates/feynkit-graph)",
+                "Compiling feynkit-cff v0.1.0 (/build/source/crates/feynkit-cff)",
+                "Compiling idenso v0.3.0 (/build/source/crates/idenso)",
+                "Compiling feynkit-tensor v0.1.0 (/build/source/crates/feynkit-tensor)",
+                "Compiling spenso-hep-lib v0.1.7 (/build/source/crates/spenso-hep-lib)",
+                "Compiling feynkit-generator v0.1.0 (/build/source/crates/feynkit-generator)",
+                "Compiling pyo3-ffi v0.28.3",
+                "Compiling pyo3-macros-backend v0.28.3",
+                "Compiling pyo3 v0.28.3",
+                "Compiling numpy v0.28.0",
+                "Compiling gammaloop-api v0.1.0 (/build/source/crates/gammaloop-api)",
+                "Compiling vakint v0.1.2 (/build/source/crates/vakint)",
+                "Compiling pyo3-macros v0.28.3",
+                "Compiling gammaloop-tracing-filter v0.1.0 (/build/source/crates/gammaloop-tracing-filter)",
+                "Compiling feynkit-ufo v0.1.0 (/build/source/crates/feynkit-ufo)"
+              ]
+            },
+            {
+              "derivation": "/nix/store/w7f2nsy0p9r4n6khfmh3l1aakr9w8c8h-gammaloop-api-python-0.1.0.drv",
+              "seconds": 9.599248242098838,
+              "compiling": []
+            },
+            {
+              "derivation": "/nix/store/cnk497yyw9zqj6p2d6860dc4f1p207yh-gammaloop-python-module.drv",
+              "seconds": 1.459428442060016,
+              "compiling": []
+            },
+            {
+              "derivation": "/nix/store/gawqzg9r2z5bkp1djynpv1ij98z27mxs-gammaloop-nextest-python-api.drv",
+              "seconds": 1.1546744180377573,
+              "compiling": []
+            }
+          ],
+          "runtimeBuilderCompiling": 0,
+          "groupCompletions": [
+            {
+              "group": "clinnet",
+              "completeAtSeconds": 0.7386827090522274,
+              "builderSeconds": 0.4107613160740584,
+              "passed": 5,
+              "skipped": 0
+            },
+            {
+              "group": "core",
+              "completeAtSeconds": 22.439723599003628,
+              "builderSeconds": 22.073481152998284,
+              "passed": 782,
+              "skipped": 31
+            },
+            {
+              "group": "feynkit",
+              "completeAtSeconds": 3.7865722459973767,
+              "builderSeconds": 3.372832922032103,
+              "passed": 210,
+              "skipped": 1
+            },
+            {
+              "group": "integration",
+              "completeAtSeconds": 176.71481051004957,
+              "builderSeconds": 176.26773070706986,
+              "passed": 106,
+              "skipped": 67
+            },
+            {
+              "group": "linnet",
+              "completeAtSeconds": 8.260874876985326,
+              "builderSeconds": 4.366611710982397,
+              "passed": 246,
+              "skipped": 0
+            },
+            {
+              "group": "spenso",
+              "completeAtSeconds": 18.54714930499904,
+              "builderSeconds": 10.154773624031805,
+              "passed": 386,
+              "skipped": 27
+            },
+            {
+              "group": "vakint",
+              "completeAtSeconds": 53.093680924968794,
+              "builderSeconds": 34.440880084992386,
+              "passed": 94,
+              "skipped": 1
+            },
+            {
+              "group": "python-api",
+              "completeAtSeconds": 103.38488995505031,
+              "builderSeconds": 1.1546744180377573,
+              "passed": 5,
+              "skipped": 0
+            }
+          ]
+        },
+        "totalReductionFraction": 0.4981202593641417,
+        "workerReductionFraction": 0.4189679052838622
+      }
+    },
+    "warmMain": {
+      "run": "prepare-main-warm-v1",
+      "layout": "main",
+      "phases": [
+        {
+          "phase": "archive-evaluation",
+          "elapsedSeconds": 7.6467225580709055,
+          "exitStatus": 0
+        },
+        {
+          "phase": "runtime-evaluation",
+          "elapsedSeconds": 9.107102133100852,
+          "exitStatus": 0
+        },
+        {
+          "phase": "definitions",
+          "elapsedSeconds": 0.5194212079513818,
+          "exitStatus": 0
+        },
+        {
+          "phase": "artifacts",
+          "elapsedSeconds": 0.17302641598507762,
+          "exitStatus": 0
+        },
+        {
+          "phase": "tests",
+          "elapsedSeconds": 167.30116855807137,
+          "exitStatus": 0
+        }
+      ],
+      "builders": 7,
+      "compiling": 0,
+      "workerSeconds": 237.99745930172503,
+      "archiveCompiling": 0,
+      "runtimeCompiling": 0,
+      "selectedCases": 1633,
+      "groupCompletions": [
+        {
+          "group": "clinnet",
+          "completeAtSeconds": 0.637226113001816,
+          "builderSeconds": 0.3515473179286346,
+          "passed": 5,
+          "skipped": 0
+        },
+        {
+          "group": "core",
+          "completeAtSeconds": 25.634223003988154,
+          "builderSeconds": 25.31738967797719,
+          "passed": 814,
+          "skipped": 61
+        },
+        {
+          "group": "integration",
+          "completeAtSeconds": 167.2954694610089,
+          "builderSeconds": 166.9480517549673,
+          "passed": 104,
+          "skipped": 67
+        },
+        {
+          "group": "linnet",
+          "completeAtSeconds": 2.2012090439675376,
+          "builderSeconds": 1.823736360995099,
+          "passed": 246,
+          "skipped": 0
+        },
+        {
+          "group": "python-api",
+          "completeAtSeconds": 2.1278023390332237,
+          "builderSeconds": 1.4550855819834396,
+          "passed": 5,
+          "skipped": 0
+        },
+        {
+          "group": "spenso",
+          "completeAtSeconds": 13.354045673971996,
+          "builderSeconds": 11.189211706980132,
+          "passed": 385,
+          "skipped": 27
+        },
+        {
+          "group": "vakint",
+          "completeAtSeconds": 33.15186735696625,
+          "builderSeconds": 30.912436900893226,
+          "passed": 74,
+          "skipped": 0
+        }
+      ],
+      "inventoryMatchesPrevious": true
+    },
+    "warmFeynkit": {
+      "run": "prepare-feynkit-warm-v2",
+      "layout": "feynkit",
+      "phases": [
+        {
+          "phase": "archive-evaluation",
+          "elapsedSeconds": 12.12277593195904,
+          "exitStatus": 0
+        },
+        {
+          "phase": "runtime-evaluation",
+          "elapsedSeconds": 13.431719148997217,
+          "exitStatus": 0
+        },
+        {
+          "phase": "definitions",
+          "elapsedSeconds": 0.5715654169907793,
+          "exitStatus": 0
+        },
+        {
+          "phase": "artifacts",
+          "elapsedSeconds": 0.18247989704832435,
+          "exitStatus": 0
+        },
+        {
+          "phase": "tests",
+          "elapsedSeconds": 162.38035302900244,
+          "exitStatus": 0
+        }
+      ],
+      "builders": 8,
+      "compiling": 0,
+      "workerSeconds": 234.99550465424545,
+      "archiveCompiling": 0,
+      "runtimeCompiling": 0,
+      "selectedCases": 1834,
+      "groupCompletions": [
+        {
+          "group": "clinnet",
+          "completeAtSeconds": 0.6965910950675607,
+          "builderSeconds": 0.3953140981029719,
+          "passed": 5,
+          "skipped": 0
+        },
+        {
+          "group": "core",
+          "completeAtSeconds": 20.979822288034484,
+          "builderSeconds": 20.645786940003745,
+          "passed": 782,
+          "skipped": 31
+        },
+        {
+          "group": "feynkit",
+          "completeAtSeconds": 4.087150763021782,
+          "builderSeconds": 3.720286973984912,
+          "passed": 210,
+          "skipped": 1
+        },
+        {
+          "group": "integration",
+          "completeAtSeconds": 162.3693933490431,
+          "builderSeconds": 161.96944525802974,
+          "passed": 106,
+          "skipped": 67
+        },
+        {
+          "group": "linnet",
+          "completeAtSeconds": 2.5418915500631556,
+          "builderSeconds": 1.8085698630893603,
+          "passed": 246,
+          "skipped": 0
+        },
+        {
+          "group": "python-api",
+          "completeAtSeconds": 3.927552690031007,
+          "builderSeconds": 1.348278666031547,
+          "passed": 5,
+          "skipped": 0
+        },
+        {
+          "group": "spenso",
+          "completeAtSeconds": 16.270056425011717,
+          "builderSeconds": 12.265014189993963,
+          "passed": 386,
+          "skipped": 27
+        },
+        {
+          "group": "vakint",
+          "completeAtSeconds": 37.004122414044105,
+          "builderSeconds": 32.842808665009215,
+          "passed": 94,
+          "skipped": 1
+        }
+      ],
+      "inventoryMatchesPrevious": true
+    },
+    "staticSourceEditComparison": {
+      "scope": "Clippy and doctests concurrently after the identical main source edit, dependency caches prepared; excludes ordinary runtime tests.",
+      "resources": {
+        "cpuAffinity": "40-47",
+        "nixCores": 8,
+        "maxJobs": 4,
+        "substituters": [],
+        "remoteBuilders": [],
+        "sandbox": true
+      },
+      "variants": {
+        "baseline": {
+          "phaseSeconds": 539.9625706269871,
+          "setupSeconds": 6.185523029067554,
+          "workerSeconds": 911.5225742920302,
+          "checks": [
+            {
+              "derivation": "/nix/store/g8h44jqcqpy979nny13lrf1728c7ddds-gammaloop-workspace-clippy-0.1.0.drv",
+              "start": 0.29223456303589046,
+              "end": 372.23667638900224,
+              "seconds": 371.94444182596635,
+              "compiling": [
+                "Compiling target-lexicon v0.13.5",
+                "Compiling pyo3-build-config v0.28.3",
+                "Compiling phf_shared v0.11.3",
+                "Compiling phf_generator v0.11.3",
+                "Compiling phf_codegen v0.11.3",
+                "Compiling getopts v0.2.24",
+                "Compiling unicode_names2_generator v1.3.0",
+                "Compiling unic-common v0.9.0",
+                "Compiling unic-char-range v0.9.0",
+                "Compiling unic-char-property v0.9.0",
+                "Compiling unic-ucd-version v0.9.0",
+                "Compiling is-macro v0.3.7",
+                "Compiling rustpython-parser-vendored v0.4.0",
+                "Compiling rustpython-parser v0.4.0",
+                "Compiling phf v0.11.3",
+                "Compiling unic-emoji-char v0.9.0",
+                "Compiling unic-ucd-ident v0.9.0",
+                "Compiling rustc-hash v1.1.0",
+                "Compiling lalrpop-util v0.20.2",
+                "Compiling symbolica v2.2.0 (https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a)",
+                "Compiling pyo3-ffi v0.28.3",
+                "Compiling pyo3-macros-backend v0.28.3",
+                "Compiling pyo3 v0.28.3",
+                "Compiling numpy v0.28.0",
+                "Compiling unicode_names2 v1.3.0",
+                "Compiling rustpython-parser-core v0.4.0",
+                "Compiling rustpython-ast v0.4.0",
+                "Compiling numerica v2.2.0 (https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a)",
+                "Compiling vakint v0.1.2 (/build/source/crates/vakint)",
+                "Compiling graphica v2.1.0 (https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a)",
+                "Compiling gammaloop-tracing-filter-macros v0.1.0 (/build/source/crates/gammaloop-tracing-filter-macros)",
+                "Compiling gammalooprs v0.3.4 (/build/source/crates/gammalooprs)",
+                "Compiling gammaloop-api v0.1.0 (/build/source/crates/gammaloop-api)",
+                "Compiling test-log-core v0.2.20",
+                "Compiling rustc_version v0.4.1",
+                "Compiling gungraun-macros v0.8.0",
+                "Compiling gungraun-runner v0.18.2",
+                "Compiling test-log-macros v0.2.20",
+                "Compiling gammaloop-integration-tests v0.1.0 (/build/source/tests)",
+                "Compiling pyo3-stub-gen-derive v0.17.2",
+                "Compiling iai-callgrind-runner v0.14.2",
+                "Compiling iai-callgrind v0.14.2",
+                "Compiling iai-callgrind-macros v0.5.1",
+                "Compiling pyo3-macros v0.28.3",
+                "Compiling gammaloop-workspace-hack v0.1.0 (/build/source/crates/gammaloop-workspace-hack)"
+              ],
+              "checkingMessages": 365
+            },
+            {
+              "derivation": "/nix/store/07lhz0likxc544d5ygl1flg4qzklh3lp-gammaloop-workspace-doctest-0.1.0.drv",
+              "start": 0.37110349198337644,
+              "end": 539.9492359580472,
+              "seconds": 539.5781324660638,
+              "compiling": [
+                "Compiling target-lexicon v0.13.5",
+                "Compiling phf_shared v0.11.3",
+                "Compiling getopts v0.2.24",
+                "Compiling unic-common v0.9.0",
+                "Compiling unic-char-range v0.9.0",
+                "Compiling is-macro v0.3.7",
+                "Compiling rustpython-parser-vendored v0.4.0",
+                "Compiling symbolica v2.2.0 (https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a)",
+                "Compiling unic-ucd-version v0.9.0",
+                "Compiling unic-char-property v0.9.0",
+                "Compiling rustc-hash v1.1.0",
+                "Compiling phf_generator v0.11.3",
+                "Compiling phf v0.11.3",
+                "Compiling unic-emoji-char v0.9.0",
+                "Compiling unic-ucd-ident v0.9.0",
+                "Compiling phf_codegen v0.11.3",
+                "Compiling lalrpop-util v0.20.2",
+                "Compiling unicode_names2_generator v1.3.0",
+                "Compiling gammaloop-tracing-filter-macros v0.1.0 (/build/source/crates/gammaloop-tracing-filter-macros)",
+                "Compiling rustpython-parser v0.4.0",
+                "Compiling vakint v0.1.2 (/build/source/crates/vakint)",
+                "Compiling gammalooprs v0.3.4 (/build/source/crates/gammalooprs)",
+                "Compiling rustc_version v0.4.1",
+                "Compiling gammaloop-api v0.1.0 (/build/source/crates/gammaloop-api)",
+                "Compiling bincode v1.3.3",
+                "Compiling gungraun-runner v0.18.2",
+                "Compiling pyo3-build-config v0.28.3",
+                "Compiling iai-callgrind-runner v0.14.2",
+                "Compiling gungraun-macros v0.8.0",
+                "Compiling gammaloop-integration-tests v0.1.0 (/build/source/tests)",
+                "Compiling test-log-core v0.2.20",
+                "Compiling wait-timeout v0.2.1",
+                "Compiling bit-vec v0.8.0",
+                "Compiling iai-callgrind v0.14.2",
+                "Compiling quick-error v1.2.3",
+                "Compiling maplit v1.0.2",
+                "Compiling rusty-fork v0.3.1",
+                "Compiling bit-set v0.8.0",
+                "Compiling unicode_names2 v1.3.0",
+                "Compiling test-log-macros v0.2.20",
+                "Compiling iai-callgrind-macros v0.5.1",
+                "Compiling rand_xorshift v0.4.0",
+                "Compiling console v0.15.11",
+                "Compiling base64 v0.21.7",
+                "Compiling unarray v0.1.4",
+                "Compiling proptest v1.11.0",
+                "Compiling ron v0.8.1",
+                "Compiling rustpython-parser-core v0.4.0",
+                "Compiling pyo3-macros-backend v0.28.3",
+                "Compiling pyo3-ffi v0.28.3",
+                "Compiling pyo3 v0.28.3",
+                "Compiling numpy v0.28.0",
+                "Compiling rustpython-ast v0.4.0",
+                "Compiling similar-asserts v1.7.0",
+                "Compiling test-log v0.2.20",
+                "Compiling kurvst v0.1.0 (/build/source/crates/kurvst)",
+                "Compiling gungraun v0.18.2",
+                "Compiling pyo3-macros v0.28.3",
+                "Compiling pyo3-stub-gen-derive v0.17.2",
+                "Compiling pyo3-stub-gen v0.17.2",
+                "Compiling numerica v2.2.0 (https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a)",
+                "Compiling symbolica-utils v0.1.0 (/build/source/crates/symbolica-utils)",
+                "Compiling graphica v2.1.0 (https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a)",
+                "Compiling gammaloop-workspace-hack v0.1.0 (/build/source/crates/gammaloop-workspace-hack)",
+                "Compiling spenso-macros v0.3.2 (/build/source/crates/spenso-macros)",
+                "Compiling linnet v0.17.0 (/build/source/crates/linnet)",
+                "Compiling spenso v0.6.0 (/build/source/crates/spenso)",
+                "Compiling idenso v0.3.0 (/build/source/crates/idenso)",
+                "Compiling gammaloop-tracing-filter v0.1.0 (/build/source/crates/gammaloop-tracing-filter)",
+                "Compiling spenso-hep-lib v0.1.7 (/build/source/crates/spenso-hep-lib)",
+                "Compiling spynso3 v0.1.2 (/build/source/crates/spynso3)",
+                "Compiling linnest v0.1.0 (/build/source/crates/linnest)",
+                "Compiling linnet-py v0.1.0 (/build/source/crates/linnet-py)"
+              ],
+              "checkingMessages": 0
+            }
+          ],
+          "doctestsPassed": 43,
+          "doctestsIgnored": 20,
+          "clippyPassed": true,
+          "doctestInventorySha256": "2a342fa274cc5eab5e5ccd3b583cea6457b4a4bc1d38eef55f8cac4cda98df76"
+        },
+        "candidate": {
+          "phaseSeconds": 493.74137560196687,
+          "setupSeconds": 5.388456940068863,
+          "workerSeconds": 810.9340298729949,
+          "checks": [
+            {
+              "derivation": "/nix/store/lx8vrhdv5njwjqd7xvc89v053iw7gq93-gammaloop-workspace-clippy-0.1.0.drv",
+              "start": 0.29221706092357635,
+              "end": 317.8666767949471,
+              "seconds": 317.57445973402355,
+              "compiling": [
+                "Compiling vakint v0.1.2 (/build/source/crates/vakint)",
+                "Compiling gammaloop-tracing-filter-macros v0.1.0 (/build/source/crates/gammaloop-tracing-filter-macros)",
+                "Compiling gammalooprs v0.3.4 (/build/source/crates/gammalooprs)",
+                "Compiling gammaloop-api v0.1.0 (/build/source/crates/gammaloop-api)",
+                "Compiling gammaloop-integration-tests v0.1.0 (/build/source/tests)",
+                "Compiling gammaloop-workspace-hack v0.1.0 (/build/source/crates/gammaloop-workspace-hack)"
+              ],
+              "checkingMessages": 13
+            },
+            {
+              "derivation": "/nix/store/mffy4q8n2ks0akqzm8lnhkl7r437y1na-gammaloop-workspace-doctest-0.1.0.drv",
+              "start": 0.3714486419921741,
+              "end": 493.7310187809635,
+              "seconds": 493.3595701389713,
+              "compiling": [
+                "Compiling symbolica v2.2.0 (https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a)",
+                "Compiling gammaloop-tracing-filter-macros v0.1.0 (/build/source/crates/gammaloop-tracing-filter-macros)",
+                "Compiling vakint v0.1.2 (/build/source/crates/vakint)",
+                "Compiling gammalooprs v0.3.4 (/build/source/crates/gammalooprs)",
+                "Compiling gammaloop-api v0.1.0 (/build/source/crates/gammaloop-api)",
+                "Compiling gammaloop-integration-tests v0.1.0 (/build/source/tests)",
+                "Compiling kurvst v0.1.0 (/build/source/crates/kurvst)",
+                "Compiling symbolica-utils v0.1.0 (/build/source/crates/symbolica-utils)",
+                "Compiling gammaloop-workspace-hack v0.1.0 (/build/source/crates/gammaloop-workspace-hack)",
+                "Compiling spenso-macros v0.3.2 (/build/source/crates/spenso-macros)",
+                "Compiling linnet v0.17.0 (/build/source/crates/linnet)",
+                "Compiling spenso v0.6.0 (/build/source/crates/spenso)",
+                "Compiling idenso v0.3.0 (/build/source/crates/idenso)",
+                "Compiling gammaloop-tracing-filter v0.1.0 (/build/source/crates/gammaloop-tracing-filter)",
+                "Compiling spenso-hep-lib v0.1.7 (/build/source/crates/spenso-hep-lib)",
+                "Compiling spynso3 v0.1.2 (/build/source/crates/spynso3)",
+                "Compiling linnest v0.1.0 (/build/source/crates/linnest)",
+                "Compiling linnet-py v0.1.0 (/build/source/crates/linnet-py)"
+              ],
+              "checkingMessages": 0
+            }
+          ],
+          "doctestsPassed": 43,
+          "doctestsIgnored": 20,
+          "clippyPassed": true,
+          "doctestInventorySha256": "2a342fa274cc5eab5e5ccd3b583cea6457b4a4bc1d38eef55f8cac4cda98df76"
+        }
+      },
+      "exactDoctestNamesAndStatusesMatch": true,
+      "completionReductionFraction": 0.08560073890186448,
+      "workerReductionFraction": 0.11035222522838928,
+      "limits": [
+        "Single sequential pair on a shared host.",
+        "The candidate dependency producer was prepared beforehand; its cold cost is included in the separate full cold suites."
+      ]
+    },
+    "staticChecks": {
+      "main": {
+        "cargoCheck": "passed",
+        "clippy": "passed",
+        "format": "passed",
+        "generatedGraphAndConfiguration": "passed",
+        "doctestsPassed": 43,
+        "doctestsIgnored": 20
+      },
+      "feynkit": {
+        "cargoCheck": "passed",
+        "clippy": "passed",
+        "format": "passed",
+        "generatedGraphAndConfiguration": "passed",
+        "doctestsPassed": 62,
+        "doctestsIgnored": 20,
+        "boundaryGuardAndSelfTest": "passed",
+        "pythonStubGeneration": "not rerun; workflow preserved"
+      }
+    },
+    "closureSizes": {
+      "baseline": {
+        "cargoArtifacts": {
+          "drv": "/nix/store/99pls2ddk6gi0j1n7p8mmzsdc6xqxmh5-gammaloop-workspace-deps-deps-0.1.0.drv",
+          "out": "/nix/store/n1197xf1f1ww18f1h0s6fvymi07ql30n-gammaloop-workspace-deps-deps-0.1.0",
+          "narBytes": 359527552,
+          "closureBytes": 1025682112,
+          "closurePaths": 583,
+          "cargoArtifactClosureBytes": 359527552,
+          "compilerStates": []
+        },
+        "crate-test-binaries-gammaloop-integration-tests": {
+          "drv": "/nix/store/4cjcz53w0xcz55rq60ks5dsfx16h9dfz-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-deps-0.1.0.drv",
+          "out": "/nix/store/fyaxlbi3x1alnmp5anl7bzbrqrgkifjy-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-deps-0.1.0",
+          "narBytes": 259903776,
+          "closureBytes": 2085008520,
+          "closurePaths": 588,
+          "cargoArtifactClosureBytes": 1418853960,
+          "compilerStates": []
+        },
+        "crate-test-binaries-gammalooprs": {
+          "drv": "/nix/store/gg3xjdbcbhcr5jdpwapiwa4lk0b1vamg-gammaloop-crate-test-binaries-gammalooprs-be74a11b6e47d216-deps-0.1.0.drv",
+          "out": "/nix/store/1rcsva3zlcd4xv2z60a4zlzm07r16aiy-gammaloop-crate-test-binaries-gammalooprs-be74a11b6e47d216-deps-0.1.0",
+          "narBytes": 114791632,
+          "closureBytes": 1912361520,
+          "closurePaths": 588,
+          "cargoArtifactClosureBytes": 1246206960,
+          "compilerStates": []
+        },
+        "crate-test-dependencies-gammaloop-api": {
+          "drv": "/nix/store/14bpvvmwdiq77439jkkd88kmc3ziy6ch-gammaloop-crate-test-dependencies-9f61ebb64a841b09-deps-0.1.0.drv",
+          "out": "/nix/store/ihfhpsinb3n4rzqnvi5ypx3awqxyrzvf-gammaloop-crate-test-dependencies-9f61ebb64a841b09-deps-0.1.0",
+          "narBytes": 24233088,
+          "closureBytes": 1821802976,
+          "closurePaths": 588,
+          "cargoArtifactClosureBytes": 1155648416,
+          "compilerStates": []
+        },
+        "crate-test-dependencies-gammalooprs": {
+          "drv": "/nix/store/i7p1sa130b29hvzii5l26h72c3zkf3c6-gammaloop-crate-test-dependencies-be74a11b6e47d216-deps-0.1.0.drv",
+          "out": "/nix/store/ixsgn5ic6a5a8j1avq5c7qrcr46slrfi-gammaloop-crate-test-dependencies-be74a11b6e47d216-deps-0.1.0",
+          "narBytes": 36503096,
+          "closureBytes": 3688332904,
+          "closurePaths": 602,
+          "cargoArtifactClosureBytes": 2973932664,
+          "compilerStates": []
+        }
+      },
+      "candidate": {
+        "cargoArtifacts": {
+          "drv": "/nix/store/7x1jzbapv982mw8d3srkd08jp345gk81-gammaloop-workspace-deps-deps-0.1.0.drv",
+          "out": "/nix/store/0pd3r0czmrh119pla9lwzsdx7xk3j33a-gammaloop-workspace-deps-deps-0.1.0",
+          "narBytes": 359468792,
+          "closureBytes": 1025623352,
+          "closurePaths": 583,
+          "cargoArtifactClosureBytes": 359468792,
+          "compilerStates": []
+        },
+        "crate-test-binaries-gammaloop-integration-tests": {
+          "drv": "/nix/store/kmjgq8b756bym1vpr7qjzdwwc75r0hvz-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-deps-0.1.0.drv",
+          "out": "/nix/store/8ilv4afx6lazqwrbjm72byx03r4dnjxm-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-deps-0.1.0",
+          "narBytes": 259921944,
+          "closureBytes": 1481132064,
+          "closurePaths": 586,
+          "cargoArtifactClosureBytes": 814977504,
+          "compilerStates": []
+        },
+        "crate-test-binaries-gammalooprs": {
+          "drv": "/nix/store/cfklxpa69pfgh6ggslbrqya9zl83jxrj-gammaloop-crate-test-binaries-gammalooprs-be74a11b6e47d216-deps-0.1.0.drv",
+          "out": "/nix/store/p6qi9jqcd8fn9sd5aw3vhxnjzg3qsr16-gammaloop-crate-test-binaries-gammalooprs-be74a11b6e47d216-deps-0.1.0",
+          "narBytes": 114759464,
+          "closureBytes": 1308852904,
+          "closurePaths": 585,
+          "cargoArtifactClosureBytes": 642698344,
+          "compilerStates": []
+        },
+        "crate-test-dependencies-gammaloop-api": {
+          "drv": "/nix/store/jhys4a9v7vvz9887yd6sx4g2yhrplysf-gammaloop-crate-test-dependencies-9f61ebb64a841b09-deps-0.1.0.drv",
+          "out": "/nix/store/a429pcrpdwvhys1ii452qjwhwjyhqxg8-gammaloop-crate-test-dependencies-9f61ebb64a841b09-deps-0.1.0",
+          "narBytes": 24235768,
+          "closureBytes": 1217570296,
+          "closurePaths": 584,
+          "cargoArtifactClosureBytes": 551415736,
+          "compilerStates": []
+        },
+        "crate-test-dependencies-gammalooprs": {
+          "drv": "/nix/store/hk43cvab7va4a1ikrh35ibk69jyyfvlw-gammaloop-crate-test-dependencies-be74a11b6e47d216-deps-0.1.0.drv",
+          "out": "/nix/store/qp3x5lv0jdzx50ffxd7cn995dal12b6s-gammaloop-crate-test-dependencies-be74a11b6e47d216-deps-0.1.0",
+          "narBytes": 36491808,
+          "closureBytes": 1194093440,
+          "closurePaths": 584,
+          "cargoArtifactClosureBytes": 527938880,
+          "compilerStates": []
+        }
+      }
+    },
+    "publication": {
+      "selectedWrappers": 34,
+      "revisionDependentWrappers": 0,
+      "wrappersRequestingCompilerState": 0,
+      "optionalSeedOutput": "packages.x86_64-linux.ci-compiler-state",
+      "remoteSeedAvailability": "not validated"
+    },
+    "negativeControl": {
+      "passed": true,
+      "exitStatus": 1,
+      "derivation": "/nix/store/fbv9v4r06r1ynmd28f4qg9z6zcdk88xz-gammaloop-crate-test-dependencies-be74a11b6e47d216-deps-0.1.0.drv",
+      "elapsedSeconds": 14.601698373095132,
+      "sourceTimestamp": 0,
+      "expectedFailure": "Current source compile_error is rejected despite inherited binaries and compiler state."
+    },
+    "finalCleanDerivationIdentity": {
+      "main": {
+        "rootsMatchFrozenBenchmark": true,
+        "producersMatchFrozenBenchmark": true
+      },
+      "feynkit": {
+        "rootsMatchFrozenBenchmark": true,
+        "producersMatchFrozenBenchmark": true
+      }
+    },
+    "cold": {
+      "main": {
+        "layout": "main",
+        "baselineSeconds": 2641.4578385340005,
+        "candidateSeconds": 2301.08482908,
+        "candidateToBaselineRatio": 0.8711419866376113,
+        "inventoryExactlyEqual": true,
+        "eligibleLocalObservation": true,
+        "coldWithinTenPercent": true,
+        "selectedCases": {
+          "baseline": 1633,
+          "candidate": 1633
+        },
+        "compilationMessages": {
+          "baseline": 794,
+          "candidate": 752
+        },
+        "workerSeconds": {
+          "baseline": 7594.422540633005,
+          "candidate": 6370.853219498002
+        },
+        "lastRuntimeGroupSeconds": {
+          "baseline": 2641.385359003,
+          "candidate": 2301.050746866
+        },
+        "limits": [
+          "Fresh project-cold candidate only; compared with the earlier same-day controlled baseline, not a contemporaneous cold pair.",
+          "Baseline derivations and the entire initial external store closure were verified identical to that earlier measurement.",
+          "Same CPU affinity 8\u201315, eight cores, four jobs, no project/compiler-state seeds or substituters; the host is shared.",
+          "NAR sizes are restored content, not network bytes or CHF costs."
+        ]
+      },
+      "feynkit": {
+        "layout": "feynkit",
+        "baselineSeconds": 2883.7439732929997,
+        "candidateSeconds": 2532.9117574049997,
+        "candidateToBaselineRatio": 0.8783414134066214,
+        "inventoryExactlyEqual": true,
+        "eligibleLocalObservation": true,
+        "coldWithinTenPercent": true,
+        "selectedCases": {
+          "baseline": 1834,
+          "candidate": 1834
+        },
+        "compilationMessages": {
+          "baseline": 896,
+          "candidate": 854
+        },
+        "workerSeconds": {
+          "baseline": 9821.823288183994,
+          "candidate": 8511.710061956994
+        },
+        "lastRuntimeGroupSeconds": {
+          "baseline": 2883.662451297,
+          "candidate": 2532.86198935
+        },
+        "limits": [
+          "Fresh project-cold candidate only; compared with the earlier same-day controlled baseline, not a contemporaneous cold pair.",
+          "Baseline derivations and the entire initial external store closure were verified identical to that earlier measurement.",
+          "Same CPU affinity 8\u201315, eight cores, four jobs, no project/compiler-state seeds or substituters; the host is shared.",
+          "NAR sizes are restored content, not network bytes or CHF costs."
+        ]
+      }
+    },
+    "mainPreparationCompletionPath": {
+      "baseline": {
+        "run": "prepare-main-final-baseline",
+        "seconds": 138.31896864506416,
+        "mergeSeconds": 60.18588880519383,
+        "cargoSeconds": 49.35000000000001,
+        "builderOtherSeconds": 27.64280030897352,
+        "waitingAndCommandSeconds": 1.1402795308968052,
+        "chain": [
+          {
+            "derivation": "/nix/store/nl4q26g8905cpn9brgcflfls2vdviiz3-gammaloop-crate-test-dependencies-be74a11b6e47d216-deps-0.1.0.drv",
+            "seconds": 15.357422705041245,
+            "cargoSeconds": 10.39,
+            "merge": false,
+            "waitSeconds": 0.3461537209805101
+          },
+          {
+            "derivation": "/nix/store/v7avcvcq7sgh7cr9kjihf1wmh3jigpvc-gammaloop-crate-test-dependencies-9f61ebb64a841b09-inputs.drv",
+            "seconds": 28.127538514090702,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 0.15027100394945592
+          },
+          {
+            "derivation": "/nix/store/bfclbx9g7q5lhpbxa9y6dqrfisi71z1a-gammaloop-crate-test-dependencies-9f61ebb64a841b09-deps-0.1.0.drv",
+            "seconds": 15.66714586794842,
+            "cargoSeconds": 11.05,
+            "merge": false,
+            "waitSeconds": 0.08128248399589211
+          },
+          {
+            "derivation": "/nix/store/qv9gl4y85q645qsy0qrb6z9l3npr0p8m-gammaloop-crate-test-dependencies-e0b21f779898bed7-inputs.drv",
+            "seconds": 23.423439012025483,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 0.15642294101417065
+          },
+          {
+            "derivation": "/nix/store/ndyram9kn3yan5jfpsvr2mww9fld180a-gammaloop-crate-test-dependencies-e0b21f779898bed7-deps-0.1.0.drv",
+            "seconds": 14.557605637004599,
+            "cargoSeconds": 10.47,
+            "merge": false,
+            "waitSeconds": 0.08394112100359052
+          },
+          {
+            "derivation": "/nix/store/pgjrz2x3l1nmnwnb6hqipwiyn6cgmg4h-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-inputs.drv",
+            "seconds": 8.634911279077642,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 0.07562722894363105
+          },
+          {
+            "derivation": "/nix/store/71zwsvis3figrgjf3sswsa0v615qsj76-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-deps-0.1.0.drv",
+            "seconds": 23.731120229000226,
+            "cargoSeconds": 17.14,
+            "merge": false,
+            "waitSeconds": 0.0819423459470272
+          },
+          {
+            "derivation": "/nix/store/176r0891asjng5fvkr9p0p8qhnk2zjnc-gammaloop-nextest-binaries-integration-gammaloop-integration-tests-0.1.0.drv",
+            "seconds": 7.631664969027042,
+            "cargoSeconds": 0.3,
+            "merge": false,
+            "waitSeconds": 0.08232656703330576
+          },
+          {
+            "derivation": "/nix/store/cgk1xpda4glqcgk30ij201vhqfx0qhc2-gammaloop-nextest-binaries-integration.drv",
+            "seconds": 0.047840900951996446,
+            "cargoSeconds": 0,
+            "merge": false,
+            "waitSeconds": 0.034105353988707066
+          }
+        ]
+      },
+      "candidate": {
+        "run": "prepare-main-final-candidate",
+        "seconds": 93.84441442799289,
+        "mergeSeconds": 12.888451995910145,
+        "cargoSeconds": 50.2,
+        "builderOtherSeconds": 29.764535472099663,
+        "waitingAndCommandSeconds": 0.9914269599830767,
+        "chain": [
+          {
+            "derivation": "/nix/store/gghgd1j8i5c7p34m4pd21m3s03h3qlmg-gammaloop-crate-test-dependencies-be74a11b6e47d216-deps-0.1.0.drv",
+            "seconds": 16.055996893090196,
+            "cargoSeconds": 10.59,
+            "merge": false,
+            "waitSeconds": 0.34665034094359726
+          },
+          {
+            "derivation": "/nix/store/15331xvmi9zskhbq9yl287b00hlr7g0r-gammaloop-crate-test-dependencies-9f61ebb64a841b09-inputs.drv",
+            "seconds": 12.888451995910145,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 0.16408048500306904
+          },
+          {
+            "derivation": "/nix/store/lg733v9vsm5m7j51lnjcvb1hg7pblqd9-gammaloop-crate-test-dependencies-9f61ebb64a841b09-deps-0.1.0.drv",
+            "seconds": 15.74659537395928,
+            "cargoSeconds": 10.81,
+            "merge": false,
+            "waitSeconds": 0.08796007407363504
+          },
+          {
+            "derivation": "/nix/store/ss4kcdqbzc5hmayv1x7wg0acn40m2492-gammaloop-crate-test-dependencies-e0b21f779898bed7-deps-0.1.0.drv",
+            "seconds": 15.704480150947347,
+            "cargoSeconds": 10.98,
+            "merge": false,
+            "waitSeconds": 0.17063773307017982
+          },
+          {
+            "derivation": "/nix/store/42idiz7w0fiivzfcfrh5ygjgm7lypmn7-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-deps-0.1.0.drv",
+            "seconds": 24.348764352034777,
+            "cargoSeconds": 17.51,
+            "merge": false,
+            "waitSeconds": 0.08437624399084598
+          },
+          {
+            "derivation": "/nix/store/1zbhcvzmy6dbpyjhymk8z096bhk52ah2-gammaloop-nextest-binaries-integration-gammaloop-integration-tests-0.1.0.drv",
+            "seconds": 8.060235877055675,
+            "cargoSeconds": 0.31,
+            "merge": false,
+            "waitSeconds": 0.08369481295812875
+          },
+          {
+            "derivation": "/nix/store/p0vg78hq0kqrzdy0yxa9fllsxdwxn64s-gammaloop-nextest-binaries-integration.drv",
+            "seconds": 0.048462825012393296,
+            "cargoSeconds": 0,
+            "merge": false,
+            "waitSeconds": 0.034994676942005754
+          }
+        ]
+      }
+    },
+    "mainColdCompletionPath": {
+      "baseline": {
+        "run": "/tmp/ci-dependency-reuse-audit/cold-followup/main/candidate",
+        "seconds": 2641.4578385340005,
+        "mergeSeconds": 384.9095471160001,
+        "cargoSeconds": 1627.49,
+        "builderOtherSeconds": 118.42619215200153,
+        "runtimeSeconds": 159.4636528359997,
+        "waitingAndCommandSeconds": 351.16844642999894,
+        "chain": [
+          {
+            "derivation": "/nix/store/zrspp800mnxwjarmlzafcvw1i2i1213s-Cargo.toml.drv",
+            "seconds": 0.06286475700000294,
+            "cargoSeconds": 0,
+            "merge": false,
+            "waitSeconds": 1.8862574499999174
+          },
+          {
+            "derivation": "/nix/store/y41i6i7w209yk39j65ryxdkvgdvd773f-source.drv",
+            "seconds": 0.4214239509999764,
+            "cargoSeconds": 0,
+            "merge": false,
+            "waitSeconds": 10.294742365000303
+          },
+          {
+            "derivation": "/nix/store/am20h6y95jqlbykwaj9x7080i1qmf9nw-gammaloop-crate-gammaloop-workspace-hack-deps-0.1.0.drv",
+            "seconds": 333.78375487799985,
+            "cargoSeconds": 330,
+            "merge": false,
+            "waitSeconds": 0.10432574900006841
+          },
+          {
+            "derivation": "/nix/store/5xlmagw7bxpb2v9v4p7bpcpagzs31g3s-gammaloop-crate-gammaloop-workspace-hack-build-0.1.0.drv",
+            "seconds": 2.209804948999988,
+            "cargoSeconds": 0.5,
+            "merge": false,
+            "waitSeconds": 0.09869888200006471
+          },
+          {
+            "derivation": "/nix/store/99pls2ddk6gi0j1n7p8mmzsdc6xqxmh5-gammaloop-workspace-deps-deps-0.1.0.drv",
+            "seconds": 221.9919810829996,
+            "cargoSeconds": 214,
+            "merge": false,
+            "waitSeconds": 0.09782431800016411
+          },
+          {
+            "derivation": "/nix/store/5x3nsc1m4pd03g1baxb2jw6k0fbqmv93-gammaloop-crate-test-dependencies-2487cdc24b69b833-inputs.drv",
+            "seconds": 11.452861866000148,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 13.308732940000027
+          },
+          {
+            "derivation": "/nix/store/0r03212a8vyx8fgpmrz0pj5qvx5hfn8b-gammaloop-crate-test-dependencies-2487cdc24b69b833-deps-0.1.0.drv",
+            "seconds": 4.5633244310002965,
+            "cargoSeconds": 1.2,
+            "merge": false,
+            "waitSeconds": 22.52348633999975
+          },
+          {
+            "derivation": "/nix/store/dh10kqyfh2vhpmwpj7vxrb6w3k3cx8j4-gammaloop-crate-test-dependencies-78814cb8a1862b52-inputs.drv",
+            "seconds": 17.232682004999788,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 15.436660707000215
+          },
+          {
+            "derivation": "/nix/store/6ckqq4f522rvalq35rw77y9vmyl1inzl-gammaloop-crate-test-dependencies-78814cb8a1862b52-deps-0.1.0.drv",
+            "seconds": 379.4342004120001,
+            "cargoSeconds": 374,
+            "merge": false,
+            "waitSeconds": 2.7208298849999437
+          },
+          {
+            "derivation": "/nix/store/nf5jw079vcm67gd111sf3957bfxic1mr-gammaloop-crate-test-dependencies-b6a0734be42e3503-inputs.drv",
+            "seconds": 42.349243155000295,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 142.8174429899998
+          },
+          {
+            "derivation": "/nix/store/z20q74sivnrsfmq03f1v9zzw92l9hmas-gammaloop-crate-test-dependencies-b6a0734be42e3503-deps-0.1.0.drv",
+            "seconds": 64.32894716100031,
+            "cargoSeconds": 54.17,
+            "merge": false,
+            "waitSeconds": 18.2057605829998
+          },
+          {
+            "derivation": "/nix/store/68h479yc881lvwaf8p24qkjmy1w1dvrn-gammaloop-crate-test-dependencies-91f21e5f130440bb-inputs.drv",
+            "seconds": 33.47214518500027,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 57.09704470299971
+          },
+          {
+            "derivation": "/nix/store/h655ql91ihr5m889p4m37pqzs1s1cszx-gammaloop-crate-test-dependencies-91f21e5f130440bb-deps-0.1.0.drv",
+            "seconds": 75.74903536199963,
+            "cargoSeconds": 63,
+            "merge": false,
+            "waitSeconds": 21.520039645999532
+          },
+          {
+            "derivation": "/nix/store/9nkqgnhq4inac9j10hk9brhk4b794cd9-gammaloop-crate-test-dependencies-326651bd60141f1c-inputs.drv",
+            "seconds": 39.03884456000014,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 7.267727802000081
+          },
+          {
+            "derivation": "/nix/store/xys1l3qv5brjcc1b7rpa6hc20zwikmp6-gammaloop-crate-test-dependencies-326651bd60141f1c-deps-0.1.0.drv",
+            "seconds": 10.346894696000163,
+            "cargoSeconds": 2.3,
+            "merge": false,
+            "waitSeconds": 10.040176483999858
+          },
+          {
+            "derivation": "/nix/store/nrlgikncahq4f9w2hvmkff6w3yr1ljdh-gammaloop-crate-test-dependencies-be74a11b6e47d216-inputs.drv",
+            "seconds": 88.77682726799958,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 15.191854773000841
+          },
+          {
+            "derivation": "/nix/store/i7p1sa130b29hvzii5l26h72c3zkf3c6-gammaloop-crate-test-dependencies-be74a11b6e47d216-deps-0.1.0.drv",
+            "seconds": 201.30729034900014,
+            "cargoSeconds": 194,
+            "merge": false,
+            "waitSeconds": 11.020031994000192
+          },
+          {
+            "derivation": "/nix/store/l9rhbaj8pbpj78pwhvyy57q0dfqlyh9s-gammaloop-crate-test-dependencies-9f61ebb64a841b09-inputs.drv",
+            "seconds": 47.58997188899957,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 0.18815029999973376
+          },
+          {
+            "derivation": "/nix/store/14bpvvmwdiq77439jkkd88kmc3ziy6ch-gammaloop-crate-test-dependencies-9f61ebb64a841b09-deps-0.1.0.drv",
+            "seconds": 176.038448775,
+            "cargoSeconds": 159,
+            "merge": false,
+            "waitSeconds": 0.21954122000011012
+          },
+          {
+            "derivation": "/nix/store/crdvqpd2bdkqf2i465rql9fm22x0b30a-gammaloop-crate-test-dependencies-e0b21f779898bed7-inputs.drv",
+            "seconds": 80.01239371800057,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 0.4170424629996887
+          },
+          {
+            "derivation": "/nix/store/il42r3y2yigfxyqynzcsc8b7ak85sw7g-gammaloop-crate-test-dependencies-e0b21f779898bed7-deps-0.1.0.drv",
+            "seconds": 107.28879318100053,
+            "cargoSeconds": 86,
+            "merge": false,
+            "waitSeconds": 0.22567934199969386
+          },
+          {
+            "derivation": "/nix/store/z5rspnxg8z0hfxq03105xqhdmrpz3yy9-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-inputs.drv",
+            "seconds": 24.98457746999975,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 0.12309963599955154
+          },
+          {
+            "derivation": "/nix/store/4cjcz53w0xcz55rq60ks5dsfx16h9dfz-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-deps-0.1.0.drv",
+            "seconds": 159.49141110500068,
+            "cargoSeconds": 149,
+            "merge": false,
+            "waitSeconds": 0.09685452499979874
+          },
+          {
+            "derivation": "/nix/store/2ybikg3d41avzhdmdl33r4jn391i8xw5-gammaloop-nextest-binaries-integration-gammaloop-integration-tests-0.1.0.drv",
+            "seconds": 8.846292783000536,
+            "cargoSeconds": 0.32,
+            "merge": false,
+            "waitSeconds": 0.1044585419995201
+          },
+          {
+            "derivation": "/nix/store/y3cbcf5qsdlzqw2s8b96z0a8fn6z05wz-gammaloop-nextest-binaries-integration.drv",
+            "seconds": 0.05172427899969989,
+            "cargoSeconds": 0,
+            "merge": false,
+            "waitSeconds": 0.042666517999805365
+          },
+          {
+            "derivation": "/nix/store/0pln8kcawvbyz63zdysl7lifp74gy7sx-gammaloop-nextest-integration.drv",
+            "seconds": 159.4636528359997,
+            "cargoSeconds": 0,
+            "merge": false,
+            "waitSeconds": 0.046836742000323284
+          }
+        ]
+      },
+      "candidate": {
+        "run": "/tmp/ci-artifact-implementation/cold/main/candidate",
+        "seconds": 2301.08482908,
+        "mergeSeconds": 87.73220368799969,
+        "cargoSeconds": 1469.6299999999999,
+        "builderOtherSeconds": 111.324572117,
+        "runtimeSeconds": 202.38402553100013,
+        "waitingAndCommandSeconds": 430.0140277440004,
+        "chain": [
+          {
+            "derivation": "/nix/store/zrspp800mnxwjarmlzafcvw1i2i1213s-Cargo.toml.drv",
+            "seconds": 0.053913981999998084,
+            "cargoSeconds": 0,
+            "merge": false,
+            "waitSeconds": 1.5768194379999987
+          },
+          {
+            "derivation": "/nix/store/y41i6i7w209yk39j65ryxdkvgdvd773f-source.drv",
+            "seconds": 0.3353506359999958,
+            "cargoSeconds": 0,
+            "merge": false,
+            "waitSeconds": 2.849139845000005
+          },
+          {
+            "derivation": "/nix/store/k2q3lyrhkz87mndkjqc9bics1v7gvxrj-gammaloop-crate-gammaloop-workspace-hack-deps-0.1.0.drv",
+            "seconds": 318.100717886,
+            "cargoSeconds": 316,
+            "merge": false,
+            "waitSeconds": 0.0865358140000021
+          },
+          {
+            "derivation": "/nix/store/vch626477anw6w0av3bfkka8l0s44gsi-gammaloop-crate-gammaloop-workspace-hack-build-0.1.0.drv",
+            "seconds": 2.107306703000063,
+            "cargoSeconds": 0.45,
+            "merge": false,
+            "waitSeconds": 0.08316199399996549
+          },
+          {
+            "derivation": "/nix/store/7x1jzbapv982mw8d3srkd08jp345gk81-gammaloop-workspace-deps-deps-0.1.0.drv",
+            "seconds": 203.41326370299993,
+            "cargoSeconds": 199,
+            "merge": false,
+            "waitSeconds": 0.08231022100000018
+          },
+          {
+            "derivation": "/nix/store/9w0wbxqw98y9a85a08bfiy7p70ifx9gf-gammaloop-crate-test-dependencies-2487cdc24b69b833-inputs.drv",
+            "seconds": 11.367567859999895,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 0.23986340300007214
+          },
+          {
+            "derivation": "/nix/store/a2065123dh0ivy66a7sl4sng152qr3bc-gammaloop-crate-test-dependencies-2487cdc24b69b833-deps-0.1.0.drv",
+            "seconds": 7.798307068999975,
+            "cargoSeconds": 1.48,
+            "merge": false,
+            "waitSeconds": 4.833316176000039
+          },
+          {
+            "derivation": "/nix/store/wf1386sxq1rl5hc7fayb1rfajxnizjqq-gammaloop-crate-test-dependencies-78814cb8a1862b52-deps-0.1.0.drv",
+            "seconds": 295.1862408800001,
+            "cargoSeconds": 288,
+            "merge": false,
+            "waitSeconds": 25.949499869999954
+          },
+          {
+            "derivation": "/nix/store/wjfa52wd9q3zdcb5fy9g3zz7w50hsdxq-gammaloop-crate-test-dependencies-b6a0734be42e3503-deps-0.1.0.drv",
+            "seconds": 63.05246478300012,
+            "cargoSeconds": 54.739999999999995,
+            "merge": false,
+            "waitSeconds": 0.2656029939998916
+          },
+          {
+            "derivation": "/nix/store/08iwvpgwlwsy41c1vl8hrvk58g0jdjr7-gammaloop-crate-test-dependencies-91f21e5f130440bb-inputs.drv",
+            "seconds": 10.785832101000096,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 28.767942831999903
+          },
+          {
+            "derivation": "/nix/store/m7hqsji72cyd7h1rcn3gxf118khri3l7-gammaloop-crate-test-dependencies-91f21e5f130440bb-deps-0.1.0.drv",
+            "seconds": 57.14331407400027,
+            "cargoSeconds": 48.49,
+            "merge": false,
+            "waitSeconds": 19.56034899999986
+          },
+          {
+            "derivation": "/nix/store/rs3p0dklxmv3hid7j5q59amff7p2dj10-gammaloop-crate-test-dependencies-326651bd60141f1c-deps-0.1.0.drv",
+            "seconds": 8.826135913999906,
+            "cargoSeconds": 1.68,
+            "merge": false,
+            "waitSeconds": 0.2714500869999483
+          },
+          {
+            "derivation": "/nix/store/rjbijcs007nn260hns2rls3wq225qnlq-gammaloop-crate-test-dependencies-be74a11b6e47d216-inputs.drv",
+            "seconds": 42.54885587799981,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 0.25612919600007444
+          },
+          {
+            "derivation": "/nix/store/hk43cvab7va4a1ikrh35ibk69jyyfvlw-gammaloop-crate-test-dependencies-be74a11b6e47d216-deps-0.1.0.drv",
+            "seconds": 149.81506419700008,
+            "cargoSeconds": 137,
+            "merge": false,
+            "waitSeconds": 0.18702925900015543
+          },
+          {
+            "derivation": "/nix/store/656awivlwg97lk8jr4x1lbc64cbj1rlw-gammaloop-crate-test-dependencies-9f61ebb64a841b09-inputs.drv",
+            "seconds": 23.029947848999882,
+            "cargoSeconds": 0,
+            "merge": true,
+            "waitSeconds": 0.2652419359999385
+          },
+          {
+            "derivation": "/nix/store/jhys4a9v7vvz9887yd6sx4g2yhrplysf-gammaloop-crate-test-dependencies-9f61ebb64a841b09-deps-0.1.0.drv",
+            "seconds": 199.2869008969999,
+            "cargoSeconds": 181,
+            "merge": false,
+            "waitSeconds": 0.193737781000209
+          },
+          {
+            "derivation": "/nix/store/gcss7y24s8g7nj82ld3v1nvbvnhzd9kw-gammaloop-crate-test-dependencies-e0b21f779898bed7-deps-0.1.0.drv",
+            "seconds": 70.93038812399982,
+            "cargoSeconds": 59.48,
+            "merge": false,
+            "waitSeconds": 332.8466221020001
+          },
+          {
+            "derivation": "/nix/store/kmjgq8b756bym1vpr7qjzdwwc75r0hvz-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-deps-0.1.0.drv",
+            "seconds": 196.0851562260002,
+            "cargoSeconds": 182,
+            "merge": false,
+            "waitSeconds": 11.468871457999967
+          },
+          {
+            "derivation": "/nix/store/r4mazz7m8ngmrlrzlv5v1fx03b53s6g8-gammaloop-nextest-binaries-integration-gammaloop-integration-tests-0.1.0.drv",
+            "seconds": 8.700123319999875,
+            "cargoSeconds": 0.31,
+            "merge": false,
+            "waitSeconds": 0.0921588259998316
+          },
+          {
+            "derivation": "/nix/store/rhm4bpa8f2sg0ik3vf6dv60ngj26sakw-gammaloop-nextest-binaries-integration.drv",
+            "seconds": 0.1199237229998289,
+            "cargoSeconds": 0,
+            "merge": false,
+            "waitSeconds": 0.04400068199993257
+          },
+          {
+            "derivation": "/nix/store/zjza82ym98xmnwz6djgnbgi6n70nkjcx-gammaloop-nextest-integration.drv",
+            "seconds": 202.38402553100013,
+            "cargoSeconds": 0,
+            "merge": false,
+            "waitSeconds": 0.06016261600007056
+          }
+        ]
+      }
+    },
+    "coldRootCompletionSeconds": {
+      "main": {
+        "baseline": {
+          "gammaloop-clippy": 1300.035810383,
+          "gammaloop-doctest": 1760.1338589850002,
+          "gammaloop-fmt": 4.642258793000132,
+          "gammaloop-guppy-workspace-graph": 35.361728134999986,
+          "gammaloop-nextest-binaries-clinnet": 761.4063964430001,
+          "gammaloop-nextest-binaries-core": 2342.756375631,
+          "gammaloop-nextest-binaries-integration": 2481.874869425,
+          "gammaloop-nextest-binaries-linnet": 1493.6351648089997,
+          "gammaloop-nextest-binaries-python-api": 2479.419062881,
+          "gammaloop-nextest-binaries-spenso": 1685.4591387790003,
+          "gammaloop-nextest-binaries-vakint": 817.1999533200003,
+          "gammaloop-nextest-clinnet": 772.1596299220002,
+          "gammaloop-nextest-core": 2377.744646485,
+          "gammaloop-nextest-integration": 2641.385359003,
+          "gammaloop-nextest-linnet": 1680.2364061679998,
+          "gammaloop-nextest-python-api": 2480.834304222,
+          "gammaloop-nextest-spenso": 1691.5948287359997,
+          "gammaloop-nextest-vakint": 893.177848671,
+          "gammaloop-python-module": 2470.8719206340006
+        },
+        "candidate": {
+          "gammaloop-clippy": 1879.857589395,
+          "gammaloop-doctest": 2233.071494662,
+          "gammaloop-fmt": 4.112318988999999,
+          "gammaloop-guppy-workspace-graph": 30.245348608,
+          "gammaloop-nextest-binaries-clinnet": 679.4610355829999,
+          "gammaloop-nextest-binaries-core": 1897.7846059070002,
+          "gammaloop-nextest-binaries-integration": 2098.6065587189996,
+          "gammaloop-nextest-binaries-linnet": 1019.6109056910001,
+          "gammaloop-nextest-binaries-python-api": 2096.402355385,
+          "gammaloop-nextest-binaries-spenso": 1146.658288751,
+          "gammaloop-nextest-binaries-vakint": 711.3205306799999,
+          "gammaloop-nextest-clinnet": 683.607919716,
+          "gammaloop-nextest-core": 1939.1928426030001,
+          "gammaloop-nextest-integration": 2301.050746866,
+          "gammaloop-nextest-linnet": 1031.7016220560001,
+          "gammaloop-nextest-python-api": 2098.5886564989996,
+          "gammaloop-nextest-spenso": 1151.0071599159999,
+          "gammaloop-nextest-vakint": 746.572155272,
+          "gammaloop-python-module": 2027.187326246
+        }
+      },
+      "feynkit": {
+        "baseline": {
+          "gammaloop-clippy": 2351.995643747,
+          "gammaloop-doctest": 2814.4009857410006,
+          "gammaloop-fmt": 4.7233601610003975,
+          "gammaloop-guppy-workspace-graph": 51.23623427599995,
+          "gammaloop-nextest-binaries-clinnet": 1322.4926084209997,
+          "gammaloop-nextest-binaries-core": 2394.5143191290003,
+          "gammaloop-nextest-binaries-feynkit": 2199.2938706910004,
+          "gammaloop-nextest-binaries-integration": 2609.6573300560003,
+          "gammaloop-nextest-binaries-linnet": 1591.378857163,
+          "gammaloop-nextest-binaries-python-api": 2607.5705415900006,
+          "gammaloop-nextest-binaries-spenso": 1613.4727813990005,
+          "gammaloop-nextest-binaries-vakint": 1626.5583047700002,
+          "gammaloop-nextest-clinnet": 1626.3064449850003,
+          "gammaloop-nextest-core": 2420.930369427,
+          "gammaloop-nextest-feynkit": 2266.2033914100007,
+          "gammaloop-nextest-integration": 2870.9810567100003,
+          "gammaloop-nextest-linnet": 1631.680603565,
+          "gammaloop-nextest-python-api": 2883.662451297,
+          "gammaloop-nextest-spenso": 1647.4216233120003,
+          "gammaloop-nextest-vakint": 1714.0263172660004,
+          "gammaloop-python-module": 2882.5024795820004
+        },
+        "candidate": {
+          "gammaloop-clippy": 1871.614602465,
+          "gammaloop-doctest": 2463.228702716,
+          "gammaloop-fmt": 4.556016103000002,
+          "gammaloop-guppy-workspace-graph": 50.94952129400001,
+          "gammaloop-nextest-binaries-clinnet": 589.4661679330001,
+          "gammaloop-nextest-binaries-core": 2176.150619598,
+          "gammaloop-nextest-binaries-feynkit": 1887.326236357,
+          "gammaloop-nextest-binaries-integration": 2298.750456812,
+          "gammaloop-nextest-binaries-linnet": 1283.9880328489999,
+          "gammaloop-nextest-binaries-python-api": 2294.956108296,
+          "gammaloop-nextest-binaries-spenso": 1311.517664597,
+          "gammaloop-nextest-binaries-vakint": 1480.162153163,
+          "gammaloop-nextest-clinnet": 1311.400640766,
+          "gammaloop-nextest-core": 2212.374521921,
+          "gammaloop-nextest-feynkit": 1892.836119089,
+          "gammaloop-nextest-integration": 2532.86198935,
+          "gammaloop-nextest-linnet": 1315.84415666,
+          "gammaloop-nextest-python-api": 2478.612657364,
+          "gammaloop-nextest-spenso": 1319.38344269,
+          "gammaloop-nextest-vakint": 1580.14738968,
+          "gammaloop-python-module": 2477.459661521
+        }
+      }
+    },
+    "coldDoctestInventoriesMatch": {
+      "main": true,
+      "feynkit": true
+    },
+    "knownFailures": [
+      {
+        "run": "edit-main-baseline-v1",
+        "failure": "Two intermittent ENOENT state-save failures; the identical unmodified tests passed on retry-main-baseline-v1. Final fresh main pair passes without retries.",
+        "changedTests": false
+      },
+      {
+        "run": "prepare-edit-feynkit-candidate-v1",
+        "failure": "Final Python packaging recompiled 14 crates because newly named epoch-1 metadata was absent from the delta archive. Fixed in c8c8b51aa; final packaging compiles zero crates on both layouts."
+      },
+      {
+        "run": "feynkit-boundaries",
+        "failure": "Existing Python invalidation assertion expects only feynkit-py; actual graph also invalidates its gammaloop-api consumer, as before this implementation. Assertion unchanged."
+      }
+    ],
+    "limits": [
+      "Single shared-host samples; changed-source rows include all runtime groups and Python, but not Clippy/doctests.",
+      "Cold comparisons reuse the earlier same-day controlled baseline with verified identical baseline derivations and external seed closure; these are not contemporaneous cold pairs.",
+      "Stored NAR content, Cargo messages and overlapping builder occupancy are not network traffic, Rustc CPU time or CHF costs.",
+      "Boundary probes inspect derivation invalidation; full runtime checks cover the prepared revision and GammaLoop source edit, not every boundary edit.",
+      "No new NixCI suite: remote cache availability, worker-minute savings and final-success tail are unverified.",
+      "Native Cargo was not rerun for the final pair; the earlier 44-second compilation measurement is historical."
+    ],
+    "ciSourceSha256": {
+      "flake.nix": "fa9506f05e9eddb86d85456c19b5435d25f403350eddeb82f402214d0e6b443f",
+      "flake.lock": "f0f3b1dae45e92ac0c5fc6d4493babdf937ced20292aab11e611dd5372ab3a92",
+      "nix/rust-workspace.nix": "c78d312f74270080b3f6ae6648c303e39e80a82d15d042c3ce0384ed90ed683a",
+      "nix/ci.nix": "227a567c27aa07d29ba6c6981100fc22e5d04da278830e5a2610795413a8f418",
+      "nix-ci.nix": "b9a59a441b0952cbb7fb321ff7ecc36a7cac9260234f2d305fbe99aa9bf8b43d"
+    },
+    "fullEvidence": {
+      "path": "/tmp/ci-artifact-implementation/implementation-validation.json",
+      "sha256": "0a5f8ada358164f95626d174da729691c9b73f875941c182abedb2ed37d8ed50",
+      "contents": "Full observations before compacting duplicate group summaries, phase detail and check metadata lists."
+    }
+  },
+  "historicalInvestigationScope": "Local investigation only. No production code or project tests changed; no additional NixCI suites.",
   "applicationLayouts": {
     "main": "395610143576507503fd2c785db3ba62340f4277",
     "feynkit": "07d0efc910cf4c3175142c808e476fe7e393f815"
@@ -823,7 +2666,7 @@
       "qualification": "Matching crate names do not prove identical compilation; Clippy metadata and rustdoc/build contexts can differ."
     }
   },
-  "limitations": [
+  "historicalLimitations": [
     "Content comparisons do not establish end-to-end speedups or all future source/feature boundaries.",
     "Removing merges can retain larger recursive cache closures; prevent unnecessary self-RPATH references and measure both together.",
     "Cleanup diagnostic preserves DT_NEEDED entries but does not validate complete standalone runtime closures or project execution.",
@@ -831,5 +2674,13 @@
     "Stable publication requires a remote cache-availability experiment before acceptance.",
     "Python sharing has no new full-suite/FeynKit/source-edit timing in this investigation.",
     "One tool-dependency realization failed before the RPATH diagnostic: uncached default Python; rerun used existing Python 3.13."
+  ],
+  "limitations": [
+    "Single shared-host samples; changed-source rows include all runtime groups and Python, but not Clippy/doctests.",
+    "Cold comparisons reuse the earlier same-day controlled baseline with verified identical baseline derivations and external seed closure; these are not contemporaneous cold pairs.",
+    "Stored NAR content, Cargo messages and overlapping builder occupancy are not network traffic, Rustc CPU time or CHF costs.",
+    "Boundary probes inspect derivation invalidation; full runtime checks cover the prepared revision and GammaLoop source edit, not every boundary edit.",
+    "No new NixCI suite: remote cache availability, worker-minute savings and final-success tail are unverified.",
+    "Native Cargo was not rerun for the final pair; the earlier 44-second compilation measurement is historical."
   ]
 }
