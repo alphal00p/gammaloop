@@ -33,7 +33,9 @@ __all__ = [
     "INHERIT",
     "Inherit",
     "Insets",
+    "LayoutFrame",
     "LayoutOptions",
+    "LayoutStream",
     "Length",
     "Mark",
     "MathSymbol",
@@ -657,6 +659,22 @@ class Insets:
     def __new__(cls, *, all: _LengthValue = ..., x: _LengthValue = ..., y: _LengthValue = ..., left: _LengthValue = ..., right: _LengthValue = ..., top: _LengthValue = ..., bottom: _LengthValue = ...) -> Insets: ...
 
 @typing.final
+class LayoutFrame:
+    r"""
+    A position snapshot from one continuous force-layout run.
+    """
+    @property
+    def nodes(self) -> builtins.list[tuple[builtins.float, builtins.float]]: ...
+    @property
+    def edges(self) -> builtins.list[tuple[builtins.float, builtins.float]]: ...
+    @property
+    def iteration(self) -> builtins.int: ...
+    @property
+    def done(self) -> builtins.bool: ...
+    @property
+    def max_movement(self) -> builtins.float: ...
+
+@typing.final
 class LayoutOptions:
     r"""
     One or more ordered Linnest layout passes.
@@ -668,6 +686,35 @@ class LayoutOptions:
     def __repr__(self) -> builtins.str: ...
     def __new__(cls, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
     def then(self, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+
+@typing.final
+class LayoutStream:
+    r"""
+    A synchronous iterator that advances the native force solver in batches.
+
+    Topology is fixed for the lifetime of the stream. Frames contain only
+    coordinates and progress, so notebook viewers can retain their SVG elements.
+    """
+    @property
+    def node_names(self) -> builtins.list[builtins.str]:
+        r"""
+        Node names in the same stable index order as every frame's coordinates.
+        """
+    @property
+    def endpoints(self) -> builtins.list[tuple[typing.Optional[builtins.int], typing.Optional[builtins.int]]]:
+        r"""
+        Source and sink node indices; a missing endpoint denotes a dangling edge.
+        """
+    @staticmethod
+    def from_dot(dot: builtins.str, *, every: builtins.int = 4, steps: builtins.int = 200, epochs: builtins.int = 8, seed: builtins.int = 1, step: builtins.float = 0.02, cool: builtins.float = 0.85, spring_strength: builtins.float = 1.0, repulsion: builtins.float = 1.5, length_scale: builtins.float = 1.0, depth_scale: builtins.float = 1.0, flattening_end: builtins.float = 0.5, delta: builtins.float = 0.1, early_tolerance: builtins.float = 1e-06) -> LayoutStream:
+        r"""
+        Start a force-layout preview from a single DOT graph.
+
+        This preview uses native graph geometry, without Typst label measurement
+        or final edge-label relaxation. A new stream restarts from the same seed.
+        """
+    def __iter__(self) -> LayoutStream: ...
+    def __next__(self) -> LayoutFrame: ...
 
 @typing.final
 class Length:

@@ -2,6 +2,8 @@ mod api;
 pub mod geom;
 mod graph_api;
 mod pin;
+mod streaming;
+pub use streaming::{ForceLayoutStream, LayoutFrame};
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "custom")]
@@ -36,7 +38,7 @@ use linnet::{
     half_edge::{
         involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Involution},
         layout::{
-            force::{force_directed_layout, ForceLayoutConfig},
+            force::{ForceLayoutConfig, ForceLayoutSession},
             layered::{
                 LayeredConfig, LayeredEdgeRoute, LayeredGeometry, LayeredOutput, LayeredProfile,
                 LayeredRankAlign, LayeredRouteExit,
@@ -2233,42 +2235,7 @@ impl TypstGraph {
     }
 
     pub fn layout_with_subgraph(&mut self, subgraph: Option<&SuBitGraph>) -> Result<(), String> {
-        if !self.layout_config.depth_scale.is_finite() || self.layout_config.depth_scale < 0.0 {
-            return Err("depth-scale must be a non-negative finite number".to_string());
-        }
-        if !(0.0..=1.0).contains(&self.layout_config.flattening_end) {
-            return Err("flattening-end must be a finite fraction between 0 and 1".to_string());
-        }
-        for (kind, index, statements) in (0..self.n_nodes())
-            .map(|i| ("node", i, &self[NodeIndex(i)].statements))
-            .chain((0..self.n_edges()).map(|i| ("edge", i, &self[EdgeIndex(i)].statements)))
-        {
-            if let Some(z) = dot_statement_value(statements, "pos-z") {
-                if !z
-                    .trim()
-                    .trim_matches('"')
-                    .parse::<f64>()
-                    .is_ok_and(f64::is_finite)
-                {
-                    return Err(format!("{kind} {index}: pos-z must be a finite number"));
-                }
-            }
-            if let Some(mode) = dot_statement_value(statements, "pos-z-mode") {
-                if !matches!(mode.trim().trim_matches('"'), "pin" | "start") {
-                    return Err(format!("{kind} {index}: pos-z-mode must be pin or start"));
-                }
-            }
-        }
-        for (_, edge, data) in self.graph.iter_edges() {
-            if dot_statement_value(&data.data.statements, "spring-length").is_some()
-                && !Self::positive_statement_f64(&data.data.statements, "spring-length")
-                    .is_some_and(|scale| scale > 0.0)
-            {
-                return Err(format!(
-                    "edge {edge}: spring-length must be a positive finite multiplier"
-                ));
-            }
-        }
+        self.validate_layout()?;
         let spring_params = ParamTuning::from(&self.layout_config.spring);
         self.clear_hedge_route_points();
 
@@ -2345,6 +2312,46 @@ impl TypstGraph {
         Ok(())
     }
 
+    fn validate_layout(&self) -> Result<(), String> {
+        if !self.layout_config.depth_scale.is_finite() || self.layout_config.depth_scale < 0.0 {
+            return Err("depth-scale must be a non-negative finite number".to_string());
+        }
+        if !(0.0..=1.0).contains(&self.layout_config.flattening_end) {
+            return Err("flattening-end must be a finite fraction between 0 and 1".to_string());
+        }
+        for (kind, index, statements) in (0..self.n_nodes())
+            .map(|i| ("node", i, &self[NodeIndex(i)].statements))
+            .chain((0..self.n_edges()).map(|i| ("edge", i, &self[EdgeIndex(i)].statements)))
+        {
+            if let Some(z) = dot_statement_value(statements, "pos-z") {
+                if !z
+                    .trim()
+                    .trim_matches('"')
+                    .parse::<f64>()
+                    .is_ok_and(f64::is_finite)
+                {
+                    return Err(format!("{kind} {index}: pos-z must be a finite number"));
+                }
+            }
+            if let Some(mode) = dot_statement_value(statements, "pos-z-mode") {
+                if !matches!(mode.trim().trim_matches('"'), "pin" | "start") {
+                    return Err(format!("{kind} {index}: pos-z-mode must be pin or start"));
+                }
+            }
+        }
+        for (_, edge, data) in self.graph.iter_edges() {
+            if dot_statement_value(&data.data.statements, "spring-length").is_some()
+                && !Self::positive_statement_f64(&data.data.statements, "spring-length")
+                    .is_some_and(|scale| scale > 0.0)
+            {
+                return Err(format!(
+                    "edge {edge}: spring-length must be a positive finite multiplier"
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub fn layout_energy_state(
         &self,
     ) -> (
@@ -2353,12 +2360,18 @@ impl TypstGraph {
     ) {
         let spring_params = ParamTuning::from(&self.layout_config.spring);
         let (tree_cfg, energy) = self.tree_init_cfg(&spring_params);
-        let (pos_n, pos_e) = self.new_positions(tree_cfg);
+        let (mut pos_n, mut pos_e) = self.new_positions(tree_cfg);
+        self.apply_initial_grouped_constraints(&mut pos_n, &mut pos_e);
         let mut state = self.graph.new_layout_state(
             pos_n,
             pos_e,
-            self.layout_config.delta,
-            self.layout_config.directional_force,
+            self.layout_config.delta * energy.spring_length,
+            self.layout_config.directional_force
+                * if matches!(self.layout_config.layout_algo, LayoutAlgo::Force) {
+                    energy.spring_length
+                } else {
+                    1.0
+                },
             self.layout_config.incremental_energy,
         );
         state.edge_spring_length_scales = self.new_edgevec(|edge, _, _| {
@@ -2673,46 +2686,56 @@ impl TypstGraph {
                 (out.vertex_points, out.edge_points)
             }
             LayoutAlgo::Force => {
-                for i in 0..self.n_nodes() {
-                    let index = NodeIndex(i);
-                    let statements = &self[index].statements;
-                    state.vertex_depths[index] = dot_statement_value(statements, "pos-z")
-                        .and_then(|z| z.trim().trim_matches('"').parse().ok());
-                    state.vertex_depth_pins[index] =
-                        self.layout_config.layout_nodes.nodes_are_fixed()
-                            || selection.is_some_and(|(nodes, _)| !nodes[index])
-                            || dot_statement_value(statements, "pos-z-mode")
-                                .is_some_and(|mode| mode.trim().trim_matches('"') == "pin");
-                }
-                for i in 0..self.n_edges() {
-                    let index = EdgeIndex(i);
-                    let statements = &self[index].statements;
-                    state.edge_depths[index] = dot_statement_value(statements, "pos-z")
-                        .and_then(|z| z.trim().trim_matches('"').parse().ok());
-                    state.edge_depth_pins[index] = selection
-                        .is_some_and(|(_, edges)| !edges[index])
-                        || dot_statement_value(statements, "pos-z-mode")
-                            .is_some_and(|mode| mode.trim().trim_matches('"') == "pin");
-                }
-                force_directed_layout(
-                    &mut state,
-                    energy,
-                    ForceLayoutConfig {
-                        steps: self.layout_config.schedule.steps,
-                        epochs: self.layout_config.schedule.epochs,
-                        step: self.layout_config.step,
-                        cool: self.layout_config.schedule.cool,
-                        max_delta: self.layout_config.delta * spring_length,
-                        early_tol: self.layout_config.schedule.early_tol * spring_length,
-                        seed: self.layout_config.seed,
-                        depth_scale: self.layout_config.depth_scale,
-                        flattening_end: self.layout_config.flattening_end,
-                    },
-                );
+                let mut session = self.force_session(state, energy, selection);
+                session.run_to_end();
+                let state = session.into_state();
                 (state.vertex_points, state.edge_points)
             }
             LayoutAlgo::Dot | LayoutAlgo::StableLayered | LayoutAlgo::Tree => unreachable!(),
         }
+    }
+
+    fn force_session<'a>(
+        &self,
+        mut state: LayoutState<'a, TypstEdge, TypstNode, TypstHedge, DefaultNodeStore<TypstNode>>,
+        energy: &SpringChargeEnergy,
+        selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
+    ) -> ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, DefaultNodeStore<TypstNode>> {
+        let spring_length = energy.spring_length;
+        for i in 0..self.n_nodes() {
+            let index = NodeIndex(i);
+            let statements = &self[index].statements;
+            state.vertex_depths[index] = dot_statement_value(statements, "pos-z")
+                .and_then(|z| z.trim().trim_matches('"').parse().ok());
+            state.vertex_depth_pins[index] = self.layout_config.layout_nodes.nodes_are_fixed()
+                || selection.is_some_and(|(nodes, _)| !nodes[index])
+                || dot_statement_value(statements, "pos-z-mode")
+                    .is_some_and(|mode| mode.trim().trim_matches('"') == "pin");
+        }
+        for i in 0..self.n_edges() {
+            let index = EdgeIndex(i);
+            let statements = &self[index].statements;
+            state.edge_depths[index] = dot_statement_value(statements, "pos-z")
+                .and_then(|z| z.trim().trim_matches('"').parse().ok());
+            state.edge_depth_pins[index] = selection.is_some_and(|(_, edges)| !edges[index])
+                || dot_statement_value(statements, "pos-z-mode")
+                    .is_some_and(|mode| mode.trim().trim_matches('"') == "pin");
+        }
+        ForceLayoutSession::new(
+            state,
+            *energy,
+            ForceLayoutConfig {
+                steps: self.layout_config.schedule.steps,
+                epochs: self.layout_config.schedule.epochs,
+                step: self.layout_config.step,
+                cool: self.layout_config.schedule.cool,
+                max_delta: self.layout_config.delta * spring_length,
+                early_tol: self.layout_config.schedule.early_tol * spring_length,
+                seed: self.layout_config.seed,
+                depth_scale: self.layout_config.depth_scale,
+                flattening_end: self.layout_config.flattening_end,
+            },
+        )
     }
 
     fn directional_target(value: f64, direction: ShiftDirection, fallback: f64) -> f64 {

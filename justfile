@@ -377,7 +377,8 @@ docs-linnet-python-check:
     VIRTUAL_ENV="$test_root/venv" maturin develop --uv --locked --manifest-path crates/linnet-py/Cargo.toml --features extension-module,abi3-py310
     "$test_root/venv/bin/python" -m unittest \
       crates/linnet-py/tests/test_basic.py \
-      crates/linnet-py/tests/test_wasm.py
+      crates/linnet-py/tests/test_wasm.py \
+      crates/linnet-py/tests/test_streaming.py
 
 # Regenerate source-backed CLI/settings and topology/dependency snapshots.
 docs-generated:

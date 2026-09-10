@@ -10,6 +10,7 @@ mod graph;
 mod mutations;
 mod native_graph;
 mod render;
+mod streaming;
 mod topology;
 mod typst;
 
@@ -21,6 +22,7 @@ fn linnet_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
     dot::register(module)?;
     typst::register_typst_api(module)?;
     render::register(module)?;
+    streaming::register(module)?;
     Ok(())
 }
 

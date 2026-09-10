@@ -227,8 +227,10 @@
               ./crates/linnet-py/uv.lock
               ./crates/linnet-py/linnet_py.pyi
               ./crates/linnet-py/examples/physics_render_settings.py
+              ./crates/linnet-py/examples/layout_stream.py
               ./crates/linnet-py/tests/test_basic.py
               ./crates/linnet-py/tests/test_wasm.py
+              ./crates/linnet-py/tests/test_streaming.py
             ]
           );
         };
@@ -3189,7 +3191,8 @@
             --features extension-module,abi3-py310
           "$linnet_python/bin/python" -m unittest \
             crates/linnet-py/tests/test_basic.py \
-            crates/linnet-py/tests/test_wasm.py
+            crates/linnet-py/tests/test_wasm.py \
+            crates/linnet-py/tests/test_streaming.py
           cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
           svg_assets="$TMPDIR/alphal00p-svg-assets"
           bash scripts/render-docs-svg-assets.sh "$svg_assets"

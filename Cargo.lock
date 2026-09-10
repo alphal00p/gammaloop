@@ -3502,6 +3502,7 @@ dependencies = [
  "linnet",
  "rand 0.8.6",
  "rkyv",
+ "self_cell",
  "serde",
  "thiserror 2.0.18",
  "wasm-minimal-protocol",
@@ -3545,6 +3546,7 @@ dependencies = [
 name = "linnet-py"
 version = "0.1.0"
 dependencies = [
+ "ciborium",
  "dot-parser",
  "kurvst",
  "linnest",

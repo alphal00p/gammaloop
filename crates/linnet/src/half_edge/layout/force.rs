@@ -38,110 +38,217 @@ pub fn force_directed_layout<'a, E, V, H, N>(
     V: HasPointConstraint,
     N: NodeStorageOps<NodeData = V> + Clone,
 {
-    assert!(cfg.depth_scale.is_finite() && cfg.depth_scale >= 0.0);
-    assert!((0.0..=1.0).contains(&cfg.flattening_end));
-    state.synchronize_grouped_coordinates();
-    let mut rng = SmallRng::seed_from_u64(cfg.seed);
-    let workset = ForceWorkSet::new(state);
-    let iterations = cfg.steps.saturating_mul(cfg.epochs);
-    let mut step = cfg.step.max(0.0);
+    let mut session = ForceLayoutSession::new(state.clone(), *energy, cfg);
+    session.run_to_end();
+    *state = session.into_state();
+}
 
-    // Break perfect symmetry (e.g., all x=0) so forces can separate axes.
-    let jitter = 1e-3 * energy.spring_length * step;
-    if iterations > 0 && jitter > 0.0 {
-        apply_initial_jitter(state, &mut rng, jitter, &workset);
+/// A force solver that can be advanced without reinitializing its random state.
+///
+/// The session owns the layout state while borrowing the graph that state lays out.
+/// Higher-level wrappers can use it for synchronous frame iterators.
+pub struct ForceLayoutSession<'a, E, V, H, N>
+where
+    E: HasPointConstraint,
+    V: HasPointConstraint,
+    N: NodeStorageOps<NodeData = V> + Clone,
+{
+    state: LayoutState<'a, E, V, H, N>,
+    energy: SpringChargeEnergy,
+    cfg: ForceLayoutConfig,
+    workset: ForceWorkSet,
+    node_z: NodeVec<f64>,
+    edge_z: EdgeVec<f64>,
+    z_bound: f64,
+    iteration: usize,
+    step_size: f64,
+    flattening_finish: f64,
+    total_iterations: usize,
+    done: bool,
+    last_max_move: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ForceLayoutSnapshot {
+    pub vertex_points: NodeVec<Point2<f64>>,
+    pub edge_points: EdgeVec<Point2<f64>>,
+    pub iteration: usize,
+    pub done: bool,
+    pub max_move: f64,
+}
+
+impl<'a, E, V, H, N> ForceLayoutSession<'a, E, V, H, N>
+where
+    E: HasPointConstraint,
+    V: HasPointConstraint,
+    N: NodeStorageOps<NodeData = V> + Clone,
+{
+    pub fn new(
+        mut state: LayoutState<'a, E, V, H, N>,
+        energy: SpringChargeEnergy,
+        cfg: ForceLayoutConfig,
+    ) -> Self {
+        assert!(cfg.depth_scale.is_finite() && cfg.depth_scale >= 0.0);
+        assert!((0.0..=1.0).contains(&cfg.flattening_end));
+        state.synchronize_grouped_coordinates();
+        let mut rng = SmallRng::seed_from_u64(cfg.seed);
+        let workset = ForceWorkSet::new(&state);
+        let total_iterations = cfg.steps.saturating_mul(cfg.epochs);
+        let step_size = cfg.step.max(0.0);
+
+        // Break perfect symmetry (e.g., all x=0) so forces can separate axes.
+        let jitter = 1e-3 * energy.spring_length * step_size;
+        if total_iterations > 0 && jitter > 0.0 {
+            apply_initial_jitter(&mut state, &mut rng, jitter, &workset);
+        }
+        let z_spread = 10.0 * energy.spring_length.abs();
+        // Unspecified entries without a directly movable planar axis stay on the
+        // layout plane instead of being stranded at random z. Explicit depths are
+        // independent of XY constraints, and hard pins are never randomized.
+        let node_z = init_node_z(
+            &mut rng,
+            &state.vertex_depths,
+            z_spread,
+            &workset.movable_node_depth,
+        );
+        let edge_z = init_edge_z(
+            &mut rng,
+            &state.edge_depths,
+            z_spread,
+            &workset.movable_edge_depth,
+        );
+        let z_bound = node_z
+            .iter()
+            .map(|(_, z)| z)
+            .chain(edge_z.iter().map(|(_, z)| z))
+            .fold(z_spread, |bound, z| bound.max(z.abs()));
+
+        Self {
+            state,
+            energy,
+            cfg,
+            workset,
+            node_z,
+            edge_z,
+            z_bound,
+            iteration: 0,
+            step_size,
+            flattening_finish: cfg.flattening_end * total_iterations.saturating_sub(1) as f64,
+            total_iterations,
+            done: total_iterations == 0,
+            last_max_move: 0.0,
+        }
     }
-    let z_spread = 10.0 * energy.spring_length.abs();
-    // Unspecified entries without a directly movable planar axis stay on the
-    // layout plane instead of being stranded at random z. Explicit depths are
-    // independent of XY constraints, and hard pins are never randomized.
-    let mut node_z = init_node_z(
-        &mut rng,
-        &state.vertex_depths,
-        z_spread,
-        &workset.movable_node_depth,
-    );
-    let mut edge_z = init_edge_z(
-        &mut rng,
-        &state.edge_depths,
-        z_spread,
-        &workset.movable_edge_depth,
-    );
-    let z_bound = node_z
-        .iter()
-        .map(|(_, z)| z)
-        .chain(edge_z.iter().map(|(_, z)| z))
-        .fold(z_spread, |bound, z| bound.max(z.abs()));
 
-    // Virtual depth breaks symmetry, but its separation disappears in the drawing.
-    // Collapse smoothly within the original cooling schedule, leaving the remaining
-    // iterations to relax projected overlaps on the exact plane without a restart.
-    let flattening_finish = cfg.flattening_end * iterations.saturating_sub(1) as f64;
-    for iteration in 0..iterations {
-        let scale = if iteration as f64 >= flattening_finish {
+    pub fn step(&mut self, iterations: usize) -> ForceLayoutSnapshot {
+        for _ in 0..iterations {
+            if self.done {
+                break;
+            }
+            self.advance();
+        }
+        self.snapshot()
+    }
+
+    pub fn run_to_end(&mut self) {
+        while !self.done {
+            self.advance();
+        }
+    }
+
+    pub fn snapshot(&self) -> ForceLayoutSnapshot {
+        ForceLayoutSnapshot {
+            vertex_points: self.state.vertex_points.clone(),
+            edge_points: self.state.edge_points.clone(),
+            iteration: self.iteration,
+            done: self.done,
+            max_move: self.last_max_move,
+        }
+    }
+
+    pub fn into_state(mut self) -> LayoutState<'a, E, V, H, N> {
+        for (idx, z) in self.node_z.iter() {
+            self.state.vertex_depths[idx] = Some(*z);
+        }
+        for (idx, z) in self.edge_z.iter() {
+            self.state.edge_depths[idx] = Some(*z);
+        }
+        self.state
+    }
+
+    fn advance(&mut self) {
+        // Virtual depth breaks symmetry, but its separation disappears in the drawing.
+        // Collapse smoothly within the original cooling schedule, leaving the remaining
+        // iterations to relax projected overlaps on the exact plane without a restart.
+        let iteration = self.iteration;
+        let scale = if iteration as f64 >= self.flattening_finish {
             0.0
         } else {
-            let u = iteration as f64 / flattening_finish;
-            cfg.depth_scale * (1.0 - u).powi(2) * (1.0 + 2.0 * u)
+            let u = iteration as f64 / self.flattening_finish;
+            self.cfg.depth_scale * (1.0 - u).powi(2) * (1.0 + 2.0 * u)
         };
-        let (mut forces_v, mut forces_e) =
-            compute_forces(state, energy, &node_z, &edge_z, scale, &workset);
-        if state.directional_force != 0.0 {
-            for &idx in &workset.movable_nodes {
+        let (mut forces_v, mut forces_e) = compute_forces(
+            &self.state,
+            &self.energy,
+            &self.node_z,
+            &self.edge_z,
+            scale,
+            &self.workset,
+        );
+        if self.state.directional_force != 0.0 {
+            for &idx in &self.workset.movable_nodes {
                 let bias = directional_force_shift(
-                    state.graph[idx].point_constraint(),
+                    self.state.graph[idx].point_constraint(),
                     LayoutPointIndex::Node(idx),
-                    state.vertex_points[idx],
-                    state.directional_force,
+                    self.state.vertex_points[idx],
+                    self.state.directional_force,
                 );
                 forces_v[idx] += Vector3::new(bias.x, bias.y, 0.0);
             }
-            for &idx in &workset.movable_edges {
+            for &idx in &self.workset.movable_edges {
                 let bias = directional_force_shift(
-                    state.graph[idx].point_constraint(),
+                    self.state.graph[idx].point_constraint(),
                     LayoutPointIndex::Edge(idx),
-                    state.edge_points[idx],
-                    state.directional_force,
+                    self.state.edge_points[idx],
+                    self.state.directional_force,
                 );
                 forces_e[idx] += Vector3::new(bias.x, bias.y, 0.0);
             }
         }
 
-        let mut max_move: f64 = 0.0;
-        for &idx in &workset.movable_nodes {
-            let mut shift3 = clamp_shift3(forces_v[idx] * step, cfg.max_delta);
-            if scale != 0.0 && workset.movable_node_depth[idx] {
-                let z = (node_z[idx] + shift3.z).clamp(-z_bound, z_bound);
-                shift3.z = z - node_z[idx];
-                node_z[idx] = z;
+        let mut max_move = 0.0_f64;
+        for &idx in &self.workset.movable_nodes {
+            let mut shift3 = clamp_shift3(forces_v[idx] * self.step_size, self.cfg.max_delta);
+            if scale != 0.0 && self.workset.movable_node_depth[idx] {
+                let z = (self.node_z[idx] + shift3.z).clamp(-self.z_bound, self.z_bound);
+                shift3.z = z - self.node_z[idx];
+                self.node_z[idx] = z;
             }
-            apply_vertex_shift_with_groups(state, idx, Vector2::new(shift3.x, shift3.y));
+            apply_vertex_shift_with_groups(&mut self.state, idx, Vector2::new(shift3.x, shift3.y));
             max_move = max_move.max(shift3.magnitude());
         }
-        for &idx in &workset.movable_edges {
-            let mut shift3 = clamp_shift3(forces_e[idx] * step, cfg.max_delta);
-            if scale != 0.0 && workset.movable_edge_depth[idx] {
-                let z = (edge_z[idx] + shift3.z).clamp(-z_bound, z_bound);
-                shift3.z = z - edge_z[idx];
-                edge_z[idx] = z;
+        for &idx in &self.workset.movable_edges {
+            let mut shift3 = clamp_shift3(forces_e[idx] * self.step_size, self.cfg.max_delta);
+            if scale != 0.0 && self.workset.movable_edge_depth[idx] {
+                let z = (self.edge_z[idx] + shift3.z).clamp(-self.z_bound, self.z_bound);
+                shift3.z = z - self.edge_z[idx];
+                self.edge_z[idx] = z;
             }
-            apply_edge_shift_with_groups(state, idx, Vector2::new(shift3.x, shift3.y));
+            apply_edge_shift_with_groups(&mut self.state, idx, Vector2::new(shift3.x, shift3.y));
             max_move = max_move.max(shift3.magnitude());
         }
 
+        self.iteration += 1;
+        self.last_max_move = max_move;
         // Even a zero/underflowed step must not terminate before depth collapses.
-        if scale == 0.0 && (max_move < cfg.early_tol || step <= 0.0) {
-            break;
+        if scale == 0.0 && (max_move < self.cfg.early_tol || self.step_size <= 0.0)
+            || self.iteration >= self.total_iterations
+        {
+            self.done = true;
         }
-        if (iteration + 1) % cfg.steps == 0 {
-            step = (step * cfg.cool).max(0.0);
+        if self.cfg.steps != 0 && self.iteration.is_multiple_of(self.cfg.steps) {
+            self.step_size = (self.step_size * self.cfg.cool).max(0.0);
         }
-    }
-    for (idx, z) in node_z.iter() {
-        state.vertex_depths[idx] = Some(*z);
-    }
-    for (idx, z) in edge_z.iter() {
-        state.edge_depths[idx] = Some(*z);
     }
 }
 
@@ -1139,6 +1246,9 @@ mod tests {
     #[test]
     fn constrained_points_start_on_virtual_layout_plane() {
         let mut rng = SmallRng::seed_from_u64(7);
+        // Unspecified entries without a directly movable planar axis stay on the
+        // layout plane instead of being stranded at random z. Explicit depths are
+        // independent of XY constraints, and hard pins are never randomized.
         let node_z = init_node_z(
             &mut rng,
             &vec![None, None, None, Some(30.0), Some(-40.0)].into(),
