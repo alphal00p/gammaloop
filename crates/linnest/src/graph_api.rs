@@ -79,6 +79,9 @@ enum PlacementMode {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TypstPlacementSpec {
+    // Structural maps merge supplied axes; constructor placements replace XY.
+    #[serde(default)]
+    merge_axes: bool,
     #[serde(default)]
     mode: PlacementMode,
     #[serde(default)]
@@ -137,6 +140,7 @@ pub struct ResolvedPoint {
 
 #[derive(Debug, Clone)]
 struct ResolvedPlacement {
+    merge_axes: bool,
     point: Option<ResolvedPoint>,
     z: Option<(f64, PlacementMode)>,
     pin: Option<String>,
@@ -629,7 +633,17 @@ fn apply_typst_graph_structural_patch(
             let placement = pos.resolve(&node_positions, "node structural patch")?;
             if let Some(point) = placement.point {
                 refresh_positions = true;
-                node_positions[node.index] = point;
+                let previous = node_positions[node.index];
+                node_positions[node.index] = if placement.merge_axes {
+                    ResolvedPoint {
+                        x: if point.x_set { point.x } else { previous.x },
+                        y: if point.y_set { point.y } else { previous.y },
+                        x_set: point.x_set || previous.x_set,
+                        y_set: point.y_set || previous.y_set,
+                    }
+                } else {
+                    point
+                };
             }
             let statements = std::mem::take(&mut graph.graph[index].statements);
             graph.graph[index].statements =
@@ -1948,6 +1962,7 @@ fn add_edge_to_builder(
             );
             (source.x_set && source.y_set && sink.x_set && sink.y_set).then_some(
                 ResolvedPlacement {
+                    merge_axes: false,
                     point: Some(ResolvedPoint {
                         x: (source.x + sink.x) / 2.0,
                         y: (source.y + sink.y) / 2.0,
@@ -2052,12 +2067,51 @@ fn apply_placement_statements(
             .to_string(),
         );
     }
-    let Some(point) = placement.point else {
+    let Some(mut point) = placement.point else {
         return statements;
     };
+    let mut pin = placement.pin.clone();
+    let mut group_start = [placement.group_start_x, placement.group_start_y];
+    if placement.merge_axes && (point.x_set || point.y_set) {
+        let previous = resolved_point_from_statements(&statements);
+        let previous_pin = statement_map_value(&statements, "pin")
+            .and_then(|value| PinConstraint::parse(value))
+            .map(|pin| match pin {
+                PinConstraint::Fixed(x, y) => format!("x:{x},y:{y}"),
+                PinConstraint::LinkBoth(group) => format!("x:@{group},y:@{group}"),
+                pin => pin.to_string(),
+            })
+            .unwrap_or_default();
+        let axes = [("x", point.x_set), ("y", point.y_set)];
+        if !point.x_set {
+            point.x = previous.x;
+            point.x_set = previous.x_set;
+            group_start[0] = parse_bool_statement(&statements, "group-start-x").unwrap_or(false);
+        }
+        if !point.y_set {
+            point.y = previous.y;
+            point.y_set = previous.y_set;
+            group_start[1] = parse_bool_statement(&statements, "group-start-y").unwrap_or(false);
+        }
+        let mut pins = Vec::new();
+        for (axis, supplied) in axes {
+            let source = if supplied {
+                pin.as_deref().unwrap_or_default()
+            } else {
+                &previous_pin
+            };
+            pins.extend(
+                source
+                    .split(',')
+                    .filter(|part| part.starts_with(&format!("{axis}:")))
+                    .map(str::to_owned),
+            );
+        }
+        pin = (!pins.is_empty()).then(|| pins.join(","));
+    }
 
-    // Explicit XY placement replaces old pins; inferred midpoints and Z-only
-    // patches must leave them intact.
+    // Explicit XY placement replaces old pins, retaining omitted axes for maps;
+    // inferred midpoints and Z-only patches must leave them intact.
     if point.x_set || point.y_set {
         statements.remove("pin");
         statements.remove("\"pin\"");
@@ -2067,23 +2121,22 @@ fn apply_placement_statements(
     statements.insert("pos-y-set".to_string(), point.y_set.to_string());
     statements.insert(
         "pos-mode".to_string(),
-        match placement.mode {
-            PlacementMode::Start => "start",
-            PlacementMode::Pin => "pin",
+        if pin.is_some() || placement.mode == PlacementMode::Pin {
+            "pin"
+        } else {
+            "start"
         }
         .to_string(),
     );
-    statements.remove("group-start-x");
-    statements.remove("group-start-y");
-    if placement.group_start_x {
-        statements.insert("group-start-x".to_string(), "true".to_string());
+    for (axis, starts_group) in ["x", "y"].into_iter().zip(group_start) {
+        let key = format!("group-start-{axis}");
+        statements.remove(&key);
+        if starts_group {
+            statements.insert(key, "true".to_string());
+        }
     }
-    if placement.group_start_y {
-        statements.insert("group-start-y".to_string(), "true".to_string());
-    }
-
-    if let Some(pin) = &placement.pin {
-        statements.insert("pin".to_string(), pin.clone());
+    if let Some(pin) = pin {
+        statements.insert("pin".to_string(), pin);
     }
 
     statements
@@ -2211,6 +2264,7 @@ impl TypstPlacementSpec {
         };
 
         Ok(ResolvedPlacement {
+            merge_axes: self.merge_axes,
             // Depth-only placements must not synthesize or refresh XY state.
             point: (z.is_none() || point.x_set || point.y_set).then_some(point),
             z: z.map(|z| (z, self.z_mode.unwrap_or(self.mode))),

@@ -1095,20 +1095,16 @@ mod tests {
         fs::write(
             &assertions,
             r#"#import "layout.typ": (
-  _attach-elements,
-  _apply-element-layout-constraints,
-  _apply-label-offsets,
-  _edge-rank-same,
-  _element-edge-style,
-  _layout-pass,
+  attach-elements,
+  layout-graph,
 )
-#import "crates/linnest/typst/src/lib.typ": draw, graph
+#import "crates/linnest/typst/src/lib.typ": draw, graph, subgraph
 
 #let source-drawing = (statement: "source-statement", compass: "e")
 #source-drawing.insert("port-label", "source-port")
 #let sink-drawing = (statement: "sink-statement", compass: "w")
 #sink-drawing.insert("port-label", "sink-port")
-#let attached = _attach-elements(
+#let attached = attach-elements(
   graph.build({
     graph.node(<source>)
     graph.node(<sink>)
@@ -1147,40 +1143,52 @@ mod tests {
     label-offset: 0.5,
   )),
 )
-#let constrained = graph.style(
-  constrained-base,
-  node-label: none,
-  node-style: node => if node.vid == 1 { (radius: 5) } else { (:) },
-)
-#let constrained = _apply-element-layout-constraints(constrained)
-#let constrained-nodes = graph.nodes(constrained)
-#let constrained-edge = graph.edges(constrained).first()
-#assert(str(constrained-nodes.first().statements.at("layout-rank")) == "2")
-#assert(float(str(constrained-nodes.first().statements.at("layout-width"))) == 3)
-#assert(float(str(constrained-nodes.first().statements.at("layout-height"))) == 3)
-#assert(float(str(constrained-nodes.last().statements.at("layout-width"))) == 4)
-#assert(float(str(constrained-nodes.last().statements.at("layout-height"))) == 4)
-#assert(str(constrained-edge.statements.at("minlen")) == "3")
-#assert(_edge-rank-same(constrained) == ((0, 1),))
-#let constrained-pass = _layout-pass(constrained, (layout-algo: "stable-layered"))
-#assert(constrained-pass.at("rank-same").len() == 1)
-#assert(type(constrained-pass.at("rank-same").first()) == bytes)
-#let offset = _apply-label-offsets(constrained)
-#let offset-pos = graph.edges(offset).first().label-pos
-#assert(calc.abs(offset-pos.x - 1) < 1e-6)
-#assert(calc.abs(offset-pos.y - 0.5) < 1e-6)
-
-#let decorated = _element-edge-style(
+#context layout-graph(
   (
-    (stroke: (paint: black, thickness: 0.5pt), pattern: "coil"),
-    (offset: 0.2, stroke: (paint: black, thickness: 0.4pt), mark: (end: "straight")),
+    layouts: none,
+    style: (
+      node-label: none,
+      node-style: node => if node.vid == 1 { (radius: 5) } else { (:) },
+    ),
+    draw: (
+      title: none,
+      subgraph: subgraph.select(constrained-base, edges: (0,)),
+      draw-after: (g, bounds) => {
+        let nodes = graph.nodes(g)
+        let edge = graph.edges(g).first()
+        assert(str(nodes.first().statements.at("layout-rank")) == "2")
+        assert(float(str(nodes.first().statements.at("layout-width"))) == 3)
+        assert(float(str(nodes.first().statements.at("layout-height"))) == 3)
+        assert(float(str(nodes.last().statements.at("layout-width"))) == 4)
+        assert(float(str(nodes.last().statements.at("layout-height"))) == 4)
+        assert(str(edge.statements.at("minlen")) == "3")
+        assert(calc.abs(edge.label-pos.x - 1) < 1e-6)
+        assert(calc.abs(edge.label-pos.y - 0.5) < 1e-6)
+        assert(bounds.width > 0)
+        ()
+      },
+    ),
   ),
-  (data: (decoration: "wave",)),
+  constrained-base,
 )
-#assert(decorated.first().pattern == "wave")
-#assert(decorated.last().offset == 0.2)
-#assert(decorated.last().stroke.paint == black)
-#assert(decorated.last().mark.end == "straight")
+
+#let ranked = graph.build({
+  graph.node(<a>); graph.node(<b>); graph.node(<c>)
+  graph.edge(graph.source(<a>), graph.sink(<b>), same-rank: true)
+  graph.edge(graph.source(<b>), graph.sink(<c>))
+})
+#context layout-graph(
+  (
+    layouts: (solver: (algorithm: "stable-layered"), constraints: (same-rank: ((1, 2),))),
+    draw: (title: none, draw-after: (g, _) => {
+      let nodes = graph.nodes(g)
+      assert(calc.abs(nodes.at(0).pos.y - nodes.at(1).pos.y) < 1e-6)
+      assert(calc.abs(nodes.at(1).pos.y - nodes.at(2).pos.y) < 1e-6)
+      ()
+    }),
+  ),
+  ranked,
+)
 
 #let explicit-partial = graph.parse(
   "digraph explicit { 0 [id=0]; ext [style=invis]; ext -> 0 [id=0, pos=\"y:37!\"]; }",
@@ -1277,287 +1285,13 @@ mod tests {
             .compile_template(&assertions, base.join("generic-assertions.pdf"), &[])
             .unwrap();
 
-        let gamma_core = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets/embedded/drawing/templates/layout-core.typ")
-            .canonicalize()
-            .unwrap();
-        let physics_module = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets/embedded/drawing/templates/physics-edge-style.typ")
-            .canonicalize()
-            .unwrap();
-        let graph_module = templates
-            .join("crates/linnest/typst/src/graph.typ")
-            .canonicalize()
-            .unwrap();
-        let subgraph_module = templates
-            .join("crates/linnest/typst/src/subgraph.typ")
-            .canonicalize()
-            .unwrap();
-        let gamma_assertions = base.join("gamma-mode-assertions.typ");
-        let gamma_source = r#"#import "@CORE@": (
-  _attach-elements,
-  _apply-element-layout-constraints,
-  _apply-label-offsets,
-  _edge-label,
-  _edge-rank-same,
-  _element-edge-style,
-  _external-label-options,
-  _layout-pass,
-  _momentum-edge-label,
-  _particle-label,
-  _resolved-mode,
-  autogen-external-edge-fields,
-)
-#import "@PHYSICS@" as physics
-#import "@GRAPH@" as graph
-#import "@SUBGRAPH@" as subgraph
-#let fake-style = (map: ("fake": (label: [particle])))
-#let explicit-map = ("fake": (label: [override]))
-#let particle-map = physics.default-map + fake-style.map + explicit-map
-#let edge = (fields: (particle: "fake"), data: (:), edge: 2)
-#let gamma-source-drawing = (statement: "gamma-source", compass: "e")
-#gamma-source-drawing.insert("port-label", "gamma-port")
-#let gamma-attached = _attach-elements(
-  graph.build({
-    graph.node(<gamma-a>)
-    graph.node(<gamma-b>)
-    graph.edge(graph.source(<gamma-a>, id: 0), graph.sink(<gamma-b>, id: 1))
-  }),
-  (hedges: (gamma-source-drawing, (:))),
-  graph: graph,
-)
-#let gamma-source = graph.edges(gamma-attached).first().source
-#assert(gamma-source.statement == "gamma-source")
-#assert(gamma-source.at("port-label") == "gamma-port")
-#assert(gamma-source.compass == "e")
-#assert(_external-label-options((show-particle: false, show-edge-index: false)) == (
-  include-particle: false,
-  include-index: false,
-))
-#assert(_particle-label(
-  edge,
-  2,
-  "plain",
-  physics: physics,
-  particle-map: particle-map,
-  include-particle: false,
-  include-index: false,
-) == none)
-#let index-only = _particle-label(
-  edge,
-  2,
-  "plain",
-  physics: physics,
-  particle-map: particle-map,
-  include-particle: false,
-  include-index: true,
-)
-#assert(type(index-only) == content)
-#assert(repr(index-only).contains("p") and repr(index-only).contains("2"))
-#let particle-only = _particle-label(
-  edge,
-  2,
-  "plain",
-  physics: physics,
-  particle-map: particle-map,
-  include-particle: true,
-  include-index: false,
-)
-#assert(type(particle-only) == content)
-#assert(repr(particle-only).contains("override"))
-
-#let generated-base = graph.build({
-  graph.node(<external>)
-  graph.edge(graph.sink(<external>), particle: "fake")
-})
-#let generated = autogen-external-edge-fields(
-  generated-base,
-  graph: graph,
-  physics: physics,
-  particle-map: particle-map,
-)
-#let generated-edge = graph.edges(generated).first()
-#assert(generated-edge.data.keys().contains("mode-label"))
-#assert(not generated-edge.data.keys().contains("label"))
-#assert(repr(_momentum-edge-label(
-  generated-edge,
-  "plain",
-  (:),
-)) == repr(generated-edge.data.at("mode-label")))
-#assert(repr(_edge-label([configured], generated-edge)) == repr([configured]))
-#assert(_edge-label(none, generated-edge) == none)
-#let element-label = graph.map(
-  generated,
-  edge: edge => (data: edge.data + (label: [element],)),
-)
-#assert(repr(_edge-label(
-  [configured],
-  graph.edges(element-label).first(),
-)) == repr([element]))
-
-// Match the generated GammaLoop wrapper contract: the explicit map is spread
-// once, then merged above the generated and model-neutral maps.
-#let generated-map = ("fake": (
-  source: (stroke: (paint: blue, thickness: 0.55pt)),
-  sink: (stroke: (paint: blue, thickness: 0.55pt)),
-))
-#let generated-style(map: (:), typst-fields: "plain", ..options) = physics.style(
-  map: physics.default-map + generated-map + map,
-  typst-fields: typst-fields,
-  ..options.named(),
-)
-#let generated-source-style(edge, typst-fields: "plain", ..options) = {
-  let callbacks = generated-style(
-    typst-fields: typst-fields,
-    ..options.named(),
-  )
-  (callbacks.source-style)(edge)
-}
-#let styled-edge = (
-  particle: "fake",
-  source-half-edge: (hedge: 0),
-  sink-half-edge: (hedge: 1),
-  orientation: "default",
-  data: (:),
-)
-#let explicit-source = generated-source-style(styled-edge, map: ("fake": (
-  source: (stroke: (paint: red, thickness: 0.55pt)),
-  sink: (stroke: (paint: red, thickness: 0.55pt)),
-),))
-#assert(explicit-source.stroke.paint == red)
-
-#let constrained-base = graph.build({
-  graph.node(<left>, pos: graph.pos(x: 0, y: 0, mode: "pin"))
-  graph.node(<right>, pos: graph.pos(x: 2, y: 0, mode: "pin"))
-  graph.edge(
-    graph.source(<left>),
-    graph.sink(<right>),
-    pos: graph.pos(x: 1, y: 0, mode: "pin"),
-    label-pos: graph.pos(x: 1, y: 0, mode: "pin"),
-  )
-})
-#let constrained-base = graph.map(
-  constrained-base,
-  node: node => if node.node == 0 {
-    (data: (rank: 2, minimum-size: 3))
-  } else {
-    (data: (maximum-size: 4))
-  },
-  edge: edge => (data: (
-    minimum-length: 3,
-    same-rank: true,
-    label-offset: 0.5,
-  )),
-)
-#let constrained = graph.style(
-  constrained-base,
-  node-label: none,
-  node-style: node => if node.vid == 1 { (radius: 5) } else { (:) },
-)
-#let constrained = _apply-element-layout-constraints(constrained, graph: graph)
-#let constrained-nodes = graph.nodes(constrained)
-#let constrained-edge = graph.edges(constrained).first()
-#assert(str(constrained-nodes.first().statements.at("layout-rank")) == "2")
-#assert(float(str(constrained-nodes.first().statements.at("layout-width"))) == 3)
-#assert(float(str(constrained-nodes.first().statements.at("layout-height"))) == 3)
-#assert(float(str(constrained-nodes.last().statements.at("layout-width"))) == 4)
-#assert(float(str(constrained-nodes.last().statements.at("layout-height"))) == 4)
-#assert(str(constrained-edge.statements.at("minlen")) == "3")
-#assert(_edge-rank-same(constrained, graph: graph) == ((0, 1),))
-#let constrained-pass = _layout-pass(
-  constrained,
-  (layout-algo: "stable-layered"),
-  graph: graph,
-  subgraph: subgraph,
-)
-#assert(constrained-pass.at("rank-same").len() == 1)
-#assert(type(constrained-pass.at("rank-same").first()) == bytes)
-#let offset = _apply-label-offsets(constrained, graph: graph)
-#let offset-pos = graph.edges(offset).first().label-pos
-#assert(calc.abs(offset-pos.x - 1) < 1e-6)
-#assert(calc.abs(offset-pos.y - 0.5) < 1e-6)
-
-#let decorated = _element-edge-style(
-  (
-    (stroke: (paint: black, thickness: 0.5pt), pattern: "coil"),
-    (offset: 0.2, stroke: (paint: black, thickness: 0.4pt), mark: (end: "straight")),
-  ),
-  (data: (
-    decoration: "wave",
-    momentum-style: (offset: 0.4, stroke: (paint: red, thickness: 0.8pt)),
-  )),
-  momentum-arrows: true,
-)
-#assert(decorated.first().pattern == "wave")
-#assert(decorated.last().offset == 0.4)
-#assert(decorated.last().stroke.paint == red)
-#assert(decorated.last().mark.end == "straight")
-#let without-momentum = _element-edge-style(
-  decorated,
-  (data: (momentum-style: none)),
-  momentum-arrows: true,
-)
-#assert(type(without-momentum) == dictionary)
-#assert(without-momentum.pattern == "wave")
-#assert(without-momentum.stroke.paint == black)
-
-#let generic = graph.build({
-  graph.node(<a>)
-  graph.node(<b>)
-  graph.edge(graph.source(<a>), graph.sink(<b>))
-})
-#let amplitude = graph.build({
-  graph.node(<a>)
-  graph.edge(graph.sink(<a>))
-})
-#let cross-section = graph.build({
-  graph.node(<a>)
-  graph.node(<b>)
-  graph.edge(graph.sink(<a>), cut-id: "pair")
-  graph.edge(graph.source(<b>), cut-id: "pair")
-})
-#assert(_resolved-mode(generic, graph: graph, auto-mode: true) == (
-  amplitude: false,
-  cross-section: false,
-))
-#assert(_resolved-mode(amplitude, graph: graph, auto-mode: true) == (
-  amplitude: true,
-  cross-section: false,
-))
-#assert(_resolved-mode(cross-section, graph: graph, auto-mode: true) == (
-  amplitude: false,
-  cross-section: true,
-))
-#assert(_resolved-mode(generic, graph: graph, amplitude-mode: true) == (
-  amplitude: true,
-  cross-section: false,
-))
-[ok]
-"#
-        .replace("@CORE@", &gamma_core.to_string_lossy().replace('\\', "/"))
-        .replace(
-            "@PHYSICS@",
-            &physics_module.to_string_lossy().replace('\\', "/"),
-        )
-        .replace(
-            "@GRAPH@",
-            &graph_module.to_string_lossy().replace('\\', "/"),
-        )
-        .replace(
-            "@SUBGRAPH@",
-            &subgraph_module.to_string_lossy().replace('\\', "/"),
-        );
-        fs::write(&gamma_assertions, gamma_source).unwrap();
+        let gamma_assertions =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/gamma-style-behavior.typ");
         renderer
             .compile_template(
                 &gamma_assertions,
-                base.join("gamma-mode-assertions.pdf"),
-                &[
-                    gamma_core.as_path(),
-                    physics_module.as_path(),
-                    graph_module.as_path(),
-                    subgraph_module.as_path(),
-                ],
+                base.join("gamma-style-assertions.pdf"),
+                &[],
             )
             .unwrap();
 

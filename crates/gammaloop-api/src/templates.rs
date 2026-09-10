@@ -97,24 +97,6 @@ mod tests {
         assert!(templates.join("layout-core.typ").is_file());
         assert!(templates.join("physics-edge-style.typ").is_file());
         assert!(templates.join("impl/physics-edge-style.typ").is_file());
-        assert!(fs::read_to_string(templates.join("grid.typ"))?.contains("page_format"));
-        let layout = fs::read_to_string(templates.join("layout.typ"))?;
-        assert!(layout.contains("#import \"layout-core.typ\": bind-layout"));
-        assert!(layout.contains("#import \"physics-edge-style.typ\" as physics"));
-        assert!(layout.contains("#let layout = bind-layout("));
-        assert!(!layout.contains("graph.parse(input)"));
-        let layout_core = fs::read_to_string(templates.join("layout-core.typ"))?;
-        assert!(layout_core.contains("amplitude-mode"));
-        assert!(layout_core.contains("cross-section-mode"));
-        assert!(layout_core.contains("show-node-index"));
-        assert!(layout_core.contains("default: style-options.at(\"unit\", default: 1.5)"));
-        assert!(layout_core.contains("autogen-external-edge-fields"));
-        assert!(layout_core.contains("momentum-index"));
-        assert!(layout_core.contains("$(p_#index)$"));
-        assert!(layout_core.contains("$n_#index$"));
-        assert!(layout_core.contains("graph.style("));
-        assert!(layout_core.contains("length-scale: 0.4"));
-        assert!(layout_core.contains("z-spring-growth: 1.01"));
 
         assert!(templates
             .join("crates/linnest/typst/linnest.wasm")
@@ -124,6 +106,9 @@ mod tests {
             .is_file());
         assert!(templates
             .join("crates/linnest/typst/src/impl/graph.typ")
+            .is_file());
+        assert!(templates
+            .join("crates/linnest/typst/src/render/layout.typ")
             .is_file());
         assert!(!templates
             .join("crates/linnest/typst/src/physics-edge-style.typ")
@@ -140,15 +125,156 @@ mod tests {
         assert!(!templates.join("curve.typ").exists());
 
         Assets::extract_justfile(tempdir.path())?;
-        let justfile = fs::read_to_string(tempdir.path().join("justfile"))?;
-        assert!(justfile.contains("--style drawings/templates/layout-core.typ"));
-        assert!(justfile.contains("--style drawings/templates/physics-edge-style.typ"));
-        assert!(justfile.contains("--style drawings/templates/impl/physics-edge-style.typ"));
-        assert!(!justfile.contains("crates/linnest/typst/src/physics-edge-style.typ"));
-        assert!(justfile.contains("momentum_line_mark := \"auto\""));
-        assert!(justfile.contains("show_node_index := \"true\""));
-        assert!(justfile.contains("show_particle := \"false\""));
+        assert!(tempdir.path().join("justfile").is_file());
 
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "requires Typst, just, and LINNET_TEST_EXECUTABLE pointing to a built CLI"]
+    fn exported_model_drawings_render_and_cache_without_python() -> Result<()> {
+        use std::collections::BTreeMap;
+        use std::os::unix::fs::symlink;
+        use std::path::PathBuf;
+        use std::process::Command;
+
+        let temp = tempfile::tempdir()?;
+        let bin = temp.path().join("bin");
+        fs::create_dir(&bin)?;
+        let search_path = std::env::var_os("PATH").unwrap_or_default();
+        for (name, configured) in [
+            (
+                "linnet",
+                Some(
+                    std::env::var_os("LINNET_TEST_EXECUTABLE").expect("set LINNET_TEST_EXECUTABLE"),
+                ),
+            ),
+            ("typst", std::env::var_os("TYPST_TEST_EXECUTABLE")),
+            ("just", None),
+            ("sh", None),
+        ] {
+            let executable = configured.map(PathBuf::from).unwrap_or_else(|| {
+                std::env::split_paths(&search_path)
+                    .map(|directory| directory.join(name))
+                    .find(|path| path.is_file())
+                    .unwrap_or_else(|| panic!("{name} must be available on PATH"))
+            });
+            symlink(fs::canonicalize(executable)?, bin.join(name))?;
+        }
+        let absent = Command::new(bin.join("sh"))
+            .env("PATH", &bin)
+            .args(["-c", "! command -v python && ! command -v python3"])
+            .status()?;
+        assert!(absent.success());
+
+        Assets::extract_templates(temp.path())?;
+        Assets::extract_justfile(temp.path())?;
+        let templates = temp.path().join("drawings/templates");
+        let model = gammalooprs::utils::load_generic_model("scalars");
+        model.generate_edge_style_template(templates.join("edge-style.typ"))?;
+        let data = temp.path().join("processes/amplitudes/example.dot");
+        fs::create_dir_all(data.parent().unwrap())?;
+        fs::write(
+            &data,
+            r#"digraph amplitude {
+            a [pos="0,0!"]; b [pos="4,0!"];
+            incoming [style=invis]; outgoing [style=invis];
+            incoming -> a [particle="scalar_0", pos="z:4"];
+            a -> b [particle="scalar_0"];
+            b -> outgoing [particle="scalar_0", pos="z:-2"];
+        }"#,
+        )?;
+
+        for scenario in ["initial", "cached", "changed-source", "explicit-inputs"] {
+            if scenario == "changed-source" {
+                let implementation = templates.join("crates/linnest/typst/src/impl/draw.typ");
+                let source = fs::read_to_string(&implementation)?;
+                fs::write(
+                    implementation,
+                    format!("{source}\n// Cache invalidation probe.\n"),
+                )?;
+            }
+            let mut command = Command::new(bin.join("just"));
+            command.current_dir(temp.path()).env("PATH", &bin).args([
+                "steps=0",
+                "columns=1",
+                "draw",
+            ]);
+            if scenario == "explicit-inputs" {
+                command.args(["--input", "steps=2", "--input", "columns=2"]);
+            }
+            let output = command.output()?;
+            let expected = if scenario == "cached" {
+                "0 built, 1 reused"
+            } else {
+                "1 built, 0 reused"
+            };
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(
+                String::from_utf8_lossy(&output.stdout).contains(expected),
+                "{}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+            for path in [
+                "drawings.pdf",
+                "drawings/figs/processes/amplitudes/example.pdf",
+            ] {
+                assert!(fs::read(temp.path().join(path))?.starts_with(b"%PDF-"));
+            }
+            let metadata: serde_json::Value = serde_json::from_slice(&fs::read(
+                temp.path().join("drawings/.cache/run-metadata.json"),
+            )?)?;
+            let inputs: Vec<(String, String)> = serde_json::from_value(metadata["input"].clone())?;
+            let inputs: BTreeMap<_, _> = inputs.into_iter().collect();
+            assert_eq!(
+                inputs["steps"],
+                if scenario == "explicit-inputs" {
+                    "2"
+                } else {
+                    "0"
+                }
+            );
+            assert_eq!(
+                inputs["columns"],
+                if scenario == "explicit-inputs" {
+                    "2"
+                } else {
+                    "1"
+                }
+            );
+        }
+
+        let assertions = temp.path().join("model-style.typ");
+        fs::write(
+            &assertions,
+            r#"#import "drawings/templates/edge-style.typ" as physics
+#import "drawings/templates/crates/linnest/typst/src/lib.typ": graph
+#let g = graph.parse(read("processes/amplitudes/example.dot")).first()
+#let styles = physics.style()
+#for edge in graph.edges(g) {
+  assert(repr((styles.edge-label)(edge)).contains(repr(physics.map.at("scalar_0").label)))
+}
+[Model-generated particle labels work directly in Typst.]
+"#,
+        )?;
+        let output = Command::new(bin.join("typst"))
+            .env("PATH", &bin)
+            .arg("compile")
+            .arg("--root")
+            .arg(temp.path())
+            .arg(&assertions)
+            .arg(temp.path().join("model-style.pdf"))
+            .output()?;
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         Ok(())
     }
 }

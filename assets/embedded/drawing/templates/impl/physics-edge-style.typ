@@ -15,7 +15,7 @@
 }
 
 #let _edge-data-field(edge, field, default) = {
-  _data-field(edge, field, default)
+  edge.at(field, default: _data-field(edge, field, default))
 }
 
 #let _half-record(edge, half) = {
@@ -50,15 +50,20 @@
   let has-source = edge.at("source-half-edge", default: none) != none
   let has-sink = edge.at("sink-half-edge", default: none) != none
   let needs-arrow = entry.at("fermion-arrow", default: false)
-  let arrow-half = needs-arrow and (
-    (half == "source" and has-source)
-      or (half == "sink" and has-sink)
+  let arrow-half = (
+    needs-arrow
+      and (
+        (half == "source" and has-source) or (half == "sink" and has-sink)
+      )
   )
   if arrow-half {
-    base + (
-      mark: entry.at("fermion-arrow-mark", default: api.fermion-arrow-mark),
-      mark-position: "center-if-dangling",
-      mark-orientation: "edge",
+    (
+      base
+        + (
+          mark: entry.at("fermion-arrow-mark", default: api.fermion-arrow-mark),
+          mark-position: "center-if-dangling",
+          mark-orientation: "edge",
+        )
     )
   } else {
     base
@@ -66,119 +71,166 @@
 }
 
 #let _single-end-mark(mark, arrow-stroke) = {
-  let base = (
-    end: "straight",
-    stroke: arrow-stroke,
-    scale: .75,
-  )
-  if mark == auto {
-    base
-  } else if mark == none {
-    none
-  } else if type(mark) == dictionary {
+  if type(mark) == str {
+    mark = mark.trim("\"")
+    if mark == "none" { mark = none } else if mark == "auto" { mark = auto }
+  }
+  let base = (end: "straight", stroke: arrow-stroke, scale: 1.1)
+  if mark == auto { base } else if mark == none { none } else if (
+    type(mark) == dictionary
+  ) {
     let clean = mark
-    if clean.keys().contains("start") {
-      let _ = clean.remove("start")
-    }
-    if clean.keys().contains("end") {
-      base + clean
-    } else {
-      base + clean + (end: "barbed")
-    }
-  } else {
-    base + (end: mark)
-  }
+    if clean.keys().contains("start") { let _ = clean.remove("start") }
+    base + clean
+  } else { base + (end: mark) }
 }
 
-#let _momentum-arrow-layer(options) = {
-  let offset = options.offset
-  let length = options.length
-  let ratio = options.ratio
-  let stroke = options.stroke
-  let mark = options.mark
-  let show-mark = options.show-mark
-  let default-stroke = options.default-stroke
-  let arrow-stroke = if stroke == none {
-    default-stroke
-  } else {
-    stroke
-  }
-  let arrow-mark = _single-end-mark(mark, arrow-stroke)
-  let layer = (
-    offset: offset,
-    length: length,
-    ratio: ratio,
-    resolve-length: "min",
-    offset-side: "label",
-    stroke: arrow-stroke,
+#let _momentum-arrow-layer(edge, options) = {
+  let side = options.momentum-arrow-side
+  let side = if side == auto { "auto" } else { str(side).trim("\"") }
+  assert(
+    side in ("auto", "left", "right"),
+    message: "momentum-arrow-side must be auto, left, or right",
   )
-  if show-mark {
-    if arrow-mark == none {
-      layer
-    } else {
-      layer + (mark: arrow-mark)
+  let stroke = options.momentum-arrow-stroke
+  if stroke == none { stroke = options.api.momentum-arrow-defaults.stroke }
+  let offset = options.momentum-arrow-offset
+  if side == "auto" {
+    // Use the edge's bend relative to its chord, independently of label content
+    // or relaxation. Straight, dangling and closed edges use the signed offset.
+    let direction = if offset < 0 { -1 } else { 1 }
+    let source = edge.at("source-node", default: none)
+    let sink = edge.at("sink-node", default: none)
+    let record = edge.at("edge", default: none)
+    let point = if type(record) == dictionary {
+      record.at("pos", default: none)
+    } else { none }
+    if type(point) == array { point = (x: point.at(0), y: point.at(1)) }
+    if source != none and sink != none and point != none {
+      let a = source.pos
+      let b = sink.pos
+      let cross = (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
+      if calc.abs(cross) > 1e-9 {
+        direction *= if cross < 0 { -1 } else { 1 }
+      }
     }
-  } else {
-    layer
+    side = if direction < 0 { "right" } else { "left" }
   }
-}
-
-#let _has-source(edge) = {
-  edge.at("source-half-edge", default: none) != none
-}
-
-#let _has-sink(edge) = {
-  edge.at("sink-half-edge", default: none) != none
-}
-
-#let _momentum-arrow-half(edge) = {
-  if _has-sink(edge) {
-    "sink"
-  } else if _has-source(edge) {
-    "source"
-  } else {
-    none
-  }
+  let anchor = options.momentum-label-anchor
+  // Resolved sides are relative to source -> sink and shared with the label carrier.
+  // The gap is in graph units: to the box for auto, or to an explicit anchor.
+  let geometry = (
+    offset: calc.abs(offset) * if side == "left" { 1 } else { -1 },
+    offset-side: none,
+    label-side: side,
+    label-gap: options.momentum-label-gap,
+    label-style: (
+      anchor: if type(anchor) == str { anchor.trim("\"") } else { anchor },
+    ),
+  )
+  let shift = options.momentum-arrow-shift
+  let label-shift = options.momentum-label-shift
+  // Auto clears the complete label box; explicit anchors use only the gap.
+  // Labels follow the full invisible path, so endpoint clamps never depend on
+  // arrow length. Linnest resolves label:auto and owns all generic overlays.
+  (
+    geometry
+      + (
+        length: options.momentum-arrow-length,
+        ratio: options.momentum-arrow-ratio,
+        resolve-length: if options.momentum-arrow-ratio == none {
+          "length"
+        } else { "min" },
+        shift: shift,
+        stroke: stroke,
+        pattern: none,
+        mark: if options.show-mark {
+          _single-end-mark(options.momentum-arrow-mark, stroke)
+        } else { none },
+        // A numeric end position uses Linnest's continuous paired-edge carrier,
+        // keeping one arrowhead when a shift crosses the source/sink split.
+        mark-position: 1,
+        mark-orientation: "path",
+      ),
+    geometry
+      + (
+        length: none,
+        ratio: none,
+        resolve-length: "none",
+        shift: 0,
+        label-only: true,
+        label: auto,
+        label-shift: if label-shift == auto { shift } else { label-shift },
+      ),
+  )
 }
 
 #let _half-style(edge, half, options) = {
-  let api = options.api
-  let map = options.map
-  let default = options.default
-  let typst-fields = options.typst-fields
-  let scope = options.scope
-  let orientation-split = options.orientation-split
-  let momentum-arrows = options.momentum-arrows
-  let momentum-arrow-offset = options.momentum-arrow-offset
-  let momentum-arrow-length = options.momentum-arrow-length
-  let momentum-arrow-ratio = options.momentum-arrow-ratio
-  let momentum-arrow-stroke = options.momentum-arrow-stroke
-  let momentum-arrow-mark = options.momentum-arrow-mark
-  let style = _base-half-style(edge, half, (
-    map: map,
-    default: default,
-    orientation-split: orientation-split,
-    api: api,
-  ))
-  style = style + (api.style-dict)(edge.at(half + "-style", default: none), edge, mode: typst-fields, map: map, scope: scope)
-  style = style + (api.style-dict)(_half-data-field(edge, half, "style", none), edge, mode: typst-fields, map: map, scope: scope)
-  if momentum-arrows {
-    let show-mark = _momentum-arrow-half(edge) == half
-    (
-      style,
-      _momentum-arrow-layer((
-        offset: momentum-arrow-offset,
-        length: momentum-arrow-length,
-        ratio: momentum-arrow-ratio,
-        stroke: momentum-arrow-stroke,
-        mark: momentum-arrow-mark,
-        show-mark: show-mark,
-        default-stroke: api.momentum-arrow-defaults.stroke,
-      )),
-    )
-  } else {
-    style
+  let style = _base-half-style(edge, half, options)
+  let enabled = _edge-data-field(
+    edge,
+    "momentum-arrows",
+    options.momentum-arrows,
+  )
+  if enabled not in (true, "true", "\"true\"") { return style }
+  // Domain controls create particle, arrow, and label layers directly; generic
+  // styles and decorations are composed once by Linnest after these defaults.
+  for key in (
+    "momentum-arrow-offset",
+    "momentum-arrow-length",
+    "momentum-arrow-ratio",
+    "momentum-arrow-stroke",
+    "momentum-arrow-mark",
+    "momentum-arrow-side",
+    "momentum-arrow-shift",
+    "momentum-label-gap",
+    "momentum-label-shift",
+    "momentum-label-anchor",
+  ) {
+    let value = _half-data-field(edge, half, key, _edge-data-field(
+      edge,
+      key,
+      options.at(key),
+    ))
+    if (
+      key
+        in (
+          "momentum-arrow-offset",
+          "momentum-arrow-length",
+          "momentum-arrow-ratio",
+          "momentum-arrow-shift",
+          "momentum-label-gap",
+          "momentum-label-shift",
+        )
+        and type(value) == str
+    ) {
+      let value-text = value.trim("\"")
+      value = if value-text == "none" { none } else if value-text == "auto" {
+        auto
+      } else { float(value-text) }
+    }
+    options.insert(key, value)
   }
+  let arrow-half = if edge.at("sink-half-edge", default: none) != none {
+    "sink"
+  } else { "source" }
+  let layers = _momentum-arrow-layer(edge, options + (show-mark: half == arrow-half))
+  let anchor = _edge-data-field(edge, "label-anchor", none)
+  let dangling = (
+    edge.at("source-half-edge", default: none) == none
+      or edge.at("sink-half-edge", default: none) == none
+  )
+  // Ordered external labels stay outside their endpoint at Linnest's solved
+  // label position. Explicit momentum placement still selects the path carrier.
+  if (
+    dangling and type(anchor) == str and anchor.trim("\"") in ("east", "west")
+      and options.momentum-arrow-shift == 0
+      and options.momentum-label-shift == auto
+      and options.momentum-label-anchor == auto
+  ) {
+    layers = layers.slice(0, 1)
+  }
+  (style, ..layers)
 }
 
 #let source-style(edge, options) = _half-style(edge, "source", options)
@@ -211,100 +263,67 @@
 
 #let _selected-label(edge, options) = {
   let api = options.api
-  let show-momentum = options.show-momentum
-  let show-edge-index = options.show-edge-index
-  let show-half-edge-index = options.show-half-edge-index
-  let show-particle = options.show-particle
-  let momentum-fields = options.momentum-fields
-  let edge-index-fields = options.edge-index-fields
-  let momentum-prefix = options.momentum-prefix
-  let edge-index-prefix = options.edge-index-prefix
-  let half-edge-index-prefix = options.half-edge-index-prefix
-  let particle-prefix = options.particle-prefix
-  let label-separator = options.label-separator
-  let label-size = options.label-size
-  let label-fill = options.label-fill
   let pieces = ()
-  if show-momentum {
-    pieces.push(_prefixed-content(momentum-prefix, (api.momentum-value)(edge, fields: momentum-fields), api))
-  }
-  if show-edge-index {
-    pieces.push(_prefixed-content(edge-index-prefix, (api.edge-index)(edge, fields: edge-index-fields), api))
-  }
-  if show-half-edge-index {
-    pieces.push(_prefixed-content(half-edge-index-prefix, (api.dangling-half-edge-index)(edge), api))
-  }
-  if show-particle {
-    pieces.push(_prefixed-content(particle-prefix, (api.particle-name)(edge), api))
-  }
-  let joined = _join-content(pieces, label-separator)
-  if joined == none {
-    none
-  } else {
-    text(size: label-size, fill: label-fill)[#joined]
-  }
-}
-
-#let _default-label(edge, options) = {
-  let api = options.api
-  let map = options.map
-  let default = options.default
-  let typst-fields = options.typst-fields
-  let scope = options.scope
-  let data-label = _edge-data-field(
-    edge,
-    "display-label",
-    _edge-data-field(edge, "label", none),
-  )
-  if data-label != none {
-    (api.label-content)(data-label, edge, mode: typst-fields, map: map, scope: scope)
-  } else {
-    let label-value = edge.at(
-      "display-label",
-      default: edge.at("label", default: none),
-    )
-    if label-value != none {
-      (api.label-content)(label-value, edge, mode: typst-fields, map: map, scope: scope)
-    } else {
-      (api.label-content)(
-        (api.edge-entry)(edge, map: map, default: default).at("label", default: none),
+  if options.show-particle != false {
+    let particle = (api.edge-entry)(
+      edge,
+      map: options.map,
+      default: options.default,
+    ).at("label", default: none)
+    if particle != none {
+      particle = (api.label-content)(
+        particle,
         edge,
-        map: map,
-        scope: scope,
+        map: options.map,
+        scope: options.scope,
       )
+      pieces.push(if options.particle-prefix == none { particle } else {
+        options.particle-prefix + particle
+      })
     }
+  }
+  if options.show-momentum {
+    pieces.push([$q_(#edge.eid)$])
+  }
+  if options.show-edge-index {
+    pieces.push(_prefixed-content(
+      options.edge-index-prefix,
+      (api.edge-index)(edge, fields: options.edge-index-fields),
+      api,
+    ))
+  }
+  if options.show-half-edge-index {
+    pieces.push(_prefixed-content(
+      options.half-edge-index-prefix,
+      (api.dangling-half-edge-index)(edge),
+      api,
+    ))
+  }
+  let joined = _join-content(pieces, options.label-separator)
+  if joined == none { none } else {
+    text(size: options.label-size, fill: options.label-fill)[#joined]
   }
 }
 
 #let edge-label(edge, options) = {
-  let selected = _selected-label(
-    edge,
-    (
-      show-momentum: options.show-momentum,
-      show-edge-index: options.show-edge-index,
-      show-half-edge-index: options.show-half-edge-index,
-      show-particle: options.show-particle,
-      momentum-fields: options.momentum-fields,
-      edge-index-fields: options.edge-index-fields,
-      momentum-prefix: options.momentum-prefix,
-      edge-index-prefix: options.edge-index-prefix,
-      half-edge-index-prefix: options.half-edge-index-prefix,
-      particle-prefix: options.particle-prefix,
-      label-separator: options.label-separator,
-      label-size: options.label-size,
-      label-fill: options.label-fill,
-      api: options.api,
-    ),
-  )
-  if selected != none {
-    selected
-  } else {
-    _default-label(edge, (
-      map: options.map,
-      default: options.default,
-      typst-fields: options.typst-fields,
-      scope: options.scope,
-      api: options.api,
-    ))
+  let api = options.api
+  // Explicit labels take precedence over generated particle/momentum portions.
+  // Explicit false show flags suppress their portion, including all labels,
+  // rather than falling through to the particle-map default.
+  for (index, record) in (_record-data(edge), edge).enumerate() {
+    for key in ("display-label", "label") {
+      if (
+        record.keys().contains(key) and (index == 0 or record.at(key) != none)
+      ) {
+        return (api.label-content)(
+          record.at(key),
+          edge,
+          mode: options.typst-fields,
+          map: options.map,
+          scope: options.scope,
+        )
+      }
+    }
   }
+  _selected-label(edge, options)
 }

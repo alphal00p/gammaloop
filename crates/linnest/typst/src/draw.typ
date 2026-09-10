@@ -329,7 +329,11 @@
   edge-stroke: 0.1em,
   /// Default logical-edge style dictionary, layers, or callback. An edge's
   /// `style:` value patches this default; `auto` delegates and `none` hides the
-  /// edge without changing its topology. -> dictionary | array | function | none
+  /// edge without changing its topology. Stored `graph.style` edge and endpoint
+  /// defaults are composed first, followed by this style, record edge style,
+  /// draw endpoint style, and endpoint-local style. Shared logical-edge callbacks
+  /// run once before the two halves are composed.
+  /// -> dictionary | array | function | none
   edge-style: (:),
   /// Default normal offset for edge paths. Applied to the base edge geometry
   /// before patterns; node outsets then trim the shifted path. -> int | float
@@ -395,7 +399,9 @@
   /// signed arc length on that derived path, clamped to the path's endpoints.
   /// Positive values move toward its end without moving or trimming the layer.
   /// `label-side` is `auto`, `"left"`, `"right"`, or a signed number; `auto`
-  /// follows the side selected by ordinary edge-label layout.
+  /// follows the side selected by ordinary edge-label layout. If a label-side
+  /// offset has no layout direction yet, both offset and label follow the sign
+  /// of `offset` (positive means left).
   /// With `label-style.anchor` omitted or set to `auto` (also `"auto"`), the
   /// centered label's actual CeTZ box clears the local tangent line by
   /// `label-gap`, accounting for text bounds, wrapping, padding and rotation.
@@ -406,7 +412,11 @@
   /// to `cetz.draw.content`. An attached
   /// label replaces the ordinary painted edge label, which may still provide
   /// its pre-layout measurement and side. Attached labels do not add separate
-  /// pre-layout collision constraints.
+  /// pre-layout collision constraints. `label: auto` reuses the ordinary edge
+  /// label and its content style. `label-only: true` makes the layer an invisible
+  /// label carrier: strokes, fills, patterns, marks, crossings and subgraph edge
+  /// styling cannot paint it. Its geometry still controls label placement. If no
+  /// visible endpoint layer carries a label, the ordinary edge label is drawn.
   /// -> dictionary | array | function | none
   source-style: (:),
   /// Sink half-edge style dictionary, array of layer dictionaries, or callback.

@@ -52,8 +52,9 @@ sync-drawing-assets:
 
     copy_gammaloop_templates() {
       local target="$1"
-      mkdir -p "$target"
+      mkdir -p "$target/impl"
       install_assets "$target" assets/embedded/drawing/templates/*.typ
+      cp -R assets/embedded/drawing/templates/impl/. "$target/impl/"
     }
 
     clean_old_flat_bundle() {
@@ -139,8 +140,9 @@ sync-drawing-assets-cargo:
 
     copy_gammaloop_templates() {
       local target="$1"
-      mkdir -p "$target"
+      mkdir -p "$target/impl"
       install_assets "$target" assets/embedded/drawing/templates/*.typ
+      cp -R assets/embedded/drawing/templates/impl/. "$target/impl/"
     }
 
     clean_old_flat_bundle() {

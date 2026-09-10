@@ -1,5 +1,8 @@
 #import "layout.typ": layout, layout-with-cut-curves
 #import "../theme.typ": palette
+#import "../../../../assets/embedded/drawing/templates/physics-edge-style.typ": (
+  momentum-arrow-defaults,
+)
 
 // Portal variant of GammaLoop's generated figure template. The graph source,
 // family and optional momentum-arrow treatment live in each asset's `.typ`
@@ -24,13 +27,9 @@
     edge-style-options: (
       momentum-arrows: momentum-arrows,
       show-edge-index: false,
-      show-particle: false,
-      momentum-arrow-stroke: (
-        paint: palette.ink,
-        thickness: 1.0pt,
-        cap: "round",
-      ),
-      momentum-arrow-mark: (end: "straight", scale: 1.1),
+      show-particle: auto,
+      momentum-arrow-stroke: momentum-arrow-defaults.stroke
+        + (paint: palette.ink),
     ),
     amplitude-mode: amplitude-mode,
     cross-section-mode: cross-section-mode,

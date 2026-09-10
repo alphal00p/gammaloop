@@ -3447,6 +3447,51 @@ class TestRendering(unittest.TestCase):
         with patch.dict(os.environ, {"PATH": ""}):
             self.assertIn("<svg", graph.to_svg())
 
+    def test_default_renderer_attaches_structural_and_native_typst_values(self):
+        with TemporaryDirectory(prefix="linnet native attachment ") as directory:
+            module_path = Path(directory) / "native drawing.typ"
+            module_path.write_text(
+                "#let label = [$k_0$]\n"
+                "#let inspect(index) = index + 1\n"
+                "#let edge-style(edge) = {\n"
+                '  assert.eq(edge.edge.statements.at("spring-length"), "7.5")\n'
+                '  assert(float(edge.edge.statements.at("label-width")) > 0)\n'
+                "  assert.eq(edge.data.label, label)\n"
+                '  assert.eq(edge.data.at("kept-content"), label)\n'
+                "  assert.eq(type(edge.data.inspect), function)\n"
+                "  assert.eq((edge.data.inspect)(edge.eid), edge.eid + 1)\n"
+                "  assert.eq(edge.source-half-edge.data.token, label)\n"
+                '  (stroke: rgb("#123456") + 1pt)\n'
+                "}\n",
+                encoding="utf-8",
+            )
+            module = lp.TypstModule.file(module_path)
+            left = lp.node("left", placement={"x": 0, "y": 0})
+            right = lp.node("right", placement={"x": 4, "y": 0})
+            graph = lp.build(
+                left,
+                right,
+                lp.edge(
+                    lp.source(left, extensions={"token": module.content("label")}),
+                    "propagator",
+                    lp.sink(right),
+                    label=module.content("label"),
+                    style=module.function("edge-style"),
+                    extensions={
+                        "spring-length": 7.5,
+                        "kept-content": module.content("label"),
+                        "inspect": module.function("inspect"),
+                    },
+                ),
+                render_config=lp.RenderConfig(
+                    layouts=lp.LayoutOptions(steps=0, label_steps=0),
+                ),
+            )
+
+            svg = graph.to_svg()
+            self.assertIn("<svg", svg)
+            self.assertIn("#123456", svg)
+
     def test_default_renderer_labels_indices_and_optional_half_edge_indices(self):
         left = lp.node("descriptive left name")
         right = lp.node("descriptive right name")

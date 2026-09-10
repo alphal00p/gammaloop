@@ -8,13 +8,21 @@
 
 #let mi = mitex.mi
 
+/// GammaLoop's default neutral and charged-particle paints.
+/// -> dictionary
+#let palette = (ink: rgb("#3d2645"), accent: rgb("#6f4d85"))
+
+/// Default vertex appearance; explicit node styles remain authoritative.
+/// -> dictionary
+#let node-style = (fill: none, stroke: palette.ink + 1.45pt)
+
 /// Conventional massive-particle stroke thickness.
 /// -> length
-#let massive = 1.0pt
+#let massive = 1.55pt
 
 /// Conventional massless-particle stroke thickness.
 /// -> length
-#let massless = 0.55pt
+#let massless = 1.0pt
 
 /// Dash pattern used for scalar-style lines.
 /// -> array
@@ -26,7 +34,7 @@
 
 /// Build a rounded CeTZ stroke dictionary accepted by `linnest.draw`.
 /// -> dictionary
-#let stroke-style(c: black, thickness: massless, dash: none) = {
+#let stroke-style(c: palette.ink, thickness: massless, dash: none) = {
   let stroke = (paint: c, thickness: thickness, cap: "round")
   if dash == none {
     (stroke: stroke)
@@ -37,14 +45,19 @@
 
 /// Source-half stroke helper.
 /// -> dictionary
-#let source-stroke(c: black, thickness: massless, dash: none) = {
+#let source-stroke(c: palette.ink, thickness: massless, dash: none) = {
   stroke-style(c: c, thickness: thickness, dash: dash)
 }
 
 /// Sink-half stroke helper. The default lightening makes the two halves encode
 /// the graph's source/sink split without requiring arrowheads.
 /// -> dictionary
-#let sink-stroke(c: black, thickness: massless, dash: none, lighten: 45%) = {
+#let sink-stroke(
+  c: palette.ink,
+  thickness: massless,
+  dash: none,
+  lighten: 45%,
+) = {
   stroke-style(c: c.lighten(lighten), thickness: thickness, dash: dash)
 }
 
@@ -53,12 +66,12 @@
 #let fermion-arrow-mark = (
   end: (
     symbol: ">",
-    fill: black,
-    stroke: black + 0.2pt,
+    fill: palette.ink,
+    stroke: palette.ink + 0.3pt,
     anchor: "center",
     shorten-to: auto,
   ),
-  scale: 0.75,
+  scale: 1.05,
 )
 
 /// Mark an edge-map entry as a fermion so the main edge receives one
@@ -103,29 +116,29 @@
 )
 
 #let _photon = (
-  source: source-stroke(c: black, thickness: massless) + wave,
-  sink: sink-stroke(c: black, thickness: massless) + wave,
+  source: source-stroke(c: palette.ink, thickness: massless) + wave,
+  sink: sink-stroke(c: palette.ink, thickness: massless) + wave,
   label: mi(`{\gamma}`),
 )
 #let _gluon = (
-  source: source-stroke(c: black, thickness: massless) + coil,
-  sink: sink-stroke(c: black, thickness: massless) + coil,
+  source: source-stroke(c: palette.ink, thickness: massless) + coil,
+  sink: sink-stroke(c: palette.ink, thickness: massless) + coil,
   label: mi(`{g}`),
 )
 #let _fermion = (
-  source: source-stroke(c: blue, thickness: massless),
-  sink: sink-stroke(c: blue, thickness: massless),
+  source: source-stroke(c: palette.accent, thickness: massless),
+  sink: sink-stroke(c: palette.accent, thickness: massless),
   fermion-arrow: true,
   label: mi(`{f}`),
 )
 #let _scalar = (
-  source: source-stroke(c: black, thickness: massive, dash: dashed),
-  sink: sink-stroke(c: black, thickness: massive, dash: dashed),
+  source: source-stroke(c: palette.ink, thickness: massive, dash: dashed),
+  sink: sink-stroke(c: palette.ink, thickness: massive, dash: dashed),
   label: mi(`{\phi}`),
 )
 #let _ghost = (
-  source: source-stroke(c: black, thickness: massless, dash: dotted),
-  sink: sink-stroke(c: black, thickness: massless, dash: dotted),
+  source: source-stroke(c: palette.ink, thickness: massless, dash: dotted),
+  sink: sink-stroke(c: palette.ink, thickness: massless, dash: dotted),
   label: mi(`{c}`),
 )
 
@@ -154,16 +167,16 @@
   "ghost": _ghost,
 )
 
-#let _momentum-arrow-stroke = (paint: black, thickness: 0.55pt, cap: "round")
+#let _momentum-arrow-stroke = (paint: palette.ink, thickness: 1pt, cap: "round")
 
 /// Default style for source-to-sink momentum arrow layers.
 /// -> dictionary
 #let momentum-arrow-defaults = (
-  offset: 0.46,
-  length: 5.0,
-  ratio: 0.5,
+  offset: 0.35,
+  length: 1.0,
+  ratio: none,
   stroke: _momentum-arrow-stroke,
-  mark: auto,
+  mark: (end: "straight", scale: 1.1),
 )
 
 /// Return an edge's particle name, stripping the quotes often present in DOT
@@ -201,6 +214,8 @@
 
 #let eval-scope(map: default-map) = (
   mi: mi,
+  palette: palette,
+  node-style: node-style,
   massive: massive,
   massless: massless,
   dashed: dashed,
@@ -278,9 +293,12 @@
   }
 }
 
-/// Return the momentum field used by optional edge labels.
+/// Read a momentum metadata field; physics labels use the edge ID instead.
 /// -> none | any
-#let momentum-value(edge, fields: ("momentum", "mom", "q")) = _field-value(edge, fields)
+#let momentum-value(edge, fields: ("momentum", "mom", "q")) = _field-value(
+  edge,
+  fields,
+)
 
 /// Return the edge index used by optional edge labels. The DOT `id` statement
 /// wins over the renderer-local `eid`.
@@ -311,27 +329,34 @@
     if half-edge == none {
       none
     } else {
-      half-edge.at("statement", default: half-edge.at("id", default: half-edge.at("hedge", default: none)))
+      half-edge.at("statement", default: half-edge.at(
+        "id",
+        default: half-edge.at("hedge", default: none),
+      ))
     }
   }
 }
 
-#let _api() = eval-scope() + (
-  momentum-arrow-defaults: momentum-arrow-defaults,
-  particle-name: particle-name,
-  edge-entry: edge-entry,
-  text-value: text-value,
-  label-content: label-content,
-  style-dict: style-dict,
-  momentum-value: momentum-value,
-  edge-index: edge-index,
-  dangling-half-edge-index: dangling-half-edge-index,
+#let _api() = (
+  eval-scope()
+    + (
+      momentum-arrow-defaults: momentum-arrow-defaults,
+      particle-name: particle-name,
+      edge-entry: edge-entry,
+      text-value: text-value,
+      label-content: label-content,
+      style-dict: style-dict,
+      momentum-value: momentum-value,
+      edge-index: edge-index,
+      dangling-half-edge-index: dangling-half-edge-index,
+    )
 )
 
 /// Style callback for the source half edge.
 ///
-/// `momentum-arrows: true` adds one centered black CeTZ-mark decoration while
-/// the main edge remains drawn with its normal particle style.
+/// `momentum-arrows: true` adds a short parallel arrow and a full-path label
+/// carrier while the main edge retains its normal particle style. Side, shift,
+/// and label geometry can be set globally or through edge `momentum-*` fields.
 /// -> dictionary | array
 #let source-style(
   edge,
@@ -346,6 +371,11 @@
   momentum-arrow-ratio: momentum-arrow-defaults.ratio,
   momentum-arrow-stroke: none,
   momentum-arrow-mark: momentum-arrow-defaults.mark,
+  momentum-arrow-side: auto,
+  momentum-arrow-shift: 0,
+  momentum-label-gap: 0.55,
+  momentum-label-shift: auto,
+  momentum-label-anchor: auto,
 ) = _impl.source-style(edge, (
   map: map,
   default: default,
@@ -358,14 +388,19 @@
   momentum-arrow-ratio: momentum-arrow-ratio,
   momentum-arrow-stroke: momentum-arrow-stroke,
   momentum-arrow-mark: momentum-arrow-mark,
+  momentum-arrow-side: momentum-arrow-side,
+  momentum-arrow-shift: momentum-arrow-shift,
+  momentum-label-gap: momentum-label-gap,
+  momentum-label-shift: momentum-label-shift,
+  momentum-label-anchor: momentum-label-anchor,
   api: _api(),
 ))
 
 /// Style callback for the sink half edge.
 ///
-/// `momentum-arrows: true` adds one centered black CeTZ-mark decoration toward
-/// the sink node, so momentum arrows always flow from source to sink
-/// independently of `edge.orientation`.
+/// `momentum-arrows: true` adds a parallel arrow toward the sink node, so
+/// momentum always flows source to sink independently of `edge.orientation`.
+/// An omitted label shift follows the arrow shift on the full-path carrier.
 /// -> dictionary | array
 #let sink-style(
   edge,
@@ -380,6 +415,11 @@
   momentum-arrow-ratio: momentum-arrow-defaults.ratio,
   momentum-arrow-stroke: none,
   momentum-arrow-mark: momentum-arrow-defaults.mark,
+  momentum-arrow-side: auto,
+  momentum-arrow-shift: 0,
+  momentum-label-gap: 0.55,
+  momentum-label-shift: auto,
+  momentum-label-anchor: auto,
 ) = _impl.sink-style(edge, (
   map: map,
   default: default,
@@ -392,20 +432,26 @@
   momentum-arrow-ratio: momentum-arrow-ratio,
   momentum-arrow-stroke: momentum-arrow-stroke,
   momentum-arrow-mark: momentum-arrow-mark,
+  momentum-arrow-side: momentum-arrow-side,
+  momentum-arrow-shift: momentum-arrow-shift,
+  momentum-label-gap: momentum-label-gap,
+  momentum-label-shift: momentum-label-shift,
+  momentum-label-anchor: momentum-label-anchor,
   api: _api(),
 ))
 
 /// Edge-label callback.
 ///
-/// By default this preserves data `display-label` or `label`, then explicit
-/// `display-label`, `label`, and particle-map labels. Set any
-/// `show-*` option to build a label from selected metadata instead:
+/// Native and DOT `display-label` or `label` values take precedence. Otherwise
+/// combine the particle-map label with requested metadata. Momentum is always
+/// `$q_(#edge.eid)$`; cut pairing and external ordering never rename it.
+/// Explicit false `show-*` flags suppress their portion, including all labels:
 ///
 /// ```example
 /// #let callbacks = physics.style(
 ///   momentum-arrows: true,
 ///   show-edge-index: true,
-///   show-particle: true,
+///   show-particle: auto,
 /// )
 /// ```
 /// -> none | content
@@ -418,15 +464,13 @@
   show-momentum: false,
   show-edge-index: false,
   show-half-edge-index: false,
-  show-particle: false,
-  momentum-fields: ("momentum", "mom", "q"),
+  show-particle: auto,
   edge-index-fields: ("id", "eid"),
-  momentum-prefix: none,
   edge-index-prefix: [e],
   half-edge-index-prefix: [h],
   particle-prefix: none,
   label-separator: [, ],
-  label-size: 7pt,
+  label-size: 10pt,
   label-fill: red,
 ) = _impl.edge-label(edge, (
   map: map,
@@ -437,9 +481,7 @@
   show-edge-index: show-edge-index,
   show-half-edge-index: show-half-edge-index,
   show-particle: show-particle,
-  momentum-fields: momentum-fields,
   edge-index-fields: edge-index-fields,
-  momentum-prefix: momentum-prefix,
   edge-index-prefix: edge-index-prefix,
   half-edge-index-prefix: half-edge-index-prefix,
   particle-prefix: particle-prefix,
@@ -449,8 +491,19 @@
   api: _api(),
 ))
 
-/// Bundle source-style, sink-style, and edge-label callbacks with shared
-/// options for `linnest.draw`.
+/// Preserve explicit and prepared external-label anchors in native Typst graphs.
+/// -> dictionary
+#let edge-label-style(edge) = {
+  let anchor = edge.at("label-anchor", default: none)
+  if type(anchor) == str { (anchor: anchor.trim("\"")) } else { (:) }
+}
+
+/// Bundle source-style, sink-style, edge-label and edge-label-style callbacks
+/// with shared options for `graph.style` or `linnest.draw`, without Python. Momentum arrows
+/// are opt-in; enabling them also enables combined particle and `q_(eid)` labels
+/// unless `show-momentum` is explicitly set. Arrow length never clamps labels.
+/// Prepared external labels retain their outward endpoint position by default;
+/// explicit momentum shifts or label anchors select path-relative placement.
 ///
 /// ````example
 /// #let g = build({
@@ -528,20 +581,25 @@
   momentum-arrow-ratio: momentum-arrow-defaults.ratio,
   momentum-arrow-stroke: none,
   momentum-arrow-mark: momentum-arrow-defaults.mark,
-  show-momentum: false,
+  momentum-arrow-side: auto,
+  momentum-arrow-shift: 0,
+  momentum-label-gap: auto,
+  momentum-label-shift: auto,
+  momentum-label-anchor: auto,
+  show-momentum: auto,
   show-edge-index: false,
   show-half-edge-index: false,
-  show-particle: false,
-  momentum-fields: ("momentum", "mom", "q"),
+  show-particle: auto,
   edge-index-fields: ("id", "eid"),
-  momentum-prefix: none,
   edge-index-prefix: [e],
   half-edge-index-prefix: [h],
   particle-prefix: none,
   label-separator: [, ],
-  label-size: 7pt,
+  label-size: 10pt,
   label-fill: red,
 ) = (
+  node-style: node-style,
+  edge-label-style: edge-label-style,
   source-style: edge => source-style(
     edge,
     map: map,
@@ -555,6 +613,13 @@
     momentum-arrow-ratio: momentum-arrow-ratio,
     momentum-arrow-stroke: momentum-arrow-stroke,
     momentum-arrow-mark: momentum-arrow-mark,
+    momentum-arrow-side: momentum-arrow-side,
+    momentum-arrow-shift: momentum-arrow-shift,
+    momentum-label-gap: if momentum-label-gap != auto {
+      momentum-label-gap
+    } else if show-momentum == false { 0.45 } else { 0.55 },
+    momentum-label-shift: momentum-label-shift,
+    momentum-label-anchor: momentum-label-anchor,
   ),
   sink-style: edge => sink-style(
     edge,
@@ -569,6 +634,13 @@
     momentum-arrow-ratio: momentum-arrow-ratio,
     momentum-arrow-stroke: momentum-arrow-stroke,
     momentum-arrow-mark: momentum-arrow-mark,
+    momentum-arrow-side: momentum-arrow-side,
+    momentum-arrow-shift: momentum-arrow-shift,
+    momentum-label-gap: if momentum-label-gap != auto {
+      momentum-label-gap
+    } else if show-momentum == false { 0.45 } else { 0.55 },
+    momentum-label-shift: momentum-label-shift,
+    momentum-label-anchor: momentum-label-anchor,
   ),
   edge-label: edge => edge-label(
     edge,
@@ -576,13 +648,14 @@
     default: default,
     typst-fields: typst-fields,
     scope: scope,
-    show-momentum: show-momentum,
+    show-momentum: if show-momentum == auto {
+      let enabled = edge.at("momentum-arrows", default: momentum-arrows)
+      enabled in (true, "true", "\"true\"")
+    } else { show-momentum },
     show-edge-index: show-edge-index,
     show-half-edge-index: show-half-edge-index,
     show-particle: show-particle,
-    momentum-fields: momentum-fields,
     edge-index-fields: edge-index-fields,
-    momentum-prefix: momentum-prefix,
     edge-index-prefix: edge-index-prefix,
     half-edge-index-prefix: half-edge-index-prefix,
     particle-prefix: particle-prefix,
