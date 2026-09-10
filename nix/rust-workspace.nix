@@ -1334,6 +1334,7 @@
   gammaloop-python-lib = craneLib.buildPackage (ciArgs
     // {
       cargoArtifacts = cranePythonBuildArtifacts;
+      CARGO_BUILD_INCREMENTAL = "true";
       pname = "gammaloop-api-python";
       src = workspacePackageSrcFor "gammaloop-api";
       cargoExtraArgs = cranePythonCargoArgs;
@@ -1776,9 +1777,11 @@
   '';
 
   mergeCargoArtifacts = name: artifacts: let
-    artifactList = lib.filter (artifact: artifact != null) artifacts;
+    artifactList = lib.unique (lib.filter (artifact: artifact != null) artifacts);
   in
-    pkgs.runCommand name {
+    if builtins.length artifactList == 1
+    then builtins.head artifactList
+    else pkgs.runCommand name {
       nativeBuildInputs = [pkgs.rsync pkgs.zstd pkgs.gnutar craneLib.installCargoArtifactsHook];
       doCompressAndInstallFullArchive = true;
     } ''
@@ -1970,6 +1973,11 @@
 
         preBuild =
           (args.preBuild or "")
+          + ''
+            # Compressed inheritance also needs Cargo's writable, fresh lock files.
+            mkdir -p target
+            find target -name '.cargo*lock' -delete
+          ''
           + lib.optionalString (preBuildWorkspaceArtifactStripPackages != []) (stripSelectedWorkspaceCargoArtifactsScript preBuildWorkspaceArtifactStripPackages);
 
         buildPhaseCargoCommand =
@@ -2005,6 +2013,9 @@
         # treat the compacted target as stale: its install hook uses epoch 1.
         doCompressAndInstallFullArchive = args.stripWorkspaceArtifacts or false;
 
+        # Artifact outputs contain archives, not a lib directory. Embedding their
+        # own output paths in helper binaries retains obsolete ancestor archives.
+        NIX_NO_SELF_RPATH = 1;
         doInstallCargoArtifacts = true;
       }
     );
@@ -2054,6 +2065,7 @@
     // {
       cargoArtifacts = workspaceHackDependencyArtifacts;
       doNotLinkInheritedArtifacts = true;
+      NIX_NO_SELF_RPATH = 1;
       pname = "gammaloop-crate-${workspaceHackPackage}";
       src = workspacePackageSrcFor workspaceHackPackage;
       cargoExtraArgs = cargoPackageCiArgsFor workspaceHackPackage;
@@ -2188,6 +2200,19 @@
       else let
         sourcePackages = lib.filter workspacePackageHasLibTarget context.sourcePackages;
         dependencyContexts = workspaceTestDependencyContextsFor context;
+        # Each context already contains its ancestors. Retain independent inputs,
+        # including FeynKit's UFO context, instead of restoring the same chain again.
+        dependencyFrontier = lib.filter (dependency:
+          dependency.componentPackages != [workspaceHackPackage]
+          && !builtins.any (other:
+            other.key != dependency.key
+            && other.usesPythonModule == dependency.usesPythonModule
+            && builtins.all (package:
+              builtins.elem package other.sourcePackages
+              && other.features.${package} == dependency.features.${package})
+              dependency.sourcePackages)
+            dependencyContexts)
+          dependencyContexts;
         procMacroPackages = lib.filter workspacePackageIsProcMacro context.componentPackages;
         hostAnchorPackage = "${testBinaryFeatureAnchorPackageFor context}-host";
         hostAnchorPackageDir = "crates/${hostAnchorPackage}";
@@ -2271,11 +2296,9 @@
         buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
           // {
             cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-test-dependencies-${context.key}-inputs" (
-              [
-                cargoArtifacts
-                workspaceHackBuildArtifacts
-              ]
-              ++ map (dependencyContext: self.${dependencyContext.key}) dependencyContexts
+              if dependencyFrontier == []
+              then [cargoArtifacts workspaceHackBuildArtifacts]
+              else map (dependencyContext: self.${dependencyContext.key}) dependencyFrontier
             );
             pname = "gammaloop-crate-test-dependencies-${context.key}";
             keepIncrementalState = true;
@@ -2318,10 +2341,8 @@
   craneTestBinaryArtifactFor = context: package:
     buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
       // {
-        cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-test-binaries-${package}-${context.key}-inputs" [
-          cargoArtifacts
-          craneTestDependencyArtifacts.${context.key}
-        ];
+        # The library archive already recursively includes the shared dependencies.
+        cargoArtifacts = craneTestDependencyArtifacts.${context.key};
         pname = "gammaloop-crate-test-binaries-${package}-${context.key}";
         keepIncrementalState = true;
         previousArtifacts =
@@ -2354,9 +2375,26 @@
     then workspaceHackBuildArtifacts
     else craneTestBinaryArtifactFor (workspaceTestContextFor {packages = [package];}) package);
 
+  cargoCheckArtifacts = buildDepsOnlyWithArtifacts (ciArgs
+    // {
+      pname = "gammaloop-workspace-check-deps";
+      src = workspaceDependencySrc;
+      inherit cargoArtifacts;
+      # Static checks include the complete workspace, including Python dependencies,
+      # and need checking metadata as well as compiled doctest dependencies.
+      buildPhaseCargoCommand = ''
+        cargoWithProfile check ${ciArgs.cargoExtraArgs} --all-targets
+        cargoWithProfile test ${ciArgs.cargoExtraArgs} --no-run
+      '';
+      checkPhaseCargoCommand = "";
+      doCheck = false;
+      stripWorkspaceArtifacts = true;
+      postPatch = workspaceMissingCargoTargetsScript;
+    });
+
   workspaceCargoCheck = craneLib.mkCargoDerivation (ciArgs
     // {
-      cargoArtifacts = cargoArtifacts;
+      cargoArtifacts = cargoCheckArtifacts;
       pname = "gammaloop-workspace-check";
       src = workspaceTestSrc;
       doNotLinkInheritedArtifacts = true;
@@ -2375,7 +2413,7 @@
 
   workspaceClippyCheck = craneLib.mkCargoDerivation (ciArgs
     // {
-      cargoArtifacts = cargoArtifacts;
+      cargoArtifacts = cargoCheckArtifacts;
       pname = "gammaloop-workspace-clippy";
       src = workspaceTestSrc;
       doNotLinkInheritedArtifacts = true;
@@ -2394,7 +2432,7 @@
 
   workspaceDocCheck = craneLib.mkCargoDerivation (ciArgs
     // {
-      cargoArtifacts = cargoArtifacts;
+      cargoArtifacts = cargoCheckArtifacts;
       pname = "gammaloop-workspace-doc";
       src = workspaceTestSrc;
       doNotLinkInheritedArtifacts = true;
@@ -2413,7 +2451,7 @@
 
   workspaceDoctestCheck = craneLib.mkCargoDerivation (ciArgs
     // {
-      cargoArtifacts = cargoArtifacts;
+      cargoArtifacts = cargoCheckArtifacts;
       pname = "gammaloop-workspace-doctest";
       src = workspaceTestSrc;
       doNotLinkInheritedArtifacts = true;
@@ -2432,38 +2470,22 @@
       SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
     });
 
-  cranePythonDependencyArtifacts = buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
-    // {
-      cargoArtifacts = mergeCargoArtifacts "gammaloop-python-deps-inputs" (
-        [cargoArtifacts]
-        ++ map (
-          dependency:
-            if dependency == workspaceHackPackage
-            then workspaceHackBuildArtifacts
-            else cranePackageDependencyModeArtifacts.${dependency}
-        ) (lib.filter (sourcePackage: sourcePackage != "gammaloop-api") (workspaceNormalSourcePackageNamesFor "gammaloop-api"))
-      );
-      pname = "gammaloop-api-python";
-      src = workspacePackageSrcForSourcePackages {
-        sourcePackages =
-          lib.filter (sourcePackage: sourcePackage != "gammaloop-api") (workspaceNormalSourcePackageNamesFor "gammaloop-api");
-      };
-      buildPhaseCargoCommand = "cargoWithProfile build ${cranePythonCargoArgs}";
-      checkPhaseCargoCommand = "";
-      doCheck = false;
-      preBuildWorkspaceArtifactStripPackages = ["gammaloop-api"];
-      stripWorkspaceArtifacts = true;
-      preservedWorkspaceArtifactPackages = workspaceResolvedDependencyNamesFor "gammaloop-api";
-      extraDummyScript = workspaceDependencyDummyCargoTargetsScriptFor "gammaloop-api";
-      postPatch = workspaceMissingCargoTargetsScript;
-    });
+  cranePythonDependencyArtifacts =
+    craneTestDependencyArtifacts.${(workspaceTestContextFor {packages = ["gammaloop-api"];}).key};
 
-  cranePythonBuildArtifacts = craneLib.cargoBuild (ciArgs
+  cranePythonBuildArtifacts = buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
     // {
       cargoArtifacts = cranePythonDependencyArtifacts;
       pname = "gammaloop-api-python-build";
-      src = workspacePackageSrcFor "gammaloop-api";
-      cargoExtraArgs = cranePythonCargoArgs;
+      dummySrc = workspacePackageSrcFor "gammaloop-api";
+      buildPhaseCargoCommand = "cargoWithProfile build ${cranePythonCargoArgs}";
+      checkPhaseCargoCommand = "";
+      doCheck = false;
+      keepIncrementalState = true;
+      previousArtifacts =
+        if compatibleIncrementalBaseline
+        then incrementalBaseline.cranePythonBuildArtifacts
+        else null;
       postPatch = workspaceMissingCargoTargetsScript;
     });
 
@@ -2721,6 +2743,22 @@
       target.packages)
     (lib.filter (target: target ? extraFeatures) checkedNextestPackageGroups));
 
+  # Publish compiler state once per seed, keeping it out of the
+  # dependency archives restored by other crates and runtime checks.
+  # This optional output can prime the local/post-build-hook cache;
+  # ordinary NixCI publication does not eagerly restore every seed.
+  ciCompilerState = pkgs.linkFarm "gammaloop-ci-compiler-state" (
+    lib.mapAttrsToList (name: artifact: {
+      inherit name;
+      path = (artifact.incrementalBase or artifact).incremental;
+    }) (lib.filterAttrs (name: artifact:
+      builtins.elem "packages.${system}.${name}" ci.configuration.onlyBuild
+      && (artifact ? incrementalBase || artifact ? incremental))
+      (lib.mapAttrs (_: value: value.artifact or value)
+        (craneTestDependencyOutputs // craneTestBinaryPackageOutputs // nextestContextualTestOutputs
+          // {gammaloop-python-module = cranePythonBuildArtifacts;})))
+  );
+
   nextestBinarySetForTarget = target: nextestBinarySets."gammaloop-nextest-binaries-${target.name}";
 
   nextestBinarySetAggregate = pkgs.linkFarm "gammaloop-nextest-binaries" (map (target: {
@@ -2821,7 +2859,7 @@
       {
         runnerAttr = "nix-ci-check-gammaloop-doctest";
         checkAttr = "gammaloop-doctest";
-        runtimeInputs = [cargoArtifacts];
+        runtimeInputs = [cargoCheckArtifacts];
       }
       {
         runnerAttr = "nix-ci-check-gammaloop-nextest";
@@ -2929,6 +2967,7 @@ in {
     workspaceDependencySrc
     craneTestDependencyArtifacts
     craneTestBinaryArtifactFor
+    cranePythonBuildArtifacts
     allChecks
     hestiaChecks
     gammaloop-cli
@@ -2939,6 +2978,8 @@ in {
     linnest-wasm
     linnestWasmCargoArtifacts
     cargoArtifacts
+    cargoCheckArtifacts
+    ciCompilerState
     gammaloopApiPackageArtifacts
     workspaceBuildArtifacts
     nixCiPassed

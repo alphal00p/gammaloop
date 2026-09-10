@@ -43,37 +43,15 @@
       pkgs = nixpkgs.legacyPackages.${system};
       inherit (pkgs) lib;
 
-      nixCiBarrierRevision =
-        if self ? dirtyRev
-        then self.dirtyRev
-        else if self ? rev
-        then self.rev
-        else if self ? narHash
-        then self.narHash
-        else "local";
       # NixCI memoizes successful top-level derivations across commits without
-      # re-realizing their closures. Salt only this zero-copy scheduling
-      # wrapper so each commit primes the stable artifact in the shared cache.
-      nixCiArtifactBarrier = name: artifact: let
-        compilerState =
-          if artifact ? incrementalBase
-          then artifact.incrementalBase.incremental
-          else artifact.incremental or null;
-      in
+      # re-realizing their closures. Keep publication stable so an unchanged
+      # commit does not restore and upload the same compilation artifacts again.
+      nixCiArtifactBarrier = name: artifact:
         pkgs.runCommand "nix-ci-artifact-barrier-${name}" {
-          NIX_CI_BARRIER_REVISION = nixCiBarrierRevision;
-          passthru = { inherit artifact; };
-        } (if compilerState != null then ''
-          # Publish compiler state once per producer, keeping it out of the
-          # dependency archives restored by other crates and runtime checks.
-          mkdir -p "$out"
-          for entry in ${artifact}/*; do
-            ln -s "$entry" "$out/"
-          done
-          ln -s ${compilerState} "$out/incremental"
-        '' else ''
+          passthru = {inherit artifact;};
+        } ''
           ln -s ${artifact} "$out"
-        '');
+        '';
 
       baseCraneLib = crane.mkLib pkgs;
       stableToolchain = fenix.packages.${system}.stable;
@@ -123,6 +101,9 @@
         linnest-wasm
         linnestWasmCargoArtifacts
         cargoArtifacts
+        cargoCheckArtifacts
+        ciCompilerState
+        cranePythonBuildArtifacts
         gammaloopApiPackageArtifacts
         workspaceBuildArtifacts
         nixCiPassed
@@ -238,6 +219,8 @@
             nixCiArtifactBarrier "linnest-wasm-cargo-artifacts" linnestWasmCargoArtifacts;
           "crane-ci-prebuild" = cargoArtifacts;
           cargoArtifacts = nixCiArtifactBarrier "cargo-artifacts" cargoArtifacts;
+          cargoCheckArtifacts = nixCiArtifactBarrier "cargo-check-artifacts" cargoCheckArtifacts;
+          ci-compiler-state = ciCompilerState;
           gammaloopApiPackageArtifacts =
             nixCiArtifactBarrier "gammaloop-api-package-artifacts" gammaloopApiPackageArtifacts;
           inherit workspaceBuildArtifacts;

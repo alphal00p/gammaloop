@@ -223,25 +223,27 @@
       ];
       "checks.${system}.gammaloop" = ["packages.${system}.gammaloop"];
       "packages.${system}.default" = ["packages.${system}.gammaloop"];
-      "packages.${system}.gammaloop-python-module" =
-        workspaceCratePackageDependencies.${cratePackageAttr "gammaloop-api"} or [];
+      "packages.${system}.gammaloop-python-module" = [
+        (crateTestDependencyAttr (workspaceTestComponentRepresentativeFor "gammaloop-api"))
+      ];
       ${gammaloopApiPackageArtifactsAttr} = [(cratePackageAttr "gammaloop-api")];
       "packages.${system}.cargoArtifacts" = [workspaceHackCacheAttr];
+      "packages.${system}.cargoCheckArtifacts" = ["packages.${system}.cargoArtifacts"];
       ${nextestContextualTestDependencyAttr "python-api" "gammaloop-integration-tests"} =
         workspaceTestDependencyArtifactDependencies.${crateTestDependencyAttr (workspaceTestComponentRepresentativeFor "gammaloop-integration-tests")};
       ${nextestContextualTestBinaryAttr "python-api" "gammaloop-integration-tests"} = [
         (nextestContextualTestDependencyAttr "python-api" "gammaloop-integration-tests")
       ];
-      "checks.${system}.gammaloop-check" = ["packages.${system}.cargoArtifacts"];
-      "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoArtifacts"];
-      "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoArtifacts"];
-      "checks.${system}.gammaloop-doctest" = ["packages.${system}.cargoArtifacts"];
+      "checks.${system}.gammaloop-check" = ["packages.${system}.cargoCheckArtifacts"];
+      "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoCheckArtifacts"];
+      "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoCheckArtifacts"];
+      "checks.${system}.gammaloop-doctest" = ["packages.${system}.cargoCheckArtifacts"];
       "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-nextest-binaries" = nextestBinaryChecks;
       "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
       "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
       "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
-      "packages.${system}.nix-ci-check-gammaloop-doctest" = ["packages.${system}.cargoArtifacts"];
+      "packages.${system}.nix-ci-check-gammaloop-doctest" = ["packages.${system}.cargoCheckArtifacts"];
       "packages.${system}.nix-ci-check-gammaloop-nextest" =
         nextestBinaryChecks
         ++ ["packages.${system}.gammaloop-python-module"];
@@ -299,8 +301,8 @@
       (crateTestBinaryAttr "spynso3")
       (workspacePackageGraphAttr workspaceHackPackage)
     ]
-    # A cached Python module needs no production Cargo artifacts. Let its
-    # worker realize those per-crate dependencies only when the module misses.
+    # A cached Python module needs no production Cargo artifacts. Its worker
+    # reuses test-library dependencies when the module itself misses.
     ++ map cratePackageDepsAttr (
       builtins.filter (
         package: package != workspaceHackPackage
@@ -381,9 +383,9 @@ in {
     # The manual graph below uses the Hakari workspace-hack cache artifact as the
     # root for Symbolica-containing cache jobs and orders nextest archive jobs
     # after the package-local test-binary artifacts that the archives reuse. The
-    # exported artifact attrs are revision-scoped symlink barriers around stable
-    # Cargo artifacts, so a memoized top-level result cannot release consumers
-    # without one worker realizing and publishing the underlying closure. The
+    # exported artifact attrs are stable symlinks around Cargo artifacts. Keep
+    # their ordering while avoiding per-commit cache publication; workers realize
+    # the underlying closure when a check actually needs it. The
     # graph is constructed over the full crate/artifact DAG so the drift and
     # cycle asserts stay meaningful, then hidden paths are contracted to their
     # nearest built producer because NixCI rejects edges to jobs it does not

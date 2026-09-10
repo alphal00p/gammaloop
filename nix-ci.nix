@@ -2,7 +2,7 @@
 {
   dependencies = {
     "checks.x86_64-linux.gammaloop-clippy" = [
-      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.cargoCheckArtifacts"
     ];
     "checks.x86_64-linux.gammaloop-nextest-binaries-clinnet" = [
       "packages.x86_64-linux.cargoArtifacts"
@@ -44,6 +44,9 @@
     ];
     "packages.x86_64-linux.cargoArtifacts" = [
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+    ];
+    "packages.x86_64-linux.cargoCheckArtifacts" = [
+      "packages.x86_64-linux.cargoArtifacts"
     ];
     "packages.x86_64-linux.crate-test-binaries-clinnet" = [
       "packages.x86_64-linux.crate-test-dependencies-clinnet"
@@ -179,11 +182,10 @@
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
     ];
     "packages.x86_64-linux.gammaloop-python-module" = [
-      "packages.x86_64-linux.cargoArtifacts"
-      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-doctest" = [
-      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.cargoCheckArtifacts"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-clinnet"
@@ -233,6 +235,7 @@
     "checks.x86_64-linux.gammaloop-nextest-binaries-spenso"
     "checks.x86_64-linux.gammaloop-nextest-binaries-vakint"
     "packages.x86_64-linux.cargoArtifacts"
+    "packages.x86_64-linux.cargoCheckArtifacts"
     "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
     "packages.x86_64-linux.crate-test-binaries-clinnet"
     "packages.x86_64-linux.crate-test-binaries-gammaloop-api"
