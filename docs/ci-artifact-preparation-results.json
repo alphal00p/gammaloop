@@ -1,0 +1,835 @@
+{
+  "scope": "Local investigation only. No production code or project tests changed; no additional NixCI suites.",
+  "applicationLayouts": {
+    "main": "395610143576507503fd2c785db3ba62340f4277",
+    "feynkit": "07d0efc910cf4c3175142c808e476fe7e393f815"
+  },
+  "mainBenchmarkImplementation": "5b87a850e77900029a487b3b8c77d1c7138fa8da",
+  "resources": {
+    "cpuAffinity": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "nixCores": 8,
+    "maxJobs": 4,
+    "remoteBuilders": false,
+    "substituters": false,
+    "uploadHook": false
+  },
+  "editCriticalPath": {
+    "summary": {
+      "cargoSeconds": 62.550000000000004,
+      "mergeSeconds": 82.16804810398025,
+      "otherBuilderSeconds": 39.023068657948166,
+      "waitingSeconds": 2.1231457591056824,
+      "lastOutputSeconds": 185.8642625210341,
+      "buildCommandSeconds": 185.898334
+    },
+    "chain": [
+      {
+        "drv": "/nix/store/l7caw3hmlsch31pkgmg41b136gkl4nh9-gammaloop-crate-test-dependencies-be74a11b6e47d216-deps-0.1.0.drv",
+        "start": 1.261946719023399,
+        "end": 20.559827185003087,
+        "elapsed": 19.297880465979688,
+        "inputReadySeconds": 0,
+        "waitingSeconds": 1.261946719023399,
+        "cargoSeconds": 13.63,
+        "merge": false
+      },
+      {
+        "drv": "/nix/store/h9nvz2abk2ba75d6wkd9pvngrci4d52d-gammaloop-crate-test-dependencies-9f61ebb64a841b09-inputs.drv",
+        "start": 20.719247961009387,
+        "end": 59.120948200987186,
+        "elapsed": 38.4017002399778,
+        "inputReadySeconds": 20.559827185003087,
+        "waitingSeconds": 0.1594207760063,
+        "cargoSeconds": 0,
+        "merge": true
+      },
+      {
+        "drv": "/nix/store/q9n50fsyaar6ijh7pyfr959ps913xxqf-gammaloop-crate-test-dependencies-9f61ebb64a841b09-deps-0.1.0.drv",
+        "start": 59.20303557801526,
+        "end": 78.38789807801368,
+        "elapsed": 19.184862499998417,
+        "inputReadySeconds": 59.120948200987186,
+        "waitingSeconds": 0.08208737702807412,
+        "cargoSeconds": 13.92,
+        "merge": false
+      },
+      {
+        "drv": "/nix/store/kqdyjnyckp99cp1yqmr8wkk377v71d3x-gammaloop-crate-test-dependencies-e0b21f779898bed7-inputs.drv",
+        "start": 78.5552781940205,
+        "end": 108.89389064902207,
+        "elapsed": 30.338612455001567,
+        "inputReadySeconds": 78.38789807801368,
+        "waitingSeconds": 0.16738011600682512,
+        "cargoSeconds": 0,
+        "merge": true
+      },
+      {
+        "drv": "/nix/store/36185bk3fq7zandjlr99z3p9ym0b7fpn-gammaloop-crate-test-dependencies-e0b21f779898bed7-deps-0.1.0.drv",
+        "start": 108.99648028198862,
+        "end": 129.21129923401168,
+        "elapsed": 20.21481895202305,
+        "inputReadySeconds": 108.89389064902207,
+        "waitingSeconds": 0.10258963296655566,
+        "cargoSeconds": 13.88,
+        "merge": false
+      },
+      {
+        "drv": "/nix/store/hlzv0w4hclwqjbvc0a6bgnv8pc8ydv6i-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-inputs.drv",
+        "start": 129.31287356402026,
+        "end": 142.74060897302115,
+        "elapsed": 13.427735409000888,
+        "inputReadySeconds": 129.21129923401168,
+        "waitingSeconds": 0.10157433000858873,
+        "cargoSeconds": 0,
+        "merge": true
+      },
+      {
+        "drv": "/nix/store/10m23r1ib3pr8ahbp2ib8dd3f0d17jaz-gammaloop-crate-test-binaries-gammaloop-integration-tests-e0b21f779898bed7-deps-0.1.0.drv",
+        "start": 142.82389995403355,
+        "end": 173.84936865599593,
+        "elapsed": 31.02546870196238,
+        "inputReadySeconds": 142.74060897302115,
+        "waitingSeconds": 0.08329098101239651,
+        "cargoSeconds": 20.78,
+        "merge": false
+      },
+      {
+        "drv": "/nix/store/vpxws2a89p76x2x8b1p215vh1njg16l9-gammaloop-nextest-binaries-integration-gammaloop-integration-tests-0.1.0.drv",
+        "start": 173.97194357501576,
+        "end": 185.76211811898975,
+        "elapsed": 11.79017454397399,
+        "inputReadySeconds": 173.84936865599593,
+        "waitingSeconds": 0.12257491901982576,
+        "cargoSeconds": 0.34,
+        "merge": false
+      },
+      {
+        "drv": "/nix/store/x00hcn860951zsq3kzgnn7x8j9y1ycyb-gammaloop-nextest-binaries-integration.drv",
+        "start": 185.80439902702346,
+        "end": 185.8642625210341,
+        "elapsed": 0.05986349401064217,
+        "inputReadySeconds": 185.76211811898975,
+        "waitingSeconds": 0.042280908033717424,
+        "cargoSeconds": 0,
+        "merge": false
+      }
+    ],
+    "otherBuilderPhaseSeconds": {
+      "unpackPhase": 0.4774908669642173,
+      "patchPhase": 20.51365652901586,
+      "updateAutotoolsGnuConfigScriptsPhase": 0.37000593403354287,
+      "configurePhase": 0.054588922997936606,
+      "buildPhase": 8.811184549052266,
+      "installPhase": 4.869409019942395,
+      "fixupPhase": 3.4673512679873966
+    }
+  },
+  "mainBinaryContentProbes": [
+    {
+      "package": "gammalooprs",
+      "seconds": 23.00995450897608,
+      "exitStatus": 0,
+      "result": [
+        {
+          "drvPath": "/nix/store/pwqcbv7cnj19pn80z5kc0ja45s4kzlcq-binary-input-equivalence-gammalooprs.drv",
+          "outputs": {
+            "out": "/nix/store/wdm8x8dv0a62xisnp2kpi4inlwgzm5ja-binary-input-equivalence-gammalooprs"
+          }
+        }
+      ],
+      "filesCompared": 4641,
+      "timing": "previous_restore_nanoseconds=2725870075\ncandidate_restore_nanoseconds=2652168586\n"
+    },
+    {
+      "package": "gammaloop-api",
+      "seconds": 24.939724865020253,
+      "exitStatus": 0,
+      "result": [
+        {
+          "drvPath": "/nix/store/pbcpjbc5pkkg30971cf311vdj55z6wls-binary-input-equivalence-gammaloop-api.drv",
+          "outputs": {
+            "out": "/nix/store/yzpik0j9v5jrqf4vdfd3ml1v77r97w3n-binary-input-equivalence-gammaloop-api"
+          }
+        }
+      ],
+      "filesCompared": 4686,
+      "timing": "previous_restore_nanoseconds=2811941888\ncandidate_restore_nanoseconds=2779447221\n"
+    },
+    {
+      "package": "gammaloop-integration-tests",
+      "seconds": 25.47817107499577,
+      "exitStatus": 0,
+      "result": [
+        {
+          "drvPath": "/nix/store/x1bh5z01hvw8gqxhj1mzcj61s9jj2pci-binary-input-equivalence-gammaloop-integration-tests.drv",
+          "outputs": {
+            "out": "/nix/store/s72vsx0hqqd0w6qw4nmgfx5md8ibljkn-binary-input-equivalence-gammaloop-integration-tests"
+          }
+        }
+      ],
+      "filesCompared": 4733,
+      "timing": "previous_restore_nanoseconds=2891924224\ncandidate_restore_nanoseconds=2907068344\n"
+    }
+  ],
+  "mainLibraryOverlapProbes": [
+    {
+      "package": "gammaloop-api",
+      "seconds": 22.85614622698631,
+      "exitStatus": 0,
+      "result": [
+        {
+          "drvPath": "/nix/store/68ykxf0r3a5j0wpg71iy1f35jk00587w-library-input-overlap-gammaloop-api.drv",
+          "outputs": {
+            "out": "/nix/store/gs1lncv91l77irrnshmylk8dg83k23lf-library-input-overlap-gammaloop-api"
+          }
+        }
+      ],
+      "filesBefore": 4641,
+      "filesAfter": 4641,
+      "missing": [],
+      "extra": [],
+      "different": [],
+      "timing": "previous_restore_nanoseconds=2650088358\ncandidate_restore_nanoseconds=2765298277\n",
+      "metadataEqual": true,
+      "contentEqual": true
+    },
+    {
+      "package": "gammaloop-integration-tests",
+      "seconds": 24.661201445036568,
+      "exitStatus": 0,
+      "result": [
+        {
+          "drvPath": "/nix/store/zmw7wnc56s4bwfvq15yfp8bja0dpnbqv-library-input-overlap-gammaloop-integration-tests.drv",
+          "outputs": {
+            "out": "/nix/store/35nycbmbr9p82zy258g1555h72af1k0h-library-input-overlap-gammaloop-integration-tests"
+          }
+        }
+      ],
+      "filesBefore": 4686,
+      "filesAfter": 4686,
+      "missing": [],
+      "extra": [],
+      "different": [],
+      "timing": "previous_restore_nanoseconds=2693776616\ncandidate_restore_nanoseconds=2900608273\n",
+      "metadataEqual": true,
+      "contentEqual": true
+    }
+  ],
+  "feynkitOverlapProbes": [
+    {
+      "drv": "/nix/store/6lsk3vd09bpr3cahag309ss8jx3x0bfh-feynkit-binary-input-overlap-gammalooprs.drv",
+      "kind": "binary",
+      "package": "gammalooprs",
+      "seconds": 22.18749572604429,
+      "exitStatus": 0,
+      "result": [
+        {
+          "drvPath": "/nix/store/6lsk3vd09bpr3cahag309ss8jx3x0bfh-feynkit-binary-input-overlap-gammalooprs.drv",
+          "outputs": {
+            "out": "/nix/store/22sgnfi7vb6y7w95sm8mmnmx2x7n73qg-feynkit-binary-input-overlap-gammalooprs"
+          }
+        }
+      ],
+      "contentEqual": true,
+      "metadataEqual": true,
+      "filesCompared": 4878
+    },
+    {
+      "drv": "/nix/store/8hcpr2sn4mnhh7ic94ysnc0vk49qbvzs-feynkit-binary-input-overlap-gammaloop-api.drv",
+      "kind": "binary",
+      "package": "gammaloop-api",
+      "seconds": 24.224558498011902,
+      "exitStatus": 0,
+      "result": [
+        {
+          "drvPath": "/nix/store/8hcpr2sn4mnhh7ic94ysnc0vk49qbvzs-feynkit-binary-input-overlap-gammaloop-api.drv",
+          "outputs": {
+            "out": "/nix/store/lm6a3v00zvygdbw3d3w2748njhlkpf8m-feynkit-binary-input-overlap-gammaloop-api"
+          }
+        }
+      ],
+      "contentEqual": true,
+      "metadataEqual": true,
+      "filesCompared": 4954
+    },
+    {
+      "drv": "/nix/store/hvq3zbwwq7dz44zql2bqlcv4s79qajz8-feynkit-binary-input-overlap-gammaloop-integration-tests.drv",
+      "kind": "binary",
+      "package": "gammaloop-integration-tests",
+      "seconds": 24.822910291026346,
+      "exitStatus": 0,
+      "result": [
+        {
+          "drvPath": "/nix/store/hvq3zbwwq7dz44zql2bqlcv4s79qajz8-feynkit-binary-input-overlap-gammaloop-integration-tests.drv",
+          "outputs": {
+            "out": "/nix/store/s8d4ww6h9cg9ngf5304iv1rg27ljw1sc-feynkit-binary-input-overlap-gammaloop-integration-tests"
+          }
+        }
+      ],
+      "contentEqual": true,
+      "metadataEqual": true,
+      "filesCompared": 5001
+    },
+    {
+      "drv": "/nix/store/p6lchsm6pr8zzprk5c3cpc011x2cca96-feynkit-library-input-overlap-gammaloop-api.drv",
+      "kind": "library",
+      "package": "gammaloop-api",
+      "seconds": 22.173448035027832,
+      "exitStatus": 0,
+      "result": [
+        {
+          "drvPath": "/nix/store/p6lchsm6pr8zzprk5c3cpc011x2cca96-feynkit-library-input-overlap-gammaloop-api.drv",
+          "outputs": {
+            "out": "/nix/store/0bckdj6pips5b1insjj6ld4whr361zq7-feynkit-library-input-overlap-gammaloop-api"
+          }
+        }
+      ],
+      "contentEqual": false,
+      "metadataEqual": false,
+      "filesCompared": 4909
+    },
+    {
+      "drv": "/nix/store/i30l4jns44sj26anb12c4hygkv036lxw-feynkit-library-input-overlap-gammaloop-integration-tests.drv",
+      "kind": "library",
+      "package": "gammaloop-integration-tests",
+      "seconds": 24.185115461004898,
+      "exitStatus": 0,
+      "result": [
+        {
+          "drvPath": "/nix/store/i30l4jns44sj26anb12c4hygkv036lxw-feynkit-library-input-overlap-gammaloop-integration-tests.drv",
+          "outputs": {
+            "out": "/nix/store/kdhll5incvk6krp2i9qrpkzk444xv754-feynkit-library-input-overlap-gammaloop-integration-tests"
+          }
+        }
+      ],
+      "contentEqual": true,
+      "metadataEqual": true,
+      "filesCompared": 4954
+    }
+  ],
+  "feynkitApiSingleInputDifferences": [
+    {
+      "package": "gammaloop-api",
+      "kind": "library",
+      "missing": [
+        "./ci-optim/.fingerprint/feynkit-ufo-7576263c1fc7f4f7/dep-lib-feynkit_ufo",
+        "./ci-optim/.fingerprint/feynkit-ufo-7576263c1fc7f4f7/invoked.timestamp",
+        "./ci-optim/.fingerprint/feynkit-ufo-7576263c1fc7f4f7/lib-feynkit_ufo",
+        "./ci-optim/.fingerprint/feynkit-ufo-7576263c1fc7f4f7/lib-feynkit_ufo.json",
+        "./ci-optim/.fingerprint/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-233b2b13b60d0c9a/build-script-build-script-build",
+        "./ci-optim/.fingerprint/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-233b2b13b60d0c9a/build-script-build-script-build.json",
+        "./ci-optim/.fingerprint/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-233b2b13b60d0c9a/dep-build-script-build-script-build",
+        "./ci-optim/.fingerprint/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-233b2b13b60d0c9a/invoked.timestamp",
+        "./ci-optim/.fingerprint/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-b52adb6eb86e1cba/dep-lib-gammaloop_ci_test_binary_dependencies_47fdc0a18fe78798",
+        "./ci-optim/.fingerprint/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-b52adb6eb86e1cba/invoked.timestamp",
+        "./ci-optim/.fingerprint/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-b52adb6eb86e1cba/lib-gammaloop_ci_test_binary_dependencies_47fdc0a18fe78798",
+        "./ci-optim/.fingerprint/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-b52adb6eb86e1cba/lib-gammaloop_ci_test_binary_dependencies_47fdc0a18fe78798.json",
+        "./ci-optim/.fingerprint/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-bda54612241ecdf6/run-build-script-build-script-build",
+        "./ci-optim/.fingerprint/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-bda54612241ecdf6/run-build-script-build-script-build.json",
+        "./ci-optim/build/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-233b2b13b60d0c9a/build-script-build",
+        "./ci-optim/build/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-233b2b13b60d0c9a/build_script_build-233b2b13b60d0c9a",
+        "./ci-optim/build/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-233b2b13b60d0c9a/build_script_build-233b2b13b60d0c9a.d",
+        "./ci-optim/build/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-bda54612241ecdf6/invoked.timestamp",
+        "./ci-optim/build/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-bda54612241ecdf6/output",
+        "./ci-optim/build/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-bda54612241ecdf6/root-output",
+        "./ci-optim/build/gammaloop-ci-test-binary-dependencies-47fdc0a18fe78798-bda54612241ecdf6/stderr",
+        "./ci-optim/deps/feynkit_ufo-7576263c1fc7f4f7.d",
+        "./ci-optim/deps/gammaloop_ci_test_binary_dependencies_47fdc0a18fe78798-b52adb6eb86e1cba.d",
+        "./ci-optim/deps/libfeynkit_ufo-7576263c1fc7f4f7.rlib",
+        "./ci-optim/deps/libfeynkit_ufo-7576263c1fc7f4f7.rmeta",
+        "./ci-optim/deps/libgammaloop_ci_test_binary_dependencies_47fdc0a18fe78798-b52adb6eb86e1cba.rlib",
+        "./ci-optim/deps/libgammaloop_ci_test_binary_dependencies_47fdc0a18fe78798-b52adb6eb86e1cba.rmeta",
+        "./ci-optim/libfeynkit_ufo.d",
+        "./ci-optim/libfeynkit_ufo.rlib",
+        "./ci-optim/libgammaloop_ci_test_binary_dependencies_47fdc0a18fe78798.d",
+        "./ci-optim/libgammaloop_ci_test_binary_dependencies_47fdc0a18fe78798.rlib"
+      ],
+      "extra": [],
+      "different": []
+    }
+  ],
+  "feynkitApiTwoInputProbe": {
+    "seconds": 24.661516529042274,
+    "build": [
+      {
+        "drvPath": "/nix/store/z0ydk67v3cqschkbp50vnh5wz7p93hx6-feynkit-library-pared-input-overlap-gammaloop-api.drv",
+        "outputs": {
+          "out": "/nix/store/scg03dgvvrim5af81r3n0qsk7c93bpm6-feynkit-library-pared-input-overlap-gammaloop-api"
+        }
+      }
+    ],
+    "contentEqual": true,
+    "metadataEqual": true,
+    "filesCompared": 4909
+  },
+  "unusedRpathDiagnostic": {
+    "exitStatus": 0,
+    "seconds": 6.9845219030976295,
+    "result": [
+      {
+        "drvPath": "/nix/store/ni1wgxds2i2q00bvvm4aamifjnvkawij-artifact-unused-rpath-audit.drv",
+        "outputs": {
+          "out": "/nix/store/b7ya4hgwg0ampsp13h91psl6l2cbc8jj-artifact-unused-rpath-audit"
+        }
+      }
+    ],
+    "modifiedElfFiles": [
+      {
+        "file": "target/ci-optim/libgammaloop_ci_test_binary_dependencies_b6a0734be42e3503_host.so",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-b6a0734be42e3503-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/libspenso_macros.so",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-b6a0734be42e3503-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/liblinnest.so",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-78814cb8a1862b52-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/build/symbolica-5358d3443dda6cc0/build_script_build-5358d3443dda6cc0",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-78814cb8a1862b52-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/build/gammaloop-ci-test-binary-dependencies-78814cb8a1862b52-007d3b10b9f6c71b/build-script-build",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-78814cb8a1862b52-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/build/gammaloop-ci-test-binary-dependencies-91f21e5f130440bb-6bd0a58f192fe57d/build-script-build",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-91f21e5f130440bb-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/build/gammaloop-ci-test-binary-dependencies-b6a0734be42e3503-1fe5c94163e409f9/build-script-build",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-b6a0734be42e3503-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/build/iai-callgrind-runner-b176b2fc267d3044/build_script_build-b176b2fc267d3044",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-78814cb8a1862b52-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/build/gammaloop-ci-test-binary-dependencies-326651bd60141f1c-3ecd6731b9dcd9bf/build-script-build",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-326651bd60141f1c-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/build/gammaloop-workspace-hack-b27ff5422bc81b90/build_script_build-b27ff5422bc81b90",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-b6a0734be42e3503-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/build/gammaloop-workspace-hack-b5356ccabcbda837/build_script_build-b5356ccabcbda837",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-78814cb8a1862b52-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/build/gungraun-macros-ed77297643f46203/build_script_build-ed77297643f46203",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-91f21e5f130440bb-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/build/iai-callgrind-502bbeee7f4476e8/build_script_build-502bbeee7f4476e8",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-78814cb8a1862b52-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/build/gammaloop-ci-test-binary-dependencies-31e37aec92971227-bf64b3397ef6294c/build-script-build",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-31e37aec92971227-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/build/gungraun-runner-0c8d5b414238d4d6/build_script_build-0c8d5b414238d4d6",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-91f21e5f130440bb-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/deps/libiai_callgrind_macros-ee4acdae9ac36c7b.so",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-78814cb8a1862b52-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/deps/libgungraun_macros-25428dbddbdad557.so",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-91f21e5f130440bb-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/deps/libspenso_macros-6751a86e22142ca5.so",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-91f21e5f130440bb-deps-0.1.0/lib"
+        ]
+      },
+      {
+        "file": "target/ci-optim/deps/libspenso_macros-0f7dbe1ffee16002.so",
+        "removedArtifactNames": [
+          "gammaloop-crate-test-dependencies-b6a0734be42e3503-deps-0.1.0/lib"
+        ]
+      }
+    ],
+    "compressedBytes": 491471928,
+    "closures": {
+      "/nix/store/b7ya4hgwg0ampsp13h91psl6l2cbc8jj-artifact-unused-rpath-audit": {
+        "ca": null,
+        "closureSize": 1205876816,
+        "deriver": "/nix/store/ni1wgxds2i2q00bvvm4aamifjnvkawij-artifact-unused-rpath-audit.drv",
+        "narHash": "sha256-5YaR7sDOsf8qcqVJcTuouo0suIjm2O79l6cu6hV4BHU=",
+        "narSize": 491476576,
+        "references": [
+          "/nix/store/02hdh1ghb2h194wqxcqddvfpgw5xcaab-vendor-cargo-deps",
+          "/nix/store/8lahnh9pn3lrrnhax5nk7ibvjcbjmnkm-gcc-15.2.0-lib",
+          "/nix/store/8q6asfb2k1x90slq445v35rw7fs64ilc-cargo-package-cpufeatures-0.2.17"
+        ],
+        "registrationTime": 1789057802,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 1
+      },
+      "/nix/store/m7ljznqc675vmbj8i1966gsgyfx9pz3n-gammaloop-crate-test-dependencies-be74a11b6e47d216-inputs": {
+        "ca": null,
+        "closureSize": 3651829808,
+        "deriver": "/nix/store/nrlgikncahq4f9w2hvmkff6w3yr1ljdh-gammaloop-crate-test-dependencies-be74a11b6e47d216-inputs.drv",
+        "narHash": "sha256-fa0BQUO5q6KqM138UghkA8COMNjkoLbk6PvWbtxTcyw=",
+        "narSize": 491473264,
+        "references": [
+          "/nix/store/02hdh1ghb2h194wqxcqddvfpgw5xcaab-vendor-cargo-deps",
+          "/nix/store/8q6asfb2k1x90slq445v35rw7fs64ilc-cargo-package-cpufeatures-0.2.17",
+          "/nix/store/g8dvak52fzalbap9c61f77q5j0rkvnbd-gammaloop-crate-test-dependencies-b6a0734be42e3503-deps-0.1.0",
+          "/nix/store/gdldjwfys90gsvrqj4ak7kxfmjb4f3fy-gammaloop-crate-test-dependencies-91f21e5f130440bb-deps-0.1.0",
+          "/nix/store/hnxzz0ix86d7ddc380wlxyj9qnd1m181-gammaloop-crate-test-dependencies-78814cb8a1862b52-deps-0.1.0",
+          "/nix/store/hx6jy7hi92ah1w4pmnihh7x3ah3kc5l5-gammaloop-crate-test-dependencies-31e37aec92971227-deps-0.1.0",
+          "/nix/store/wb58286wr57jh3phpdlq6bfplisdpjyq-gammaloop-crate-test-dependencies-326651bd60141f1c-deps-0.1.0"
+        ],
+        "registrationTime": 1789028048,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 1
+      }
+    }
+  },
+  "unusedRpathClosureReductionFraction": 0.6697883309462269,
+  "stdenvSource": {
+    "source": "/nix/store/sg7xjcivmh51ckjdr7bjik3lghd8kjax-stdenv-linux/setup",
+    "lines": [
+      {
+        "line": 513,
+        "text": "    if [ \"${NIX_NO_SELF_RPATH:-0}\" != 1 ]; then"
+      },
+      {
+        "line": 514,
+        "text": "        export NIX_LDFLAGS=\"-rpath $1/lib ${NIX_LDFLAGS-}\""
+      }
+    ]
+  },
+  "publication": {
+    "wrappers": 33,
+    "currentNoopChanges": 33,
+    "stableNoopChanges": 0,
+    "rawNoopChanges": 0,
+    "compilerStateOutputReferencesBefore": 30,
+    "compilerStateOutputReferencesAfter": 0
+  },
+  "latePreparation": {
+    "selectedJobCount": 52,
+    "latePreparationJobs": 10,
+    "requiredSeconds": 536,
+    "suiteSeconds": 811,
+    "tailSeconds": 275,
+    "wholeDurationsOfLateJobsSeconds": 496.07914153,
+    "wholeRestoresOfLateJobsBytes": 9293751027.2,
+    "qualification": "Whole job totals include work before the required-check cutoff; eliminating these jobs is not yet a measured counterfactual.",
+    "jobs": [
+      {
+        "type": "build",
+        "attribute": "packages.x86_64-linux.crate-test-binaries-gammaloop-api",
+        "status": "success",
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/ef0bf274-9a48-4dbe-a079-30bf3691a640",
+        "checkStartedAt": "2026-09-10T11:50:29Z",
+        "checkCompletedAt": "2026-09-10T11:51:48Z",
+        "completedFromSuiteSeconds": 766,
+        "workerSeconds": 79.976578211,
+        "downloadReportedBytes": 697828840,
+        "compilationMessages": 1
+      },
+      {
+        "type": "build",
+        "attribute": "packages.x86_64-linux.crate-test-binaries-gammaloop-integration-tests",
+        "status": "success",
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/abdb6f8d-9792-4be0-a3c2-e50eacfe38a1",
+        "checkStartedAt": "2026-09-10T11:51:10Z",
+        "checkCompletedAt": "2026-09-10T11:51:29Z",
+        "completedFromSuiteSeconds": 747,
+        "workerSeconds": 18.68455218,
+        "downloadReportedBytes": 1046478847.9999999,
+        "compilationMessages": 0
+      },
+      {
+        "type": "build",
+        "attribute": "packages.x86_64-linux.crate-test-binaries-gammalooprs",
+        "status": "success",
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/03d73395-5704-422e-b5b6-b04c8496c715",
+        "checkStartedAt": "2026-09-10T11:50:07Z",
+        "checkCompletedAt": "2026-09-10T11:52:27Z",
+        "completedFromSuiteSeconds": 805,
+        "workerSeconds": 140.243563474,
+        "downloadReportedBytes": 968151788.8,
+        "compilationMessages": 1
+      },
+      {
+        "type": "build",
+        "attribute": "packages.x86_64-linux.crate-test-binaries-idenso",
+        "status": "success",
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/e929dede-ab1a-4c2e-94b6-aefc9b8c437d",
+        "checkStartedAt": "2026-09-10T11:49:01Z",
+        "checkCompletedAt": "2026-09-10T11:50:25Z",
+        "completedFromSuiteSeconds": 683,
+        "workerSeconds": 83.334684858,
+        "downloadReportedBytes": 547148180.8,
+        "compilationMessages": 1
+      },
+      {
+        "type": "build",
+        "attribute": "packages.x86_64-linux.crate-test-binaries-spenso-hep-lib",
+        "status": "success",
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/a8c46219-cfde-43c3-af85-5ad0d8fbe460",
+        "checkStartedAt": "2026-09-10T11:49:25Z",
+        "checkCompletedAt": "2026-09-10T11:49:41Z",
+        "completedFromSuiteSeconds": 639,
+        "workerSeconds": 16.562466132,
+        "downloadReportedBytes": 1074475827.2,
+        "compilationMessages": 0
+      },
+      {
+        "type": "build",
+        "attribute": "packages.x86_64-linux.crate-test-dependencies-gammaloop-api",
+        "status": "success",
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/c9eb9049-6b83-44e3-bcb9-91cf0324a5e4",
+        "checkStartedAt": "2026-09-10T11:50:05Z",
+        "checkCompletedAt": "2026-09-10T11:50:22Z",
+        "completedFromSuiteSeconds": 680,
+        "workerSeconds": 17.05896502,
+        "downloadReportedBytes": 694052454.4,
+        "compilationMessages": 0
+      },
+      {
+        "type": "build",
+        "attribute": "packages.x86_64-linux.crate-test-dependencies-gammaloop-integration-tests",
+        "status": "success",
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/173a6bdd-6cea-410d-a344-5b1d9daff136",
+        "checkStartedAt": "2026-09-10T11:50:29Z",
+        "checkCompletedAt": "2026-09-10T11:50:47Z",
+        "completedFromSuiteSeconds": 705,
+        "workerSeconds": 20.231884911,
+        "downloadReportedBytes": 1930330353.6000001,
+        "compilationMessages": 0
+      },
+      {
+        "type": "build",
+        "attribute": "packages.x86_64-linux.crate-test-dependencies-gammalooprs",
+        "status": "success",
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/4e4e3818-e7dd-4304-b72e-e6102e1a99b2",
+        "checkStartedAt": "2026-09-10T11:49:22Z",
+        "checkCompletedAt": "2026-09-10T11:49:38Z",
+        "completedFromSuiteSeconds": 636,
+        "workerSeconds": 15.386507394,
+        "downloadReportedBytes": 1277427302.4,
+        "compilationMessages": 0
+      },
+      {
+        "type": "build",
+        "attribute": "packages.x86_64-linux.crate-test-dependencies-idenso",
+        "status": "success",
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/faf15849-77b9-4ba6-ba63-226910f25dbf",
+        "checkStartedAt": "2026-09-10T11:47:18Z",
+        "checkCompletedAt": "2026-09-10T11:48:43Z",
+        "completedFromSuiteSeconds": 581,
+        "workerSeconds": 85.73676205,
+        "downloadReportedBytes": 116708452.8,
+        "compilationMessages": 12
+      },
+      {
+        "type": "build",
+        "attribute": "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib",
+        "status": "success",
+        "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/cbb9e34e-9db8-4e68-8bd3-094ff2605d9b",
+        "checkStartedAt": "2026-09-10T11:49:00Z",
+        "checkCompletedAt": "2026-09-10T11:49:19Z",
+        "completedFromSuiteSeconds": 617,
+        "workerSeconds": 18.8631773,
+        "downloadReportedBytes": 941148979.2,
+        "compilationMessages": 0
+      }
+    ]
+  },
+  "staticChecks": {
+    "main": {
+      "clippy": {
+        "builderSeconds": 519.7159504869999,
+        "cargoFinished": [
+          "Finished `ci-optim` profile [optimized] target(s) in 8m 32s"
+        ],
+        "compiledMessages": 45
+      },
+      "doctest": {
+        "builderSeconds": 835.9564959659999,
+        "cargoFinished": [
+          "Finished `ci-optim` profile [optimized] target(s) in 13m 06s"
+        ],
+        "compiledMessages": 73
+      },
+      "repeatedCrateNames": [
+        "gammaloop-api",
+        "gammaloop-integration-tests",
+        "gammaloop-tracing-filter-macros",
+        "gammaloop-workspace-hack",
+        "gammalooprs",
+        "getopts",
+        "graphica",
+        "gungraun-macros",
+        "gungraun-runner",
+        "iai-callgrind",
+        "iai-callgrind-macros",
+        "iai-callgrind-runner",
+        "is-macro",
+        "lalrpop-util",
+        "numerica",
+        "numpy",
+        "phf",
+        "phf_codegen",
+        "phf_generator",
+        "phf_shared",
+        "pyo3",
+        "pyo3-build-config",
+        "pyo3-ffi",
+        "pyo3-macros",
+        "pyo3-macros-backend",
+        "pyo3-stub-gen-derive",
+        "rustc-hash",
+        "rustc_version",
+        "rustpython-ast",
+        "rustpython-parser",
+        "rustpython-parser-core",
+        "rustpython-parser-vendored",
+        "symbolica",
+        "target-lexicon",
+        "test-log-core",
+        "test-log-macros",
+        "unic-char-property",
+        "unic-char-range",
+        "unic-common",
+        "unic-emoji-char",
+        "unic-ucd-ident",
+        "unic-ucd-version",
+        "unicode_names2",
+        "unicode_names2_generator",
+        "vakint"
+      ],
+      "qualification": "Matching crate names do not prove identical compilation; Clippy metadata and rustdoc/build contexts can differ."
+    },
+    "feynkit": {
+      "clippy": {
+        "builderSeconds": 637.5713210060001,
+        "cargoFinished": [
+          "Finished `ci-optim` profile [optimized] target(s) in 10m 25s"
+        ],
+        "compiledMessages": 44
+      },
+      "doctest": {
+        "builderSeconds": 1013.4977223070002,
+        "cargoFinished": [
+          "Finished `ci-optim` profile [optimized] target(s) in 16m 13s"
+        ],
+        "compiledMessages": 81
+      },
+      "repeatedCrateNames": [
+        "gammaloop-api",
+        "gammaloop-integration-tests",
+        "gammaloop-tracing-filter-macros",
+        "gammaloop-workspace-hack",
+        "gammalooprs",
+        "getopts",
+        "graphica",
+        "gungraun-macros",
+        "gungraun-runner",
+        "iai-callgrind",
+        "iai-callgrind-macros",
+        "iai-callgrind-runner",
+        "is-macro",
+        "lalrpop-util",
+        "numerica",
+        "numpy",
+        "phf",
+        "phf_codegen",
+        "phf_generator",
+        "phf_shared",
+        "pyo3",
+        "pyo3-build-config",
+        "pyo3-ffi",
+        "pyo3-macros",
+        "pyo3-macros-backend",
+        "pyo3-stub-gen-derive",
+        "rustc-hash",
+        "rustc_version",
+        "rustpython-ast",
+        "rustpython-parser",
+        "rustpython-parser-core",
+        "rustpython-parser-vendored",
+        "symbolica",
+        "test-log-core",
+        "test-log-macros",
+        "unic-char-property",
+        "unic-char-range",
+        "unic-common",
+        "unic-emoji-char",
+        "unic-ucd-ident",
+        "unic-ucd-version",
+        "unicode_names2",
+        "unicode_names2_generator",
+        "vakint"
+      ],
+      "qualification": "Matching crate names do not prove identical compilation; Clippy metadata and rustdoc/build contexts can differ."
+    }
+  },
+  "limitations": [
+    "Content comparisons do not establish end-to-end speedups or all future source/feature boundaries.",
+    "Removing merges can retain larger recursive cache closures; prevent unnecessary self-RPATH references and measure both together.",
+    "Cleanup diagnostic preserves DT_NEEDED entries but does not validate complete standalone runtime closures or project execution.",
+    "NAR closure sizes are not network bytes or billing.",
+    "Stable publication requires a remote cache-availability experiment before acceptance.",
+    "Python sharing has no new full-suite/FeynKit/source-edit timing in this investigation.",
+    "One tool-dependency realization failed before the RPATH diagnostic: uncached default Python; rerun used existing Python 3.13."
+  ]
+}
