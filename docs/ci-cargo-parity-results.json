@@ -1,0 +1,171 @@
+{
+  "applicationRevision": "395610143576507503fd2c785db3ba62340f4277",
+  "craneRevision": "eb35abda9f232cc6610b1d1e3200d15c49b7ac54",
+  "baselineSourceRevision": "5181661ec340ebfb181a0045dac79fcec4f35525",
+  "comparisonScope": {
+    "scenario": "equivalent GammaLoop implementation edit from independently prepared application revision",
+    "cpus": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "coresPerBuild": 8,
+    "maxNixJobs": 4,
+    "profile": "ci-optim",
+    "nextestProfile": "ci_gammaloop",
+    "rust": "1.97.0",
+    "nextest": "0.9.140",
+    "testsPassed": 1628,
+    "testsSkipped": 155,
+    "excludes": [
+      "Python API runtime group",
+      "Clippy",
+      "doctests"
+    ],
+    "samplesPerVariant": 1,
+    "sharedHost": true,
+    "projectCold": false,
+    "remoteMeasured": false,
+    "sourceEdit": {
+      "file": "crates/gammalooprs/src/lib.rs",
+      "function": "clear_interrupt_request",
+      "before": "set_interrupted(false);",
+      "after": "INTERRUPTED.store(false, std::sync::atomic::Ordering::Relaxed);"
+    }
+  },
+  "timingsSeconds": {
+    "native": {
+      "artifacts": 44.1777,
+      "tests": 182.366,
+      "total": 226.5437
+    },
+    "previousNix": {
+      "artifacts": 1381.9515,
+      "tests": 177.4231,
+      "total": 1572.1222
+    },
+    "narrowNix": {
+      "artifacts": 843.0566,
+      "tests": 203.9879,
+      "total": 1067.2117
+    },
+    "integratedNix": {
+      "archive-evaluation": 12.926239143998828,
+      "runtime-evaluation": 11.982765274995472,
+      "definitions": 1.5637755990028381,
+      "artifacts": 185.89833416801412,
+      "tests": 182.31392371701077,
+      "total": 394.685037903022
+    }
+  },
+  "cargoCompilationMessages": 12,
+  "runtimeCompilationMessages": 0,
+  "fullPreparedRevision": {
+    "testsPassed": 1633,
+    "testsSkipped": 155,
+    "includesPython": true,
+    "artifactPreparationSeconds": 1714.7978,
+    "runtimePhaseIncludingPythonPreparationSeconds": 914.1654,
+    "runtimePhaseCompilationMessages": 65
+  },
+  "validation": {
+    "inventoryMatches": true,
+    "materializedRawClosuresWithoutCompilerState": 64,
+    "optionalUnmaterializedProducerEntries": 4,
+    "timestampZeroCompileErrorRejected": true,
+    "reporterTestsPassed": 23,
+    "static": {
+      "Clippy": "passed",
+      "doctests": "passed",
+      "formatting": "passed",
+      "generatedGraphAndConfig": "passed",
+      "doctestsPassed": 43,
+      "doctestsIgnored": 20,
+      "totalSeconds": 613.9324829440448
+    },
+    "feynkitRuntime": "passed"
+  },
+  "limitations": [
+    "No NixCI or network transfer timing for integrated candidate",
+    "No controlled cold comparison",
+    "Compiler-state baseline refresh is deliberate, not automatic",
+    "Warm unchanged producer-wrapper state downloads remain to be measured"
+  ],
+  "implementationCommit": "5b87a850e",
+  "compilerStateStorage": {
+    "uniqueMaterializedOutputs": 30,
+    "compressedFileBytes": 2410152249,
+    "networkTrafficMeasured": false,
+    "note": "Separate from normal compiled-artifact outputs; producer wrappers publish this state."
+  },
+  "remainingAcceptance": [
+    "Remote warm unchanged and changed-source timing, transfers and worker time",
+    "Four controlled project-cold runs, paired within main and FeynKit",
+    "Initial missing-baseline-state publication and cross-worker reuse"
+  ],
+  "feynkit": {
+    "applicationRevision": "07d0efc910cf4c3175142c808e476fe7e393f815",
+    "sourceEdit": "same independent clear_interrupt_request edit as main",
+    "timingsSeconds": {
+      "archive-evaluation": 16.331377006950788,
+      "runtime-evaluation": 18.534910914022475,
+      "definitions": 2.331045744009316,
+      "artifacts": 218.08613255497767,
+      "tests": 183.86724469595356,
+      "total": 439.1507109159138
+    },
+    "cargoCompilationByCrate": {
+      "gammaloop-ci-test-binary-dependencies-fe38cd0f06240674": 2,
+      "gammalooprs": 2,
+      "gammaloop-api": 2,
+      "gammaloop-ci-test-binary-dependencies-43a25b0557b5e949": 2,
+      "gammaloop-integration-tests": 2,
+      "gammaloop-ci-test-binary-dependencies-9e2d4730badeecc9": 2
+    },
+    "extractedCratesCompiled": [],
+    "runtimeCompilationMessages": 0,
+    "testsPassed": 1829,
+    "testsSkipped": 127,
+    "excludes": [
+      "Python API runtime group",
+      "Clippy",
+      "doctests"
+    ],
+    "exactInventoriesMatch": true,
+    "fullPreparedRevision": {
+      "testsPassed": 1834,
+      "testsSkipped": 127,
+      "includesPython": true,
+      "artifactPreparationSeconds": 2028.49744109303,
+      "runtimePhaseIncludingPythonPreparationSeconds": 1113.2847029219847,
+      "runtimePhaseCompilationMessages": 90
+    },
+    "baselineSpeedupMeasured": false,
+    "projectCold": false,
+    "remoteMeasured": false
+  },
+  "pythonReuseExperiment": {
+    "applicationLayout": "main",
+    "pythonFeaturesAndAbiUnchanged": true,
+    "runtimeCommandFixturesAndEnvironmentUnchanged": true,
+    "modulePreparationSeconds": 245.36549620202277,
+    "runtimeCheckSeconds": 1.770069605030585,
+    "executedTests": [
+      "python_evaluate_sample_honors_generate_events_and_observable_snapshots",
+      "python_evaluate_sample_preserves_graph_grouping_and_incoming_pdgs",
+      "python_evaluate_samples_batch_and_momentum_space_have_expected_shape",
+      "python_session_getters_return_live_toml_and_command_blocks",
+      "python_settings_wrappers_expose_nested_runtime_and_global_settings"
+    ],
+    "exactInventoryMatch": true,
+    "runtimeCargoCompilations": 0,
+    "comparisonLimit": "The old 914.165-second tests phase also ran ordinary tests concurrently and lacks per-builder wall timestamps. Do not report it as isolated Python preparation or calculate a speedup percentage from it.",
+    "integrated": false,
+    "cargoCompilationMessages": 14
+  }
+}
