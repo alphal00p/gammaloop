@@ -700,10 +700,17 @@ impl SiteBuilder {
         let catalogs = TempDirBuilder::new()
             .prefix("alphal00p-catalog-check-")
             .tempdir_in(target)?;
-        self.check_with_catalogs(ComponentCatalogSource::Generate(catalogs.path()))
+        for warning in
+            self.check_with_catalogs(ComponentCatalogSource::Generate(catalogs.path()))?
+        {
+            eprintln!("warning: {warning}");
+        }
+        Ok(())
     }
 
-    fn check_with_catalogs(&self, catalogs: ComponentCatalogSource<'_>) -> Result<()> {
+    fn check_with_catalogs(&self, catalogs: ComponentCatalogSource<'_>) -> Result<Vec<String>> {
+        // Builds enforce validity; the explicit check command reports maintenance debt.
+        let mut warnings = Vec::new();
         ensure!(
             self.registry.schema == SCHEMA_VERSION,
             "registry schema {} does not match catalog schema {}",
@@ -819,10 +826,10 @@ impl SiteBuilder {
                     note.owner
                 );
                 if note.owner == "unassigned" {
-                    eprintln!(
-                        "warning: developer note {} still requires a named owner",
+                    warnings.push(format!(
+                        "developer note {} still requires a named owner",
                         note.id
-                    );
+                    ));
                 }
                 ensure!(
                     !note.products.is_empty()
@@ -857,27 +864,27 @@ impl SiteBuilder {
                     if let Some(reviewed_at) = reviewed_at {
                         let age = today.signed_duration_since(reviewed_at).num_days();
                         if note.lifecycle == "current" && age > 60 {
-                            eprintln!(
-                                "warning: current developer note {} was reviewed {age} days ago (publication blocks after owner-ratified enforcement at 90 days)",
+                            warnings.push(format!(
+                                "current developer note {} was reviewed {age} days ago (publication blocks after owner-ratified enforcement at 90 days)",
                                 note.id
-                            );
+                            ));
                         } else if note.lifecycle == "proposal" && age > 180 {
-                            eprintln!(
-                                "warning: proposal {} has had no disposition for {age} days",
+                            warnings.push(format!(
+                                "proposal {} has had no disposition for {age} days",
                                 note.id
-                            );
+                            ));
                         }
                     } else {
-                        eprintln!(
-                            "warning: {} developer note {} has no review record",
+                        warnings.push(format!(
+                            "{} developer note {} has no review record",
                             note.lifecycle, note.id
-                        );
+                        ));
                     }
                     if note.review_triggers.is_empty() {
-                        eprintln!(
-                            "warning: {} developer note {} has no review triggers",
+                        warnings.push(format!(
+                            "{} developer note {} has no review triggers",
                             note.lifecycle, note.id
-                        );
+                        ));
                     }
                 }
                 for trigger in &note.review_triggers {
@@ -956,10 +963,10 @@ impl SiteBuilder {
                 if matches!(note.lifecycle.as_str(), "investigation" | "archived")
                     && note.evidence_revision.is_none()
                 {
-                    eprintln!(
-                        "warning: {} developer note {} has no immutable evidence revision",
+                    warnings.push(format!(
+                        "{} developer note {} has no immutable evidence revision",
                         note.lifecycle, note.id
-                    );
+                    ));
                 }
                 ensure!(
                     note.source
@@ -1580,7 +1587,7 @@ impl SiteBuilder {
             }
         }
         self.generated_references()?;
-        Ok(())
+        Ok(warnings)
     }
 
     fn check_prose_sources(&self) -> Result<()> {

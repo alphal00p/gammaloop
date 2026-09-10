@@ -85,7 +85,7 @@ impl TypstRenderer for CliTypstRenderer {
 #[cfg(feature = "persistent-typst")]
 mod persistent {
     use std::{
-        collections::{BTreeSet, HashMap, hash_map::Entry},
+        collections::{BTreeSet, HashMap, HashSet, hash_map::Entry},
         env,
         sync::Arc,
     };
@@ -119,6 +119,7 @@ mod persistent {
         work_root: PathBuf,
         fonts: Option<Arc<FontStore>>,
         sessions: HashMap<String, Session>,
+        feature_warnings: HashSet<SourceDiagnostic>,
     }
 
     struct Session {
@@ -159,6 +160,7 @@ mod persistent {
                 work_root,
                 fonts: None,
                 sessions: HashMap::new(),
+                feature_warnings: HashSet::new(),
             })
         }
 
@@ -226,7 +228,14 @@ mod persistent {
                 options.pdf.timestamp = Some(pdf_timestamp);
                 typst_bundle::export(&bundle, &options)
             });
-            emit_diagnostics(&session.world, warnings.iter())?;
+            // Experimental-feature notices have no source span and apply to the
+            // whole watcher. Source warnings remain visible on every compilation.
+            emit_diagnostics(
+                &session.world,
+                warnings.iter().filter(|warning| {
+                    !warning.span.is_detached() || self.feature_warnings.insert((*warning).clone())
+                }),
+            )?;
             if let Err(errors) = &output {
                 emit_diagnostics(&session.world, errors.iter())?;
             }
@@ -450,7 +459,7 @@ mod persistent {
             let work = root.path().join("target/watch/typst");
             let output = root.path().join("output");
             let dependency_file = root.path().join("dependencies/test.deps");
-            fs::write(root.path().join("body.typ"), "First version").unwrap();
+            fs::write(root.path().join("body.typ"), "First version #h(1em)").unwrap();
             let mut renderer = PersistentTypstRenderer::new(root.path(), &work).unwrap();
 
             let job = |output: &Path| TypstRenderJob {
@@ -468,6 +477,13 @@ mod persistent {
                     .unwrap()
                     .contains("First version")
             );
+            let feature_warnings = renderer.feature_warnings.clone();
+            assert!(!feature_warnings.is_empty());
+            assert!(
+                feature_warnings
+                    .iter()
+                    .all(|warning| warning.span.is_detached())
+            );
 
             fs::write(root.path().join("body.typ"), "Second version").unwrap();
             renderer.render(job(&output)).unwrap();
@@ -479,6 +495,11 @@ mod persistent {
             let session = renderer.sessions.get("test").unwrap();
             assert_eq!(session.compilations, 2);
             assert_eq!(renderer.sessions.len(), 1);
+            assert_eq!(renderer.feature_warnings, feature_warnings);
+            let mut other_job = job(&output);
+            other_job.key = "other-product".to_owned();
+            renderer.render(other_job).unwrap();
+            assert_eq!(renderer.feature_warnings, feature_warnings);
             assert!(
                 fs::read(&dependency_file)
                     .unwrap()

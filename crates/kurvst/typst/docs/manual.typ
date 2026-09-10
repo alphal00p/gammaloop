@@ -410,6 +410,12 @@ CeTZ path merging and styling:
 == Generated Reference
 
 #context {
+  show pad: it => if target() == "html" { html.elem("div", it.body) } else { it }
+  show stack: it => if target() == "html" {
+    html.elem("div", it.children.filter(child => type(child) == content).join(" "))
+  } else { it }
+  show h: it => if target() == "html" { " " } else { it }
+  show v: it => if target() == "html" { parbreak() } else { it }
   let tidy-style = dictionary(tidy.styles.default)
   let _ = tidy-style.insert("show-example", tidy-style.show-example.with(scale-preview: 100%))
   let docs = tidy.parse-module(

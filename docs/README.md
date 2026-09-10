@@ -39,6 +39,8 @@ just docs-watch gammaloop
 
 `docs-check` validates registries, generated CLI/settings and topology data,
 Python inventories, checked examples, source-format policy, links, and assets.
+It also reports developer-note ownership, review, and evidence reminders; site
+and watch builds enforce validity without repeating that maintenance audit.
 `docs-site <product>` produces an honest product-scoped preview. `docs-site
 all` builds the complete portal and all five products. Output defaults to
 `target/alphal00p-docs`; `docs-watch` continuously rebuilds one product and

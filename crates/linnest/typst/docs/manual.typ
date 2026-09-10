@@ -47,9 +47,7 @@ If a half-edge is glued to itself, we call that an external half-edge. This mean
   edge(source(<a>), <in-a2>, label: [e])
 })
 // #edges(g)
-#context if target() == "paged" {
-  figure(draw(layout(g, g-center: 0.005, length-scale: .3)))
-}
+#figure(html.frame(draw(layout(g, g-center: 0.005, length-scale: .3))))
 
 
 Native half-edges also make subgraphs more granular because they can be encoded
@@ -138,20 +136,14 @@ the checkout-relative form because they are also compiled as repository tests.
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
 #let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
 #let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
-#context if target() == "paged" {
-  draw(
-    g,
-    subgraph: east,
-    edge-label: edge-label,
-    edge-label-style: (anchor: "south"),
-    source-style: source-style,
-    sink-style: sink-style,
-  )
-} else {
-  [The downloadable PDF renders this CeTZ result. The HTML manual keeps the
-  copyable source because Typst's experimental HTML target does not yet emit
-  the drawing content.]
-}
+#html.frame(draw(
+  g,
+  subgraph: east,
+  edge-label: edge-label,
+  edge-label-style: (anchor: "south"),
+  source-style: source-style,
+  sink-style: sink-style,
+))
 ```
 
 #import "../src/lib.typ": draw, graph, layout, subgraph
@@ -182,14 +174,14 @@ the checkout-relative form because they are also compiled as repository tests.
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
 #let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
 #let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
-#draw(
+#html.frame(draw(
   g,
   subgraph: east,
   edge-label: edge-label,
   edge-label-style: (anchor: "south"),
   source-style: source-style,
   sink-style: sink-style,
-)
+))
 
 === Graph Objects
 
@@ -796,13 +788,6 @@ Subgraph objects are opaque zero-copy values.
     .join("\n")
   block(raw(displayed-code, lang: "typ", block: true))
 }
-// Typst 0.15 drops Tidy's variable-name stack from HTML, so restore its heading there.
-#let _show-variable(variable-doc, style-args) = {
-  if target() == "html" {
-    heading(variable-doc.name, level: style-args.first-heading-level + 1)
-  }
-  tidy.styles.default.show-variable(variable-doc, style-args)
-}
 #let _api-link(prefix, name, display: none) = {
   raw(if display == none { name } else { display }, lang: none)
 }
@@ -817,9 +802,16 @@ Subgraph objects are opaque zero-copy values.
 )
 
 #let _show-reference(source, name, preamble: "", function-aliases: (:)) = context {
+  // Typst 0.15 drops Tidy's print layout from HTML. Preserve signatures and
+  // variable headings with semantic containers while retaining the PDF layout.
+  show pad: it => if target() == "html" { html.elem("div", it.body) } else { it }
+  show stack: it => if target() == "html" {
+    html.elem("div", it.children.filter(child => type(child) == content).join(" "))
+  } else { it }
+  show h: it => if target() == "html" { " " } else { it }
+  show v: it => if target() == "html" { parbreak() } else { it }
   let style = dictionary(tidy.styles.default)
   let _ = style.insert("show-example", _show-example-source)
-  let _ = style.insert("show-variable", _show-variable)
   let docs = tidy.parse-module(
     source,
     name: name,

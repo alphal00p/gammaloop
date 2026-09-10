@@ -1460,7 +1460,10 @@ The release and Pages builders still use the pinned Typst 0.15 command-line
 renderer. That path remains the reproducible publishing reference and does not
 link the Typst compiler into the normal documentation Cargo artifact. The local
 `docs-watch` path enables a separate, optional `persistent-typst` feature and
-keeps the compiler in the watcher process.
+keeps the compiler in the watcher process. Typst's source-independent feature
+notices are emitted once per watcher; source warnings and errors remain visible
+on each compilation. Non-blocking developer-note maintenance reminders are
+reported by `docs-check`, while every build still enforces registry validity.
 
 The watcher now owns one stable Typst entrypoint and `World` for each selected
 project, plus a developer-notes world for an all-project build. It no longer

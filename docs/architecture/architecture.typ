@@ -13,7 +13,11 @@ claim against a new build revision.
 The build revision, review revision, and historical evidence revision
 are separate facts. `current` and `proposal` records age against their
 review dates; `investigation` and `archived` records retain their capture
-context without pretending to describe HEAD. Superseded records keep a
+context without pretending to describe HEAD. `just docs-check` reports
+maintenance warnings for missing owners, overdue or missing reviews, missing
+review triggers, and missing historical evidence. Site and watch builds still
+validate the same registry, source scopes, and links; they leave those
+non-blocking maintenance reminders to the explicit audit. Superseded records keep a
 route and replacement edge but are removed from primary navigation and
 search.
 

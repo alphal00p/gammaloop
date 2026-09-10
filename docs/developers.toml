@@ -688,8 +688,8 @@ kind = "Build engineering"
 status = "Living engineering record"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-09-04"
-review_ref = "vnmlxtwk"
+reviewed_at = "2026-09-10"
+review_ref = "ymkkxtzp"
 products = ["gammaloop"]
 topics = ["nix", "ci", "cache", "documentation"]
 review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**", "crates/alphal00p-docs-builder/**", "justfile"]
@@ -704,13 +704,15 @@ anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
 # snapshot renders remain isolated, cacheable jobs consumed by a merge-only
 # route check whose assertions match full-site relative URLs. The docs test
 # runner supplies deterministic provenance and an isolated temporary root.
-digest = "48da5b3a73cf5a5ddb5f5d06c439f431bcbad3a6"
+# No cache-architecture impact: deprecated platform aliases now use hostPlatform.
+digest = "3c67db762c4f7a22190a762192d84c295e3848f2"
 
 [[section.note.scope]]
 path = "crates/alphal00p-docs-builder/src/typst_render.rs"
 symbol = "alphal00p_docs_builder::typst_render::PersistentTypstRenderer"
 anchor = "pub(crate) struct PersistentTypstRenderer {"
-digest = "e901371a78210b31068a9ba102508bf7951b823e"
+# Reviewed feature-notice deduplication; source diagnostics still emit every time.
+digest = "7b8bcfca055d90701dd741b497cf5a3ed331a246"
 
 [[section.note.scope]]
 path = "crates/alphal00p-docs-builder/src/watch.rs"
@@ -735,7 +737,7 @@ status = "Current guide"
 lifecycle = "current"
 owner = "unassigned"
 reviewed_at = "2026-09-10"
-review_ref = "nxulmrox"
+review_ref = "ymkkxtzp"
 products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
 topics = ["documentation", "architecture", "governance"]
 review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/lib.rs", "CONTRIBUTING.typ"]
@@ -748,7 +750,9 @@ anchor = "pub fn check(&self) -> Result<()> {"
 # remain separate from presentation; Rust resolves channels and validates links.
 # Reviewed citation-page removal: the documented route inventory is updated;
 # registry lifecycle, scope validation, and build ownership are unchanged.
-digest = "92934cc4b8f85d7ef2c1ed917025f21a8d9faf2b"
+# Reviewed maintenance advisories: docs-check reports them explicitly; all
+# build paths still enforce registry, scope, catalogue, and link validity.
+digest = "7910571d480869720ff80582d7dc59396d9694ce"
 
 [[section.note]]
 id = "documentation-improvement-plan"
