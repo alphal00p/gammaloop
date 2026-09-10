@@ -1,9 +1,49 @@
+import ast
+import types
 import unittest
+from pathlib import Path
 
 import linnet_py as lp
 
 
 class TestLinnetPy(unittest.TestCase):
+    def test_documented_surface_matches_runtime(self):
+        stub_path = Path(__file__).resolve().parents[1] / "linnet_py.pyi"
+        stub_text = stub_path.read_text(encoding="utf-8")
+        docs_stub_path = (
+            Path(__file__).resolve().parents[3]
+            / "docs"
+            / "api"
+            / "python"
+            / "linnet-py.pyi"
+        )
+        self.assertEqual(stub_text, docs_stub_path.read_text(encoding="utf-8"))
+        stub = ast.parse(stub_text)
+        export_assignments = [
+            node
+            for node in stub.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "__all__"
+                for target in node.targets
+            )
+        ]
+        self.assertEqual(
+            len(export_assignments), 1, "stub must define one __all__ list"
+        )
+        documented = ast.literal_eval(export_assignments[0].value)
+        self.assertIsInstance(documented, list)
+        self.assertTrue(all(isinstance(name, str) for name in documented))
+
+        self.assertCountEqual(lp.__all__, documented)
+        runtime = {
+            name
+            for name in dir(lp)
+            if not name.startswith("_")
+            and not isinstance(getattr(lp, name), types.ModuleType)
+        }
+        self.assertCountEqual(runtime, documented)
+
     def test_basic_graph_ops(self):
         dot = """
         digraph G {

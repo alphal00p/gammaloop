@@ -22,7 +22,7 @@ use crate::{
 
 #[derive(Args, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Select {
-    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
     #[arg(
         long = "process",
         short = 'p',

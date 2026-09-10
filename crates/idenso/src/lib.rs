@@ -72,6 +72,16 @@ pub mod epsilon;
 // pub mod parsing_ind;
 #[cfg(feature = "python")]
 pub mod python;
+
+/// Gather the Python API registered for the Idenso Symbolica community module.
+#[cfg(feature = "python_stubgen")]
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    pyo3_stub_gen::StubInfo::from_project_root(
+        "symbolica.community.idenso".to_owned(),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    )
+}
+
 #[cfg(any(test, feature = "reference-cases"))]
 pub mod reference_cases;
 pub mod rep_symbols;

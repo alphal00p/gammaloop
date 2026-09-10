@@ -1,3 +1,9 @@
+//! Borrowed command-session access to a loaded GammaLoop state.
+//!
+//! [`CliSession`] ties together the domain state, replay history, persistent settings, runtime
+//! defaults, and transient command-block state owned by [`crate::LoadedState`]. It does not own or
+//! automatically persist any of them.
+
 use std::{
     collections::BTreeMap,
     io::{self, IsTerminal, Write},
@@ -73,6 +79,10 @@ fn prompt_command_block_conflict_override(conflicting_blocks: &[String]) -> Resu
     }
 }
 
+/// Transient state used while defining a reusable command block.
+///
+/// This is process/session state rather than persisted run history. Most callers should retain the
+/// value inside [`crate::LoadedState`] and access it through [`CliSession`].
 #[derive(Debug, Clone, Default)]
 pub struct CliSessionState {
     pending_commands_block: Option<PendingCommandsBlock>,
@@ -90,6 +100,12 @@ enum HistoryMode {
     Suppress,
 }
 
+/// Mutably borrowed view used to execute GammaLoop commands.
+///
+/// A session updates its caller-owned [`State`], [`RunHistory`], and effective settings in place.
+/// It may also write files according to the selected command. Read-only mode prevents
+/// GammaLoop-managed writes into the active state tree, but does not constrain explicit exports or
+/// external processes such as the `!` shell command.
 pub struct CliSession<'a> {
     state: &'a mut State,
     run_history: &'a mut RunHistory,
@@ -99,6 +115,11 @@ pub struct CliSession<'a> {
 }
 
 impl<'a> CliSession<'a> {
+    /// Combine the mutable state and settings that participate in command execution.
+    ///
+    /// This constructor does not initialize GammaLoop, load files, replay history, or execute boot
+    /// commands. Prefer [`crate::StateLoadOption::load`] followed by
+    /// [`crate::LoadedState::cli_session`] unless the caller already owns a consistent bundle.
     pub fn new(
         state: &'a mut State,
         run_history: &'a mut RunHistory,
@@ -115,11 +136,27 @@ impl<'a> CliSession<'a> {
         }
     }
 
+    /// Prepare and execute one command against the borrowed state.
+    ///
+    /// Ordinary successful commands are normalized and appended to the replayable run history;
+    /// command-block definition controls have specialized recording behavior. A command can mutate
+    /// the state and settings or write its requested outputs before returning. Inspect both
+    /// [`CommandExecution::flow`] and [`CommandExecution::output`]: save/quit requests use
+    /// [`ControlFlow::Break`], while only evaluation and integration currently return structured
+    /// output.
+    ///
+    /// Errors include parse/preparation failures, invalid state or settings, unavailable backends,
+    /// numerical command failures, and forbidden writes into a read-only state tree. An error does
+    /// not imply that every command-specific external effect was rolled back.
     pub fn execute_command(&mut self, command: CommandHistory) -> Result<CommandExecution> {
         let prepared = PreparedCommand::prepare(command, self.run_history, 1)?;
         self.execute_prepared(prepared, HistoryMode::Record)
     }
 
+    /// Reapply the stored session settings and commands without appending duplicate history.
+    ///
+    /// Replay mutates the current state and can perform the same command-specific effects as normal
+    /// execution. Callers must honor a returned [`ControlFlow::Break`] save/quit request.
     pub fn replay_run_history(&mut self) -> Result<ControlFlow<SaveState>> {
         self.run_history
             .apply_session_settings(self.cli_settings, self.default_runtime_settings)?;

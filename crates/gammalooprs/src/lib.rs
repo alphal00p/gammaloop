@@ -44,6 +44,7 @@ pub const MAX_CORES: usize = 1000;
 pub trait GammaLoopContext: HasStateMap + HasModel {}
 
 pub trait HasModel {
+    /// Returns the physics model associated with this computation context.
     fn get_model(&self) -> &Model;
 }
 
@@ -61,7 +62,9 @@ impl HasModel for GammaLoopContextContainer<'_> {
 
 #[derive(Clone, Copy)]
 pub struct GammaLoopContextContainer<'a> {
+    /// Symbolica state map used to resolve symbols during GammaLoop computations.
     pub state_map: &'a StateMap,
+    /// Physics model that supplies particles, parameters, and interactions.
     pub model: &'a Model,
 }
 

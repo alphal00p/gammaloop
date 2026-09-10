@@ -1,5 +1,36 @@
 {
   "normal_dependencies": {
+    "alphal00p-docs-builder": [
+      "alphal00p-docs-schema"
+    ],
+    "alphal00p-docs-catalogs": [
+      "alphal00p-docs-macros",
+      "alphal00p-docs-schema",
+      "gammaloop-api",
+      "gammalooprs",
+      "vakint"
+    ],
+    "alphal00p-docs-examples": [
+      "alphal00p-docs-catalogs",
+      "alphal00p-docs-schema",
+      "gammaloop-api",
+      "gammalooprs",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "vakint"
+    ],
+    "alphal00p-docs-macros": [],
+    "alphal00p-docs-python-exporter": [
+      "gammaloop-api",
+      "idenso",
+      "linnet-py",
+      "spynso3",
+      "vakint"
+    ],
+    "alphal00p-docs-schema": [],
     "clinnet": [],
     "gammaloop-api": [
       "gammaloop-tracing-filter",
@@ -75,6 +106,63 @@
     "vakint": []
   },
   "normal_dependency_features": {
+    "alphal00p-docs-builder": {
+      "alphal00p-docs-schema": []
+    },
+    "alphal00p-docs-catalogs": {
+      "alphal00p-docs-macros": [],
+      "alphal00p-docs-schema": [],
+      "gammaloop-api": [
+        "cli"
+      ],
+      "gammalooprs": [],
+      "vakint": []
+    },
+    "alphal00p-docs-examples": {
+      "alphal00p-docs-catalogs": [],
+      "alphal00p-docs-schema": [],
+      "gammaloop-api": [
+        "cli"
+      ],
+      "gammalooprs": [],
+      "idenso": [
+        "bincode",
+        "reference-cases"
+      ],
+      "linnet": [
+        "bincode",
+        "drawing",
+        "nodestore-vec",
+        "serde",
+        "symbolica"
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "spenso-hep-lib": [],
+      "spenso-macros": [
+        "shadowing"
+      ],
+      "vakint": []
+    },
+    "alphal00p-docs-macros": {},
+    "alphal00p-docs-python-exporter": {
+      "gammaloop-api": [
+        "python_stubgen"
+      ],
+      "idenso": [
+        "python_stubgen"
+      ],
+      "linnet-py": [],
+      "spynso3": [
+        "python_stubgen"
+      ],
+      "vakint": [
+        "python_stubgen",
+        "symbolica_community_module"
+      ]
+    },
+    "alphal00p-docs-schema": {},
     "clinnet": {},
     "gammaloop-api": {
       "gammaloop-tracing-filter": [
@@ -188,6 +276,12 @@
     "vakint": {}
   },
   "package_dirs": {
+    "alphal00p-docs-builder": "crates/alphal00p-docs-builder",
+    "alphal00p-docs-catalogs": "crates/alphal00p-docs-catalogs",
+    "alphal00p-docs-examples": "crates/alphal00p-docs-examples",
+    "alphal00p-docs-macros": "crates/alphal00p-docs-macros",
+    "alphal00p-docs-python-exporter": "crates/alphal00p-docs-python-exporter",
+    "alphal00p-docs-schema": "crates/alphal00p-docs-schema",
     "clinnet": "crates/clinnet",
     "gammaloop-api": "crates/gammaloop-api",
     "gammaloop-integration-tests": "tests",
@@ -208,6 +302,12 @@
     "vakint": "crates/vakint"
   },
   "packages": [
+    "alphal00p-docs-builder",
+    "alphal00p-docs-catalogs",
+    "alphal00p-docs-examples",
+    "alphal00p-docs-macros",
+    "alphal00p-docs-python-exporter",
+    "alphal00p-docs-schema",
     "clinnet",
     "gammaloop-api",
     "gammaloop-integration-tests",
@@ -228,6 +328,33 @@
     "vakint"
   ],
   "resolved_normal_dependencies": {
+    "alphal00p-docs-builder": [
+      "alphal00p-docs-schema"
+    ],
+    "alphal00p-docs-catalogs": [
+      "alphal00p-docs-macros",
+      "alphal00p-docs-schema"
+    ],
+    "alphal00p-docs-examples": [
+      "alphal00p-docs-catalogs",
+      "alphal00p-docs-macros",
+      "alphal00p-docs-schema",
+      "gammaloop-api",
+      "gammaloop-tracing-filter",
+      "gammaloop-tracing-filter-macros",
+      "gammaloop-workspace-hack",
+      "gammalooprs",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "symbolica-utils",
+      "vakint"
+    ],
+    "alphal00p-docs-macros": [],
+    "alphal00p-docs-python-exporter": [],
+    "alphal00p-docs-schema": [],
     "clinnet": [],
     "gammaloop-api": [
       "gammaloop-tracing-filter",
@@ -326,6 +453,35 @@
     "vakint": []
   },
   "resolved_test_dependencies": {
+    "alphal00p-docs-builder": [
+      "alphal00p-docs-schema"
+    ],
+    "alphal00p-docs-catalogs": [
+      "alphal00p-docs-macros",
+      "alphal00p-docs-schema"
+    ],
+    "alphal00p-docs-examples": [
+      "alphal00p-docs-catalogs",
+      "alphal00p-docs-macros",
+      "alphal00p-docs-schema",
+      "gammaloop-api",
+      "gammaloop-tracing-filter",
+      "gammaloop-tracing-filter-macros",
+      "gammaloop-workspace-hack",
+      "gammalooprs",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "symbolica-utils",
+      "vakint"
+    ],
+    "alphal00p-docs-macros": [
+      "alphal00p-docs-schema"
+    ],
+    "alphal00p-docs-python-exporter": [],
+    "alphal00p-docs-schema": [],
     "clinnet": [],
     "gammaloop-api": [
       "gammaloop-tracing-filter",
@@ -430,6 +586,7 @@
     "vakint": []
   },
   "symbolica_normal_packages": [
+    "alphal00p-docs-examples",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -447,6 +604,7 @@
     "vakint"
   ],
   "symbolica_test_packages": [
+    "alphal00p-docs-examples",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -464,6 +622,39 @@
     "vakint"
   ],
   "test_dependencies": {
+    "alphal00p-docs-builder": [
+      "alphal00p-docs-schema"
+    ],
+    "alphal00p-docs-catalogs": [
+      "alphal00p-docs-macros",
+      "alphal00p-docs-schema",
+      "gammaloop-api",
+      "gammalooprs",
+      "vakint"
+    ],
+    "alphal00p-docs-examples": [
+      "alphal00p-docs-catalogs",
+      "alphal00p-docs-schema",
+      "gammaloop-api",
+      "gammalooprs",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "vakint"
+    ],
+    "alphal00p-docs-macros": [
+      "alphal00p-docs-schema"
+    ],
+    "alphal00p-docs-python-exporter": [
+      "gammaloop-api",
+      "idenso",
+      "linnet-py",
+      "spynso3",
+      "vakint"
+    ],
+    "alphal00p-docs-schema": [],
     "clinnet": [],
     "gammaloop-api": [
       "gammaloop-tracing-filter",
@@ -543,6 +734,65 @@
     "vakint": []
   },
   "test_dependency_features": {
+    "alphal00p-docs-builder": {
+      "alphal00p-docs-schema": []
+    },
+    "alphal00p-docs-catalogs": {
+      "alphal00p-docs-macros": [],
+      "alphal00p-docs-schema": [],
+      "gammaloop-api": [
+        "cli"
+      ],
+      "gammalooprs": [],
+      "vakint": []
+    },
+    "alphal00p-docs-examples": {
+      "alphal00p-docs-catalogs": [],
+      "alphal00p-docs-schema": [],
+      "gammaloop-api": [
+        "cli"
+      ],
+      "gammalooprs": [],
+      "idenso": [
+        "bincode",
+        "reference-cases"
+      ],
+      "linnet": [
+        "bincode",
+        "drawing",
+        "nodestore-vec",
+        "serde",
+        "symbolica"
+      ],
+      "spenso": [
+        "shadowing"
+      ],
+      "spenso-hep-lib": [],
+      "spenso-macros": [
+        "shadowing"
+      ],
+      "vakint": []
+    },
+    "alphal00p-docs-macros": {
+      "alphal00p-docs-schema": []
+    },
+    "alphal00p-docs-python-exporter": {
+      "gammaloop-api": [
+        "python_stubgen"
+      ],
+      "idenso": [
+        "python_stubgen"
+      ],
+      "linnet-py": [],
+      "spynso3": [
+        "python_stubgen"
+      ],
+      "vakint": [
+        "python_stubgen",
+        "symbolica_community_module"
+      ]
+    },
+    "alphal00p-docs-schema": {},
     "clinnet": {},
     "gammaloop-api": {
       "gammaloop-tracing-filter": [

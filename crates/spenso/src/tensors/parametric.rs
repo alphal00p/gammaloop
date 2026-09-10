@@ -351,7 +351,9 @@ impl<Args: IntoArgs> TensorCoefficient for ExpandedCoefficent<Args> {
 )]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct ParamTensor<S = OrderedStructure> {
+    /// Dense or sparse symbolic components together with their tensor structure.
     pub tensor: DataTensor<Atom, S>,
+    /// Whether the components are primitive parameters or composite expressions.
     pub param_type: ParamOrComposite,
     // Param(DataTensor<Atom, S>),
     // // Concrete(DataTensor<T, S>),

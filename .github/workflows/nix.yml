@@ -64,13 +64,14 @@ jobs:
               --no-link \
               --print-build-logs \
               --print-out-paths \
+              .#packages.x86_64-linux.alphal00p-docs-cargo-artifacts \
               .#packages.x86_64-linux.crane-ci-prebuild \
               .#packages.x86_64-linux.gammaloop \
               .#packages.x86_64-linux.gammaloop-python-module \
               .#checks.x86_64-linux.gammaloop-nextest-binaries
           )
           mapfile -t producer_outputs <<< "$producer_output_lines"
-          test "${#producer_outputs[@]}" -eq 4
+          test "${#producer_outputs[@]}" -eq 5
           publish_path_lines=$(
             nix-store --query --requisites "${producer_outputs[@]}" | LC_ALL=C sort -u
           )

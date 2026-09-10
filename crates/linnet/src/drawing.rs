@@ -18,7 +18,7 @@
 //!
 //! Users interested in path drawing can look at the internal tests for examples of
 //! using `kurbo::BezPath` and its SVG export capabilities. For direct `HedgeGraph`
-//! visualization, the DOT output functionalities (see `dot_parser` module and
+//! visualization, the DOT output functionalities (see the [`crate::parser`] module and
 //! `HedgeGraph::dot_...` methods) can be used in conjunction with external
 //! Graphviz tools.
 

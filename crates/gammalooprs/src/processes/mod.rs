@@ -12,7 +12,7 @@ use tracing::debug;
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     settings::{GlobalSettings, runtime::LockedRuntimeSettings},
-    utils::serde_utils::{IsDefault, is_false, is_true, is_usize},
+    utils::serde_utils::{IsDefault, is_false, is_true, is_usize, show_defaults_helper},
     uv::export::UVForestExportSettings,
 };
 use serde::{Deserialize, Serialize};
@@ -71,65 +71,83 @@ pub enum ContractionMode {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
+    /// Perform symbolic tensor and scalar algebra before lowering to an evaluator.
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_algebra: bool,
+    /// Re-optimize orientation expressions iteratively while building the evaluator.
     #[serde(
         default = "evaluator_default_iterative_orientation_optimization",
         skip_serializing_if = "is_true"
     )]
     pub iterative_orientation_optimization: bool,
+    /// Build one evaluator for the sum of all contributions instead of separate evaluators.
     #[serde(default, skip_serializing_if = "is_false")]
     pub summed: bool,
+    /// Represent a summed evaluator through a shared Symbolica function map.
     #[serde(default, skip_serializing_if = "is_false")]
     pub summed_function_map: bool,
+    /// Compile the lowered evaluator using the configured generation compilation backend.
     #[serde(default, skip_serializing_if = "is_false")]
     pub compile: bool,
+    /// Retain the intermediate Symbolica atom alongside the executable evaluator.
     #[serde(default, skip_serializing_if = "is_false")]
     pub store_atom: bool,
+    /// Apply function-map replacements before numerical lowering.
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_fn_map_replacements: bool,
+    /// Translate compatible symbolic expressions directly into Spenso networks.
     #[serde(
         default = "evaluator_default_direct_translation",
         skip_serializing_if = "is_true"
     )]
     pub direct_translation: bool,
+    /// Number of Horner-scheme optimization passes applied to scalar expressions.
     #[serde(
         default = "evaluator_default_horner_iterations",
         skip_serializing_if = "is_usize::<1>"
     )]
     pub horner_iterations: usize,
+    /// Worker threads used while constructing one evaluator.
     #[serde(
         default = "evaluator_default_n_cores",
         skip_serializing_if = "is_usize::<1>"
     )]
     pub n_cores: usize,
+    /// Optional number of common-pair-elimination optimization passes.
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub cpe_iterations: Option<usize>,
+    /// Optimization stage at which evaluator construction aborts for diagnostic isolation.
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub abort_level: usize,
 
+    /// Maximum variable count for attempting a Horner-scheme optimization.
     #[serde(
         default = "evaluator_default_max_horner_scheme_variables",
         skip_serializing_if = "is_usize::<500>"
     )]
     pub max_horner_scheme_variables: usize,
 
+    /// Maximum cached candidate pairs during common-pair elimination.
     #[serde(
         default = "evaluator_default_max_common_pair_cache_entries",
         skip_serializing_if = "is_usize::<1000000>"
     )]
     pub max_common_pair_cache_entries: usize,
 
+    /// Maximum expression-tree distance considered during common-pair elimination.
     #[serde(
         default = "evaluator_default_max_common_pair_distance",
         skip_serializing_if = "is_usize::<1000>"
     )]
     pub max_common_pair_distance: usize,
+    /// Heuristic used to order tensor-network contractions.
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub tensor_network_contraction_order: TensorNetworkContractionOrder,
+    /// Emit detailed evaluator-construction diagnostics.
     #[serde(default, skip_serializing_if = "is_false")]
     pub verbose: bool,
 
+    /// Spenso execution and contraction modes used by the lowered tensor network.
     #[serde(
         default = "evaluator_default_spenso_execution_mode",
         skip_serializing_if = "is_default_spenso_execution_mode"
@@ -170,7 +188,7 @@ const fn evaluator_default_spenso_execution_mode() -> (ExecutionMode, Contractio
 }
 
 fn is_default_spenso_execution_mode(mode: &(ExecutionMode, ContractionMode)) -> bool {
-    mode == &evaluator_default_spenso_execution_mode()
+    show_defaults_helper(mode == &evaluator_default_spenso_execution_mode())
 }
 
 impl Default for EvaluatorSettings {
@@ -225,20 +243,29 @@ pub struct ProcessList {
     pub processes: Vec<Process>,
 }
 
+/// Controls which graph details and algebraic transformations are included in DOT exports.
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
 )]
 pub struct DotExportSettings {
     // pub root_folder: PathBuf,
+    /// Write all diagrams of an integrand to one file during filesystem export.
     pub combine_diagrams: bool,
+    /// Request UV counterterm graph output; currently retained for compatibility.
     pub with_uv: bool,
+    /// Add the complete symbolic numerator as the graph-level `full_num` field.
     pub output_full_numerator: bool,
+    /// Split cross-section graphs by distinct initial-state assignments.
     pub split_xs_by_initial_states: bool,
+    /// Simplify gamma-matrix algebra in the full numerator before formatting it.
     pub do_gamma_algebra: bool,
+    /// Simplify color algebra in the full numerator before formatting it.
     pub do_color_algebra: bool,
     #[serde(default, skip_serializing_if = "is_false")]
+    /// Include vertex and edge fields whose values GammaLoop generated automatically.
     pub include_autogenerated_fields: bool,
 }
 
@@ -291,8 +318,10 @@ pub enum StandaloneNumericTarget {
 }
 
 #[cfg(feature = "python_api")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(feature = "python_api", pyo3::pymethods)]
 impl DotExportSettings {
+    /// Construct DOT export settings with GammaLoop's defaults.
     #[new]
     fn new() -> Self {
         DotExportSettings::default()

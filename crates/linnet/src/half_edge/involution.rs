@@ -41,10 +41,10 @@ impl Display for EdgeIndex {
 define_indexed_vec!(
     /// A type-safe wrapper around a `usize` representing a directed half-edge.
     ///
-    /// Each undirected edge in a graph is typically composed of two oppositely
-    /// directed half-edges. `Hedge` identifies one of these. The actual edge data
-    /// and topological information (like its opposite or next half-edge) are
-    /// stored within the graph structure (e.g., [`HedgeGraph`]).
+    /// An internal edge is represented by two paired half-edges. A dangling edge
+    /// has one half-edge that maps to itself. `Hedge` identifies either kind;
+    /// [`HedgeGraph`] stores its incident node, pairing, edge data, and half-edge
+    /// data. It does not assign a cyclic order around the node.
     pub struct Hedge; // new‑type around usize
 
     /// Vector whose items are `T`, indexable only by `EntityId`.

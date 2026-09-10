@@ -18,29 +18,39 @@ const BASE62_ALPHABET: &[u8; 62] =
 /// # Type Parameters
 /// - `Other`: The type of the other subgraph to perform operations with. Defaults to `Self`.
 pub trait SubSetOps<ID = Hedge, Other: SubSetLike<ID> = Self>: SubSetLike<ID> {
+    /// Retains only IDs included by both subsets.
     fn intersect_with(&mut self, other: &Other);
+    /// Adds every ID included by `other`.
     fn union_with(&mut self, other: &Other);
+    /// Retains IDs included by exactly one of the two subsets.
     fn sym_diff_with(&mut self, other: &Other);
+    /// Returns whether the subsets have no included ID in common.
     fn empty_intersection(&self, other: &Other) -> bool;
+    /// Returns whether neither subset includes any ID.
     fn empty_union(&self, other: &Other) -> bool;
+    /// Returns the IDs included by both subsets without modifying either input.
     fn intersection(&self, other: &Other) -> Self {
         let mut new = self.clone();
         new.intersect_with(other);
         new
     }
+    /// Returns the IDs included by either subset without modifying either input.
     fn union(&self, other: &Other) -> Self {
         let mut new = self.clone();
         new.union_with(other);
 
         new
     }
+    /// Returns the IDs included by exactly one subset without modifying either input.
     fn sym_diff(&self, other: &Other) -> Self {
         let mut new = self.clone();
         new.sym_diff_with(other);
         new
     }
 
+    /// Removes every ID included by `other`.
     fn subtract_with(&mut self, other: &Other);
+    /// Returns the IDs in `self` but not `other` without modifying either input.
     fn subtract(&self, other: &Other) -> Self {
         let mut new = self.clone();
         new.subtract_with(other);
@@ -222,6 +232,7 @@ impl<ID> Iterator for SubSetIter<'_, ID> {
 pub trait BaseSubgraph:
     SubGraphLike + ModifySubSet<HedgePair> + ModifySubSet<Hedge> + SubSetOps<Hedge>
 {
+    /// Selects all half-edges belonging to edges whose data satisfies `filter`.
     fn from_filter<E, V, H, N: NodeStorageOps<NodeData = V>, F: FnMut(&E) -> bool>(
         graph: &HedgeGraph<E, V, H, N>,
         filter: F,
@@ -269,6 +280,9 @@ pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
         covering
     }
 
+    /// Chooses the DOT background color used to distinguish the subgraph boundary.
+    ///
+    /// The default colors split and absent edge pairs gray and leaves complete pairs uncolored.
     fn background_color(&self, hedge_pair: Option<HedgePair>) -> Option<String> {
         let color = "gray".to_string();
 
@@ -289,6 +303,9 @@ pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
         graph: &HedgeGraph<E, V, H, N>,
     ) -> usize; //not counting unpaired hedges
 
+    /// Writes a DOT rendering of this subgraph to a formatting sink.
+    ///
+    /// The attribute callbacks supply optional DOT attributes for half-edges, edges, and nodes.
     fn dot_fmt<W: std::fmt::Write, E, V, H, N: NodeStorageOps<NodeData = V>, Str: AsRef<str>>(
         &self,
         writer: &mut W,
@@ -351,6 +368,9 @@ pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
         Ok(())
     }
 
+    /// Writes a DOT rendering of this subgraph to an I/O sink.
+    ///
+    /// The attribute callbacks supply optional DOT attributes for half-edges, edges, and nodes.
     fn dot_io<W: std::io::Write, E, V, H, N: NodeStorageOps<NodeData = V>, Str: AsRef<str>>(
         &self,
         writer: &mut W,
@@ -411,6 +431,7 @@ pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
         Ok(())
     }
 
+    /// Selects the half-edges that occur in both this subgraph and `node`.
     fn hairs(&self, node: impl Iterator<Item = Hedge>) -> SuBitGraph {
         let mut hairs = SuBitGraph::empty(self.size());
         for h in node {
@@ -442,7 +463,9 @@ pub trait SubSetLike<ID = Hedge>:
     + Inclusion<std::ops::RangeFrom<ID>>
     + Inclusion<ID>
 {
+    /// Canonical subset representation returned by [`SubSetLike::included`].
     type Base: SubSetLike<ID>;
+    /// Double-ended iterator over the included IDs.
     type BaseIter<'a>: Iterator<Item = ID> + DoubleEndedIterator
     where
         Self: 'a,
@@ -467,8 +490,10 @@ pub trait SubSetLike<ID = Hedge>:
     /// Appends all incuded half-edges at the end of other
     fn join_mut(&mut self, other: Self);
 
+    /// Returns a compact textual label representing this selection.
     fn string_label(&self) -> String;
 
+    /// Returns a Symbolica symbol whose name and formatter encode this selection's label.
     #[cfg(feature = "symbolica")]
     fn symbol(&self) -> symbolica::atom::Symbol {
         use symbolica::{
@@ -513,7 +538,12 @@ pub trait SubSetLike<ID = Hedge>:
         })
     }
 
+    /// Attempts to decode an implementation-specific compact label for a universe
+    /// of `size` IDs.
+    ///
+    /// Returns `None` when decoding is unsupported or the label cannot represent that universe.
     fn from_base62(label: &str, size: usize) -> Option<Self>;
+    /// Iterates over every ID included in the selection.
     fn included_iter(&self) -> Self::BaseIter<'_>;
     // fn included_iter_(&self) -> Self::BaseIter<'_>;
     // SubGraphHedgeIter {
@@ -529,7 +559,9 @@ pub trait SubSetLike<ID = Hedge>:
     /// Number of half-edges included in the subgraph
     fn n_included(&self) -> usize;
 
+    /// Creates a selection containing no IDs in a universe of `size` IDs.
     fn empty(size: usize) -> Self;
+    /// Returns whether the selection contains no IDs.
     fn is_empty(&self) -> bool;
 }
 

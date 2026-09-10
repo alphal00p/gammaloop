@@ -32,6 +32,33 @@ fn inspect_x_space_reports_invalid_coordinate_count_cleanly() -> Result<()> {
 }
 
 #[test]
+fn inspect_momentum_space_reports_incomplete_triplet_cleanly() -> Result<()> {
+    let mut cli = setup_scalar_topologies_cli("scalar_box_invalid_momentum_inspect")?;
+
+    let error = Inspect {
+        process: Some(ProcessRef::Unqualified("box".to_string())),
+        integrand_name: Some("scalar_box".to_string()),
+        point: vec![0.1, 0.2, 0.3, 0.4],
+        momentum_space: true,
+        graph_id: Some(0),
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .expect_err("inspect should reject an incomplete loop-momentum triplet");
+
+    let rendered = format!("{error:#}");
+    assert!(
+        rendered.contains(
+            "Momentum-space evaluation expects flattened (px, py, pz) triplets, so the coordinate count must be a multiple of 3; got 4."
+        ),
+        "{rendered}"
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
 #[serial]
 fn inspect_x_space_reports_missing_discrete_dimensions_cleanly() -> Result<()> {
     let mut cli =

@@ -185,7 +185,7 @@ pub struct GammaloopSymbols {
     pub expansion: Symbol,
     ///For selecting a concete index.
     pub delta_vec: Symbol,
-    ///Q(<edgeid>,index___)
+    /// `Q(<edgeid>, index___)`
     pub emr_mom: Symbol,
     pub emr_vec: Symbol,
     pub dot: Symbol,
@@ -206,7 +206,8 @@ pub struct GammaloopSymbols {
     pub nc2_1: Symbol,
     pub expr: Symbol,
     pub num: Symbol,
-    ///denominator wrapper, den(<edge_id>,<momentum>,<mass>,<full_expr>) (no power and should not be multiplied in but divided!)
+    /// Denominator wrapper, `den(<edge_id>, <momentum>, <mass>, <full_expr>)`
+    /// (no power and should not be multiplied in but divided!).
     pub den: Symbol,
     pub radius_left: Symbol,
     pub radius_star_left: Symbol,

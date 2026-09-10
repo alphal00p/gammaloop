@@ -1005,6 +1005,7 @@ impl<Aind: AbsInd + DummyAind + ParseableAind + 'static> ParamNet<Aind> {
     }
 }
 pub trait NetworkParse {
+    /// Parses this symbolic expression into a parameterized tensor network using `settings`.
     #[allow(clippy::result_large_err)]
     fn parse_to_atom_net<Aind: AbsInd + DummyAind + ParseableAind>(
         &self,

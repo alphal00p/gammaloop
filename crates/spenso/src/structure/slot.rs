@@ -96,7 +96,8 @@ pub enum SlotError {
 }
 
 #[cfg(feature = "shadowing")]
-/// Can possibly constuct a Slot from an `AtomView`, if it is of the form: <representation>(<dimension>,<index>)
+/// Can construct a `Slot` from an `AtomView` of the form
+/// `<representation>(<dimension>, <index>)`.
 ///
 impl<'a, T: RepName, Aind> TryFrom<AtomView<'a>> for Slot<T, Aind>
 where
@@ -191,6 +192,11 @@ pub trait DummyAind {
     fn is_dummy(&self) -> bool;
 }
 
+/// One external tensor axis: representation, dimension, and abstract index.
+///
+/// Slot equality includes all three fields. Dummy abstract indices remain
+/// ordinary identity-bearing values; their dummy classification is not a
+/// wildcard for contraction.
 pub trait IsAbstractSlot: Copy + PartialEq + Eq + Debug + Clone + Hash + Ord + Display {
     type Aind: AbsInd;
     type R: RepName;
@@ -243,11 +249,19 @@ pub trait IsAbstractSlot: Copy + PartialEq + Eq + Debug + Clone + Hash + Ord + D
     //     SlotError: From<<Self::Aind as TryFrom<AtomView<'a>>>::Error>;
 }
 
+/// Duality and contraction matching for tensor slots.
 pub trait DualSlotTo: IsAbstractSlot {
+    /// Slot type obtained by reversing the representation orientation.
     type Dual: IsAbstractSlot;
+    /// Returns the same dimension and abstract index in the dual
+    /// representation.
     fn dual(&self) -> Self::Dual;
+    /// Reports whether `other` has the same dimension and abstract index and a
+    /// representation dual-compatible with `self`.
     fn matches(&self, other: &Self::Dual) -> bool;
 
+    /// Ordering counterpart of [`Self::matches`] used by canonical structure
+    /// merge algorithms.
     fn match_cmp(&self, other: &Self::Dual) -> Ordering;
 }
 

@@ -55,7 +55,8 @@ impl<Name, Args, R: RepName, Aind: AbsInd> SmartShadowStructure<Name, Args, R, A
         }
     }
 
-    /// Constructs a new [`SmartShadow`] from a list of tuples of indices and dimension (assumes they are all euclidean), along with a name
+    /// Constructs a new [`SmartShadowStructure`] from a list of indices and
+    /// dimensions (assumed to be Euclidean), together with a name.
     #[must_use]
     pub fn from_iter<I, T>(
         iter: T,

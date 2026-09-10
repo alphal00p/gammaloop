@@ -1,0 +1,5 @@
+error: #[alphal00p_docs::macro_item] requires macro_rules! or a function marked #[proc_macro], #[proc_macro_attribute], or #[proc_macro_derive]
+ --> tests/ui/macro-wrong-target.rs:4:4
+  |
+4 | fn not_an_exported_macro() {}
+  |    ^^^^^^^^^^^^^^^^^^^^^

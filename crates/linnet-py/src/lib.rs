@@ -322,15 +322,22 @@ impl PyNodeStatements {
         self.snapshot(py).len()
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "typing.Iterator[builtins.str]",
+        imports = ("builtins", "typing")
+    ))]
     fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let keys = self.keys(py)?;
         keys.call_method0("__iter__")
     }
 
+    #[pyo3(signature = (key, default=None))]
     fn get<'py>(
         &self,
         key: String,
-        default: Option<Bound<'py, PyAny>>,
+        #[gen_stub(override_type(type_repr = "typing.Any", imports = ("typing")))] default: Option<
+            Bound<'py, PyAny>,
+        >,
         py: Python<'py>,
     ) -> Bound<'py, PyAny> {
         if let Some(value) = self.get_value(py, &key) {
@@ -340,6 +347,10 @@ impl PyNodeStatements {
         }
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.list[builtins.str]",
+        imports = ("builtins")
+    ))]
     fn keys<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let keys = self
             .snapshot(py)
@@ -349,6 +360,10 @@ impl PyNodeStatements {
         Ok(PyList::new(py, keys)?.into_any())
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.list[builtins.str]",
+        imports = ("builtins")
+    ))]
     fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let values = self
             .snapshot(py)
@@ -358,6 +373,10 @@ impl PyNodeStatements {
         Ok(PyList::new(py, values)?.into_any())
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.list[tuple[builtins.str, builtins.str]]",
+        imports = ("builtins")
+    ))]
     fn items<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let items = self.snapshot(py);
         Ok(PyList::new(py, items)?.into_any())
@@ -369,7 +388,15 @@ impl PyNodeStatements {
         }
     }
 
-    fn update(&mut self, other: &Bound<'_, PyAny>, py: Python<'_>) -> PyResult<()> {
+    fn update(
+        &mut self,
+        #[gen_stub(override_type(
+            type_repr = "typing.Mapping[builtins.str, builtins.str]",
+            imports = ("builtins", "typing")
+        ))]
+        other: &Bound<'_, PyAny>,
+        py: Python<'_>,
+    ) -> PyResult<()> {
         let map = other.extract::<BTreeMap<String, String>>()?;
         let mut data = self.data.bind(py).extract::<PyRefMut<PyDotVertexData>>()?;
         for (k, v) in map {
@@ -382,7 +409,9 @@ impl PyNodeStatements {
     fn pop<'py>(
         &mut self,
         key: String,
-        default: Option<Bound<'py, PyAny>>,
+        #[gen_stub(override_type(type_repr = "typing.Any", imports = ("typing")))] default: Option<
+            Bound<'py, PyAny>,
+        >,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let value = self.get_value(py, &key);
@@ -397,6 +426,10 @@ impl PyNodeStatements {
         }
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "tuple[builtins.str, builtins.str]",
+        imports = ("builtins")
+    ))]
     fn popitem<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let items = self.snapshot(py);
         if let Some((key, value)) = items.into_iter().next() {
@@ -409,6 +442,10 @@ impl PyNodeStatements {
     }
 
     #[pyo3(signature = (key, default=None))]
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.str",
+        imports = ("builtins")
+    ))]
     fn setdefault<'py>(
         &mut self,
         key: String,
@@ -699,15 +736,22 @@ impl PyEdgeStatements {
         self.snapshot(py).len()
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "typing.Iterator[builtins.str]",
+        imports = ("builtins", "typing")
+    ))]
     fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let keys = self.keys(py)?;
         keys.call_method0("__iter__")
     }
 
+    #[pyo3(signature = (key, default=None))]
     fn get<'py>(
         &self,
         key: String,
-        default: Option<Bound<'py, PyAny>>,
+        #[gen_stub(override_type(type_repr = "typing.Any", imports = ("typing")))] default: Option<
+            Bound<'py, PyAny>,
+        >,
         py: Python<'py>,
     ) -> Bound<'py, PyAny> {
         if let Some(value) = self.get_value(py, &key) {
@@ -717,6 +761,10 @@ impl PyEdgeStatements {
         }
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.list[builtins.str]",
+        imports = ("builtins")
+    ))]
     fn keys<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let keys = self
             .snapshot(py)
@@ -726,6 +774,10 @@ impl PyEdgeStatements {
         Ok(PyList::new(py, keys)?.into_any())
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.list[builtins.str]",
+        imports = ("builtins")
+    ))]
     fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let values = self
             .snapshot(py)
@@ -735,6 +787,10 @@ impl PyEdgeStatements {
         Ok(PyList::new(py, values)?.into_any())
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.list[tuple[builtins.str, builtins.str]]",
+        imports = ("builtins")
+    ))]
     fn items<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let items = self.snapshot(py);
         Ok(PyList::new(py, items)?.into_any())
@@ -746,7 +802,15 @@ impl PyEdgeStatements {
         }
     }
 
-    fn update(&mut self, other: &Bound<'_, PyAny>, py: Python<'_>) -> PyResult<()> {
+    fn update(
+        &mut self,
+        #[gen_stub(override_type(
+            type_repr = "typing.Mapping[builtins.str, builtins.str]",
+            imports = ("builtins", "typing")
+        ))]
+        other: &Bound<'_, PyAny>,
+        py: Python<'_>,
+    ) -> PyResult<()> {
         let map = other.extract::<BTreeMap<String, String>>()?;
         let mut data = self.data.bind(py).extract::<PyRefMut<PyDotEdgeData>>()?;
         for (k, v) in map {
@@ -759,7 +823,9 @@ impl PyEdgeStatements {
     fn pop<'py>(
         &mut self,
         key: String,
-        default: Option<Bound<'py, PyAny>>,
+        #[gen_stub(override_type(type_repr = "typing.Any", imports = ("typing")))] default: Option<
+            Bound<'py, PyAny>,
+        >,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let value = self.get_value(py, &key);
@@ -774,6 +840,10 @@ impl PyEdgeStatements {
         }
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "tuple[builtins.str, builtins.str]",
+        imports = ("builtins")
+    ))]
     fn popitem<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let items = self.snapshot(py);
         if let Some((key, value)) = items.into_iter().next() {
@@ -786,6 +856,10 @@ impl PyEdgeStatements {
     }
 
     #[pyo3(signature = (key, default=None))]
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.str",
+        imports = ("builtins")
+    ))]
     fn setdefault<'py>(
         &mut self,
         key: String,
@@ -968,15 +1042,22 @@ impl PyGlobalStatements {
         self.snapshot(py).len()
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "typing.Iterator[builtins.str]",
+        imports = ("builtins", "typing")
+    ))]
     fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let keys = self.keys(py)?;
         keys.call_method0("__iter__")
     }
 
+    #[pyo3(signature = (key, default=None))]
     fn get<'py>(
         &self,
         key: String,
-        default: Option<Bound<'py, PyAny>>,
+        #[gen_stub(override_type(type_repr = "typing.Any", imports = ("typing")))] default: Option<
+            Bound<'py, PyAny>,
+        >,
         py: Python<'py>,
     ) -> Bound<'py, PyAny> {
         if let Some(value) = self.get_value(py, &key) {
@@ -986,6 +1067,10 @@ impl PyGlobalStatements {
         }
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.list[builtins.str]",
+        imports = ("builtins")
+    ))]
     fn keys<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let keys = self
             .snapshot(py)
@@ -995,6 +1080,10 @@ impl PyGlobalStatements {
         Ok(PyList::new(py, keys)?.into_any())
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.list[builtins.str]",
+        imports = ("builtins")
+    ))]
     fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let values = self
             .snapshot(py)
@@ -1004,6 +1093,10 @@ impl PyGlobalStatements {
         Ok(PyList::new(py, values)?.into_any())
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.list[tuple[builtins.str, builtins.str]]",
+        imports = ("builtins")
+    ))]
     fn items<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let items = self.snapshot(py);
         Ok(PyList::new(py, items)?.into_any())
@@ -1015,7 +1108,15 @@ impl PyGlobalStatements {
         }
     }
 
-    fn update(&mut self, other: &Bound<'_, PyAny>, py: Python<'_>) -> PyResult<()> {
+    fn update(
+        &mut self,
+        #[gen_stub(override_type(
+            type_repr = "typing.Mapping[builtins.str, builtins.str]",
+            imports = ("builtins", "typing")
+        ))]
+        other: &Bound<'_, PyAny>,
+        py: Python<'_>,
+    ) -> PyResult<()> {
         let map = other.extract::<BTreeMap<String, String>>()?;
         let mut data = self.data.bind(py).extract::<PyRefMut<PyGlobalData>>()?;
         for (k, v) in map {
@@ -1028,7 +1129,9 @@ impl PyGlobalStatements {
     fn pop<'py>(
         &mut self,
         key: String,
-        default: Option<Bound<'py, PyAny>>,
+        #[gen_stub(override_type(type_repr = "typing.Any", imports = ("typing")))] default: Option<
+            Bound<'py, PyAny>,
+        >,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let value = self.get_value(py, &key);
@@ -1043,6 +1146,10 @@ impl PyGlobalStatements {
         }
     }
 
+    #[gen_stub(override_return_type(
+        type_repr = "tuple[builtins.str, builtins.str]",
+        imports = ("builtins")
+    ))]
     fn popitem<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let items = self.snapshot(py);
         if let Some((key, value)) = items.into_iter().next() {
@@ -1055,6 +1162,10 @@ impl PyGlobalStatements {
     }
 
     #[pyo3(signature = (key, default=None))]
+    #[gen_stub(override_return_type(
+        type_repr = "builtins.str",
+        imports = ("builtins")
+    ))]
     fn setdefault<'py>(
         &mut self,
         key: String,
@@ -2693,6 +2804,50 @@ submit! {
 }
 
 define_stub_info_gatherer!(stub_info);
+
+/// Render the installed and documented Python surface from one StubInfo inventory.
+pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
+    let info = stub_info()?;
+    let module = info
+        .modules
+        .get("linnet_py")
+        .expect("linnet StubInfo must contain the linnet_py module");
+    let mut exports = module
+        .class
+        .values()
+        .map(|class| class.name)
+        .chain(module.enum_.values().map(|enum_| enum_.name))
+        .chain(module.function.keys().copied())
+        .chain(module.variables.values().map(|variable| variable.name))
+        .collect::<Vec<_>>();
+    exports.sort_unstable();
+    exports.dedup();
+
+    let generated = module.to_string();
+    let import_end = generated
+        .split_inclusive('\n')
+        .scan(0, |offset, line| {
+            *offset += line.len();
+            Some((line, *offset))
+        })
+        .filter(|(line, _)| {
+            let line = line.trim_start();
+            line.starts_with("import ") || line.starts_with("from ")
+        })
+        .map(|(_, offset)| offset)
+        .last()
+        .expect("linnet stub must import its referenced Python types");
+    let declarations = generated[import_end..].trim_matches('\n');
+    let exports = exports
+        .into_iter()
+        .map(|name| format!("    \"{name}\","))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(format!(
+        "{}\n__all__ = [\n{exports}\n]\n\n{declarations}\n",
+        &generated[..import_end]
+    ))
+}
 
 fn extract_hedge(obj: &Bound<'_, PyAny>) -> PyResult<Hedge> {
     if let Ok(h) = obj.extract::<PyRef<PyHedge>>() {

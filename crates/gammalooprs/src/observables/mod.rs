@@ -1982,22 +1982,39 @@ pub enum HistogramSnapshotKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct HistogramSnapshot {
+    /// Determines whether bins represent continuous ranges or discrete identifiers.
     pub kind: HistogramSnapshotKind,
+    /// Human-readable histogram title used by JSON and HwU output.
     pub title: String,
+    /// HwU `TYPE@` description retained with the histogram metadata.
     pub type_description: String,
+    /// Real or imaginary component of the complex event weight accumulated in this histogram.
     pub phase: ObservablePhase,
+    /// Transformation applied to observable coordinates before continuous binning.
     pub value_transform: ObservableValueTransform,
+    /// Whether the observable supports paired fills that mitigate boundary misbinning.
     pub supports_misbinning_mitigation: bool,
+    /// Lower bound of a continuous histogram, or `None` for a discrete histogram.
     pub x_min: Option<f64>,
+    /// Upper bound of a continuous histogram, or `None` for a discrete histogram.
     pub x_max: Option<f64>,
+    /// Number of statistically independent Monte Carlo samples represented by the snapshot.
     pub sample_count: usize,
+    /// Whether compatible renderers should display the horizontal axis logarithmically.
     pub log_x_axis: bool,
+    /// Whether compatible renderers should display the vertical axis logarithmically.
     pub log_y_axis: bool,
+    /// Smallest discrete bin identifier, or `None` for a continuous histogram.
     pub discrete_min_bin_id: Option<isize>,
+    /// Display ordering for discrete bins, or `None` for a continuous histogram.
     pub discrete_ordering: Option<DiscreteBinOrdering>,
+    /// Raw statistics for every in-range bin.
     pub bins: Vec<HistogramBinSnapshot>,
+    /// Raw statistics for entries below the configured histogram range.
     pub underflow_bin: HistogramBinSnapshot,
+    /// Raw statistics for entries above the configured histogram range.
     pub overflow_bin: HistogramBinSnapshot,
+    /// Histogram-wide entry, non-finite-value, and mitigation counters.
     pub statistics: HistogramStatisticsSnapshot,
 }
 
@@ -2212,24 +2229,42 @@ impl HistogramSnapshot {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HistogramAccumulatorState {
+    /// Determines whether bins represent continuous ranges or discrete identifiers.
     pub kind: HistogramSnapshotKind,
+    /// Human-readable histogram title used by snapshots and exported output.
     pub title: String,
+    /// HwU `TYPE@` description retained in generated snapshots.
     pub type_description: String,
+    /// Real or imaginary component of the complex event weight accumulated in this histogram.
     pub phase: ObservablePhase,
+    /// Transformation applied to observable coordinates before continuous binning.
     pub value_transform: ObservableValueTransform,
+    /// Whether the observable supports paired fills that mitigate boundary misbinning.
     pub supports_misbinning_mitigation: bool,
+    /// Lower continuous bound, or the smallest discrete bin identifier as an `f64`.
     pub x_min: f64,
+    /// Upper continuous bound, or one past the largest discrete bin identifier as an `f64`.
     pub x_max: f64,
+    /// Number of committed statistically independent Monte Carlo samples.
     pub sample_count: usize,
     new_sample_count: usize,
+    /// Whether compatible renderers should display the horizontal axis logarithmically.
     pub log_x_axis: bool,
+    /// Whether compatible renderers should display the vertical axis logarithmically.
     pub log_y_axis: bool,
+    /// Smallest discrete bin identifier, or `None` for a continuous histogram.
     pub discrete_min_bin_id: Option<isize>,
+    /// Display ordering for discrete bins, or `None` for a continuous histogram.
     pub discrete_ordering: Option<DiscreteBinOrdering>,
+    /// Optional labels indexed by bin offset, primarily used by discrete histograms.
     pub bin_labels: Vec<Option<String>>,
+    /// Per-bin raw-stat accumulators in continuous or ascending discrete-bin order.
     pub bins: Vec<ObservableBinAccumulator>,
+    /// Raw-stat accumulator for entries below the configured histogram range.
     pub underflow_bin: ObservableBinAccumulator,
+    /// Raw-stat accumulator for entries above the configured histogram range.
     pub overflow_bin: ObservableBinAccumulator,
+    /// Histogram-wide entry, non-finite-value, and mitigation counters.
     pub statistics: ObservableHistogramStatistics,
 }
 

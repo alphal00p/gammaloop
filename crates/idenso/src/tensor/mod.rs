@@ -141,7 +141,8 @@ where
 /// This tensor is used to represent the structure of a tensor, and is used to perform symbolic contraction.
 /// Currently contraction is just a multiplication of the atoms, but in the future this will ensure that internal indices are independent accross the contraction.
 ///
-/// Additionally, this can also be used as a tensor structure, that tracks the history, much like [`HistoryStructure`].
+/// It can also serve as a tensor structure while retaining the symbolic
+/// expression and the ordered external-index structure across transformations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolicTensor<Aind: AbsInd = AbstractIndex> {
     pub structure: OrderedStructure<LibraryRep, Aind>,

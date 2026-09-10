@@ -1,32 +1,12 @@
-# linnest
+# Linnest
 
-Typst wrapper package for the `linnest.wasm` graph layout plugin.
+Linnest is the Typst wrapper for the `linnest.wasm` graph-layout plugin. It requires Typst 0.15.0
+or newer.
 
-Linnest requires Typst 0.15.0 or newer.
+The canonical source manual is [`docs/manual.typ`](docs/manual.typ). Its workflow is published
+as the [Linnest Typst guide](https://alphal00p.github.io/gammaloop/products/linnet/latest/guides/linnest/),
+with the supported symbol reference split across the
+[Linnest Typst API reference](https://alphal00p.github.io/gammaloop/products/linnet/latest/reference/typst/).
+Compile-checked examples live under [`examples/`](examples/).
 
-## Usage
-
-```typ
-#import "src/lib.typ": draw, graph, layout, subgraph
-#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
-
-#let g = build({
-  node(<a>, label: [A], statements: (fill-color: "cfe8ff"))
-  node(<c>, label: [C], statements: (fill-color: "d6f5d6"))
-  edge(
-    source(<a>, compass: "e"),
-    <a-c>,
-    sink(<c>, compass: "w"),
-    label: [a-c],
-    statements: (color: "0055ff"),
-  )
-},
-  name: "demo",
-)
-#let g = layout(g)
-#let dot-text = dot(g)
-#let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
-#draw(g, edge-label: edge-label)
-```
-
-See `docs/manual.typ` and the rendered `docs/manual.pdf` for the full API reference.
+Contributor policy is in [`CONTRIBUTING.typ`](../../../CONTRIBUTING.typ).

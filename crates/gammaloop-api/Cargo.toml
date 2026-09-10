@@ -86,6 +86,14 @@ workspace = true
 features = ["auto-initialize", "eyre"]
 optional = true
 
+[dependencies.pyo3-stub-gen]
+workspace = true
+optional = true
+features = ["numpy"]
+
+[dependencies.pyo3-stub-gen-derive]
+workspace = true
+
 [dependencies.symbolica]
 workspace = true
 default-features = false
@@ -135,5 +143,9 @@ python_api = [
   "gammalooprs/python_api",
   "ufo_support",
 ]
-python_stubgen = ["python_api"]
+python_stubgen = [
+  "dep:pyo3-stub-gen",
+  "gammalooprs/python_stubgen",
+  "python_api",
+]
 ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]

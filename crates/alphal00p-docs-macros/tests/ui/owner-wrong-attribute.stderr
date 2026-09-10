@@ -1,0 +1,7 @@
+error: `owner` is only supported by #[alphal00p_docs::func], not #[alphal00p_docs::ty]
+ --> tests/ui/owner-wrong-attribute.rs:3:1
+  |
+3 | #[ty(owner = "Documented")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `ty` (in Nightly builds, run with -Z macro-backtrace for more info)

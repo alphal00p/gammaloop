@@ -1,0 +1,63 @@
+/// Computes a checked result from one value.
+///
+/// The second paragraph proves existing Rust Markdown remains intact.
+pub fn compute(value: u32) -> Result<u32, &'static str> {
+    Ok(value + 1)
+}
+
+/// A source-owned record.
+pub struct ExternalRecord {
+    /// Stored value.
+    pub value: u32,
+    pub(crate) crate_visible: u32,
+    private: u32,
+}
+
+impl ExternalRecord {
+    /// Increments the stored value.
+    pub fn increment(&mut self, amount: u32) {
+        self.value += amount;
+    }
+}
+
+/// Describes an externally parsed operation.
+pub trait ExternalOperation {
+    /// Applies the operation.
+    fn apply(&self, value: u32) -> u32 { value }
+}
+
+/// Builds one external record.
+macro_rules! external_record {
+    ($value:expr) => {
+        ExternalRecord { value: $value }
+    };
+}
+
+/* These lookalikes must never supply a documentation source location.
+#[proc_macro]
+pub fn external_bang(input: TokenStream) -> TokenStream { input }
+#[proc_macro_attribute]
+pub fn external_attribute(_: TokenStream, item: TokenStream) -> TokenStream { item }
+#[proc_macro_derive(ExternalDerive)]
+pub fn external_derive(input: TokenStream) -> TokenStream { input }
+*/
+
+/// Expands a function-like procedural macro.
+#[proc_macro]
+pub fn external_bang(input: TokenStream) -> TokenStream {
+    input
+}
+
+/// Expands an attribute procedural macro.
+#[proc_macro_attribute]
+pub fn external_attribute(_: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
+/// Derives an external implementation.
+#[proc_macro_derive(ExternalDerive, attributes(external_option))]
+pub fn external_derive(input: TokenStream) -> TokenStream {
+    input
+}
+
+pub struct Undocumented;

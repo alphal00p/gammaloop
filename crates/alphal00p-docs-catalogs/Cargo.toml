@@ -1,0 +1,33 @@
+[package]
+name = "alphal00p-docs-catalogs"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+alphal00p-docs-macros.workspace = true
+alphal00p-docs-schema.workspace = true
+clap = { workspace = true, features = ["derive"] }
+eyre.workspace = true
+gammaloop-api = { path = "../gammaloop-api", default-features = false, features = ["cli"], optional = true }
+gammalooprs = { path = "../gammalooprs", default-features = false, optional = true }
+regex.workspace = true
+schemars = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+vakint = { path = "../vakint", default-features = false, optional = true }
+
+[features]
+default = []
+gammaloop-reference = ["dep:gammaloop-api", "dep:gammalooprs", "dep:schemars"]
+vakint-reference = ["dep:vakint"]
+
+[[bin]]
+name = "alphal00p-docs-gammaloop-reference"
+path = "src/bin/gammaloop_reference.rs"
+required-features = ["gammaloop-reference"]
+
+[[bin]]
+name = "alphal00p-docs-vakint-reference"
+path = "src/bin/vakint_reference.rs"
+required-features = ["vakint-reference"]

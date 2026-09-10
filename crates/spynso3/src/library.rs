@@ -6,7 +6,7 @@ use pyo3::{PyResult, pyclass, pymethods};
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
     PyStubType,
-    derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods},
+    derive::{gen_stub_pyclass, gen_stub_pymethods},
 };
 
 use spenso::network::library::function_lib::{PanicMissingConcrete, SymbolLib};
@@ -56,7 +56,6 @@ pub struct SpensorLibrary {
     pub(crate) library: TensorLibrary<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>,
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(name = "TensorFunctionLibrary", module = "symbolica.community.spenso")]
 pub struct SpensorFunctionLibrary {
     pub(crate) library:
@@ -64,7 +63,13 @@ pub struct SpensorFunctionLibrary {
 }
 
 impl ModuleInit for SpensorLibrary {}
-impl ModuleInit for SpensorFunctionLibrary {}
+
+#[cfg(feature = "python_stubgen")]
+impl PyStubType for SpensorFunctionLibrary {
+    fn type_output() -> pyo3_stub_gen::TypeInfo {
+        pyo3_stub_gen::TypeInfo::none()
+    }
+}
 
 pub enum ConvertibleToSymbol {
     Name(String),
@@ -106,7 +111,6 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSymbol {
     }
 }
 #[allow(clippy::new_without_default)]
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SpensorFunctionLibrary {
     #[new]
@@ -338,7 +342,6 @@ impl SpensorLibrary {
 /// # Variants:
 /// - Weyl: Tensors related to Weyl spinors and chiral representations
 /// - Algebra: Tensors related to algebraic structures and Lie algebras
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(from_py_object, eq, eq_int, module = "symbolica.community.spenso")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TensorNamespace {

@@ -73,6 +73,7 @@ fn main() -> Result<()> {
             integrand_name: None,
             use_arb_prec: false,
             minimal_output: false,
+            return_generated_events: Some(true),
             momentum_space: false,
             points: single_point.view(),
             integrator_weights: None,
@@ -84,7 +85,12 @@ fn main() -> Result<()> {
     println!("\n== evaluate_sample ==\n");
     println!("{single_result}");
 
-    // let momentum_point: Array2<f64> = arr2(&[[0.11, -0.07, 0.19, -0.13, 0.05, 0.29]]);
+    // Momentum-space rows contain one flattened (px, py, pz) triplet per loop;
+    // neither loop energies nor external momenta are input here.
+    // let momentum_point: Array2<f64> = arr2(&[[
+    //     0.11, -0.07, 0.19, // k1 = (px, py, pz)
+    //     -0.13, 0.05, 0.29, // k2 = (px, py, pz)
+    // ]]);
     // let momentum_result = evaluate_sample(
     //     &mut loaded.state,
     //     &EvaluateSamples {
@@ -92,6 +98,7 @@ fn main() -> Result<()> {
     //         integrand_name: None,
     //         use_arb_prec: false,
     //         minimal_output: false,
+    //         return_generated_events: Some(true),
     //         momentum_space: true,
     //         points: momentum_point.view(),
     //         integrator_weights: None,
@@ -110,6 +117,7 @@ fn main() -> Result<()> {
     //         integrand_name: None,
     //         use_arb_prec: true,
     //         minimal_output: false,
+    //         return_generated_events: Some(true),
     //         momentum_space: false,
     //         points: single_point.view(),
     //         integrator_weights: None,
@@ -130,6 +138,7 @@ fn main() -> Result<()> {
     //     integrand_name: None,
     //     use_arb_prec: false,
     //     minimal_output: false,
+    //     return_generated_events: Some(true),
     //     momentum_space: false,
     //     points: batch_points.view(),
     //     integrator_weights: None,
@@ -147,6 +156,7 @@ fn main() -> Result<()> {
     //     integrand_name: None,
     //     use_arb_prec: true,
     //     minimal_output: true,
+    //     return_generated_events: Some(true),
     //     momentum_space: false,
     //     points: batch_points.view(),
     //     integrator_weights: None,

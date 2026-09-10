@@ -22,7 +22,8 @@ use super::{node::HedgeNode, Inclusion, ModifySubSet, SubSetIter, SubSetLike, Su
 /// edge topology.
 ///
 /// To represent a subgraph that does have external connections (or "hairs"),
-/// use types like [`HedgeNode`] or [`ContractedSubGraph`].
+/// use types like [`HedgeNode`] or
+/// [`ContractedSubGraph`](crate::half_edge::subgraph::ContractedSubGraph).
 pub struct InternalSubGraph {
     // cannot be hairy. I.e. it must always have paired hedges.
     // To represent a hairy subgraph, use a ContractedSubGraph

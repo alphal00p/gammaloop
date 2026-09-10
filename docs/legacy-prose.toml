@@ -1,0 +1,5 @@
+schema = 1
+
+# Migration is complete. This inventory is retired and must remain empty.
+# Files named exactly AGENTS.md and README.md are compatibility exceptions.
+source = []

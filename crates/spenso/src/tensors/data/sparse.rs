@@ -42,15 +42,19 @@ use super::{
     CastData, DataIterator, DenseTensor, GetTensorData, HasTensorData, SetTensorData, StorageTensor,
 };
 
-/// Sparse data tensor, generic on storage type `T`, and structure type `I`.
+/// Sparse tensor components paired with their structural coordinate map.
 ///
-/// Stores data in a hashmap of usize, using ahash's hashmap.
-/// The usize key is the flattened index of the corresponding position in the dense tensor
+/// Explicit components are keyed by [`FlatIndex`] in the same order used by a
+/// dense tensor with this structure. Missing keys evaluate to `zero`; storing a
+/// component equal to `zero` is allowed unless a smart setter removes it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode)]
 pub struct SparseTensor<T, I = OrderedStructure> {
     // #[bincode(with_serde)]
+    /// Explicitly stored components keyed by their flat indices.
     pub elements: std::collections::HashMap<FlatIndex, T>,
+    /// Value used for components absent from `elements`.
     pub zero: T,
+    /// Tensor structure that maps external slots to flat component indices.
     pub structure: I,
 }
 

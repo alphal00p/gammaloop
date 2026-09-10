@@ -1,3 +1,48 @@
+//! Rust facade for loading a GammaLoop state and driving its command session.
+//!
+//! This crate owns GammaLoop's persistent state, run-card, command, CLI, and Python-facing
+//! lifecycle. The numerical integrand and event contracts live in [`gammalooprs`]. Embedded Rust
+//! callers normally configure [`StateLoadOption`], call [`StateLoadOption::load`], and borrow a
+//! [`session::CliSession`] from the resulting [`LoadedState`].
+//!
+//! Loading is not a pure deserialization step: it initializes process-global services, configures
+//! tracing, can apply a boot card, and can remove the resolved state path when `clean_state` is
+//! selected. Dropping [`LoadedState`] does not save it. Commands decide whether to mutate the
+//! in-memory state, write an explicitly requested export, or return a save/quit request.
+//!
+//! # Embedded lifecycle
+//!
+//! The following example is compile-checked but not run as a doctest because GammaLoop startup
+//! can require process-global Symbolica initialization and licensed features.
+//!
+//! ```no_run
+//! use std::ops::ControlFlow;
+//!
+//! use gammaloop_api::{
+//!     commands::CommandOutput, state::CommandHistory, StateLoadOption,
+//! };
+//!
+//! # fn main() -> color_eyre::Result<()> {
+//! let temporary = tempfile::tempdir()?;
+//! let mut loaded = StateLoadOption {
+//!     state_folder: Some(temporary.path().join("state")),
+//!     read_only_state: true,
+//!     ..StateLoadOption::default()
+//! }
+//! .load()?;
+//! assert!(loaded.state_load_summary.is_none());
+//!
+//! let execution = {
+//!     let mut session = loaded.cli_session();
+//!     let command = CommandHistory::from_raw_string("display settings global")?;
+//!     session.execute_command(command)?
+//! };
+//! assert!(matches!(execution.flow, ControlFlow::Continue(())));
+//! assert!(matches!(execution.output, CommandOutput::None));
+//! # Ok(())
+//! # }
+//! ```
+
 #[cfg(all(
     feature = "no_pyo3",
     any(
@@ -288,14 +333,19 @@ enum CompletionShell {
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct CLISettings {
+    /// Serialize replayable commands as compact strings when their structured form permits it.
     #[serde(skip_serializing_if = "is_true")]
     pub try_strings: bool,
+    /// Permit generated artifacts to replace compatible files in the active state folder.
     #[serde(skip_serializing_if = "is_false")]
     pub override_state: bool,
+    /// Location and optional display name of the persistent GammaLoop state.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub state: StateSettings,
+    /// Generation, logging, and parallelization settings shared by the CLI session.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub global: GlobalSettings,
+    /// Transient read-only controls and startup warnings excluded from serialized settings.
     #[serde(skip)]
     #[schemars(skip)]
     pub session: SessionSettings,
@@ -304,7 +354,9 @@ pub struct CLISettings {
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub struct StateSettings {
+    /// Folder containing persisted settings, models, processes, and run history.
     pub folder: PathBuf,
+    /// Optional human-readable state name stored with the serialized state.
     #[serde(
         default,
         skip_serializing_if = "skip_optional_nonempty_string",
@@ -459,31 +511,71 @@ impl CLISettings {
 
 impl SmartSerde for CLISettings {}
 
+/// Programmatic startup options for an embedded GammaLoop session.
+///
+/// The resolved state folder is the explicit `state_folder`, otherwise the folder named by the
+/// boot card, otherwise `./gammaloop_state`. A saved, manifested folder is deserialized; a missing,
+/// empty, or unmanifested folder starts a blank in-memory state. Loading a blank state does not
+/// create or save the folder by itself.
+///
+/// `read_only_state` prevents GammaLoop-managed writes to the active state tree, not arbitrary
+/// filesystem writes: explicit exports elsewhere and external processes such as the `!` shell
+/// command remain outside that boundary. `clean_state` removes the resolved path and therefore
+/// cannot be combined with read-only mode.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct StateLoadOption {
+    /// Remove the resolved state folder before loading so the session starts from a blank state.
     pub clean_state: bool,
+    /// Optional run card whose settings and commands are applied during boot.
     pub boot_commands_path: Option<PathBuf>,
+    /// State folder to load, defaulting to `./gammaloop_state` when omitted.
     pub state_folder: Option<PathBuf>,
+    /// Optional model file that replaces the saved model when loading an existing state.
     pub model_file: Option<PathBuf>,
+    /// Optional trace-log filename for the loaded session.
     pub trace_logs_filename: Option<String>,
+    /// Terminal log-level override for the loaded session.
     pub level: Option<LogLevel>,
+    /// File log-level override for the loaded session.
     pub logfile_level: Option<LogLevel>,
+    /// Prefix format used for emitted log records.
     pub logging_prefix: Option<LogFormat>,
+    /// Prevent writes inside the active state folder for the lifetime of the session.
     pub read_only_state: bool,
+    /// Optional TOML file whose global settings override the state or boot card.
     pub settings_global_path: Option<PathBuf>,
+    /// Optional TOML file supplying the session's default runtime settings.
     pub settings_runtime_defaults_path: Option<PathBuf>,
 }
 
+/// Owned state and settings produced by [`StateLoadOption::load`].
+///
+/// This value is the persistence boundary for an embedded session. It owns the mutable state and
+/// replay history, but neither dropping it nor dropping a [`CliSession`]
+/// automatically saves them. Inspect `cli_settings.session.startup_warnings` after loading: a boot
+/// card that disagrees with a saved state's frozen settings can force the session into read-only
+/// mode to protect reproducibility.
 pub struct LoadedState {
+    /// In-memory model, processes, integrands, and generation metadata.
     pub state: State,
+    /// Persisted or boot-provided settings and replayable commands.
     pub run_history: RunHistory,
+    /// Effective state, global, and transient session settings after startup overrides.
     pub cli_settings: CLISettings,
+    /// Runtime settings used as defaults for commands that do not supply their own.
     pub default_runtime_settings: RuntimeSettings,
+    /// Transient command-block state retained between session operations.
     pub session_state: CliSessionState,
+    /// Load timing, serialized size, and graph count for an existing saved state.
     pub state_load_summary: Option<StateLoadSummary>,
 }
 
 impl LoadedState {
+    /// Borrow the state, history, and effective settings as one command session.
+    ///
+    /// The returned session holds mutable borrows of this bundle. End its lexical scope (or drop
+    /// it) before reading the fields of `LoadedState` directly. Commands update these owned values;
+    /// they do not create a second state or save on drop.
     pub fn cli_session(&mut self) -> CliSession<'_> {
         CliSession::new(
             &mut self.state,
@@ -527,6 +619,19 @@ impl StateLoadOption {
         }
     }
 
+    /// Resolve, initialize, and load an embedded GammaLoop session.
+    ///
+    /// For an existing manifested state this restores the saved model, processes, settings, run
+    /// history, and integrand backends. `model_file` is an override only on that saved-state path.
+    /// For a missing or unmanifested path the method creates a blank state in memory instead.
+    /// When supplied, the boot run history and settings overrides are applied before this method
+    /// returns, so loading can mutate the domain state and can perform command-specific external
+    /// writes.
+    ///
+    /// This method initializes process-global GammaLoop/Symbolica services and tracing. It never
+    /// automatically persists the returned state. It fails when the state or settings cannot be
+    /// read or validated, startup initialization fails, a boot command fails or requests exit, or
+    /// the requested clean/read-only combination is inconsistent.
     pub fn load(self) -> Result<LoadedState> {
         initialise()?;
         let mut one_shot = self.into_oneshot();
@@ -574,10 +679,14 @@ impl SettingsFileOverrides {
     }
 }
 
+/// Diagnostic measurements available only when an existing manifested state was loaded.
 #[derive(Debug, Clone)]
 pub struct StateLoadSummary {
+    /// Wall-clock time spent restoring the saved state and activating its backends.
     pub elapsed: Duration,
+    /// Total bytes in regular files below the state directory when metadata was available.
     pub serialized_size_bytes: Option<u64>,
+    /// Total number of amplitude or cross-section graphs restored across all processes.
     pub total_graphs: usize,
 }
 

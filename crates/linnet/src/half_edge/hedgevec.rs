@@ -23,10 +23,10 @@ use super::{
 /// A specialized vector-like structure for storing edge data along with its
 /// topological [`Involution`].
 ///
-/// `SmartHedgeVec` is a core component for managing edges in a [`HedgeGraph`].
+/// `SmartEdgeVec` is a core component for managing edges in a [`HedgeGraph`].
 /// It stores the custom edge data (`T`) and the [`HedgePair`] for each edge.
-/// The associated `Involution` within `SmartHedgeVec` then stores `EdgeIndex` values,
-/// which point back into this `SmartHedgeVec`'s `data` vector. This design
+/// The associated `Involution` within `SmartEdgeVec` then stores `EdgeIndex` values,
+/// which point back into this `SmartEdgeVec`'s `data` vector. This design
 /// separates the topological mapping of half-edges (handled by `Involution`)
 /// from the storage of the actual edge data and pairing information.
 ///
@@ -41,7 +41,7 @@ pub struct SmartEdgeVec<T> {
     pub(crate) data: EdgeVec<(T, HedgePair)>,
     /// The [`Involution`] structure that manages the topological relationships of half-edges.
     /// In this context, the `Involution` stores `EdgeIndex` as its data, pointing back
-    /// to the `data` vector of this `SmartHedgeVec`.
+    /// to the `data` vector of this `SmartEdgeVec`.
     pub(crate) involution: Involution,
 }
 

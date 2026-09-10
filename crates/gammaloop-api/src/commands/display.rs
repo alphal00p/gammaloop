@@ -30,6 +30,7 @@ use crate::{
         observable_kind, quantity_kind, selector_kind, serialize_runtime_named_settings,
         summarize_observable, summarize_quantity, summarize_selector, NamedProcessSettingKind,
     },
+    commands::CliArgumentMetadataExt,
     completion::CompletionArgExt,
     integrand_info::{
         IntegrandCutThresholdInfo, IntegrandEsurfaceClassification, IntegrandGraphGroupInfo,
@@ -43,23 +44,29 @@ use crate::{
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Display {
+    /// Show model particles, parameters, couplings, and vertices for the selected context.
     Model {
+        /// Include the model's coupling-order definitions and coupling values.
         #[arg(short = 'c', long = "show-couplings", default_value_t = false)]
         show_couplings: bool,
+        /// Include interaction vertices from the active model.
         #[arg(short = 'v', long = "show-vertices", default_value_t = false)]
         show_vertices: bool,
+        /// Include external and derived model parameters.
         #[arg(short = 'r', long = "show-parameters", default_value_t = false)]
         show_parameters: bool,
+        /// Include the model's particle definitions.
         #[arg(long = "show-particles", default_value_t = false)]
         show_particles: bool,
+        /// Include particles, parameters, couplings, and vertices in one report.
         #[arg(short = 'a', long = "show-all", default_value_t = false)]
         show_all: bool,
-        /// Process reference: #<id>, name:<name>, or <id>/<name>
+        /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
         #[arg(
             short = 'p',
             long = "process",
             value_name = "PROCESS",
-            requires = "integrand_name",
+            cli_requires("integrand_name"),
             completion_process_selector(crate::completion::SelectorKind::Any)
         )]
         process: Option<ProcessRef>,
@@ -68,15 +75,17 @@ pub enum Display {
             short = 'i',
             long = "integrand-name",
             value_name = "NAME",
-            requires = "process",
+            cli_requires("process"),
             completion_integrand_selector(crate::completion::SelectorKind::Any)
         )]
         integrand_name: Option<String>,
     },
+    /// List processes currently stored in the active state.
     Processes,
+    /// Show generated integrands, graph groups, resources, and selected detail tables.
     #[command(name = "integrand")]
     Integrands {
-        /// Process reference: #<id>, name:<name>, or <id>/<name>
+        /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
         #[arg(
             short = 'p',
             long = "process",
@@ -89,7 +98,7 @@ pub enum Display {
             short = 'i',
             long = "integrand-name",
             value_name = "NAME",
-            requires = "process",
+            cli_requires("process"),
             completion_integrand_selector(crate::completion::SelectorKind::Any)
         )]
         integrand_name: Option<String>,
@@ -99,7 +108,7 @@ pub enum Display {
             long = "graph",
             value_name = "MASTER_GRAPH",
             num_args = 1..,
-            requires = "integrand_name",
+            cli_requires("integrand_name"),
             completion_selected_master_graph()
         )]
         graphs: Vec<String>,
@@ -108,7 +117,7 @@ pub enum Display {
             long = "category",
             value_name = "CATEGORY",
             num_args = 1..,
-            requires = "integrand_name",
+            cli_requires("integrand_name"),
             completion_selected_integrand_category()
         )]
         categories: Vec<IntegrandDisplayCategory>,
@@ -116,28 +125,34 @@ pub enum Display {
         #[arg(
             long = "hide-non-existing-thresholds",
             default_value_t = false,
-            requires = "integrand_name"
+            cli_requires("integrand_name")
         )]
         #[serde(default)]
         hide_non_existing_thresholds: bool,
     },
+    /// List configured named quantities, or inspect one quantity in a selected process.
     Quantities {
         #[command(flatten)]
         target: DisplayProcessNamedSettingsArgs,
     },
+    /// List configured observables, or inspect one observable in a selected process.
     Observables {
         #[command(flatten)]
         target: DisplayProcessNamedSettingsArgs,
     },
+    /// List configured event selectors, or inspect one selector in a selected process.
     Selectors {
         #[command(flatten)]
         target: DisplayProcessNamedSettingsArgs,
     },
+    /// Show one stored command block, or list every block when no name is supplied.
     #[command(name = "command_block")]
     CommandBlock {
+        /// Stored command-block name; omit it to list all available blocks.
         #[arg(value_name = "NAME")]
         name: Option<String>,
     },
+    /// Show effective global, default-runtime, or process-specific settings.
     Settings {
         #[command(subcommand)]
         target: DisplaySettingsTarget,
@@ -148,23 +163,27 @@ pub enum Display {
 pub struct DisplayProcessNamedSettingsArgs {
     #[command(flatten)]
     process: ProcessArgs,
+    /// Named quantity, observable, or selector; omit it to list the selected category.
     #[arg(value_name = "NAME")]
     name: Option<String>,
 }
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum DisplaySettingsTarget {
+    /// Show effective global generation, logging, and parallelization settings.
     Global {
         /// Optional dotted path to a specific setting
         #[arg(value_name = "PATH")]
         path: Option<String>,
     },
+    /// Show the default runtime settings inherited by newly generated integrands.
     #[command(alias = "defaults")]
     DefaultRuntime {
         /// Optional dotted path to a specific setting
         #[arg(value_name = "PATH")]
         path: Option<String>,
     },
+    /// Show effective settings for one generated process or integrand.
     Process {
         #[command(flatten)]
         process: ProcessArgs,

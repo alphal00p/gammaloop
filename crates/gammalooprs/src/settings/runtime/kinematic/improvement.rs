@@ -25,10 +25,13 @@ use typed_index_collections::TiVec;
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct PhaseSpaceImprovementSettings {
+    /// On-shell improvement algorithm, or `none` to preserve the supplied momenta.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mode: ImprovementMode,
+    /// Maximum dimensionless deformation before the improved point is rejected.
     #[serde(skip_serializing_if = "_default_large_def_check")]
     pub large_deformation_check: Option<F<f64>>,
+    /// Warn instead of failing when an improvement exceeds the deformation threshold.
     #[serde(skip_serializing_if = "is_false")]
     pub only_warn_on_large_deformation: bool,
 }
