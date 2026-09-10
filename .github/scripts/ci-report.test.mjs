@@ -687,3 +687,74 @@ test('explicit retry numbers preserve missing clocks and detect a check attached
   assert.ok(report.errors.some(error => error.jobUrl === retry.url && error.stage === 'checks'));
   assert.ok(report.incidents.some(incident => incident.kind === 'check-result-mismatch' && incident.jobUrl === first.url));
 });
+
+test('reciprocal retry metadata assigns reused check clocks only to the identified replacement', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'ci-report-retry-links-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const runs = [
+    { type: 'config', status: 'cached', url: suiteUrl + '/config' },
+    { type: 'test', attribute: attr, status: 'failed', url: suiteUrl + '/first' },
+    { type: 'test', attribute: attr, status: 'success', attempt: 2, url: suiteUrl + '/retry' },
+  ];
+  const checks = [
+    { id: 1, details_url: runs[0].url, started_at: '2026-09-06T00:00:00Z', completed_at: '2026-09-06T00:00:01Z', conclusion: 'success' },
+    { id: 2, name: 'test ' + attr, status: 'completed', details_url: runs[1].url,
+      started_at: '2026-09-06T00:00:20Z', completed_at: '2026-09-06T00:00:40Z', conclusion: 'success' },
+  ];
+  const metadata = runs.slice(1).map(run => ({ uuid: run.url.split('/').at(-1), type: run.type,
+    attribute: run.attribute, status: run.status }));
+  metadata[0].retried_by = runs[2].url;
+  metadata[1].retry_of = runs[1].url;
+  const manifest = { repository: 'example/repo', runs: [{ ...spec, requiredAttributes: [attr],
+    offline: { suite: 'suite.json', checks: 'checks.json', jobs: 'jobs.json', actions: 'actions.json' } }] };
+  for (const [file, value] of Object.entries({ 'manifest.json': manifest,
+    'suite.json': { commit: sha, status: 'success', runs }, 'actions.json': [],
+  })) await writeFile(join(dir, file), JSON.stringify(value));
+  await writeFile(join(dir, 'first.ndjson'), overlap);
+  await writeFile(join(dir, 'retry.ndjson'), overlap.split('\n').filter(Boolean).map(line => {
+    const record = JSON.parse(line);
+    record.utc_time = new Date(Date.parse(record.utc_time.replace(' ', 'T') + 'Z') + 20_000).toISOString();
+    return JSON.stringify(record);
+  }).join('\n') + '\n');
+  for (const variant of ['valid', 'one-way', 'wrong-identity', 'wrong-type', 'wrong-status', 'foreign-link', 'cycle', 'wrong-check', 'ambiguous-check', 'own-check']) {
+    const evidence = structuredClone(metadata), currentChecks = structuredClone(checks);
+    if (variant === 'one-way') delete evidence[1].retry_of;
+    if (variant === 'wrong-identity') evidence[1].attribute = attr + '-other';
+    if (variant === 'wrong-type') evidence[1].type = 'build';
+    if (variant === 'wrong-status') evidence[1].status = 'failed';
+    if (variant === 'foreign-link') evidence[0].retried_by = suiteUrl + '-other/retry';
+    if (variant === 'cycle') {
+      evidence[1].retried_by = runs[1].url;
+      evidence[0].retry_of = runs[2].url;
+    }
+    if (variant === 'wrong-check') currentChecks[1].name = 'test ' + attr + '-other';
+    if (variant === 'ambiguous-check') currentChecks.push({ ...currentChecks[1], id: 3 });
+    if (variant === 'own-check') currentChecks.push({ ...currentChecks[1], id: 3, details_url: runs[2].url });
+    await writeFile(join(dir, 'checks.json'), JSON.stringify(currentChecks));
+    await writeFile(join(dir, 'jobs.json'), JSON.stringify(runs.slice(1).map((run, i) => ({ url: run.url,
+      file: i === 0 ? 'first.ndjson' : 'retry.ndjson', retryMetadata: evidence[i] }))));
+    const report = await createReport(join(dir, 'manifest.json'), join(dir, variant));
+    const suite = report.suites[0], first = suite.jobs[1], retry = suite.jobs[2];
+    assert.equal(retry.checkId, variant === 'valid' ? 2 : variant === 'own-check' ? 3 : null, variant);
+    assert.equal(first.checkSeconds, null, variant);
+    assert.equal(first.postWorkerSeconds, null, variant);
+    assert.equal(suite.observedWorkerMinutes, 28 / 60, variant);
+    assert.equal(report.complete, false, variant);
+    if (variant === 'valid') {
+      assert.equal(first.checkId, null);
+      assert.equal(first.checkStartedAt, null);
+      assert.equal(first.checkCompletedAt, null);
+      assert.equal(retry.checkSeconds, 20);
+      assert.equal(retry.checkDetailsUrl, runs[1].url);
+      assert.equal(retry.checkMapping.source, 'reciprocal-retry-links');
+      assert.deepEqual(retry.checkMapping.urls, runs.slice(1).map(run => run.url));
+      assert.equal(suite.requiredSeconds, 40);
+      assert.equal(suite.requiredPassed, true);
+      assert.equal(suite.observedResourceLowerBound, true);
+      assert.ok(report.errors.some(error => error.jobUrl === first.url && error.stage === 'checks'));
+      assert.ok(!report.errors.some(error => error.jobUrl === retry.url));
+      assert.deepEqual(JSON.parse(await readFile(join(dir, variant, 'raw/1/checks.json'), 'utf8')), checks);
+      assert.deepEqual(JSON.parse(await readFile(retry.retryMetadataFile, 'utf8')), metadata[1]);
+    } else assert.equal(retry.checkMapping, null, variant);
+  }
+});

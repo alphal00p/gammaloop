@@ -513,6 +513,56 @@ class Collector {
     }
 
     const runs = [...new Map(suite.runs.map(job => [job.url, job])).values()];
+    const retryMetadata = new Map(), retryEvidence = new Map();
+    const retryRuns = runs.filter(run => runs.some(other => other.type === run.type && other.attribute === run.attribute
+      && (other.attempt ?? 1) > 1));
+    let metadataCursor = 0;
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      while (metadataCursor < retryRuns.length) {
+        const run = retryRuns[metadataCursor++];
+        try {
+          if (!run.url?.startsWith(spec.suiteUrl + '/') || !/^[^/?#]+$/.test(run.url.slice(spec.suiteUrl.length + 1)))
+            throw new Error('retry metadata URL does not belong to the exact suite');
+          const metadata = local ? localJobs.find(job => job.url === run.url)?.retryMetadata
+            : JSON.parse(await this.nixci(run.url, 'application/json'));
+          if (!metadata && local) continue;
+          if (metadata?.uuid !== run.url.split('/').at(-1) || metadata.attribute !== run.attribute
+            || metadata.type !== run.type || metadata.status !== run.status)
+            throw new Error('retry metadata identity or status disagrees with the suite');
+          retryEvidence.set(run.url, await this.save(`${prefix}/retry-metadata/${runs.indexOf(run) + 1}.json`, metadata));
+          retryMetadata.set(run.url, metadata);
+        } catch (error) {
+          this.errors.push({ suiteUrl: spec.suiteUrl, jobUrl: run.url, stage: 'retry-metadata', error: error.message });
+        }
+      }
+    }));
+    const checkJobs = new Map(checks.map(check => [check, check.details_url?.replace(/\/$/, '')]));
+    const checkMappings = new Map();
+    for (const check of checks) {
+      const source = runs.find(run => run.url === checkJobs.get(check));
+      if (!source) continue;
+      const chain = [source];
+      let current = source;
+      while (retryMetadata.get(current.url)?.retried_by) {
+        const next = runs.find(run => run.url === retryMetadata.get(current.url).retried_by);
+        if (!next || chain.includes(next) || retryMetadata.get(next.url)?.retry_of !== current.url
+          || next.attribute !== source.attribute || next.type !== source.type
+          || (next.attempt ?? 1) <= (current.attempt ?? 1)) break;
+        chain.push(next);
+        current = next;
+      }
+      // NixCI can update a check for a retry while retaining the original details URL.
+      // Only reciprocal service links can transfer that clock; prior clocks stay unknown.
+      if (current === source || retryMetadata.get(current.url)?.retried_by || source.status === current.status
+        || check.status !== 'completed' || check.name !== `${current.type} ${current.attribute}`
+        || checks.filter(other => other.details_url?.replace(/\/$/, '') === source.url).length !== 1
+        || !(check.conclusion === 'success' && ['success', 'cached'].includes(current.status)
+          || check.conclusion === 'failure' && ['failed', 'failure', 'hopeless'].includes(current.status))
+        || checks.some(other => other !== check && other.details_url?.replace(/\/$/, '') === current.url)) continue;
+      checkJobs.set(check, current.url);
+      checkMappings.set(check, { source: 'reciprocal-retry-links', fromUrl: source.url,
+        urls: chain.map(run => run.url), evidenceFiles: chain.map(run => retryEvidence.get(run.url)) });
+    }
     const jobs = new Array(runs.length);
     let cursor = 0;
     // Bound requests and memory use while retaining manifest/API order in outputs.
@@ -520,7 +570,7 @@ class Collector {
       while (cursor < runs.length) {
         const position = cursor++;
         const run = runs[position];
-        const matching = checks.filter(check => check.details_url?.replace(/\/$/, '') === run.url?.replace(/\/$/, ''));
+        const matching = checks.filter(check => checkJobs.get(check) === run.url?.replace(/\/$/, ''));
         const check = matching.toSorted((a, b) => (timestamp(a.started_at) ?? 0) - (timestamp(b.started_at) ?? 0)).at(-1);
         const job = {
           attribute: run.attribute ?? run.type, type: run.type, status: run.status, url: run.url, attempt: run.attempt ?? 1,
@@ -529,6 +579,8 @@ class Collector {
           checkAttempts: [...new Map(matching.filter(check => check.id != null).map(check => [check.id, { id: check.id, startedAt: check.started_at, completedAt: check.completed_at }])).values()],
           checkId: check?.id ?? null, checkStartedAt: check?.started_at ?? null,
           checkCompletedAt: check?.completed_at ?? null, checkConclusion: check?.conclusion ?? null,
+          checkDetailsUrl: check?.details_url ?? null, checkMapping: checkMappings.get(check) ?? null,
+          retryMetadata: retryMetadata.get(run.url), retryMetadataFile: retryEvidence.get(run.url),
           checkSeconds: excluded.has(run.status) || excluded.has(check?.conclusion) ? null
             : secondsBetween(timestamp(check?.started_at), timestamp(check?.completed_at)),
           logStatus: 'not-run', testExecution: run.type === 'test' ? 'unknown' : 'not-applicable',

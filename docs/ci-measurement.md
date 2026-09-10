@@ -42,14 +42,18 @@ Duplicate suite URLs and ambiguous pairs are rejected.
 By default the collector retrieves all Actions runs for the SHA and all their
 attempts. Optional `actionRunIds: [34063777721]` limits the selected workflow
 runs, retaining every attempt of each selected run. There is no workflow
-consolidation. GitHub check runs use `filter=all` and are joined to NixCI jobs by
-exact details URL; another job attempt on the same SHA cannot supply its clock.
+consolidation. GitHub check runs use `filter=all` and normally join NixCI jobs by
+exact details URL. NixCI sometimes reuses a check for a retry while retaining the
+original URL. Only validated reciprocal `retry_of`/`retried_by` links, matching
+job identities and an unambiguous final outcome permit reassignment. Raw GitHub
+checks and the mapping evidence are preserved; earlier attempt clocks stay unknown.
 
 Required-check latency defaults to the latest attempt of each NixCI test plus
 `gammaloop-clippy`, `gammaloop-fmt`, and `gammaloop-guppy-workspace-graph`.
 NixCI's explicit attempt number takes precedence over check timestamps when
-selecting the latest attempt. A retry without its own exact-URL GitHub check
-keeps unknown timing; another attempt's clock is never borrowed. If NixCI and
+selecting the latest attempt. Without an exact-URL check or validated reciprocal
+retry mapping, timing remains unknown; a shared attribute or SHA is insufficient.
+If NixCI and
 the attached GitHub check disagree on success versus failure, both outcomes
 are retained as a `check-result-mismatch` incident. That check's duration is
 untrusted, and the suite cannot supply accepted paired percentages.
