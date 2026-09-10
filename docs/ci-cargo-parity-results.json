@@ -78,7 +78,7 @@
     "materializedRawClosuresWithoutCompilerState": 64,
     "optionalUnmaterializedProducerEntries": 4,
     "timestampZeroCompileErrorRejected": true,
-    "reporterTestsPassed": 23,
+    "reporterTestsPassed": 24,
     "static": {
       "Clippy": "passed",
       "doctests": "passed",
@@ -91,10 +91,11 @@
     "feynkitRuntime": "passed"
   },
   "limitations": [
-    "No NixCI or network transfer timing for integrated candidate",
     "No controlled cold comparison",
     "Compiler-state baseline refresh is deliberate, not automatic",
-    "Warm unchanged producer-wrapper state downloads remain to be measured"
+    "Remote seed and warm scenarios do not form a baseline/candidate implementation pair.",
+    "Warm resource accounting is incomplete after a replaced worker log; the seed observer also had a recorded gap.",
+    "No network byte or CHF measurement; log-reported content and worker spans are proxies."
   ],
   "implementationCommit": "5b87a850e",
   "compilerStateStorage": {
@@ -104,9 +105,10 @@
     "note": "Separate from normal compiled-artifact outputs; producer wrappers publish this state."
   },
   "remainingAcceptance": [
-    "Remote warm unchanged and changed-source timing, transfers and worker time",
     "Four controlled project-cold runs, paired within main and FeynKit",
-    "Initial missing-baseline-state publication and cross-worker reuse"
+    "Reliable cross-worker reuse: unchanged NixCI outputs are still rebuilt",
+    "Warm zero-recompilation and final-success goals failed in this sample",
+    "No causal remote baseline/candidate speedup established; the source edit includes retries and duplicate builds"
   ],
   "feynkit": {
     "applicationRevision": "07d0efc910cf4c3175142c808e476fe7e393f815",
@@ -167,5 +169,439 @@
     "comparisonLimit": "The old 914.165-second tests phase also ran ordinary tests concurrently and lacks per-builder wall timestamps. Do not report it as isolated Python preparation or calculate a speedup percentage from it.",
     "integrated": false,
     "cargoCompilationMessages": 14
+  },
+  "remote": {
+    "runs": [
+      {
+        "scenario": "integrated-seed",
+        "sha": "5b87a850e77900029a487b3b8c77d1c7138fa8da",
+        "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da",
+        "status": "success",
+        "requiredPassed": true,
+        "suiteStartedAt": "2026-09-10T09:56:37.000Z",
+        "suiteCompletedAt": "2026-09-10T11:38:46.000Z",
+        "suiteSeconds": 6129,
+        "requiredSeconds": 6109,
+        "submittedAt": "2026-09-10T09:51:04.850964+00:00",
+        "submissionCompletedAt": "2026-09-10T09:51:06.857214+00:00",
+        "submissionToRequiredSeconds": 6441.15,
+        "finalAggregateTailSeconds": 20,
+        "observedWorkerMinutes": 238.99065171753324,
+        "downloadReportedBytes": 34322268769.6,
+        "intermediateDownloadReportedBytes": 24899520142.399998,
+        "downloadWorkerSeconds": 756.1739999999999,
+        "uploadWorkerSeconds": 6231.725,
+        "compilationMessages": 1552,
+        "executedTestJobs": 8,
+        "reusedTestJobs": 0,
+        "unknownTestJobs": 0,
+        "observedResourceLowerBound": false,
+        "missingLogs": 0,
+        "failedJobs": 0,
+        "reporterComplete": true,
+        "ordinaryGroupsSeconds": 5806,
+        "requiredChecks": [
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-doctest",
+            "status": "success",
+            "completedFromSuiteSeconds": 4591,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da/6f1d23bb-2263-4ef7-a52b-0bd4328216aa"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet",
+            "status": "success",
+            "completedFromSuiteSeconds": 3947,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da/f1931b66-d02f-4bce-801a-ab3fa604d37f"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core",
+            "status": "success",
+            "completedFromSuiteSeconds": 5512,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da/75c985a3-4c32-43ee-a99b-8bf98842d224"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration",
+            "status": "success",
+            "completedFromSuiteSeconds": 5806,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da/12159b27-dc8d-4b39-898d-f0fce943a998"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet",
+            "status": "success",
+            "completedFromSuiteSeconds": 4393,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da/4df662ae-52b4-46e9-b969-461ce37a2ee3"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-python-api",
+            "status": "success",
+            "completedFromSuiteSeconds": 6109,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da/22465d35-3c86-48fd-9c3f-0c45a19fba00"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-spenso",
+            "status": "success",
+            "completedFromSuiteSeconds": 4857,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da/e2f8f52c-1035-4bf0-b48e-52f5994ac3a2"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-vakint",
+            "status": "success",
+            "completedFromSuiteSeconds": 4283,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da/e1778e82-f06e-4910-ae87-6ff706e2f9c8"
+          },
+          {
+            "attribute": "checks.x86_64-linux.gammaloop-clippy",
+            "status": "success",
+            "completedFromSuiteSeconds": 4143,
+            "testExecution": "not-applicable",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da/453e5217-e866-41f9-b2d1-3cfcf7899e39"
+          },
+          {
+            "attribute": "checks.x86_64-linux.gammaloop-fmt",
+            "status": "success",
+            "completedFromSuiteSeconds": 1548,
+            "testExecution": "not-applicable",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da/305c6d98-4b24-48c6-9e50-5cea9c28e967"
+          },
+          {
+            "attribute": "checks.x86_64-linux.gammaloop-guppy-workspace-graph",
+            "status": "success",
+            "completedFromSuiteSeconds": 2027,
+            "testExecution": "not-applicable",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da/133c0fce-2fae-4cb4-aa46-e880f36efead"
+          }
+        ],
+        "visibleExecutedNextestCases": 1633,
+        "observationCaveats": [
+          "36-minute observation gap; available final logs cannot recover attempts entirely contained in the gap."
+        ]
+      },
+      {
+        "scenario": "integrated-warm",
+        "sha": "f1a086ead8a176a6e63c3d686b9317c841d373e8",
+        "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8",
+        "status": "success",
+        "requiredPassed": true,
+        "suiteStartedAt": "2026-09-10T11:39:02.000Z",
+        "suiteCompletedAt": "2026-09-10T11:52:33.000Z",
+        "suiteSeconds": 811,
+        "requiredSeconds": 536,
+        "submittedAt": "2026-09-10T11:38:56.073497+00:00",
+        "submissionCompletedAt": "2026-09-10T11:38:57.934066+00:00",
+        "submissionToRequiredSeconds": 541.927,
+        "finalAggregateTailSeconds": 275,
+        "observedWorkerMinutes": 41.251456060249986,
+        "downloadReportedBytes": 29780551617.600002,
+        "intermediateDownloadReportedBytes": 28366172081.600002,
+        "downloadWorkerSeconds": 876.2030000000001,
+        "uploadWorkerSeconds": 450.7439999999999,
+        "compilationMessages": 162,
+        "executedTestJobs": 3,
+        "reusedTestJobs": 0,
+        "unknownTestJobs": 5,
+        "observedResourceLowerBound": true,
+        "missingLogs": 0,
+        "failedJobs": 0,
+        "reporterComplete": false,
+        "ordinaryGroupsSeconds": 136,
+        "requiredChecks": [
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-doctest",
+            "status": "success",
+            "completedFromSuiteSeconds": 536,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/0e4dfa3f-d2f1-44d1-bdfc-237c8a50091b"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet",
+            "status": "success",
+            "completedFromSuiteSeconds": 67,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/ce51f9a2-e1ea-4964-822b-b226c8d52eb6"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core",
+            "status": "success",
+            "completedFromSuiteSeconds": 68,
+            "testExecution": "unknown",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/116cf5bf-887c-4cc5-879a-eeeddc65bbd2"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration",
+            "status": "success",
+            "completedFromSuiteSeconds": 84,
+            "testExecution": "unknown",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/ccaa1c3f-de53-45fc-93e5-c119db017101"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet",
+            "status": "success",
+            "completedFromSuiteSeconds": 136,
+            "testExecution": "unknown",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/1b22e26c-dee4-42fd-a42a-90e6cc369842"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-python-api",
+            "status": "success",
+            "completedFromSuiteSeconds": 75,
+            "testExecution": "unknown",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/352fd6a7-a711-49a4-97ef-387689e9c434"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-spenso",
+            "status": "success",
+            "completedFromSuiteSeconds": 78,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/0508077b-2764-4a6b-a3aa-40dbadf420ae"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-vakint",
+            "status": "success",
+            "completedFromSuiteSeconds": 78,
+            "testExecution": "unknown",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/5a5f1f07-148a-4cd5-816d-2a2810fbcf60"
+          },
+          {
+            "attribute": "checks.x86_64-linux.gammaloop-clippy",
+            "status": "cached",
+            "completedFromSuiteSeconds": 143,
+            "testExecution": "not-applicable",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/d5326e2e-a5c8-41f1-b708-79b308759e62"
+          },
+          {
+            "attribute": "checks.x86_64-linux.gammaloop-fmt",
+            "status": "cached",
+            "completedFromSuiteSeconds": 58,
+            "testExecution": "not-applicable",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/63eb59f0-3214-4ec5-9de5-eb80a7e059a7"
+          },
+          {
+            "attribute": "checks.x86_64-linux.gammaloop-guppy-workspace-graph",
+            "status": "cached",
+            "completedFromSuiteSeconds": 65,
+            "testExecution": "not-applicable",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8/34dd2780-8359-4d52-bf02-7040ad62ce80"
+          }
+        ],
+        "visibleExecutedNextestCases": 390,
+        "observationCaveats": [
+          "A log stream was overwritten; earlier partial metrics remain separate because streams may overlap."
+        ]
+      },
+      {
+        "scenario": "integrated-edit",
+        "sha": "3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c",
+        "suiteUrl": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c",
+        "status": "success",
+        "requiredPassed": true,
+        "suiteStartedAt": "2026-09-10T11:53:09.000Z",
+        "suiteCompletedAt": "2026-09-10T12:12:30.000Z",
+        "suiteSeconds": 1161,
+        "requiredSeconds": 1150,
+        "submittedAt": "2026-09-10T11:53:01.436730+00:00",
+        "submissionCompletedAt": "2026-09-10T11:53:03.281432+00:00",
+        "submissionToRequiredSeconds": 1157.564,
+        "finalAggregateTailSeconds": 11,
+        "observedWorkerMinutes": 66.16617355358333,
+        "downloadReportedBytes": 21750635795.2,
+        "intermediateDownloadReportedBytes": 13234657486.399998,
+        "downloadWorkerSeconds": 581.8080000000001,
+        "uploadWorkerSeconds": 1567.5510000000002,
+        "compilationMessages": 216,
+        "executedTestJobs": 6,
+        "reusedTestJobs": 0,
+        "unknownTestJobs": 2,
+        "observedResourceLowerBound": true,
+        "missingLogs": 0,
+        "failedJobs": 6,
+        "reporterComplete": false,
+        "ordinaryGroupsSeconds": 1048,
+        "requiredChecks": [
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-doctest",
+            "status": "success",
+            "completedFromSuiteSeconds": 588,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/4b80d2ba-397a-482b-811f-bdf67057ba5d"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet",
+            "status": "success",
+            "completedFromSuiteSeconds": 71,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/f4c9e54f-c3a7-47e5-8868-b50e7908384f"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core",
+            "status": "success",
+            "completedFromSuiteSeconds": 828,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/917235a4-a7bd-4479-9188-55bf8467c95a"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration",
+            "status": "success",
+            "completedFromSuiteSeconds": 1048,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/e1381ead-6a74-484d-bbc5-7c04cdf4e848"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet",
+            "status": "success",
+            "completedFromSuiteSeconds": 124,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/a8bd9e31-8ed2-45fd-b184-259e023685a0"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-python-api",
+            "status": "success",
+            "completedFromSuiteSeconds": 1150,
+            "testExecution": "executed",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/0af162b7-244d-481b-b2f1-3a6f837f7740"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-spenso",
+            "status": "success",
+            "completedFromSuiteSeconds": 71,
+            "testExecution": "unknown",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/63365706-6bc2-449f-b38c-47f8e413b8f3"
+          },
+          {
+            "attribute": "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-vakint",
+            "status": "success",
+            "completedFromSuiteSeconds": 71,
+            "testExecution": "unknown",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/c8034e6a-4d5c-401f-bc8b-9d9b22a8c1c8"
+          },
+          {
+            "attribute": "checks.x86_64-linux.gammaloop-clippy",
+            "status": "success",
+            "completedFromSuiteSeconds": 527,
+            "testExecution": "not-applicable",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/f20bf7bd-554a-4dd5-a08a-36dda728fca0"
+          },
+          {
+            "attribute": "checks.x86_64-linux.gammaloop-fmt",
+            "status": "success",
+            "completedFromSuiteSeconds": 70,
+            "testExecution": "not-applicable",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/a6e1681e-412b-4af2-a1dc-b2f3021482ed"
+          },
+          {
+            "attribute": "checks.x86_64-linux.gammaloop-guppy-workspace-graph",
+            "status": "success",
+            "completedFromSuiteSeconds": 73,
+            "testExecution": "not-applicable",
+            "url": "https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/7145d902-96a7-4755-a6a0-eeb16110b261"
+          }
+        ],
+        "visibleExecutedNextestCases": 1174,
+        "observationCaveats": [
+          "Six download-failed attempts were followed by additional attempts. This is not a clean changed-source performance sample.",
+          "GitHub reassigned checks to retries without changing their old URLs. Reciprocal NixCI retry links recover replacement clocks; original failed-attempt check clocks remain unknown.",
+          "The second Python attempt also has a replaced stream. Its earlier observed 12.20 seconds and 12.76 MiB are kept separately because overlap is unresolved."
+        ]
+      }
+    ],
+    "limits": [
+      "These are scenarios of one implementation, not paired baseline/candidate performance samples.",
+      "The seed used shared remote caches and is not a controlled cold run.",
+      "Reported restored content is not measured network traffic; worker minutes are not billed compute or CHF.",
+      "Successful required-check completion does not prove every test reexecuted."
+    ],
+    "pendingScenarios": [],
+    "warmCompilerStateRestores": {
+      "observedAt": "2026-09-10T11:53:38.214Z",
+      "status": "success",
+      "wrapperCount": 56,
+      "stateWrapperCount": 34,
+      "namedStateTransfers": 30,
+      "ownWrapperMatches": 30,
+      "reportedContentBytes": 2409991987.2,
+      "summedTransferSeconds": 131.407,
+      "limits": [
+        "Download labels omit store hashes; matching a unique local state name is attribution by name, not proof of remote NAR equality.",
+        "Recorded content is uncompressed NAR size, not network bytes.",
+        "Transfer intervals can overlap.",
+        "This explains state publication cost, not why identical raw outputs were rebuilt."
+      ]
+    },
+    "warmOrdinaryGroups": {
+      "completedSeconds": 136,
+      "executedGroups": 2,
+      "unknownExecutionGroups": 4,
+      "visibleExecutedTests": 390,
+      "note": "All six groups succeeded, but their total elapsed time cannot be compared with native execution of all 1628 tests."
+    },
+    "warmPostRequiredWork": {
+      "artifactJobs": 10,
+      "lastArtifactSeconds": 805,
+      "finalAggregateSeconds": 811,
+      "finalSuccessTailSeconds": 275,
+      "note": "Whole worker spans and their content totals are not strictly post-cutoff resource use."
+    },
+    "rawReport": "/tmp/gammaloop-ci-validation/cargo-parity-main/nixci-approved-three/reports/retry-lineage-final-2026-09-10T12-28-34.341Z/report.json",
+    "reporterCommit": "a4fd8c0fc",
+    "sourceEditFailures": {
+      "failedAttempts": 6,
+      "http2Errors": 14,
+      "host": "cache.nix-ci.com",
+      "clusterSeconds": 6.18,
+      "replacementChecksMapped": 6,
+      "originalAttemptCheckClocks": "unknown"
+    },
+    "sourceEditCargoSeconds": {
+      "gammalooprs": {
+        "library": 9.19,
+        "tests": 12.11
+      },
+      "gammaloop-api": {
+        "library": 7.09,
+        "tests": 7.98
+      },
+      "gammaloop-integration-tests": {
+        "library": 9.09,
+        "tests": 9.82
+      }
+    },
+    "sourceEditPythonWorker": {
+      "workerSeconds": 707,
+      "cargoCommandSeconds": 279,
+      "uploadIntervalSeconds": 401,
+      "downloadIntervalSeconds": 59,
+      "intervalsOverlap": true,
+      "compilationMessages": 30,
+      "note": "Rounded phase timings; uploads include unspecified processing, not just network."
+    }
+  },
+  "stableWrapperProbe": {
+    "scope": "selected main NixCI publishing wrappers; evaluation only, no builds or pushes",
+    "selectedWrappers": 33,
+    "unchangedStableWrappers": 26,
+    "notes": [
+      "No selected test or producer compilation derivation was modified.",
+      "Stable wrappers still change when their artifact or referenced compiler state changes.",
+      "NixCI may memoize unchanged top-level jobs without realizing their closures; cache availability remains an unresolved service constraint.",
+      "This identity inspection does not establish latency or transfer savings and is not included in the measured candidate."
+    ],
+    "currentChangedWrappers": 33,
+    "proposedChangedWrappers": [
+      "crate-test-binaries-gammaloop-api",
+      "crate-test-binaries-gammaloop-integration-tests",
+      "crate-test-binaries-gammalooprs",
+      "crate-test-dependencies-gammaloop-api",
+      "crate-test-dependencies-gammaloop-integration-tests",
+      "crate-test-dependencies-gammalooprs",
+      "gammaloop-python-module"
+    ],
+    "matchesRawArtifactChanges": true
   }
 }

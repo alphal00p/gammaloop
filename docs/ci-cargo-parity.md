@@ -121,8 +121,107 @@ measure a speedup against FeynKit's earlier implementation or native Cargo.
 FeynKit cache preparation takes 33m49s for archives, then 18m33s for the runtime
 phase including its separate Python-module preparation (90 compilation messages).
 These are preparation timings on the existing local store, not cold results.
-The main-only NixCI seed, unchanged and source-edit runs are being collected
-separately; the historical experiments below describe earlier implementations.
+The main-only NixCI measurements below assess the integrated implementation;
+the historical experiments later in this document describe earlier implementations.
+
+## Integrated NixCI measurements, 10 September 2026
+
+All three approved runs pass, but **the unchanged run misses the zero-Cargo-
+recompilation and final-success goals**. These scenarios use the same implementation;
+the seed is not an implementation baseline and cannot supply a causal speedup
+percentage. It also uses shared caches, so it is not a controlled cold run.
+
+| Main scenario | Required checks | Whole suite | Push to required | Observed worker minutes | Reported restored content |
+|---|---:|---:|---:|---:|---:|
+| [Prepare new caches](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da) | 1h41m49s | 1h42m09s | 1h47m21s | 238.99 | 31.97 GiB |
+| [Unchanged commit](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-warm/f1a086ead8a176a6e63c3d686b9317c841d373e8) | 8m56s | 13m31s | 9m02s | at least 41.25 | at least 27.74 GiB |
+| [GammaLoop edit, with retries](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c) | 19m10s | 19m21s | 19m18s | at least 66.17 | at least 20.26 GiB |
+
+Worker minutes are observed log spans, not billed compute. Content sizes are not
+measured network bytes. The seed observer had a 36-minute gap; transient attempts
+inside it may be missing even though the collector retrieved all available logs.
+The unchanged run has a verified replaced worker log, making resource totals
+lower bounds. Its earlier observed 33.24 seconds and 199.4 MiB are kept separately
+because overlap with the replacement is unknown.
+
+The seed executes all 1,633 nextest cases and 43 doctests. In the unchanged run,
+all six ordinary group checks finish by **2m16s**, but only 390 executed cases are
+visible (Clinnet and Spenso). Four ordinary groups and Python have successful jobs
+with insufficient evidence to distinguish execution from cached result reuse.
+The 43 doctests execute and determine required completion. Therefore 2m16s is
+not a measurement of executing all tests and cannot be compared with native Cargo's
+3m47s edit-and-test run. Local exact-inventory validation remains the coverage proof.
+
+Two distinct problems remain:
+
+- **Our scheduling:** all 33 selected publication wrappers change with each commit.
+  The unchanged run restores 30 compiler-state outputs, totaling **2.24 GiB** of
+  reported content and 131.41 seconds of summed transfer intervals. Every named
+  state download matches its own producer wrapper by its unique logged name;
+  remote archive hashes are not available. These are not inherited parent states
+  in ordinary artifact consumers. Ten preparation jobs finish after all
+  required checks, extending final success by **4m35s**. The aggregate itself
+  finishes six seconds after the final producer. This preparation did not help
+  that run's test completion.
+- **Unexplained remote reuse failures:** the unchanged run logs 162 Cargo compilation
+  messages (73 in the doctest job), including builds of exact outputs uploaded by
+  the seed. The same workspace-hack dependency is built in three seed jobs, including
+  starts five and sixteen minutes after its first successful upload. The unchanged
+  doctest output is also rebuilt after its seed upload. Successful upload messages
+  do not establish later cache availability; the logs do not identify the root cause.
+
+A build-free scheduling probe removes only the per-commit identity change. Across
+the controlled GammaLoop edit, **7 wrappers change instead of 33**, exactly matching
+the six affected library/test producers and Python module; 26 unrelated wrappers
+stay stable. This is a follow-up hypothesis, not an integrated change or measured
+saving. The original salt worked around NixCI memoizing top-level jobs without
+realizing their closures, so dependable remote cache access still matters.
+
+The seed's [Python module worker](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da/640af92b-e576-4bfd-abe0-13be90552a12)
+spends 49m12s in its observed worker span. Upload activity covers 31m48s; Cargo
+commands cover about 6m53s. Many short preparation builds are followed by lengthy
+upload intervals. These intervals overlap and include unspecified processing, so
+they do not establish pure network time. Nix documents that a
+[post-build hook blocks the build loop](https://releases.nixos.org/nix/nix-2.34.8/manual/advanced-topics/post-build-hook.html).
+The worker's public closure links curl 8.20.0, so the upstream Nix fix specifically
+for curl 8.21 and newer is not an established explanation for these delays.
+
+In the source-edit suite, the six ordinary groups finish in **17m28s**. Visible
+summaries prove 1,174 nextest executions across the suite, including five Python
+cases; Spenso and Vakint succeed with unknown execution versus reuse. The affected GammaLoop, API and integration Cargo commands
+take **7–12 seconds each**, confirming that compiler-state reuse works remotely.
+Whole dedicated workers take 66–291 seconds, including preparation and transfers.
+This is not a clean speed comparison with the 6m35s local run: hardware differs,
+not every test is proven to reexecute, and the remote run has retries and duplicates.
+
+The [dedicated GammaLoop producer](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/7f86ebce-a314-4984-bc99-0f20fa54320e)
+finishes uploading at 11:56:57.195. The [integration producer](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-edit/3da4b1d3da993cfb23d8f0bf70f07c2aa307af4c/bbfdb96d-84ea-46bd-80f6-74da94ce8c71)
+starts later and rebuilds the identical derivation at 12:02:50.156. It also rebuilds
+four exact seed artifact derivations, compiling unchanged libraries. That repeated
+work is distinct from the expected rebuilding of changed application code.
+
+Fourteen HTTP/2 download errors from `cache.nix-ci.com` hit six attempts within
+6.18 seconds. Each later succeeds under another job URL. GitHub updates the original
+check but keeps its old URL; the reporter now uses validated reciprocal NixCI retry
+links to associate its clocks with the replacement. Original failed-attempt check
+clocks remain unknown. A replacement Python worker also has an overwritten stream;
+its earlier 12.20 seconds and 12.76 MiB remain separate because overlap is unresolved.
+All original logs and reports are preserved. No fourth suite was submitted.
+
+The replacement Python module worker takes **11m47s**, including about **4m39s** of
+Cargo command time and **6m41s** of upload activity. These intervals overlap. It
+still prepares production/Python feature variants separately; the scratch reuse
+experiment below is not part of these runs. The final five Python tests execute
+in 0.47 seconds, while their check completes last at 19m10s. Final success follows
+11 seconds later, meeting the final-tail goal for this scenario.
+
+The four controlled local cold runs are still in progress. No integrated cold
+speedup or causal remote implementation speedup is claimed yet.
+
+Detailed JSON, CSV, raw logs, replaced streams and snapshots are retained under
+`/tmp/gammaloop-ci-validation/cargo-parity-main/nixci-approved-three/`. The portable
+JSON beside this document includes all three final scenarios, per-check completion
+and execution labels, and their limitations.
 
 ## Separate Python artifact-reuse experiment
 
@@ -261,8 +360,9 @@ nix build --no-link \
   .#checks.x86_64-linux.gammaloop-guppy-workspace-graph
 ```
 
-No additional NixCI suite has been pushed for this change, and no cold-build
-or remote worker-time improvement is claimed.
+At the time of the earlier narrow experiment, no additional NixCI suite had
+been pushed and no cold-build or remote worker-time improvement was claimed.
+The integrated follow-up measurements are reported above.
 
 Local evidence is under `/tmp/gammaloop-ci-validation/cargo-parity-main/`:
 
@@ -282,8 +382,9 @@ Local evidence is under `/tmp/gammaloop-ci-validation/cargo-parity-main/`:
 
 The previous Cargo and Nix measurements are documented in
 [the native comparison](ci-main-native-comparison.md). The integrated implementation above applies the resulting compiler-state experiment
-separately to each affected library and test producer. Remote transfer cost, cold
-completion and the remaining artifact-merge overhead still require measurement.
+separately to each affected library and test producer. The integrated results
+above measure remote transfer overhead; controlled cold completion and the
+remaining artifact-merge overhead are separate validation steps.
 
 The portable [timing and validation summary](ci-cargo-parity-results.json) is
 committed alongside this document. Detailed integrated evidence in the same directory:
@@ -297,10 +398,10 @@ committed alongside this document. Detailed integrated evidence in the same dire
 - `integrated-validation/feynkit-boundary-comparison.json`: unchanged invalidation sets.
 - `crane-update-probes/latest.json`: repeated lock cleanup and archive regression probes.
 
-The CI log reporter's 23 existing tests pass. The first of three approved main
-NixCI suites is [running the committed integrated candidate](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-cargo-parity-main-seed/5b87a850e77900029a487b3b8c77d1c7138fa8da).
-Its unchanged follow-up and independent source-edit commits have the exact
-locally validated archive roots. Remote conclusions await those completed runs.
+The CI log reporter's 24 tests pass, including validated retry-check association. All three approved main NixCI
+suites have been submitted. The unchanged and independent source-edit commits
+have the exact locally validated archive roots; their remote evidence is described
+above.
 FeynKit timing and inventory evidence is under
 `/tmp/ci-dependency-reuse-audit/integrated/benchmark/`, including
 `integrated-result.json` and `inventory-comparison-v1.json`.
