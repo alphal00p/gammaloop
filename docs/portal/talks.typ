@@ -41,8 +41,6 @@
 
 #let talks = [
   #talks-hero[
-    #kicker[Seminars & conferences]
-
     = Talks
 
     Selected presentations on Local Unitarity, numerical perturbation theory, GammaLoop, and the scientific software surrounding them.

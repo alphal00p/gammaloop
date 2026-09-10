@@ -25,9 +25,7 @@
 ]
 
 #let people = [
-  #page-hero[
-    #kicker[People]
-
+  #page-hero(class: "portal-page-hero-compact")[
     = People building GammaLoop
 
     Researchers and collaborators developing GammaLoop, Local Unitarity methods, and the scientific software that supports them.

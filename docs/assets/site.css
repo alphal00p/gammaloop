@@ -1000,7 +1000,9 @@ button[data-copy-target] { display: none; }
 .people-card nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: auto; padding-top: 1.5rem; }
 .people-card nav a { padding: 0.3rem 0.5rem; border: 1px solid var(--hairline); background: var(--surface); font-family: var(--font-mono); font-size: 0.65rem; text-decoration: none; }
 .people-card nav a:hover, .people-card nav a:focus-visible { border-color: var(--border); background: var(--accent-soft); }
-.publication-provenance { font-family: var(--font-mono); font-size: 0.7rem !important; }
+.portal-page-hero-compact { padding: clamp(1.5rem, 3vw, 2.5rem); }
+.portal-page-hero-compact h1 { max-width: none; margin: 0 0 0.8rem; font-size: clamp(2.5rem, 4vw, 4rem); }
+.publication-provenance { margin: 0; font-family: var(--font-mono); font-size: 0.7rem !important; }
 .publication-filters { position: sticky; top: var(--portal-header-height); z-index: 20; display: grid; grid-template-columns: minmax(13rem, 2fr) repeat(4, minmax(8rem, 1fr)) auto; gap: 0; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--canvas) 96%, transparent); backdrop-filter: blur(12px); }
 .publication-filters label { display: grid; gap: 0.25rem; padding: 0.65rem; border-right: 1px solid var(--hairline); color: var(--ink-muted); font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; }
 .publication-filters input, .publication-filters select { min-width: 0; height: 2.35rem; padding: 0.35rem 0.5rem; border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); font-family: var(--font-sans); font-size: 0.78rem; text-transform: none; }

@@ -261,7 +261,7 @@
 ]
 #let people-grid(body) = region(class: "people-page-grid", body)
 
-#let talks-hero(body) = page-hero(class: "talks-page-hero", body)
+#let talks-hero(body) = page-hero(class: "talks-page-hero portal-page-hero-compact", body)
 #let talks-provenance(body) = styled-paragraph("talks-provenance", body)
 #let talk-card(id, datetime, date, year, body) = panel(class: "talk-card", id: id)[
   #group(class: "talk-card-date")[
@@ -299,33 +299,35 @@
   "form",
   class: "publication-filters",
   attrs: ("data-publication-filters": ""),
-)[
-  #el("label")[Search #void("input", attrs: (
-    type: "search",
-    "data-publication-search": "",
-    placeholder: "Title or author",
-  ))]
-  #el("label")[Author #el("select", attrs: ("data-publication-author": ""))[
-    #el("option", attrs: (value: ""))[All authors]
-    #for author in authors { el("option", attrs: (value: author.id))[#author.name] }
-  ]]
-  #el("label")[Year #el("select", attrs: ("data-publication-year": ""))[
-    #el("option", attrs: (value: ""))[All years]
-    #for year in years { el("option", attrs: (value: str(year)))[#str(year)] }
-  ]]
-  #el("label")[Type #el("select", attrs: ("data-publication-type": ""))[
-    #el("option", attrs: (value: ""))[All types]
-    #for kind in kinds { el("option", attrs: (value: kind))[#kind-label(kind)] }
-  ]]
-  #el("label")[Sort #el("select", attrs: ("data-publication-sort": ""))[
-    #el("option", attrs: (value: "newest"))[Newest]
-    #el("option", attrs: (value: "cited"))[Most cited]
-  ]]
-  #el("output", attrs: (
-    "data-publication-count": "",
-    "aria-live": "polite",
-  ))[#str(count) publications]
-]
+  {
+    // Join controls in code so markup whitespace cannot become extra grid items.
+    el("label", [Search] + void("input", attrs: (
+      type: "search",
+      "data-publication-search": "",
+      placeholder: "Title or author",
+    )))
+    el("label", [Author] + el("select", attrs: ("data-publication-author": ""))[
+      #el("option", attrs: (value: ""))[All authors]
+      #for author in authors { el("option", attrs: (value: author.id))[#author.name] }
+    ])
+    el("label", [Year] + el("select", attrs: ("data-publication-year": ""))[
+      #el("option", attrs: (value: ""))[All years]
+      #for year in years { el("option", attrs: (value: str(year)))[#str(year)] }
+    ])
+    el("label", [Type] + el("select", attrs: ("data-publication-type": ""))[
+      #el("option", attrs: (value: ""))[All types]
+      #for kind in kinds { el("option", attrs: (value: kind))[#kind-label(kind)] }
+    ])
+    el("label", [Sort] + el("select", attrs: ("data-publication-sort": ""))[
+      #el("option", attrs: (value: "newest"))[Newest]
+      #el("option", attrs: (value: "cited"))[Most cited]
+    ])
+    el("output", attrs: (
+      "data-publication-count": "",
+      "aria-live": "polite",
+    ))[#str(count) publications]
+  },
+)
 #let publication-list(body) = region(
   class: "publication-list",
   attrs: ("data-publication-list": ""),

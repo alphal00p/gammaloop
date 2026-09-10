@@ -66,9 +66,7 @@
 }
 
 #let citations = [
-  #page-hero[
-    #kicker[Credit the software]
-
+  #page-hero(class: "portal-page-hero-compact")[
     = Cite αLoop projects
 
     Use the version-specific records below. Where a Zenodo DOI exists, it is the persistent citation target; otherwise the citation names the versioned source repository without inventing an identifier.

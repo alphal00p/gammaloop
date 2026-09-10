@@ -50,12 +50,8 @@
 )
 
 #let publications = [
-  #page-hero[
-    #kicker[Research output]
-
+  #page-hero(class: "portal-page-hero-compact")[
     = Publications
-
-    Automatically assembled from stable INSPIRE HEP author identifiers, deduplicated across coauthors, and cached for a reproducible documentation build.
 
     #publication-provenance[
       Updated #publication-cache.updated · #link(publication-cache.api_url)[
