@@ -205,11 +205,22 @@
   defaults.scope,
 ) {
   let expected = scope.at("feynman", default: defaults.scope.feynman)
+  let particle-only = feynman.edge-style.with(show-momentum: false)
+  assert.eq(particle-only(scope + (fields: (:), momentum: [$k$])), (
+    expected.fermion + (mark-shift: 0),
+  ))
   for (alias, preset) in expected.particles {
     let layers = feynman.edge-style(
       scope + (fields: (particle: alias), momentum: []),
     )
     assert.eq(layers.first(), preset + (mark-shift: 0), message: alias)
+    assert.eq(
+      feynman.edge-style(
+        scope + (fields: (particle: alias), momentum: [$k$]),
+        show-momentum: false,
+      ),
+      (layers.first(),),
+    )
   }
   assert.eq(expected.particles.a, expected.particles.photon)
   assert.eq(expected.particles.g, expected.particles.gluon)

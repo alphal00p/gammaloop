@@ -183,9 +183,9 @@
   )
 }
 
-#let edge-style(edge) = (
+#let edge-style(edge, show-momentum: true) = (
   _particle-layer(edge),
-  .._momentum-layers(edge),
+  ..if show-momentum { _momentum-layers(edge) } else { () },
 )
 
 #let node-style(node) = if _enabled(node, "hidden") {

@@ -663,6 +663,12 @@
   `mom(...)` patches described below, retain priority over inherited edge data
   and keep their arrow/label placement independent of these width options.
 
+  To omit momentum arrows and labels while retaining propagators and fermion
+  arrows, pass `edge-style: feynman.edge-style.with(show-momentum: false)` to
+  `draw`, alongside `..feynman.draw-style`. This only suppresses drawing layers;
+  the hidden labels used by `graph.style` still participate in layout, so the
+  switch does not change the solved graph geometry.
+
   An edge can sparsely patch the `edge-style` passed to `draw` with
   `style: (...)`, compute the patch with a callback, use `auto` to delegate, or
   use `none` to hide its paint while

@@ -1,4 +1,4 @@
-#set page(height: auto, width: 179mm, margin: 5mm)
+#set page(height: auto, width: 179mm, margin: 2mm)
 
 #import "../src/lib.typ": draw, graph, layout, layouts, subgraph
 #import graph: *
@@ -35,7 +35,7 @@
   spring: (strength: 18, length: 0.25),
   repulsion: (
     strength: 12,
-    centering: 0.0005,
+    centering: 0.005,
     edge-node: .29,
     edge-edge: .1,
     dangling: 14.75,
@@ -97,13 +97,14 @@
 #let flatten-boundary = item => if item.boundary != none { (pos: pos(z: pin(0))) }
 
 // `cut-x` is in graph units; auto puts the cut just right of center.
-#let diagram(g, options: base-layout, cut-x: auto, cut-y: auto, initial-cut: none, draw-after: none) = context {
+#let diagram(g, options: base-layout, cut-x: auto, cut-y: auto, initial-cut: none, draw-after: none, show-momentum: true) = context {
   draw(
     layout(
       graph.style(g, ..graph-style),
       ..options,
     ),
     ..feynman.draw-style,
+    edge-style: feynman.edge-style.with(show-momentum: show-momentum),
     padding: diagram-style.padding,
     draw-after: (g, bounds) => {
       // Group signed external momenta explicitly, including the through-gluon's
@@ -111,6 +112,13 @@
       let endpoints = graph.boundaries(g).map(b => b + (
         group: b.data.crossings.at(b.crossing).group,
       ))
+      // Directly built dangling edges can provide grouping without cut provenance.
+      endpoints += graph.edges(g).filter(e =>
+        e.boundary == none
+          and (e.source == none or e.sink == none)
+          and type(e.data) == dictionary
+          and "group" in e.data
+      ).map(e => (group: e.data.group, side: e.data.side, pos: e.pos))
       let box-style = diagram-style.endpoint-box
       cetz.draw.on-layer(-1, {
         for (momentum, fill) in box-style.fills {
@@ -351,78 +359,102 @@
     dangling: 5.5,
     dangling-centroid: 30,
   ),
-  constraints: (side-strength: 10),
-  labels: (steps: 100, distance: 0.9, spring: 12, repulsion: 8),
-  solver: (
-    steps: 50,
-    epochs: 50,
-    step: .81,
-    max-movement: 0.2,
-    cooling: 0.85,
-    depth-scale: 1,
-    flattening-end: 0.5,
-  ),
 )
 #pagebreak()
-#grid(columns:2,align:center+horizon, diagram(graph.build(default-edge-data: (particle: "d",spring-length:.3) + mom(offset: .4), {
+#set page(height: auto, width: auto, margin: 2mm)
+
+#align(center, grid(columns:3,align:center+horizon, diagram(graph.build(default-edge-data: (particle: "d",spring-length:.3) + mom(offset: .4), {
   node(<a>)
   node(<b>)
   node(<c>)
   node(<d>)
-  edge(<D1.1>, sink(<a>), momentum: [$p_1$],pos:pos(x:in-x,y:top),..mom(side: "right", label: ( gap: .01,)))
+  edge(<D1.1>, sink(<a>), momentum: [$p_1$],pos:pos(x:in-x,y:top),group: "p1", side: "left",..mom(side: "right", label: ( gap: .01,)))
   edge(<D2>, source(<a>), sink(<b>), momentum: [$p_1+k$],..mom(side: "left",shift:-0.4,length: .8, label: (shift: -0.3, gap: .2,)))
   
-  edge(<D3.1>, sink(<b>),orientation: "reversed", momentum: [$p_2-k$],pos:pos(x:in-x,y:bot),..mom(side: "left",shift: -0.4, label: ( shift: -0.7, gap: .01,)))
+  edge(<D3.1>, sink(<b>),orientation: "reversed", momentum: [$p_2-k$],pos:pos(x:in-x,y:bot),group: "p2", side: "left",..mom(side: "left",shift: -0.4, label: ( shift: -0.7, gap: .01,)))
   edge(<D4>, source(<b>), sink(<c>), momentum: [$p_(12)$], particle: "a",spring-length:0.1,..mom(side: "right", label: ( gap: .1,)))
-  edge(<D3.2>, source(<c>), orientation: "reversed", momentum: [$p_2-k$],pos:pos(x:out-x,y:bot),..mom(side: "left", label: ( gap: .2,shift:0.4)))
+  edge(<D3.2>, source(<c>), orientation: "reversed", momentum: [$p_2-k$],pos:pos(x:out-x,y:bot),group: "p2", side: "right",..mom(side: "left", label: ( gap: .2,shift:0.4)))
   edge(<D5>, source(<c>), sink(<d>), momentum: [$p_1+k$],..mom(side: "left",shift:-0.4,length: .8, label: (shift: -1, gap: .1,)))
-  edge(<D1.2>, source(<d>), momentum: [$p_1$],pos:pos(x:out-x,y:top),..mom(side: "left", label: ( gap: .1,)))
-  edge(<D6.1>, sink(<a>), momentum: [$k$],particle:"g",pos:pos(x:in-x,y:mid),..mom(side: "right", label: ( gap: .1,)))
-  edge(<D6.2>, source(<d>), momentum: [$k$],particle:"g",pos:pos(x:out-x,y:mid),..mom(side: "left", label: ( gap: .2,)))
+  edge(<D1.2>, source(<d>), momentum: [$p_1$],pos:pos(x:out-x,y:top),group: "p1", side: "right",..mom(side: "left", label: ( gap: .1,)))
+  edge(<D6.1>, sink(<a>), momentum: [$k$],particle:"g",pos:pos(x:in-x,y:mid),group: "p2", side: "left",..mom(side: "right", label: ( gap: .1,)))
+  edge(<D6.2>, source(<d>), momentum: [$k$],particle:"g",pos:pos(x:out-x,y:mid),group: "p2", side: "right",..mom(side: "left", label: ( gap: .2,)))
 }
 
 // ,compact
 ),options: better-layout,cut-y: 0.5,cut-x:0.3)
-
-
+,
+[#h(3mm) or #h(3mm)]
 ,diagram(graph.build(default-edge-data: (particle: "d") + mom(offset: .4), {
   node(<a>)
   node(<b>,pos:pos(y:mid))
   node(<c>,pos:pos(y:mid))
   node(<d>)
-  edge(<D1.1>, sink(<a>), momentum: [$p_1$],pos:pos(x:in-x,y:top),..mom(side: "left", length: .8, label: (shift: 1, gap: .01, anchor: "south")))
+  edge(<D1.1>, sink(<a>), momentum: [$p_1$],pos:pos(x:in-x,y:top),..mom(side: "left", length: .8, label: (shift: 1, gap: .01, anchor: "south")),group: "p1", side: "left")
   edge(<D2>, source(<a>), sink(<b>), momentum: [$p_1-k$],..mom(side: "right", length: .8, label: ( gap: .1)))
   
-  edge(<D3.1>, sink(<b>),orientation: "reversed", momentum: [$p_2-k$],pos:pos(x:in-x,y:bot),spring-length:1.5,..mom(side: "right", length: .8, label: ( gap: .1)),crossing-under: <D6.2>, crossing-gap: .7)
+  edge(<D3.1>, sink(<b>),orientation: "reversed", momentum: [$p_2-k$],pos:pos(x:in-x,y:bot),group: "p2", side: "left",spring-length:1.5,..mom(side: "right", length: .8, label: ( gap: .1)),crossing-under: <D6.2>, crossing-gap: .7)
   edge(<D4>, source(<b>), sink(<c>), momentum: [$p_(12) - 2k$], particle: "a",spring-length:1.5,..mom(side: "right", length: .8, label: (shift: 0.25, gap: .01, anchor: "north")))
-  edge(<D3.2>, sink(<c>), momentum: [$p_1$],pos:pos(x:out-x,y:top),spring-length:1.5,crossing-under: <D6.1>, crossing-gap: .7)
+  edge(<D3.2>, sink(<c>), momentum: [$p_1$],pos:pos(x:out-x,y:top),group: "p1", side: "right",spring-length:1.5,crossing-under: <D6.1>, crossing-gap: .7)
   edge(<D5>, source(<c>), sink(<d>), momentum: [$p_2-2k$],..mom(side: "left", length: .8, label: (shift: -0.25, gap: .2)))
-  edge(<D1.2>, source(<d>), momentum: [$p_2-k$],pos:pos(x:out-x,y:bot),..mom(side: "left",shift:1, length: .8, label: ( shift: 2, gap: .2,anchor:"south-west")))
-  edge(<D6.1>, source(<a>), momentum: [$k$],particle:"g",pos:pos(x:out-x,y:mid), bend:.44,spring-length:2.5,..mom(side: "left",shift:2, length: .8, label: ( gap: .2)))
-  edge(<D6.2>, sink(<d>), bend:-.54,momentum: [$k$],particle:"g",pos:pos(x:in-x,y:mid),spring-length:2.5,..mom(side: "right",shift:-2, length: .8, label: ( gap: .2)))
+  edge(<D1.2>, source(<d>), momentum: [$p_2-k$],pos:pos(x:out-x,y:bot),group: "p2", side: "right",..mom(side: "left",shift:1, length: .8, label: ( shift: 2, gap: .2,anchor:"south-west")))
+  edge(<D6.1>, source(<a>), momentum: [$k$],particle:"g",pos:pos(x:out-x,y:mid),group: "p2", side: "right", bend:.44,spring-length:2.5,..mom(side: "left",shift:2, length: .8, label: ( gap: .2)))
+  edge(<D6.2>, sink(<d>), bend:-.54,momentum: [$k$],particle:"g",pos:pos(x:in-x,y:mid),group: "p2", side: "left",spring-length:2.5,..mom(side: "right",shift:-2, length: .8, label: ( gap: .2)))
 }
 
 
 ),options: better-layout,cut-x: 0.3,cut-y:0.5)
+))
+
+#pagebreak()
+#let better-layout = layouts.options(
+  spring: (strength: 40, length: 0.12),
+  repulsion: (
+    strength: 10,
+    centering: 0.005,
+    edge-node: .39,
+    edge-edge: .75,
+    dangling: 5.5,
+    dangling-centroid: 30,
+  ),
 )
 
-
+$ 
 #diagram(graph.build(default-edge-data: (particle: "d",spring-length:.3) + mom(offset: .4), {
+    node(<a>)
+    node(<b>)
+    node(<c>)
+    node(<d>)
+    edge(<D1.1>, sink(<a>),momentum:[],pos:pos(x:in-x,y:bot,z:pin(0)))
+    edge(<D2>, source(<a>), sink(<b>), momentum: [$p_1+k$],..mom(side: "left",shift:-0.4,length: .8, label: (shift: -0.3, gap: .2,)))
+    
+    edge(<D3.1>, sink(<b>),orientation: "reversed", momentum: [$p_2-k$],pos:pos(x:in-x,y:top,z:pin(0)),..mom(side: "left",shift: -0.4, label: ( shift: -0.7, gap: .01,)))
+    edge(<D4>, source(<b>), sink(<c>), momentum: [$p_(12)$], particle: "a",spring-length:0.1,..mom(side: "right", label: ( gap: .1,)))
+    edge(<D3.2>, source(<c>), orientation: "reversed", momentum: [$p_2-k$],pos:pos(x:out-x,y:bot,z:pin(0)),..mom(side: "left", label: ( gap: .2,shift:0.4)))
+    edge(<D5>, sink(<c>), source(<d>), momentum: [$p_1+k$],..mom(side: "left",shift:-0.4,length: .8, label: (shift: -1, gap: .1,)))
+    edge(<D1.2>, sink(<d>), momentum: [$p_1$],pos:pos(x:out-x,y:top,z:pin(0)),..mom(side: "left", label: ( gap: .1,)))
+    edge(<D6.1>, sink(<a>), momentum: [$k$],particle:"g",pos:pos(x:in-x,y:mid,z:pin(0)),..mom(side: "right", label: ( gap: .1,)))
+    edge(<D6.2>, source(<d>), momentum: [$k$],particle:"g",pos:pos(x:out-x,y:mid,z:pin(0)),..mom(side: "left", label: ( gap: .2,)))
+  }
+  
+  // ,compact
+  ),options: better-layout,cut-y: 0.5,cut-x:0.3,show-momentum: false) =  op("disc")_(p_1^2)  op("disc")_(p_2^2)lr((#h(-3mm)
+#box(inset: -2mm,baseline: 45%,diagram(graph.build(default-edge-data: (particle: "d",spring-length:.3) + mom(offset: .4), {
   node(<a>)
   node(<b>)
   node(<c>)
   node(<d>)
-  edge(<D1.1>, sink(<a>),momentum:[],pos:pos(x:in-x,y:bot,z:pin(0)),..mom(side: "right", label: ( gap: .01,)))
+  edge(<D1.1>, sink(<a>),momentum:[], pos:pos(x:in-x,y:bot,z:pin(0)))
   edge(<D2>, source(<a>), sink(<b>), momentum: [$p_1+k$],..mom(side: "left",shift:-0.4,length: .8, label: (shift: -0.3, gap: .2,)))
   
-  edge(<D3.1>, sink(<b>),orientation: "reversed", momentum: [$p_2-k$],pos:pos(x:in-x,y:top,z:pin(0)),..mom(side: "left",shift: -0.4, label: ( shift: -0.7, gap: .01,)))
+  edge(<D3.1>, sink(<b>),source(<d>),orientation: "reversed", momentum: [$p_2-k$])
   edge(<D4>, source(<b>), sink(<c>), momentum: [$p_(12)$], particle: "a",spring-length:0.1,..mom(side: "right", label: ( gap: .1,)))
-  edge(<D3.2>, source(<c>), orientation: "reversed", momentum: [$p_2-k$],pos:pos(x:out-x,y:bot,z:pin(0)),..mom(side: "left", label: ( gap: .2,shift:0.4)))
-  edge(<D5>, source(<c>), sink(<d>), momentum: [$p_1+k$],..mom(side: "left",shift:-0.4,length: .8, label: (shift: -1, gap: .1,)))
-  edge(<D1.2>, source(<d>), momentum: [$p_1$],pos:pos(x:out-x,y:top,z:pin(0)),..mom(side: "left", label: ( gap: .1,)))
-  edge(<D6.1>, sink(<a>), momentum: [$k$],particle:"g",pos:pos(x:in-x,y:mid,z:pin(0)),..mom(side: "right", label: ( gap: .1,)))
-  edge(<D6.2>, source(<d>), momentum: [$k$],particle:"g",pos:pos(x:out-x,y:mid,z:pin(0)),..mom(side: "left", label: ( gap: .2,)))
+  edge(<D3.2>, source(<c>), momentum: [$p_2-k$],pos:pos(x:out-x,y:bot,z:pin(0)))
+  edge(<D5>, sink(<c>), momentum: [$p_1+k$],pos:pos(x:out-x,y:top,z:pin(0)))
+  edge(<D5.1>, source(<d>), momentum: [$p_1+k$],pos:pos(x:in-x,y:top,z:pin(0)))
+  // edge(<D1.2>, sink(<d>), momentum: [$p_1$],pos:pos(x:out-x,y:top,z:pin(0)))
+  edge(<D6>, sink(<a>), source(<d>), momentum: [$k$],particle:"g")
 }
 
 // ,compact
-),options: better-layout,cut-y: 0.5,cut-x:0.3)
+),options: better-layout,cut-y: 0.5,cut-x:1.,show-momentum: false)))|)_"soft"
+$
