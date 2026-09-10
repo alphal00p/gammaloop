@@ -38,7 +38,6 @@
       #link(root + quickstart.route)[Get started]
       #link(root + guide.route)[Guides]
       #link(root + "reference/")[Reference]
-      #project-cite-link("citations/#" + product.id)[Cite]
     ]
   ]
 }
@@ -67,7 +66,6 @@
       #button("products/gammaloop/" + channel-route + "/quickstart/", [
         Start with GammaLoop #arrow()
       ])
-      #button("citations/", [Cite the software #arrow()])
     ]
   ]
   #task-section[

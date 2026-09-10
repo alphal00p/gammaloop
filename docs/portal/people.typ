@@ -15,8 +15,6 @@
 ]
 
 #let person-entry(person) = person-card(person)[
-  #kicker[Collaboration]
-
   == #person.name
 
   #person.role
@@ -26,9 +24,7 @@
 
 #let people = [
   #page-hero(class: "portal-page-hero-compact")[
-    = People building GammaLoop
-
-    Researchers and collaborators developing GammaLoop, Local Unitarity methods, and the scientific software that supports them.
+    = People
   ]
   #people-grid[
     #for person in portal.people { person-entry(person) }

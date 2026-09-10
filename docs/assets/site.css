@@ -902,7 +902,8 @@ button[data-copy-target] { display: none; }
 .portal-project-card:hover { z-index: 1; background: var(--accent-soft); box-shadow: inset 0.35rem 0 var(--accent); }
 .portal-project-meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--link); font-family: var(--font-mono); font-size: 0.66rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
 .portal-project-card h3 { margin: 2.8rem 0 0.8rem; font-family: var(--font-serif); font-size: clamp(2rem, 3.4vw, 3rem); font-weight: 600; letter-spacing: -0.035em; }
-.portal-project-card h3 a { color: var(--ink-strong); text-decoration: none; }
+.portal-project-card h3 a { color: var(--ink-strong); text-decoration: none; text-underline-offset: 0.15em; }
+.portal-project-card h3 a:hover, .portal-project-card h3 a:focus-visible { color: var(--link); text-decoration: underline; }
 .portal-project-summary { margin: 0; color: var(--ink-muted); }
 .portal-packages { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 1.5rem; }
 .portal-packages-label { flex-basis: 100%; color: var(--ink-muted); font-family: var(--font-mono); font-size: 0.6rem; text-transform: uppercase; }
@@ -995,7 +996,7 @@ button[data-copy-target] { display: none; }
 #ben-ruijl > .people-card-portrait { object-position: center; }
 .people-card-initials { display: grid; place-items: center; background: var(--accent-soft); color: var(--ink-strong); font-family: var(--font-serif); font-size: 4rem; }
 .people-card-copy { display: flex; flex-direction: column; padding: clamp(1.4rem, 3vw, 2.5rem); }
-.people-card h2 { margin: 1.5rem 0 0.65rem; color: var(--ink-strong); font-family: var(--font-serif); font-size: clamp(2rem, 3vw, 3rem); font-weight: 600; line-height: 1; }
+.people-card h2 { margin: 0 0 0.65rem; color: var(--ink-strong); font-family: var(--font-serif); font-size: clamp(2rem, 3vw, 3rem); font-weight: 600; line-height: 1; }
 .people-card-copy > p:not(.portal-kicker) { color: var(--ink-muted); }
 .people-card nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: auto; padding-top: 1.5rem; }
 .people-card nav a { padding: 0.3rem 0.5rem; border: 1px solid var(--hairline); background: var(--surface); font-family: var(--font-mono); font-size: 0.65rem; text-decoration: none; }
@@ -1016,19 +1017,6 @@ button[data-copy-target] { display: none; }
 .publication-card h2 a { text-decoration: none; }
 .publication-authors { margin: 0; color: var(--ink-muted); font-size: 0.82rem; }
 .publication-card nav { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: auto; padding-top: 1.5rem; font-family: var(--font-mono); font-size: 0.65rem; text-transform: uppercase; }
-
-.citation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.citation-card { min-width: 0; padding: clamp(1.5rem, 4vw, 3.5rem); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-.citation-card:nth-child(2n) { border-right: 0; }
-.citation-card:last-child { grid-column: 1 / -1; border-right: 0; }
-.citation-card h2 { margin: 1rem 0; color: var(--ink-strong); font-family: var(--font-serif); font-size: 2.8rem; }
-.citation-card h3 { margin-top: 2rem; }
-.citation-card pre { max-width: 100%; overflow-x: auto; padding: 1rem; border: 1px solid var(--hairline); background: var(--surface); white-space: pre-wrap; }
-.citation-card .reference-copy-row pre { padding-right: 3.6rem; }
-.citation-card details { margin-top: 1.5rem; }
-.citation-card summary { color: var(--link); cursor: pointer; }
-.citation-card .portal-button { margin-top: 0.6rem; cursor: pointer; }
-.citation-status { color: var(--ink-muted); font-size: 0.82rem; }
 
 @media (max-width: 82rem) {
   .docs-shell { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
@@ -1129,8 +1117,8 @@ button[data-copy-target] { display: none; }
   .talk-year > div { grid-template-columns: 1fr; }
   .talk-card, .talk-card:nth-child(2n), .talk-card:nth-last-child(-n + 2) { border-right: 0; border-bottom: 1px solid var(--border); }
   .talk-card:last-child { border-bottom: 0; }
-  .people-page-grid, .publication-list, .citation-grid { grid-template-columns: 1fr; }
-  .people-card, .publication-card, .citation-card, .citation-card:last-child { grid-column: auto; border-right: 0; }
+  .people-page-grid, .publication-list { grid-template-columns: 1fr; }
+  .people-card, .publication-card { grid-column: auto; border-right: 0; }
   .publication-filters { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .publication-filters output { min-height: 3rem; }
 }

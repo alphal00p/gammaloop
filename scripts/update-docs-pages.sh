@@ -266,8 +266,6 @@ case "$mode" in
             fail "latest build has no talks page"
         [ -f "$build_root/publications/index.html" ] ||
             fail "latest build has no publications page"
-        [ -f "$build_root/citations/index.html" ] ||
-            fail "latest build has no citations page"
         [ -f "$build_root/developers/.note" ] ||
             fail "latest build has no developer publication note"
         [ -f "$build_root/developers/index.html" ] ||
@@ -298,9 +296,9 @@ case "$mode" in
         install -m 0644 "$build_root/index.html" "$pages_root/index.html"
         install -m 0644 "$build_root/search-index.json" "$pages_root/search-index.json"
         install -m 0644 "$build_root/.nojekyll" "$pages_root/.nojekyll"
-        rm -rf -- "$pages_root/assets"
+        rm -rf -- "$pages_root/assets" "$pages_root/citations"
         cp -a "$build_root/assets" "$pages_root/assets"
-        for portal_page in about people talks publications citations; do
+        for portal_page in about people talks publications; do
             rm -rf -- "$pages_root/$portal_page"
             cp -a "$build_root/$portal_page" "$pages_root/$portal_page"
         done

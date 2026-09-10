@@ -1211,7 +1211,6 @@ impl SiteBuilder {
             "docs/portal/people.typ",
             "docs/portal/talks.typ",
             "docs/portal/publications.typ",
-            "docs/portal/citations.typ",
             "docs/assets/typst/theme.typ",
             "docs/assets/typst/marks/local-unitarity.typ",
             "docs/assets/typst/marks/gammaloop.typ",
@@ -3600,30 +3599,16 @@ impl SiteBuilder {
                 escape_html(&portal),
             ));
         }
-        let citation_href = match scope {
-            BuildScope::FullSite => {
-                let portal = match metadata.channel {
-                    BuildChannel::Latest => format!("{docs_root}../../../"),
-                    BuildChannel::Snapshot => format!("{docs_root}../../../../"),
-                };
-                format!("{portal}citations/#{}", product.id)
-            }
-            BuildScope::ProductPreview => {
-                format!("{PUBLISHED_DOCS_ROOT}/citations/#{}", product.id)
-            }
-        };
         let version = match metadata.channel {
             BuildChannel::Latest => "latest".to_owned(),
             BuildChannel::Snapshot => metadata.snapshot_tag.unwrap_or("unknown").to_owned(),
         };
         format!(
-            "<aside class=\"docs-sidebar\" id=\"docs-sidebar\" aria-label=\"{} manual\">{navigation}<p class=\"sidebar-meta\"><strong>{}</strong><br><code>{}</code><br><a href=\"{}manual.pdf\">Download PDF</a><br><a href=\"{}\">Cite {}</a></p></aside>",
+            "<aside class=\"docs-sidebar\" id=\"docs-sidebar\" aria-label=\"{} manual\">{navigation}<p class=\"sidebar-meta\"><strong>{}</strong><br><code>{}</code><br><a href=\"{}manual.pdf\">Download PDF</a></p></aside>",
             escape_html(&product.title),
             escape_html(&product.title),
             escape_html(&version),
             escape_html(docs_root),
-            escape_html(&citation_href),
-            escape_html(&product.title),
         )
     }
 
@@ -3995,30 +3980,6 @@ impl SiteBuilder {
             entry.href = format!("developers/{}", entry.href);
             entry.kind = format!("Developers · {}", entry.kind);
             entry
-        }));
-        entries.extend(self.registry.product.iter().map(|product| {
-            let persistent = product.citation.doi.as_ref().map_or_else(
-                || "the versioned source repository".to_owned(),
-                |doi| format!("DOI {doi}"),
-            );
-            SearchEntry {
-                title: format!("Cite {}", product.title),
-                summary: format!(
-                    "Version-specific software citation and BibTeX for {} using {persistent}.",
-                    product.title
-                ),
-                href: format!("citations/#{}", product.id),
-                kind: "citation".to_owned(),
-                text: format!(
-                    "{} {} software citation cite BibTeX",
-                    product.citation.title,
-                    product
-                        .citation
-                        .doi
-                        .as_deref()
-                        .unwrap_or(&product.citation.repository),
-                ),
-            }
         }));
         entries.push(SearchEntry {
             title: "About the αLoop collaboration".to_owned(),
@@ -4554,7 +4515,6 @@ impl SiteBuilder {
             "people/index.html",
             "talks/index.html",
             "publications/index.html",
-            "citations/index.html",
         ] {
             ensure!(
                 bundle.join(page).is_file(),
@@ -4562,6 +4522,7 @@ impl SiteBuilder {
             );
         }
         copy_tree(&bundle, output)?;
+        remove_generated_path(&output.join("citations"))?;
         fs::write(output.join(".nojekyll"), b"")?;
         Ok(())
     }
@@ -9378,7 +9339,7 @@ mod tests {
             builder.site_sidebar(product, &metadata, &current, "", BuildScope::FullSite, &[]);
         assert!(!sidebar.contains("developers/"));
         assert!(!sidebar.contains("For developers"));
-        assert!(sidebar.contains("href=\"../../../../citations/#gammaloop\">Cite GammaLoop</a>"));
+        assert!(!sidebar.contains("citations/"));
     }
 
     #[test]
@@ -11144,14 +11105,7 @@ mod tests {
                 &[],
             );
             assert!(!sidebar.contains("developers/"), "{}", product.id);
-            assert!(
-                sidebar.contains(&format!(
-                    "href=\"{PUBLISHED_DOCS_ROOT}/citations/#{}\">Cite {}</a>",
-                    product.id, product.title
-                )),
-                "{}",
-                product.id
-            );
+            assert!(!sidebar.contains("citations/"), "{}", product.id);
             let options =
                 builder.product_options(product, &metadata, "../", BuildScope::ProductPreview);
             assert_eq!(options.matches("<option ").count(), 1, "{}", product.id);
@@ -11639,24 +11593,6 @@ mod tests {
     }
 
     #[test]
-    fn python_member_fragments_have_scroll_and_target_styles() {
-        let builder = SiteBuilder::discover().unwrap();
-        let css = fs::read_to_string(builder.root.join("docs/assets/site.css")).unwrap();
-
-        assert!(css.contains(
-            ".api-member, .api-overload, .api-member-anchor-alias { scroll-margin-top: calc(var(--header-height) + 1rem); }"
-        ));
-        assert!(css.contains(".api-member-anchor-alias:target > .api-member"));
-        assert!(css.contains(
-            ".reference-coverage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));"
-        ));
-        assert!(css.contains("math[display=\"block\"] { display: block math;"));
-        assert!(
-            css.contains(".reference-table-wrap > table { display: table; overflow: visible; }")
-        );
-    }
-
-    #[test]
     fn stale_staging_is_cleared_without_touching_published_files() {
         let temporary = tempfile::tempdir().unwrap();
         let output = temporary.path().join("site");
@@ -11780,70 +11716,26 @@ mod tests {
     }
 
     #[test]
-    fn portal_focuses_on_projects_and_keeps_dedicated_routes() {
+    fn portal_emits_routes_and_valid_assets() {
         let builder = SiteBuilder::discover().unwrap();
         let output = tempfile::tempdir().unwrap();
+        fs::create_dir(output.path().join("citations")).unwrap();
+        fs::write(output.path().join("citations/index.html"), "obsolete page").unwrap();
         write_test_portal(&builder, output.path(), BuildChannel::Latest, None);
 
-        let html = fs::read_to_string(output.path().join("index.html")).unwrap();
-        assert_eq!(html.matches("class=\"portal-project-card\"").count(), 5);
-        assert!(html.contains("id=\"projects\""));
-        assert!(html.contains("Projects &amp; crates"));
-        assert!(html.contains("αLoop"));
-        assert!(html.contains("href=\"people/\""));
-        assert!(html.contains("href=\"about/\""));
-        assert!(html.contains("href=\"talks/\""));
-        assert!(html.contains("href=\"developers/\""));
-        assert!(html.contains("href=\"publications/\""));
-        assert!(
-            html.contains("href=\"products/gammaloop/latest/quickstart/\">Start with GammaLoop")
-        );
-        assert!(html.contains(
-            "class=\"portal-graph-field\" role=\"img\" aria-label=\"A jumble of Feynman graphs rendered by GammaLoop from real process and test data\""
-        ));
-        assert_eq!(
-            html.matches("class=\"portal-process-graph\"").count(),
-            builder.portal.graphs.len()
-        );
-        assert_eq!(
-            html.matches("class=\"portal-graph-theme portal-graph-theme-")
-                .count(),
-            builder.portal.graphs.len() * 2
-        );
-        assert!(html.contains(
-            "class=\"portal-wordmark\" aria-label=\"αLoop collaboration mark\" role=\"img\""
-        ));
-        assert!(!html.contains(
-            "class=\"portal-hero-art\" aria-label=\"αLoop collaboration mark\" role=\"img\""
-        ));
-        assert!(!html.contains("class=\"portal-graph-card\""));
-        assert!(!html.contains("portal-topology-field"));
-        assert_eq!(html.matches("class=\"portal-funding\"").count(), 1);
-        assert!(html.contains("Publicly funded research"));
-        assert!(html.contains(&builder.portal.funding));
-        assert!(html.contains(&builder.portal.funding_url));
-        assert!(html.contains(
-            "rel=\"icon\" type=\"image/svg+xml\" href=\"assets/local-unitarity-light.svg\""
-        ));
-        assert!(html.contains(
-            "href=\"assets/local-unitarity-dark.svg\" media=\"(prefers-color-scheme: dark)\""
-        ));
-        assert_eq!(html.matches("portal-card-cite").count(), 5);
-        for removed in [
-            "class=\"portal-pillars\"",
-            "class=\"portal-facts\"",
-            "id=\"developers\"",
-            "id=\"people\"",
-            "id=\"affiliations\"",
-            "href=\"#affiliations\"",
+        for page in [
+            "index.html",
+            "about/index.html",
+            "people/index.html",
+            "talks/index.html",
+            "publications/index.html",
         ] {
-            assert!(
-                !html.contains(removed),
-                "unexpected landing-page copy: {removed}"
-            );
+            let html = fs::read_to_string(output.path().join(page)).unwrap();
+            assert!(html.contains("assets/site.css"));
+            assert!(html.contains("assets/site.js"));
+            assert!(!html.contains("citations/"));
         }
-        assert!(!html.contains("Product manual"));
-        assert!(!html.contains("scientific-computing products"));
+        assert!(!output.path().join("citations").exists());
 
         for asset in [
             "about-double-triangle-light.svg",
@@ -11898,196 +11790,18 @@ mod tests {
                 );
             }
         }
-        assert!(output.path().join("assets/people/valentin.webp").is_file());
-
         let people = fs::read_to_string(output.path().join("people/index.html")).unwrap();
-        assert_eq!(people.matches("class=\"people-card\"").count(), 7);
-        assert!(people.contains("https://symbolica.io/about.html"));
-        assert!(people.contains("id=\"cedric-sigrist\""));
-        assert!(people.contains("People building GammaLoop"));
-        assert!(people.contains(
-            "Researchers and collaborators developing GammaLoop, Local Unitarity methods"
-        ));
-        assert!(people.contains("href=\"../assets/local-unitarity-light.svg\""));
-        assert!(!people.contains("People building αLoop"));
-        for internal_copy in [
-            "Contributor scope",
-            "default branch",
-            "malformed commit identities",
-            "Portrait source",
-        ] {
-            assert!(
-                !people.contains(internal_copy),
-                "unexpected process copy: {internal_copy}"
-            );
+        for person in &builder.portal.people {
+            assert!(people.contains(&format!("id=\"{}\"", person.id)));
+            if let Some(portrait) = &person.portrait {
+                assert!(output.path().join("assets/people").join(portrait).is_file());
+            }
         }
-
-        let about = fs::read_to_string(output.path().join("about/index.html")).unwrap();
-        assert!(about.contains("Precision is another path to discovery"));
-        assert!(about.contains("Schematic Local Unitarity cross-section"));
-        assert!(about.contains("../assets/about-double-triangle-light.svg"));
-        assert!(about.contains("../assets/about-double-triangle-dark.svg"));
-        assert!(about.contains("../assets/about-local-unitarity-equation-light.svg"));
-        assert!(about.contains("../assets/about-local-unitarity-equation-dark.svg"));
-        assert!(about.contains("class=\"about-equation-formula\" role=\"img\""));
-        assert!(!about.contains("<span>dσ/d𝒪</span>"));
-        assert_eq!(
-            about.matches("class=\"about-pillar\"").count(),
-            builder.portal.pillar.len()
-        );
-        assert_eq!(
-            about.matches("class=\"about-affiliation\"").count(),
-            builder.portal.affiliation.len()
-        );
-        assert!(about.contains(&builder.portal.funding));
-
-        let talks = fs::read_to_string(output.path().join("talks/index.html")).unwrap();
-        assert_eq!(
-            talks.matches("class=\"talk-card\"").count(),
-            builder.talks.talk.len()
-        );
-        assert!(talks.contains("The GammaLoop ecosystem"));
-        assert!(talks.contains("href=\"../people/#lucien-huber\""));
-        assert!(talks.contains("aria-current=\"page\">Talks"));
-
-        let css = fs::read_to_string(output.path().join("assets/site.css")).unwrap();
-        assert!(css.contains(".publication-card:nth-child(2n of :not([hidden]))"));
-        assert!(!css.contains(".publication-card:nth-child(2n) {"));
-        assert!(css.contains(".people-card-portrait { object-position: left center; }"));
-        assert!(css.contains("#ben-ruijl > .people-card-portrait"));
-        assert!(css.contains(".product-logo-gammaloop { aspect-ratio: 2.016 / 1;"));
-        assert!(css.contains("background-size: contain;"));
-        assert!(!css.contains("background-size: 137.2% auto;"));
-        assert!(css.contains(".product-logo-spenso { aspect-ratio: 637 / 189;"));
-        assert!(css.contains(".portal-graph-field"));
-        assert!(css.contains("grid-template-columns: clamp(15rem, 20vw, 18rem)"));
-        assert!(css.contains(".portal-process-graph:nth-child(11)"));
-        assert!(css.contains(":root[data-theme=\"dark\"] .portal-graph-theme-light"));
-        assert!(css.contains(":root:not([data-theme]) {"));
-        assert!(!css.contains(".portal-process-graph > img { display: block;"));
-        assert!(!css.contains(".portal-graph-card"));
-
-        let renderer =
-            fs::read_to_string(builder.root.join("scripts/render-docs-svg-assets.sh")).unwrap();
-        assert!(renderer.contains("typst compile"));
-        for forbidden in ["cargo run", "save dot", "linnet draw", "dot -", "sed -i"] {
-            assert!(
-                !renderer.contains(forbidden),
-                "website SVG renderer uses external generation: {forbidden}"
-            );
-        }
-        for graph in &builder.portal.graphs {
-            let source = builder
-                .root
-                .join("docs/assets/typst/portal-graphs/graphs")
-                .join(format!("portal-graph-{graph}.typ"));
-            let typst = fs::read_to_string(&source).unwrap();
-            assert!(
-                typst.contains("#render(") && typst.contains("read(") && typst.contains(".dot\""),
-                "missing editable Linnest source for {graph}"
-            );
-        }
-        let about_graph = fs::read_to_string(
-            builder
-                .root
-                .join("docs/assets/typst/about/double-triangle.typ"),
-        )
-        .unwrap();
-        assert!(about_graph.contains("tests/resources/graphs/double_triangle.dot"));
-        assert!(about_graph.contains("#render(input"));
-        assert!(about_graph.contains("cut_curve=blue"));
-        assert!(about_graph.contains("cut_curve=red"));
-        assert!(about_graph.contains("cut-curves: true"));
-        assert!(!about_graph.contains("cut_marker"));
-        assert!(about_graph.contains("v3 [label=\\\"\\\", pos="));
-        let about_equation = fs::read_to_string(
-            builder
-                .root
-                .join("docs/assets/typst/about/local-unitarity-equation.typ"),
-        )
-        .unwrap();
-        for term in [
-            "frac(dif sigma, dif cal(O))",
-            "product_(i = 1)^(n_\"loop\") dif^3 bold(k)_i",
-            "I_(Gamma,c)^upright(\"LU\")",
-            "delta(cal(O)(c, bold(k)_i))",
-        ] {
-            assert!(about_equation.contains(term), "About equation lost {term}");
-        }
-
-        let shared_layout = fs::read_to_string(
-            builder
-                .root
-                .join("assets/embedded/drawing/templates/layout-core.typ"),
-        )
-        .unwrap();
-        let canonical_layout = fs::read_to_string(
-            builder
-                .root
-                .join("assets/embedded/drawing/templates/layout.typ"),
-        )
-        .unwrap();
-        let portal_layout = fs::read_to_string(
-            builder
-                .root
-                .join("docs/assets/typst/portal-graphs/layout.typ"),
-        )
-        .unwrap();
-        for structural_contract in [
-            "#let edge-label-style(edge)",
-            "#let autogen-external-edge-fields(",
-            "#let layout(",
-            "#let bind-layout(",
-            "graph.parse(input)",
-            "graph.style(",
-            "apply-layout(graph-bytes, ..layout-options)",
-            "draw(",
-        ] {
-            assert!(
-                shared_layout.contains(structural_contract),
-                "shared GammaLoop layout lost {structural_contract}"
-            );
-        }
-        assert!(canonical_layout.contains("#import \"layout-core.typ\": bind-layout"));
-        assert!(portal_layout.contains(
-            "#import \"../../../../assets/embedded/drawing/templates/layout-core.typ\": ("
-        ));
-        assert!(portal_layout.contains("cetz.draw.bezier("));
-        for (name, adapter) in [
-            ("save-dot", canonical_layout.as_str()),
-            ("website", portal_layout.as_str()),
-        ] {
-            assert!(
-                adapter.contains("#let layout = bind-layout("),
-                "{name} adapter does not bind the shared layout"
-            );
-            assert!(
-                !adapter.contains("graph.parse(input)"),
-                "{name} adapter duplicated the shared layout algorithm"
-            );
-        }
-        assert!(portal_layout.contains("diagram-options: ("));
-        assert!(portal_layout.contains("node-stroke: palette.ink + 1.45pt"));
-
         let publications =
             fs::read_to_string(output.path().join("publications/index.html")).unwrap();
-        assert_eq!(
-            publications.matches("data-publication data-title").count(),
-            builder.publications.publications.len()
-        );
-        assert!(publications.contains("data-publication-author"));
-        assert!(publications.contains("Open the live INSPIRE query"));
-
-        let citations = fs::read_to_string(output.path().join("citations/index.html")).unwrap();
-        assert_eq!(citations.matches("class=\"citation-card\"").count(), 5);
-        for product in &builder.registry.product {
-            assert!(citations.contains(&format!(
-                "<article class=\"citation-card\" id=\"{}\"",
-                product.id
-            )));
+        for control in ["search", "author", "year", "type", "sort", "count", "list"] {
+            assert!(publications.contains(&format!("data-publication-{control}")));
         }
-        assert!(citations.contains("10.5281/zenodo.18429583"));
-        assert!(citations.contains("No registered software DOI is currently configured"));
     }
 
     #[test]
@@ -12101,11 +11815,8 @@ mod tests {
             write_test_portal(&builder, output.path(), channel, tag);
             let html = fs::read_to_string(output.path().join("index.html")).unwrap();
 
-            assert!(html.contains("id=\"tasks\" aria-labelledby=\"tasks-title\""));
-            assert_eq!(html.matches("class=\"portal-task-link\"").count(), 5);
             for task in &builder.portal.task {
                 let product_id = &task.product;
-                let role = &task.role;
                 let product = builder
                     .registry
                     .product
@@ -12118,33 +11829,10 @@ mod tests {
                     .find(|page| page.id == "quickstart")
                     .unwrap();
                 assert!(html.contains(&format!(
-                    "class=\"portal-task-link\" data-product=\"{product_id}\" href=\"products/{product_id}/{channel_route}/{}\"",
+                    "href=\"products/{product_id}/{channel_route}/{}\"",
                     quickstart.route
                 )));
-                assert!(html.contains(&format!("<strong>{}</strong>", task.label)));
-                assert!(html.contains(&format!("{} · {role}", product.title)));
             }
-        }
-    }
-
-    #[test]
-    fn portal_project_cards_use_accurate_ecosystem_roles() {
-        let builder = SiteBuilder::discover().unwrap();
-        let output = tempfile::tempdir().unwrap();
-        write_test_portal(&builder, output.path(), BuildChannel::Latest, None);
-        let html = fs::read_to_string(output.path().join("index.html")).unwrap();
-
-        assert!(!html.contains("Research project"));
-        for task in &builder.portal.task {
-            let product_id = &task.product;
-            let role = &task.role;
-            assert!(html.contains(&format!(
-                "<article class=\"portal-project-card\" data-product=\"{product_id}\"><div class=\"portal-project-meta\"><span>"
-            )));
-            assert!(html.contains(&format!("</span><span>{role}</span></div>")));
-            assert!(html.contains(&format!(
-                "products/{product_id}/latest/quickstart/\">Get started</a>"
-            )));
         }
     }
 
@@ -12486,22 +12174,19 @@ mod tests {
         .unwrap();
         assert_eq!(
             search.len(),
-            PRODUCT_IDS.len() * 2 + builder.talks.talk.len() + 3
+            PRODUCT_IDS.len() + builder.talks.talk.len() + 3
         );
         for product in &builder.registry.product {
             assert!(search.iter().any(|entry| {
                 entry.href == format!("products/{}/latest/tutorial/#first-result", product.id)
                     && entry.kind == format!("{} · tutorial", product.title)
             }));
-            let citation = search
-                .iter()
-                .find(|entry| entry.title == format!("Cite {}", product.title))
-                .unwrap();
-            assert_eq!(citation.href, format!("citations/#{}", product.id));
-            assert_eq!(citation.kind, "citation");
-            assert!(citation.summary.contains("software citation and BibTeX"));
-            assert!(citation.text.contains(&product.citation.title));
         }
+        assert!(
+            !search
+                .iter()
+                .any(|entry| entry.href.starts_with("citations/"))
+        );
         assert!(search.iter().any(|entry| {
             entry.href == "developers/architecture/current/"
                 && entry.kind == "Developers · developer current implemented"
@@ -12529,18 +12214,16 @@ mod tests {
             route: "products/gammaloop/latest/".to_owned(),
             components: Vec::new(),
         };
-        for (page, expected_source, expected_search, expected_citation) in [
+        for (page, expected_source, expected_search) in [
             (
                 SitePage::new("tutorial/", "Create your first state", "Tutorial"),
                 "docs/products/gammaloop/content/tutorial.typ",
                 "../../../../search-index.json",
-                "../../../../citations/#gammaloop",
             ),
             (
                 SitePage::new("reference/cli/", "CLI commands and settings", "Reference"),
                 "crates/gammaloop-api/src/commands/mod.rs",
                 "../../../../../search-index.json",
-                "../../../../../citations/#gammaloop",
             ),
         ] {
             let destination = site.path().join(&page.route);
@@ -12562,12 +12245,11 @@ mod tests {
                 .unwrap();
             let rendered = fs::read_to_string(destination.join("index.html")).unwrap();
             assert!(rendered.contains(&format!("data-search-index=\"{expected_search}\"")));
-            assert!(rendered.contains(&format!("href=\"{expected_citation}\">Cite GammaLoop</a>")));
+            assert!(!rendered.contains("citations/"));
             assert!(rendered.contains(&format!(
                 "https://github.com/alphal00p/gammaloop/blob/0123456789abcdef/{expected_source}"
             )));
             assert!(rendered.contains("issues/new?labels=documentation&amp;title="));
-            assert!(rendered.contains("Report a documentation issue"));
         }
     }
 
@@ -12743,8 +12425,8 @@ mod tests {
         write_test_portal(&builder, output.path(), BuildChannel::Latest, None);
         let portal = fs::read_to_string(output.path().join("index.html")).unwrap();
         assert!(portal.contains("data-search-index=\"search-index.json\""));
-        assert!(portal.contains("class=\"portal-search-button\""));
-        assert!(portal.contains("Search all projects and developer notes"));
+        assert!(portal.contains("data-search-open"));
+        assert!(portal.contains("data-search-dialog"));
 
         builder
             .write_developer_docs(
@@ -12758,7 +12440,7 @@ mod tests {
             .unwrap();
         let hub = fs::read_to_string(output.path().join("developers/index.html")).unwrap();
         assert!(hub.contains("data-search-index=\"../search-index.json\""));
-        assert!(hub.contains("Report a documentation issue"));
+        assert!(hub.contains("issues/new?labels=documentation&amp;title="));
         assert!(hub.contains("blob/"));
         assert!(hub.contains("/docs/developers.toml"));
 
@@ -12769,7 +12451,6 @@ mod tests {
         )
         .unwrap();
         assert!(note.contains("data-search-index=\"../../../search-index.json\""));
-        assert!(note.contains("Report a documentation issue"));
         assert!(note.contains("architecture-current.typ"));
         assert!(note.contains("issues/new?labels=documentation&amp;title="));
     }

@@ -18,7 +18,7 @@ route and replacement edge but are removed from primary navigation and
 search.
 
 The collaboration portal is authored in `docs/portal/`. One Typst bundle
-emits the landing, About, People, Talks, Publications, and Citations routes.
+emits the landing, About, People, Talks, and Publications routes.
 Those sources load `docs/portal.toml`, `docs/talks.toml`,
 `docs/products/registry.toml`, and the generated INSPIRE publication cache
 directly. Page bodies use ordinary Typst headings, paragraphs, emphasis, links,

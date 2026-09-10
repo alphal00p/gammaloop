@@ -57,19 +57,6 @@
   body,
 )
 
-#let copyable-code(id, value, label) = [
-  #el("pre", attrs: (id: id))[#el("code")[#value]]
-  #el("button", class: "portal-button", attrs: (
-    type: "button",
-    "data-copy-target": id,
-  ))[#label]
-]
-
-#let disclosure(summary, body) = el("details")[
-  #el("summary")[#summary]
-  #body
-]
-
 // Semantic portal components. Authored pages use these names and never need to
 // know the CSS selectors or incidental HTML wrappers behind them.
 #let landing-hero(art, body) = region(
@@ -166,13 +153,6 @@
   attrs: (href: href),
   body,
 )
-#let project-cite-link(href, body) = el(
-  "a",
-  class: "portal-card-cite",
-  attrs: (href: href),
-  body,
-)
-
 #let funding-note(href, title-id: "funding-title", about: false, body) = el(
   "aside",
   class: "portal-funding" + if about { " about-funding" } else { "" },
@@ -337,10 +317,6 @@
   #styled-paragraph("portal-page-note", body)
 ]
 
-#let citation-card(id, body) = panel(class: "citation-card", id: id, body)
-#let citation-status(body) = styled-paragraph("citation-status", body)
-#let citation-grid(body) = region(class: "citation-grid", body)
-
 #let nav-attrs(href, item, active) = if item == active {
   (href: href, "aria-current": "page")
 } else {
@@ -397,7 +373,6 @@
     #el("a", attrs: (href: root + "people/"))[People]
     #el("a", attrs: (href: root + "talks/"))[Talks]
     #el("a", attrs: (href: root + "publications/"))[Publications]
-    #el("a", attrs: (href: root + "citations/"))[Cite]
     #el("a", attrs: (href: root + "developers/"))[Developers]
     #el("a", attrs: (href: "https://github.com/alphal00p/gammaloop"))[Source]
   ]
