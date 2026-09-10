@@ -572,6 +572,7 @@ class Collector {
         const run = runs[position];
         const matching = checks.filter(check => checkJobs.get(check) === run.url?.replace(/\/$/, ''));
         const check = matching.toSorted((a, b) => (timestamp(a.started_at) ?? 0) - (timestamp(b.started_at) ?? 0)).at(-1);
+        const superseded = [...checkMappings.values()].find(mapping => mapping.fromUrl === run.url)?.urls.at(-1);
         const job = {
           attribute: run.attribute ?? run.type, type: run.type, status: run.status, url: run.url, attempt: run.attempt ?? 1,
           context: /crate-(?:test-|deps-)|cargoArtifacts|Artifacts|prebuild|nextest-binaries|ci-test-inputs/.test(run.attribute ?? '') ? 'artifact-producer'
@@ -580,13 +581,16 @@ class Collector {
           checkId: check?.id ?? null, checkStartedAt: check?.started_at ?? null,
           checkCompletedAt: check?.completed_at ?? null, checkConclusion: check?.conclusion ?? null,
           checkDetailsUrl: check?.details_url ?? null, checkMapping: checkMappings.get(check) ?? null,
+          checkSupersededBy: superseded ?? null,
           retryMetadata: retryMetadata.get(run.url), retryMetadataFile: retryEvidence.get(run.url),
           checkSeconds: excluded.has(run.status) || excluded.has(check?.conclusion) ? null
             : secondsBetween(timestamp(check?.started_at), timestamp(check?.completed_at)),
           logStatus: 'not-run', testExecution: run.type === 'test' ? 'unknown' : 'not-applicable',
         };
         if (!check && !['queued', 'pending', 'skipped', 'cancelled'].includes(run.status))
-          this.errors.push({ suiteUrl: spec.suiteUrl, jobUrl: run.url, stage: 'checks', error: 'no check matches the exact job URL' });
+          this.errors.push({ suiteUrl: spec.suiteUrl, jobUrl: run.url, stage: 'checks', error: superseded
+            ? 'GitHub check now describes an explicitly linked retry; original attempt timestamps are unavailable'
+            : 'no check matches the exact job URL' });
         if (run.status === 'cached') {
           job.logStatus = 'cached';
           if (run.type === 'test') job.testExecution = 'reused';

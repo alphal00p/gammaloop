@@ -744,6 +744,7 @@ test('reciprocal retry metadata assigns reused check clocks only to the identifi
       assert.equal(first.checkId, null);
       assert.equal(first.checkStartedAt, null);
       assert.equal(first.checkCompletedAt, null);
+      assert.equal(first.checkSupersededBy, retry.url);
       assert.equal(retry.checkSeconds, 20);
       assert.equal(retry.checkDetailsUrl, runs[1].url);
       assert.equal(retry.checkMapping.source, 'reciprocal-retry-links');
