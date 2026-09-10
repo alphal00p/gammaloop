@@ -1803,7 +1803,7 @@
 
       # Crane deletes inherited Cargo locks before using an artifact tree.
       # Remove them here while the merged files are still ordinary files.
-      find target -name .cargo-lock -delete
+      find target -name '.cargo*lock' -delete
 
       # Keep the merged closure compressed without retaining its input archives.
       # Crane normalizes archive timestamps to epoch 1 for Cargo freshness.
@@ -2600,7 +2600,7 @@
           mkdir -p "$out"
           if [ -d target ]; then
             chmod -R u+w target
-            find target -name .cargo-lock -delete
+            find target -name '.cargo*lock' -delete
           fi
           cargo nextest --version
           cargo nextest archive \
