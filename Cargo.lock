@@ -4727,9 +4727,9 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.25.2"
+version = "2.25.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f3898e876d41f21e4960426b5e650ca04d7741f255ce45fc7e7ef03b49f2e12"
+checksum = "5db5510ad994b72be2438fc9cae89b92c6c8a7c848d94a298b1d4f9c0dedfb57"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
