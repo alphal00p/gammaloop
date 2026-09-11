@@ -191,7 +191,7 @@ impl ThermalWeight {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use symbolica::atom::AtomCore;
 
@@ -225,6 +225,160 @@ mod tests {
                     - factor(2, -1) * factor(4, -1) * factor(1, 1)
             );
         }
+    }
+
+    #[test]
+    fn canonicalization_keeps_positive_side_when_already_canonical() {
+        let (canonicalized, sign) = ThermalNumerator::from_edge_lists_canonicalized(
+            vec![EdgeIndex(1), EdgeIndex(4)],
+            vec![EdgeIndex(2), EdgeIndex(5)],
+        );
+        assert_eq!(sign, 1);
+        assert_eq!(
+            canonicalized,
+            ThermalNumerator {
+                positive_energies: vec![EdgeIndex(1), EdgeIndex(4)],
+                negative_energies: vec![EdgeIndex(2), EdgeIndex(5)],
+            }
+        );
+    }
+
+    #[test]
+    fn trivial_numerator_detection_runs_after_sign_fixup() {
+        let (canonicalized, sign) =
+            ThermalNumerator::from_edge_lists_canonicalized(vec![], vec![EdgeIndex(7)]);
+        assert_eq!(sign, -1);
+        assert!(canonicalized.is_trivial());
+    }
+
+    #[test]
+    fn thermal_mode_keeps_cyclic_orientations() {
+        let mut parsed = crate::graph_io::test_graphs::box_graph();
+        parsed.internal_edges.truncate(3);
+        parsed.internal_edges[2].head = 0;
+        parsed.external_edges.truncate(4);
+        parsed.external_names.truncate(2);
+        parsed.node_name_to_internal.retain(|_, node| *node < 3);
+        for edge in &mut parsed.internal_edges {
+            edge.signature.external_signature.truncate(2);
+        }
+        for (medium_mode, expected_orientations) in [
+            (MediumMode::Vacuum, 6),
+            (MediumMode::ThermodynamicEquilibrium, 8),
+            (MediumMode::ZeroTemperatureEquilibrium, 8),
+        ] {
+            let expression = generate_3d_expression(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    medium_mode,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .expression;
+            assert_eq!(expression.orientations.len(), expected_orientations);
+        }
+    }
+
+    #[test]
+    fn thermal_generation_keeps_nontrivial_numerators_and_canonicalization_signs() {
+        let mut parsed = crate::graph_io::test_graphs::box_graph();
+        parsed.internal_edges.truncate(3);
+        parsed.internal_edges[2].head = 0;
+        parsed.external_edges.truncate(4);
+        parsed.external_names.truncate(2);
+        parsed.node_name_to_internal.retain(|_, node| *node < 3);
+        for edge in &mut parsed.internal_edges {
+            edge.signature.external_signature.truncate(2);
+        }
+        for medium_mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let expression = generate_3d_expression(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    medium_mode,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .expression;
+            let variants = expression
+                .orientations
+                .iter()
+                .flat_map(|orientation| &orientation.variants)
+                .collect::<Vec<_>>();
+            let numerators = variants
+                .iter()
+                .flat_map(|variant| &variant.thermal_weight.numerators)
+                .collect::<Vec<_>>();
+            assert!(!numerators.is_empty());
+            assert!(numerators.iter().all(|numerator| !numerator.is_trivial()));
+            let unique_numerators = numerators.iter().copied().collect::<BTreeSet<_>>();
+            assert!(numerators.len() > unique_numerators.len());
+            assert_eq!(
+                unique_numerators.len(),
+                unique_numerators
+                    .iter()
+                    .map(|numerator| {
+                        numerator
+                            .to_atom(medium_mode.is_finite_temperature())
+                            .to_canonical_string()
+                    })
+                    .collect::<BTreeSet<_>>()
+                    .len()
+            );
+            assert!(
+                variants
+                    .iter()
+                    .any(|variant| variant.prefactor == Atom::num(-1))
+            );
+            assert!(
+                variants
+                    .iter()
+                    .any(|variant| variant.prefactor == Atom::num(1))
+            );
+        }
+    }
+
+    #[test]
+    fn thermal_variant_fusion_combines_matching_weights_and_preserves_distinct_weights() {
+        let parsed = crate::graph_io::test_graphs::box_graph();
+        let expression = generate_3d_expression(
+            &parsed,
+            &Generate3DExpressionOptions {
+                medium_mode: MediumMode::ThermodynamicEquilibrium,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .expression;
+        let mut orientation = expression.orientations.first().unwrap().clone();
+        let original = orientation.variants[0].clone();
+        let mut distinct = original.clone();
+        distinct
+            .thermal_weight
+            .distributions
+            .push(ThermalDistributionFactor {
+                edge_id: EdgeIndex(0),
+                sign: -1,
+                derivative_order: 0,
+            });
+        distinct.thermal_weight.canonicalize();
+        orientation.variants = vec![original.clone(), distinct.clone(), original.clone()];
+        let before = orientation.to_atom();
+        orientation.fuse_compatible_variants();
+        assert_eq!(orientation.variants.len(), 2);
+        assert_eq!((orientation.to_atom() - before).expand(), Atom::Zero);
+        assert!(orientation.variants.iter().any(|variant| {
+            variant.thermal_weight == original.thermal_weight
+                && variant.prefactor == Atom::num(2) * &original.prefactor
+        }));
+        assert!(orientation.variants.iter().any(|variant| {
+            variant.thermal_weight == distinct.thermal_weight
+                && variant.prefactor == distinct.prefactor
+        }));
     }
 
     #[test]
