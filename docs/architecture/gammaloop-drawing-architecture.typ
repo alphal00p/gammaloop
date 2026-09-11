@@ -377,7 +377,7 @@ momentum expression renumbers the edge ID.
 The momentum geometry follows the Xbox example: offset `0.35`, visible length `1.0`, and no ratio cap.
 GammaLoop uses a rounded `1pt` stroke and a straight arrowhead at scale `1.1`. Its ink and accent
 colors are available through `physics.palette`; nodes use a transparent fill and a `1.45pt` outline.
-The label gap is `0.55`, reduced to `0.45` when momentum labels are disabled. Use
+The label gap is `0.20`, reduced to `0.10` when momentum labels are disabled. Use
 `momentum-arrow-side: auto`, `"left"`, or `"right"` relative to source-to-sink flow.
 Automatic sides follow the edge's bend relative to its source-to-sink chord, independently of
 label visibility, size, or relaxed position. Straight edges, dangling legs, and closed chords
@@ -388,10 +388,12 @@ set independently. `momentum-label-anchor` controls label anchoring. These optio
 per-edge `momentum-*` fields. A full-path `label-only: true, label: auto` carrier reuses the
 ordinary measured label, preventing arrow-length changes from clamping its location. Explicit
 style arrays can remove the carrier; the ordinary edge label then supplies the fallback.
-Prepared external legs keep their combined labels outside the free endpoint, with incoming
-labels anchored east and outgoing labels anchored west. Their default momentum style leaves
-Linnest's solved label position intact; explicit momentum shifts or label anchors select the
-path-relative placement instead. Unmatched cut legs receive the same outward anchors.
+Prepared external legs keep their combined labels outside the free endpoint. Their automatic
+anchor follows the actual direction from the attached node to that endpoint, so explicit
+placements can put incoming or outgoing legs on either side. Left endpoints anchor east, right
+endpoints west, and vertical endpoints anchor south or north; explicit user anchors take precedence.
+Their default momentum style leaves Linnest's solved label position intact; explicit momentum
+shifts or `momentum-label-anchor` select the path-relative placement instead. Unmatched cut legs receive the same outward anchors.
 Amplitude and cross-section layout presets use label length scale `0.45` with momentum labels
 and `0.30` without them; explicit layout-pass settings still take precedence.
 

@@ -216,6 +216,7 @@
   } else { "source" }
   let layers = _momentum-arrow-layer(edge, options + (show-mark: half == arrow-half))
   let anchor = _edge-data-field(edge, "label-anchor", none)
+  if type(anchor) == str { anchor = anchor.trim("\"") }
   let dangling = (
     edge.at("source-half-edge", default: none) == none
       or edge.at("sink-half-edge", default: none) == none
@@ -223,7 +224,7 @@
   // Ordered external labels stay outside their endpoint at Linnest's solved
   // label position. Explicit momentum placement still selects the path carrier.
   if (
-    dangling and type(anchor) == str and anchor.trim("\"") in ("east", "west")
+    dangling and (anchor == auto or type(anchor) == str)
       and options.momentum-arrow-shift == 0
       and options.momentum-label-shift == auto
       and options.momentum-label-anchor == auto

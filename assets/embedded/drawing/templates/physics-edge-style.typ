@@ -373,7 +373,7 @@
   momentum-arrow-mark: momentum-arrow-defaults.mark,
   momentum-arrow-side: auto,
   momentum-arrow-shift: 0,
-  momentum-label-gap: 0.55,
+  momentum-label-gap: 0.20,
   momentum-label-shift: auto,
   momentum-label-anchor: auto,
 ) = _impl.source-style(edge, (
@@ -417,7 +417,7 @@
   momentum-arrow-mark: momentum-arrow-defaults.mark,
   momentum-arrow-side: auto,
   momentum-arrow-shift: 0,
-  momentum-label-gap: 0.55,
+  momentum-label-gap: 0.20,
   momentum-label-shift: auto,
   momentum-label-anchor: auto,
 ) = _impl.sink-style(edge, (
@@ -491,11 +491,29 @@
   api: _api(),
 ))
 
-/// Preserve explicit and prepared external-label anchors in native Typst graphs.
+/// Preserve explicit anchors and resolve prepared external labels outward from
+/// their actual endpoint direction, independently of incoming/outgoing flow.
 /// -> dictionary
 #let edge-label-style(edge) = {
   let anchor = edge.at("label-anchor", default: none)
-  if type(anchor) == str { (anchor: anchor.trim("\"")) } else { (:) }
+  if type(anchor) == str { anchor = anchor.trim("\"") }
+  if anchor in (auto, "auto") and edge.at("ext", default: false) {
+    let source = edge.at("source-node", default: none)
+    let sink = edge.at("sink-node", default: none)
+    let node = if source == none { sink } else { source }
+    let record = edge.at("edge", default: none)
+    let pos = if type(record) == dictionary {
+      record.at("pos", default: none)
+    } else { none }
+    // Measurement has no node aliases; anchoring affects drawing, not text size.
+    if node != none and pos != none {
+      let dx = pos.x - node.pos.x
+      let dy = pos.y - node.pos.y
+      anchor = if dx < -1e-9 { "east" } else if dx > 1e-9 { "west" }
+        else if dy > 0 { "south" } else if dy < 0 { "north" } else { "center" }
+    } else { anchor = none }
+  }
+  if type(anchor) == str { (anchor: anchor) } else { (:) }
 }
 
 /// Bundle source-style, sink-style, edge-label and edge-label-style callbacks
@@ -503,7 +521,7 @@
 /// are opt-in; enabling them also enables combined particle and `q_(eid)` labels
 /// unless `show-momentum` is explicitly set. Arrow length never clamps labels.
 /// Prepared external labels retain their outward endpoint position by default;
-/// explicit momentum shifts or label anchors select path-relative placement.
+/// explicit momentum shifts or `momentum-label-anchor` select path-relative placement.
 ///
 /// ````example
 /// #let g = build({
@@ -617,7 +635,7 @@
     momentum-arrow-shift: momentum-arrow-shift,
     momentum-label-gap: if momentum-label-gap != auto {
       momentum-label-gap
-    } else if show-momentum == false { 0.45 } else { 0.55 },
+    } else if show-momentum == false { 0.10 } else { 0.20 },
     momentum-label-shift: momentum-label-shift,
     momentum-label-anchor: momentum-label-anchor,
   ),
@@ -638,7 +656,7 @@
     momentum-arrow-shift: momentum-arrow-shift,
     momentum-label-gap: if momentum-label-gap != auto {
       momentum-label-gap
-    } else if show-momentum == false { 0.45 } else { 0.55 },
+    } else if show-momentum == false { 0.10 } else { 0.20 },
     momentum-label-shift: momentum-label-shift,
     momentum-label-anchor: momentum-label-anchor,
   ),

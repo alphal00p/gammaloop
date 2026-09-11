@@ -65,9 +65,9 @@
       (type(data) != dictionary or not data.keys().contains("label-anchor"))
         and not edge.statements.keys().contains("label-anchor")
     ) {
-      generated.insert("label-anchor", if side == "left" { "east" } else {
-        "west"
-      })
+      // Resolve the anchor after layout: explicit coordinates can put either
+      // incoming or outgoing legs on either side of the graph.
+      generated.insert("label-anchor", auto)
     }
     let id = if match-field == none { edge.edge } else {
       _field(edge, match-field)
