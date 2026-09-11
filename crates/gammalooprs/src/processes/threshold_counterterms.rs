@@ -716,7 +716,7 @@ impl ResolvedThresholdCounterterms {
                     .subspace
                     .iter_basis_edges(all_lmbs)
                     .collect::<Vec<_>>();
-                let resolved_parent_lmb = association.requires_explicit_parent_lmb.then(|| {
+                let resolved_parent_lmb = Some({
                     association
                         .subspace
                         .get_lmb(all_lmbs)
@@ -903,7 +903,10 @@ mod tests {
         let default = &threshold.counterterms[0];
         assert_eq!(default.name.as_deref(), Some("default"));
         assert_eq!(default.subspace.as_deref(), Some([basis_edge].as_slice()));
-        assert!(default.parent_lmb.is_none());
+        assert_eq!(
+            default.parent_lmb.as_deref(),
+            Some(graph.loop_momentum_basis.loop_edges.raw.as_slice())
+        );
         assert!(default.multiplier.is_none());
     }
 
@@ -917,8 +920,9 @@ mod tests {
             ext->v1:0 [id=0]
             v1->v2 [id=1]
             v2->v1 [id=2]
-            v1->v2 [id=3]
-            ext->v2:1 [id=4]
+            v2->v3 [id=3]
+            v3->v2 [id=4]
+            ext->v3:1 [id=5]
         })
         .unwrap();
         let all_lmbs = graph.generate_loop_momentum_bases();
@@ -926,8 +930,9 @@ mod tests {
         let subspaces = all_lmbs
             .iter_enumerated()
             .filter_map(|(lmb_index, _)| {
-                SubspaceData::new_with_user_selected_lmb(
-                    containing_subgraph.clone(),
+                SubspaceData::new_from_parent_basis_edges(
+                    &[EdgeIndex(1)],
+                    &containing_subgraph,
                     lmb_index,
                     &graph,
                     &all_lmbs,
@@ -1027,18 +1032,16 @@ mod tests {
 
         for (threshold, association) in reparsed.cuts[0].thresholds.iter().zip(&associations) {
             let counterterm = &threshold.counterterms[0];
-            let parent_lmb_index = counterterm
+            let parent = counterterm
                 .parent_lmb
                 .as_ref()
-                .map(|parent| {
-                    all_lmbs
-                        .iter_enumerated()
-                        .find_map(|(lmb_index, lmb)| {
-                            lmb.loop_edges.iter().eq(parent.iter()).then_some(lmb_index)
-                        })
-                        .expect("serialized parent LMB must be generated")
+                .expect("materialized variants must declare their full parent");
+            let parent_lmb_index = all_lmbs
+                .iter_enumerated()
+                .find_map(|(lmb_index, lmb)| {
+                    lmb.loop_edges.iter().eq(parent.iter()).then_some(lmb_index)
                 })
-                .unwrap_or_else(|| implicit_subspace.parent_lmb_index());
+                .expect("serialized parent LMB must be generated");
             let round_tripped = SubspaceData::new_from_parent_basis_edges(
                 counterterm.subspace.as_deref().unwrap(),
                 &containing_subgraph,
@@ -1051,10 +1054,9 @@ mod tests {
             assert!(round_tripped.has_equivalent_embedding(implicit_subspace, &all_lmbs));
         }
 
-        assert!(
-            reparsed.cuts[0].thresholds[0].counterterms[0]
-                .parent_lmb
-                .is_none()
+        assert_eq!(
+            reparsed.cuts[0].thresholds[0].counterterms[0].parent_lmb,
+            Some(implicit_subspace.get_lmb(&all_lmbs).loop_edges.raw.clone()),
         );
         assert_eq!(
             reparsed.cuts[0].thresholds[1].counterterms[0].parent_lmb,

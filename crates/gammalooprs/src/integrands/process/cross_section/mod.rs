@@ -26,7 +26,7 @@ use crate::{
     model::Model,
     momentum::{
         Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum,
-        sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace, SubspaceData},
+        sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
     },
     observables::{
         AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup,
@@ -1206,46 +1206,18 @@ impl CrossSectionGraphTerm {
             let variant_subspaces = if resolved.legacy_equivalent {
                 None
             } else {
-                let all_lmbs = graph.derived_data.lmbs.as_ref().ok_or_else(|| {
-                    eyre!(
-                        "graph '{}' has resolved threshold variants but no loop-momentum bases",
-                        graph.graph.name,
-                    )
-                })?;
                 Some(
                     graph
                         .derived_data
                         .threshold_counterterms
                         .iter()
-                        .map(|counterterm_data| {
-                            let left_common = if counterterm_data.left_subspaces.is_empty() {
-                                None
-                            } else {
-                                Some(SubspaceData::union_in_common_parent(
-                                    counterterm_data.left_subspaces.iter(),
-                                    &graph.graph,
-                                    all_lmbs,
-                                )?)
-                            };
-                            let right_common = if counterterm_data.right_subspaces.is_empty() {
-                                None
-                            } else {
-                                Some(SubspaceData::union_in_common_parent(
-                                    counterterm_data.right_subspaces.iter(),
-                                    &graph.graph,
-                                    all_lmbs,
-                                )?)
-                            };
-                            Ok(LUVariantSubspaces {
-                                left_variant_ids: counterterm_data.left_variant_ids.clone(),
-                                right_variant_ids: counterterm_data.right_variant_ids.clone(),
-                                left: counterterm_data.left_subspaces.clone(),
-                                right: counterterm_data.right_subspaces.clone(),
-                                left_common,
-                                right_common,
-                            })
+                        .map(|counterterm_data| LUVariantSubspaces {
+                            left_variant_ids: counterterm_data.left_variant_ids.clone(),
+                            right_variant_ids: counterterm_data.right_variant_ids.clone(),
+                            left: counterterm_data.left_subspaces.clone(),
+                            right: counterterm_data.right_subspaces.clone(),
                         })
-                        .collect::<Result<TiVec<CutGroupId, _>>>()?,
+                        .collect::<TiVec<CutGroupId, _>>(),
                 )
             };
 

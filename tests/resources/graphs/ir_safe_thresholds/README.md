@@ -35,9 +35,10 @@ thresholds `(5,11,13)` and `(5,7)`, and right thresholds `(3,11,12)` and
 physical-cut geometry `(2,6,10)`.  The focused Cartesian regression explicitly
 disables unrelated left `(8,12,14)` and right `(2,6,10)`, duplicates `(7,8)`
 into the verified `[7]` and `[3,7]` variants, and keeps `(5,12,13)` and `(5,10)`
-as its two distinct right partners.  Its `[3,7]` variant requires explicit
-parent LMB `(3,4,7,10)`: omitting the parent produces genuinely different
-common-parent embeddings and is rejected as ambiguous.
+as its two distinct right partners. Every explicit variant requires a full
+parent LMB; the GL638 variants declare `(3,4,7,10)`. Implicit right partners
+retain their native default parents. Selected edges and their signed cycles
+identify solve groups; different native parent labels alone do not separate groups.
 
 At the audit baseline, forcing a cut together with a generation-time
 orientation pattern exposed a missing-CFF-surface error for topology-wide

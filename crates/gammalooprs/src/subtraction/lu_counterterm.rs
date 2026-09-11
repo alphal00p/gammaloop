@@ -1,5 +1,5 @@
 use core::f64;
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, path::Path, sync::Arc};
 
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -389,22 +389,6 @@ fn weight_iterated_multiplier_pieces<T: FloatLike>(
         );
     }
     result
-}
-
-fn plain_t_dual_or_scalar_complex<T: FloatLike>(
-    value: &DualOrNot<Complex<F<T>>>,
-    t_variable: Option<usize>,
-) -> DualOrNot<Complex<F<T>>> {
-    match value {
-        DualOrNot::Dual(dual) => {
-            if let Some(t_variable) = t_variable {
-                DualOrNot::Dual(extract_zero_threshold_coefficient_t_dual(dual, t_variable))
-            } else {
-                DualOrNot::NonDual(dual.values[0].clone())
-            }
-        }
-        DualOrNot::NonDual(value) => DualOrNot::NonDual(value.clone()),
-    }
 }
 
 fn extract_zero_threshold_coefficient_t_dual<
@@ -1194,6 +1178,7 @@ impl LUCounterTermEvaluators {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn from_atoms(
         counterterm_data: &LUCounterTermData,
         max_cut_order: usize,
@@ -1381,8 +1366,6 @@ pub(crate) struct LUVariantSubspaces {
     pub right_variant_ids: TiVec<RightThresholdId, ThresholdCountertermVariantId>,
     pub left: TiVec<LeftThresholdId, SubspaceData>,
     pub right: TiVec<RightThresholdId, SubspaceData>,
-    pub left_common: Option<SubspaceData>,
-    pub right_common: Option<SubspaceData>,
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -1410,18 +1393,30 @@ pub(crate) struct LUCountertermEvaluation<T: FloatLike> {
 #[derive(Clone)]
 struct GlobalOverlapRecord {
     cut_group_id: CutGroupId,
+    side: ThresholdCountertermSide,
     local_threshold_id: usize,
-    global_surface_id: EsurfaceID,
     variant_id: Option<ThresholdCountertermVariantId>,
 }
 
-#[derive(Default)]
-struct GlobalOverlapSideData {
+/// One complete solve group. Every sample is expressed in `subspace`'s parent,
+/// while its cut's fixed data and derivative orders remain independent.
+struct ThresholdSolveGroup<T: FloatLike> {
     thresholds: EsurfaceCollection,
-    subspaces: Vec<SubspaceData>,
-    group_ids: Vec<Option<usize>>,
-    kinematics: Vec<OverlapKinematics>,
+    subspace: SubspaceData,
+    kinematics: Vec<LUCTKinematicPoint<T>>,
     records: Vec<GlobalOverlapRecord>,
+    overlap: OverlapStructure,
+    prefactor_power: usize,
+}
+
+#[derive(Clone)]
+pub(crate) struct LUSharedOverlaps<T: FloatLike> {
+    left: OverlapStructure,
+    right: OverlapStructure,
+    // Local CT dispatch refers back to the complete group and its center. In
+    // particular, foreign-cut complements never disappear during projection.
+    left_groups: Vec<(Arc<ThresholdSolveGroup<T>>, usize)>,
+    right_groups: Vec<(Arc<ThresholdSolveGroup<T>>, usize)>,
 }
 
 struct PendingLUCountertermComponent<T: FloatLike> {
@@ -1472,6 +1467,7 @@ impl<T: FloatLike> PendingLUCountertermComponent<T> {
     }
 }
 
+#[derive(Clone)]
 pub struct LUCTKinematicPoint<T: FloatLike> {
     pub unrescaled_sample: MomentumSample<T>,
     pub dualized_momentum_sample_cache: Vec<MomentumSample<T>>,
@@ -1661,9 +1657,9 @@ impl LUCounterTerm {
         ))
     }
 
-    /// Construct one overlap structure per side for every compatible solve group across all
-    /// supplied cut groups. The returned structures retain local threshold IDs so the existing
-    /// residue and radial-root evaluators can consume them without changing their indexing.
+    /// Collect all solved cuts before constructing independent physical-cycle groups.
+    /// Local threshold IDs are retained only for residue dispatch; each center's
+    /// multichannel complements continue to refer to the complete solve group.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prepare_shared_overlaps<T: FloatLike>(
         &self,
@@ -1674,347 +1670,260 @@ impl LUCounterTerm {
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         settings: &RuntimeSettings,
         probe_rotation: &Rotation,
-    ) -> Result<TiVec<CutGroupId, Option<(OverlapStructure, OverlapStructure)>>> {
-        let mut left = GlobalOverlapSideData::default();
-        let mut right = GlobalOverlapSideData::default();
+    ) -> Result<TiVec<CutGroupId, Option<LUSharedOverlaps<T>>>> {
+        let mut partitions = BTreeMap::new();
         let e_cm = F::from_f64(settings.kinematics.e_cm);
         let existence_threshold = F::from_f64(settings.subtraction.esurface_existence_threshold);
-
-        let collect_side =
-            |side: ThresholdCountertermSide, data: &mut GlobalOverlapSideData| -> Result<()> {
-                for &(cut_group_id, kinematic_point) in kinematic_points {
-                    let variant_subspaces = self
-                        .variant_subspaces
-                        .as_ref()
-                        .map(|subspaces| &subspaces[cut_group_id]);
-                    let (thresholds, common_subspace, threshold_subspaces) = match side {
-                        ThresholdCountertermSide::Left => {
-                            let (legacy, _) = &self.subspaces[cut_group_id];
-                            let (thresholds, _) = &self.thresholds[cut_group_id];
-                            (
-                                thresholds.iter().cloned().collect_vec(),
-                                variant_subspaces
-                                    .and_then(|subspaces| subspaces.left_common.as_ref())
-                                    .unwrap_or(legacy),
-                                variant_subspaces.map(|subspaces| subspaces.left.raw.as_slice()),
-                            )
-                        }
-                        ThresholdCountertermSide::Right => {
-                            let (_, legacy) = &self.subspaces[cut_group_id];
-                            let (_, thresholds) = &self.thresholds[cut_group_id];
-                            (
-                                thresholds.iter().cloned().collect_vec(),
-                                variant_subspaces
-                                    .and_then(|subspaces| subspaces.right_common.as_ref())
-                                    .unwrap_or(legacy),
-                                variant_subspaces.map(|subspaces| subspaces.right.raw.as_slice()),
-                            )
-                        }
-                        ThresholdCountertermSide::Amplitude => {
-                            return Err(eyre!(
-                                "amplitude threshold side is invalid in LU overlap preparation"
-                            ));
-                        }
-                    };
-                    if thresholds.is_empty() {
+        for &(cut_group_id, kinematic_point) in kinematic_points {
+            let variants = self
+                .variant_subspaces
+                .as_ref()
+                .map(|data| &data[cut_group_id]);
+            for side in [
+                ThresholdCountertermSide::Left,
+                ThresholdCountertermSide::Right,
+            ] {
+                let (thresholds, legacy, subspaces, variant_ids, active) = match side {
+                    ThresholdCountertermSide::Left => (
+                        self.thresholds[cut_group_id]
+                            .0
+                            .iter()
+                            .cloned()
+                            .collect_vec(),
+                        &self.subspaces[cut_group_id].0,
+                        variants.map(|data| data.left.raw.as_slice()),
+                        variants.map(|data| data.left_variant_ids.raw.as_slice()),
+                        self.active_left_thresholds[cut_group_id].raw.as_slice(),
+                    ),
+                    ThresholdCountertermSide::Right => (
+                        self.thresholds[cut_group_id]
+                            .1
+                            .iter()
+                            .cloned()
+                            .collect_vec(),
+                        &self.subspaces[cut_group_id].1,
+                        variants.map(|data| data.right.raw.as_slice()),
+                        variants.map(|data| data.right_variant_ids.raw.as_slice()),
+                        self.active_right_thresholds[cut_group_id].raw.as_slice(),
+                    ),
+                    ThresholdCountertermSide::Amplitude => unreachable!(),
+                };
+                for (local_id, surface) in thresholds.into_iter().enumerate() {
+                    if !active[local_id] {
                         continue;
                     }
-
-                    let transformed = kinematic_point.lmb_transform(
-                        &graph.loop_momentum_basis,
-                        common_subspace.get_lmb(all_lmbs),
-                    );
-                    for (local_id, esurface) in thresholds.iter().enumerate() {
-                        let threshold_is_active = match side {
-                            ThresholdCountertermSide::Left => {
-                                self.active_left_thresholds[cut_group_id]
-                                    [LeftThresholdId::from(local_id)]
-                            }
-                            ThresholdCountertermSide::Right => {
-                                self.active_right_thresholds[cut_group_id]
-                                    [RightThresholdId::from(local_id)]
-                            }
-                            ThresholdCountertermSide::Amplitude => false,
-                        };
-                        if !threshold_is_active {
-                            continue;
-                        }
-                        let threshold_subspace = threshold_subspaces
-                            .map_or(common_subspace, |subspaces| &subspaces[local_id]);
-                        let classification = esurface.classify_existence_subspace(
-                            transformed.representative_sample().loop_moms(),
-                            transformed.representative_sample().external_moms(),
-                            threshold_subspace,
+                    let subspace = subspaces.map_or(legacy, |data| &data[local_id]);
+                    let native = kinematic_point
+                        .lmb_transform(&graph.loop_momentum_basis, subspace.get_lmb(all_lmbs));
+                    let sample = native.representative_sample();
+                    if !surface
+                        .classify_existence_subspace(
+                            sample.loop_moms(),
+                            sample.external_moms(),
+                            subspace,
                             all_lmbs,
                             graph,
                             masses,
                             &reversed_edges[cut_group_id],
                             &e_cm,
                             &existence_threshold,
-                        );
-                        if !classification.is_existing() {
+                        )
+                        .is_existing()
+                    {
+                        continue;
+                    }
+                    let variant_id = variant_ids.map(|ids| ids[local_id]);
+                    let group_id = variant_id.and_then(|id| {
+                        self.metadata_registry
+                            .as_ref()
+                            .and_then(|registry| registry.variants.get(id.0))
+                            .and_then(|variant| variant.group_id)
+                    });
+                    let record = GlobalOverlapRecord {
+                        cut_group_id,
+                        side,
+                        local_threshold_id: local_id,
+                        variant_id,
+                    };
+                    partitions
+                        .entry((group_id, subspace.solve_signature(all_lmbs)))
+                        .or_insert_with(Vec::new)
+                        .push((record, surface, subspace.clone(), native));
+                }
+            }
+        }
+        let mut groups = Vec::new();
+        for ((group_id, signature), entries) in partitions {
+            let subspace = entries[0].2.clone();
+            let mut thresholds = EsurfaceCollection::new();
+            let mut kinematics = Vec::new();
+            let mut records = Vec::new();
+            let mut prefactor_power = 2;
+            for (record, surface, native_subspace, native) in entries {
+                let order = match record.side {
+                    ThresholdCountertermSide::Left => self.evaluators[record.cut_group_id]
+                        .left_thresholds_evaluator
+                        [LeftThresholdId::from(record.local_threshold_id)]
+                    .keys()
+                    .filter_map(|index| index.left_threshold_order)
+                    .max()
+                    .unwrap_or(1),
+                    ThresholdCountertermSide::Right => self.evaluators[record.cut_group_id]
+                        .right_thresholds_evaluator
+                        [RightThresholdId::from(record.local_threshold_id)]
+                    .keys()
+                    .filter_map(|index| index.right_threshold_order)
+                    .max()
+                    .unwrap_or(1),
+                    ThresholdCountertermSide::Amplitude => unreachable!(),
+                };
+                let num_right = self.thresholds[record.cut_group_id].1.len();
+                let iterated_order = self.evaluators[record.cut_group_id]
+                    .iterated_evaluator
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| match record.side {
+                        ThresholdCountertermSide::Left => {
+                            index / num_right == record.local_threshold_id
+                        }
+                        ThresholdCountertermSide::Right => {
+                            index % num_right == record.local_threshold_id
+                        }
+                        ThresholdCountertermSide::Amplitude => false,
+                    })
+                    .flat_map(|(_, evaluator)| evaluator.keys())
+                    .filter_map(|index| match record.side {
+                        ThresholdCountertermSide::Left => index.left_threshold_order,
+                        ThresholdCountertermSide::Right => index.right_threshold_order,
+                        ThresholdCountertermSide::Amplitude => None,
+                    })
+                    .max()
+                    .unwrap_or(1);
+                let order = order.max(iterated_order);
+                // An even power strictly above every pole order suppresses every
+                // omitted threshold, including the derivatives of raised residues.
+                prefactor_power = prefactor_power.max(2 * (order / 2 + 1));
+                thresholds.push(surface);
+                kinematics.push(native.lmb_transform(
+                    native_subspace.get_lmb(all_lmbs),
+                    subspace.get_lmb(all_lmbs),
+                ));
+                records.push(record);
+            }
+            let solver_kinematics = kinematics
+                .iter()
+                .map(|point| {
+                    let sample = point.representative_sample();
+                    OverlapKinematics {
+                        loop_moms: sample.loop_moms().iter().map(|p| p.to_f64()).collect(),
+                        external_momenta: sample
+                            .external_moms()
+                            .iter()
+                            .map(|p| p.to_f64())
+                            .collect(),
+                        edge_masses: None,
+                    }
+                })
+                .collect_vec();
+            let existing: ExistingThresholds = thresholds.keys().collect();
+            let input = OverlapInput {
+                graph,
+                settings,
+                subspace: &subspace,
+                threshold_subspaces: None,
+                lmbs: all_lmbs,
+                thresholds: &thresholds,
+                edge_masses: masses.iter().map(|(_, mass)| F(mass.to_f64())).collect(),
+                surface_kinematics: Some(&solver_kinematics),
+            };
+            let first = &solver_kinematics[0];
+            let overlap = overlap_subspace::find_maximal_overlap(
+                &input,
+                &existing,
+                &first.loop_moms,
+                &first.external_momenta,
+                probe_rotation,
+            )?;
+            crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #center;
+                graph = %graph.name, group_id = ?group_id,
+                file.solve_signature = ?signature,
+                file.instances = ?records.iter().map(|record| (record.cut_group_id, record.side, record.local_threshold_id, record.variant_id)).collect_vec(),
+                centers = overlap.overlap_groups.len(),
+                "prepared complete threshold solve group"
+            );
+            groups.push(Arc::new(ThresholdSolveGroup {
+                thresholds,
+                subspace,
+                kinematics,
+                records,
+                overlap,
+                prefactor_power,
+            }));
+        }
+        let mut result = ti_vec![None; self.thresholds.len()];
+        for &(cut_group_id, _) in kinematic_points {
+            let mut local = LUSharedOverlaps {
+                left: OverlapStructure::new_empty(),
+                right: OverlapStructure::new_empty(),
+                left_groups: Vec::new(),
+                right_groups: Vec::new(),
+            };
+            for side in [
+                ThresholdCountertermSide::Left,
+                ThresholdCountertermSide::Right,
+            ] {
+                let (structure, contexts) = if side == ThresholdCountertermSide::Left {
+                    (&mut local.left, &mut local.left_groups)
+                } else {
+                    (&mut local.right, &mut local.right_groups)
+                };
+                structure.existing_esurfaces = groups
+                    .iter()
+                    .flat_map(|group| &group.records)
+                    .filter(|record| record.cut_group_id == cut_group_id && record.side == side)
+                    .map(|record| EsurfaceID::from(record.local_threshold_id))
+                    .sorted()
+                    .collect();
+                for group in &groups {
+                    let local_id = |id: ExistingEsurfaceId| {
+                        let record = &group.records[group.overlap.existing_esurfaces[id].0];
+                        if record.cut_group_id != cut_group_id || record.side != side {
+                            return None;
+                        }
+                        structure
+                            .existing_esurfaces
+                            .iter_enumerated()
+                            .find_map(|(id, surface)| {
+                                (surface.0 == record.local_threshold_id).then_some(id)
+                            })
+                    };
+                    for (center_index, center) in group.overlap.overlap_groups.iter().enumerate() {
+                        let members = center
+                            .existing_esurfaces
+                            .iter()
+                            .filter_map(|&id| local_id(id))
+                            .collect_vec();
+                        if members.is_empty() {
                             continue;
                         }
-
-                        let global_surface_id = EsurfaceID::from(data.thresholds.len());
-                        data.thresholds.push(esurface.clone());
-                        data.subspaces.push(threshold_subspace.clone());
-                        let variant_id = variant_subspaces.and_then(|subspaces| match side {
-                            ThresholdCountertermSide::Left => subspaces
-                                .left_variant_ids
-                                .get(LeftThresholdId::from(local_id)),
-                            ThresholdCountertermSide::Right => subspaces
-                                .right_variant_ids
-                                .get(RightThresholdId::from(local_id)),
-                            ThresholdCountertermSide::Amplitude => None,
+                        let complement = center
+                            .complement
+                            .iter()
+                            .filter_map(|&id| local_id(id))
+                            .collect();
+                        structure.overlap_groups.push(OverlapGroup {
+                            existing_esurfaces: members,
+                            complement,
+                            center: center.center.clone(),
                         });
-                        let group_id = variant_id.and_then(|variant_id| {
-                            self.metadata_registry
-                                .as_ref()
-                                .and_then(|registry| registry.variants.get(variant_id.0))
-                                .and_then(|variant| variant.group_id)
-                        });
-                        data.group_ids.push(group_id);
-                        let representative_sample = transformed.representative_sample();
-                        data.kinematics.push(OverlapKinematics {
-                            loop_moms: representative_sample
-                                .loop_moms()
-                                .iter()
-                                .map(|momentum| momentum.to_f64())
-                                .collect(),
-                            external_momenta: representative_sample
-                                .external_moms()
-                                .iter()
-                                .map(|momentum| momentum.to_f64())
-                                .collect(),
-                        });
-                        data.records.push(GlobalOverlapRecord {
-                            cut_group_id,
-                            local_threshold_id: local_id,
-                            global_surface_id,
-                            variant_id: variant_id.copied(),
-                        });
+                        contexts.push((Arc::clone(group), center_index));
                     }
                 }
-                Ok(())
-            };
-
-        collect_side(ThresholdCountertermSide::Left, &mut left)?;
-        collect_side(ThresholdCountertermSide::Right, &mut right)?;
-
-        let solve_side = |data: &GlobalOverlapSideData,
-                          side_label: &str|
-         -> Result<Option<OverlapStructure>> {
-            if data.thresholds.is_empty() {
-                return Ok(None);
             }
-            let existing: ExistingThresholds = data.thresholds.keys().collect();
-            let mut explicit_records = BTreeMap::<usize, Vec<&GlobalOverlapRecord>>::new();
-            for record in &data.records {
-                if let Some(group_id) = data.group_ids[record.global_surface_id.0] {
-                    explicit_records.entry(group_id).or_default().push(record);
-                }
-            }
-            for (group_id, records) in explicit_records {
-                let signatures = records
-                    .iter()
-                    .map(|record| {
-                        let subspace = &data.subspaces[record.global_surface_id.0];
-                        (
-                            record,
-                            subspace.parent_lmb_index(),
-                            subspace.solve_signature(all_lmbs),
-                        )
-                    })
-                    .collect_vec();
-                let distinct = signatures
-                    .iter()
-                    .map(|(_, parent, signature)| (parent, signature))
-                    .unique()
-                    .count();
-                if distinct > 1 {
-                    let details = signatures
-                        .iter()
-                        .map(|(record, parent, signature)| {
-                            let threshold_edges = &data.thresholds[record.global_surface_id].energies;
-                            let variant = record.variant_id.and_then(|variant_id| {
-                                self.metadata_registry
-                                    .as_ref()
-                                    .and_then(|registry| registry.variants.get(variant_id.0))
-                                    .map(|variant| format!("{} '{}', ", variant_id.0, variant.name))
-                            }).unwrap_or_default();
-                            format!(
-                                "cut group {} threshold {} variant {}parent LMB {} threshold edges {:?} signature {:?}",
-                                record.cut_group_id.0,
-                                record.local_threshold_id,
-                                variant,
-                                usize::from(*parent),
-                                threshold_edges,
-                                signature,
-                            )
-                        })
-                        .join("; ");
-                    return Err(eyre!(
-                        "graph '{}' explicit threshold group_id={} on {} contains incompatible solve subspaces across cut groups: {}",
-                        graph.name,
-                        group_id,
-                        side_label,
-                        details
-                    ));
-                }
-            }
-
-            let mut partitions = BTreeMap::<
-                (Option<usize>, LmbIndex, Vec<(LoopIndex, EdgeIndex)>),
-                Vec<&GlobalOverlapRecord>,
-            >::new();
-            for record in &data.records {
-                let subspace = &data.subspaces[record.global_surface_id.0];
-                let key = (
-                    data.group_ids[record.global_surface_id.0],
-                    subspace.parent_lmb_index(),
-                    subspace.solve_signature(all_lmbs),
-                );
-                partitions.entry(key).or_default().push(record);
-            }
-
-            let mut combined = OverlapStructure {
-                overlap_groups: Vec::new(),
-                existing_esurfaces: existing.clone(),
-            };
-            for (_, records) in partitions {
-                let common_subspace = SubspaceData::union_in_common_parent(
-                    records
-                        .iter()
-                        .map(|record| &data.subspaces[record.global_surface_id.0]),
-                    graph,
-                    all_lmbs,
-                )?;
-                // `OverlapInput::validate_subspaces` checks the complete indexed catalogue,
-                // while this solve only owns one compatible partition. Keep the global indices
-                // stable for surface and kinematics lookup, and use harmless common-frame
-                // placeholders for surfaces belonging to other independent partitions.
-                let mut partition_threshold_subspaces = data.subspaces.clone();
-                for (index, subspace) in partition_threshold_subspaces.iter_mut().enumerate() {
-                    if !records
-                        .iter()
-                        .any(|record| record.global_surface_id.0 == index)
-                    {
-                        *subspace = common_subspace.clone();
-                    }
-                }
-                let partition_existing: ExistingThresholds = records
-                    .iter()
-                    .map(|record| record.global_surface_id)
-                    .collect();
-                let input = OverlapInput {
-                    graph,
-                    settings,
-                    subspace: &common_subspace,
-                    threshold_subspaces: Some(&partition_threshold_subspaces),
-                    lmbs: all_lmbs,
-                    thresholds: &data.thresholds,
-                    edge_masses: masses.iter().map(|(_, mass)| F(mass.to_f64())).collect(),
-                    surface_kinematics: Some(&data.kinematics),
-                };
-                let first = &data.kinematics[records[0].global_surface_id.0];
-                let partition = overlap_subspace::find_maximal_overlap(
-                    &input,
-                    &partition_existing,
-                    &first.loop_moms,
-                    &first.external_momenta,
-                    probe_rotation,
-                )?;
-                for mut group in partition.overlap_groups {
-                    group.existing_esurfaces = group
-                        .existing_esurfaces
-                        .into_iter()
-                        .map(|id| ExistingEsurfaceId::from(partition_existing[id].0))
-                        .collect();
-                    group.complement = group
-                        .complement
-                        .into_iter()
-                        .map(|id| ExistingEsurfaceId::from(partition_existing[id].0))
-                        .collect();
-                    combined.overlap_groups.push(group);
-                }
-            }
-            Ok(Some(combined))
-        };
-
-        let left_global = solve_side(&left, "left")?;
-        let right_global = solve_side(&right, "right")?;
-        let mut result = ti_vec![None; self.thresholds.len()];
-
-        for (side_data, global) in [(&left, left_global), (&right, right_global)] {
-            let Some(global) = global else {
-                continue;
-            };
-            for (cut_group_id, _) in kinematic_points {
-                let local_records = side_data
-                    .records
-                    .iter()
-                    .filter(|record| record.cut_group_id == *cut_group_id)
-                    .collect_vec();
-                if local_records.is_empty() {
-                    continue;
-                }
-                let local_existing: ExistingThresholds = local_records
-                    .iter()
-                    .map(|record| EsurfaceID::from(record.local_threshold_id))
-                    .collect();
-                let mut local_structure = OverlapStructure {
-                    overlap_groups: Vec::new(),
-                    existing_esurfaces: local_existing,
-                };
-                for global_group in &global.overlap_groups {
-                    let local_members = global_group
-                        .existing_esurfaces
-                        .iter()
-                        .filter_map(|global_existing_id| {
-                            let global_surface_id = global.existing_esurfaces[*global_existing_id];
-                            let record = side_data.records.iter().find(|record| {
-                                record.cut_group_id == *cut_group_id
-                                    && record.global_surface_id == global_surface_id
-                            })?;
-                            let local_index = local_records.iter().position(|candidate| {
-                                candidate.global_surface_id == record.global_surface_id
-                            })?;
-                            Some(ExistingEsurfaceId::from(local_index))
-                        })
-                        .collect_vec();
-                    let local_complement = global_group
-                        .complement
-                        .iter()
-                        .filter_map(|global_existing_id| {
-                            let global_surface_id = global.existing_esurfaces[*global_existing_id];
-                            side_data.records.iter().find(|record| {
-                                record.cut_group_id == *cut_group_id
-                                    && record.global_surface_id == global_surface_id
-                            })
-                        })
-                        .filter_map(|record| {
-                            local_records.iter().position(|candidate| {
-                                candidate.global_surface_id == record.global_surface_id
-                            })
-                        })
-                        .map(ExistingEsurfaceId::from)
-                        .collect_vec();
-                    local_structure.overlap_groups.push(OverlapGroup {
-                        existing_esurfaces: local_members,
-                        complement: local_complement,
-                        center: global_group.center.clone(),
-                    });
-                }
-                let entry = &mut result[*cut_group_id];
-                let pair = entry.get_or_insert_with(|| {
-                    (OverlapStructure::new_empty(), OverlapStructure::new_empty())
-                });
-                if std::ptr::eq(side_data, &left) {
-                    pair.0 = local_structure;
-                } else {
-                    pair.1 = local_structure;
-                }
+            if !local.left.existing_esurfaces.is_empty()
+                || !local.right.existing_esurfaces.is_empty()
+            {
+                result[cut_group_id] = Some(local);
             }
         }
         Ok(result)
@@ -2025,7 +1934,7 @@ impl LUCounterTerm {
         &mut self,
         kinematic_point: &LUCTKinematicPoint<T>,
         cut_group_id: CutGroupId,
-        reversed_edges: &[EdgeIndex],
+        _reversed_edges: &[EdgeIndex],
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         graph: &Graph,
         masses: &EdgeVec<F<T>>,
@@ -2036,7 +1945,7 @@ impl LUCounterTerm {
         evaluation_meta_data: &mut EvaluationMetaData,
         record_primary_timing: bool,
         record_components: bool,
-        shared_overlaps: Option<&(OverlapStructure, OverlapStructure)>,
+        shared_overlaps: Option<&LUSharedOverlaps<T>>,
     ) -> Result<LUCountertermEvaluation<T>> {
         self.ensure_active_cut_group(cut_group_id)?;
 
@@ -2069,12 +1978,8 @@ impl LUCounterTerm {
         } else {
             LUThresholdHelperOutputs::Legacy
         };
-        let left_subspace = variant_subspaces
-            .and_then(|subspaces| subspaces.left_common.as_ref())
-            .unwrap_or(legacy_left_subspace);
-        let right_subspace = variant_subspaces
-            .and_then(|subspaces| subspaces.right_common.as_ref())
-            .unwrap_or(legacy_right_subspace);
+        let left_subspace = legacy_left_subspace;
+        let right_subspace = legacy_right_subspace;
         let left_threshold_subspaces =
             variant_subspaces.map(|subspaces| subspaces.left.raw.as_slice());
         let right_threshold_subspaces =
@@ -2110,540 +2015,143 @@ impl LUCounterTerm {
         } else {
             None
         };
-        let (sample_left_transformed, sample_right_transformed) = (
-            kinematic_point
-                .lmb_transform(&graph.loop_momentum_basis, left_subspace.get_lmb(all_lmbs)),
-            kinematic_point
-                .lmb_transform(&graph.loop_momentum_basis, right_subspace.get_lmb(all_lmbs)),
-        );
-
-        debug!("possible left thresholds: {}", left_thresholds.len());
-        debug!("possible right thresholds: {}", right_thresholds.len());
-
-        let masses_f64: EdgeVec<F<f64>> = masses.iter().map(|(_, m)| F(m.to_f64())).collect();
-        let sample_left_transformed_f64 = sample_left_transformed
-            .representative_sample()
-            .loop_moms()
-            .iter()
-            .map(|lm| lm.to_f64())
-            .collect();
-        let sample_right_transformed_f64 = sample_right_transformed
-            .representative_sample()
-            .loop_moms()
-            .iter()
-            .map(|lm| lm.to_f64())
-            .collect();
-        let external_moms_f64 = kinematic_point
-            .representative_sample()
-            .external_moms()
-            .iter()
-            .map(|em| em.to_f64())
-            .collect();
-
-        let e_cm = F::from_f64(settings.kinematics.e_cm);
-        let esurface_existence_threshold =
-            F::from_f64(settings.subtraction.esurface_existence_threshold);
-
-        let left_existing_esurfaces = self.thresholds[cut_group_id]
-            .0
-            .iter_enumerated()
-            .filter(|(left_id, _)| {
-                self.active_left_thresholds[cut_group_id][LeftThresholdId::from(left_id.0)]
-            })
-            .filter_map(|(left_id, esurface)| {
-                let threshold_subspace = left_threshold_subspaces
-                    .map_or(left_subspace, |subspaces| &subspaces[left_id.0]);
-                let classification = esurface.classify_existence_subspace(
-                    sample_left_transformed.representative_sample().loop_moms(),
-                    kinematic_point.representative_sample().external_moms(),
-                    threshold_subspace,
-                    all_lmbs,
-                    graph,
-                    masses,
-                    reversed_edges,
-                    &e_cm,
-                    &esurface_existence_threshold,
-                );
-                debug!(
-                    graph = %graph.name,
-                    side = "left",
-                    esurface_id = left_id.0,
-                    status = classification.label(),
-                    normalized_margin = ?classification.normalized_margin(),
-                    non_existing_reason = ?classification.non_existing_reason(),
-                    "classified LU threshold surface"
-                );
-                if classification.is_existing() {
-                    Some(EsurfaceID::from(left_id.0))
-                } else {
-                    None
-                }
-            })
-            .collect::<TiVec<ExistingEsurfaceId, _>>();
-
-        let right_existing_esurfaces = self.thresholds[cut_group_id]
-            .1
-            .iter_enumerated()
-            .filter(|(right_id, _)| {
-                self.active_right_thresholds[cut_group_id][RightThresholdId::from(right_id.0)]
-            })
-            .filter_map(|(right_id, esurface)| {
-                let threshold_subspace = right_threshold_subspaces
-                    .map_or(right_subspace, |subspaces| &subspaces[right_id.0]);
-                let classification = esurface.classify_existence_subspace(
-                    sample_right_transformed.representative_sample().loop_moms(),
-                    kinematic_point.representative_sample().external_moms(),
-                    threshold_subspace,
-                    all_lmbs,
-                    graph,
-                    masses,
-                    reversed_edges,
-                    &e_cm,
-                    &esurface_existence_threshold,
-                );
-                debug!(
-                    graph = %graph.name,
-                    side = "right",
-                    esurface_id = right_id.0,
-                    status = classification.label(),
-                    normalized_margin = ?classification.normalized_margin(),
-                    non_existing_reason = ?classification.non_existing_reason(),
-                    "classified LU threshold surface"
-                );
-                if classification.is_existing() {
-                    Some(EsurfaceID::from(right_id.0))
-                } else {
-                    None
-                }
-            })
-            .collect::<TiVec<ExistingEsurfaceId, _>>();
-
-        debug!(
-            "number of thresholds on the left: {}",
-            left_existing_esurfaces.len()
-        );
-        debug!(
-            "number of thresholds on the right: {}",
-            right_existing_esurfaces.len()
-        );
-
-        if left_existing_esurfaces.is_empty() && right_existing_esurfaces.is_empty() {
+        let Some(shared) = shared_overlaps else {
             return Ok(LUCountertermEvaluation {
                 total: Complex::new_re(kinematic_point.representative_sample().zero()),
                 components: record_components.then(Vec::new),
             });
-        }
-
-        if let Some(shared_overlaps) = shared_overlaps {
-            if !shared_overlaps.0.existing_esurfaces.is_empty()
-                && shared_overlaps.0.existing_esurfaces != left_existing_esurfaces
-            {
-                return Err(eyre!(
-                    "graph '{}' cut group {} received a shared left overlap structure for a different set of existing thresholds",
-                    graph.name,
-                    cut_group_id.0,
-                ));
-            }
-            if !shared_overlaps.1.existing_esurfaces.is_empty()
-                && shared_overlaps.1.existing_esurfaces != right_existing_esurfaces
-            {
-                return Err(eyre!(
-                    "graph '{}' cut group {} received a shared right overlap structure for a different set of existing thresholds",
-                    graph.name,
-                    cut_group_id.0,
-                ));
-            }
-        }
-
-        let left_overlap_input = OverlapInput {
-            graph,
-            subspace: left_subspace,
-            settings,
-            edge_masses: masses_f64.clone(),
-            lmbs: all_lmbs,
-            thresholds: left_thresholds,
-            threshold_subspaces: left_threshold_subspaces,
-            surface_kinematics: None,
         };
-
-        let right_overlap_input = OverlapInput {
-            graph,
-            subspace: right_subspace,
-            settings,
-            edge_masses: masses_f64,
-            lmbs: all_lmbs,
-            thresholds: right_thresholds,
-            threshold_subspaces: right_threshold_subspaces,
-            surface_kinematics: None,
-        };
-
-        let left_group_ids = variant_subspaces.map(|subspaces| {
-            subspaces
-                .left_variant_ids
-                .iter()
-                .map(|variant_id| {
-                    self.metadata_registry
-                        .as_ref()
-                        .and_then(|registry| registry.variants.get(variant_id.0))
-                        .and_then(|variant| variant.group_id)
-                })
-                .collect::<Vec<_>>()
-        });
-        let right_group_ids = variant_subspaces.map(|subspaces| {
-            subspaces
-                .right_variant_ids
-                .iter()
-                .map(|variant_id| {
-                    self.metadata_registry
-                        .as_ref()
-                        .and_then(|registry| registry.variants.get(variant_id.0))
-                        .and_then(|variant| variant.group_id)
-                })
-                .collect::<Vec<_>>()
-        });
-
-        let left_overlap = if let Some(shared_overlaps) =
-            shared_overlaps.filter(|overlaps| !overlaps.0.existing_esurfaces.is_empty())
-        {
-            shared_overlaps.0.clone()
-        } else {
-            match if let Some(group_ids) = left_group_ids.as_deref() {
-                overlap_subspace::find_maximal_overlap_with_group_ids(
-                    &left_overlap_input,
-                    &left_existing_esurfaces,
-                    group_ids,
-                    &sample_left_transformed_f64,
-                    &external_moms_f64,
-                    probe_rotation,
-                )
-            } else {
-                overlap_subspace::find_maximal_overlap(
-                    &left_overlap_input,
-                    &left_existing_esurfaces,
-                    &sample_left_transformed_f64,
-                    &external_moms_f64,
-                    probe_rotation,
-                )
-            } {
-                Ok(left_overlap) => left_overlap,
-                Err(error) => {
-                    evaluation_meta_data.record_threshold_counterterm_error(format!(
-                        "LU graph '{}' cut group {} left subspace failed overlap-center construction in probe rotation {}: {}",
-                        graph.name,
-                        cut_group_id.0,
-                        probe_rotation.method,
-                        error,
-                    ));
-                    return Ok(LUCountertermEvaluation {
-                        total: Complex::new_re(F::from_f64(f64::NAN)),
-                        components: None,
-                    });
-                }
-            }
-        };
-
-        let right_overlap = if let Some(shared_overlaps) =
-            shared_overlaps.filter(|overlaps| !overlaps.1.existing_esurfaces.is_empty())
-        {
-            shared_overlaps.1.clone()
-        } else {
-            match if let Some(group_ids) = right_group_ids.as_deref() {
-                overlap_subspace::find_maximal_overlap_with_group_ids(
-                    &right_overlap_input,
-                    &right_existing_esurfaces,
-                    group_ids,
-                    &sample_right_transformed_f64,
-                    &external_moms_f64,
-                    probe_rotation,
-                )
-            } else {
-                overlap_subspace::find_maximal_overlap(
-                    &right_overlap_input,
-                    &right_existing_esurfaces,
-                    &sample_right_transformed_f64,
-                    &external_moms_f64,
-                    probe_rotation,
-                )
-            } {
-                Ok(right_overlap) => right_overlap,
-                Err(error) => {
-                    evaluation_meta_data.record_threshold_counterterm_error(format!(
-                        "LU graph '{}' cut group {} right subspace failed overlap-center construction in probe rotation {}: {}",
-                        graph.name,
-                        cut_group_id.0,
-                        probe_rotation.method,
-                        error,
-                    ));
-                    return Ok(LUCountertermEvaluation {
-                        total: Complex::new_re(F::from_f64(f64::NAN)),
-                        components: None,
-                    });
-                }
-            }
-        };
-
+        let left_overlap = &shared.left;
+        let right_overlap = &shared.right;
         debug!("left overlap structure: {}", left_overlap);
-
         debug!("right overlap structure: {}", right_overlap);
-
+        let mut radial_root_failed = false;
         let left_counterterm_builder = CounterTermBuilder::new(
             graph,
             settings,
-            left_overlap_input.thresholds,
-            sample_left_transformed,
-            &left_overlap,
+            left_thresholds,
+            kinematic_point.clone(),
+            left_overlap,
             masses,
             all_lmbs,
             left_subspace,
             left_threshold_subspaces,
             probe_rotation,
+            cut_group_id,
+            &shared.left_groups,
         );
-
-        let left_overlap_builders = if left_threshold_subspaces.is_some() {
-            SideOverlapBuilders::Projected(
-                left_overlap
-                    .overlap_groups
+        let left_overlap_builders = left_overlap
+            .overlap_groups
+            .iter()
+            .enumerate()
+            .map(|(group_index, group)| {
+                group
+                    .existing_esurfaces
                     .iter()
-                    .map(|overlap_group| {
-                        overlap_group
-                            .existing_esurfaces
-                            .iter()
-                            .map(|existing_esurface_id| {
-                                let esurface_id =
-                                    left_overlap.existing_esurfaces[*existing_esurface_id];
-                                left_counterterm_builder
-                                    .new_overlap_builder(overlap_group, Some(esurface_id))
-                            })
-                            .collect_vec()
+                    .map(|id| {
+                        left_counterterm_builder
+                            .new_overlap_builder(group_index, left_overlap.existing_esurfaces[*id])
                     })
-                    .collect_vec(),
-            )
-        } else {
-            SideOverlapBuilders::Homogeneous(
-                left_overlap
-                    .overlap_groups
-                    .iter()
-                    .map(|overlap_group| {
-                        left_counterterm_builder.new_overlap_builder(overlap_group, None)
-                    })
-                    .collect_vec(),
-            )
-        };
-
-        let mut radial_root_failed = false;
+                    .collect_vec()
+            })
+            .collect_vec();
         let mut left_overlap_solutions = Vec::with_capacity(left_overlap.overlap_groups.len());
-        match &left_overlap_builders {
-            SideOverlapBuilders::Homogeneous(builders) => {
-                for (overlap_group_index, overlap_builder) in builders.iter().enumerate() {
-                    let mut group_solutions =
-                        Vec::with_capacity(overlap_builder.overlap_group.existing_esurfaces.len());
-                    for &existing_esurface_id in &overlap_builder.overlap_group.existing_esurfaces {
-                        let esurface_id = left_overlap.existing_esurfaces[existing_esurface_id];
-                        let radial_root_identity = Self::radial_root_identity(
-                            &graph.name,
-                            cut_group_id,
-                            "left",
-                            overlap_group_index,
-                            esurface_id,
-                            probe_rotation,
-                        );
-                        let Some(solution) = overlap_builder
-                            .new_esurface_builder(existing_esurface_id)
-                            .solve_rstar(
-                                &mut self.rstar_dependence_calculator[cut_group_id],
-                                &radial_root_identity,
-                                &mut evaluation_meta_data.radial_root_diagnostics,
-                            )
-                        else {
-                            evaluation_meta_data.record_threshold_counterterm_error(format!(
-                                "LU graph '{}' cut group {} left overlap group {} E-surface {} failed center or radial-root validation in probe rotation {}",
-                                graph.name,
-                                cut_group_id.0,
-                                overlap_group_index,
-                                esurface_id.0,
-                                probe_rotation.method,
-                            ));
-                            radial_root_failed = true;
-                            continue;
-                        };
-                        group_solutions.push(solution);
+        for (overlap_group_index, (group, builders)) in left_overlap
+            .overlap_groups
+            .iter()
+            .zip(&left_overlap_builders)
+            .enumerate()
+        {
+            let mut solutions = Vec::with_capacity(builders.len());
+            for (&id, builder) in group.existing_esurfaces.iter().zip(builders) {
+                let esurface_id = left_overlap.existing_esurfaces[id];
+                let identity = Self::radial_root_identity(
+                    &graph.name,
+                    cut_group_id,
+                    "left",
+                    overlap_group_index,
+                    esurface_id,
+                    probe_rotation,
+                );
+                match builder.new_esurface_builder(id).solve_rstar(
+                    &mut self.rstar_dependence_calculator[cut_group_id],
+                    &identity,
+                    &mut evaluation_meta_data.radial_root_diagnostics,
+                ) {
+                    Some(solution) => solutions.push(solution),
+                    None => {
+                        evaluation_meta_data.record_threshold_counterterm_error(format!(
+                            "LU graph '{}' cut group {} left threshold {} center {} failed radial-root validation",
+                            graph.name, cut_group_id.0, esurface_id.0, overlap_group_index));
+                        radial_root_failed = true;
                     }
-                    left_overlap_solutions.push(group_solutions);
                 }
             }
-            SideOverlapBuilders::Projected(builders) => {
-                for (overlap_group_index, (overlap_group, group_builders)) in
-                    left_overlap.overlap_groups.iter().zip(builders).enumerate()
-                {
-                    let mut group_solutions = Vec::with_capacity(group_builders.len());
-                    for (&existing_esurface_id, overlap_builder) in
-                        overlap_group.existing_esurfaces.iter().zip(group_builders)
-                    {
-                        let esurface_id = left_overlap.existing_esurfaces[existing_esurface_id];
-                        let radial_root_identity = Self::radial_root_identity(
-                            &graph.name,
-                            cut_group_id,
-                            "left",
-                            overlap_group_index,
-                            esurface_id,
-                            probe_rotation,
-                        );
-                        let Some(solution) = overlap_builder
-                            .new_esurface_builder(existing_esurface_id)
-                            .solve_rstar(
-                                &mut self.rstar_dependence_calculator[cut_group_id],
-                                &radial_root_identity,
-                                &mut evaluation_meta_data.radial_root_diagnostics,
-                            )
-                        else {
-                            evaluation_meta_data.record_threshold_counterterm_error(format!(
-                                "LU graph '{}' cut group {} left projected E-surface instance {} in overlap group {} failed center or radial-root validation in probe rotation {}",
-                                graph.name,
-                                cut_group_id.0,
-                                esurface_id.0,
-                                overlap_group_index,
-                                probe_rotation.method,
-                            ));
-                            radial_root_failed = true;
-                            continue;
-                        };
-                        group_solutions.push(solution);
-                    }
-                    left_overlap_solutions.push(group_solutions);
-                }
-            }
+            left_overlap_solutions.push(solutions);
         }
-
         let right_counterterm_builder = CounterTermBuilder::new(
             graph,
             settings,
-            right_overlap_input.thresholds,
-            sample_right_transformed,
-            &right_overlap,
+            right_thresholds,
+            kinematic_point.clone(),
+            right_overlap,
             masses,
             all_lmbs,
             right_subspace,
             right_threshold_subspaces,
             probe_rotation,
+            cut_group_id,
+            &shared.right_groups,
         );
-
-        let right_overlap_builders = if right_threshold_subspaces.is_some() {
-            SideOverlapBuilders::Projected(
-                right_overlap
-                    .overlap_groups
+        let right_overlap_builders = right_overlap
+            .overlap_groups
+            .iter()
+            .enumerate()
+            .map(|(group_index, group)| {
+                group
+                    .existing_esurfaces
                     .iter()
-                    .map(|overlap_group| {
-                        overlap_group
-                            .existing_esurfaces
-                            .iter()
-                            .map(|existing_esurface_id| {
-                                let esurface_id =
-                                    right_overlap.existing_esurfaces[*existing_esurface_id];
-                                right_counterterm_builder
-                                    .new_overlap_builder(overlap_group, Some(esurface_id))
-                            })
-                            .collect_vec()
+                    .map(|id| {
+                        right_counterterm_builder
+                            .new_overlap_builder(group_index, right_overlap.existing_esurfaces[*id])
                     })
-                    .collect_vec(),
-            )
-        } else {
-            SideOverlapBuilders::Homogeneous(
-                right_overlap
-                    .overlap_groups
-                    .iter()
-                    .map(|overlap_group| {
-                        right_counterterm_builder.new_overlap_builder(overlap_group, None)
-                    })
-                    .collect_vec(),
-            )
-        };
-
+                    .collect_vec()
+            })
+            .collect_vec();
         let mut right_overlap_solutions = Vec::with_capacity(right_overlap.overlap_groups.len());
-        match &right_overlap_builders {
-            SideOverlapBuilders::Homogeneous(builders) => {
-                for (overlap_group_index, overlap_builder) in builders.iter().enumerate() {
-                    let mut group_solutions =
-                        Vec::with_capacity(overlap_builder.overlap_group.existing_esurfaces.len());
-                    for &existing_esurface_id in &overlap_builder.overlap_group.existing_esurfaces {
-                        let esurface_id = right_overlap.existing_esurfaces[existing_esurface_id];
-                        let radial_root_identity = Self::radial_root_identity(
-                            &graph.name,
-                            cut_group_id,
-                            "right",
-                            overlap_group_index,
-                            esurface_id,
-                            probe_rotation,
-                        );
-                        let Some(solution) = overlap_builder
-                            .new_esurface_builder(existing_esurface_id)
-                            .solve_rstar(
-                                &mut self.rstar_dependence_calculator[cut_group_id],
-                                &radial_root_identity,
-                                &mut evaluation_meta_data.radial_root_diagnostics,
-                            )
-                        else {
-                            evaluation_meta_data.record_threshold_counterterm_error(format!(
-                                "LU graph '{}' cut group {} right overlap group {} E-surface {} failed center or radial-root validation in probe rotation {}",
-                                graph.name,
-                                cut_group_id.0,
-                                overlap_group_index,
-                                esurface_id.0,
-                                probe_rotation.method,
-                            ));
-                            radial_root_failed = true;
-                            continue;
-                        };
-                        group_solutions.push(solution);
+        for (overlap_group_index, (group, builders)) in right_overlap
+            .overlap_groups
+            .iter()
+            .zip(&right_overlap_builders)
+            .enumerate()
+        {
+            let mut solutions = Vec::with_capacity(builders.len());
+            for (&id, builder) in group.existing_esurfaces.iter().zip(builders) {
+                let esurface_id = right_overlap.existing_esurfaces[id];
+                let identity = Self::radial_root_identity(
+                    &graph.name,
+                    cut_group_id,
+                    "right",
+                    overlap_group_index,
+                    esurface_id,
+                    probe_rotation,
+                );
+                match builder.new_esurface_builder(id).solve_rstar(
+                    &mut self.rstar_dependence_calculator[cut_group_id],
+                    &identity,
+                    &mut evaluation_meta_data.radial_root_diagnostics,
+                ) {
+                    Some(solution) => solutions.push(solution),
+                    None => {
+                        evaluation_meta_data.record_threshold_counterterm_error(format!(
+                            "LU graph '{}' cut group {} right threshold {} center {} failed radial-root validation",
+                            graph.name, cut_group_id.0, esurface_id.0, overlap_group_index));
+                        radial_root_failed = true;
                     }
-                    right_overlap_solutions.push(group_solutions);
                 }
             }
-            SideOverlapBuilders::Projected(builders) => {
-                for (overlap_group_index, (overlap_group, group_builders)) in right_overlap
-                    .overlap_groups
-                    .iter()
-                    .zip(builders)
-                    .enumerate()
-                {
-                    let mut group_solutions = Vec::with_capacity(group_builders.len());
-                    for (&existing_esurface_id, overlap_builder) in
-                        overlap_group.existing_esurfaces.iter().zip(group_builders)
-                    {
-                        let esurface_id = right_overlap.existing_esurfaces[existing_esurface_id];
-                        let radial_root_identity = Self::radial_root_identity(
-                            &graph.name,
-                            cut_group_id,
-                            "right",
-                            overlap_group_index,
-                            esurface_id,
-                            probe_rotation,
-                        );
-                        let Some(solution) = overlap_builder
-                            .new_esurface_builder(existing_esurface_id)
-                            .solve_rstar(
-                                &mut self.rstar_dependence_calculator[cut_group_id],
-                                &radial_root_identity,
-                                &mut evaluation_meta_data.radial_root_diagnostics,
-                            )
-                        else {
-                            evaluation_meta_data.record_threshold_counterterm_error(format!(
-                                "LU graph '{}' cut group {} right projected E-surface instance {} in overlap group {} failed center or radial-root validation in probe rotation {}",
-                                graph.name,
-                                cut_group_id.0,
-                                esurface_id.0,
-                                overlap_group_index,
-                                probe_rotation.method,
-                            ));
-                            radial_root_failed = true;
-                            continue;
-                        };
-                        group_solutions.push(solution);
-                    }
-                    right_overlap_solutions.push(group_solutions);
-                }
-            }
+            right_overlap_solutions.push(solutions);
         }
-
         if radial_root_failed {
             return Ok(LUCountertermEvaluation {
                 total: Complex::new_re(F::from_f64(f64::NAN)),
@@ -2855,6 +2363,14 @@ impl LUCounterTerm {
                             .pop()
                             .unwrap();
 
+                        // E-surface channel weights are part of the residue and
+                        // retain radial derivatives. Opaque user multipliers are
+                        // applied to the completed helper pieces below.
+                        let result_of_this_ct = multiply_dual_or_not_complex(
+                            result_of_this_ct,
+                            &sample.value_of_multi_channeling_factor,
+                        );
+
                         debug!(
                             "result of left threshold evaluator {:?}: {}",
                             cut_cff_index, result_of_this_ct
@@ -2874,10 +2390,6 @@ impl LUCounterTerm {
                                 record_primary_timing,
                             },
                             &left_threshold_params,
-                        );
-                        let multi_channeling_factor = plain_t_dual_or_scalar_complex(
-                            &sample.value_of_multi_channeling_factor,
-                            variable_indices.lu_cut,
                         );
                         if let Some(pending) = pending_components.as_mut() {
                             let helper_completed_pieces = helper_evaluation.into_pieces();
@@ -2899,12 +2411,8 @@ impl LUCounterTerm {
                                     coefficients.integrated.clone(),
                                 ),
                             ] {
-                                let pass_one = (!coefficient.is_zero()).then(|| {
-                                    negate_dual_or_not_complex(multiply_dual_or_not_complex(
-                                        piece,
-                                        &multi_channeling_factor,
-                                    ))
-                                });
+                                let pass_one = (!coefficient.is_zero())
+                                    .then(|| negate_dual_or_not_complex(piece));
                                 pending.push(PendingLUCountertermComponent {
                                     component_id: registry.component_id(
                                         Some(cut_group_id),
@@ -2944,10 +2452,7 @@ impl LUCounterTerm {
                             } else {
                                 helper_evaluation.into_legacy()
                             };
-                            left_evaluations += multiply_dual_or_not_complex(
-                                helper_completed_result,
-                                &multi_channeling_factor,
-                            );
+                            left_evaluations += helper_completed_result;
                         }
                     }
                 }
@@ -3137,6 +2642,14 @@ impl LUCounterTerm {
                             .pop()
                             .unwrap();
 
+                        // E-surface channel weights are part of the residue and
+                        // retain radial derivatives. Opaque user multipliers are
+                        // applied to the completed helper pieces below.
+                        let result_of_this_ct = multiply_dual_or_not_complex(
+                            result_of_this_ct,
+                            &sample.value_of_multi_channeling_factor,
+                        );
+
                         debug!(
                             "result of right threshold evaluator {:?}: {}",
                             cut_cff_index, result_of_this_ct
@@ -3156,10 +2669,6 @@ impl LUCounterTerm {
                                 record_primary_timing,
                             },
                             &right_threshold_params,
-                        );
-                        let multi_channeling_factor = plain_t_dual_or_scalar_complex(
-                            &sample.value_of_multi_channeling_factor,
-                            variable_indices.lu_cut,
                         );
                         if let Some(pending) = pending_components.as_mut() {
                             let helper_completed_pieces = helper_evaluation.into_pieces();
@@ -3181,12 +2690,8 @@ impl LUCounterTerm {
                                     coefficients.integrated.clone(),
                                 ),
                             ] {
-                                let pass_one = (!coefficient.is_zero()).then(|| {
-                                    negate_dual_or_not_complex(multiply_dual_or_not_complex(
-                                        piece,
-                                        &multi_channeling_factor,
-                                    ))
-                                });
+                                let pass_one = (!coefficient.is_zero())
+                                    .then(|| negate_dual_or_not_complex(piece));
                                 pending.push(PendingLUCountertermComponent {
                                     component_id: registry.component_id(
                                         Some(cut_group_id),
@@ -3226,10 +2731,7 @@ impl LUCounterTerm {
                             } else {
                                 helper_evaluation.into_legacy()
                             };
-                            right_evaluations += multiply_dual_or_not_complex(
-                                helper_completed_result,
-                                &multi_channeling_factor,
-                            );
+                            right_evaluations += helper_completed_result;
                         }
                     }
                 }
@@ -3298,7 +2800,11 @@ impl LUCounterTerm {
                                     right_threshold_params.radius_star,
                                 );
                                 let inverse_transformed_momentum_sample =
-                                    merge_and_inverse_transform(&sample_left, &sample_right);
+                                    merge_and_inverse_transform(
+                                        &sample_left,
+                                        &sample_right,
+                                        &cut_cff_index,
+                                    );
                                 let detailed_pair_variant_ids =
                                     detailed_variant_ids.as_ref().map(|(left, right)| {
                                         (left[iterated_index.0.0], right[iterated_index.1.0])
@@ -3532,12 +3038,9 @@ impl LUCounterTerm {
                                     continue;
                                 }
 
-                                let multi_channeling_factor = plain_t_dual_or_scalar_complex(
-                                    &multiply_dual_or_not_complex(
-                                        sample_left.value_of_multi_channeling_factor.clone(),
-                                        &sample_right.value_of_multi_channeling_factor,
-                                    ),
-                                    variable_indices.lu_cut,
+                                let multi_channeling_factor = multiply_dual_or_not_complex(
+                                    sample_left.value_of_multi_channeling_factor.clone(),
+                                    &sample_right.value_of_multi_channeling_factor,
                                 );
 
                                 let params = T::get_parameters(
@@ -3567,6 +3070,10 @@ impl LUCounterTerm {
                                     .pop()
                                     .unwrap();
 
+                                let result_of_this_ct = multiply_dual_or_not_complex(
+                                    result_of_this_ct,
+                                    &multi_channeling_factor,
+                                );
                                 let helper_evaluation = evaluate_threshold_helper_iterated(
                                     ThresholdHelperEvaluationContext {
                                         helper: self.evaluators[cut_group_id]
@@ -3615,12 +3122,7 @@ impl LUCounterTerm {
                                             &coefficients.integrated_integrated,
                                         ),
                                     ] {
-                                        let pass_one = (!coefficient.is_zero()).then(|| {
-                                            multiply_dual_or_not_complex(
-                                                piece,
-                                                &multi_channeling_factor,
-                                            )
-                                        });
+                                        let pass_one = (!coefficient.is_zero()).then_some(piece);
                                         pending.push(PendingLUCountertermComponent {
                                             component_id: registry.component_id(
                                                 Some(cut_group_id),
@@ -3667,10 +3169,7 @@ impl LUCounterTerm {
                                             helper_evaluation.into_legacy()
                                         };
 
-                                    cartesian_product_result += multiply_dual_or_not_complex(
-                                        helper_completed_result,
-                                        &multi_channeling_factor,
-                                    );
+                                    cartesian_product_result += helper_completed_result;
                                 }
                             }
                         }
@@ -3730,8 +3229,10 @@ struct CounterTermBuilder<'a, T: FloatLike> {
     all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
     settings: &'a RuntimeSettings,
     esurface_collection: &'a EsurfaceCollection,
-    transformed_kinematic_point: LUCTKinematicPoint<T>,
+    kinematic_point: LUCTKinematicPoint<T>,
     probe_rotation: &'a Rotation,
+    cut_group_id: CutGroupId,
+    shared_groups: &'a [(Arc<ThresholdSolveGroup<T>>, usize)],
 }
 
 impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
@@ -3740,28 +3241,30 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         graph: &'a Graph,
         settings: &'a RuntimeSettings,
         esurface_collection: &'a EsurfaceCollection,
-        transformed_kinematic_point: LUCTKinematicPoint<T>,
+        kinematic_point: LUCTKinematicPoint<T>,
         overlap_structure: &'a OverlapStructure,
         masses: &'a EdgeVec<F<T>>,
         all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
         subspace: &'a SubspaceData,
         threshold_subspaces: Option<&'a [SubspaceData]>,
         probe_rotation: &'a Rotation,
+        cut_group_id: CutGroupId,
+        shared_groups: &'a [(Arc<ThresholdSolveGroup<T>>, usize)],
     ) -> Self {
-        let e_cm = F::from_f64(settings.kinematics.e_cm);
-
         Self {
             real_mass_vector: masses,
-            e_cm,
+            e_cm: F::from_f64(settings.kinematics.e_cm),
             graph,
             settings,
             esurface_collection,
             overlap_structure,
-            transformed_kinematic_point,
+            kinematic_point,
             all_lmbs,
             subspace,
             threshold_subspaces,
             probe_rotation,
+            cut_group_id,
+            shared_groups,
         }
     }
 
@@ -3772,54 +3275,69 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
 
     fn new_overlap_builder(
         &'a self,
-        overlap_group: &'a OverlapGroup,
-        selected_esurface: Option<EsurfaceID>,
+        group_index: usize,
+        selected_esurface: EsurfaceID,
     ) -> OverlapBuilder<'a, T> {
-        let subspace = selected_esurface
-            .map(|esurface_id| self.threshold_subspace(esurface_id))
-            .unwrap_or(self.subspace);
-
-        let center = overlap_group.center.cast();
-
-        let shifted_loop_momenta = self
-            .transformed_kinematic_point
+        let subspace = self.threshold_subspace(selected_esurface);
+        let (shared_group, shared_center) = &self.shared_groups[group_index];
+        let transformed_kinematic_point = self.kinematic_point.lmb_transform(
+            &self.graph.loop_momentum_basis,
+            subspace.get_lmb(self.all_lmbs),
+        );
+        // A center has only active coordinates. Copy by defining edge instead of
+        // transforming its artificial zero complement as a physical sample.
+        let mut center = transformed_kinematic_point
+            .representative_sample()
+            .loop_moms()
+            .clone();
+        for momentum in center.0.iter_mut() {
+            *momentum = ThreeMomentum::new(self.e_cm.zero(), self.e_cm.zero(), self.e_cm.zero());
+        }
+        let shared_lmb = shared_group.subspace.get_lmb(self.all_lmbs);
+        for target_index in subspace.iter_lmb_indices() {
+            let edge = subspace.get_lmb(self.all_lmbs).loop_edges[target_index];
+            let source_index = shared_lmb
+                .loop_edges
+                .iter_enumerated()
+                .find_map(|(index, &candidate)| (candidate == edge).then_some(index))
+                .expect("compatible solve group has the same defining edges");
+            center[target_index] = shared_group.overlap.overlap_groups[*shared_center].center
+                [source_index]
+                .map(&F::from_ff64);
+        }
+        let shifted_loop_momenta = transformed_kinematic_point
             .representative_sample()
             .loop_moms()
             - &center;
-
         let radius = shifted_loop_momenta
-            .hyper_radius_squared(Some(&subspace.iter_lmb_indices().collect_vec()))
+            .hyper_radius_squared(subspace.as_subspace_simple())
             .sqrt();
-        let unit_shifted_momenta = shifted_loop_momenta.rescale(
-            &radius.inv(),
-            Some(&subspace.iter_lmb_indices().collect_vec()),
-        );
-
+        let unit_shifted_momenta =
+            shifted_loop_momenta.rescale(&radius.inv(), subspace.as_subspace_simple());
         OverlapBuilder {
             counterterm_builder: self,
-            overlap_group,
             subspace,
             center,
             unit_shifted_momenta,
             radius,
+            transformed_kinematic_point,
+            shared_group,
+            shared_center: *shared_center,
         }
     }
 }
 
 struct OverlapBuilder<'a, T: FloatLike> {
     counterterm_builder: &'a CounterTermBuilder<'a, T>,
-    overlap_group: &'a OverlapGroup,
     subspace: &'a SubspaceData,
-    /// Solver-derived centers already belong to the current probe and cut-side LMB frame.
+    /// Solver-derived centers already belong to the current probe; only active
+    /// coordinates are transferred to this threshold's native parent LMB.
     center: LoopMomenta<F<T>>,
     unit_shifted_momenta: LoopMomenta<F<T>>,
     radius: F<T>,
-}
-
-enum SideOverlapBuilders<'a, T: FloatLike> {
-    Homogeneous(Vec<OverlapBuilder<'a, T>>),
-    /// One builder per projected E-surface instance, grouped like the overlap result.
-    Projected(Vec<Vec<OverlapBuilder<'a, T>>>),
+    transformed_kinematic_point: LUCTKinematicPoint<T>,
+    shared_group: &'a ThresholdSolveGroup<T>,
+    shared_center: usize,
 }
 
 impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
@@ -3866,7 +3384,6 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 
         let representative_sample = self
             .overlap_builder
-            .counterterm_builder
             .transformed_kinematic_point
             .representative_sample();
         let mut center_with_fixed_complement = representative_sample.loop_moms().clone();
@@ -3875,40 +3392,32 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 self.overlap_builder.center[loop_index].clone();
         }
 
-        let center_surface_values = self
-            .overlap_builder
-            .overlap_group
+        let shared = self.overlap_builder.shared_group;
+        let shared_lmb = shared.subspace.get_lmb(lmbs);
+        let shared_center = &shared.overlap.overlap_groups[self.overlap_builder.shared_center];
+        // Validate every member with its own solved-cut data, including members
+        // whose counterterm is dispatched by another cut.
+        let center_surface_values = shared_center
             .existing_esurfaces
             .iter()
-            .map(|&existing_esurface_id| {
-                let esurface_id = self
-                    .overlap_builder
-                    .counterterm_builder
-                    .overlap_structure
-                    .existing_esurfaces[existing_esurface_id];
-                let esurface =
-                    &self.overlap_builder.counterterm_builder.esurface_collection[esurface_id];
-                let surface_subspace = self
-                    .overlap_builder
-                    .counterterm_builder
-                    .threshold_subspace(esurface_id);
-                let mut surface_center_with_fixed_complement =
-                    representative_sample.loop_moms().clone();
-                for loop_index in surface_subspace.iter_lmb_indices() {
-                    surface_center_with_fixed_complement[loop_index] =
-                        self.overlap_builder.center[loop_index].clone();
+            .map(|&id| {
+                let surface_id = shared.overlap.existing_esurfaces[id];
+                let sample = shared.kinematics[surface_id.0].representative_sample();
+                let mut momenta = sample.loop_moms().clone();
+                for index in shared.subspace.iter_lmb_indices() {
+                    momenta[index] = shared_center.center[index].map(&F::from_ff64);
                 }
-                let value = esurface.compute_from_momenta(
-                    surface_subspace.get_lmb(lmbs),
+                let value = shared.thresholds[surface_id].compute_from_momenta(
+                    shared_lmb,
                     masses,
-                    &surface_center_with_fixed_complement,
-                    representative_sample.external_moms(),
+                    &momenta,
+                    sample.external_moms(),
                 );
-                let is_valid = esurface_value_is_strictly_inside(
+                let valid = esurface_value_is_strictly_inside(
                     &value,
                     &self.overlap_builder.counterterm_builder.e_cm,
                 );
-                (esurface_id, value, is_valid)
+                (surface_id, value, valid)
             })
             .collect_vec();
         let all_center_values_valid = center_surface_values
@@ -3960,7 +3469,6 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
         let (raw_radius_guess, _) = self.esurface.get_radius_guess_subspace(
             &self.overlap_builder.unit_shifted_momenta,
             self.overlap_builder
-                .counterterm_builder
                 .transformed_kinematic_point
                 .representative_sample()
                 .external_moms(),
@@ -3976,7 +3484,6 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 &self.overlap_builder.unit_shifted_momenta,
                 &self.overlap_builder.center,
                 self.overlap_builder
-                    .counterterm_builder
                     .transformed_kinematic_point
                     .representative_sample()
                     .external_moms(),
@@ -4036,7 +3543,6 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
         let t_dependent_solution = if rstar_t_dependence_evaluator.supports_t_derivatives() {
             let t_star = match &self
                 .overlap_builder
-                .counterterm_builder
                 .transformed_kinematic_point
                 .non_dual_cut_params()
                 .tstar
@@ -4055,7 +3561,6 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                     subspace,
                     unrescaled_momentum_sample: self
                         .overlap_builder
-                        .counterterm_builder
                         .transformed_kinematic_point
                         .unrescaled_sample(),
                     masses,
@@ -4153,7 +3658,6 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let source_sample = self
             .esurface_ct_builder
             .overlap_builder
-            .counterterm_builder
             .transformed_kinematic_point
             .sample_for_order(order);
         let dual_loop_momenta = source_sample
@@ -4230,7 +3734,6 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let source_sample = self
             .esurface_ct_builder
             .overlap_builder
-            .counterterm_builder
             .transformed_kinematic_point
             .sample_for_order(lu_order);
         let target_shape = shape_from_cut_cff_index(cut_cff_index)
@@ -4301,175 +3804,119 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
     }
 
     fn non_dual_multichanneling_factor(&self, rstar_sample: &MomentumSample<T>) -> Complex<F<T>> {
-        let subspace = self.subspace();
-
-        let multi_channeling_denominator = self
-            .esurface_ct_builder
-            .overlap_builder
-            .counterterm_builder
-            .overlap_structure
+        let builder = self.esurface_ct_builder.overlap_builder;
+        let group = builder.shared_group;
+        let native_lmb = self
+            .subspace()
+            .get_lmb(builder.counterterm_builder.all_lmbs);
+        let group_lmb = group.subspace.get_lmb(builder.counterterm_builder.all_lmbs);
+        let active_sample = rstar_sample.lmb_transform(native_lmb, group_lmb);
+        let values: Vec<_> = group
+            .thresholds
+            .iter_enumerated()
+            .map(|(id, surface)| {
+                let mut momenta = group.kinematics[id.0]
+                    .representative_sample()
+                    .loop_moms()
+                    .clone();
+                for index in group.subspace.iter_lmb_indices() {
+                    momenta[index] = active_sample.loop_moms()[index].clone();
+                }
+                surface
+                    .compute_from_momenta(
+                        group_lmb,
+                        builder.counterterm_builder.real_mass_vector,
+                        &momenta,
+                        group.kinematics[id.0]
+                            .representative_sample()
+                            .external_moms(),
+                    )
+                    .powi(group.prefactor_power as i32)
+            })
+            .collect();
+        let weights = group
+            .overlap
             .overlap_groups
             .iter()
-            .map(|group| {
-                group
+            .map(|center| {
+                center
                     .complement
                     .iter()
-                    .map(|existing_esurface_id| {
-                        let esurface_id = self
-                            .esurface_ct_builder
-                            .overlap_builder
-                            .counterterm_builder
-                            .overlap_structure
-                            .existing_esurfaces[*existing_esurface_id];
-                        let esurface = &self
-                            .esurface_ct_builder
-                            .overlap_builder
-                            .counterterm_builder
-                            .esurface_collection[esurface_id];
-                        let esurface_value = esurface.compute_from_momenta(
-                            subspace.get_lmb(
-                                self.esurface_ct_builder
-                                    .overlap_builder
-                                    .counterterm_builder
-                                    .all_lmbs,
-                            ),
-                            self.esurface_ct_builder
-                                .overlap_builder
-                                .counterterm_builder
-                                .real_mass_vector,
-                            rstar_sample.loop_moms(),
-                            rstar_sample.external_moms(),
-                        );
-
-                        &esurface_value * &esurface_value
-                    })
-                    .fold(rstar_sample.one(), |acc, value| acc * value)
+                    .map(|id| &values[group.overlap.existing_esurfaces[*id].0])
+                    .fold(rstar_sample.one(), |weight, value| weight * value)
             })
-            .fold(rstar_sample.zero(), |acc, value| acc + value);
-
-        let multichanneling_numerator = self
-            .esurface_ct_builder
-            .overlap_builder
-            .overlap_group
-            .complement
+            .collect_vec();
+        let denominator = weights
             .iter()
-            .map(|existing_esurface_id| {
-                let esurface_id = self
-                    .esurface_ct_builder
-                    .overlap_builder
-                    .counterterm_builder
-                    .overlap_structure
-                    .existing_esurfaces[*existing_esurface_id];
-                let esurface = &self
-                    .esurface_ct_builder
-                    .overlap_builder
-                    .counterterm_builder
-                    .esurface_collection[esurface_id];
-                let esurface_value = esurface.compute_from_momenta(
-                    subspace.get_lmb(
-                        self.esurface_ct_builder
-                            .overlap_builder
-                            .counterterm_builder
-                            .all_lmbs,
-                    ),
-                    self.esurface_ct_builder
-                        .overlap_builder
-                        .counterterm_builder
-                        .real_mass_vector,
-                    rstar_sample.loop_moms(),
-                    rstar_sample.external_moms(),
-                );
-
-                &esurface_value * &esurface_value
-            })
-            .fold(rstar_sample.one(), |acc, value| acc * value);
-
-        Complex::new_re(multichanneling_numerator / multi_channeling_denominator)
+            .fold(rstar_sample.zero(), |sum, value| sum + value);
+        Complex::new_re(weights[builder.shared_center].clone() / denominator)
     }
 
     fn dual_multichanneling_factor(&self, geometry: &DualRstarGeometry<T>) -> HyperDual<F<T>> {
-        let subspace = self.subspace();
-        let lmb = subspace.get_lmb(
-            self.esurface_ct_builder
-                .overlap_builder
-                .counterterm_builder
-                .all_lmbs,
-        );
-        let zero = new_constant(&geometry.radius, &geometry.radius.values[0].zero());
+        let builder = self.esurface_ct_builder.overlap_builder;
+        let group = builder.shared_group;
+        let native_lmb = self
+            .subspace()
+            .get_lmb(builder.counterterm_builder.all_lmbs);
+        let group_lmb = group.subspace.get_lmb(builder.counterterm_builder.all_lmbs);
+        let external_spatial = geometry
+            .external_moms
+            .iter()
+            .map(|p| p.spatial.clone())
+            .collect();
+        let current =
+            geometry
+                .rstar_loop_momenta
+                .lmb_transform(native_lmb, group_lmb, &external_spatial);
+        let values = group
+            .thresholds
+            .iter_enumerated()
+            .map(|(id, surface)| {
+                let sample = group.kinematics[id.0].representative_sample();
+                // The target cut's complement carries its live LU-t derivatives.
+                // Other cuts' already-solved data are constants for this residue;
+                // their threshold-r dependence enters through the shared coordinates.
+                let (mut momenta, externals) = if group.records[id.0].cut_group_id
+                    == builder.counterterm_builder.cut_group_id
+                {
+                    (current.clone(), geometry.external_moms.clone())
+                } else {
+                    (
+                        dualize_loop_momenta(&geometry.radius, sample.loop_moms()),
+                        dualize_external_momenta(&geometry.radius, sample.external_moms()),
+                    )
+                };
+                for index in group.subspace.iter_lmb_indices() {
+                    momenta[index] = current[index].clone();
+                }
+                let value = surface.compute_from_dual_momenta(
+                    group_lmb,
+                    builder.counterterm_builder.real_mass_vector,
+                    &momenta,
+                    &externals,
+                );
+                (0..group.prefactor_power).fold(
+                    new_constant(&value, &value.values[0].one()),
+                    |product, _| product * &value,
+                )
+            })
+            .collect_vec();
         let one = new_constant(&geometry.radius, &geometry.radius.values[0].one());
-
-        let multi_channeling_denominator = self
-            .esurface_ct_builder
-            .overlap_builder
-            .counterterm_builder
-            .overlap_structure
+        let zero = new_constant(&geometry.radius, &geometry.radius.values[0].zero());
+        let weights = group
+            .overlap
             .overlap_groups
             .iter()
-            .map(|group| {
-                group
+            .map(|center| {
+                center
                     .complement
                     .iter()
-                    .map(|existing_esurface_id| {
-                        let esurface_id = self
-                            .esurface_ct_builder
-                            .overlap_builder
-                            .counterterm_builder
-                            .overlap_structure
-                            .existing_esurfaces[*existing_esurface_id];
-                        let esurface = &self
-                            .esurface_ct_builder
-                            .overlap_builder
-                            .counterterm_builder
-                            .esurface_collection[esurface_id];
-                        let esurface_value = esurface.compute_from_dual_momenta(
-                            lmb,
-                            self.esurface_ct_builder
-                                .overlap_builder
-                                .counterterm_builder
-                                .real_mass_vector,
-                            &geometry.rstar_loop_momenta,
-                            &geometry.external_moms,
-                        );
-
-                        esurface_value.clone() * esurface_value
-                    })
-                    .fold(one.clone(), |acc, value| acc * value)
+                    .map(|id| &values[group.overlap.existing_esurfaces[*id].0])
+                    .fold(one.clone(), |weight, value| weight * value)
             })
-            .fold(zero.clone(), |acc, value| acc + value);
-
-        let multi_channeling_numerator = self
-            .esurface_ct_builder
-            .overlap_builder
-            .overlap_group
-            .complement
-            .iter()
-            .map(|existing_esurface_id| {
-                let esurface_id = self
-                    .esurface_ct_builder
-                    .overlap_builder
-                    .counterterm_builder
-                    .overlap_structure
-                    .existing_esurfaces[*existing_esurface_id];
-                let esurface = &self
-                    .esurface_ct_builder
-                    .overlap_builder
-                    .counterterm_builder
-                    .esurface_collection[esurface_id];
-                let esurface_value = esurface.compute_from_dual_momenta(
-                    lmb,
-                    self.esurface_ct_builder
-                        .overlap_builder
-                        .counterterm_builder
-                        .real_mass_vector,
-                    &geometry.rstar_loop_momenta,
-                    &geometry.external_moms,
-                );
-
-                esurface_value.clone() * esurface_value
-            })
-            .fold(one, |acc, value| acc * value);
-
-        multi_channeling_numerator / multi_channeling_denominator
+            .collect_vec();
+        let denominator = weights.iter().fold(zero, |sum, value| sum + value);
+        weights[builder.shared_center].clone() / denominator
     }
 
     fn rstar_sample_for_order<'solution>(
@@ -4482,7 +3929,6 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             let mut rstar_sample = self
                 .esurface_ct_builder
                 .overlap_builder
-                .counterterm_builder
                 .transformed_kinematic_point
                 .representative_sample()
                 .clone();
@@ -4558,7 +4004,6 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let mut rstar_sample = self
             .esurface_ct_builder
             .overlap_builder
-            .counterterm_builder
             .transformed_kinematic_point
             .sample_for_order(order)
             .clone();
@@ -4640,7 +4085,6 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let mut rstar_sample = self
             .esurface_ct_builder
             .overlap_builder
-            .counterterm_builder
             .transformed_kinematic_point
             .sample_for_order(lu_order)
             .clone();
@@ -4780,56 +4224,70 @@ impl<'solution, 'a, T: FloatLike> RstarSample<'solution, 'a, T> {
 fn merge_and_inverse_transform<T: FloatLike>(
     left_sample: &RstarSample<'_, '_, T>,
     right_sample: &RstarSample<'_, '_, T>,
+    cut_cff_index: &CutCFFIndex,
 ) -> MomentumSample<T> {
+    let left_builder = left_sample
+        .rstar_solution
+        .esurface_ct_builder
+        .overlap_builder;
+    let lmbs = left_builder.counterterm_builder.all_lmbs;
     let left_subspace = left_sample.rstar_solution.subspace();
-
     let right_subspace = right_sample.rstar_solution.subspace();
-
     assert!(
-        left_subspace.is_mergable_with(right_subspace),
-        "incompatible subspaces for merging samples"
+        left_subspace.is_mergable_with(right_subspace, lmbs),
+        "incompatible physical subspaces for merging samples"
     );
-
-    let mut merged_sample = left_sample.rstar_sample.clone();
-    for lmb_index in right_subspace.iter_lmb_indices() {
-        let right_momentum = right_sample.rstar_sample.loop_moms()[lmb_index].clone();
-        merged_sample.sample.loop_moms[lmb_index] = right_momentum;
+    let graph_lmb = &left_builder.counterterm_builder.graph.loop_momentum_basis;
+    let mut merged = left_sample.get_inverse_transformed_sample();
+    let right = right_sample.get_inverse_transformed_sample();
+    let base = left_builder
+        .transformed_kinematic_point
+        .representative_sample()
+        .lmb_transform(left_subspace.get_lmb(lmbs), graph_lmb);
+    // Add the two physical displacements to their common solved-cut sample.
+    // This is the same Cartesian projection even when native parent slots differ.
+    for index in (0..merged.loop_moms().0.len()).map(LoopIndex::from) {
+        merged.sample.loop_moms[index] +=
+            &right.sample.loop_moms[index] - &base.sample.loop_moms[index];
     }
-
     match (
-        merged_sample.sample.dual_loop_moms.as_mut(),
-        right_sample.rstar_sample.sample.dual_loop_moms.as_ref(),
+        merged.sample.dual_loop_moms.as_mut(),
+        right.sample.dual_loop_moms.as_ref(),
     ) {
-        (Some(merged_dual_loop_moms), Some(right_dual_loop_moms)) => {
-            for lmb_index in right_subspace.iter_lmb_indices() {
-                merged_dual_loop_moms[lmb_index] = right_dual_loop_moms[lmb_index].clone();
+        (Some(merged_duals), Some(right_duals)) => {
+            let source = &left_builder.transformed_kinematic_point;
+            let order = cut_cff_index.lu_cut_order.expect("iterated LU order") - 1;
+            let base_sample = source.sample_for_order(order);
+            let target_shape = shape_from_cut_cff_index(cut_cff_index).map(HyperDual::new);
+            let native_base = embedded_dual_loop_momenta_for_cut_cff_index(
+                base_sample,
+                &target_shape,
+                variable_indices_from_cut_cff_index(cut_cff_index).lu_cut,
+            )
+            .expect("iterated dual base matches the residue shape");
+            let external = dualize_external_momenta(
+                &merged_duals[LoopIndex::from(0)].px,
+                base_sample.external_moms(),
+            );
+            let base_duals = native_base.lmb_transform(
+                left_subspace.get_lmb(lmbs),
+                graph_lmb,
+                &external.iter().map(|p| p.spatial.clone()).collect(),
+            );
+            for index in (0..merged_duals.0.len()).map(LoopIndex::from) {
+                merged_duals[index] = merged_duals[index].clone() + right_duals[index].clone()
+                    - base_duals[index].clone();
             }
         }
         (None, None) => {}
-        _ => {
-            unreachable!("iterated LU samples must either both carry dual loop momenta or neither")
-        }
+        _ => unreachable!("iterated LU samples must carry matching dual shapes"),
     }
-
-    let current_lmb = left_subspace.get_lmb(
-        left_sample
-            .rstar_solution
-            .esurface_ct_builder
-            .overlap_builder
-            .counterterm_builder
-            .all_lmbs,
-    );
-
-    let target_lmb = &left_sample
-        .rstar_solution
-        .esurface_ct_builder
-        .overlap_builder
-        .counterterm_builder
-        .graph
-        .loop_momentum_basis;
-
-    merged_sample.lmb_transform(current_lmb, target_lmb)
+    merged
 }
+
+#[cfg(test)]
+#[path = "lu_counterterm_group_tests.rs"]
+mod group_tests;
 
 #[cfg(test)]
 mod tests {

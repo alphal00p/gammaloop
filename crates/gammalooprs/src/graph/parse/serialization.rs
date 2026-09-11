@@ -339,7 +339,7 @@ mod tests {
                         name: Some("quoted \"variant\" η".to_string()),
                         group_id: None,
                         subspace: Some(vec![EdgeIndex(3)]),
-                        parent_lmb: None,
+                        parent_lmb: Some(vec![EdgeIndex(3)]),
                         disable: false,
                         multiplier: Some(ThresholdCountertermMultiplier {
                             expression: "custom(\"η\", \\path, tab:\t, line:\n)".to_string(),

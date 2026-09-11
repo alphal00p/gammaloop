@@ -456,7 +456,7 @@ fn cross_section_absent_and_explicit_empty_directives_are_runtime_equivalent() {
                     .collect::<BTreeSet<_>>();
                 assert_eq!(
                     grouped_cut_ids,
-                    (0..graph.cuts.len()).collect(),
+                    (0..graph.cuts.len()).collect::<BTreeSet<_>>(),
                     "every discovered process-valid cut must remain in the numerical LU evaluation",
                 );
             }

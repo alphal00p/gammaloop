@@ -12,6 +12,7 @@ edges = [2, 4, 9]
     [[cuts.thresholds.counterterms]]
     name = "forced_1l"
     subspace = [5]
+    parent_lmb = [4, 5, 9, 11]
 
   [[cuts.thresholds]]
   edges = [5, 11, 13]
@@ -19,6 +20,7 @@ edges = [2, 4, 9]
     [[cuts.thresholds.counterterms]]
     name = "forced_1l"
     subspace = [5]
+    parent_lmb = [4, 5, 9, 11]
 
 [[cuts]]
 edges = [2, 6, 7]
@@ -29,6 +31,7 @@ edges = [2, 6, 7]
     [[cuts.thresholds.counterterms]]
     name = "forced_1l"
     subspace = [3]
+    parent_lmb = [3, 6, 7, 11]
 
   [[cuts.thresholds]]
   edges = [3, 11, 12]
@@ -36,3 +39,4 @@ edges = [2, 6, 7]
     [[cuts.thresholds.counterterms]]
     name = "forced_1l"
     subspace = [3]
+    parent_lmb = [3, 6, 7, 11]

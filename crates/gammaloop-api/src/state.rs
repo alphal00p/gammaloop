@@ -1569,12 +1569,14 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
+// Version 7 stores master-topology amplitude metadata and removes the coerced
+// common-parent LU subspaces. Older generated states must be regenerated.
 // Version 6 removes obsolete deferred-integrand fields from the positional
 // amplitude and cut-integrand layouts.
 // Version 5 persists component-local generated-CFF ownership and prefactor
 // metadata. Older states use a previous positional bincode layout and must be
 // regenerated rather than decoded as the new expression type.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 6;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 7;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

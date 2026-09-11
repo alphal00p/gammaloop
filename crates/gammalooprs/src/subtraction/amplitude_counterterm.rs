@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::Path, slice};
+use std::{collections::BTreeMap, path::Path, slice, sync::Arc};
 
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -14,8 +14,8 @@ use crate::{
         CutCFFIndex,
         esurface::{
             Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces,
-            ExistingThresholds, GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceId,
-            esurface_value_is_strictly_inside,
+            ExistingThresholds, GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceGroup,
+            RaisedEsurfaceId, esurface_value_is_strictly_inside,
         },
         expression::OrientationID,
     },
@@ -23,7 +23,7 @@ use crate::{
     integrands::{
         evaluation::EvaluationMetaData,
         process::{
-            GenericEvaluator, ParamBuilder, ThresholdParams,
+            GenericEvaluator, ParamBuilder, RuntimeCache, ThresholdParams,
             evaluators::{
                 EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator,
                 evaluate_evaluator_single,
@@ -49,9 +49,13 @@ use crate::{
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
         evaluate_integrated_ct_normalisation, evaluate_uv_damper,
-        overlap::{OverlapGroup, OverlapStructure},
+        overlap::{
+            OverlapGroup, OverlapInput, OverlapStructure, SingleGraphOverlapData,
+            find_maximal_overlap,
+        },
         overlap_subspace::{
-            OverlapInput as SubspaceOverlapInput, OverlapStructure as SubspaceOverlapStructure,
+            OverlapInput as SubspaceOverlapInput, OverlapKinematics,
+            OverlapStructure as SubspaceOverlapStructure,
             find_maximal_overlap as find_maximal_subspace_overlap,
         },
     },
@@ -239,6 +243,272 @@ pub struct AmplitudeCountertermData {
     pub esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
     pub local_esurface_exists: TiVec<GroupEsurfaceId, bool>,
     pub own_group_position: GraphGroupPosition,
+    /// One immutable catalogue is shared by all members, including foreign MC complements.
+    pub(crate) group_catalogue: RuntimeCache<Arc<AmplitudeOverlapCatalogue>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct AmplitudeOverlapCatalogue {
+    pub graphs: TiVec<GraphGroupPosition, Graph>,
+    pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
+    pub variants: Vec<(
+        GraphGroupPosition,
+        ThresholdCountertermVariantId,
+        ResolvedThresholdCountertermVariant,
+        Esurface,
+    )>,
+}
+
+struct PreparedAmplitudeOverlap<T: FloatLike> {
+    thresholds: EsurfaceCollection,
+    threshold_subspaces: Vec<SubspaceData>,
+    threshold_masses: Vec<EdgeVec<F<T>>>,
+    synthetic_variants: TiVec<EsurfaceID, usize>,
+    sample_in_common_lmb: MomentumSample<T>,
+    lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
+    parent_lmb: LmbIndex,
+    overlap: SubspaceOverlapStructure,
+}
+
+impl AmplitudeOverlapCatalogue {
+    fn prepare_group<T: FloatLike>(
+        &self,
+        allowed_instances: &[usize],
+        momentum_sample: &MomentumSample<T>,
+        model: &Model,
+        settings: &RuntimeSettings,
+        rotation: &Rotation,
+    ) -> Result<PreparedAmplitudeOverlap<T>> {
+        // Explicit physical cycles have one canonical chart on the group master. An implicit
+        // full-space member instead keeps the established shared generation variables, with
+        // each member's native propagator routing; its local edge IDs need not match the master.
+        // Each independent instance retains its own native mass data and fixed complement.
+        let topology = &self.graphs[GraphGroupPosition::from(0)];
+        let native_full_space = allowed_instances
+            .iter()
+            .any(|&instance| self.variants[instance].2.requested_parent_lmb.is_none());
+        let mut lmbs = self.lmbs.clone();
+        let common_subspace = if native_full_space {
+            let parent = LmbIndex::from(lmbs.len());
+            lmbs.push(topology.loop_momentum_basis.clone());
+            SubspaceData::new_with_user_selected_lmb(topology.no_dummy(), parent, topology, &lmbs)?
+        } else {
+            self.variants[allowed_instances[0]].2.subspace.clone()
+        };
+        let common_lmb = common_subspace.get_lmb(&lmbs).clone();
+        let sample_in_common_lmb = if native_full_space {
+            momentum_sample.clone()
+        } else {
+            momentum_sample.lmb_transform(&topology.loop_momentum_basis, &common_lmb)
+        };
+        let e_cm = F::from_f64(settings.kinematics.e_cm);
+        let existence_tolerance = F::from_f64(settings.subtraction.esurface_existence_threshold);
+
+        let mut thresholds = EsurfaceCollection::new();
+        let mut threshold_subspaces = Vec::new();
+        let mut threshold_masses = Vec::new();
+        let mut surface_kinematics = Vec::new();
+        let mut synthetic_variants = TiVec::<EsurfaceID, usize>::new();
+        for &instance in allowed_instances {
+            let (owner, _, metadata, esurface) = &self.variants[instance];
+            let subspace = &metadata.subspace;
+            let native_lmb = subspace.get_lmb(&self.lmbs);
+            let member = &self.graphs[*owner];
+            let native_geometry = metadata.requested_parent_lmb.is_none();
+            if !native_geometry
+                && esurface
+                    .energies
+                    .iter()
+                    .chain(esurface.external_shift.iter().map(|(edge, _)| edge))
+                    .chain(member.loop_momentum_basis.loop_edges.iter())
+                    .any(|edge| native_lmb.edge_signatures.get(*edge).is_none())
+            {
+                return Err(eyre!(
+                    "Amplitude graph '{}' threshold variant '{}' refers to edges absent from master graph '{}' coordinates",
+                    member.name,
+                    metadata.name,
+                    topology.name,
+                ));
+            }
+            let native_subspace = if native_geometry {
+                let parent = LmbIndex::from(lmbs.len());
+                lmbs.push(member.loop_momentum_basis.clone());
+                SubspaceData::new_with_user_selected_lmb(member.no_dummy(), parent, member, &lmbs)?
+            } else {
+                subspace.clone()
+            };
+            let native_sample = if native_geometry {
+                momentum_sample.clone()
+            } else {
+                momentum_sample.lmb_transform(&topology.loop_momentum_basis, native_lmb)
+            };
+            let geometry = if native_geometry { member } else { topology };
+            let masses = member.get_real_mass_vector::<T>(model);
+            let existence = esurface.classify_existence_subspace(
+                native_sample.loop_moms(),
+                native_sample.external_moms(),
+                &native_subspace,
+                &lmbs,
+                geometry,
+                &masses,
+                &[],
+                &e_cm,
+                &existence_tolerance,
+            );
+            if !existence.is_existing() {
+                continue;
+            }
+            // Equal physical cycles allow the full sample to be expressed in this group's chart.
+            let rebased = if native_geometry {
+                native_sample
+            } else {
+                native_sample.lmb_transform(native_lmb, &common_lmb)
+            };
+            let rebased_subspace = if native_geometry {
+                native_subspace
+            } else {
+                SubspaceData::new_from_parent_basis_edges(
+                    &subspace.iter_basis_edges(&self.lmbs).collect::<Vec<_>>(),
+                    &topology.no_dummy(),
+                    common_subspace.parent_lmb_index(),
+                    topology,
+                    &lmbs,
+                )?
+            };
+            thresholds.push(esurface.clone());
+            threshold_subspaces.push(rebased_subspace);
+            surface_kinematics.push(OverlapKinematics {
+                loop_moms: rebased.loop_moms().iter().map(|mom| mom.to_f64()).collect(),
+                external_momenta: rebased
+                    .external_moms()
+                    .iter()
+                    .map(|mom| mom.to_f64())
+                    .collect(),
+                edge_masses: Some(masses.iter().map(|(_, mass)| F(mass.0.to_f64())).collect()),
+            });
+            threshold_masses.push(masses);
+            synthetic_variants.push(instance);
+        }
+        let existing_thresholds: ExistingThresholds = thresholds.keys().collect();
+        let sample_f64 = momentum_sample_to_f64(&sample_in_common_lmb);
+        let overlap = if native_full_space && !thresholds.is_empty() {
+            // Reuse the full-space solver's per-graph geometry. Each semantic variant is a
+            // separate synthetic graph/surface entry, including duplicate and foreign poles.
+            let raised_data = RaisedEsurfaceData {
+                raised_groups: thresholds
+                    .keys()
+                    .map(|id| RaisedEsurfaceGroup {
+                        esurface_ids: vec![id],
+                        max_occurence: 1,
+                    })
+                    .collect(),
+                pass_two_evaluator: None,
+            };
+            let mut probe_settings = settings.clone();
+            // This input supplies only generation frames, so skip the unavailable alternate-LMB
+            // origin heuristic. The regular SOCP still solves all of the same constraints.
+            probe_settings
+                .subtraction
+                .overlap_settings
+                .try_origin_all_lmbs = false;
+            if let Some(center) = &mut probe_settings
+                .subtraction
+                .overlap_settings
+                .force_global_center
+            {
+                let rotated = center
+                    .iter()
+                    .map(|p| ThreeMomentum::new(F(p[0]), F(p[1]), F(p[2])))
+                    .collect::<LoopMomenta<_>>()
+                    .rotate(rotation);
+                *center = rotated.iter().map(|p| [p.px.0, p.py.0, p.pz.0]).collect();
+            }
+            let input = OverlapInput {
+                graph_data: thresholds
+                    .keys()
+                    .map(|id| SingleGraphOverlapData {
+                        lmb: threshold_subspaces[id.0].get_lmb(&lmbs),
+                        esurfaces: &thresholds,
+                        raised_data: &raised_data,
+                        edge_masses: surface_kinematics[id.0].edge_masses.clone().unwrap(),
+                    })
+                    .collect(),
+                settings: &probe_settings,
+                group_esurface_map: thresholds
+                    .keys()
+                    .map(|id| {
+                        thresholds
+                            .keys()
+                            .map(|owner| (owner == id).then_some(RaisedEsurfaceId::from(id.0)))
+                            .collect()
+                    })
+                    .collect(),
+                local_esurface_exists: thresholds
+                    .keys()
+                    .map(|owner| thresholds.keys().map(|id| owner == id).collect())
+                    .collect(),
+            };
+            let overlap = find_maximal_overlap(
+                &input,
+                &thresholds
+                    .keys()
+                    .map(|id| GroupEsurfaceId::from(id.0))
+                    .collect(),
+                sample_f64.external_moms(),
+            )?;
+            Ok(SubspaceOverlapStructure {
+                existing_esurfaces: overlap
+                    .existing_esurfaces
+                    .iter()
+                    .map(|id| EsurfaceID::from(id.0))
+                    .collect(),
+                overlap_groups: overlap
+                    .overlap_groups
+                    .into_iter()
+                    .map(|group| crate::subtraction::overlap_subspace::OverlapGroup {
+                        existing_esurfaces: group.existing_esurfaces,
+                        complement: group.complement,
+                        center: group.center,
+                    })
+                    .collect(),
+            })
+        } else {
+            let overlap_input = SubspaceOverlapInput {
+                graph: topology,
+                settings,
+                subspace: &common_subspace,
+                threshold_subspaces: Some(&threshold_subspaces),
+                lmbs: &lmbs,
+                thresholds: &thresholds,
+                edge_masses: topology.get_real_mass_vector::<f64>(model),
+                surface_kinematics: Some(&surface_kinematics),
+            };
+            find_maximal_subspace_overlap(
+                &overlap_input,
+                &existing_thresholds,
+                sample_f64.loop_moms(),
+                sample_f64.external_moms(),
+                rotation,
+            )
+        }
+        .with_context(|| {
+            format!(
+                "Failed to find shared threshold overlap for amplitude group master '{}'",
+                topology.name,
+            )
+        })?;
+
+        Ok(PreparedAmplitudeOverlap {
+            thresholds,
+            threshold_subspaces,
+            threshold_masses,
+            synthetic_variants,
+            sample_in_common_lmb,
+            lmbs,
+            parent_lmb: common_subspace.parent_lmb_index(),
+            overlap,
+        })
+    }
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -435,7 +705,40 @@ impl AmplitudeCountertermData {
             esurface_map: TiVec::new(),
             local_esurface_exists: TiVec::new(),
             own_group_position,
+            group_catalogue: RuntimeCache::default(),
         }
+    }
+
+    fn overlap_catalogue(
+        &self,
+        graph: &Graph,
+        esurfaces: &EsurfaceCollection,
+    ) -> Arc<AmplitudeOverlapCatalogue> {
+        self.group_catalogue.as_ref().cloned().unwrap_or_else(|| {
+            Arc::new(AmplitudeOverlapCatalogue {
+                graphs: std::iter::repeat_with(|| graph.clone())
+                    .take(usize::from(self.own_group_position) + 1)
+                    .collect(),
+                lmbs: self.lmbs.clone(),
+                variants: self
+                    .variant_metadata
+                    .iter_enumerated()
+                    .filter(|(id, _)| {
+                        self.variant_generated_mask[*id] && self.variant_active_mask[*id]
+                    })
+                    .map(|(id, metadata)| {
+                        let raised = self.variant_raised_esurfaces[id];
+                        (
+                            self.own_group_position,
+                            id,
+                            metadata.clone(),
+                            esurfaces[self.raised_data.raised_groups[raised].esurface_ids[0]]
+                                .clone(),
+                        )
+                    })
+                    .collect(),
+            })
+        })
     }
 
     fn ensure_active_raised_esurface(&self, raised_esurface_id: RaisedEsurfaceId) -> Result<()> {
@@ -915,47 +1218,34 @@ impl AmplitudeCountertermData {
         record_primary_timing: bool,
         record_components: bool,
     ) -> Result<AmplitudeCountertermEvaluation<T>> {
-        let candidate_ids = self
-            .variant_evaluators
-            .keys()
-            .filter(|&id| self.variant_generated_mask[id] && self.variant_active_mask[id])
-            .collect::<Vec<_>>();
-        let mut groups: Vec<(Option<usize>, Vec<ThresholdCountertermVariantId>)> = Vec::new();
-        for variant_id in candidate_ids {
-            let metadata = &self.variant_metadata[variant_id];
-            let matching = groups.iter().position(|(group_id, members)| {
-                *group_id == metadata.group_id
-                    && members.first().is_some_and(|first| {
-                        self.variant_subspaces[*first].parent_lmb_index()
-                            == self.variant_subspaces[variant_id].parent_lmb_index()
-                            && self.variant_subspaces[*first].solve_signature(&self.lmbs)
-                                == self.variant_subspaces[variant_id].solve_signature(&self.lmbs)
-                    })
-            });
-            if let Some(index) = matching {
-                groups[index].1.push(variant_id);
-            } else {
-                if let Some(group_id) = metadata.group_id {
-                    if let Some((_, members)) = groups.iter().find(|(id, _)| *id == Some(group_id))
-                    {
-                        let first = members[0];
+        let catalogue = self.overlap_catalogue(graph, esurfaces);
+        let mut groups = BTreeMap::new();
+        let mut explicit = BTreeMap::<usize, (_, GraphGroupPosition, usize)>::new();
+        for (instance, (owner, variant_id, metadata, _)) in catalogue.variants.iter().enumerate() {
+            let signature = metadata.subspace.solve_signature(&catalogue.lmbs);
+            if let Some(label) = metadata.group_id {
+                if let Some((previous, previous_owner, previous_variant)) = explicit.get(&label) {
+                    if previous != &signature {
                         return Err(eyre!(
-                            "Amplitude graph '{}' explicit threshold group_id={} contains incompatible solve subspaces: variant {} '{}' has parent {:?} and basis {:?}, while variant {} '{}' has parent {:?} and basis {:?}",
-                            graph.name,
-                            group_id,
-                            first.0,
-                            self.variant_metadata[first].name,
-                            self.variant_subspaces[first].parent_lmb_index(),
-                            self.variant_subspaces[first].solve_signature(&self.lmbs),
+                            "Amplitude group master '{}' explicit threshold group_id={} has incompatible physical solve cycles: graph '{}' variant {} {:?}; graph '{}' variant {} {:?}",
+                            catalogue.graphs[GraphGroupPosition::from(0)].name,
+                            label,
+                            catalogue.graphs[*previous_owner].name,
+                            previous_variant,
+                            previous,
+                            catalogue.graphs[*owner].name,
                             variant_id.0,
-                            metadata.name,
-                            self.variant_subspaces[variant_id].parent_lmb_index(),
-                            self.variant_subspaces[variant_id].solve_signature(&self.lmbs),
+                            signature,
                         ));
                     }
+                } else {
+                    explicit.insert(label, (signature.clone(), *owner, variant_id.0));
                 }
-                groups.push((metadata.group_id, vec![variant_id]));
             }
+            groups
+                .entry((metadata.group_id, signature))
+                .or_insert_with(Vec::new)
+                .push(instance);
         }
 
         let mut total = Complex::new_re(momentum_sample.zero());
@@ -974,7 +1264,8 @@ impl AmplitudeCountertermData {
                 evaluation_metadata,
                 record_primary_timing,
                 record_components,
-                Some(&members),
+                &catalogue,
+                &members,
             )?;
             total += evaluation.total;
             local_counterterms.extend(evaluation.local_counterterms);
@@ -991,12 +1282,13 @@ impl AmplitudeCountertermData {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn evaluate_variant_group<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
         model: &Model,
-        esurfaces: &EsurfaceCollection,
+        _esurfaces: &EsurfaceCollection,
         rotation: &Rotation,
         settings: &RuntimeSettings,
         param_builder: &mut ParamBuilder<f64>,
@@ -1004,7 +1296,8 @@ impl AmplitudeCountertermData {
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
         record_components: bool,
-        allowed_variant_ids: Option<&[ThresholdCountertermVariantId]>,
+        catalogue: &AmplitudeOverlapCatalogue,
+        allowed_instances: &[usize],
     ) -> Result<AmplitudeCountertermEvaluation<T>> {
         if self.variant_evaluators.len() != self.variant_subspaces.len()
             || self.variant_evaluators.len() != self.variant_raised_esurfaces.len()
@@ -1033,117 +1326,37 @@ impl AmplitudeCountertermData {
             }
         }
 
-        let candidate_variant_ids = self
-            .variant_evaluators
-            .keys()
-            .filter(|&variant_id| {
-                self.variant_generated_mask[variant_id]
-                    && self.variant_active_mask[variant_id]
-                    && allowed_variant_ids.is_none_or(|allowed| allowed.contains(&variant_id))
-            })
-            .collect::<Vec<_>>();
-        if candidate_variant_ids.is_empty() {
-            return Ok(AmplitudeCountertermEvaluation {
-                total: Complex::new_re(momentum_sample.zero()),
-                local_counterterms: Vec::new(),
-                components: record_components.then(Vec::new),
-            });
-        }
-        for &variant_id in &candidate_variant_ids {
-            self.ensure_active_variant(variant_id)?;
-        }
-
-        // The union selects only a common coordinate frame for the SOCP. Each projected
-        // E-surface below retains its own exact subspace and sampled fixed complement.
-        let common_subspace = SubspaceData::union_in_common_parent(
-            candidate_variant_ids
-                .iter()
-                .map(|&variant_id| &self.variant_subspaces[variant_id]),
-            graph,
-            &self.lmbs,
-        )
-        .with_context(|| {
-            format!(
-                "Amplitude graph '{}' threshold variants cannot share an overlap-center frame",
-                graph.name,
-            )
-        })?;
-        let common_lmb = common_subspace.get_lmb(&self.lmbs);
-        let sample_in_common_lmb =
-            momentum_sample.lmb_transform(&graph.loop_momentum_basis, common_lmb);
+        let PreparedAmplitudeOverlap {
+            thresholds,
+            threshold_subspaces,
+            threshold_masses,
+            synthetic_variants,
+            sample_in_common_lmb,
+            lmbs,
+            parent_lmb,
+            overlap,
+        } = catalogue.prepare_group(
+            allowed_instances,
+            momentum_sample,
+            model,
+            settings,
+            rotation,
+        )?;
+        let topology = &catalogue.graphs[GraphGroupPosition::from(0)];
+        let common_lmb = &lmbs[parent_lmb];
         let real_mass_vector = graph.get_real_mass_vector(model);
         let e_cm = F::from_f64(settings.kinematics.e_cm);
-        let existence_tolerance = F::from_f64(settings.subtraction.esurface_existence_threshold);
-
-        let mut thresholds = EsurfaceCollection::new();
-        let mut threshold_subspaces = Vec::new();
-        let mut synthetic_variants = TiVec::<EsurfaceID, ThresholdCountertermVariantId>::new();
-        for variant_id in candidate_variant_ids {
-            let raised_esurface_id = self.variant_raised_esurfaces[variant_id];
-            let esurface_id = self.raised_data.raised_groups[raised_esurface_id].esurface_ids[0];
-            let esurface = &esurfaces[esurface_id];
-            let subspace = &self.variant_subspaces[variant_id];
-            let existence = esurface.classify_existence_subspace(
-                sample_in_common_lmb.loop_moms(),
-                sample_in_common_lmb.external_moms(),
-                subspace,
-                &self.lmbs,
-                graph,
-                &real_mass_vector,
-                &[],
-                &e_cm,
-                &existence_tolerance,
-            );
-            if !existence.is_existing() {
-                continue;
-            }
-            thresholds.push(esurface.clone());
-            threshold_subspaces.push(subspace.clone());
-            synthetic_variants.push(variant_id);
-        }
-        if thresholds.is_empty() {
-            return Ok(AmplitudeCountertermEvaluation {
-                total: Complex::new_re(momentum_sample.zero()),
-                local_counterterms: Vec::new(),
-                components: record_components.then(Vec::new),
-            });
-        }
-
-        let existing_thresholds: ExistingThresholds = thresholds.keys().collect();
-        let sample_f64 = momentum_sample_to_f64(&sample_in_common_lmb);
-        let overlap_input = SubspaceOverlapInput {
-            graph,
-            settings,
-            subspace: &common_subspace,
-            threshold_subspaces: Some(&threshold_subspaces),
-            lmbs: &self.lmbs,
-            thresholds: &thresholds,
-            edge_masses: graph.get_real_mass_vector::<f64>(model),
-            surface_kinematics: None,
-        };
-        let overlap = find_maximal_subspace_overlap(
-            &overlap_input,
-            &existing_thresholds,
-            sample_f64.loop_moms(),
-            sample_f64.external_moms(),
-            rotation,
-        )
-        .with_context(|| {
-            format!(
-                "Failed to find graph-local projected threshold overlap for amplitude graph '{}'",
-                graph.name,
-            )
-        })?;
-
         let max_prefactor_power = synthetic_variants
             .iter()
-            .map(|&variant_id| {
-                self.raised_data.raised_groups[self.variant_raised_esurfaces[variant_id]]
-                    .max_occurence
-                    + 1
+            .map(|&instance| {
+                let order = catalogue.variants[instance]
+                    .2
+                    .raised_esurface_group
+                    .max_occurence;
+                2 * (order / 2 + 1)
             })
             .max()
-            .unwrap_or(1);
+            .unwrap_or(2);
         let mut total = Complex::new_re(momentum_sample.zero());
         let mut local_counterterms = Vec::new();
         let mut components = record_components.then(Vec::new);
@@ -1156,10 +1369,23 @@ impl AmplitudeCountertermData {
         for (overlap_group_index, overlap_group) in overlap.overlap_groups.iter().enumerate() {
             for &existing_esurface_id in &overlap_group.existing_esurfaces {
                 let synthetic_esurface_id = overlap.existing_esurfaces[existing_esurface_id];
-                let variant_id = synthetic_variants[synthetic_esurface_id];
+                let instance = synthetic_variants[synthetic_esurface_id];
+                let (owner, variant_id, metadata, _) = &catalogue.variants[instance];
+                if *owner != self.own_group_position {
+                    continue;
+                }
+                let variant_id = *variant_id;
+                self.ensure_active_variant(variant_id)?;
                 let raised_esurface_id = self.variant_raised_esurfaces[variant_id];
-                let subspace = &self.variant_subspaces[variant_id];
+                let subspace = &threshold_subspaces[synthetic_esurface_id.0];
                 let esurface = &thresholds[synthetic_esurface_id];
+                let native_geometry = metadata.requested_parent_lmb.is_none();
+                let geometry = if native_geometry { graph } else { topology };
+                let root_lmb = if native_geometry {
+                    &graph.loop_momentum_basis
+                } else {
+                    common_lmb
+                };
 
                 let mut center = overlap_group.center.cast::<T>();
                 for loop_index in (0..center.0.len()).map(LoopIndex::from) {
@@ -1181,8 +1407,8 @@ impl AmplitudeCountertermData {
                     &unit_shifted_momenta,
                     sample_in_common_lmb.external_moms(),
                     subspace,
-                    &self.lmbs,
-                    graph,
+                    &lmbs,
+                    geometry,
                     &real_mass_vector,
                 );
                 let function = |r: &_| {
@@ -1193,8 +1419,8 @@ impl AmplitudeCountertermData {
                         sample_in_common_lmb.external_moms(),
                         &real_mass_vector,
                         subspace,
-                        &self.lmbs,
-                        graph,
+                        &lmbs,
+                        geometry,
                     )
                 };
                 let zero = raw_radius_guess.zero();
@@ -1239,18 +1465,18 @@ impl AmplitudeCountertermData {
                     + &center;
                 let mut root_in_common_lmb = sample_in_common_lmb.clone();
                 root_in_common_lmb.sample.loop_moms = root_loop_momenta;
-                let root_in_generation_lmb =
-                    root_in_common_lmb.lmb_transform(common_lmb, &graph.loop_momentum_basis);
+                let root_in_metadata_lmb =
+                    root_in_common_lmb.lmb_transform(common_lmb, &topology.loop_momentum_basis);
                 let (local_multiplier, integrated_multiplier) = Self::evaluate_variant_multiplier(
                     &mut self.threshold_multipliers,
                     multiplier_workspace.as_mut(),
                     variant_id,
-                    graph,
+                    topology,
                     &real_mass_vector,
                     param_builder.model_values(),
                     &additional_params,
                     momentum_sample,
-                    &root_in_generation_lmb,
+                    &root_in_metadata_lmb,
                     evaluation_metadata,
                     record_primary_timing,
                 )?;
@@ -1267,8 +1493,8 @@ impl AmplitudeCountertermData {
                         evaluation_metadata,
                         record_primary_timing,
                         &real_mass_vector,
-                        &self.lmbs,
-                        common_lmb,
+                        &lmbs,
+                        root_lmb,
                         &root_in_common_lmb,
                         &center,
                         &unit_shifted_momenta,
@@ -1280,6 +1506,7 @@ impl AmplitudeCountertermData {
                         subspace,
                         &thresholds,
                         &threshold_subspaces,
+                        &threshold_masses,
                         &overlap,
                         overlap_group_index,
                         max_prefactor_power,
@@ -1335,57 +1562,23 @@ impl AmplitudeCountertermData {
         rotation: &Rotation,
         settings: &RuntimeSettings,
     ) -> Result<OverlapStructureWithKinematics<T>> {
-        let candidate_ids = self
-            .variant_evaluators
-            .keys()
-            .filter(|&id| self.variant_generated_mask[id] && self.variant_active_mask[id])
-            .collect::<Vec<_>>();
-        let mut groups: Vec<(Option<usize>, LmbIndex, Vec<ThresholdCountertermVariantId>)> =
-            Vec::new();
-        for variant_id in candidate_ids {
-            let metadata = &self.variant_metadata[variant_id];
-            let parent = self.variant_subspaces[variant_id].parent_lmb_index();
-            let signature = self.variant_subspaces[variant_id].solve_signature(&self.lmbs);
-            let matching = groups.iter().position(|(group_id, group_parent, members)| {
-                *group_id == metadata.group_id
-                    && *group_parent == parent
-                    && members.first().is_some_and(|first| {
-                        self.variant_subspaces[*first].solve_signature(&self.lmbs) == signature
-                    })
-            });
-            if let Some(index) = matching {
-                groups[index].2.push(variant_id);
-            } else {
-                if let Some(group_id) = metadata.group_id {
-                    if let Some((_, _, members)) =
-                        groups.iter().find(|(id, _, _)| *id == Some(group_id))
-                    {
-                        let first = members[0];
-                        return Err(eyre!(
-                            "Amplitude graph '{}' explicit threshold group_id={} contains incompatible solve subspaces: variant {} '{}' has parent {:?} and basis {:?}, while variant {} '{}' has parent {:?} and basis {:?}",
-                            graph.name,
-                            group_id,
-                            first.0,
-                            self.variant_metadata[first].name,
-                            self.variant_subspaces[first].parent_lmb_index(),
-                            self.variant_subspaces[first].solve_signature(&self.lmbs),
-                            variant_id.0,
-                            metadata.name,
-                            parent,
-                            signature,
-                        ));
-                    }
-                }
-                groups.push((metadata.group_id, parent, vec![variant_id]));
-            }
+        let catalogue = self.overlap_catalogue(graph, esurfaces);
+        let mut groups = BTreeMap::new();
+        for (instance, (_, _, metadata, _)) in catalogue.variants.iter().enumerate() {
+            groups
+                .entry((
+                    metadata.group_id,
+                    metadata.subspace.solve_signature(&catalogue.lmbs),
+                ))
+                .or_insert_with(Vec::new)
+                .push(instance);
         }
-
         let mut combined = OverlapStructureWithKinematics {
             existing_esurfaces: ExistingEsurfaces::new(),
             variant_ids: Some(TiVec::new()),
             overlap_groups_with_kinematics: Vec::new(),
         };
-        for (_, _, members) in groups {
+        for (_, members) in groups {
             let mut group_result = self.kinematics_for_variant_approach(
                 momentum_sample,
                 graph,
@@ -1393,7 +1586,8 @@ impl AmplitudeCountertermData {
                 esurfaces,
                 rotation,
                 settings,
-                members,
+                &catalogue,
+                &members,
             )?;
             let existing_offset = combined.existing_esurfaces.len();
             if let (Some(all_variants), Some(group_variants)) =
@@ -1429,10 +1623,11 @@ impl AmplitudeCountertermData {
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
         model: &Model,
-        esurfaces: &EsurfaceCollection,
+        _esurfaces: &EsurfaceCollection,
         rotation: &Rotation,
         settings: &RuntimeSettings,
-        candidate_variant_ids: Vec<ThresholdCountertermVariantId>,
+        catalogue: &AmplitudeOverlapCatalogue,
+        allowed_instances: &[usize],
     ) -> Result<OverlapStructureWithKinematics<T>> {
         if self.variant_evaluators.len() != self.variant_subspaces.len()
             || self.variant_evaluators.len() != self.variant_raised_esurfaces.len()
@@ -1445,116 +1640,55 @@ impl AmplitudeCountertermData {
             ));
         }
 
-        if candidate_variant_ids.is_empty() {
-            return Ok(OverlapStructureWithKinematics {
-                existing_esurfaces: ExistingEsurfaces::new(),
-                variant_ids: Some(TiVec::new()),
-                overlap_groups_with_kinematics: Vec::new(),
-            });
-        }
-        for &variant_id in &candidate_variant_ids {
-            self.ensure_active_variant(variant_id)?;
-        }
-
-        let common_subspace = SubspaceData::union_in_common_parent(
-            candidate_variant_ids
-                .iter()
-                .map(|&variant_id| &self.variant_subspaces[variant_id]),
-            graph,
-            &self.lmbs,
-        )
-        .with_context(|| {
-            format!(
-                "Amplitude graph '{}' threshold variants cannot share an approach-center frame",
-                graph.name,
-            )
-        })?;
-        let common_lmb = common_subspace.get_lmb(&self.lmbs);
-        let sample_in_common_lmb =
-            momentum_sample.lmb_transform(&graph.loop_momentum_basis, common_lmb);
+        let PreparedAmplitudeOverlap {
+            thresholds,
+            threshold_subspaces,
+            synthetic_variants,
+            sample_in_common_lmb,
+            lmbs,
+            parent_lmb,
+            overlap,
+            ..
+        } = catalogue.prepare_group(
+            allowed_instances,
+            momentum_sample,
+            model,
+            settings,
+            rotation,
+        )?;
+        let topology = &catalogue.graphs[GraphGroupPosition::from(0)];
+        let common_lmb = &lmbs[parent_lmb];
+        let common_subspace = &catalogue.variants[allowed_instances[0]].2.subspace;
         let real_mass_vector = graph.get_real_mass_vector(model);
         let e_cm = F::from_f64(settings.kinematics.e_cm);
-        let existence_tolerance = F::from_f64(settings.subtraction.esurface_existence_threshold);
-
-        let mut thresholds = EsurfaceCollection::new();
-        let mut threshold_subspaces = Vec::new();
-        let mut synthetic_variants = TiVec::<EsurfaceID, ThresholdCountertermVariantId>::new();
+        let sample_f64 = momentum_sample_to_f64(&sample_in_common_lmb);
         let mut existing_esurfaces = ExistingEsurfaces::new();
-        for variant_id in candidate_variant_ids {
-            let raised_esurface_id = self.variant_raised_esurfaces[variant_id];
-            let esurface_id = self.raised_data.raised_groups[raised_esurface_id].esurface_ids[0];
-            let esurface = &esurfaces[esurface_id];
-            let subspace = &self.variant_subspaces[variant_id];
-            let existence = esurface.classify_existence_subspace(
-                sample_in_common_lmb.loop_moms(),
-                sample_in_common_lmb.external_moms(),
-                subspace,
-                &self.lmbs,
-                graph,
-                &real_mass_vector,
-                &[],
-                &e_cm,
-                &existence_tolerance,
-            );
-            if !existence.is_existing() {
+        let mut variant_ids = TiVec::new();
+        let mut local_ids = BTreeMap::new();
+        for (synthetic_id, &instance) in synthetic_variants.iter_enumerated() {
+            let (owner, variant_id, _, _) = &catalogue.variants[instance];
+            if *owner != self.own_group_position {
                 continue;
             }
-            let group_esurface_id = self
+            let raised = self.variant_raised_esurfaces[*variant_id];
+            let group_surface = self
                 .esurface_map
                 .iter_enumerated()
-                .find_map(|(group_esurface_id, graph_map)| {
-                    (graph_map[self.own_group_position] == Some(raised_esurface_id))
-                        .then_some(group_esurface_id)
-                })
+                .find_map(|(id, map)| (map[*owner] == Some(raised)).then_some(id))
                 .ok_or_else(|| {
                     eyre!(
-                        "Amplitude graph '{}' threshold variant {} raised E-surface {} has no group E-surface mapping",
+                        "Amplitude graph '{}' variant {} has no group E-surface mapping",
                         graph.name,
-                        variant_id.0,
-                        raised_esurface_id.0,
+                        variant_id.0
                     )
                 })?;
-            thresholds.push(esurface.clone());
-            threshold_subspaces.push(subspace.clone());
-            synthetic_variants.push(variant_id);
-            existing_esurfaces.push(group_esurface_id);
+            local_ids.insert(
+                ExistingEsurfaceId::from(synthetic_id.0),
+                ExistingEsurfaceId::from(existing_esurfaces.len()),
+            );
+            existing_esurfaces.push(group_surface);
+            variant_ids.push(*variant_id);
         }
-
-        let variant_ids = synthetic_variants.iter().copied().collect::<TiVec<_, _>>();
-        if thresholds.is_empty() {
-            return Ok(OverlapStructureWithKinematics {
-                existing_esurfaces,
-                variant_ids: Some(variant_ids),
-                overlap_groups_with_kinematics: Vec::new(),
-            });
-        }
-
-        let existing_thresholds: ExistingThresholds = thresholds.keys().collect();
-        let sample_f64 = momentum_sample_to_f64(&sample_in_common_lmb);
-        let overlap_input = SubspaceOverlapInput {
-            graph,
-            settings,
-            subspace: &common_subspace,
-            threshold_subspaces: Some(&threshold_subspaces),
-            lmbs: &self.lmbs,
-            thresholds: &thresholds,
-            edge_masses: graph.get_real_mass_vector::<f64>(model),
-            surface_kinematics: None,
-        };
-        let overlap = find_maximal_subspace_overlap(
-            &overlap_input,
-            &existing_thresholds,
-            sample_f64.loop_moms(),
-            sample_f64.external_moms(),
-            rotation,
-        )
-        .with_context(|| {
-            format!(
-                "Failed to find graph-local projected threshold approach overlap for amplitude graph '{}'",
-                graph.name,
-            )
-        })?;
-
         let mut radial_root_diagnostics = RadialRootDiagnostics::default();
         let mut overlap_groups_with_kinematics = Vec::with_capacity(overlap.overlap_groups.len());
         for (overlap_group_index, overlap_group) in overlap.overlap_groups.iter().enumerate() {
@@ -1572,10 +1706,23 @@ impl AmplitudeCountertermData {
 
             for &existing_esurface_id in &overlap_group.existing_esurfaces {
                 let synthetic_esurface_id = overlap.existing_esurfaces[existing_esurface_id];
-                let variant_id = synthetic_variants[synthetic_esurface_id];
+                let instance = synthetic_variants[synthetic_esurface_id];
+                let (owner, variant_id, metadata, _) = &catalogue.variants[instance];
+                if *owner != self.own_group_position {
+                    continue;
+                }
+                let variant_id = *variant_id;
+                self.ensure_active_variant(variant_id)?;
                 let raised_esurface_id = self.variant_raised_esurfaces[variant_id];
-                let subspace = &self.variant_subspaces[variant_id];
+                let subspace = &threshold_subspaces[synthetic_esurface_id.0];
                 let esurface = &thresholds[synthetic_esurface_id];
+                let native_geometry = metadata.requested_parent_lmb.is_none();
+                let geometry = if native_geometry { graph } else { topology };
+                let root_lmb = if native_geometry {
+                    &graph.loop_momentum_basis
+                } else {
+                    common_lmb
+                };
 
                 let mut projected_center = overlap_group.center.cast::<T>();
                 for loop_index in (0..projected_center.0.len()).map(LoopIndex::from) {
@@ -1597,8 +1744,8 @@ impl AmplitudeCountertermData {
                     &unit_shifted_momenta,
                     sample_in_common_lmb.external_moms(),
                     subspace,
-                    &self.lmbs,
-                    graph,
+                    &lmbs,
+                    geometry,
                     &real_mass_vector,
                 );
                 let function = |r: &_| {
@@ -1609,8 +1756,8 @@ impl AmplitudeCountertermData {
                         sample_in_common_lmb.external_moms(),
                         &real_mass_vector,
                         subspace,
-                        &self.lmbs,
-                        graph,
+                        &lmbs,
+                        geometry,
                     )
                 };
                 let zero = raw_radius_guess.zero();
@@ -1653,7 +1800,7 @@ impl AmplitudeCountertermData {
                 let mut root_in_common_lmb = sample_in_common_lmb.clone();
                 root_in_common_lmb.sample.loop_moms = root_loop_momenta;
                 let root_in_generation_lmb =
-                    root_in_common_lmb.lmb_transform(common_lmb, &graph.loop_momentum_basis);
+                    root_in_common_lmb.lmb_transform(root_lmb, &graph.loop_momentum_basis);
 
                 let mut full_center_in_common_lmb = sample_in_common_lmb.clone();
                 for loop_index in subspace.iter_lmb_indices() {
@@ -1661,7 +1808,7 @@ impl AmplitudeCountertermData {
                         projected_center[loop_index].clone();
                 }
                 let full_center_in_generation_lmb = full_center_in_common_lmb
-                    .lmb_transform(common_lmb, &graph.loop_momentum_basis)
+                    .lmb_transform(root_lmb, &graph.loop_momentum_basis)
                     .loop_moms()
                     .clone();
 
@@ -1669,10 +1816,22 @@ impl AmplitudeCountertermData {
                 approach_centers_at_esurface.push(Some(full_center_in_generation_lmb));
             }
 
+            // This is a graph-local approach report, not the catalogue used by MC normalization.
+            if loop_momenta_at_esurface.is_empty() {
+                continue;
+            }
             overlap_groups_with_kinematics.push(OverlapGroupWithKinematics {
                 overlap_group: OverlapGroup {
-                    existing_esurfaces: overlap_group.existing_esurfaces.clone(),
-                    complement: overlap_group.complement.clone(),
+                    existing_esurfaces: overlap_group
+                        .existing_esurfaces
+                        .iter()
+                        .filter_map(|id| local_ids.get(id).copied())
+                        .collect(),
+                    complement: overlap_group
+                        .complement
+                        .iter()
+                        .filter_map(|id| local_ids.get(id).copied())
+                        .collect(),
                     center: group_center,
                     prefactor_evaluator: None,
                 },
@@ -1850,7 +2009,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn evaluate_generalized_multichanneling_prefactor<T: FloatLike>(
     momentum_sample: &MomentumSample<T>,
-    real_mass_vector: &EdgeVec<F<T>>,
+    threshold_masses: &[EdgeVec<F<T>>],
     all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     thresholds: &EsurfaceCollection,
     threshold_subspaces: &[SubspaceData],
@@ -1877,7 +2036,7 @@ fn evaluate_generalized_multichanneling_prefactor<T: FloatLike>(
                         let subspace = &threshold_subspaces[esurface_id.0];
                         let value = thresholds[esurface_id].compute_from_dual_momenta(
                             subspace.get_lmb(all_lmbs),
-                            real_mass_vector,
+                            &threshold_masses[esurface_id.0],
                             dual_loop_momenta,
                             &dual_external_momenta,
                         );
@@ -1912,7 +2071,7 @@ fn evaluate_generalized_multichanneling_prefactor<T: FloatLike>(
                     let subspace = &threshold_subspaces[esurface_id.0];
                     let value = thresholds[esurface_id].compute_from_momenta(
                         subspace.get_lmb(all_lmbs),
-                        real_mass_vector,
+                        &threshold_masses[esurface_id.0],
                         momentum_sample.loop_moms(),
                         momentum_sample.external_moms(),
                     );
@@ -1952,6 +2111,7 @@ fn evaluate_generalized_rstar<T: FloatLike>(
     subspace: &SubspaceData,
     thresholds: &EsurfaceCollection,
     threshold_subspaces: &[SubspaceData],
+    threshold_masses: &[EdgeVec<F<T>>],
     overlap: &SubspaceOverlapStructure,
     overlap_group_index: usize,
     prefactor_power: usize,
@@ -2069,7 +2229,7 @@ fn evaluate_generalized_rstar<T: FloatLike>(
             .unwrap();
         let prefactor = evaluate_generalized_multichanneling_prefactor(
             &sample_for_order_in_common_lmb,
-            real_mass_vector,
+            threshold_masses,
             all_lmbs,
             thresholds,
             threshold_subspaces,
@@ -3155,6 +3315,312 @@ mod tests {
             .ensure_active_raised_esurface(RaisedEsurfaceId(0))
             .unwrap_err();
         assert!(error.to_string().contains("generation marked it inactive"));
+    }
+
+    #[test]
+    fn grouped_amplitude_catalogue_keeps_foreign_complements_and_raised_weights() {
+        use super::{AmplitudeOverlapCatalogue, evaluate_generalized_multichanneling_prefactor};
+        use crate::{
+            cff::{
+                VertexSet,
+                esurface::{Esurface, EsurfaceID, RaisedEsurfaceGroup},
+            },
+            graph::{FeynmanGraph, LMBext, LmbIndex},
+            momentum::{
+                Rotation, RotationMethod,
+                sample::{LoopIndex, SubspaceData},
+            },
+            processes::{ResolvedThresholdCountertermVariant, ThresholdCountertermSide},
+            settings::RuntimeSettings,
+            utils::{
+                hyperdual_utils::{DualOrNot, extract_t_derivatives, simple_n_deriv_shape},
+                load_generic_model,
+            },
+        };
+        use linnet::half_edge::involution::EdgeIndex;
+        use symbolica::domains::dual::{DualNumberStructure, HyperDual};
+
+        test_initialise().unwrap();
+        // Diagnostic geometry: A encloses disjoint balls B and C. Their owners are three
+        // graph-group members; only A's owner will evaluate its CT at either center.
+        let graph: Graph = dot!(digraph shared_threshold_geometry {
+            ext [style=invis]
+            node [num=1]
+            edge [num=1 mass=0]
+            ext -> a [id=0]
+            ext -> b [id=1]
+            ext -> c [id=2]
+            a -> b [id=3]
+            b -> c [id=4]
+            c -> a [id=5 lmb_id=0]
+        })
+        .unwrap();
+        let model = load_generic_model("scalars");
+        let lmbs = ti_vec![graph.loop_momentum_basis.clone()];
+        let subspace = SubspaceData::new_from_parent_basis_edges(
+            &[EdgeIndex::from(5)],
+            &graph.full_filter(),
+            LmbIndex::from(0),
+            &graph,
+            &lmbs,
+        )
+        .unwrap();
+        let variants = [5, 3, 4]
+            .into_iter()
+            .enumerate()
+            .map(|(owner, edge)| {
+                let surface = Esurface {
+                    energies: vec![EdgeIndex::from(edge)],
+                    // e2 is dependent; 2*e0+e1 is the timelike vector (2,0,0,0).
+                    external_shift: [(0, -2), (1, -1)]
+                        .into_iter()
+                        .map(|(edge, sign)| {
+                            (EdgeIndex::from(edge), sign * if owner == 0 { 4 } else { 1 })
+                        })
+                        .collect(),
+                    vertex_set: VertexSet::dummy(),
+                };
+                let metadata = ResolvedThresholdCountertermVariant {
+                    name: format!("member_{owner}"),
+                    group_id: Some(0),
+                    cut_group_id: None,
+                    associations: Vec::new(),
+                    side: ThresholdCountertermSide::Amplitude,
+                    threshold_esurface_ids: vec![EsurfaceID::from(0)],
+                    raised_esurface_group: RaisedEsurfaceGroup {
+                        esurface_ids: vec![EsurfaceID::from(0)],
+                        max_occurence: 2,
+                    },
+                    requested_subspace: Some(vec![EdgeIndex::from(5)]),
+                    requested_parent_lmb: Some(vec![EdgeIndex::from(5)]),
+                    resolved_parent_lmb: vec![EdgeIndex::from(5)],
+                    subspace: subspace.clone(),
+                    subspace_loop_count: 1,
+                    multiplier: None,
+                };
+                (
+                    GraphGroupPosition::from(owner),
+                    ThresholdCountertermVariantId(0),
+                    metadata,
+                    surface,
+                )
+            })
+            .collect();
+        let catalogue = AmplitudeOverlapCatalogue {
+            graphs: ti_vec![graph.clone(), graph.clone(), graph],
+            lmbs,
+            variants,
+        };
+        let mut sample = MomentumSample {
+            sample: BareMomentumSample {
+                loop_moms: [ThreeMomentum::new(F(6.4), F(4.8), F(0.0))]
+                    .into_iter()
+                    .collect(),
+                dual_loop_moms: None,
+                loop_mom_cache_id: 0,
+                loop_mom_base_cache_id: 0,
+                external_moms: [(2.0 / 3.0, 4.0), (2.0 / 3.0, -8.0), (-4.0 / 3.0, 4.0)]
+                    .into_iter()
+                    .map(|(energy, px)| FourMomentum::from_args(F(energy), F(px), F(0.0), F(0.0)))
+                    .collect(),
+                external_mom_cache_id: 0,
+                external_mom_base_cache_id: 0,
+                jacobian: F(1.0),
+                orientation: None,
+                parameterization_branch: None,
+            },
+        };
+        let mut settings = RuntimeSettings::default();
+        settings.subtraction.overlap_settings.try_origin_all_lmbs = false;
+        let prepared = catalogue
+            .prepare_group(
+                &[0, 1, 2],
+                &sample,
+                &model,
+                &settings,
+                &Rotation::new(RotationMethod::Identity),
+            )
+            .unwrap();
+        assert_eq!(prepared.overlap.overlap_groups.len(), 2);
+        assert!(
+            prepared
+                .overlap
+                .overlap_groups
+                .iter()
+                .all(|group| group.existing_esurfaces.len() == 2 && group.complement.len() == 1)
+        );
+        let weight = |point: &MomentumSample<f64>, group| {
+            evaluate_generalized_multichanneling_prefactor(
+                point,
+                &prepared.threshold_masses,
+                &catalogue.lmbs,
+                &prepared.thresholds,
+                &prepared.threshold_subspaces,
+                &prepared.overlap,
+                group,
+                4,
+            )
+        };
+        let scalar = |point: &MomentumSample<f64>, group| match weight(point, group) {
+            DualOrNot::NonDual(value) => value.re.0,
+            DualOrNot::Dual(_) => unreachable!(),
+        };
+        let first = scalar(&sample, 0);
+        assert!(
+            (first - 0.5).abs() > 0.1,
+            "foreign complements must not collapse to equal empty products"
+        );
+        assert!((first + scalar(&sample, 1) - 1.0).abs() < 1.0e-12);
+        let complement =
+            prepared.overlap.existing_esurfaces[prepared.overlap.overlap_groups[0].complement[0]];
+        let values = [1usize, 2].map(|id| {
+            prepared.thresholds[EsurfaceID::from(id)]
+                .compute_from_momenta(
+                    &catalogue.lmbs[LmbIndex::from(0)],
+                    &prepared.threshold_masses[id],
+                    sample.loop_moms(),
+                    sample.external_moms(),
+                )
+                .0
+                .powi(4)
+        });
+        assert!((first - values[complement.0 - 1] / (values[0] + values[1])).abs() < 1.0e-12);
+
+        let delta = 1.0e-4;
+        let mut displaced = sample.clone();
+        displaced.sample.loop_moms[LoopIndex(0)] =
+            ThreeMomentum::new(F(0.8 * (8.0 + delta)), F(0.6 * (8.0 + delta)), F(0.0));
+        let plus = scalar(&displaced, 0);
+        displaced.sample.loop_moms[LoopIndex(0)] =
+            ThreeMomentum::new(F(0.8 * (8.0 - delta)), F(0.6 * (8.0 - delta)), F(0.0));
+        let minus = scalar(&displaced, 0);
+        let shape = HyperDual::<F<f64>>::new(simple_n_deriv_shape(2));
+        let radius = shape.variable(0, F(8.0));
+        sample.sample.dual_loop_moms = Some(
+            [ThreeMomentum::new(
+                radius.clone() * F(0.8),
+                radius * F(0.6),
+                super::new_constant(&shape, &F(0.0)),
+            )]
+            .into_iter()
+            .collect(),
+        );
+        let DualOrNot::Dual(dual) = weight(&sample, 0) else {
+            panic!("raised weight must retain its derivatives")
+        };
+        let real = HyperDual::from_values(
+            dual.get_shape()
+                .iter()
+                .map(|entry| entry.to_vec())
+                .collect(),
+            dual.values.into_iter().map(|value| value.re).collect(),
+        );
+        let derivatives = extract_t_derivatives(real);
+        assert!(derivatives[1].0.abs() > 1.0e-5);
+        assert!((derivatives[1].0 - (plus - minus) / (2.0 * delta)).abs() < 1.0e-8);
+
+        // A native implicit member can have edges absent from the master. Its additional
+        // ball must remain in the shared geometry without changing explicit members' routing.
+        let native: Graph = dot!(digraph native_implicit_member {
+            ext [style=invis]
+            node [num=1]
+            edge [num=1 mass=0]
+            ext -> a [id=0]
+            ext -> b [id=1]
+            ext -> c [id=2]
+            a -> b [id=3]
+            b -> c [id=4]
+            c -> d [id=5]
+            d -> a [id=6 lmb_id=0 mass=1]
+        })
+        .unwrap();
+        let mut mixed = catalogue.clone();
+        let member_lmb = mixed.graphs[GraphGroupPosition(1)]
+            .generate_loop_momentum_bases_of(&mixed.graphs[GraphGroupPosition(1)].no_dummy())
+            .into_iter()
+            .find(|lmb| lmb.loop_edges.raw.as_slice() == [EdgeIndex(3)])
+            .unwrap();
+        mixed.graphs[GraphGroupPosition(1)].loop_momentum_basis = member_lmb;
+        for (_, _, metadata, _) in &mut mixed.variants {
+            metadata.group_id = None;
+        }
+        let mut implicit = mixed.variants[0].2.clone();
+        implicit.name = "native_default".into();
+        implicit.requested_subspace = None;
+        implicit.requested_parent_lmb = None;
+        mixed.variants.push((
+            GraphGroupPosition(3),
+            ThresholdCountertermVariantId(0),
+            implicit,
+            Esurface {
+                energies: vec![EdgeIndex(6)],
+                external_shift: mixed.variants[1].3.external_shift.clone(),
+                vertex_set: VertexSet::dummy(),
+            },
+        ));
+        mixed.graphs.push(native.clone());
+        settings.subtraction.overlap_settings.try_origin_all_lmbs = true;
+        let mixed_prepared = mixed
+            .prepare_group(
+                &[0, 1, 2, 3],
+                &sample,
+                &model,
+                &settings,
+                &Rotation::new(RotationMethod::Identity),
+            )
+            .unwrap();
+        assert_eq!(mixed_prepared.thresholds.len(), 4);
+        assert_eq!(mixed_prepared.overlap.overlap_groups.len(), 3);
+        for id in 0..3 {
+            assert_eq!(
+                mixed_prepared.threshold_subspaces[id]
+                    .get_lmb(&mixed_prepared.lmbs)
+                    .edge_signatures,
+                prepared.threshold_subspaces[id]
+                    .get_lmb(&prepared.lmbs)
+                    .edge_signatures,
+                "an implicit neighbor must not change explicit master-based surface equations",
+            );
+        }
+        assert_eq!(
+            mixed_prepared.threshold_subspaces[3]
+                .get_lmb(&mixed_prepared.lmbs)
+                .edge_signatures,
+            native.loop_momentum_basis.edge_signatures
+        );
+        let weights = (0..3)
+            .map(|group| {
+                evaluate_generalized_multichanneling_prefactor(
+                    &sample,
+                    &mixed_prepared.threshold_masses,
+                    &mixed_prepared.lmbs,
+                    &mixed_prepared.thresholds,
+                    &mixed_prepared.threshold_subspaces,
+                    &mixed_prepared.overlap,
+                    group,
+                    4,
+                )
+            })
+            .map(|weight| match weight {
+                DualOrNot::Dual(value) => value,
+                _ => panic!("mixed raised weight lost derivatives"),
+            })
+            .collect::<Vec<_>>();
+        let sum = weights[0].clone() + &weights[1] + &weights[2];
+        assert!((sum.values[0].re.0 - 1.0).abs() < 1.0e-12);
+        assert!(
+            sum.values
+                .iter()
+                .skip(1)
+                .all(|value| value.re.0.abs() < 1.0e-12)
+        );
+        assert!(
+            mixed_prepared
+                .overlap
+                .overlap_groups
+                .iter()
+                .all(|group| group.existing_esurfaces.len() == 2 && group.complement.len() == 2)
+        );
     }
 
     #[test]

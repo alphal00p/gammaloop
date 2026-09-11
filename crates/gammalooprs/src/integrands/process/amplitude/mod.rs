@@ -557,8 +557,10 @@ impl AmplitudeGraphTerm {
         }
         threshold_counterterm.lmbs = graph
             .derived_data
-            .lmbs
-            .clone()
+            .threshold_topology
+            .as_ref()
+            .map(|(_, lmbs)| lmbs.clone())
+            .or_else(|| graph.derived_data.lmbs.clone())
             .expect("amplitude graph term requires generated LMBs");
         threshold_counterterm.raised_data = graph.derived_data.raised_data.clone();
         if include_threshold_metadata {
@@ -2126,6 +2128,51 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
         for a in self.data.graph_terms.iter_mut() {
             a.warm_up(&self.settings, model)?;
         }
+        for group in &self.data.graph_group_structure {
+            if group.into_iter().all(|id| {
+                self.data.graph_terms[id]
+                    .threshold_counterterm
+                    .legacy_equivalent
+            }) {
+                continue;
+            }
+            let mut catalogue =
+                crate::subtraction::amplitude_counterterm::AmplitudeOverlapCatalogue {
+                    graphs: group
+                        .into_iter()
+                        .map(|id| self.data.graph_terms[id].graph.clone())
+                        .collect(),
+                    lmbs: self.data.graph_terms[group.master()]
+                        .threshold_counterterm
+                        .lmbs
+                        .clone(),
+                    variants: Vec::new(),
+                };
+            for (position, graph_id) in group.iter_enumerated() {
+                let term = &self.data.graph_terms[graph_id];
+                let counterterm = &term.threshold_counterterm;
+                for (variant_id, metadata) in counterterm.variant_metadata.iter_enumerated() {
+                    if counterterm.variant_generated_mask[variant_id]
+                        && counterterm.variant_active_mask[variant_id]
+                    {
+                        let raised = counterterm.variant_raised_esurfaces[variant_id];
+                        let surface = term.esurfaces
+                            [counterterm.raised_data.raised_groups[raised].esurface_ids[0]]
+                            .clone();
+                        catalogue
+                            .variants
+                            .push((position, variant_id, metadata.clone(), surface));
+                    }
+                }
+            }
+            let catalogue = std::sync::Arc::new(catalogue);
+            for graph_id in group {
+                self.data.graph_terms[graph_id]
+                    .threshold_counterterm
+                    .group_catalogue
+                    .set(catalogue.clone());
+            }
+        }
         validate_group_orientation_catalogs(
             &self.settings,
             &self.data.graph_terms,
@@ -2388,15 +2435,15 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                             crate::subtraction::overlap::OverlapStructure::new_empty();
                         continue;
                     }
-                    let max_required_power = graph_term
+                    let max_required_order = graph_term
                         .threshold_counterterm
                         .raised_data
                         .raised_groups
                         .iter()
                         .map(|raised_group| raised_group.max_occurence)
                         .max()
-                        .unwrap_or(0) as i32
-                        + 1;
+                        .unwrap_or(0);
+                    let max_required_power = (2 * (max_required_order / 2 + 1)) as i32;
 
                     let mut localized_overlap = overlap.localized_to_existing_surfaces(
                         &graph_term.threshold_counterterm.local_esurface_exists,
