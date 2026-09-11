@@ -25,6 +25,31 @@ their sufficiency for every other cut has not yet been demonstrated.  Other
 thresholds remain implicit legacy defaults, so GammaLoop—not either TOML
 document—constructs all left/right Cartesian products.
 
+The 2026-09-11 validation confirms integrability on the tested GL638 soft rays
+but finds an ordinary-threshold pole on cut `(2,4,12)`: the `[3,7]` projection
+for `(7,8)` moves the right threshold `(5,12,13)`, invalidating the independent
+roots used by the iterated helper. Thus the GL638 prescription remains a
+diagnostic, not a validated general cure. These scans disable integrated UV
+generation because it fails identically with and without threshold metadata.
+The measured results and pending coupled-subtraction design are recorded in
+[`IR_SAFE_THRESHOL_UPDATE.md`](../../../../IR_SAFE_THRESHOL_UPDATE.md).
+
+Every explicit `[[cuts.thresholds.counterterms]]` entry requires a full
+`parent_lmb`, including disabled entries and entries specifying only a name or
+`group_id`. The parent fixes the signed momentum cycles of the selected defining
+edges. Defaults remain implicit: omitted counterterm entries use the full
+available loop subspace of the relevant cut side. Automatic solve groups use
+selected defining edges together with their signed cycles, independent of
+parent-basis slots or the choice of the fixed complement. Explicit `group_id`
+values start at zero and only subdivide compatible automatic groups; incompatible
+assignments produce diagnostics listing every member of each conflicting group.
+
+Grouped amplitudes interpret every member's metadata against the master graph,
+with edge correspondence supplied by the user. Cross-section threshold groups
+span cuts within each graph; threshold metadata on non-master cross-section
+graphs is rejected. Corresponding variants merged into a higher-power residue
+must agree on their group IDs and subtraction prescriptions.
+
 Every multiplier E-surface call in the GL638 cure uses the mandatory form
 `eta(star, eset(...))`.  The `eset` symbol is registered as symmetric before
 expression parsing, so its edge arguments need not be sorted; the former flat
@@ -90,10 +115,11 @@ Feyngen in subsequent experiments.
 ### Direct-import cut contract
 
 The DOT topology is self-contained, but a saved DOT does not encode the
-process-valid physical-cut selection.  Importing it with the default empty
-`global.generation.force_cuts` reconstructed 19 generic s-t cuts and did not
-reproduce the threshold associations below.  A direct-import helper must set
-the exact process cuts before `generate existing`.
+process-valid physical-cut selection. Current CLI cards supply `--process-spec`
+when importing the graph, so GammaLoop selects the tth@NNLO cuts automatically;
+no `force_cuts` setting is needed. The historical import without a process
+specification reconstructed 19 generic s-t cuts. Its explicit cut lists below
+are retained as audit provenance and for isolated structural fixtures.
 
 The complete GL297 cut list, in the original channel order, is:
 
@@ -246,13 +272,10 @@ cross-cut LU cancellation.
 For the selected cut-3 regression, the generalized `(3,7)` variant cannot be
 constructed in any cut-compatible parent: edge 3 lies outside every such
 basis.  It is valid as a graph-global two-loop subspace in the generation LMB
-`(3,4,7,10)`.  Enumerating every generated common-parent solution with
-`parent_lmb` omitted finds genuinely different active-topology/fixed-complement
-embeddings, so inference is intentionally rejected as ambiguous.  The explicit
-`parent_lmb = [3,4,7,10]` in the experiment and fixture is therefore required,
-not a numerical tie-breaker.  In that parent the right-side legacy subspace is
-represented by basis edge 10 and is disjoint from both left `[7]` and `[3,7]`
-variants.
+`(3,4,7,10)`. The explicit `parent_lmb = [3,4,7,10]` preserves that
+choice of signed cycles. Other variants retain their own native parents;
+iterated left/right counterterms merge their physical active displacements
+instead of forcing all variants into this parent.
 
 The current focused-test settings also expose physical-cut geometry
 `(2,6,10)` as a third right-side threshold candidate under cut 3.  It is not
@@ -370,16 +393,18 @@ missing-cache error, and a dormant explicit `(5,10)` directive under cut
 
 - GL638's historical one-loop `[7]` and two-loop `[3,7]` subspaces are direct
   ordered subsets of the verified generation LMB `(3,4,7,10)`.  The completed
-  resolver audit found genuinely different common-parent embeddings when the
-  parent is omitted, so `parent_lmb = [3,4,7,10]` is required.
+  resolver audit found genuinely different embeddings when the parent was
+  omitted; each explicit variant now requires `parent_lmb = [3,4,7,10]`.
 - GL297's `[5]` is a direct subset of generation LMB `(4,5,6,11)`, but `[3]`
   is not.  There are 35 generated full bases containing edge 3 (basis IDs
   69 through 103 in this state), and none is a selected cut-channel basis.
   The cut-compatible search resolves both target-cut requests in parent
   `(3,5,11,14)`: `[5]` is left with active topology `(5,6,7,13)`, while `[3]`
   is right with active topology `(3,4,9,12)`.  This confirms that `[3]` must
-  not be interpreted in the generation basis and that no explicit parent is
-  needed for the verified side-projected embeddings.
+  not be interpreted in the generation basis. The target-cut fixture now
+  declares `(3,5,11,14)` explicitly. The four dressed-graph overrides retain
+  their previously resolved parents: `(4,5,9,11)` for left `[5]` and
+  `(3,6,7,11)` for right `[3]`.
 
 ## Reconciliation with the research PDF
 

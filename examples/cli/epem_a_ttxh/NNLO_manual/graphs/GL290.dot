@@ -17,6 +17,7 @@ edges = [2, 4, 9]
     [[cuts.thresholds.counterterms]]
     name = \"shared_1l\"
     subspace = [5]
+    parent_lmb = [2, 4, 5, 11]
 
   [[cuts.thresholds]]
   edges = [5, 11, 13]
@@ -24,6 +25,7 @@ edges = [2, 4, 9]
     [[cuts.thresholds.counterterms]]
     name = \"shared_1l\"
     subspace = [5]
+    parent_lmb = [2, 4, 5, 11]
 
   [[cuts.thresholds]]
   edges = [5, 9, 14]
@@ -31,6 +33,7 @@ edges = [2, 4, 9]
     [[cuts.thresholds.counterterms]]
     name = \"shared_1l\"
     subspace = [5]
+    parent_lmb = [2, 4, 5, 11]
 
   [[cuts.thresholds]]
   edges = [5, 9, 12, 13]
@@ -38,6 +41,7 @@ edges = [2, 4, 9]
     [[cuts.thresholds.counterterms]]
     name = \"shared_1l\"
     subspace = [5]
+    parent_lmb = [2, 4, 5, 11]
 ";
 
 	0 [int_id="V_141"];

@@ -1591,6 +1591,8 @@ pub struct State {
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 7 stores CFF coefficients using native Rational encoding.
+// Version 7 stores master-topology amplitude metadata and removes the coerced
+// common-parent LU subspaces. Older generated states must be regenerated.
 // Version 6 removes obsolete deferred-integrand fields from the positional
 // amplitude and cut-integrand layouts.
 // Version 5 persists component-local generated-CFF ownership and prefactor

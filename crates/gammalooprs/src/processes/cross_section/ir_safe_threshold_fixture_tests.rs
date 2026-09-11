@@ -99,6 +99,7 @@ edges = [2, 11, 14]
     [[cuts.thresholds.counterterms]]
     name = "forced_1l"
     subspace = [5]
+    parent_lmb = [3, 5, 11, 14]
 
   [[cuts.thresholds]]
   edges = [3, 9]
@@ -106,6 +107,7 @@ edges = [2, 11, 14]
     [[cuts.thresholds.counterterms]]
     name = "forced_1l"
     subspace = [3]
+    parent_lmb = [3, 5, 11, 14]
 "#;
 
 const GL297_CURE_DIRECTIVES: &str = r#"
@@ -120,6 +122,7 @@ edges = [2, 4, 9]
     [[cuts.thresholds.counterterms]]
     name = "forced_1l"
     subspace = [5]
+    parent_lmb = [4, 5, 9, 11]
 
   [[cuts.thresholds]]
   edges = [5, 7]
@@ -127,6 +130,7 @@ edges = [2, 4, 9]
     [[cuts.thresholds.counterterms]]
     name = "forced_1l"
     subspace = [5]
+    parent_lmb = [4, 5, 9, 11]
 
 [[cuts]]
 edges = [2, 6, 7]
@@ -137,6 +141,7 @@ edges = [2, 6, 7]
     [[cuts.thresholds.counterterms]]
     name = "forced_1l"
     subspace = [3]
+    parent_lmb = [3, 6, 7, 11]
 
   [[cuts.thresholds]]
   edges = [3, 9]
@@ -144,6 +149,7 @@ edges = [2, 6, 7]
     [[cuts.thresholds.counterterms]]
     name = "forced_1l"
     subspace = [3]
+    parent_lmb = [3, 6, 7, 11]
 "#;
 
 const GL638_TARGET_DIRECTIVES: &str = r#"
@@ -160,6 +166,7 @@ edges = [2, 4, 12]
     [[cuts.thresholds.counterterms]]
     name = "fixture_disabled"
     disable = true
+    parent_lmb = [3, 4, 7, 10]
 
   # The verified orientation also exposes a right threshold equal to another physical-cut
   # geometry. It is unrelated to the two historical right partners exercised by this fixture.
@@ -169,6 +176,7 @@ edges = [2, 4, 12]
     [[cuts.thresholds.counterterms]]
     name = "fixture_disabled"
     disable = true
+    parent_lmb = [3, 4, 7, 10]
 
   [[cuts.thresholds]]
   edges = [7, 8]
@@ -176,6 +184,7 @@ edges = [2, 4, 12]
     [[cuts.thresholds.counterterms]]
     name = "intrinsic_1l"
     subspace = [7]
+    parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
       expression = "eta(star, eset(7, 8))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)"
@@ -183,7 +192,7 @@ edges = [2, 4, 12]
     [[cuts.thresholds.counterterms]]
     name = "embedded_2l"
     subspace = [3, 7]
-    # Revalidated by enumerating every generated parent: omission is genuinely ambiguous.
+    # Revalidated by enumerating every generated parent; the explicit parent fixes the signed cycles.
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
@@ -814,7 +823,7 @@ fn gl297_selected_orientation_resolves_forced_one_loop_subspaces_with_full_uv() 
                 forced
                     .iter()
                     .any(|variant| variant.requested_subspace.as_deref()
-                        == Some(&[EdgeIndex::from(3)])),
+                        == Some([EdgeIndex::from(3)].as_slice())),
                 "the non-generation-basis edge e3 must resolve through a genuine one-loop parent embedding",
             );
 
@@ -875,6 +884,30 @@ fn gl297_selected_orientation_resolves_forced_one_loop_subspaces_with_full_uv() 
         .unwrap()
         .join()
         .unwrap();
+}
+
+#[test]
+fn explicit_parent_validation_excludes_initial_state_cycles() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    let graph: Graph =
+        include_str!("../../../../../examples/cli/epem_a_ttxh/NNLO/graphs/GL297.dot")
+            .into_graph(&model)
+            .unwrap();
+    assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 4);
+    assert_eq!(graph.external_momentum_edge_order().len(), 2);
+    assert_eq!(graph.threshold_counterterms.cuts.len(), 2);
+    for cut in &graph.threshold_counterterms.cuts {
+        for threshold in &cut.thresholds {
+            let parent = threshold.counterterms[0].parent_lmb.as_ref().unwrap();
+            assert_eq!(parent.len(), 4);
+            assert!(
+                parent
+                    .iter()
+                    .all(|edge| !graph.external_momentum_edge_order().contains(edge))
+            );
+        }
+    }
 }
 
 #[test]
@@ -1372,7 +1405,7 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
                         .collect::<Vec<_>>()
                         == vec![3, 4, 7, 10]
                 }),
-                "the global two-loop request must rebase the complete cut group into the verified generation parent",
+                "both explicit variants must retain their declared generation parent",
             );
 
             let right = group
@@ -1381,14 +1414,12 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
                 .map(|variant_id| &resolved.variants[*variant_id])
                 .collect::<Vec<_>>();
             assert!(right.iter().all(|variant| variant.name == "default"));
+            let native_right = &graph.derived_data.subspace_data[crate::processes::CutGroupId::from(0)].1;
+            let native_parent = native_right.get_lmb(graph.derived_data.lmbs.as_ref().unwrap()).loop_edges.raw.clone();
             assert!(right.iter().all(|variant| {
-                variant
-                    .resolved_parent_lmb
-                    .iter()
-                    .map(|edge| edge.0)
-                    .collect::<Vec<_>>()
-                    == vec![3, 4, 7, 10]
-            }));
+                variant.resolved_parent_lmb == native_parent
+                    && variant.subspace.has_same_embedding(native_right)
+            }), "implicit right partners must retain their native default parent and subspace");
             assert_eq!(
                 right
                     .iter()

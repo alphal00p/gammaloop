@@ -147,7 +147,7 @@ fn assert_every_discovered_cut_is_grouped(cross_section: &CrossSection) {
         .collect::<BTreeSet<_>>();
     assert_eq!(
         grouped_cut_ids,
-        (0..graph.cuts.len()).collect(),
+        (0..graph.cuts.len()).collect::<BTreeSet<_>>(),
         "every discovered process-valid cut must remain in the numerical LU evaluation",
     );
 }
@@ -177,7 +177,7 @@ fn target_directives_from_legacy(cross_section: &CrossSection) -> ThresholdCount
     assert_eq!(target_group.left.len(), 1);
     assert_eq!(target_group.right.len(), 1);
 
-    let mut cuts = BTreeMap::<Vec<EdgeIndex>, BTreeSet<Vec<EdgeIndex>>>::new();
+    let mut cuts = BTreeMap::<Vec<EdgeIndex>, BTreeMap<Vec<EdgeIndex>, Vec<EdgeIndex>>>::new();
     for variant_id in target_group.left.iter().chain(&target_group.right) {
         let variant = &resolved.variants[*variant_id];
         assert_eq!(variant.raised_esurface_group.max_occurence, 2);
@@ -191,14 +191,22 @@ fn target_directives_from_legacy(cross_section: &CrossSection) -> ThresholdCount
         for association in &variant.associations {
             cuts.entry(association.cut_edges.clone())
                 .or_default()
-                .insert(association.threshold_edges.clone());
+                .insert(
+                    association.threshold_edges.clone(),
+                    association
+                        .subspace
+                        .get_lmb(graph.derived_data.lmbs.as_ref().unwrap())
+                        .loop_edges
+                        .raw
+                        .clone(),
+                );
         }
     }
 
-    let counterterm = || ThresholdCountertermVariant {
+    let counterterm = |parent_lmb| ThresholdCountertermVariant {
         name: Some(RAISED_VARIANT_NAME.to_string()),
         subspace: None,
-        parent_lmb: None,
+        parent_lmb: Some(parent_lmb),
         group_id: None,
         disable: false,
         multiplier: Some(ThresholdCountertermMultiplier {
@@ -215,9 +223,9 @@ fn target_directives_from_legacy(cross_section: &CrossSection) -> ThresholdCount
                 edges,
                 thresholds: thresholds
                     .into_iter()
-                    .map(|edges| ThresholdCountertermThreshold {
+                    .map(|(edges, parent_lmb)| ThresholdCountertermThreshold {
                         edges,
-                        counterterms: vec![counterterm()],
+                        counterterms: vec![counterterm(parent_lmb)],
                     })
                     .collect(),
             })
@@ -385,6 +393,87 @@ fn assert_runtime_decomposition(
     assert!(event_count > 0, "the fixed samples must generate events");
     assert_eq!(&observed_target_components, target_component_ids);
     observed_target_occurrences
+}
+
+#[test]
+fn raised_cross_section_rejects_different_groups_for_one_merged_variant() {
+    std::thread::Builder::new()
+        .name("raised-cross-section-group-conflict".to_string())
+        .stack_size(64 * 1024 * 1024)
+        .spawn(|| {
+            test_initialise().unwrap();
+            let model = Model::from_str(SCALARS_2P_3P_MODEL.to_string(), "json").unwrap();
+            let mut graph: Graph = TRIPLE_DOTTED_BUBBLE.into_graph(&model).unwrap();
+            let generation = generation_settings();
+            let runtime = runtime_settings();
+            let baseline = preprocess_graph(graph.clone(), &model, &generation, &runtime);
+            let resolved = baseline.supergraphs[0]
+                .derived_data
+                .resolved_threshold_counterterms
+                .as_ref()
+                .unwrap();
+            let group = resolved
+                .cross_section_cut_groups
+                .iter()
+                .find(|group| !group.left.is_empty() && !group.right.is_empty())
+                .expect("the raised fixture must contain a middle cut group");
+            let variant = &resolved.variants[group.left[0]];
+            assert!(variant.associations.len() > 1);
+            assert!(variant.raised_esurface_group.max_occurence > 1);
+            let mut directives = target_directives_from_legacy(&baseline);
+            for (index, association) in variant.associations.iter().enumerate() {
+                let cut = directives
+                    .cuts
+                    .iter_mut()
+                    .find(|cut| cut.edges == association.cut_edges)
+                    .unwrap();
+                let threshold = cut
+                    .thresholds
+                    .iter_mut()
+                    .find(|threshold| threshold.edges == association.threshold_edges)
+                    .unwrap();
+                threshold.counterterms[0].group_id = Some(usize::from(index == 0));
+            }
+            graph.threshold_counterterms = Autogen::explicit(directives);
+            let definition = ProcessDefinition::from_graph_list(
+                std::slice::from_ref(&graph),
+                GenerationType::CrossSection,
+                &model,
+            )
+            .unwrap();
+            let mut cross_section = CrossSection::from_graph_list(
+                "raised_group_conflict".to_string(),
+                vec![graph],
+                &model,
+            )
+            .unwrap();
+            let error = cross_section
+                .preprocess(
+                    &model,
+                    &definition,
+                    &generation,
+                    (&runtime).into(),
+                    &generation_pool(),
+                )
+                .expect_err("a merged raised variant cannot use different solve groups");
+            let diagnostic = format!("{error:#}");
+            for expected in [
+                "one merged raised residue",
+                "group_id=Some(0)",
+                "group_id=Some(1)",
+                "parent=",
+                "signed_cycles=",
+                "cut_edges=",
+            ] {
+                assert!(
+                    diagnostic.contains(expected),
+                    "missing {expected}: {diagnostic}"
+                );
+            }
+        })
+        .unwrap()
+        .join()
+        .unwrap();
 }
 
 #[test]

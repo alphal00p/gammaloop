@@ -904,83 +904,30 @@ impl EsurfacePairs {
         result: &OverlapStructure,
     ) -> HashSet<Vec<ExistingEsurfaceId>> {
         let mut res = HashSet::default();
-        let existing_esurfaces_not_in_overlap = existing_esurfaces
-            .iter_enumerated()
-            .map(|a| a.0)
-            .filter(|&existing_esurface_id| {
-                !result
-                    .overlap_groups
-                    .iter()
-                    .any(|group| group.existing_esurfaces.contains(&existing_esurface_id))
-            });
-
-        let mut possible_options_from_esurfaces_not_in_overlap = HashSet::default();
-
-        for esurface in existing_esurfaces_not_in_overlap.filter(|existing_esurface_id| {
-            self.has_pair_with[Into::<usize>::into(*existing_esurface_id)].len() >= subset_len - 1
-        }) {
-            for possible_combination in self.has_pair_with[Into::<usize>::into(esurface)]
+        // A maximal overlap can have every pair covered by different larger overlaps.
+        // Only containment of the complete candidate permits skipping its SOCP problem.
+        for (first, _) in existing_esurfaces.iter_enumerated() {
+            for remaining in self.has_pair_with[usize::from(first)]
                 .iter()
+                .copied()
+                .filter(|&id| id > first)
                 .combinations(subset_len - 1)
             {
-                let mut option = vec![esurface];
-                option.extend(possible_combination.iter().copied());
-                let mut is_valid = true;
-
-                'pair_loop: for i in 0..subset_len - 1 {
-                    for j in i + 1..subset_len - 1 {
-                        let pair = (
-                            Into::<ExistingEsurfaceId>::into(*possible_combination[i]),
-                            Into::<ExistingEsurfaceId>::into(*possible_combination[j]),
-                        );
-
-                        if !self.pair_exists(pair) {
-                            is_valid = false;
-                            break 'pair_loop;
-                        }
-                    }
+                if !remaining
+                    .iter()
+                    .tuple_combinations()
+                    .all(|(&left, &right)| self.pair_exists((left, right)))
+                {
+                    continue;
                 }
-
-                if is_valid {
-                    option.sort_unstable();
-                    possible_options_from_esurfaces_not_in_overlap.insert(option);
+                let mut candidate = vec![first];
+                candidate.extend(remaining);
+                candidate.sort_unstable();
+                if !is_subset_of_result(&candidate, result) {
+                    res.insert(candidate);
                 }
             }
         }
-
-        let existing_pairs_not_in_overlap = self.data.keys().filter(|(left, right)| {
-            !is_subset_of_result(&[*left, *right], result)
-                && is_subset_of_result(&[*left], result)
-                && is_subset_of_result(&[*right], result)
-                && self.has_pair_with[Into::<usize>::into(*left)].len() >= subset_len - 1
-                && self.has_pair_with[Into::<usize>::into(*right)].len() >= subset_len - 1
-        });
-
-        let mut possible_options_from_pairs_not_in_overlap = HashSet::default();
-
-        for pair in existing_pairs_not_in_overlap {
-            let possible_additions = existing_esurfaces
-                .iter_enumerated()
-                .map(|a| a.0)
-                .filter(|&id| {
-                    id != pair.0
-                        && id != pair.1
-                        && self.has_pair_with[Into::<usize>::into(pair.0)].contains(&id)
-                        && self.has_pair_with[Into::<usize>::into(pair.1)].contains(&id)
-                })
-                .combinations(subset_len - 2);
-
-            for possible_addition in possible_additions {
-                let mut option = vec![pair.0, pair.1];
-                option.extend(possible_addition.iter().copied());
-                option.sort_unstable();
-                possible_options_from_pairs_not_in_overlap.insert(option);
-            }
-        }
-
-        res.extend(possible_options_from_esurfaces_not_in_overlap);
-        res.extend(possible_options_from_pairs_not_in_overlap);
-
         res
     }
 }
@@ -1366,6 +1313,51 @@ mod tests {
         );
 
         assert_eq!(esurface_pairs_massive.data.len(), 0);
+    }
+
+    #[test]
+    fn maximal_overlap_candidates_include_cliques_whose_pairs_are_already_covered() {
+        let existing: ExistingEsurfaces = (0..9).map(GroupEsurfaceId::from).collect();
+        let center = LoopMomenta::from_iter([ThreeMomentum::new(F(0.0), F(0.0), F(0.0))]);
+        // X,Y,Z have a common region. Two small balls in each pair's exclusive region
+        // produce the larger overlaps XYuv, XZwx, YZyz, while XYZ remains maximal too.
+        let larger = [[0, 1, 3, 4], [0, 2, 5, 6], [1, 2, 7, 8]];
+        let result = OverlapStructure {
+            existing_esurfaces: existing.clone(),
+            overlap_groups: larger
+                .map(|members| OverlapGroup {
+                    existing_esurfaces: members.into_iter().map(ExistingEsurfaceId::from).collect(),
+                    complement: vec![],
+                    center: center.clone(),
+                    prefactor_evaluator: None,
+                })
+                .to_vec(),
+        };
+        let mut pairs = EsurfacePairs::new_empty(existing.len());
+        for members in larger {
+            for (left, right) in members
+                .into_iter()
+                .map(ExistingEsurfaceId::from)
+                .tuple_combinations()
+            {
+                if !pairs.pair_exists((left, right)) {
+                    pairs.insert((left, right), center.clone());
+                    pairs.has_pair_with[usize::from(left)].push(right);
+                    pairs.has_pair_with[usize::from(right)].push(left);
+                }
+            }
+        }
+        let central = (0..3).map(ExistingEsurfaceId::from).collect_vec();
+        assert!(
+            central
+                .iter()
+                .tuple_combinations()
+                .all(|(&left, &right)| { is_subset_of_result(&[left, right], &result) })
+        );
+        assert_eq!(
+            pairs.construct_possible_subsets_of_len(&existing, 3, &result),
+            HashSet::from_iter([central]),
+        );
     }
 
     #[test]

@@ -10,7 +10,7 @@ use linnet::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::Graph;
+use super::{Graph, lmb::LMBwithEdges};
 
 pub const THRESHOLD_COUNTERTERM_SCHEMA_VERSION: u32 = 1;
 
@@ -61,6 +61,7 @@ pub struct ThresholdCountertermVariant {
     pub group_id: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subspace: Option<Vec<EdgeIndex>>,
+    /// Required in explicit graph metadata; absent only for internally synthesized defaults.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_lmb: Option<Vec<EdgeIndex>>,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -95,10 +96,10 @@ fn is_false(value: &bool) -> bool {
 }
 
 impl ThresholdCountertermSpec {
-    pub(crate) fn validate_group_ids(&self) -> Result<()> {
-        let ids = self
-            .cuts
-            .iter()
+    pub(crate) fn validate_group_ids<'a>(specs: impl IntoIterator<Item = &'a Self>) -> Result<()> {
+        let ids = specs
+            .into_iter()
+            .flat_map(|spec| &spec.cuts)
             .flat_map(|cut| &cut.thresholds)
             .flat_map(|threshold| &threshold.counterterms)
             .filter_map(|variant| variant.group_id)
@@ -191,8 +192,15 @@ impl ThresholdCountertermSpec {
 
     pub(crate) fn validate_for_graph(&self, graph: &Graph) -> Result<()> {
         let graph_is_amplitude = graph.initial_state_cut.is_empty();
+        // A declared amplitude member uses its master's edge IDs and topology. Group parsing
+        // can choose the master implicitly, so certify topology after the group is complete.
+        let defer_topology =
+            graph_is_amplitude && graph.group_id.is_some() && !graph.is_group_master;
         let n_edges = graph.n_edges();
         let validate_edge = |edge: EdgeIndex, role: &str| -> Result<()> {
+            if defer_topology && role != "cut" {
+                return Ok(());
+            }
             if edge.0 >= n_edges {
                 return Err(eyre!(
                     "graph '{}' threshold_counterterms {role} references edge {}, but the graph has only {n_edges} edges",
@@ -248,17 +256,84 @@ impl ThresholdCountertermSpec {
                             validate_edge(*edge, "subspace")?;
                         }
                     }
-                    if let Some(parent_lmb) = &variant.parent_lmb {
-                        for edge in parent_lmb {
-                            validate_edge(*edge, "parent_lmb")?;
+                    let parent_lmb = variant.parent_lmb.as_ref().ok_or_else(|| {
+                        eyre!(
+                            "graph '{}' threshold_counterterms cut {:?}, threshold {:?}, variant {:?} requires a full parent_lmb",
+                            graph.name,
+                            edge_numbers(&cut.edges),
+                            edge_numbers(&threshold.edges),
+                            variant.name,
+                        )
+                    })?;
+                    if let Some(subspace) = &variant.subspace {
+                        let missing = subspace
+                            .iter()
+                            .filter(|edge| !parent_lmb.contains(edge))
+                            .copied()
+                            .collect::<Vec<_>>();
+                        if !missing.is_empty() {
+                            return Err(eyre!(
+                                "graph '{}' threshold_counterterms variant {:?} selected edges {:?} are absent from parent_lmb {:?}",
+                                graph.name,
+                                variant.name,
+                                edge_numbers(&missing),
+                                edge_numbers(parent_lmb),
+                            ));
                         }
+                    }
+                    for edge in parent_lmb {
+                        validate_edge(*edge, "parent_lmb")?;
+                    }
+                    if defer_topology {
+                        continue;
+                    }
+                    if parent_lmb.len() != graph.loop_momentum_basis.loop_edges.len() {
+                        return Err(eyre!(
+                            "graph '{}' threshold_counterterms variant {:?} requires a full parent_lmb with {} defining edges, received {:?}",
+                            graph.name,
+                            variant.name,
+                            graph.loop_momentum_basis.loop_edges.len(),
+                            edge_numbers(parent_lmb),
+                        ));
+                    }
+                    // A cross-section graph closes the incoming external lines into
+                    // topological cycles; generation turns those cycles back into fixed
+                    // external momenta before exposing the physical loop-momentum basis.
+                    let mut topological_parent = parent_lmb.clone();
+                    if !graph_is_amplitude {
+                        topological_parent.extend(graph.external_momentum_edge_order());
+                    }
+                    let resolved_parent = graph
+                        .lmb_with_loop_edges(topological_parent.as_slice())
+                        .with_context(|| format!(
+                            "graph '{}' threshold_counterterms variant {:?} has invalid full parent_lmb {:?}",
+                            graph.name,
+                            variant.name,
+                            edge_numbers(parent_lmb),
+                        ))?;
+                    if resolved_parent
+                        .loop_edges
+                        .iter()
+                        .copied()
+                        .collect::<BTreeSet<_>>()
+                        != topological_parent.iter().copied().collect::<BTreeSet<_>>()
+                    {
+                        return Err(eyre!(
+                            "graph '{}' threshold_counterterms variant {:?} parent_lmb {:?} does not define a full loop-momentum basis",
+                            graph.name,
+                            variant.name,
+                            edge_numbers(parent_lmb),
+                        ));
                     }
                 }
             }
         }
 
-        self.validate_group_ids()
-            .map_err(|error| eyre!("graph '{}': {error:#}", graph.name))?;
+        // Amplitude graph groups share one namespace, certified once the complete group is known.
+        if !graph_is_amplitude || graph.group_id.is_none() {
+            Self::validate_group_ids([self])
+                .map_err(|error| eyre!("graph '{}': {error:#}", graph.name))?;
+        }
 
         Ok(())
     }
@@ -347,7 +422,7 @@ fn validate_ordered_edges(
     };
     if edges.is_empty() {
         return Err(eyre!(
-            "threshold_counterterms {context} has an empty {field}; omit the field to use the legacy default",
+            "threshold_counterterms {context} has an empty {field}; explicit parent_lmb must be full and a selected subspace must be nonempty",
         ));
     }
     let mut seen = BTreeSet::new();
@@ -386,6 +461,11 @@ fn normalize_variants(variants: &mut [ThresholdCountertermVariant], context: &st
 
         validate_ordered_edges(&variant.subspace, "subspace", &variant_context)?;
         validate_ordered_edges(&variant.parent_lmb, "parent_lmb", &variant_context)?;
+        if variant.parent_lmb.is_none() {
+            return Err(eyre!(
+                "threshold_counterterms {variant_context}, variant '{name}' requires a full parent_lmb to identify its signed loop cycles; omit the counterterm entry to use automatic defaults",
+            ));
+        }
 
         if let Some(multiplier) = &variant.multiplier {
             if multiplier.expression.trim().is_empty() {
@@ -431,6 +511,7 @@ edges = [4, 2]
 
     [[cuts.thresholds.counterterms]]
     subspace = [7]
+    parent_lmb = [7, 8]
 
       [cuts.thresholds.counterterms.multiplier]
       expression = "eta(effective, eset(7, 8))"
@@ -473,6 +554,7 @@ edges = []
 edges = [1, 2]
 [[cuts.thresholds.counterterms]]
 name = "v"
+parent_lmb = [1]
 [cuts.thresholds.counterterms.multiplier]
 expression = "1"
 opaque_derivatives = false
@@ -493,9 +575,11 @@ edges = []
 edges = [1, 2]
 [[cuts.thresholds.counterterms]]
 subspace = [1]
+parent_lmb = [1, 2]
 [[cuts.thresholds.counterterms]]
 name = "second"
 subspace = [2]
+parent_lmb = [1, 2]
 "#,
         )
         .unwrap_err();
@@ -510,6 +594,7 @@ edges = []
 edges = [1, 2]
 [[cuts.thresholds.counterterms]]
 subspace = [1, 1]
+parent_lmb = [1, 2]
 "#,
         )
         .unwrap_err();
@@ -558,18 +643,23 @@ parent_lmb = [1, 2, 0]
         assert!(empty.is_legacy_equivalent());
         assert!(empty.to_toml().unwrap().contains("cuts = []"));
 
-        let named_default = ThresholdCountertermSpec::parse_toml(
-            r#"
-schema_version = 1
-[[cuts]]
-edges = []
-[[cuts.thresholds]]
-edges = [1, 2]
-[[cuts.thresholds.counterterms]]
-name = "normalized_default"
-"#,
-        )
-        .unwrap();
+        let named_default = ThresholdCountertermSpec {
+            cuts: vec![ThresholdCountertermCut {
+                edges: vec![],
+                thresholds: vec![ThresholdCountertermThreshold {
+                    edges: vec![EdgeIndex(1), EdgeIndex(2)],
+                    counterterms: vec![ThresholdCountertermVariant {
+                        name: Some("normalized_default".to_string()),
+                        group_id: None,
+                        subspace: None,
+                        parent_lmb: None,
+                        disable: false,
+                        multiplier: None,
+                    }],
+                }],
+            }],
+            ..ThresholdCountertermSpec::default()
+        };
         assert!(named_default.is_legacy_equivalent());
 
         let custom_subspace = ThresholdCountertermSpec::parse_toml(
@@ -581,6 +671,7 @@ edges = []
 edges = [1, 2]
 [[cuts.thresholds.counterterms]]
 subspace = [1]
+parent_lmb = [1, 2]
 "#,
         )
         .unwrap();
@@ -595,10 +686,35 @@ edges = []
 edges = [1, 2]
 [[cuts.thresholds.counterterms]]
 disable = true
+parent_lmb = [1, 2]
 "#,
         )
         .unwrap();
         assert!(!disabled.is_legacy_equivalent());
+    }
+
+    #[test]
+    fn explicit_variants_require_parent_but_implicit_defaults_do_not() {
+        let defaults =
+            "schema_version = 1\n[[cuts]]\nedges = []\n[[cuts.thresholds]]\nedges = [1, 2]\n";
+        assert!(
+            ThresholdCountertermSpec::parse_toml(defaults)
+                .unwrap()
+                .is_legacy_equivalent()
+        );
+        for declaration in [
+            "name = \"named\"",
+            "subspace = [1]",
+            "disable = true",
+            "group_id = 0",
+        ] {
+            let error = ThresholdCountertermSpec::parse_toml(&format!(
+                "{defaults}[[cuts.thresholds.counterterms]]\n{declaration}\n"
+            ))
+            .unwrap_err();
+            assert!(error.to_string().contains("requires a full parent_lmb"));
+            assert!(error.to_string().contains("threshold [1, 2]"));
+        }
     }
 
     #[test]
@@ -618,7 +734,7 @@ disable = true
                 }],
             }],
         });
-        let error = spec.validate_group_ids().unwrap_err();
+        let error = super::ThresholdCountertermSpec::validate_group_ids([&spec]).unwrap_err();
         assert!(error.to_string().contains("missing group_id 0"));
     }
 }
