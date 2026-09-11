@@ -1120,6 +1120,52 @@ fn fixed_length_label_layout_keeps_label_radius() {
 }
 
 #[test]
+fn measured_label_collision_pass_preserves_repulsion() {
+    for label_size in [0.0, 0.2] {
+        let dot = format!(
+            r#"digraph {{
+                a [pos="-2,0!" "layout-width"="0.2" "layout-height"="0.2"]
+                b [pos="2,0!" "layout-width"="0.2" "layout-height"="0.2"]
+                a -> b [pos="0,0!" "label-width"="{label_size}" "label-height"="{label_size}"]
+            }}"#
+        );
+        let graph = decode_graphs(&parse_dot_graphs_bytes(dot.as_bytes()).unwrap()).remove(0);
+
+        for (charge, expected_y) in [("0", 1.0), ("100", 1.1)] {
+            let config = BTreeMap::from([
+                ("layout-algo", "tree"),
+                ("layout-nodes", "fixed"),
+                ("viewport-w", "2"),
+                ("viewport-h", "1"),
+                ("length-scale", "1"),
+                ("label-layout", "normal"),
+                ("label-length-scale", "1"),
+                ("label-spring", "0"),
+                ("label-charge", charge),
+                ("label-steps", "1"),
+                ("label-step", "1"),
+                ("label-max-delta-scale", "0.1"),
+            ]);
+            let laid_out = layout_parsed_graph_bytes(&graph, &encode_cbor(&config)).unwrap();
+            let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+            assert_point_close(
+                edges[0].pos.as_ref().unwrap(),
+                &TypstPoint { x: 0.0, y: 0.0 },
+            );
+            // Symmetric repulsion moves the label upward by the configured step cap.
+            // Its measured box is collision-free, so placement must retain that move.
+            assert_point_close(
+                edges[0].label_pos.as_ref().unwrap(),
+                &TypstPoint {
+                    x: 0.0,
+                    y: expected_y,
+                },
+            );
+        }
+    }
+}
+
+#[test]
 fn dangling_tangent_label_layout_keeps_paired_labels_normal() {
     let graph = graph_from_spec_bytes(&encode_graph_spec(&TestPlacementGraphSpec {
         name: "dangling-tangent-label".to_string(),
