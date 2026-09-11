@@ -69,7 +69,7 @@ docs-site linnet`, then `nix develop --command just docs-notebooks /path/to/brow
 This exports the DOT playground and the canonical Python quickstart as Marimo islands
 under the Linnet version's `assets/notebooks/` directory. The Pages workflow builds a
 wheel for the documented revision and includes these assets automatically. Each page
-starts its browser runtime only when the reader selects **Launch notebook**.
+loads its browser runtime automatically when the example approaches the viewport.
 
 The exported pages embed their Python source and open with editable code cells;
 browser edits do not modify the checked-in notebooks. The Linnet wheel is bundled;

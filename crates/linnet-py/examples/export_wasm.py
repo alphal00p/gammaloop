@@ -45,7 +45,7 @@ class Notebook:
     @property
     def ready_selector(self) -> str:
         if self.ready_value == "quickstart":
-            return '[data-linnet-notebook="python_quickstart"] svg.typst-doc'
+            return '[data-linnet-notebook="python_quickstart"] svg[width$="pt"]'
         return f'[data-linnet-render-ready="{self.ready_value}"] svg'
 
 
@@ -389,9 +389,7 @@ def browser_smoke(
                 if response is None or not response.ok:
                     raise RuntimeError(f"Browser failed to load {url}")
                 if docs:
-                    page.locator("[data-linnet-notebook]").get_by_role(
-                        "button", name="Launch notebook"
-                    ).click()
+                    page.locator("[data-linnet-notebook]").scroll_into_view_if_needed()
                 else:
                     page.locator(".cm-editor").first.wait_for(
                         state="visible",

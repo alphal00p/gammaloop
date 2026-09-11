@@ -66,9 +66,11 @@ print(graph.to_dot())
     "data-linnet-notebook": "python_quickstart",
     "aria-label": "Run the Python quickstart",
   ))[
-    Launch the notebook to run this example in your browser. Edit the Python cell and run it
-    again to try your changes. The first launch downloads Python and its dependencies;
-    this requires JavaScript and the notebook assets for this documentation build.
+    #html.elem("p", attrs: (class: "live-notebook-fallback"))[
+      This editable example loads automatically when it comes into view. It requires JavaScript
+      and downloads Python and its dependencies on the first visit. You can also run the
+      example above locally.
+    ]
   ]
 }
 

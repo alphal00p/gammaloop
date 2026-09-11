@@ -3,11 +3,12 @@
 #let playground = [
 = Live Python playground
 
-Launch the notebook below to edit DOT and watch the layout update as the solver runs.
+Edit DOT below and watch the layout update as the solver runs. The notebook loads automatically
+when it comes into view.
 Open the collapsible layout controls to change the solver settings. Editing DOT or a slider
 restarts the layout; pause and resume keep the current positions.
 
-The first launch downloads the browser Python runtime and notebook dependencies. Python and
+The first visit downloads the browser Python runtime and notebook dependencies. Python and
 Linnet then run locally in your browser through WebAssembly; no Python installation or remote
 notebook server is needed. An internet connection is needed for the initial downloads.
 
@@ -17,9 +18,11 @@ notebook server is needed. An internet connection is needed for the initial down
     "data-linnet-notebook": "layout_stream",
     "aria-label": "Live DOT layout notebook",
   ))[
-    This interactive notebook needs JavaScript and the notebook assets for this documentation
-    build. The #source-link("crates/linnet-py/examples/layout_stream.py", label: "notebook source")
-    is also available to run locally.
+    #html.elem("p", attrs: (class: "live-notebook-fallback"))[
+      This interactive notebook needs JavaScript and the notebook assets for this documentation
+      build. The #source-link("crates/linnet-py/examples/layout_stream.py", label: "notebook source")
+      is also available to run locally.
+    ]
   ]
 } else {
   [Open the #source-link("crates/linnet-py/examples/layout_stream.py", label: "streaming layout notebook source")
@@ -35,7 +38,7 @@ measured labels, styles, and decorations.
 == Try the Python API
 
 The #link("quickstart/python/")[Python quickstart] has an editable notebook containing its graph
-example. Launch it, edit the Python cell, and run the cell to inspect the resulting graph.
+example. Edit the Python cell and use its play button to inspect the resulting graph.
 
 The #link("reference/python/")[Python reference] documents the full API. Its examples can depend
 on earlier definitions, local files, or rendering dependencies, so they are not all runnable

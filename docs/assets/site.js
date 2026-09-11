@@ -61,6 +61,10 @@
   const preferredTheme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   const applyTheme = (theme) => {
     root.dataset.theme = theme;
+    // Embedded editors accept theme changes through a JSON widget property.
+    document.querySelectorAll(".live-notebook marimo-code-editor").forEach((editor) => {
+      editor.dataset.theme = JSON.stringify(theme);
+    });
     const nextTheme = theme === "dark" ? "light" : "dark";
     themeButton?.setAttribute("aria-label", `Switch to ${nextTheme} theme`);
     themeButton?.setAttribute("aria-pressed", String(theme === "dark"));
@@ -78,17 +82,15 @@
   });
 
   let notebookRuntime;
-  document.querySelectorAll("[data-linnet-notebook]").forEach((container) => {
-    const launch = document.createElement("button");
-    launch.type = "button";
-    launch.className = "live-notebook-launch";
-    launch.textContent = "Launch notebook";
-    const status = document.createElement("p");
-    status.setAttribute("role", "status");
-    container.append(launch, status);
-    launch.addEventListener("click", async () => {
-      launch.disabled = true;
-      status.textContent = "Loading the notebook. Python packages may take a moment on the first visit.";
+  const notebookObserver = new IntersectionObserver(async (entries, observer) => {
+    for (const { target: container, isIntersecting } of entries) {
+      if (!isIntersecting) continue;
+      observer.unobserve(container);
+      container.dataset.notebookState = "loading";
+      const status = document.createElement("p");
+      status.setAttribute("role", "status");
+      status.textContent = "Loading interactive example…";
+      container.append(status);
       const notebook = document.createElement("div");
       notebook.className = "live-notebook-cells";
       try {
@@ -100,6 +102,9 @@
         // Resolve our wheel against the version-local asset URL on this page.
         const wheel = new URL(payload.wheel, url).href;
         notebook.innerHTML = payload.body.replaceAll("__LINNET_WHEEL_URL__", wheel);
+        notebook.querySelectorAll("marimo-code-editor").forEach((editor) => {
+          editor.dataset.theme = JSON.stringify(root.dataset.theme === "dark" ? "dark" : "light");
+        });
         container.append(notebook);
         if (!notebookRuntime) {
           const head = new DOMParser().parseFromString(payload.head, "text/html");
@@ -107,16 +112,17 @@
           notebookRuntime = import(head.querySelector('script[type="module"]').src);
         }
         await notebookRuntime;
-        status.textContent = "The notebook runs in your browser. Edit DOT to update the layout, or use the cell’s play button to run Python code.";
-        launch.remove();
+        container.dataset.notebookState = "active";
+        status.remove();
       } catch (error) {
         notebook.remove();
         notebookRuntime = undefined;
-        launch.disabled = false;
-        status.textContent = `${error.message} You can still use the documented example locally.`;
+        container.dataset.notebookState = "error";
+        status.textContent = `${error.message} Reload this page to retry.`;
       }
-    });
-  });
+    }
+  }, { rootMargin: "200px" });
+  document.querySelectorAll("[data-linnet-notebook]").forEach((container) => notebookObserver.observe(container));
 
   let indexPromise;
   const getIndex = () => indexPromise ||= fetch(searchIndex)
