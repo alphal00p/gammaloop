@@ -15,6 +15,11 @@ and makes publication stable. Its fresh main source-edit pair, including Python,
 finishes in **4m53s versus 10m12s**. The measurements below describe the preceding
 implementation; they remain useful baseline evidence.
 
+A subsequent [matched cold Cargo/Nix comparison](ci-cold-cargo-comparison.md)
+includes Python preparation and all 1,633 runtime tests in both routes: **21m46s
+with direct Cargo versus 28m48s through Nix**. It excludes Clippy/doctests and is
+separate from the source-edit measurements below.
+
 ## Earlier integrated cache implementation, 10 September 2026
 
 The follow-up combines four changes:

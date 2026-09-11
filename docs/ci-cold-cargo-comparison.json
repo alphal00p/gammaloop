@@ -1,0 +1,186 @@
+{
+  "scope": "Main: cold compilation, Python extension preparation, all seven CI runtime groups; excludes Clippy/doctests/fmt/graph checks, downloads and remote CI. Both use Cargo/nextest, not the libtest scheduler of a plain cargo test invocation.",
+  "revision": "e56b04d650895fe78f564fea9c4e8dd9b0f3dfa2",
+  "affinity": [
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47
+  ],
+  "nativeVersions": {
+    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)",
+    "nextest": "cargo-nextest 0.9.140\nrelease: 0.9.140\nhost: x86_64-unknown-linux-gnu"
+  },
+  "initialState": {
+    "nativeTargetEmpty": true,
+    "nixProjectOutputsPresent": 0,
+    "nixCompilerStatePresent": 0,
+    "downloadedSourcesAndToolchainsAvailable": true,
+    "nixSeedValidation": [
+      {
+        "stage": "before-build",
+        "externalSeedClosureExact": true,
+        "excludedProjectOutputsPresent": 0,
+        "timedRootsPresent": 0
+      },
+      {
+        "stage": "dry-run",
+        "projectOnlyBuildCount": 147
+      },
+      {
+        "stage": "after-build",
+        "allRootsRegistered": true
+      },
+      {
+        "stage": "after-repeat",
+        "allRootsRegistered": true
+      }
+    ]
+  },
+  "native": {
+    "elapsedSeconds": 1306.2064482701244,
+    "elapsedIncludingInventoryValidationSeconds": 1307.338585996069,
+    "pythonBuildSeconds": 451.2252445979975,
+    "pythonPackagingSeconds": 0.13084306207019836,
+    "testCompilationSeconds": 675.1071962619899,
+    "testExecutionSeconds": 179.74316434806678,
+    "inventoryValidationSeconds": 1.130422992981039,
+    "compilationMessages": 508,
+    "runtimeCompilationMessages": 0,
+    "commands": {
+      "python-build": [
+        "cargo",
+        "build",
+        "--offline",
+        "--profile",
+        "ci-optim",
+        "--locked",
+        "--no-default-features",
+        "-p",
+        "gammaloop-api",
+        "-p",
+        "gammaloop-tracing-filter",
+        "-p",
+        "gammaloop-workspace-hack",
+        "-p",
+        "idenso",
+        "-p",
+        "linnet",
+        "-p",
+        "spenso",
+        "--features",
+        "gammaloop-api/pyo3-extension-module,gammaloop-api/python_abi,gammaloop-tracing-filter/clap,gammaloop-tracing-filter/symbolica,idenso/bincode,idenso/reference-cases,linnet/bincode,linnet/drawing,linnet/rkyv,linnet/serde,linnet/symbolica,spenso-macros/shadowing,spenso/shadowing,symbolica/tracing_max_level_info"
+      ],
+      "test-compile": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "--workspace",
+        "--features",
+        "gammaloop-integration-tests/python-api-tests,symbolica/tracing_max_level_info",
+        "--profile",
+        "ci-optim",
+        "--no-run"
+      ],
+      "tests": [
+        "cargo",
+        "nextest",
+        "run",
+        "--offline",
+        "--locked",
+        "--workspace",
+        "--features",
+        "gammaloop-integration-tests/python-api-tests,symbolica/tracing_max_level_info",
+        "--cargo-profile",
+        "ci-optim",
+        "--profile",
+        "ci_gammaloop",
+        "-E",
+        "not package(=spynso3) & not package(=gammaloop-workspace-hack)"
+      ]
+    }
+  },
+  "nix": {
+    "elapsedSeconds": 1727.602464093,
+    "evaluationSeconds": 12.888504556,
+    "externalAndDefinitionCopySeconds": 9.123840387,
+    "compilationMessages": 625,
+    "archiveCompilationMessages": 0,
+    "runtimeCompilationMessages": 0,
+    "groupCompletionSeconds": {
+      "gammaloop-nextest-clinnet": 608.33692209,
+      "gammaloop-nextest-core": 1462.5973328449998,
+      "gammaloop-nextest-integration": 1727.571382014,
+      "gammaloop-nextest-linnet": 880.759728639,
+      "gammaloop-nextest-python-api": 1665.2004858499997,
+      "gammaloop-nextest-spenso": 1016.392930578,
+      "gammaloop-nextest-vakint": 686.260741131
+    },
+    "builderOccupancySeconds": 3472.135575533999,
+    "exactRepeatSeconds": 0.23131226499984042,
+    "exactRepeatExecutesTests": false,
+    "runtimeExecutionProof": {
+      "summaries": 17,
+      "distinctRuntimeGroups": 7,
+      "passed": 1633,
+      "skipped": 155
+    },
+    "buildCommand": [
+      "/run/current-system/sw/bin/taskset",
+      "-c",
+      "40-47",
+      "nix",
+      "build",
+      "--offline",
+      "--store",
+      "local?root=/tmp/ci-cargo-nix-cold-tests/main/candidate/store",
+      "--stdin",
+      "--no-link",
+      "--cores",
+      "8",
+      "--max-jobs",
+      "4",
+      "--keep-going",
+      "--option",
+      "sandbox",
+      "true",
+      "--option",
+      "substituters",
+      "",
+      "--option",
+      "builders",
+      "",
+      "--option",
+      "post-build-hook",
+      "",
+      "--log-format",
+      "internal-json",
+      "--print-build-logs"
+    ],
+    "rootDerivations": "/tmp/ci-cargo-nix-cold-tests/main/candidate/root-derivations.txt",
+    "installables": "/tmp/ci-cargo-nix-cold-tests/main/candidate/build-installables.txt"
+  },
+  "comparison": {
+    "nixMinusNativeSeconds": 421.3960158228756,
+    "nixToNativeRatio": 1.3226105768969,
+    "inventoryExactlyEqual": true,
+    "listedCases": 1788,
+    "passedEach": 1633,
+    "skippedEach": 155
+  },
+  "limits": [
+    "One sequential pair on a shared host; CPU affinity is identical but memory/storage and host activity are not isolated. OS page caches are not flushed.",
+    "Native uses one persistent Cargo target and workspace feature unification. Nix uses the current per-crate artifact graph. Feature coverage and test inventories match; Cargo compilation-unit graphs differ.",
+    "Native Python uses the same ABI/features/interpreter as the Nix module, then the test build uses the CI test interpreter. Both routes build their extension inside the timed cold workload.",
+    "Nix overlaps compilation and test groups; summing group or builder durations would not give elapsed completion time. Builder occupancy is not CPU time or CHF cost.",
+    "Timing excludes dependency/toolchain downloads and Nix evaluation/setup; native inventory-only validation is also excluded and separately recorded.",
+    "No new NixCI suite was pushed; these are local workflow measurements."
+  ],
+  "rawEvidence": "/tmp/ci-cargo-nix-cold-tests"
+}
