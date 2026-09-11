@@ -1048,7 +1048,7 @@ impl VakintMomentumSolution {
         let solutions = Atom::solve(system)
             .wrt_with_exponent::<u8, _>(variables)
             .map_err(|source| eyre!("{source}"))?;
-        let [solution] = solutions.as_slice() else {
+        let [solution] = solutions.iter().as_slice() else {
             return Err(eyre!(
                 "expected one Vakint momentum solution, got {} branches",
                 solutions.len()
@@ -1059,9 +1059,13 @@ impl VakintMomentumSolution {
             .map(|variable| {
                 let polynomial_variable =
                     PolyVariable::try_from(variable.clone()).map_err(|source| eyre!("{source}"))?;
-                solution.get(&polynomial_variable).cloned().ok_or_else(|| {
-                    eyre!("Vakint momentum solution has no value for {polynomial_variable}")
-                })
+                if solution.free_variables().contains(&polynomial_variable) {
+                    Ok(variable.clone())
+                } else {
+                    solution.get(&polynomial_variable).cloned().ok_or_else(|| {
+                        eyre!("Vakint momentum solution has no value for {polynomial_variable}")
+                    })
+                }
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(Self::from_solution(

@@ -46,7 +46,8 @@ fn run_network_informed() {
                 "vx({}, k1_, k2_, k3_, mu1_, mu2_, mu3_)",
                 i + 1
             )))
-            .level_range((0, Some(0)))
+            .min_level(0)
+            .max_level(Some(0))
             .rhs_cache_size(1000)
             .with(&rhs_subs);
     }

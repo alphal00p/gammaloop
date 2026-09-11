@@ -15,9 +15,9 @@ symbolica-utils = { path = "../crates/symbolica-utils", default-features = false
 tymbolica-atom-payload = { git = "https://github.com/lcnbr/tymbolica", rev = "e85233dd3d99e5fb458913d0d49f99d83466025b", default-features = false, features = ["wasm"] }
 
 [patch.crates-io]
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0084bc7c1418940fdec652059cd704e00d07e9d1" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0084bc7c1418940fdec652059cd704e00d07e9d1" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0084bc7c1418940fdec652059cd704e00d07e9d1" }
 
 [profile.release]
 codegen-units = 1

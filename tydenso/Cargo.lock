@@ -490,6 +490,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "directories"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16f5094c54661b38d03bd7e50df373292118db60b585c08a411c6d840017fe7d"
+dependencies = [
+ "dirs-sys",
+]
+
+[[package]]
+name = "dirs-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e01a3366d27ee9890022452ee61b2b63a67e6f13f58900b651ff5665f0bb1fab"
+dependencies = [
+ "libc",
+ "option-ext",
+ "redox_users",
+ "windows-sys",
+]
+
+[[package]]
 name = "dot-parser"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -526,6 +547,12 @@ name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
+
+[[package]]
+name = "ed25519-compact"
+version = "2.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f05391a505666bdf2b5d2626f41b7f0f49052b1e33cceac960eaa818008141da"
 
 [[package]]
 name = "either"
@@ -672,7 +699,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "2.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=ec19eeb211685aa216dbd28a4df547cd4c6baca1#ec19eeb211685aa216dbd28a4df547cd4c6baca1"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=0084bc7c1418940fdec652059cd704e00d07e9d1#0084bc7c1418940fdec652059cd704e00d07e9d1"
 dependencies = [
  "ahash",
  "dyn-clone",
@@ -847,6 +874,15 @@ name = "libm"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
+
+[[package]]
+name = "libredox"
+version = "0.1.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d8f1ea3f21fd3405dcaf6c9b5c1630af9afc422d9073ea39c5f6d6c772e08ed"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "linnet"
@@ -1026,7 +1062,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=ec19eeb211685aa216dbd28a4df547cd4c6baca1#ec19eeb211685aa216dbd28a4df547cd4c6baca1"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=0084bc7c1418940fdec652059cd704e00d07e9d1#0084bc7c1418940fdec652059cd704e00d07e9d1"
 dependencies = [
  "ahash",
  "astro-float",
@@ -1040,6 +1076,7 @@ dependencies = [
  "malachite-q",
  "num-traits",
  "rand 0.9.5",
+ "rand_core 0.9.5",
  "rayon",
  "rug",
  "serde",
@@ -1060,6 +1097,12 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
+
+[[package]]
+name = "option-ext"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "papergrid"
@@ -1324,6 +1367,17 @@ checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
+]
+
+[[package]]
+name = "redox_users"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
+dependencies = [
+ "getrandom 0.2.17",
+ "libredox",
+ "thiserror",
 ]
 
 [[package]]
@@ -1597,16 +1651,19 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "symbolica"
 version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=ec19eeb211685aa216dbd28a4df547cd4c6baca1#ec19eeb211685aa216dbd28a4df547cd4c6baca1"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=0084bc7c1418940fdec652059cd704e00d07e9d1#0084bc7c1418940fdec652059cd704e00d07e9d1"
 dependencies = [
  "ahash",
  "append-only-vec",
+ "base64",
  "bincode",
  "bincode-trait-derive",
  "brotli",
  "byteorder",
  "bytes",
+ "directories",
  "dyn-clone",
+ "ed25519-compact",
  "getrandom 0.3.4",
  "graphica",
  "inventory",

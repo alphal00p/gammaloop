@@ -9,9 +9,9 @@
 //! serde = { version = "1.0", features = ["derive"] }
 //! symbolica = { version = "2.2", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 //! [patch.crates-io]
-//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1" }
-//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1" }
-//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0084bc7c1418940fdec652059cd704e00d07e9d1" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0084bc7c1418940fdec652059cd704e00d07e9d1" }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0084bc7c1418940fdec652059cd704e00d07e9d1" }
 //! ```
 
 #![allow(dead_code)]

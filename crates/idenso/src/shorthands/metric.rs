@@ -123,7 +123,8 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
                 i.to_symbolic([dima.clone(), function!(header, Atom::var(RS.a_))]),
             )
             .when(RS.a_.filter_match(not_wraped_aind(header)))
-            .level_range((0, Some(1))),
+            .min_level(0)
+            .max_level(Some(1)),
         );
     }
 
@@ -135,7 +136,8 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
                 i.to_symbolic([dima.clone(), function!(header, Atom::var(RS.a_))]),
             )
             .when(RS.a_.filter_match(not_wraped_aind(header)))
-            .level_range((0, Some(1))),
+            .min_level(0)
+            .max_level(Some(1)),
         );
         reps.push(
             Replacement::new(
@@ -143,7 +145,8 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
                 di.to_symbolic([dima.clone(), function!(header, Atom::var(RS.a_))]),
             )
             .when(RS.a_.filter_match(not_wraped_aind(header)))
-            .level_range((0, Some(1))),
+            .min_level(0)
+            .max_level(Some(1)),
         );
     }
     let mut atom = Atom::new();
@@ -186,7 +189,7 @@ pub fn wrap_dummies_impl<Aind: ParseableAind + AbsInd + DummyAind>(
         .collect();
 
     let mut expr = view.to_owned();
-    let settings = MatchSettings::new().level_range((0, Some(0)));
+    let settings = MatchSettings::new().min_level(0).max_level(Some(0));
 
     for i in LibraryRep::all_self_duals().chain(LibraryRep::all_inline_metrics()) {
         let ipat = i.to_symbolic([RS.d_, RS.a_]).to_pattern();
@@ -318,7 +321,8 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
             SPENSO_TAG.self_dual_::<0, _>([RS.d_, RS.i_])
         ),
     )
-    .level_range((0, Some(0)))
+    .min_level(0)
+    .max_level(Some(0))
     .when(not_slot(RS.a___) & not_slot(RS.b___))
     .repeat()
     .with_map(move |m| {
@@ -339,7 +343,8 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
         )
         .pow(2),
     )
-    .level_range((0, Some(0)))
+    .min_level(0)
+    .max_level(Some(0))
     .when(not_slot(RS.a___))
     .repeat()
     .with_map(move |m| {
@@ -362,7 +367,8 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
             SPENSO_TAG.dualizable_dual_::<0, _>([RS.d_, RS.i_])
         ),
     )
-    .level_range((0, Some(0)))
+    .min_level(0)
+    .max_level(Some(0))
     .when(not_slot(RS.a___) & not_slot(RS.b___))
     .repeat()
     .with_map(move |m| {
@@ -380,7 +386,8 @@ pub fn to_dots_impl(expr: AtomView) -> Atom {
         function!(SPENSO_TAG.dot, f, g)
     })
     .replace(function!(ETS.metric, RS.f_, RS.g_))
-    .level_range((0, Some(0)))
+    .min_level(0)
+    .max_level(Some(0))
     .when(not_slot(RS.f_) & not_slot(RS.g_))
     .repeat()
     .with(function!(SPENSO_TAG.dot, RS.f_, RS.g_))

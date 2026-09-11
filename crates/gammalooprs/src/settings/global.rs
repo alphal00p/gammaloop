@@ -570,7 +570,8 @@ impl OrientationPattern {
             atom.replace(self.pat.as_ref()?.as_view().to_pattern())
                 .with(function!(GS.selected, &self.pat.as_ref()?.0))
                 .replace(function!(GS.orientation_delta, W_.a___))
-                .level_range((0, Some(0)))
+                .min_level(0)
+                .max_level(Some(0))
                 .with(Atom::Zero),
         )
     }

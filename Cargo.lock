@@ -1226,6 +1226,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "directories"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16f5094c54661b38d03bd7e50df373292118db60b585c08a411c6d840017fe7d"
+dependencies = [
+ "dirs-sys",
+]
+
+[[package]]
 name = "dirs"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1304,6 +1313,12 @@ name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
+
+[[package]]
+name = "ed25519-compact"
+version = "2.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f05391a505666bdf2b5d2626f41b7f0f49052b1e33cceac960eaa818008141da"
 
 [[package]]
 name = "either"
@@ -1865,7 +1880,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "2.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=ec19eeb211685aa216dbd28a4df547cd4c6baca1#ec19eeb211685aa216dbd28a4df547cd4c6baca1"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=0084bc7c1418940fdec652059cd704e00d07e9d1#0084bc7c1418940fdec652059cd704e00d07e9d1"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -2879,7 +2894,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=ec19eeb211685aa216dbd28a4df547cd4c6baca1#ec19eeb211685aa216dbd28a4df547cd4c6baca1"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=0084bc7c1418940fdec652059cd704e00d07e9d1#0084bc7c1418940fdec652059cd704e00d07e9d1"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -2887,6 +2902,7 @@ dependencies = [
  "bincode-trait-derive",
  "colored 3.1.1",
  "dyn-clone",
+ "gmp-mpfr-sys",
  "itertools 0.14.0",
  "malachite-base",
  "malachite-nz",
@@ -2896,6 +2912,7 @@ dependencies = [
  "pyo3",
  "pyo3-stub-gen",
  "rand 0.9.4",
+ "rand_core 0.9.5",
  "rayon",
  "rug",
  "serde",
@@ -4668,16 +4685,19 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=ec19eeb211685aa216dbd28a4df547cd4c6baca1#ec19eeb211685aa216dbd28a4df547cd4c6baca1"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=0084bc7c1418940fdec652059cd704e00d07e9d1#0084bc7c1418940fdec652059cd704e00d07e9d1"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
+ "base64 0.22.1",
  "bincode 2.0.1",
  "bincode-trait-derive",
  "brotli 8.0.2",
  "byteorder",
  "bytes",
+ "directories",
  "dyn-clone",
+ "ed25519-compact",
  "getrandom 0.3.4",
  "graphica",
  "inventory",

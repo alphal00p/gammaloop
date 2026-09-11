@@ -2146,21 +2146,29 @@ mod tests {
 
     #[test]
     fn sample_shape_compatibility_requires_matching_grid_topology() {
-        let continuous_2d = Grid::Continuous(ContinuousGrid::new(2, 8, 0, None, false));
-        let continuous_3d = Grid::Continuous(ContinuousGrid::new(3, 8, 0, None, false));
-        let discrete_2 = Grid::Discrete(DiscreteGrid::new(vec![None, None], F(10.0), false));
-        let discrete_nested = Grid::Discrete(DiscreteGrid::new(
-            vec![
-                Some(Grid::Continuous(ContinuousGrid::new(2, 8, 0, None, false))),
-                Some(Grid::Continuous(ContinuousGrid::new(2, 8, 0, None, false))),
-            ],
-            F(10.0),
-            false,
-        ));
+        let continuous_2d = Grid::Continuous(ContinuousGrid::new(2, 8, 0, None, false).unwrap());
+        let continuous_3d = Grid::Continuous(ContinuousGrid::new(3, 8, 0, None, false).unwrap());
+        let discrete_2 =
+            Grid::Discrete(DiscreteGrid::new(vec![None, None], F(10.0), false).unwrap());
+        let discrete_nested = Grid::Discrete(
+            DiscreteGrid::new(
+                vec![
+                    Some(Grid::Continuous(
+                        ContinuousGrid::new(2, 8, 0, None, false).unwrap(),
+                    )),
+                    Some(Grid::Continuous(
+                        ContinuousGrid::new(2, 8, 0, None, false).unwrap(),
+                    )),
+                ],
+                F(10.0),
+                false,
+            )
+            .unwrap(),
+        );
 
         assert!(super::grids_have_compatible_sample_shape(
             &continuous_2d,
-            &Grid::Continuous(ContinuousGrid::new(2, 4, 0, None, false))
+            &Grid::Continuous(ContinuousGrid::new(2, 4, 0, None, false).unwrap())
         ));
         assert!(!super::grids_have_compatible_sample_shape(
             &continuous_2d,

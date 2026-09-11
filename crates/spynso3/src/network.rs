@@ -1064,7 +1064,8 @@ impl SpensoNet {
                         r
                     }
                     .non_greedy_wildcards(setting_non_greedy_wildcards.clone())
-                    .level_range(setting_level_range)
+                    .min_level(setting_level_range.0)
+                    .max_level(setting_level_range.1)
                     .level_is_tree_depth(setting_level_is_tree_depth)
                     .allow_new_wildcards_on_rhs(setting_allow_new_wildcards_on_rhs)
                     .rhs_cache_size(setting_rhs_cache_size);

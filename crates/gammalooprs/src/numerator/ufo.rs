@@ -231,10 +231,12 @@ impl UFOSymbols {
                 // println!("{}", rep.to_symbolic([i]));
                 atom = atom
                     .replace(rep.to_symbolic([wrappedi]))
-                    .level_range((1, Some(1)))
+                    .min_level(1)
+                    .max_level(Some(1))
                     .with(r.to_atom())
                     .replace(rep.to_symbolic([i]))
-                    .level_range((1, Some(1)))
+                    .min_level(1)
+                    .max_level(Some(1))
                     .with(r.to_atom())
             }
         }
@@ -569,14 +571,16 @@ impl UFOSymbols {
                 // println!("{}", rep.to_symbolic([i]));
                 atom = atom
                     .replace(rep.to_symbolic([wrappedi]))
-                    .level_range((1, Some(1)))
+                    .min_level(1)
+                    .max_level(Some(1))
                     .with(r.to_atom())
                     .replace(self.identity.call((wrappedi, W_.i_)))
                     .with(self.identity.call((r.to_atom(), W_.i_)))
                     .replace(self.identity.call((W_.i_, wrappedi)))
                     .with(self.identity.call((W_.i_, r.to_atom())))
                     .replace(rep.to_symbolic([i]))
-                    .level_range((1, Some(1)))
+                    .min_level(1)
+                    .max_level(Some(1))
                     .with(r.to_atom())
                     .replace(self.identity.call((i, W_.i_)))
                     .with(self.identity.call((r.to_atom(), W_.i_)))

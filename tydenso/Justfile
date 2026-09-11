@@ -76,7 +76,7 @@ check: build check-wasm-features
       echo "TYMBOLICA_CHECKOUT must be at $tymbolica_revision; found ${checkout_revision:-no Git HEAD}" >&2
       exit 1
     fi
-    symbolica_revision="ec19eeb211685aa216dbd28a4df547cd4c6baca1"
+    symbolica_revision="0084bc7c1418940fdec652059cd704e00d07e9d1"
     expected_source="source = \"git+https://github.com/symbolica-dev/symbolica?rev=$symbolica_revision#$symbolica_revision\""
     for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
       for package in symbolica numerica graphica; do

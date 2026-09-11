@@ -1650,14 +1650,14 @@ impl LoopMomentumBasis {
         }
 
         let solutions = Atom::solve(&sys).wrt_with_exponent::<u8, _>(&vars).unwrap();
-        let [solution] = solutions.as_slice() else {
+        let [solution] = solutions.iter().as_slice() else {
             panic!(
                 "expected one loop-momentum basis solution, got {} branches",
                 solutions.len()
             );
         };
         assert!(
-            !solution.is_underdetermined(),
+            solution.free_variables().is_empty(),
             "loop-momentum basis solution is underdetermined"
         );
         vars.iter()
