@@ -204,27 +204,32 @@ from the rendered PDF.
 
 ## NixCI Cache
 
-Before pushing, run `just ci-checks` inside `nix develop` to build and run the
-selected CI checks locally. `nix flake check --impure` additionally builds the
-CLI, documentation and WASM checks exported by the flake. Licensed tests need
-`SYMBOLICA_LICENSE` in the environment. NixCI can reuse matching outputs that
-have been uploaded to its cache; running bare Cargo does not populate it.
+Run `just ci-checks` for the selected local CI checks. To run them and then
+publish their outputs to NixCI, use `just ci-checks-and-upload`. Licensed tests
+need `SYMBOLICA_LICENSE` in the environment. `nix flake check --impure` additionally
+builds the CLI, documentation and WASM checks exported by the flake.
 
-Put a NixCI token in `~/.netrc`; see
-[the NixCI cache documentation](https://nix-ci.com/documentation/nix-ci-cache).
-The dev shell points Nix at that file and enables a `post-build-hook` which
-uploads newly built outputs. The flake also configures reading from the cache;
-accept its cache settings when Nix asks. Upload failures print a warning while
-leaving a successful local build successful.
+Put your NixCI token in `~/.netrc`, or point `NIXCI_NETRC` at an existing file;
+see [the NixCI cache documentation](https://nix-ci.com/documentation/nix-ci-cache).
+Uploads run as your user and need no additional Nix privileges. Entering the dev
+shell enables no upload hook. Bare Cargo builds do not populate this cache.
+An untrusted daemon may warn that it ignores `netrc-file`; the upload client
+still uses that file to authenticate with the destination cache.
 
-Nix honours the hook and the client's `netrc-file` setting only for a trusted
-user, which `nix store info --json` reports. If nothing is being pushed, check
-that first. The hook runs after executed builds; already-cached outputs need an
-explicit `nix copy .#OUTPUT --to https://cache.nix-ci.com` to publish them.
+The upload command first requires successful checks, then realizes the outputs
+selected by `nix/ci.nix` and publishes their runtime closures. These explicit
+producer targets retain the binaries and compiler artifacts that test-result
+outputs alone would omit. Existing local outputs are published too. It does not
+select packaging, documentation, WASM, dev shells or unrelated repositories.
+Required shared dependencies can still be part of the uploaded closures.
 
-Uploads run synchronously and add to local build time. For local compilation
-benchmarks, disable the hook with `--option post-build-hook ""` and record cache
-transfer time separately.
+Check time, publication preparation and upload time are reported separately.
+An upload failure returns a nonzero status; the successful checks remain cached.
+Use plain `just ci-checks` for local benchmarks without publishing.
+
+The flake retains NixCI's substituter and signing-key settings for downloads.
+On a shared daemon, an administrator must configure the cache's trust and access
+credentials for substitution; enabling user uploads does not configure downloads.
 
 ## Version Control Workflow
 

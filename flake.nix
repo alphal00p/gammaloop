@@ -184,29 +184,6 @@
           valgrind
         ];
 
-      # Nix runs this after every build in the dev shell, so NixCI can reuse
-      # matching outputs from checks already built locally.
-      # See https://nix-ci.com/documentation/nix-ci-cache
-      pushToNixCiCache = pkgs.writeShellScript "push-to-nix-ci-cache" ''
-        set -eu
-        set -f
-        export IFS=' '
-
-        # Keep the throwaway XDG_CACHE_HOME. Without it this machine remembers
-        # the unsigned narinfo it built locally, and then refuses to
-        # substitute back the paths it pushed itself.
-        # Also override NIX_CACHE_HOME, which takes precedence if inherited.
-        XDG_CACHE_HOME="$(mktemp -d)"
-        NIX_CACHE_HOME="$XDG_CACHE_HOME/nix"
-        export XDG_CACHE_HOME NIX_CACHE_HOME
-        trap 'rm -rf "$XDG_CACHE_HOME"' EXIT
-
-        # Nix fails the build whose post-build-hook fails, so being offline or
-        # without a token must not come out of here non-zero.
-        nix copy --to 'https://cache.nix-ci.com?compression=xz&parallel-compression=true' ''${OUT_PATHS-} \
-          || echo "push-to-nix-ci-cache: could not push to the NixCI cache." >&2
-      '';
-
       mkDevShell = extraPackages:
         craneLib.devShell {
           # checks = self.checks.${system};
@@ -227,16 +204,6 @@
           #   export CXX="${nixCxx}"
           #   export ${cargoLinkerVar}="${nixCc}"
           # '';
-
-          # The hook runs as the Nix daemon user, which finds the cache token
-          # through the netrc-file setting it inherits from here. Nix honours
-          # both settings only for a trusted user; see CONTRIBUTING.md.
-          shellHook = ''
-            if [ -r "$HOME/.netrc" ]; then
-              NIX_CONFIG="$(printf '%s\nnetrc-file = %s\npost-build-hook = %s' "''${NIX_CONFIG-}" "$HOME/.netrc" "${pushToNixCiCache}")"
-              export NIX_CONFIG
-            fi
-          '';
 
           packages = devShellPackages ++ extraPackages;
         };
