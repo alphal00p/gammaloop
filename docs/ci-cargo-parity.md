@@ -353,10 +353,16 @@ Local validation with Nix 2.34.8 confirmed:
   15 runtime/Python roots and 35 package producers retain their derivation paths.
   The Just recipe parses, its shell syntax passes, and the flake passes Alejandra.
 
-The real NixCI upload/restore remains unverified because no cache token is available
-here. No NixCI suite was started. New scripts and evidence are under
-`/tmp/ci-scoped-upload/`; the initial hook validation remains under
-`/tmp/ci-pr105-integration/`.
+A real NixCI round trip was subsequently verified on 2026-09-11 using privately
+configured credentials. A unique 108-byte fixture uploaded in 1.046 seconds and
+restored into an empty local store in 0.080 seconds with NixCI's signing key;
+restoration without that trusted key was rejected. The daemon still reported
+`trusted: false`, and the token's cache response confirmed GammaLoop read access.
+This verifies authentication and transfer mechanics, not full-project upload speed
+or reuse by a hosted worker. No CI suite or full artifact upload was started.
+Scripts and evidence are under `/tmp/ci-scoped-upload/nixci-live/`; the local
+fixture checks remain under `/tmp/ci-scoped-upload/`, and the initial hook
+validation under `/tmp/ci-pr105-integration/`. Credentials are outside the repo.
 
 Nix also [caches missing paths for one hour by default](https://github.com/NixOS/nix/blob/2.34.7/src/libstore/include/nix/store/globals.hh#L55-L73),
 and [checks process memory before its disk cache](https://github.com/NixOS/nix/blob/2.34.7/src/libstore/store-api.cc#L608-L650).
