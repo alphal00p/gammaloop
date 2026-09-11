@@ -220,12 +220,57 @@ pub(crate) fn energy_map_replacements_gs(
 mod tests {
     use linnet::half_edge::involution::{EdgeVec, Orientation};
     use symbolica::atom::AtomView;
+    use three_dimensional_reps::{MediumMode, expression::AllOrientations};
 
     use super::*;
     use crate::{
         cff::surface::LinearEnergyExpr, dot, graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise, utils::external_energy_atom_from_index,
     };
+
+    #[test]
+    fn thermal_surface_conversion_preserves_distribution_atoms() -> color_eyre::Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph thermal_triangle {
+            edge [num=1 mass=0]
+            node [num=1]
+            ext [style=invis]
+            ext -> a [id=3]
+            ext -> b [id=4]
+            c -> ext [id=5]
+            c -> a [id=0 lmb_id=0]
+            a -> b [id=1]
+            b -> c [id=2]
+        })?;
+        for medium_mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let mut graph = graph.clone();
+            let mut options = graph.denominator_only_cff_3d_expression_options();
+            options.medium_mode = medium_mode;
+            let expression = graph
+                .generate_3d_expression_for_integrand(&[], &None, &options, None)?
+                .expression;
+            let atom = expression
+                .orientations
+                .iter()
+                .map(GammaLoopOrientationExpression::to_atom_gs)
+                .fold(Atom::Zero, |sum, orientation| sum + orientation);
+            assert_eq!(atom, expression.to_atom(AllOrientations));
+
+            // Typed weights emit distributions directly; surface conversion must
+            // preserve them without the former thermal-numerator placeholders.
+            let substituted = expression.surfaces.substitute_energies(&atom, &[]);
+            let substituted_string = substituted.to_canonical_string();
+            assert!(
+                substituted_string.contains("N("),
+                "{medium_mode:?} CFF lost its thermal distributions: {substituted_string}"
+            );
+            assert!(!substituted_string.contains("Tnum("));
+        }
+        Ok(())
+    }
 
     #[test]
     fn affine_energy_map_keeps_two_numerator_factors_under_one_map() -> color_eyre::Result<()> {

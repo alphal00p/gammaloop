@@ -3779,79 +3779,322 @@ mod tests {
 #[cfg(test)]
 mod thermal_reference_tests {
     use super::*;
-    use crate::{Generate3DExpressionOptions, MediumMode, generate_3d_expression};
+    use crate::{
+        Generate3DExpressionOptions, MediumMode, MomentumSignature, generate_3d_expression,
+        graph_io::{ParsedGraphExternalEdge, ParsedGraphInternalEdge},
+        surface::LinearSurfaceKind,
+    };
 
     #[test]
-    fn thermal_bubble_matches_existing_bose_reference() {
-        let mut parsed = crate::graph_io::test_graphs::box_graph();
-        parsed.internal_edges.truncate(2);
-        parsed.internal_edges[1].head = 0;
-        parsed.external_edges.truncate(2);
-        parsed.node_name_to_internal.retain(|_, node| *node < 2);
-        let expression = generate_3d_expression(
-            &parsed,
-            &Generate3DExpressionOptions {
-                medium_mode: MediumMode::ThermodynamicEquilibrium,
-                ..Default::default()
-            },
-        )
-        .unwrap()
-        .expression;
-        let input = EvaluationInput {
-            external_momenta: vec![[1.0, 3.0, 4.0, 5.0], [0.0; 4], [0.0; 4]],
-            loop_spatial_momenta: vec![[1.0, 2.0, 3.0]],
-            masses: vec![0.0; 2],
-            uniform_scale: None,
-        };
-        let evaluator = ExpressionEvaluator::new(&parsed, &expression, &input);
-        // The existing thermal bubble oracle uses bosonic distributions at beta=1.
-        // Evaluate those explicit test inputs without giving the model-free
-        // standalone evaluator an implicit choice of particle statistics.
-        let distribution = |edge: usize, sign: i32| {
-            (f64::from(sign) + 1.0 / (evaluator.internal_energies[edge] / 2.0).tanh()) / 2.0
-        };
-        let mut result = 0.0;
-        for variant in expression
-            .orientations
-            .iter()
-            .flat_map(|orientation| &orientation.variants)
-        {
-            assert!(variant.thermal_weight.distributions.is_empty());
-            let thermal = variant
-                .thermal_weight
-                .numerators
+    fn thermal_scalar_bose_references() {
+        for (name, edges, signatures, points, surface_counts) in [
+            (
+                "thermal_bubble",
+                vec![(0, 1), (1, 0)],
+                vec![vec![1], vec![1]],
+                vec![(vec![[1.0, 2.0, 3.0]], 9.236_597_515_492_299e-4, 1.0e-15)],
+                (2, 2),
+            ),
+            (
+                "thermal_mercedes",
+                vec![(0, 1), (1, 2), (2, 0), (1, 3), (3, 0), (2, 3)],
+                vec![
+                    vec![1, 0, 0],
+                    vec![0, 1, 0],
+                    vec![0, 0, 1],
+                    vec![1, -1, 0],
+                    vec![1, 0, -1],
+                    vec![0, 1, -1],
+                ],
+                vec![(
+                    vec![[1.1, -2.0, 1.3], [2.7, 2.1, -2.4], [0.2, 1.4, -0.6]],
+                    7.510_957_576_577_536e-7,
+                    1.0e-14,
+                )],
+                (7, 33),
+            ),
+            (
+                "thermal_eight",
+                vec![(0, 0), (0, 0)],
+                vec![vec![1, 0], vec![0, 1]],
+                vec![
+                    (
+                        vec![[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+                        9.978_988_858_570_828,
+                        1.0e-14,
+                    ),
+                    (
+                        vec![[1.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+                        1.143_176_604_199_321,
+                        1.0e-14,
+                    ),
+                ],
+                (0, 0),
+            ),
+            (
+                "thermal_bubble_chain",
+                vec![(0, 0), (0, 1), (1, 0), (1, 1)],
+                vec![vec![1, 0, 0], vec![0, 1, 0], vec![0, 1, 0], vec![0, 0, 1]],
+                vec![
+                    (
+                        vec![[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]],
+                        7.272_248_247_929_602_4,
+                        1.0e-14,
+                    ),
+                    (
+                        vec![[1.1, 0.2, 0.3], [0.4, 1.5, 0.6], [0.7, 0.8, 1.9]],
+                        3.140_465_809_410_901_4e-2,
+                        1.0e-14,
+                    ),
+                ],
+                (1, 0),
+            ),
+            (
+                "thermal_ring",
+                vec![(0, 1), (1, 0), (1, 2), (2, 3), (3, 2), (3, 0)],
+                vec![
+                    vec![1, 0, 0],
+                    vec![1, -1, 0],
+                    vec![0, 1, 0],
+                    vec![0, 0, 1],
+                    vec![0, -1, 1],
+                    vec![0, 1, 0],
+                ],
+                vec![
+                    (
+                        vec![[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]],
+                        8.524_796_385_080_671e1,
+                        // TODO: Investigate why the tolerance needs to be so loose
+                        3.0e-11,
+                    ),
+                    (
+                        vec![[1.1, 0.2, 0.3], [0.4, 1.5, 0.6], [0.7, 0.8, 1.9]],
+                        4.048_992_143_144_149e-3,
+                        1.0e-14,
+                    ),
+                ],
+                (6, 19),
+            ),
+            (
+                "thermal_bugblatter",
+                vec![
+                    (3, 0),
+                    (4, 3),
+                    (0, 1),
+                    (1, 4),
+                    (2, 5),
+                    (5, 4),
+                    (1, 2),
+                    (3, 5),
+                    (2, 0),
+                ],
+                vec![
+                    vec![1, 0, 0, 0],
+                    vec![0, 1, 0, 0],
+                    vec![0, 0, 1, 0],
+                    vec![0, 0, 0, 1],
+                    vec![1, 0, 0, -1],
+                    vec![0, 1, 0, -1],
+                    vec![0, 0, 1, -1],
+                    vec![-1, 1, 0, 0],
+                    vec![-1, 0, 1, 0],
+                ],
+                vec![
+                    (
+                        vec![
+                            [0.1, 0.2, 0.3],
+                            [0.5, 0.4, 0.6],
+                            [0.9, 0.8, 0.7],
+                            [1.1, 1.2, 1.3],
+                        ],
+                        1.308_467_742_357_907_9,
+                        // TODO: Investigate why the tolerance needs to be so loose
+                        1.0e-10,
+                    ),
+                    (
+                        vec![
+                            [1.1, 0.2, 0.3],
+                            [0.5, 1.4, 0.6],
+                            [0.9, 1.8, 0.7],
+                            [1.1, 2.2, 1.3],
+                        ],
+                        3.799_072_627_985_78e-4,
+                        // TODO: Investigate why the tolerance needs to be so loose
+                        1.0e-13,
+                    ),
+                ],
+                (22, 174),
+            ),
+        ] {
+            let bubble = name == "thermal_bubble";
+            let n_loops = signatures[0].len();
+            let n_nodes = edges
                 .iter()
-                .map(|numerator| {
-                    let product = |sign| {
-                        numerator
-                            .positive_energies
-                            .iter()
-                            .map(|edge| distribution(edge.0, sign))
-                            .chain(
+                .flat_map(|(tail, head)| [tail, head])
+                .max()
+                .unwrap()
+                + 1;
+            let parsed = ParsedGraph {
+                internal_edges: edges
+                    .into_iter()
+                    .zip(signatures)
+                    .enumerate()
+                    .map(
+                        |(edge_id, ((tail, head), loop_signature))| ParsedGraphInternalEdge {
+                            edge_id,
+                            tail,
+                            head,
+                            label: format!("q{edge_id}"),
+                            mass_key: None,
+                            signature: MomentumSignature {
+                                loop_signature,
+                                external_signature: if bubble {
+                                    vec![i32::from(edge_id == 1)]
+                                } else {
+                                    Vec::new()
+                                },
+                            },
+                            had_pow: false,
+                        },
+                    )
+                    .collect(),
+                external_edges: if bubble {
+                    vec![
+                        ParsedGraphExternalEdge {
+                            edge_id: 10_000_000,
+                            source: None,
+                            destination: Some(1),
+                            label: "p1".to_string(),
+                            external_coefficients: vec![1],
+                        },
+                        ParsedGraphExternalEdge {
+                            edge_id: 10_000_001,
+                            source: Some(0),
+                            destination: None,
+                            label: "-p1".to_string(),
+                            external_coefficients: vec![-1],
+                        },
+                    ]
+                } else {
+                    Vec::new()
+                },
+                initial_state_cut_edges: Vec::new(),
+                loop_names: (0..n_loops).map(|index| format!("k{index}")).collect(),
+                external_names: if bubble {
+                    vec!["p1".to_string()]
+                } else {
+                    Vec::new()
+                },
+                node_name_to_internal: (0..n_nodes)
+                    .map(|node| (format!("v{node}"), node))
+                    .collect(),
+            };
+            let generated = generate_3d_expression(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    medium_mode: MediumMode::ThermodynamicEquilibrium,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let expression = &generated.expression;
+            assert_eq!(
+                expression.orientations.len(),
+                1 << parsed.internal_edges.len(),
+                "{name}"
+            );
+            for (kind, expected) in [
+                (LinearSurfaceKind::Esurface, surface_counts.0),
+                (LinearSurfaceKind::Hsurface, surface_counts.1),
+            ] {
+                assert_eq!(
+                    expression
+                        .surfaces
+                        .linear_surface_cache
+                        .iter()
+                        .filter(|surface| surface.kind == kind)
+                        .count(),
+                    expected,
+                    "{name}: {kind:?} count",
+                );
+            }
+            for (point, (loop_spatial_momenta, reference, tolerance)) in
+                points.into_iter().enumerate()
+            {
+                let input = EvaluationInput {
+                    external_momenta: if bubble {
+                        vec![[1.0, 3.0, 4.0, 5.0]]
+                    } else {
+                        Vec::new()
+                    },
+                    loop_spatial_momenta,
+                    masses: vec![0.0; parsed.internal_edges.len()],
+                    uniform_scale: None,
+                };
+                let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
+                // The existing thermal scalar oracles use bosonic distributions at beta=1, mu=0.
+                // Evaluate those explicit test inputs without giving the model-free
+                // standalone evaluator an implicit choice of particle statistics.
+                let distribution = |edge: usize, sign: i32, derivative_order| {
+                    let coth = 1.0 / (evaluator.internal_energies[edge] / 2.0).tanh();
+                    match derivative_order {
+                        0 => (f64::from(sign) + coth) / 2.0,
+                        1 => (coth * coth - 1.0) / 4.0,
+                        2 => (coth * coth - 1.0) * coth / 4.0,
+                        _ => {
+                            panic!("{name}: unexpected distribution derivative {derivative_order}")
+                        }
+                    }
+                };
+                let mut result = 0.0;
+                for variant in expression
+                    .orientations
+                    .iter()
+                    .flat_map(|orientation| &orientation.variants)
+                {
+                    let thermal = variant
+                        .thermal_weight
+                        .numerators
+                        .iter()
+                        .map(|numerator| {
+                            let product = |sign| {
                                 numerator
-                                    .negative_energies
+                                    .positive_energies
                                     .iter()
-                                    .map(|edge| distribution(edge.0, -sign)),
-                            )
-                            .product::<f64>()
-                    };
-                    product(1) - product(-1)
-                })
-                .product::<f64>();
-            let energy_product = variant
-                .half_edges
-                .iter()
-                .map(|edge| 2.0 * evaluator.internal_energies[edge.0])
-                .product::<f64>();
-            result += rational_to_f64(&variant.prefactor)
-                * thermal
-                * evaluator.tree_sum(&variant.denominator).unwrap()
-                / energy_product;
+                                    .map(|edge| distribution(edge.0, sign, 0))
+                                    .chain(
+                                        numerator
+                                            .negative_energies
+                                            .iter()
+                                            .map(|edge| distribution(edge.0, -sign, 0)),
+                                    )
+                                    .product::<f64>()
+                            };
+                            product(1) - product(-1)
+                        })
+                        .chain(variant.thermal_weight.distributions.iter().map(|factor| {
+                            distribution(factor.edge_id.0, factor.sign, factor.derivative_order)
+                        }))
+                        .product::<f64>();
+                    let energy_product = variant
+                        .half_edges
+                        .iter()
+                        .map(|edge| 2.0 * evaluator.internal_energies[edge.0])
+                        .product::<f64>();
+                    result += rational_to_f64(&variant.prefactor)
+                        * thermal
+                        * evaluator.tree_sum(&variant.denominator).unwrap()
+                        / energy_product;
+                }
+                // These references include positive 1/(2E) factors, without the
+                // shared engine's contour sign or the physical i^L phase.
+                result *= generated.core_global_prefactor_sign.factor() as f64;
+                let difference = ((result - reference) / result).abs();
+                assert!(
+                    difference < tolerance,
+                    "{name}, point {point}: {result:e} != {reference:e} (difference {difference:e} is larger than relative tolerance {tolerance:e})",
+                );
+            }
         }
-        let reference = 9.236_597_515_492_299e-4_f64;
-        assert!(
-            ((result - reference) / result).abs() < 1.0e-15,
-            "{result:e} != {reference:e}"
-        );
     }
 }

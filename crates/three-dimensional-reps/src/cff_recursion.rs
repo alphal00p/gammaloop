@@ -712,6 +712,253 @@ mod thermal_tests {
     use super::*;
 
     #[test]
+    fn thermal_detachable_cycles_respect_attachment_vertices() {
+        for (name, edges, incoming, expected_cycles) in [
+            (
+                "one attachment among multiple candidate cycles",
+                vec![
+                    (0, 1),
+                    (1, 2),
+                    (2, 0), // Vertex 2 prevents detaching this cycle.
+                    (0, 3),
+                    (3, 0), // Only vertex 0 attaches this cycle to the remainder.
+                    (0, 4),
+                    (5, 6),
+                    (6, 5), // Both vertices have external attachments.
+                ],
+                vec![
+                    (0, EdgeType::External),
+                    (0, EdgeType::InitialStateCut),
+                    (2, EdgeType::InitialStateCut),
+                    (5, EdgeType::External),
+                    (6, EdgeType::External),
+                ],
+                vec![(0, Some(vec![8, 9])), (5, None)],
+            ),
+            (
+                "two attachment vertices",
+                vec![(0, 1), (1, 2), (2, 0), (0, 3)],
+                vec![(2, EdgeType::InitialStateCut)],
+                vec![(0, None)],
+            ),
+            (
+                "external attachments on one vertex",
+                vec![(0, 1), (1, 2), (2, 0)],
+                vec![(0, EdgeType::External), (0, EdgeType::InitialStateCut)],
+                vec![(0, Some(vec![2, 3, 4]))],
+            ),
+            (
+                "detachable cycle inside a larger directed component",
+                vec![(0, 1), (1, 2), (2, 0), (0, 3), (3, 0), (0, 4)],
+                vec![
+                    (0, EdgeType::External),
+                    (0, EdgeType::InitialStateCut),
+                    (2, EdgeType::InitialStateCut),
+                ],
+                vec![(0, Some(vec![6, 7]))],
+            ),
+            (
+                "branching internal edges",
+                vec![(0, 1), (1, 2), (2, 0), (0, 2), (2, 1)],
+                vec![],
+                vec![(0, None)],
+            ),
+        ] {
+            let vertex_count = edges.iter().flat_map(|&(a, b)| [a, b]).max().unwrap() + 1;
+            let mut vertices = (0..vertex_count)
+                .map(|node| CffVertex {
+                    nodes: BTreeSet::from([node]),
+                    incoming: Vec::new(),
+                    outgoing: Vec::new(),
+                })
+                .collect::<Vec<_>>();
+            // Keep nonvirtual edges first, preserving the original fixture edge IDs.
+            for (edge_id, &(node, edge_type)) in incoming.iter().enumerate() {
+                vertices[node].incoming.push(EdgeRef { edge_id, edge_type });
+            }
+            for (index, &(tail, head)) in edges.iter().enumerate() {
+                let edge = EdgeRef {
+                    edge_id: incoming.len() + index,
+                    edge_type: EdgeType::Virtual,
+                };
+                vertices[tail].outgoing.push(edge);
+                vertices[head].incoming.push(edge);
+            }
+            let graph = CffGenerationGraph::new(vertices);
+            for (start, expected) in expected_cycles {
+                let start = BTreeSet::from([start]);
+                assert_eq!(
+                    graph.detachable_cycle(
+                        &start,
+                        &start,
+                        &mut vec![start.clone()],
+                        &mut Vec::new(),
+                    ),
+                    expected,
+                    "{name}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn thermal_cycle_stripping_preserves_remaining_edges_and_vertices() {
+        for (name, edges, expected_factors, remaining_edges, remaining_nodes) in [
+            (
+                "self edge with attached tail",
+                vec![(0, 0), (0, 1)],
+                vec![(0, 0)],
+                vec![1],
+                vec![0, 1],
+            ),
+            (
+                "two-edge cycle with attached tail",
+                vec![(0, 1), (1, 0), (0, 2)],
+                vec![(0, 1)],
+                vec![2],
+                vec![0, 2],
+            ),
+            (
+                "repeated stripping reaches a fixed point",
+                vec![(0, 1), (1, 0), (2, 3), (3, 2), (0, 4)],
+                vec![(0, 1), (2, 1)],
+                vec![4],
+                vec![0, 4],
+            ),
+            (
+                "two attachments prevent stripping",
+                vec![(0, 1), (1, 0), (0, 2), (1, 3)],
+                vec![],
+                vec![0, 1, 2, 3],
+                vec![0, 1, 2, 3],
+            ),
+            (
+                "only isolated cycle vertices are removed",
+                vec![(0, 1), (1, 2), (2, 0), (0, 3)],
+                vec![(0, 2)],
+                vec![3],
+                vec![0, 3],
+            ),
+        ] {
+            let vertex_count = edges.iter().flat_map(|&(a, b)| [a, b]).max().unwrap() + 1;
+            let mut vertices = (0..vertex_count)
+                .map(|node| CffVertex {
+                    nodes: BTreeSet::from([node]),
+                    incoming: Vec::new(),
+                    outgoing: Vec::new(),
+                })
+                .collect::<Vec<_>>();
+            for (edge_id, &(tail, head)) in edges.iter().enumerate() {
+                let edge = EdgeRef {
+                    edge_id,
+                    edge_type: EdgeType::Virtual,
+                };
+                vertices[tail].outgoing.push(edge);
+                vertices[head].incoming.push(edge);
+            }
+            let mut graph = CffGenerationGraph::new(vertices);
+            let signs = vec![1; edges.len()];
+            assert_eq!(
+                graph.strip_thermal_distribution_factors(&signs),
+                expected_factors
+                    .into_iter()
+                    .map(|(edge, derivative_order)| ThermalDistributionFactor {
+                        edge_id: EdgeIndex(edge),
+                        sign: 1,
+                        derivative_order,
+                    })
+                    .collect::<Vec<_>>(),
+                "{name}",
+            );
+            assert_eq!(
+                graph
+                    .vertices
+                    .iter()
+                    .map(|vertex| vertex.nodes.clone())
+                    .collect::<Vec<_>>(),
+                remaining_nodes
+                    .iter()
+                    .map(|&node| BTreeSet::from([node]))
+                    .collect::<Vec<_>>(),
+                "{name}",
+            );
+            for vertex in &graph.vertices {
+                let node = *vertex.nodes.first().unwrap();
+                for (actual, incoming) in [(&vertex.incoming, true), (&vertex.outgoing, false)] {
+                    let expected = remaining_edges
+                        .iter()
+                        .filter(|&&edge| {
+                            if incoming {
+                                edges[edge].1 == node
+                            } else {
+                                edges[edge].0 == node
+                            }
+                        })
+                        .map(|&edge_id| EdgeRef {
+                            edge_id,
+                            edge_type: EdgeType::Virtual,
+                        })
+                        .collect::<Vec<_>>();
+                    assert_eq!(*actual, expected, "{name}");
+                }
+            }
+            let fixed_point = graph.clone();
+            assert!(
+                graph.strip_thermal_distribution_factors(&signs).is_empty(),
+                "{name}"
+            );
+            assert_eq!(graph, fixed_point, "{name}");
+        }
+    }
+
+    #[test]
+    fn thermal_reversed_self_edge_keeps_adjacency_after_contraction() {
+        let edge = |edge_id| EdgeRef {
+            edge_id,
+            edge_type: EdgeType::Virtual,
+        };
+        let graph = CffGenerationGraph::new(vec![
+            CffVertex {
+                nodes: BTreeSet::from([0]),
+                incoming: vec![edge(0)],
+                outgoing: vec![edge(0), edge(1)],
+            },
+            CffVertex {
+                nodes: BTreeSet::from([1]),
+                incoming: vec![edge(1)],
+                outgoing: vec![edge(2)],
+            },
+            CffVertex {
+                nodes: BTreeSet::from([2]),
+                incoming: vec![edge(2)],
+                outgoing: vec![],
+            },
+        ]);
+        // Vertex contraction removes every joining edge; the self edge and tail survive.
+        let mut graph = graph.contract_vertices(&BTreeSet::from([0]), &BTreeSet::from([1]));
+        let contracted = graph.clone();
+        graph.reverse_virtual_edge(0);
+        assert_eq!(graph, contracted);
+        let vertex = graph.vertex(&BTreeSet::from([0, 1]));
+        assert_eq!(vertex.incoming, vec![edge(0)]);
+        assert_eq!(vertex.outgoing, vec![edge(0), edge(2)]);
+        assert_eq!(
+            graph.strip_thermal_distribution_factors(&[-1, 1, 1]),
+            vec![ThermalDistributionFactor {
+                edge_id: EdgeIndex(0),
+                sign: -1,
+                derivative_order: 0,
+            }],
+        );
+        assert!(graph.vertex(&BTreeSet::from([0, 1])).incoming.is_empty());
+        assert_eq!(
+            graph.vertex(&BTreeSet::from([0, 1])).outgoing,
+            vec![edge(2)]
+        );
+        assert_eq!(graph.vertex(&BTreeSet::from([2])).incoming, vec![edge(2)]);
+    }
+
+    #[test]
     fn thermal_detachable_cycles_keep_distribution_derivatives() {
         let mut parsed = crate::graph_io::test_graphs::box_graph();
         parsed.external_edges.clear();
