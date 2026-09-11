@@ -72,6 +72,9 @@ least `run.toml`, `global_settings.toml`,
 `default_runtime_settings.toml`, and `processes/` in the state folder. `run.toml` records the
 commands and settings needed to replay the run; it is not merely a log file.
 
+Use #link("guides/dot-input/")[GammaLoop DOT input] to inspect a diagram interactively or
+render the exported drawing bundle with `just draw`.
+
 == Resume the saved state
 
 Load the saved state and ask the active session to display its processes:

@@ -7,6 +7,7 @@
 #import "content/tutorial.typ": tutorial
 #import "content/algorithms.typ": algorithms
 #import "content/playground.typ": playground
+#import "content/python-rendering.typ": python-rendering
 #import "content/clinnet.typ": clinnet
 #import "content/linnest.typ": linnest
 #import "content/api.typ": api
@@ -34,6 +35,7 @@
     #tutorial
     #algorithms
     #playground
+    #python-rendering
     #clinnet
     #linnest
     #api

@@ -104,6 +104,7 @@
         notebook.innerHTML = payload.body.replaceAll("__LINNET_WHEEL_URL__", wheel);
         notebook.querySelectorAll("marimo-code-editor").forEach((editor) => {
           editor.dataset.theme = JSON.stringify(root.dataset.theme === "dark" ? "dark" : "light");
+          if (container.dataset.linnetNotebook === "rendering_api") editor.dataset.maxHeight = "360";
         });
         container.append(notebook);
         if (!notebookRuntime) {

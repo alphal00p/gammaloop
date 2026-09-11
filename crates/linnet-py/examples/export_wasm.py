@@ -33,6 +33,8 @@ PUBLISHED_REQUIREMENT = '#     "linnet-py==0.1.0",'
 class Notebook:
     filename: str
     ready_value: str
+    docs_product: str
+    docs_route: str
 
     @property
     def source(self) -> Path:
@@ -50,9 +52,9 @@ class Notebook:
 
 
 NOTEBOOKS = (
-    Notebook("rendering_api.py", "generic"),
-    Notebook("physics_render_settings.py", "physics"),
-    Notebook("layout_stream.py", "stream"),
+    Notebook("rendering_api.py", "generic", "linnet", "guides/python-rendering/"),
+    Notebook("physics_render_settings.py", "physics", "gammaloop", "guides/dot-input/"),
+    Notebook("layout_stream.py", "stream", "linnet", "playground/"),
 )
 
 
@@ -155,7 +157,7 @@ def lint(staged: Sequence[tuple[Notebook, Path]]) -> None:
 
 
 def export(
-    staged: Sequence[tuple[Notebook, Path]], output: Path, *, docs: bool = False
+    staged: Sequence[tuple[Notebook, Path]], output: Path, *, docs: str | None = None
 ) -> tuple[tuple[Notebook, Path], ...]:
     output.mkdir(parents=True, exist_ok=True)
     artifacts = []
@@ -180,7 +182,9 @@ def export(
                 text.replace("    import ", "    linnet_browser_ready\n    import ", 1),
                 encoding="utf-8",
             )
-            generator = mo.MarimoIslandGenerator.from_file(str(source))
+            generator = mo.MarimoIslandGenerator.from_file(
+                str(source), display_code=notebook.ready_value == "generic"
+            )
             generator.add_code(
                 "import micropip as _micropip\n"
                 f"await _micropip.install({requirements!r}, reinstall=True)\n"
@@ -188,33 +192,44 @@ def export(
             )
             generators.append((notebook, generator))
 
-        # The live quickstart uses the canonical documented example verbatim,
-        # then renders the resulting graph. Keeping
-        # output in the editable cell also gives it Marimo's rerun control.
-        quickstart = (
-            EXAMPLES_DIR.parents[2]
-            / "docs/products/linnet/content/quickstart-python.typ"
-        )
-        match = re.search(
-            r"// docs-example: compile linnet-python-quickstart\s*```python\n(.*?)\n```",
-            quickstart.read_text(encoding="utf-8"),
-            re.DOTALL,
-        )
-        if match is None:
-            raise ValueError("The canonical Linnet Python quickstart was not found")
-        generator = mo.MarimoIslandGenerator()
-        generator.add_code(
-            "import micropip as _micropip\n"
-            "await _micropip.install('__LINNET_WHEEL_URL__')\n"
-            "linnet_browser_ready = True",
-        )
-        generator.add_code(
-            "linnet_browser_ready\n" + match.group(1) + "\n\n"
-            "import marimo as mo\n"
-            "mo.Html(graph.to_svg())",
-            display_code=True,
-        )
-        generators.append((Notebook("python_quickstart.py", "quickstart"), generator))
+        if docs == "linnet":
+            # The live quickstart uses the canonical documented example verbatim,
+            # then renders the resulting graph. Keeping
+            # output in the editable cell also gives it Marimo's rerun control.
+            quickstart = (
+                EXAMPLES_DIR.parents[2]
+                / "docs/products/linnet/content/quickstart-python.typ"
+            )
+            match = re.search(
+                r"// docs-example: compile linnet-python-quickstart\s*```python\n(.*?)\n```",
+                quickstart.read_text(encoding="utf-8"),
+                re.DOTALL,
+            )
+            if match is None:
+                raise ValueError("The canonical Linnet Python quickstart was not found")
+            generator = mo.MarimoIslandGenerator()
+            generator.add_code(
+                "import micropip as _micropip\n"
+                "await _micropip.install('__LINNET_WHEEL_URL__')\n"
+                "linnet_browser_ready = True",
+            )
+            generator.add_code(
+                "linnet_browser_ready\n" + match.group(1) + "\n\n"
+                "import marimo as mo\n"
+                "mo.Html(graph.to_svg())",
+                display_code=True,
+            )
+            generators.append(
+                (
+                    Notebook(
+                        "python_quickstart.py",
+                        "quickstart",
+                        "linnet",
+                        "quickstart/python/",
+                    ),
+                    generator,
+                )
+            )
         wheel = next((staged[0][1].parent / "wheels").glob("*.whl"))
         hosted_wheel = output / "public" / "wheels" / wheel.name
         hosted_wheel.parent.mkdir(parents=True, exist_ok=True)
@@ -372,13 +387,7 @@ def browser_smoke(
                     lambda error, errors=errors: errors.append(str(error)),
                 )
                 route = (
-                    (
-                        "quickstart/python/"
-                        if notebook.ready_value == "quickstart"
-                        else "playground/"
-                    )
-                    if docs
-                    else urllib.parse.quote(artifact.name)
+                    notebook.docs_route if docs else urllib.parse.quote(artifact.name)
                 )
                 url = urllib.parse.urljoin(base_url, route)
                 response = page.goto(
@@ -419,12 +428,13 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         required=True,
         help="Directory for the editable HTML-WASM notebooks",
     )
-    parser.add_argument(
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument(
         "--docs",
-        action="store_true",
-        help="Export live documentation cells into a built product's assets/notebooks directory (requires --wheel)",
+        choices=("linnet", "gammaloop"),
+        help="Export this product's live cells into its built assets/notebooks directory (requires --wheel)",
     )
-    parser.add_argument(
+    selection.add_argument(
         "--notebook",
         choices=[Path(notebook.filename).stem for notebook in NOTEBOOKS],
         help="Export one notebook (default: all)",
@@ -462,28 +472,21 @@ def main(arguments: Sequence[str] | None = None) -> int:
         raise ValueError("--timeout must be greater than zero")
     wheel = validate_wasm_wheel(options.wheel) if options.wheel else None
     output = options.output.expanduser().resolve()
-    if options.docs and (
-        wheel is None or options.notebook not in (None, "layout_stream")
-    ):
+    if options.docs and wheel is None:
+        raise ValueError("--docs requires --wheel")
+    if options.docs and (output.parent.name, output.name) != ("assets", "notebooks"):
         raise ValueError(
-            "--docs requires --wheel and exports the layout stream and Python quickstart"
+            "Build the product docs first and use --output <product-version>/assets/notebooks"
         )
-    if options.docs and (
-        (output.parent.name, output.name) != ("assets", "notebooks")
-        or (
-            options.browser_smoke
-            and not (output.parent.parent / "playground/index.html").is_file()
-        )
-    ):
-        raise ValueError(
-            "Build the Linnet docs first and use --output <product-version>/assets/notebooks"
-        )
-    selected = "layout_stream" if options.docs else options.notebook
-
     notebooks = tuple(
         notebook
         for notebook in NOTEBOOKS
-        if selected is None or Path(notebook.filename).stem == selected
+        if (
+            notebook.docs_product == options.docs
+            if options.docs
+            else options.notebook is None
+            or Path(notebook.filename).stem == options.notebook
+        )
     )
     with staged_notebooks(wheel, notebooks) as staged:
         lint(staged)
@@ -497,7 +500,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             artifacts,
             output,
             wheel,
-            docs=options.docs,
+            docs=bool(options.docs),
         )
         if options.browser_smoke:
             browser_smoke(
@@ -505,7 +508,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 artifacts,
                 options.timeout,
                 options.browser_executable,
-                docs=options.docs,
+                docs=bool(options.docs),
             )
 
     print(f"Marimo WASM notebooks exported to {output}")

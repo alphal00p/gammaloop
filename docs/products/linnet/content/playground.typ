@@ -40,6 +40,9 @@ measured labels, styles, and decorations.
 The #link("quickstart/python/")[Python quickstart] has an editable notebook containing its graph
 example. Edit the Python cell and use its play button to inspect the resulting graph.
 
+The #link("guides/python-rendering/")[Python rendering guide] provides a complete editable
+workflow with custom styles and arbitrary Python payloads.
+
 The #link("reference/python/")[Python reference] documents the full API. Its examples can depend
 on earlier definitions, local files, or rendering dependencies, so they are not all runnable
 as independent notebook cells yet.

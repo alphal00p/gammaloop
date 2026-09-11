@@ -342,11 +342,12 @@ docs-site PRODUCT="all" CHANNEL="latest" SNAPSHOT_TAG="" OUTPUT="target/alphal00
     just docs-check
     cargo run --locked -p alphal00p-docs-builder -- "${args[@]}"
 
-# Add executable cells to a previously built Linnet documentation version.
-docs-notebooks WHEEL OUTPUT="target/alphal00p-docs/products/linnet/latest/assets/notebooks":
+# Add executable cells to a product in a previously built documentation site.
+docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="target/alphal00p-docs":
     uv run --no-project --with marimo==0.24.0 python \
-        crates/linnet-py/examples/export_wasm.py --docs \
-        --wheel {{ quote(WHEEL) }} --output {{ quote(OUTPUT) }}
+        crates/linnet-py/examples/export_wasm.py --docs {{ quote(PRODUCT) }} \
+        --wheel {{ quote(WHEEL) }} \
+        --output {{ quote(OUTPUT + "/products/" + PRODUCT + "/latest/assets/notebooks") }}
 
 # Validate the five-product documentation registry and generated inputs.
 docs-check:

@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, product-link
+#import "../../shared.typ": callout, boundary, product-link, source-link
 
 #let dot-input = [
 = GammaLoop DOT input
@@ -6,6 +6,45 @@
 GammaLoop imports Feynman graphs from Graphviz `digraph` files. The generic DOT syntax and parser
 behavior are covered in Linnet's #product-link("linnet", page: "reference/rust/linnet/parser/index.html", label: "Linnet DOT parser reference");
 this page records GammaLoop's physics contract.
+
+== Explore a DOT diagram
+
+The notebook parses DOT with `linnet-py` and renders it through Linnest and Typst. It loads
+when it comes into view, downloading browser Python and its dependencies on the first visit.
+All subsequent Python execution and rendering happen in your browser.
+
+Edit the DOT, choose *Force* or *Stable layered*, or toggle the Feynman styling and annotations.
+The diagram updates after an edit; the force controls update when a slider is released. Below
+the drawing, inspect the generated Typst and a table of the parsed edges.
+
+The notebook supplies its own Python `DotCodec` and `RenderConfig`, including its `pᵢ`
+annotations. GammaLoop's exported `just draw` bundle uses its DOT-only Typst figure template and
+generated particle styles. The notebook does not select that template or validate particles and
+interactions against the active GammaLoop model.
+
+#context if target() == "html" {
+  html.elem("div", attrs: (
+    class: "live-notebook",
+    "data-linnet-notebook": "physics_render_settings",
+    "aria-label": "Physics DOT rendering notebook",
+  ))[
+    #html.elem("p", attrs: (class: "live-notebook-fallback"))[
+      This interactive notebook requires JavaScript and this documentation build's notebook
+      assets. The #source-link("crates/linnet-py/examples/physics_render_settings.py", label: "physics rendering notebook source")
+      is also available to run locally.
+    ]
+  ]
+} else {
+  [The online guide includes an interactive notebook. Open the
+  #source-link("crates/linnet-py/examples/physics_render_settings.py", label: "physics rendering notebook source")
+  to run the same example locally.]
+}
+
+Try changing an internal edge's `particle`: the notebook draws `a` as a photon wave, `g` as a
+gluon coil, `H` as a dashed scalar, and `t` as a fermion. Its codec translates grouped external
+coordinates such as `pin="x:@-left"` and `pin="x:@+right"` into typed placements. Turning off
+Feynman styling retains those placements while showing generic structural labels. Half-edge
+IDs work in either style; the momentum and `pᵢ` / `nᵢ` controls apply to its Feynman view.
 
 == Graph shape and half-edges
 
@@ -78,4 +117,9 @@ indices, factors, and loop-momentum basis entries during import/export. The curr
   A shared invisible node is deliberately compact. Put each external particle, numerator, and
   cut flag on its own connecting edge so those attributes do not get copied to every leg.
 ])
+
+For PDF figures, run `just draw` from the directory written by `save dot`. See
+#product-link("linnet", label: "Clinnet DOT rendering", page: "guides/clinnet/") for renderer
+configuration, or #product-link("linnet", label: "Rendering graphs from Python", page: "guides/python-rendering/")
+to build graphs with arbitrary Python data and custom drawing selectors.
 ]

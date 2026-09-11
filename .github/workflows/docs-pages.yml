@@ -357,12 +357,27 @@ jobs:
           if [ "$CHANNEL" = snapshot ]; then
             channel_path="snapshots/$SNAPSHOT_TAG"
           fi
-          nix develop --command \
-            uv run --no-project --with marimo==0.24.0 python \
-            crates/linnet-py/examples/export_wasm.py \
-            --docs \
-            --wheel "${wheels[0]}" \
-            --output "$staged_docs/products/linnet/$channel_path/assets/notebooks"
+          exporter_help=$(python3 crates/linnet-py/examples/export_wasm.py --help)
+          products=(linnet)
+          product_selection=false
+          if [[ "$exporter_help" == *"--docs {"* ]]; then
+            products+=(gammaloop)
+            product_selection=true
+          fi
+          for product in "${products[@]}"; do
+            # Manual snapshots use the exporter from the selected historical
+            # revision, including its original Linnet-only boolean --docs flag.
+            docs_args=(--docs)
+            if [ "$product_selection" = true ]; then
+              docs_args+=("$product")
+            fi
+            nix develop --command \
+              uv run --no-project --with marimo==0.24.0 python \
+              crates/linnet-py/examples/export_wasm.py \
+              "${docs_args[@]}" \
+              --wheel "${wheels[0]}" \
+              --output "$staged_docs/products/$product/$channel_path/assets/notebooks"
+          done
           echo "path=$staged_docs" >> "$GITHUB_OUTPUT"
 
       - name: Summarize documentation quality

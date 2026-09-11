@@ -79,8 +79,9 @@ DOT. `Graph` also exposes typed nodes, half-edges, subgraphs, cycles, oriented c
 traversal trees; use the #link("reference/python/")[Python reference] for the exact current
 surface.
 
-The #link("playground/")[live Python playground] also lets you edit DOT and tune the layout
-while watching the solver run.
+Continue with #link("guides/python-rendering/")[Rendering graphs from Python] to explore a
+complete graph with custom drawing selectors. The #link("playground/")[live Python playground]
+also lets you edit DOT and tune the layout while watching the solver run.
 
 Use the #link("quickstart/rust/")[Rust guide] when you need Linnet's complete crate API, or
 the #link("quickstart/typst/")[Typst guide] when the final result should be a drawing.

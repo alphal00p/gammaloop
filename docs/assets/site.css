@@ -1193,7 +1193,7 @@ button[data-copy-target] { display: none; }
 .live-notebook-cells { min-width: 0; }
 .reference-copy-row:has(+ .live-notebook[data-linnet-notebook="python_quickstart"][data-notebook-state="active"]) { display: none; }
 /* Keep Typst artwork on light paper without recoloring its drawing semantics. */
-.live-notebook[data-linnet-notebook="python_quickstart"] svg[width$="pt"] { display: block; max-width: 100%; height: auto; margin: 1rem auto; padding: .75rem; border-radius: .35rem; background: white; }
+:is(.live-notebook, :host) :is(svg[width$="pt"], img[src^="data:image/svg+xml;"]) { display: block; max-width: 100%; height: auto; margin: 1rem auto; padding: .75rem; border-radius: .35rem; background: white; }
 .live-notebook marimo-island { display: block; min-width: 0; margin-block: .8rem; }
 
 /* Marimo 0.24 copies this same-origin stylesheet into its widget shadow roots.

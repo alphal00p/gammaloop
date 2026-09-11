@@ -66,10 +66,13 @@ layout demo, and `--browser-executable /path/to/chromium` for a Nix browser.
 
 To add live cells to a built documentation site, run `nix develop --command just
 docs-site linnet`, then `nix develop --command just docs-notebooks /path/to/browser.whl`.
-This exports the DOT playground and the canonical Python quickstart as Marimo islands
-under the Linnet version's `assets/notebooks/` directory. The Pages workflow builds a
-wheel for the documented revision and includes these assets automatically. Each page
-loads its browser runtime automatically when the example approaches the viewport.
+This exports the rendering guide, DOT playground, and canonical Python quickstart as
+Marimo islands under the Linnet version's `assets/notebooks/` directory. Build the
+GammaLoop docs and pass `gammaloop` after the wheel path to include the physics notebook
+in its DOT input guide. The exporter accepts `--docs linnet` or `--docs gammaloop` for
+the same product selection. The Pages workflow builds one wheel for the documented
+revision and includes both products' notebook assets. Each example loads automatically
+as it approaches the viewport.
 
 The exported pages embed their Python source and open with editable code cells;
 browser edits do not modify the checked-in notebooks. The Linnet wheel is bundled;
