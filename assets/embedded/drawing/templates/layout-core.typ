@@ -30,8 +30,9 @@
 }
 
 // Match GammaLoop external-edge conventions with outward-facing particle
-// labels. Incoming order pairs the two sides of a cross section; the sewing
-// tag never becomes a momentum index. Matched legs share fixed Y coordinates
+// labels. Relative half-edge order follows amplitude kinematics; numeric cut
+// tags order and pair cross-section legs without becoming momentum-label indices.
+// Matched legs share fixed Y coordinates
 // across the left and right columns. Every dangling endpoint stays at raw
 // depth zero, independently of explicit XY placement or an unmatched cut tag.
 #let autogen-external-edge-fields(
@@ -43,7 +44,8 @@
 ) = {
   let left = ()
   let right = ()
-  for edge in graph.edges(g) {
+  let edges = graph.edges(g)
+  for edge in edges {
     let id = if match-field == none { edge.edge } else {
       _field(edge, match-field)
     }
@@ -51,6 +53,14 @@
       left.push(id)
     } else if id != none and edge.source != none and edge.sink == none {
       right.push(id)
+    }
+  }
+  if place {
+    if match-field == none {
+      left = left.sorted(key: id => edges.at(id).sink.hedge)
+      right = right.sorted(key: id => edges.at(id).source.hedge)
+    } else if match-field == "is_cut" {
+      left = left.map(value => int(value)).sorted()
     }
   }
   graph.map(g, edge: edge => {
@@ -72,6 +82,7 @@
     let id = if match-field == none { edge.edge } else {
       _field(edge, match-field)
     }
+    if place and match-field == "is_cut" and id != none { id = int(id) }
     let ids = if match-field != none or side == "left" { left } else { right }
     let rank = ids.position(value => value == id)
     if rank != none and place {

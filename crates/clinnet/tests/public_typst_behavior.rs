@@ -966,3 +966,51 @@ fn public_gammaloop_momentum_geometry_ignores_label_visibility() {
         }
     }
 }
+
+#[test]
+fn public_gammaloop_external_order_tracks_physical_indices() {
+    let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
+    let typst = configured_typst
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("typst"));
+    match Command::new(&typst).arg("--version").output() {
+        Ok(version) if version.status.success() => {}
+        result if configured_typst.is_some() => {
+            panic!("configured Typst executable failed: {result:?}")
+        }
+        _ => return,
+    }
+    let base = tempfile::tempdir().unwrap();
+    let renderer = TypstRenderer::new(base.path()).typst_executable(typst);
+    renderer.check_version().unwrap();
+    renderer.stage_default_assets().unwrap();
+    let templates = base.path().join(".clinnet/templates");
+    fs::create_dir_all(templates.join("impl")).unwrap();
+    for (name, source) in [
+        (
+            "gamma-physics-edge-style.typ",
+            include_str!("../../../assets/embedded/drawing/templates/physics-edge-style.typ"),
+        ),
+        (
+            "impl/physics-edge-style.typ",
+            include_str!("../../../assets/embedded/drawing/templates/impl/physics-edge-style.typ"),
+        ),
+        (
+            "gamma-layout-core.typ",
+            include_str!("../../../assets/embedded/drawing/templates/layout-core.typ"),
+        ),
+        (
+            "gamma-external-order-behavior.typ",
+            include_str!("resources/gamma-external-order-behavior.typ"),
+        ),
+    ] {
+        fs::write(templates.join(name), source).unwrap();
+    }
+    renderer
+        .compile_template(
+            templates.join("gamma-external-order-behavior.typ"),
+            base.path().join("gamma-external-order.pdf"),
+            &[],
+        )
+        .unwrap();
+}

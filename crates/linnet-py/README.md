@@ -51,7 +51,7 @@ Once an Emscripten wheel is available, export the notebooks as editable static
 WASM pages without changing their checked-in dependency metadata:
 
 ```console
-uv run --with marimo==0.24.0 \
+nix develop --command uv run --no-project --with marimo==0.24.0 \
   python crates/linnet-py/examples/export_wasm.py \
   --wheel dist/linnet_py-0.1.0-cp310-abi3-pyemscripten_2026_0_wasm32.whl \
   --output dist/linnet-wasm
@@ -63,6 +63,23 @@ Omit `--wheel` after publishing the browser wheel. Pass `--browser-smoke` in an
 environment with Playwright and Chromium to wait for a real SVG render from
 each Pyodide notebook. Use `--notebook layout_stream` to export just the live
 layout demo, and `--browser-executable /path/to/chromium` for a Nix browser.
+
+The physics notebook uses GammaLoop's actual `save dot` drawing bundle, including
+its generated Standard Model particle map and automatic external placement. The
+exporter builds this revision's `.#gammaloop` executable with Nix, or accepts
+`--gammaloop /path/to/gammaloop`, and writes `public/gammaloop-drawing.zip` beside
+the notebooks. Python passes the original DOT and controls to the bundled Typst
+figure template; it does not implement the physics styles or pinning. Layout
+sliders are collapsible, and custom force overrides are optional.
+
+For a native physics-notebook session, point to that exported archive:
+
+```console
+GAMMALOOP_DRAWING_BUNDLE="$PWD/dist/linnet-wasm/public/gammaloop-drawing.zip" \
+  nix develop --command uv run --no-project --with marimo==0.24.0 \
+  --with-editable crates/linnet-py \
+  marimo edit crates/linnet-py/examples/physics_render_settings.py
+```
 
 To add live cells to a built documentation site, run `nix develop --command just
 docs-site linnet`, then `nix develop --command just docs-notebooks /path/to/browser.whl`.

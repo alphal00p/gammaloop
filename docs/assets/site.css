@@ -1189,7 +1189,33 @@ button[data-copy-target] { display: none; }
   min-width: 0;
 }
 .live-notebook:is([data-notebook-state="loading"], [data-notebook-state="active"]) > .live-notebook-fallback { display: none; }
-.live-notebook > [role="status"] { padding-block: .75rem; color: var(--ink-muted); font-size: .85rem; }
+.live-notebook > [role="status"] {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin: 0;
+  padding: .65rem .8rem;
+  border: 1px solid var(--hairline);
+  border-radius: .35rem;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-size: .85rem;
+}
+.live-notebook > [role="status"]::before {
+  content: "";
+  flex: 0 0 .8rem;
+  height: .8rem;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+.live-notebook > [role="status"][data-state="busy"]::before {
+  border-right-color: transparent;
+  animation: notebook-spin .8s linear infinite;
+}
+@keyframes notebook-spin { to { transform: rotate(360deg); } }
 .live-notebook-cells { min-width: 0; }
 .reference-copy-row:has(+ .live-notebook[data-linnet-notebook="python_quickstart"][data-notebook-state="active"]) { display: none; }
 /* Keep Typst artwork on light paper without recoloring its drawing semantics. */

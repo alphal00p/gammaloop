@@ -1590,6 +1590,12 @@ boundary unchanged. Notebook assets live inside the selected product version and
 in immutable snapshot comparisons. Historical revisions without notebook support keep the
 original static bundle.
 
+The physics notebook export also runs the native GammaLoop CLI to import the bundled Standard
+Model and `save dot` into temporary staging. Its generated particle map and canonical drawing
+packages become `public/gammaloop-drawing.zip`. Browser Python passes edited DOT and controls to
+those Typst templates; model import runs only during export. This additional publication asset
+uses the existing GammaLoop package and does not change the documentation Cargo producer.
+
 Manual Pages dispatches with `publish=false` build and seed this cache
 without merging Pages history or configuring, uploading, or deploying
 GitHub Pages. A docs-only successor run can therefore validate cross-run

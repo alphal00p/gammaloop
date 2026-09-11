@@ -89,10 +89,26 @@
       container.dataset.notebookState = "loading";
       const status = document.createElement("p");
       status.setAttribute("role", "status");
-      status.textContent = "Loading interactive example…";
+      status.setAttribute("aria-atomic", "true");
+      status.dataset.state = "busy";
+      status.textContent = "Loading notebook and Python…";
       container.append(status);
       const notebook = document.createElement("div");
       notebook.className = "live-notebook-cells";
+      notebook.setAttribute("aria-busy", "true");
+      let started = false;
+      // Marimo 0.24 mirrors actual cell execution to each island's data-status.
+      // Initial idle cells precede Python startup, so wait for the first run.
+      const executionObserver = new MutationObserver(() => {
+        const busy = Boolean(notebook.querySelector('marimo-island:is([data-status="queued"], [data-status="running"])'));
+        started ||= busy;
+        if (!started) return;
+        status.dataset.state = busy ? "busy" : "ready";
+        const message = busy ? "Running notebook…" : "Ready";
+        if (status.textContent !== message) status.textContent = message;
+        notebook.setAttribute("aria-busy", String(busy));
+      });
+      executionObserver.observe(notebook, { subtree: true, attributes: true, attributeFilter: ["data-status"] });
       try {
         const url = new URL(`${docsRoot}assets/notebooks/${container.dataset.linnetNotebook}.json`, document.baseURI);
         const response = await fetch(url);
@@ -114,11 +130,12 @@
         }
         await notebookRuntime;
         container.dataset.notebookState = "active";
-        status.remove();
       } catch (error) {
+        executionObserver.disconnect();
         notebook.remove();
         notebookRuntime = undefined;
         container.dataset.notebookState = "error";
+        status.dataset.state = "error";
         status.textContent = `${error.message} Reload this page to retry.`;
       }
     }
