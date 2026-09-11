@@ -88,11 +88,12 @@ fn main() -> Result<()> {
 }
 ```
 
-Compile and run with GammaLoop's public Symbolica build selector:
+Compile and run with your Symbolica user license available through `SYMBOLICA_LICENSE`.
+Embedding the Rust API does not activate the GammaLoop CLI's OEM license:
 
 // docs-example: syntax
 ```sh
-SYMBOLICA_OEM_LICENSE=SYMBOLICA_OEM_GAMMALOOP cargo run
+cargo run
 ```
 
 #callout("The facade owns the supported embedding boundary", [

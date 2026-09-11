@@ -578,8 +578,8 @@ impl Topology {
                 )));
             }
         };
-        let solution = match solutions.as_slice() {
-            [solution] if !solution.is_underdetermined() => solution,
+        let solution = match solutions.iter().as_slice() {
+            [solution] if solution.free_variables().is_empty() => solution,
             _ => {
                 return Err(VakintError::InvalidIntegralFormat(format!(
                     "Could not solve the linear system to force the loop momentum basis: expected one fully determined solution, got {} branch(es)",

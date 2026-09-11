@@ -5,7 +5,59 @@ import builtins
 import decimal
 import enum
 import typing
-from symbolica.core import Condition, Expression, HeldExpression, PatternRestriction, Transformer
+from symbolica import ComplexFloat, Float
+from symbolica.community.idenso import ColorCasimirSettings, ColorSimplifySettings, CookSettings, GammaSimplifySettings, SchoonschipSettings
+from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction
+
+AUTO: _AutoIndex
+_: _AutoIndex
+@typing.final
+class BroadcastFunction:
+    r"""
+    A unary Symbolica function whose action is broadcast over tensor entries.
+    """
+    def __new__(cls, name: builtins.str, *, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[Transformer | typing.Callable[[Expression], Expression]] = None, print: typing.Optional[typing.Any] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | str | dict | list | bytes] = None) -> BroadcastFunction:
+        r"""
+        Register a Symbolica function for elementwise application to tensor entries.
+
+        The function is always tagged as a Spenso broadcast and cannot also be a tensor head.
+        """
+    @staticmethod
+    def conj() -> BroadcastFunction:
+        r"""
+        Return Spenso's registered complex-conjugation broadcast function.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def to_expression(self) -> Expression:
+        r"""
+        Return the registered function as a Symbolica variable expression.
+        """
+    def has_tag(self, tag: builtins.str) -> builtins.bool:
+        r"""
+        Whether the registered function carries `tag`.
+
+        Unqualified names also match tags registered in Symbolica's Python namespace.
+        """
+    def get_tags(self) -> builtins.list[builtins.str]:
+        r"""
+        Return the fully qualified tags attached to the registered function.
+        """
+    @typing.overload
+    def __call__(self, arg: Tensor | TensorNetwork) -> TensorNetwork:
+        r"""
+        Apply this unary function lazily to a concrete tensor or tensor network.
+        """
+    @typing.overload
+    def __call__(self, arg: TensorExpression) -> TensorExpression:
+        r"""
+        Apply this unary function elementwise, preserving a structured interface.
+        """
+    @typing.overload
+    def __call__(self, arg: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> Expression:
+        r"""
+        Apply this unary function to an ordinary scalar expression.
+        """
 
 @typing.final
 class CompiledTensorEvaluator:
@@ -59,255 +111,73 @@ class CompiledTensorEvaluator:
         """
 
 @typing.final
-class LibraryTensor:
+class DisplaySettings:
     r"""
-    A library tensor class optimized for use in tensor libraries and networks.
+    Presentation settings shared by Typst source, HTML, and SVG rendering.
+    """
+    @property
+    def tensor_layout(self) -> builtins.str: ...
+    @property
+    def show_dimensions(self) -> builtins.bool: ...
+    @property
+    def parentheses(self) -> builtins.bool: ...
+    @property
+    def commas(self) -> typing.Optional[builtins.bool]: ...
+    @property
+    def symbol_scripts(self) -> builtins.bool: ...
+    @property
+    def index_gap(self) -> builtins.str: ...
+    @property
+    def factor_gap(self) -> builtins.str: ...
+    def __new__(cls, tensor_layout: builtins.str = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em') -> DisplaySettings: ...
+    @staticmethod
+    def ports() -> DisplaySettings: ...
+    @staticmethod
+    def schoonschip() -> DisplaySettings: ...
+    @staticmethod
+    def call() -> DisplaySettings: ...
+    def __repr__(self) -> builtins.str: ...
 
-    Library tensors are similar to regular tensors but use explicit keys for efficient
-    lookup and storage in tensor libraries. They can be either dense or sparse and
-    store data as floats, complex numbers, or symbolic expressions.
+@typing.final
+class PortPattern(Expression):
+    r"""
+    A Symbolica expression representing one tensor port in a rewrite pattern.
 
-    LibraryTensors are designed for:
-    - Registration in TensorLibrary instances
-    - Use in tensor networks where structure reuse is important
-    - Efficient symbolic manipulation and pattern matching
+    Port patterns may name an exact representation or constrain a wildcard
+    representation head by its Spenso duality tags. Omitting `index` produces a
+    stripped representation, suitable for compact vector and trace patterns.
 
     Examples
     --------
-    >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation
-    >>> rep = Representation.euc(3)
-    >>> structure = TensorStructure(rep, rep, name="T")
-    >>> data = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
-    >>> tensor = LibraryTensor.dense(structure, data)
-    >>> sparse_tensor = LibraryTensor.sparse(structure, float)
+    >>> import symbolica as sp
+    >>> from symbolica.community.spenso import PortPattern, Representation
+    >>> D_, i_ = sp.S("D_", "i_")
+    >>> exact = PortPattern.exact(Representation.mink(4), i_)
+    >>> generic = PortPattern.self_dual("R_", D_, i_)
+    >>> stripped = PortPattern.dualizable("C_", D_)
     """
-    def structure(self) -> TensorStructure: ...
     @staticmethod
-    def sparse(structure: TensorStructure | builtins.list[Representation] | builtins.list[builtins.int], type_info: type) -> LibraryTensor:
+    def exact(rep: Representation, index: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> PortPattern:
         r"""
-        Create a new sparse empty library tensor with the given structure and data type.
-
-        Creates a sparse tensor that initially contains no non-zero elements.
-        Elements can be set individually using indexing operations.
-
-        Parameters
-        ----------
-        structure : TensorStructure, list of Representations, or list of int
-            The tensor structure defining shape and index properties
-        type_info : type
-            The data type - either `float` or `Expression` class
-
-        Returns
-        -------
-        LibraryTensor
-            A new sparse library tensor with all elements initially zero
-
-        Examples
-        --------
-        >>> import symbolica as sp
-        >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation
-        >>> rep = Representation.euc(3)
-        >>> structure = TensorStructure(rep, rep)
-        >>> sparse_float = LibraryTensor.sparse(structure, float)
-        >>> sparse_sym = LibraryTensor.sparse(structure, sp.Expression)
-        >>> sparse_float[0, 0] = 1.0
-        >>> sparse_float[1, 1] = 2.0
+        Match one exact representation, optionally carrying `index`.
         """
     @staticmethod
-    def dense(structure: TensorStructure | builtins.list[Representation] | builtins.list[builtins.int], data: typing.Sequence[Expression] | typing.Sequence[builtins.float] | typing.Sequence[builtins.complex]) -> LibraryTensor:
+    def any(name: builtins.str, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], index: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> PortPattern:
         r"""
-        Create a new dense library tensor with the given structure and data.
+        Match any Spenso representation head.
 
-        Dense tensors store all elements explicitly in row-major order. The structure
-        defines the tensor's shape and indexing properties.
-
-        Parameters
-        ----------
-        structure : TensorStructure, list of Representations, or list of int
-            The tensor structure defining shape and index properties
-        data : list of float, complex, or Expression
-            The tensor data in row-major order
-
-        Returns
-        -------
-        LibraryTensor
-            A new dense library tensor with the specified data
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation
-        >>> rep = Representation.euc(2)
-        >>> sigma = S("sigma")
-        >>> structure = TensorStructure(rep, rep, name=sigma)
-        >>> data = [0.0, 1.0, 1.0, 0.0]
-        >>> tensor = LibraryTensor.dense(structure, data)
-        >>> x, y = S("x", "y")
-        >>> sym_data = [x, y, -y, x]
-        >>> sym_tensor = LibraryTensor.dense(structure, sym_data)
+        `name` is the reusable Symbolica wildcard name and must end in one
+        underscore, for example `"R_"`.
         """
     @staticmethod
-    def one() -> LibraryTensor:
+    def self_dual(name: builtins.str, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], index: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> PortPattern:
         r"""
-        Create a scalar library tensor with value 1.0.
-
-        Returns
-        -------
-        LibraryTensor
-            A scalar library tensor containing the value 1.0
-
-        Examples
-        --------
-        >>> from symbolica.community.spenso import LibraryTensor
-        >>> one = LibraryTensor.one()
+        Match a self-dual representation head.
         """
     @staticmethod
-    def zero() -> LibraryTensor:
+    def dualizable(name: builtins.str, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], index: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, *, dual: builtins.bool = False) -> PortPattern:
         r"""
-        Create a scalar library tensor with value 0.0.
-
-        Returns
-        -------
-        LibraryTensor
-            A scalar library tensor containing the value 0.0
-
-        Examples
-        --------
-        >>> from symbolica.community.spenso import LibraryTensor
-        >>> zero = LibraryTensor.zero()
-        """
-    def to_dense(self) -> None:
-        r"""
-        Convert this library tensor to dense storage format.
-
-        Converts sparse tensors to dense format in-place. Dense tensors are unchanged.
-        This allocates memory for all tensor elements.
-
-        # Examples:
-        ```python
-        from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation
-
-        rep = Representation.cof(2)
-        structure = TensorStructure([rep, rep])
-        tensor = LibraryTensor.sparse(structure, float)
-        tensor[0, 0] = 1.0
-        tensor.to_dense()  # Now stores all 4 elements explicitly
-        ```
-        """
-    def to_sparse(self) -> None:
-        r"""
-        Convert this library tensor to sparse storage format.
-
-        Converts dense tensors to sparse format in-place, only storing non-zero elements.
-        This can save memory for tensors with many zero elements.
-
-        # Examples:
-        ```python
-        from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation
-
-        rep = Representation.euc(2)
-        structure = TensorStructure(rep, rep)
-        data = [1.0, 0.0, 0.0, 2.0]
-        tensor = LibraryTensor.dense(structure, data)
-        tensor.to_sparse()  # Now only stores 2 non-zero elements
-        ```
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def __len__(self) -> builtins.int: ...
-    @typing.overload
-    def __getitem__(self, item: builtins.slice | builtins.int | builtins.list[builtins.int]) -> typing.Any: ...
-    @typing.overload
-    def __getitem__(self, item: builtins.slice) -> builtins.list[Expression | builtins.complex | float]:
-        r"""
-        Get library tensor elements at the specified range of indices.
-
-        Parameters
-        ----------
-        item : slice
-            Slice object defining the range of indices
-
-        Returns
-        -------
-        list of float, complex, or Expression
-            The tensor elements at the specified range
-        """
-    @typing.overload
-    def __getitem__(self, item: typing.Sequence[builtins.int] | builtins.int) -> Expression | builtins.complex | float:
-        r"""
-        Get library tensor element at the specified index or indices.
-
-        Parameters
-        ----------
-        item : int or list of int
-            Index specification (int for flat index, list of int for coordinates)
-
-        Returns
-        -------
-        float, complex, or Expression
-            The tensor element at the specified index
-        """
-    @typing.overload
-    def __setitem__(self, item: typing.Any, value: typing.Any) -> None:
-        r"""
-        Set library tensor element(s) at the specified index or indices.
-
-        Parameters
-        ----------
-        item : int or list of int
-            Index specification (int for flat index, list of int for coordinates)
-        value : float, complex, or Expression
-            The value to set
-
-        Examples
-        --------
-        >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation
-        >>> rep = Representation.euc(2)
-        >>> structure = TensorStructure(rep, rep)
-        >>> tensor = LibraryTensor.sparse(structure, float)
-        >>> tensor[0] = 1.0
-        >>> tensor[1, 1] = 2.0
-        """
-    @typing.overload
-    def __setitem__(self, item: typing.Sequence[builtins.int] | builtins.int, value: Expression | builtins.complex | float) -> None:
-        r"""
-        Set library tensor element(s) at the specified index or indices.
-
-        Parameters
-        ----------
-        item : int or list of int
-            Index specification (int for flat index, list of int for coordinates)
-        value : float, complex, or Expression
-            The value to set
-
-        Examples
-        --------
-        >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation
-        >>> rep = Representation.euc(2)
-        >>> structure = TensorStructure(rep, rep)
-        >>> tensor = LibraryTensor.sparse(structure, float)
-        >>> tensor[0] = 1.0
-        >>> tensor[1, 1] = 2.0
-        """
-    def scalar(self) -> Expression:
-        r"""
-        Extract the scalar value from a rank-0 (scalar) library tensor.
-
-        Returns
-        -------
-        Expression
-            The scalar expression contained in this tensor
-
-        Raises
-        ------
-        RuntimeError
-            If the tensor is not a scalar
-
-        Examples
-        --------
-        >>> from symbolica.community.spenso import LibraryTensor
-        >>> scalar_tensor = LibraryTensor.one()
-        >>> value = scalar_tensor.scalar()
+        Match a dualizable representation in its base or dual orientation.
         """
 
 @typing.final
@@ -352,6 +222,12 @@ class Representation:
     metric = euclidean.g('mu', 'nu')       # g_μν
     ```
     """
+    @property
+    def dimension(self) -> Expression:
+        r"""
+        Return the dimension carried by this representation.
+        """
+    def __eq__(self, other: builtins.object) -> builtins.bool: ...
     @typing.overload
     def __call__(self, aind: builtins.int | Expression | str) -> Slot:
         r"""
@@ -423,8 +299,25 @@ class Representation:
         general = Representation("General", n, is_self_dual=True)
         ```
         """
-    def dual(self) -> Representation: ...
-    def g(self, i: builtins.int | Expression | str, j: builtins.int | Expression | str) -> TensorIndices:
+    def dual(self) -> Representation:
+        r"""
+        Return the representation paired with this one under index contraction.
+        """
+    def casimir(self, degree: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] = 2) -> Expression:
+        r"""
+        Build the degree-k Casimir eigenvalue for this representation.
+        """
+    def dynkin_index(self, degree: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] = 2) -> Expression:
+        r"""
+        Build the degree-k Dynkin index for this representation.
+        """
+    def gram(self, degree: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], other: typing.Optional[Representation] = None) -> Expression:
+        r"""
+        Build a degree-k Gram invariant with another representation.
+
+        If `other` is omitted, both sides use this representation.
+        """
+    def g(self, i: builtins.int | Expression | str, j: builtins.int | Expression | str) -> TensorExpression:
         r"""
         Create a metric tensor for this representation.
 
@@ -438,7 +331,7 @@ class Representation:
         metric = rep.g('mu', 'nu')  # Minkowski metric g_μν
         ```
         """
-    def flat(self, i: builtins.int | Expression | str, j: builtins.int | Expression | str) -> TensorIndices:
+    def flat(self, i: builtins.int | Expression | str, j: builtins.int | Expression | str) -> TensorExpression:
         r"""
         Create a musical isomorphism tensor for this representation.
 
@@ -452,7 +345,7 @@ class Representation:
         flat = rep.flat('mu', 'nu')  # Flat isomorphism ♭_μν
         ```
         """
-    def id(self, i: builtins.int | Expression | str, j: builtins.int | Expression | str) -> TensorIndices:
+    def id(self, i: builtins.int | Expression | str, j: builtins.int | Expression | str) -> TensorExpression:
         r"""
         Create an identity tensor for this representation.
 
@@ -545,13 +438,17 @@ class Slot:
     custom_slot = Slot("MyRep", 4, 'alpha', dual=False)
 
     # Use in tensor structures
-    from symbolica.community.spenso import TensorIndices
-    tensor_structure = TensorIndices(slot1, slot2)
+    from symbolica.community.spenso import TensorName
+    tensor_expression = TensorName("T")(slot1, slot2)
     ```
     """
+    def __eq__(self, other: builtins.object) -> builtins.bool: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dual(self) -> Slot: ...
+    def dual(self) -> Slot:
+        r"""
+        Return this slot with its representation replaced by the dual representation.
+        """
     def __new__(cls, name: builtins.str, dimension: builtins.int, aind: builtins.int | Expression | str, dual: builtins.bool = False) -> Slot:
         r"""
         Create a new slot with a custom representation and index.
@@ -600,22 +497,30 @@ class Tensor:
 
     Examples
     --------
-    >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation
-    >>> structure = TensorIndices(Representation.euc(4)(1))
+    >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    >>> rep = Representation.euc(4)
+    >>> structure = TensorName.vector("v")(rep("mu"))
     >>> data = [1.0, 2.0, 3.0, 4.0]
     >>> tensor = Tensor.dense(structure, data)
     >>> sparse_tensor = Tensor.sparse(structure, float)
     """
-    def structure(self) -> TensorIndices: ...
+    def structure(self) -> TensorExpression:
+        r"""
+        Return the exact structured expression describing this tensor's data.
+        """
+    def with_name(self, name: TensorName | builtins.str | Expression | TensorExpression) -> Tensor:
+        r"""
+        Return a copy with a new data identity while preserving its expression and interface.
+        """
     @staticmethod
-    def sparse(structure: TensorIndices | builtins.list[Slot], type_info: type) -> Tensor:
+    def sparse(structure: TensorExpression, type_info: type) -> Tensor:
         r"""
         Create a new sparse empty tensor with the given structure and data type.
 
         Parameters
         ----------
-        structure : TensorIndices or list of Slots
-            The tensor structure defining shape and index properties
+        structure : TensorExpression
+            A named expression with unresolved, explicit, or mixed interface ports
         type_info : type
             The data type - either `float` or `Expression` class
 
@@ -626,22 +531,27 @@ class Tensor:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R
-        >>> structure = TensorIndices(R.euc(3)(1), R.euc(3)(2))
+        >>> import symbolica
+        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> rep = Representation.euc(3)
+        >>> structure = TensorName("T")(rep, rep)
         >>> sparse_float = Tensor.sparse(structure, float)
         >>> sparse_sym = Tensor.sparse(structure, symbolica.Expression)
         """
     @staticmethod
-    def dense(structure: TensorIndices | builtins.list[Slot], data: typing.Sequence[Expression] | typing.Sequence[builtins.float] | typing.Sequence[builtins.complex]) -> Tensor:
+    def dense(structure: TensorExpression, data: typing.Sequence[Expression] | typing.Sequence[builtins.float] | typing.Sequence[builtins.complex]) -> Tensor:
         r"""
         Create a new dense tensor with the given structure and data.
 
         Parameters
         ----------
-        structure : TensorIndices or list of Slots
-            The tensor structure defining shape and index properties
+        structure : TensorExpression
+            A named expression with unresolved, explicit, or mixed interface ports
         data : list of float, complex, or Expression
-            The tensor data in row-major order
+            Tensor values in logical row-major order: the last interface axis varies
+            fastest, regardless of the canonical order used by internal storage.
+            Representation-axis movement occurs only at this input boundary; later
+            index-only storage permutations do not change the public layout.
 
         Returns
         -------
@@ -651,43 +561,14 @@ class Tensor:
         Examples
         --------
         >>> from symbolica import S
-        >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R
-        >>> structure = TensorIndices(R.euc(2)(1), R.euc(2)(2))
+        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> rep = Representation.euc(2)
+        >>> structure = TensorName("T")(rep("mu"), rep("nu"))
         >>> data = [1.0, 2.0, 3.0, 4.0]
         >>> tensor = Tensor.dense(structure, data)
         >>> x, y = S("x", "y")
         >>> sym_data = [x, y, x * y, x + y]
         >>> sym_tensor = Tensor.dense(structure, sym_data)
-        """
-    @staticmethod
-    def one() -> Tensor:
-        r"""
-        Create a scalar tensor with value 1.0.
-
-        Returns
-        -------
-        Tensor
-            A scalar tensor containing the value 1.0
-
-        Examples
-        --------
-        >>> from symbolica.community.spenso import Tensor
-        >>> one = Tensor.one()
-        """
-    @staticmethod
-    def zero() -> Tensor:
-        r"""
-        Create a scalar tensor with value 0.0.
-
-        Returns
-        -------
-        Tensor
-            A scalar tensor containing the value 0.0
-
-        Examples
-        --------
-        >>> from symbolica.community.spenso import Tensor
-        >>> zero = Tensor.zero()
         """
     def to_dense(self) -> None:
         r"""
@@ -700,8 +581,9 @@ class Tensor:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R
-        >>> structure = TensorIndices(R.euc(4)(2))
+        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> rep = Representation.euc(4)
+        >>> structure = TensorName.vector("v")(rep("mu"))
         >>> tensor = Tensor.sparse(structure, float)
         >>> tensor[0] = 1.0
         >>> tensor.to_dense()
@@ -717,21 +599,63 @@ class Tensor:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R
-        >>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1))
+        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> rep = Representation.euc(2)
+        >>> structure = TensorName("T")(rep("mu"), rep("nu"))
         >>> data = [1.0, 0.0, 0.0, 2.0]
         >>> tensor = Tensor.dense(structure, data)
         >>> tensor.to_sparse()
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def format_tensor(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+        r"""
+        Format this concrete tensor using compact Spenso notation.
+
+        Values are read in logical interface order without transposing or densifying
+        the stored tensor. Large results show a bounded edge preview.
+        """
+    def to_typst(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+        r"""
+        Format this concrete tensor as Typst math source.
+
+        Values are read in logical interface order without transposing or densifying
+        the stored tensor. Large results show a bounded edge preview.
+        """
+    def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
+        r"""
+        Build Symbolica's rich display wrapper for this concrete tensor.
+
+        Its text, HTML, and LaTeX representations all use logical interface order.
+        """
+    def to_html(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
+        r"""
+        Compile this concrete tensor to semantic HTML with the optional Typst renderer.
+        """
+    def to_svg(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
+        r"""
+        Compile this concrete tensor to SVG with the optional Typst renderer.
+        """
+    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_latex_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None: ...
     def __len__(self) -> builtins.int: ...
     @typing.overload
-    def __getitem__(self, item: builtins.slice | builtins.int | builtins.list[builtins.int]) -> typing.Any: ...
+    def __getitem__(self, item: builtins.slice | builtins.int | builtins.list[builtins.int]) -> typing.Any:
+        r"""
+        Return tensor data in logical interface order.
+
+        An integer is a flat logical row-major position. A list supplies one coordinate
+        per slot in `structure().interface`; slices likewise traverse flat logical order.
+        Canonical storage-axis order is never exposed through this API.
+        """
     @typing.overload
     def __getitem__(self, item: builtins.slice) -> builtins.list[Expression | builtins.complex | float]:
         r"""
         Get tensor elements at the specified range of indices.
+
+        Slices traverse the flat logical row-major order shown by `Tensor.structure().interface`;
+        canonical storage-axis order is not exposed.
 
         Parameters
         ----------
@@ -747,6 +671,9 @@ class Tensor:
     def __getitem__(self, item: typing.Sequence[builtins.int] | builtins.int) -> Expression | builtins.complex | float:
         r"""
         Get tensor element at the specified index or indices.
+
+        Integers are flat logical row-major positions. Coordinate lists follow
+        `Tensor.structure().interface`; canonical storage-axis order is not exposed.
 
         Parameters
         ----------
@@ -766,14 +693,17 @@ class Tensor:
         Parameters
         ----------
         item : int or list of int
-            Index specification (int for flat index, list of int for coordinates)
+            Logical index specification (int for flat row-major position, list of int
+            for coordinates following `structure().interface`)
         value : float, complex, or Expression
-            The value to set
+            The value to set. Its coefficient kind must match the tensor: `float` for
+            real storage, `complex` for complex storage, or `Expression` for parametric storage.
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R
-        >>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1))
+        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> rep = Representation.euc(2)
+        >>> structure = TensorName("T")(rep("mu"), rep("nu"))
         >>> tensor = Tensor.sparse(structure, float)
         >>> tensor[0] = 4.0
         >>> tensor[1, 1] = 1.0
@@ -783,18 +713,22 @@ class Tensor:
         r"""
         Set tensor element at the specified index.
 
+        Integers are flat logical row-major positions. Coordinate lists follow
+        `Tensor.structure().interface`; canonical storage-axis order is not exposed.
+
         Parameters
         ----------
         item : int or list of int
             Index specification (int for flat index, list of int for coordinates)
         value : float, complex, or Expression
-            The value to set
+            The value to set. Use float for real storage, complex for complex storage,
+            or Expression for parametric storage.
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation
+        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
         >>> rep = Representation.euc(2)
-        >>> structure = TensorIndices(rep(1), rep(2))
+        >>> structure = TensorName("T")(rep("mu"), rep("nu"))
         >>> tensor = Tensor.sparse(structure, float)
         >>> tensor[0] = 1.0
         >>> tensor[1, 1] = 2.0
@@ -831,9 +765,10 @@ class Tensor:
         Examples
         --------
         >>> from symbolica import S
-        >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R
+        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
         >>> x, y = S("x", "y")
-        >>> structure = TensorIndices(R.euc(2)(1))
+        >>> rep = Representation.euc(2)
+        >>> structure = TensorName.vector("v")(rep("mu"))
         >>> tensor = Tensor.dense(structure, [x * y, x + y])
         >>> evaluator = tensor.evaluator(constants={}, funs={}, params=[x, y], iterations=50)
         >>> results = evaluator.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])
@@ -854,9 +789,49 @@ class Tensor:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Tensor
-        >>> scalar_tensor = Tensor.one()
+        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> rep = Representation.euc(2)
+        >>> p = TensorName.vector("p")
+        >>> structure = (p(rep("mu")) * p(rep("mu"))).with_name(TensorName("p2"))
+        >>> scalar_tensor = Tensor.dense(structure, [1.0])
         >>> value = scalar_tensor.scalar()
+        """
+    def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:
+        r"""
+        Reference this tensor with new abstract indices and return a lazy network.
+        """
+    def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:
+        r"""
+        Reference this tensor with new abstract indices and return a lazy network.
+        """
+    def __neg__(self) -> TensorNetwork: ...
+    def __add__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __radd__(self, lhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __sub__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __rsub__(self, lhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __mul__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __rmul__(self, lhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __truediv__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __rtruediv__(self, lhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def outer(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+        r"""
+        Form a lazy outer product without contracting compatible ports.
+        """
+    def contract(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
+        r"""
+        Contract one selected pair of ordered interface positions.
+        """
+    def compose(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
+        r"""
+        Compose two selected `(input, output)` matrix channels.
+        """
+    def dot(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+        r"""
+        Contract two rank-one operands into the canonical dot form.
+        """
+    def trace(self, *, channel: typing.Optional[tuple[builtins.int, builtins.int]] = None) -> TensorNetwork:
+        r"""
+        Close `channel`, or the unique matrix channel when it is omitted.
         """
     def __iter__(self) -> typing.Iterator[typing.Any]:
         r"""
@@ -952,182 +927,451 @@ class TensorEvaluator:
         """
 
 @typing.final
-class TensorIndices:
+class TensorExpression(Expression):
     r"""
-    A tensor structure with abstract indices for symbolic tensor operations.
+    A Symbolica expression with an ordered external tensor interface.
 
-    TensorIndices represents the index structure of tensors with named abstract indices
-    that can be contracted, manipulated symbolically, and converted to expressions.
-    It maintains both the representation structure and index assignments.
+    Predefined tensors are constructed by typed factories and indexed afterward
+    in logical interface order. Dimensions are representation metadata, not
+    scalar tensor arguments.
 
     Examples
     --------
-    >>> from symbolica.community.spenso import TensorIndices, Representation, TensorName
-    >>> rep = Representation.euc(3)
-    >>> mu = rep('mu')
-    >>> nu = rep('nu')
-    >>> indices = TensorIndices(mu, nu)
-    >>> T = TensorName("T")
-    >>> named_indices = T(mu, nu)
-    >>> expr = named_indices.to_expression()
+    >>> from symbolica.community.spenso import Representation, TensorExpression
+    >>> mink = Representation.mink(4)
+    >>> metric = TensorExpression.g(mink)("mu", "nu")
+    >>> flat = TensorExpression.flat(mink)("mu", "nu")
+    >>> gamma = TensorExpression.gamma(4)("i", "j", "mu")
+    >>> gamma5 = TensorExpression.gamma5(4)("i", "j")
+    >>> projm = TensorExpression.projm(4)("i", "j")
+    >>> projp = TensorExpression.projp(4)("i", "j")
+    >>> sigma = TensorExpression.sigma(4)("mu", "nu", "i", "j")
+    >>> structure_constant = TensorExpression.f(8)("a", "b", "c")
+    >>> generator = TensorExpression.t(8, 3)("a", "i", "j")
     """
-    def set_name(self, name: TensorName | builtins.str | Expression) -> None:
+    @property
+    def rank(self) -> builtins.int:
         r"""
-        Set the tensor name for this structure.
-
-        Parameters
-        ----------
-        name : TensorName
-            The tensor name to assign
-
-        Examples
-        --------
-        >>> from symbolica.community.spenso import TensorIndices, TensorName, Representation
-        >>> rep = Representation.euc(3)
-        >>> structure = TensorIndices(rep('mu'), rep('nu'))
-        >>> T = TensorName("T")
-        >>> structure.set_name(T)
+        Number of external tensor ports in the ordered interface.
         """
-    def get_name(self) -> typing.Optional[TensorName]:
+    @property
+    def is_scalar(self) -> builtins.bool:
         r"""
-        Get the tensor name of this structure.
+        Whether the expression has no external tensor ports.
+        """
+    @property
+    def interface(self) -> tuple:
+        r"""
+        Ordered external interface as concrete `Slot` objects or unresolved `Representation`s.
+        """
+    @property
+    def name(self) -> typing.Optional[TensorName]:
+        r"""
+        The optional identity used when this expression describes stored data.
+        """
+    @staticmethod
+    def g(rep: Representation) -> TensorExpression:
+        r"""
+        Create an unresolved metric tensor for `rep`.
 
-        Returns
-        -------
-        TensorName or None
-            The tensor name if set, None otherwise
+        Call the result with two indices to fill its ports in logical order.
+        """
+    @staticmethod
+    def flat(rep: Representation) -> TensorExpression:
+        r"""
+        Create an unresolved musical-isomorphism tensor for `rep`.
+
+        Call the result with two indices to fill its ports in logical order.
+        """
+    @staticmethod
+    def gamma(minkowski_dimension: builtins.int | Expression | str) -> TensorExpression:
+        r"""
+        Create an unresolved gamma matrix with Minkowski dimension
+        `minkowski_dimension`.
+
+        Its public ports use storage order: bispinor, bispinor, then Minkowski.
+        The bispinor dimension is four. Call the result with `(i, j, mu)` to
+        index it.
+        """
+    @staticmethod
+    def gamma5(spinor_dimension: builtins.int | Expression | str) -> TensorExpression:
+        r"""
+        Create an unresolved gamma-five matrix with two bispinor ports of
+        `spinor_dimension`; call the result with `(i, j)`.
+        """
+    @staticmethod
+    def projm(spinor_dimension: builtins.int | Expression | str) -> TensorExpression:
+        r"""
+        Create an unresolved left-chiral projector with two bispinor ports of
+        `spinor_dimension`; call the result with `(i, j)`.
+        """
+    @staticmethod
+    def projp(spinor_dimension: builtins.int | Expression | str) -> TensorExpression:
+        r"""
+        Create an unresolved right-chiral projector with two bispinor ports of
+        `spinor_dimension`; call the result with `(i, j)`.
+        """
+    @staticmethod
+    def sigma(minkowski_dimension: builtins.int | Expression | str) -> TensorExpression:
+        r"""
+        Create an unresolved sigma matrix with Minkowski dimension
+        `minkowski_dimension`.
+
+        Its logical ports are two Minkowski ports followed by two four-dimensional
+        bispinor ports. Call the result with `(mu, nu, i, j)` to index it.
+        """
+    @staticmethod
+    def f(adjoint_dimension: builtins.int | Expression | str) -> TensorExpression:
+        r"""
+        Create an unresolved color structure constant.
+
+        All three logical ports are adjoint representations of
+        `adjoint_dimension`; call the result with `(a, b, c)`.
+        """
+    @staticmethod
+    def t(adjoint_dimension: builtins.int | Expression | str, fundamental_dimension: builtins.int | Expression | str) -> TensorExpression:
+        r"""
+        Create an unresolved color generator.
+
+        The logical ports are adjoint, fundamental, and antifundamental. Dimensions
+        belong to those representations and are not tensor key arguments.
 
         Examples
         --------
-        >>> name = structure.get_name()
+        >>> from symbolica.community.spenso import TensorExpression
+        >>> generator = TensorExpression.t(8, 3)
+        >>> indexed = generator("a", "i", "j")
+        """
+    def with_name(self, name: TensorName | builtins.str | Expression | TensorExpression) -> TensorExpression:
+        r"""
+        Return a named descriptor without changing the underlying expression.
+        """
+    def __len__(self) -> builtins.int: ...
+    def to_expression(self) -> Expression:
+        r"""
+        Drop the structured interface and return an ordinary Symbolica `Expression`.
+        """
+    def reinfer(self) -> TensorExpression:
+        r"""
+        Re-parse the underlying symbolic expression and rebuild its ordered tensor interface.
+        """
+    def expand(self, var: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, via_poly: typing.Optional[builtins.bool] = None) -> TensorExpression:
+        r"""
+        Expand scalar algebra while preserving and validating the tensor interface.
+        """
+    def simplify_gamma(self, settings: typing.Optional[GammaSimplifySettings] = None) -> TensorExpression:
+        r"""
+        Apply Idenso's gamma-algebra simplifier and re-infer the tensor interface.
+        """
+    def collect_gamma_chains(self) -> TensorExpression:
+        r"""
+        Convert bispinor tensors into chain/trace shorthands and join adjacent gamma chains.
+        """
+    def simplify_gamma0(self) -> TensorExpression:
+        r"""
+        Simplify products and linear combinations involving the time-like gamma matrix `gamma0`.
+        """
+    def simplify_gamma_conjugate(self) -> TensorExpression:
+        r"""
+        Rewrite conjugated gamma matrices as gamma0-sandwiched matrices.
+        """
+    def simplify_epsilon(self) -> TensorExpression:
+        r"""
+        Simplify Levi-Civita/metric contractions and pairs of Levi-Civita tensors.
+        """
+    def simplify_metrics(self) -> TensorExpression:
+        r"""
+        Contract metric and identity tensors and re-infer the external interface.
+        """
+    def simplify_color(self, settings: typing.Optional[ColorSimplifySettings] = None) -> TensorExpression:
+        r"""
+        Apply Idenso's SU(N) color-algebra simplifier and re-infer the interface.
+        """
+    def collect_color(self) -> TensorExpression:
+        r"""
+        Factor around tensors carrying fundamental, antifundamental, or adjoint color.
+        """
+    def collect_color_constants(self) -> TensorExpression:
+        r"""
+        Factor around recognized scalar color invariants such as Casimirs and indices.
+        """
+    def to_color_casimir(self, *, fundamental: Representation, adjoint: Representation, settings: typing.Optional[ColorCasimirSettings] = None) -> TensorExpression:
+        r"""
+        Rewrite supplied color dimensions and invariants into a representation-aware Casimir basis.
+        """
+    def to_cof_dimension_invariants(self) -> TensorExpression:
+        r"""
+        Replace supported `cof(N)` invariants by explicit dimension formulas.
+        """
+    def wrap_color(self, symbol: Expression) -> TensorExpression:
+        r"""
+        Expand around color structures and wrap each scalar coefficient with `symbol`.
+        """
+    def expand_mink(self) -> builtins.list[tuple[Expression, Expression]]:
+        r"""
+        Selectively expand around Minkowski structures into `(structure, coefficient)` pairs.
+        """
+    def expand_bis(self) -> builtins.list[tuple[Expression, Expression]]:
+        r"""
+        Selectively expand around bispinor structures into `(structure, coefficient)` pairs.
+        """
+    def expand_mink_bis(self) -> builtins.list[tuple[Expression, Expression]]:
+        r"""
+        Selectively expand around Minkowski and bispinor structures into factorized pairs.
+        """
+    def expand_metrics(self) -> builtins.list[tuple[Expression, Expression]]:
+        r"""
+        Selectively expand around metric tensors into `(structure, coefficient)` pairs.
+        """
+    def expand_color(self) -> builtins.list[tuple[Expression, Expression]]:
+        r"""
+        Selectively expand around color structures into `(structure, coefficient)` pairs.
+        """
+    def expand_in_patterns(self, patterns: typing.Sequence[Expression]) -> builtins.list[tuple[Expression, Expression]]:
+        r"""
+        Selectively expand around the supplied Symbolica patterns into factorized pairs.
+        """
+    def wrap_indices(self, header: Expression) -> Expression:
+        r"""
+        Wrap every abstract-index payload with `header` and return an ordinary expression.
+
+        Wrapped payloads are not Spenso abstract indices until they are cooked, so the result
+        intentionally has no `TensorExpression` interface.
+        """
+    def cook_indices(self, settings: typing.Optional[CookSettings] = None) -> TensorExpression:
+        r"""
+        Flatten nested representation-index payloads using index cooking by default.
+        """
+    def cook_function(self, settings: typing.Optional[CookSettings] = None) -> Expression:
+        r"""
+        Encode one function call as an ordinary Symbolica expression.
+        """
+    def wrap_dummies(self, header: Expression) -> TensorExpression:
+        r"""
+        Wrap only contracted-index payloads with `header` and re-infer the interface.
+
+        Raises `ValueError` when the expression cannot be parsed as a tensor network.
+        """
+    def list_dangling(self) -> builtins.list[Expression]:
+        r"""
+        Return the ordered external, uncontracted indices as Symbolica expressions.
+
+        Raises `ValueError` when the expression cannot be parsed as a tensor network.
+        """
+    def canonize(self) -> TensorExpression:
+        r"""
+        Canonically order tensor factors and deterministically rename contracted indices.
+        """
+    def alias_subtensors(self, tensor_name: builtins.str) -> tuple[Expression, builtins.list[tuple[Expression, Expression]]]:
+        r"""
+        Replace nested tensor subexpressions by aliases and return the root plus alias mappings.
+        """
+    def spenso_conjugate(self) -> TensorExpression:
+        r"""
+        Complex-conjugate this tensor expression and re-infer its interface.
+        """
+    def conjugate_transpose(self, representation: Representation) -> TensorExpression:
+        r"""
+        Complex-conjugate this expression and transpose slots in `representation`.
+        """
+    def dirac_adjoint(self) -> TensorExpression:
+        r"""
+        Construct the physics-aware Dirac adjoint and re-infer the tensor interface.
+        """
+    def cook(self, settings: typing.Optional[CookSettings] = None) -> Expression:
+        r"""
+        Encode this expression using Idenso's reversible cooking format.
+        """
+    def uncook(self, settings: typing.Optional[CookSettings] = None) -> TensorExpression:
+        r"""
+        Restore a reversibly cooked expression and re-infer its tensor interface.
+        """
+    def schoonschip(self, settings: typing.Optional[SchoonschipSettings] = None) -> TensorExpression:
+        r"""
+        Simplify tensor shorthands using the configured Schoonschip traversal.
+        """
+    def schoonschip_net(self, settings: typing.Optional[SchoonschipSettings] = None, *, expand_contracted_sums: builtins.bool = False) -> TensorExpression:
+        r"""
+        Parse and contract this expression as a symbolic tensor network.
+        """
+    def to_dots(self) -> TensorExpression:
+        r"""
+        Convert contracted rank-one tensors into compact dot-product notation.
+        """
+    def normalize_dots(self) -> TensorExpression:
+        r"""
+        Canonicalize compact dot-product shorthands without expanding them.
+        """
+    def expand_dots(self) -> TensorExpression:
+        r"""
+        Expand dot products into explicit metric and indexed-vector contractions.
+        """
+    def metric_shorthand_to_dot(self) -> TensorExpression:
+        r"""
+        Replace metric shorthand such as `g(p(rep), q(rep))` by a compact dot product.
+        """
+    def undo_all(self) -> TensorExpression:
+        r"""
+        Expand every Idenso tensor shorthand into explicit tensor syntax.
+        """
+    def undo_schoonschip(self) -> TensorExpression:
+        r"""
+        Expand Schoonschip shorthands while leaving dots, chains, and traces compact.
+        """
+    def undo_dots(self) -> TensorExpression:
+        r"""
+        Expand dot-product shorthands while leaving other shorthands compact.
+        """
+    def undo_chain(self) -> TensorExpression:
+        r"""
+        Expand open-chain shorthands while leaving other shorthands compact.
+        """
+    def undo_trace(self) -> TensorExpression:
+        r"""
+        Expand trace shorthands while leaving other shorthands compact.
+        """
+    def collect_chains(self, representation: Representation) -> TensorExpression:
+        r"""
+        Join adjacent open chains for `representation` and re-infer the interface.
+        """
+    def chainify(self, representation: Representation) -> TensorExpression:
+        r"""
+        Rewrite tensors with two `representation` slots as open-chain factors.
+        """
+    def normalize_chains(self) -> TensorExpression:
+        r"""
+        Convert chains whose endpoints coincide into trace shorthands.
+        """
+    def undo_single_length(self) -> TensorExpression:
+        r"""
+        Replace one-factor chain shorthands by their underlying tensor factor.
+        """
+    def to_network(self, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:
+        r"""
+        Materialize unresolved ports and parse this expression as a tensor network.
+
+        When `library` is omitted, use the built-in four-dimensional HEP and SU(3) library.
+        """
+    def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:
+        r"""
+        Fill the unresolved external ports with `indices` in interface order.
+
+        Pass `AUTO` to leave a port unresolved. Set `cook_indices=True` to flatten nested
+        symbolic index payloads before insertion. Repeated compatible indices contract their
+        ports, in which case the result no longer carries the original stored-data identity.
+        """
+    def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:
+        r"""
+        Fill the unresolved external ports with `indices` in interface order.
+        """
+    def __neg__(self) -> TensorExpression: ...
+    def __add__(self, rhs: typing.Any) -> TensorExpression | TensorNetwork: ...
+    def __radd__(self, lhs: typing.Any) -> TensorExpression | TensorNetwork: ...
+    def __sub__(self, rhs: typing.Any) -> TensorExpression | TensorNetwork: ...
+    def __rsub__(self, lhs: typing.Any) -> TensorExpression | TensorNetwork: ...
+    def __mul__(self, rhs: typing.Any) -> TensorExpression | TensorNetwork: ...
+    def __rmul__(self, lhs: typing.Any) -> TensorExpression | TensorNetwork: ...
+    def __truediv__(self, rhs: typing.Any) -> TensorExpression | TensorNetwork: ...
+    def __rtruediv__(self, lhs: typing.Any) -> TensorExpression | TensorNetwork: ...
+    def outer(self, rhs: typing.Any) -> TensorExpression | TensorNetwork:
+        r"""
+        Form an outer product without contracting compatible ports.
+        """
+    def contract(self, rhs: typing.Any, *, left: builtins.int, right: builtins.int) -> TensorExpression | TensorNetwork:
+        r"""
+        Contract one selected pair of ordered interface positions.
+        """
+    def compose(self, rhs: typing.Any, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorExpression | TensorNetwork:
+        r"""
+        Compose two selected `(input, output)` matrix channels.
+        """
+    def trace(self, *, channel: typing.Optional[tuple[builtins.int, builtins.int]] = None) -> TensorExpression:
+        r"""
+        Close `channel`, or the unique matrix channel when it is omitted.
+        """
+    def format_tensor(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+        r"""
+        Format this structured expression using compact Spenso notation.
+        """
+    def to_typst(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+        r"""
+        Format this structured expression as Typst math source.
+        """
+    def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
+        r"""
+        Build Symbolica's rich display value, including semantic HTML when the
+        optional ``gammaloop[typst-display]`` renderer is installed.
+
+        ``notation_source`` is a trusted complete replacement for the bundled
+        ``notation.typ`` module, not a style fragment. Typst executes it. When
+        HTML cannot be rendered, the result retains its LaTeX and text forms.
+        """
+    def to_html(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
+        r"""
+        Compile this expression to semantic HTML with the optional Typst
+        renderer.
+
+        Install ``gammaloop[typst-display]`` to enable this method.
+        ``notation_source``, when supplied, is trusted Typst code replacing the
+        complete bundled ``notation.typ`` module.
+        """
+    def to_svg(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
+        r"""
+        Compile this expression to SVG with the optional Typst renderer.
+
+        Install ``gammaloop[typst-display]`` to enable this method.
+        ``notation_source``, when supplied, is trusted Typst code replacing the
+        complete bundled ``notation.typ`` module.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def to_expression(self) -> Expression:
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None: ...
+    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_latex_(self) -> builtins.str: ...
+    @typing.overload
+    def __getitem__(self, item: builtins.int) -> builtins.list[builtins.int]:
         r"""
-        Convert the tensor indices to a symbolic expression.
+        Convert a logical row-major flat index to tensor coordinates.
+        """
+    @typing.overload
+    def __getitem__(self, item: typing.Sequence[builtins.int]) -> builtins.int:
+        r"""
+        Convert tensor coordinates to a logical row-major flat index.
+        """
+    @typing.overload
+    def __getitem__(self, item: builtins.slice) -> builtins.list[builtins.list[builtins.int]]:
+        r"""
+        Expand a slice of logical row-major flat indices to tensor coordinates.
+        """
 
-        Creates a symbolic representation of the tensor with its indices that can be
-        used in algebraic manipulations and pattern matching.
+@typing.final
+class TensorFunctionLibrary:
+    r"""
+    A registry of elementwise tensor functions used during network evaluation.
+    """
+    def __new__(cls) -> TensorFunctionLibrary:
+        r"""
+        Create a new empty tensor function library.
+
+        Initializes an empty library ready for registering tensor functions.
 
         Returns
         -------
-        Expression
-            A symbolic Expression representing this indexed tensor
-
-        Raises
-        ------
-        RuntimeError
-            If the tensor structure has no name
+        TensorFunctionLibrary
+            A new empty function library
 
         Examples
         --------
-        >>> from symbolica.community.spenso import TensorName, Representation
-        >>> T = TensorName("T")
-        >>> rep = Representation.euc(3)
-        >>> mu = rep('mu')
-        >>> nu = rep('nu')
-        >>> indices = T(mu, nu)
-        >>> expr = indices.to_expression()
+        >>> from symbolica.community.spenso import TensorFunctionLibrary
+        >>> lib = TensorFunctionLibrary()
         """
-    def __len__(self) -> builtins.int: ...
-    def __add__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression) -> Expression:
+    def register(self, function: BroadcastFunction, callback: typing.Any) -> None:
         r"""
-        Add this expression to `other`, returning the result.
-        """
-    def __radd__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression) -> Expression:
-        r"""
-        Add this expression to `other`, returning the result.
-        """
-    def __sub__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression) -> Expression:
-        r"""
-        Subtract `other` from this expression, returning the result.
-        """
-    def __rsub__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression) -> Expression:
-        r"""
-        Subtract this expression from `other`, returning the result.
-        """
-    def __mul__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression) -> Expression:
-        r"""
-        Add this expression to `other`, returning the result.
-        """
-    def __rmul__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression) -> Expression:
-        r"""
-        Add this expression to `other`, returning the result.
-        """
-    def __new__(cls, *slots: TensorIndices | builtins.list[Slot], name: TensorName | builtins.str | Expression | None = None) -> TensorIndices:
-        r"""
-        Create tensor structure from slots and optional arguments.
+        Register an elementwise callback for concrete tensor execution.
 
-        Parameters
-        ----------
-        *additional_args : Slot or Expression
-            Mixed arguments (Slot objects and Expressions for additional arguments)
-        name : TensorName, optional
-            Optional tensor name to assign to the structure
-
-        Returns
-        -------
-        TensorIndices
-            A new TensorIndices object
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.spenso import TensorIndices, Representation, TensorName
-        >>> rep = Representation.euc(3)
-        >>> mu = rep('mu')
-        >>> nu = rep('nu')
-        >>> structure = TensorIndices(mu, nu)
-        >>> x = S('x')
-        >>> structure_with_args = TensorIndices(mu, nu, x)
-        >>> T = TensorName("T")
-        >>> named_structure = TensorIndices(mu, nu, name=T)
-        """
-    @typing.overload
-    def __getitem__(self, item: builtins.slice) -> builtins.list[Expression | builtins.complex | float]:
-        r"""
-        Get expanded indices at the specified range of flattened indices.
-
-        Parameters
-        ----------
-        item : slice
-            Slice object defining the range of indices
-
-        Returns
-        -------
-        list of list of int
-            List of expanded indices
-        """
-    @typing.overload
-    def __getitem__(self, item: typing.Sequence[builtins.int]) -> Expression | builtins.complex | float:
-        r"""
-        Get flattened index associated to this expanded index.
-
-        Parameters
-        ----------
-        item : list of int
-            Multi-dimensional index coordinates
-
-        Returns
-        -------
-        int
-            The flat index
-        """
-    @typing.overload
-    def __getitem__(self, item: builtins.int) -> Expression | builtins.complex | float:
-        r"""
-        Get expanded index associated to this flat index.
-
-        Parameters
-        ----------
-        item : int
-            Flat index into the tensor
-
-        Returns
-        -------
-        list of int
-            Multi-dimensional index coordinates
+        The callback receives a Python `float` or `complex` matching each input value and
+        must return either type. The result uses complex storage if any returned value is
+        complex; otherwise it uses real storage.
         """
 
 @typing.final
@@ -1140,14 +1384,13 @@ class TensorLibrary:
     associated names and can resolve symbolic references to registered tensors.
 
     ```python
-    import symbolica
-    from symbolica.community.spenso import TensorLibrary, LibraryTensor, TensorStructure, Representation
+    from symbolica.community.spenso import Tensor, TensorLibrary, TensorName, Representation
 
     lib = TensorLibrary()
     rep = Representation.euc(3)
-    name = symbolica.S("my_tensor")
-    structure = TensorStructure(rep, rep, name=name)
-    tensor = LibraryTensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
+    name = TensorName("my_tensor")
+    structure = name(rep, rep)
+    tensor = Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
     lib.register(tensor)
     tensor_ref = lib[name]
     ```
@@ -1187,7 +1430,7 @@ class TensorLibrary:
         >>> from symbolica.community.spenso import TensorLibrary
         >>> lib = TensorLibrary.construct()
         """
-    def register(self, tensor: Tensor | LibraryTensor) -> None:
+    def register(self, tensor: Tensor) -> None:
         r"""
         Register a tensor in the library.
 
@@ -1197,22 +1440,21 @@ class TensorLibrary:
 
         Parameters
         ----------
-        tensor : LibraryTensor or Tensor
-            The tensor to register - can be a LibraryTensor or regular Tensor
+        tensor : Tensor
+            A named tensor with a fully unresolved interface, or a named scalar
 
         Examples
         --------
-        >>> import symbolica
-        >>> from symbolica.community.spenso import TensorLibrary, LibraryTensor, TensorStructure, Representation
+        >>> from symbolica.community.spenso import Tensor, TensorLibrary, TensorName, Representation
         >>> lib = TensorLibrary()
         >>> rep = Representation.euc(3)
-        >>> name = symbolica.S("my_tensor")
-        >>> structure = TensorStructure(rep, rep, name=name)
-        >>> tensor = LibraryTensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
+        >>> name = TensorName("my_tensor")
+        >>> structure = name(rep, rep)
+        >>> tensor = Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
         >>> lib.register(tensor)
         >>> tensor_ref = lib[name]
         """
-    def __getitem__(self, key: Expression | int | str | float | builtins.complex | builtins.str) -> TensorStructure:
+    def __getitem__(self, key: TensorExpression | TensorName | Expression | builtins.str) -> TensorExpression:
         r"""
         Retrieve a registered tensor structure by name.
 
@@ -1221,13 +1463,15 @@ class TensorLibrary:
 
         Parameters
         ----------
-        key : str or Expression
-            The tensor name - can be a string or symbolic expression
+        key : TensorExpression, TensorName, Expression, or str
+            An exact unresolved tensor signature in registered storage order, or a
+            symbol-only convenience key
 
         Returns
         -------
-        TensorStructure
-            A TensorStructure representing the registered tensor template
+        TensorExpression
+            An atomic reference with the requested exact interface, or the registered
+            logical interface for a symbol-only lookup
 
         Raises
         ------
@@ -1236,7 +1480,8 @@ class TensorLibrary:
 
         Examples
         --------
-        >>> structure = lib["T"]
+        >>> exact = lib[TensorName("T")(1, Representation.euc(3))]
+        >>> unique_by_name = lib["T"]
         """
     @staticmethod
     def hep_lib() -> TensorLibrary:
@@ -1284,11 +1529,17 @@ class TensorLibrary:
 @typing.final
 class TensorName:
     r"""
-    A symbolic name for tensor functions and structures.
+    A symbolic name for tensor expressions.
 
-    TensorName represents named tensor functions that can be called with indices and arguments
-    to create tensor structures. Names can have various mathematical properties like symmetry,
+    TensorName represents named tensor functions that can be called with scalar arguments, slots,
+    and representations to create tensor expressions. Names can have various mathematical properties like symmetry,
     antisymmetry, and custom normalization or printing behavior.
+
+    The predefined accessors such as `TensorName.gamma()` and `TensorName.t()`
+    return raw fixed heads for introspection and pattern construction; those
+    reserved names cannot be called directly. Use the matching
+    `TensorExpression` factory for concrete tensors or `TensorPattern` shortcut
+    for rewrite patterns.
 
     Examples
     --------
@@ -1299,9 +1550,9 @@ class TensorName:
     >>> rep = Representation.cof(3)
     >>> mu = rep('mu')
     >>> nu = rep('nu')
-    >>> tensor_structure = T(mu, nu)
+    >>> tensor_expression = T(mu, nu)
     """
-    def __new__(cls, name: builtins.str, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, custom_normalization: typing.Optional[Transformer] = None) -> TensorName:
+    def __new__(cls, name: builtins.str, *, rank: typing.Optional[builtins.int] = None, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[Transformer | typing.Callable[[Expression], Expression]] = None, print: typing.Optional[typing.Any] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | str | dict | list | bytes] = None) -> TensorName:
         r"""
         Create a new tensor name with optional mathematical properties.
 
@@ -1317,8 +1568,12 @@ class TensorName:
             If True, tensor is symmetric under cyclic permutations
         is_linear : bool, optional
             If True, tensor is linear in its arguments
-        custom_normalization : Transformer, optional
-            Custom normalization function (advanced)
+        rank : int, optional
+            The declared rank. Only rank one has a dedicated construction invariant.
+        tags : list[str], optional
+            Extra Symbolica tags. The Spenso tensor tag is always included.
+        normalization, print, derivative, series, eval, data : optional
+            Symbolica symbol callbacks and metadata.
 
         Returns
         -------
@@ -1332,6 +1587,11 @@ class TensorName:
         >>> g = TensorName("g", is_symmetric=True)
         >>> F = TensorName("F", is_antisymmetric=True)
         >>> D = TensorName("D", is_linear=True)
+        """
+    @staticmethod
+    def vector(name: builtins.str, *, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[Transformer | typing.Callable[[Expression], Expression]] = None, print: typing.Optional[typing.Any] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | str | dict | list | bytes] = None) -> TensorName:
+        r"""
+        Create a rank-one tensor name.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -1349,6 +1609,14 @@ class TensorName:
         >>> T = TensorName("T")
         >>> expr = T.to_expression()
         """
+    def has_tag(self, tag: builtins.str) -> builtins.bool:
+        r"""
+        Check whether this tensor name carries `tag`.
+        """
+    def get_tags(self) -> builtins.list[builtins.str]:
+        r"""
+        Return all Symbolica tags carried by this tensor name.
+        """
     @staticmethod
     def g() -> TensorName:
         r"""
@@ -1362,7 +1630,10 @@ class TensorName:
     @staticmethod
     def gamma() -> TensorName:
         r"""
-        Predefined gamma matrix name.
+        Predefined gamma matrix name for introspection and pattern construction.
+
+        The matching typed factories use storage order: bispinor-in,
+        bispinor-out, then Minkowski.
         """
     @staticmethod
     def gamma5() -> TensorName:
@@ -1394,22 +1665,21 @@ class TensorName:
         r"""
         Predefined color generator name.
         """
-    @typing.overload
-    def __call__(self, *args: Slot | Expression | int | str | float | builtins.complex) -> TensorIndices:
+    def __call__(self, *args: Slot | Representation | Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorExpression:
         r"""
-        Call the tensor name with arguments to create tensor structures.
+        Call the tensor name with arguments to create a tensor expression.
 
-        Accepts a mix of slots and symbolic expressions (for additional arguments).
+        Accepts scalar key expressions followed by any mix of slots and representations.
 
         Parameters
         ----------
-        *args : Slot or Expression
-            Slot objects and Expressions for additional arguments
+        *args : Expression, Slot, or Representation
+            Scalar key expressions followed by structural ports
 
         Returns
         -------
-        TensorIndices
-            A new TensorIndices object
+        TensorExpression
+            A structured expression with explicit and/or unresolved ports
 
         Examples
         --------
@@ -1418,33 +1688,7 @@ class TensorName:
         >>> T = TensorName("T")
         >>> rep = Representation.euc(3)
         >>> mu = rep("mu")
-        >>> nu = rep("nu")
-        >>> indexed_tensor = T(mu, nu)
-        """
-    @typing.overload
-    def __call__(self, *args: Representation | Expression) -> TensorStructure:
-        r"""
-        Call the tensor name with arguments to create a TensorStructure.
-
-        Accepts a mix of representations and symbolic expressions (for additional arguments).
-
-        Parameters
-        ----------
-        *args : Representation or Expression
-            Representation objects and Expressions for additional arguments
-
-        Returns
-        -------
-        TensorStructure
-            A new TensorStructure object
-
-        Examples
-        --------
-        >>> from symbolica.community.spenso import TensorName, Slot, Representation
-        >>> import symbolica as sp
-        >>> T = TensorName("T")
-        >>> rep = Representation.euc(3)
-        >>> structure_tensor = T(rep, rep)
+        >>> tensor = T(mu, rep)
         """
 
 @typing.final
@@ -1456,23 +1700,27 @@ class TensorNetwork:
     before constructing and executing a network; an expression alone supplies structure, not
     component values.
 
+    A network retains the semantic source expression and its public tensor interface
+    separately from the executable graph and its stored values. Value specialization
+    and graph execution therefore do not rewrite the source expression returned by
+    `structure()` or used by the semantic display methods.
+
     Examples
     --------
     >>> from symbolica.community.spenso import (
     ...     ExecutionMode,
-    ...     LibraryTensor,
     ...     Representation,
+    ...     Tensor,
     ...     TensorLibrary,
     ...     TensorName,
     ...     TensorNetwork,
-    ...     TensorStructure,
     ... )
     >>> rep = Representation.euc(2)
     >>> A = TensorName("A")
-    >>> structure = TensorStructure(rep, rep, name=A)
+    >>> structure = A(rep, rep)
     >>> library = TensorLibrary()
     >>> library.register(
-    ...     LibraryTensor.dense(structure, [1.0, 0.0, 0.0, 1.0])
+    ...     Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0])
     ... )
     >>> network = TensorNetwork(
     ...     A(rep("i"), rep("j")),
@@ -1483,7 +1731,7 @@ class TensorNetwork:
     >>> len(result)
     4
     """
-    def __new__(cls, expr: Expression | int | str | float | builtins.complex | TensorIndices | Expression, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:
+    def __new__(cls, expr: typing.Any, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:
         r"""
         Create a tensor network by parsing an arithmetic expression.
 
@@ -1495,7 +1743,8 @@ class TensorNetwork:
         expr : ArithmeticStructure
             The arithmetic expression or tensor structure to parse
         library : TensorLibrary, optional
-            Optional tensor library for resolving named tensor references
+            Tensor library for resolving named tensor references. Defaults to the built-in
+            four-dimensional HEP and SU(3) library returned by `TensorLibrary.hep_lib()`.
 
         Returns
         -------
@@ -1519,9 +1768,15 @@ class TensorNetwork:
         >>> result = one_net.result_scalar()
         """
     @staticmethod
-    def bracket() -> Expression: ...
+    def bracket() -> Expression:
+        r"""
+        Return the symbolic head used for structured product brackets.
+        """
     @staticmethod
-    def broadcast(str: builtins.str) -> Expression: ...
+    def broadcast(str: builtins.str) -> Expression:
+        r"""
+        Create a Symbolica function symbol tagged for elementwise tensor broadcasting.
+        """
     @staticmethod
     def zero() -> TensorNetwork:
         r"""
@@ -1538,19 +1793,24 @@ class TensorNetwork:
         >>> zero_net = TensorNetwork.zero()
         >>> result = zero_net.result_scalar()
         """
-    def replace(self, pattern: Expression | int | str | float | builtins.complex, rhs: Expression | int | str | float | builtins.complex | HeldExpression | typing.Callable[[dict[Expression, Expression]], Expression] | int | float | complex | decimal.Decimal, _cond: typing.Optional[PatternRestriction | Condition] = None, non_greedy_wildcards: typing.Optional[typing.Sequence[Expression]] = None, level_range: typing.Optional[tuple[builtins.int, typing.Optional[builtins.int]]] = None, level_is_tree_depth: typing.Optional[builtins.bool] = None, allow_new_wildcards_on_rhs: typing.Optional[builtins.bool] = None, rhs_cache_size: typing.Optional[builtins.int] = None, repeat: typing.Optional[builtins.bool] = None) -> TensorNetwork:
+    def replace(self, pattern: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | HeldExpression | typing.Callable[[dict[Expression, Expression]], Expression] | int | float | complex | Float | ComplexFloat | decimal.Decimal, cond: typing.Optional[PatternRestriction | Condition] = None, non_greedy_wildcards: typing.Optional[typing.Sequence[Expression]] = None, level_range: typing.Optional[tuple[builtins.int, typing.Optional[builtins.int]]] = None, level_is_tree_depth: typing.Optional[builtins.bool] = None, allow_new_wildcards_on_rhs: typing.Optional[builtins.bool] = None, rhs_cache_size: typing.Optional[builtins.int] = None, repeat: typing.Optional[builtins.bool] = None) -> TensorNetwork:
         r"""
-        Replace patterns in the tensor network using symbolic pattern matching.
+        Replace patterns in stored symbolic network values.
 
-        Applies pattern-based transformations to the network structure, allowing for
-        symbolic simplifications, substitutions, and algebraic manipulations.
+        Rewrites scalar coefficients and symbolic elements of parametric tensors in
+        the execution store. Tensor identities, graph topology, the public interface,
+        and the semantic source expression returned by `structure()` are unchanged.
+        Rewrite a `TensorExpression` before constructing the network when the source
+        tensor expression itself should change.
 
         Parameters
         ----------
         pattern : Expression
-            The symbolic pattern to match against
+            The symbolic pattern to match within stored values
         rhs : Expression
             The replacement expression or pattern
+        cond : PatternRestriction or Condition, optional
+            Additional restriction that each match must satisfy
         non_greedy_wildcards : list of Expression, optional
             List of wildcard symbols to match non-greedily
         level_range : tuple of int, optional
@@ -1567,14 +1827,17 @@ class TensorNetwork:
         Returns
         -------
         TensorNetwork
-            A new TensorNetwork with the replacements applied
+            A new TensorNetwork with matching stored values replaced and the same
+            semantic source structure
         """
     def evaluate(self, constants: typing.Mapping[Expression, builtins.float], functions: typing.Mapping[Expression, typing.Any]) -> TensorNetwork:
         r"""
-        Evaluate symbolic expressions in the network with numerical values.
+        Evaluate symbolic tensor values in the execution store.
 
-        Substitutes symbolic constants and functions with numerical values,
-        converting symbolic parts of the network to concrete numerical tensors.
+        Substitutes symbolic constants and functions in stored parametric tensor
+        elements, converting them to concrete numerical tensors. Tensor identities,
+        graph topology, the public interface, and the semantic source expression are
+        retained.
 
         Parameters
         ----------
@@ -1586,9 +1849,10 @@ class TensorNetwork:
         Returns
         -------
         TensorNetwork
-            A new TensorNetwork with symbolic expressions evaluated
+            A new TensorNetwork with stored tensor values evaluated and the same
+            semantic source structure
         """
-    def execute(self, library: typing.Optional[TensorLibrary] = None, function_library: None = None, n_steps: typing.Optional[builtins.int] = None, mode: ExecutionMode = ExecutionMode.All) -> None:
+    def execute(self, library: typing.Optional[TensorLibrary] = None, function_library: typing.Optional[TensorFunctionLibrary] = None, n_steps: typing.Optional[builtins.int] = None, mode: ExecutionMode = ExecutionMode.All) -> None:
         r"""
         Execute the tensor network to perform tensor contractions and simplifications.
 
@@ -1600,8 +1864,8 @@ class TensorNetwork:
         ----------
         library : TensorLibrary, optional
             Optional tensor library for resolving tensor operations
-        function_library : None, optional
-            Reserved for an internally supplied function library
+        function_library : TensorFunctionLibrary or None, optional
+            Tensor function callbacks; None uses the built-in function library
         n_steps : int, optional
             Maximum number of execution steps (None for complete execution)
         mode : ExecutionMode, optional
@@ -1675,12 +1939,52 @@ class TensorNetwork:
         """
     def __str__(self) -> builtins.str:
         r"""
-        Return a string representation of the network structure.
+        Return a DOT representation of the executable network graph.
 
         Generates a DOT format representation of the computational graph that can be
         visualized using graphviz or similar tools.
         """
-    def __add__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:
+    def to_dot(self) -> builtins.str:
+        r"""
+        Return the computational graph in Graphviz DOT format.
+        """
+    def format_tensor(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+        r"""
+        Format the exact semantic structure using compact Spenso notation.
+        """
+    def to_typst(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+        r"""
+        Format the semantic source structure as Typst math source.
+        """
+    def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
+        r"""
+        Build Symbolica's rich display wrapper for the semantic source structure.
+        """
+    def to_html(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str: ...
+    def to_svg(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str: ...
+    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def structure(self) -> TensorExpression:
+        r"""
+        Return the semantic source expression and its public tensor interface.
+
+        This expression records the tensor-aware structure used for composition and
+        provenance. It is not reconstructed from the current execution store, so
+        `replace()`, `evaluate()`, and `execute()` leave it unchanged. Use
+        `result_scalar()` or `result_tensor()` to inspect the current computed value.
+        """
+    def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:
+        r"""
+        Fill the unresolved external ports with `indices` in interface order.
+
+        Pass `AUTO` to leave a port unresolved. Set `cook_indices=True` to flatten nested
+        symbolic index payloads before insertion.
+        """
+    def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:
+        r"""
+        Fill the unresolved external ports with `indices` in interface order.
+        """
+    def __neg__(self) -> TensorNetwork: ...
+    def __add__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Add two tensor networks element-wise.
 
@@ -1700,11 +2004,11 @@ class TensorNetwork:
         >>> net2 = TensorNetwork(expr2)
         >>> sum_net = net1 + net2
         """
-    def __radd__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __radd__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Add two tensor networks element-wise (right-hand addition).
         """
-    def __sub__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __sub__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Subtract one tensor network from another element-wise.
 
@@ -1724,11 +2028,11 @@ class TensorNetwork:
         >>> net2 = TensorNetwork(expr2)
         >>> diff_net = net1 - net2
         """
-    def __rsub__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __rsub__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Subtract one tensor network from another (right-hand subtraction).
         """
-    def __mul__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __mul__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Multiply two tensor networks.
 
@@ -1748,204 +2052,136 @@ class TensorNetwork:
         >>> net2 = TensorNetwork(expr2)
         >>> product_net = net1 * net2
         """
-    def __rmul__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __rmul__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Multiply two tensor networks (right-hand multiplication).
         """
+    def __truediv__(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __rtruediv__(self, lhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def outer(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+        r"""
+        Form an outer tensor product without contracting compatible ports.
+        """
+    def contract(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
+        r"""
+        Contract one selected pair of public interface positions.
+        """
+    def compose(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
+        r"""
+        Compose two explicitly selected matrix channels.
+        """
+    def dot(self, rhs: Expression | int | Float | ComplexFloat | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+        r"""
+        Contract two rank-one operands into the canonical dot form.
+        """
+    def trace(self, *, channel: typing.Optional[tuple[builtins.int, builtins.int]] = None) -> TensorNetwork:
+        r"""
+        Close a selected or uniquely inferred propagation channel.
+        """
 
 @typing.final
-class TensorStructure:
+class TensorPattern(Expression):
     r"""
-    A tensor structure without abstract indices, defined purely by representations.
+    A tagged Symbolica expression intended for tensor rewrite rules.
 
-    TensorStructure represents the shape and representation structure of tensors
-    without specific index assignments. It's used for defining tensor templates
-    in libraries and for creating indexless tensor computations.
+    `args` contains scalar tensor arguments and `ports` contains structural
+    syntax. The two named sections are concatenated in that order. Since this is
+    a pattern expression rather than a concrete tensor, either section may
+    contain ordinary or sequence-wildcard Symbolica expressions.
 
-    # Examples:
-    ```python
-    from symbolica.community.spenso import TensorStructure, Representation, TensorName
-
-    # Create from representations
-    rep = Representation.euc(3)
-    structure = TensorStructure(rep, rep)  # 3x3 matrix structure
-
-    # With name for library registration
-    T = TensorName("T")
-    named_structure = TensorStructure(rep, rep, name=T)
-
-    # Use to create indexed tensor
-    indices = structure.index('mu', 'nu')  # Assign specific indices
-
-    # Create symbolic expression
-    expr = structure.symbolic('a', 'b')  # T(a, b)
-    ```
+    Examples
+    --------
+    >>> import symbolica as sp
+    >>> from symbolica.community.spenso import (
+    ...     PortPattern, TensorExpression, TensorName, TensorPattern,
+    ... )
+    >>> k_, D_, mu_, i_, j_, rest___ = sp.S(
+    ...     "k_", "D_", "mu_", "i_", "j_", "rest___",
+    ... )
+    >>> fixed = TensorPattern(
+    ...     TensorName("A"),
+    ...     args=[k_],
+    ...     ports=[PortPattern.any("R_", D_, i_), rest___],
+    ... )
+    >>> generic = TensorPattern.any("T_", ports=[rest___])
+    >>> target = TensorExpression.gamma(4)("i", "j", "mu").to_expression()
+    >>> rule = TensorPattern.gamma(D_, i_, j_, mu_)
+    >>> target.replace(rule, 0)
+    0
     """
-    def set_name(self, name: TensorName | builtins.str | Expression) -> None: ...
-    def get_name(self) -> typing.Optional[TensorName]: ...
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def __len__(self) -> builtins.int: ...
-    def __new__(cls, *reps_and_additional_args: TensorIndices | builtins.list[Slot], name: TensorName | builtins.str | Expression | None = None) -> TensorStructure:
+    def __new__(cls, head: TensorName, *, args: typing.Sequence[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = [], ports: typing.Sequence[Slot | Representation | Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = []) -> TensorPattern:
         r"""
-        Construct a new TensorStructure with the given representations.
+        Create a pattern for the fixed tensor `head`.
 
-        Parameters
-        ----------
-        *reps_and_additional_args : Representation or Expression
-            Mixed arguments (Representation objects and Expressions for additional arguments)
-        name : TensorName, optional
-            Optional tensor name to assign to the structure
-
-        Returns
-        -------
-        TensorStructure
-            A new TensorStructure object
-
-        Examples
-        --------
-        >>> from symbolica import S
-        >>> from symbolica.community.spenso import TensorStructure, Representation, TensorName
-        >>> rep = Representation.euc(3)
-        >>> structure = TensorStructure(rep, rep)
-        >>> x = S('x')
-        >>> structure_with_args = TensorStructure(rep, rep, x)
-        >>> T = TensorName("T")
-        >>> named_structure = TensorStructure(rep, rep, name=T)
+        Scalar `args` are always emitted before structural `ports`.
         """
-    @typing.overload
-    def __getitem__(self, item: builtins.slice) -> builtins.list[Expression | builtins.complex | float]:
+    @staticmethod
+    def any(name: builtins.str, *, args: typing.Sequence[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = [], ports: typing.Sequence[Slot | Representation | Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = []) -> TensorPattern:
         r"""
-        Get expanded indices at the specified range of flattened indices.
+        Match any tensor-tagged head.
 
-        Parameters
-        ----------
-        item : slice
-            Slice object defining the range of indices
-
-        Returns
-        -------
-        list of list of int
-            List of expanded indices
+        `name` must end in one underscore, for example `"T_"`.
         """
-    @typing.overload
-    def __getitem__(self, item: typing.Sequence[builtins.int]) -> Expression | builtins.complex | float:
+    @staticmethod
+    def vector(name: builtins.str, *, args: typing.Sequence[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = [], ports: typing.Sequence[Slot | Representation | Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = []) -> TensorPattern:
         r"""
-        Get flattened index associated to this expanded index.
+        Match any rank-one tensor head.
 
-        Parameters
-        ----------
-        item : list of int
-            Multi-dimensional index coordinates
-
-        Returns
-        -------
-        int
-            The flat index
+        Pattern construction intentionally does not impose a concrete arity, so
+        a sequence wildcard may describe the scalar arguments or structural port.
         """
-    @typing.overload
-    def __getitem__(self, item: builtins.int) -> Expression | builtins.complex | float:
+    @staticmethod
+    def g(rep_pattern: Representation | Expression, i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
         r"""
-        Get expanded index associated to this flat index.
-
-        Parameters
-        ----------
-        item : int
-            Flat index into the tensor
-
-        Returns
-        -------
-        list of int
-            Multi-dimensional index coordinates
+        Match a metric tensor in logical index order.
         """
-    def __call__(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] | None = None) -> Expression:
+    @staticmethod
+    def flat(rep_pattern: Representation | Expression, i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
         r"""
-        Convenience method for creating symbolic expressions.
-
-        This is a shorthand for calling `symbolic(*args, extra_args=extra_args)`.
-        Creates a symbolic Expression representing this tensor structure.
-
-        Parameters
-        ----------
-        *args : int, str, Symbol, or Expression
-            Positional arguments (indices and additional args)
-        extra_args : list of Expression, optional
-            Optional list of additional non-tensorial arguments
-
-        Returns
-        -------
-        Expression
-            A symbolic Expression representing the tensor
-
-        Examples
-        --------
-        >>> structure = TensorStructure(rep, rep, name="T")
-        >>> expr = structure('mu', 'nu')
+        Match a musical-isomorphism tensor in logical index order.
         """
-    def symbolic(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] | None = None) -> Expression:
+    @staticmethod
+    def gamma(minkowski_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], mu: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
         r"""
-        Create a symbolic expression representing this tensor structure.
-
-        Builds a symbolic tensor expression with the specified indices. Arguments can be
-        separated using a semicolon (';') to distinguish between additional arguments
-        and tensor indices.
-
-        Parameters
-        ----------
-        *args : int, str, Symbol, Expression, or ';'
-            Positional arguments (int, str, Symbol, Expression for indices, ';' for separator)
-        extra_args : list of Expression, optional
-            Optional list of additional non-tensorial arguments
-
-        Returns
-        -------
-        Expression
-            A symbolic Expression representing the tensor with indices
-
-        Examples
-        --------
-        >>> import symbolica as sp
-        >>> from symbolica.community.spenso import TensorStructure, Representation, TensorName
-        >>> rep = Representation.euc(3)
-        >>> T = TensorName("T")
-        >>> structure = TensorStructure([rep, rep], name=T)
-        >>> expr = structure.symbolic('mu', 'nu')
-        >>> x = sp.S('x')
-        >>> expr = structure.symbolic(x, ';', 'mu', 'nu')
-        >>> expr = structure.symbolic('mu', 'nu', extra_args=[x])
+        Match a gamma matrix in storage `(i, j, mu)` order.
         """
-    def index(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression] | None = None, cook_indices: builtins.bool = False) -> TensorIndices:
+    @staticmethod
+    def gamma5(spinor_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
         r"""
-        Create an indexed tensor (TensorIndices) from this structure.
-
-        Converts this structure template into a concrete indexed tensor by assigning
-        specific abstract indices to each representation slot.
-
-        Parameters
-        ----------
-        *args : int, str, Symbol, Expression, or ';'
-            Positional arguments (indices and ';' separator between additional args and indices)
-        extra_args : list of Expression, optional
-            Optional list of additional non-tensorial arguments
-        cook_indices : bool, optional
-            If True, attempt to convert expressions to valid indices
-
-        Returns
-        -------
-        TensorIndices
-            A TensorIndices object with concrete index assignments
-
-        Examples
-        --------
-        >>> import symbolica as sp
-        >>> from symbolica.community.spenso import TensorStructure, Representation, TensorName
-        >>> rep = Representation.cof(3)
-        >>> T = TensorName("T")
-        >>> structure = TensorStructure([rep, rep], name=T)
-        >>> indices = structure.index('mu', 'nu')
-        >>> x = sp.S('x')
-        >>> indices = structure.index(x, ';', 'mu', 'nu')
+        Match a gamma-five matrix in logical `(i, j)` order.
         """
+    @staticmethod
+    def projm(spinor_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+        r"""
+        Match a left-chiral projector in logical `(i, j)` order.
+        """
+    @staticmethod
+    def projp(spinor_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+        r"""
+        Match a right-chiral projector in logical `(i, j)` order.
+        """
+    @staticmethod
+    def sigma(minkowski_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], mu: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], nu: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+        r"""
+        Match a sigma matrix. Arguments use logical `(mu, nu, i, j)` order.
+        """
+    @staticmethod
+    def f(adjoint_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], a: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], b: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], c: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+        r"""
+        Match a color structure constant in logical `(a, b, c)` order.
+        """
+    @staticmethod
+    def t(adjoint_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], fundamental_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], a: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+        r"""
+        Match a color generator in logical `(a, i, j)` order.
+        """
+
+@typing.final
+class _AutoIndex:
+    r"""
+    The local placeholder used to leave a tensor port unresolved.
+    """
+    ...
 
 @typing.final
 class ExecutionMode(enum.Enum):
@@ -1982,6 +2218,31 @@ class SymbolicParallelism(enum.Enum):
     Force Rayon without `Auto`'s Symbolica license safety check.
     """
 
+def as_tensor(expression: typing.Any) -> TensorExpression:
+    r"""
+    Restore tensor-aware dispatch after a base Symbolica transformation.
+    """
+
+def chain(start_slot: Slot, end_slot: Slot, *factors: typing.Any) -> TensorExpression | TensorNetwork:
+    r"""
+    Build an explicitly-ended ordered tensor chain.
+    """
+
+def dot(left: typing.Any, right: typing.Any) -> TensorExpression | TensorNetwork:
+    r"""
+    Contract two rank-one tensors into the canonical dot form.
+    """
+
+def format_tensor(expression: Expression, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+    r"""
+    Format a tensor expression using compact Spenso notation.
+    """
+
+def formatted(expression: Expression, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
+    r"""
+    Build Symbolica's rich display wrapper for a tensor expression.
+    """
+
 def set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> builtins.bool:
     r"""
     Configure whether Spenso may use Rayon for Symbolica operations.
@@ -1991,5 +2252,25 @@ def set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> builtins.bool:
     when unlicensed, symbolic operations remain serial. The returned boolean
     reports whether the resolved policy permits Rayon, not whether every
     operation will use it.
+    """
+
+def to_html(expression: Expression, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
+    r"""
+    Render a tensor expression to semantic HTML through the optional Typst runtime.
+    """
+
+def to_svg(expression: Expression, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
+    r"""
+    Render a tensor expression to an SVG string through the optional Typst runtime.
+    """
+
+def to_typst(expression: Expression, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+    r"""
+    Format a tensor expression as Typst math source.
+    """
+
+def trace(representation: Representation, *factors: typing.Any) -> TensorExpression | TensorNetwork:
+    r"""
+    Close an ordered factor sequence into a canonical cyclic trace.
     """
 

@@ -16,8 +16,11 @@ publish = false
 ### BEGIN HAKARI SECTION
 [dependencies]
 ahash = { version = "0.8", features = ["serde"] }
+aho-corasick = { version = "1" }
+approx = { version = "0.5" }
 bincode = { version = "2", features = ["serde"] }
 bitflags = { version = "2", default-features = false, features = ["serde"] }
+bytemuck = { version = "1", default-features = false, features = ["aarch64_simd", "derive", "extern_crate_alloc", "min_const_generics"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env", "unicode", "unstable-ext", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "unicode", "unstable-ext", "usage", "wrap_help"] }
@@ -25,45 +28,64 @@ console = { version = "0.16" }
 criterion = { version = "0.5", features = ["html_reports"] }
 crossterm = { version = "0.28", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1", default-features = false, features = ["float-mpfr", "integer-gmp"] }
+fastrand = { version = "2" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["float-mpfr", "integer-gmp"] }
+hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "raw-entry"] }
+indexmap = { version = "2", features = ["rayon", "serde"] }
 insta = { version = "1", features = ["json", "ron", "toml", "yaml"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
+memchr = { version = "2" }
+num-bigint = { version = "0.4" }
 num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
-once_cell = { version = "1" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
 papergrid = { version = "0.18", default-features = false, features = ["ansi", "std"] }
-rand = { version = "0.9" }
-rand_chacha = { version = "0.9", default-features = false, features = ["std"] }
+phf_shared = { version = "0.13", default-features = false, features = ["std"] }
+rand = { version = "0.8", features = ["small_rng"] }
+rand_chacha = { version = "0.3" }
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
 regex = { version = "1" }
-regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
+regex-automata = { version = "0.4", default-features = false, features = ["dfa", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
 rust-embed-utils = { version = "8", default-features = false, features = ["debug-embed", "include-exclude"] }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
 serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
 serde_spanned = { version = "1" }
-smallvec = { version = "1", default-features = false, features = ["const_generics", "serde"] }
+slab = { version = "0.4" }
+slotmap = { version = "1", features = ["serde"] }
+smallvec = { version = "1", default-features = false, features = ["const_new", "serde", "union", "write"] }
 smartstring = { version = "1", features = ["serde"] }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
+stable_deref_trait = { version = "1", default-features = false, features = ["alloc"] }
+strum = { version = "0.27", features = ["derive"] }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 tabled = { version = "0.22", features = ["ansi"] }
 testing_table = { version = "0.3", default-features = false, features = ["ansi", "std"] }
-time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
+time = { version = "0.3", features = ["formatting", "local-offset", "macros", "parsing"] }
+tinystr = { version = "0.8", features = ["serde", "zerovec"] }
+toml = { version = "0.8" }
 toml_datetime = { version = "1", features = ["serde"] }
 toml_parser = { version = "1" }
 toml_writer = { version = "1" }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
+unic-langid-impl = { version = "0.9", default-features = false, features = ["serde"] }
 winnow-ca01ad9e24f5d932 = { package = "winnow", version = "0.7" }
 winnow-dff4ba8e3ae991db = { package = "winnow", version = "1" }
+yoke = { version = "0.8", features = ["derive", "serde"] }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
+zerofrom = { version = "0.1", default-features = false, features = ["alloc", "derive"] }
+zerovec = { version = "0.11", default-features = false, features = ["alloc", "derive", "serde", "yoke"] }
 
 [build-dependencies]
 ahash = { version = "0.8", features = ["serde"] }
+aho-corasick = { version = "1" }
+approx = { version = "0.5" }
 bincode = { version = "2", features = ["serde"] }
 bitflags = { version = "2", default-features = false, features = ["serde"] }
+bytemuck = { version = "1", default-features = false, features = ["aarch64_simd", "derive", "extern_crate_alloc", "min_const_generics"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env", "unicode", "unstable-ext", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "unicode", "unstable-ext", "usage", "wrap_help"] }
@@ -71,20 +93,26 @@ console = { version = "0.16" }
 criterion = { version = "0.5", features = ["html_reports"] }
 crossterm = { version = "0.28", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1", default-features = false, features = ["float-mpfr", "integer-gmp"] }
+fastrand = { version = "2" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["float-mpfr", "integer-gmp"] }
+hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "raw-entry"] }
+indexmap = { version = "2", features = ["rayon", "serde"] }
 insta = { version = "1", features = ["json", "ron", "toml", "yaml"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
+memchr = { version = "2" }
+num-bigint = { version = "0.4" }
 num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
-once_cell = { version = "1" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
 papergrid = { version = "0.18", default-features = false, features = ["ansi", "std"] }
-rand = { version = "0.9" }
-rand_chacha = { version = "0.9", default-features = false, features = ["std"] }
+phf_shared = { version = "0.13", default-features = false, features = ["std"] }
+rand = { version = "0.8", features = ["small_rng"] }
+rand_chacha = { version = "0.3" }
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
 regex = { version = "1" }
-regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
+regex-automata = { version = "0.4", default-features = false, features = ["dfa", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
 rust-embed-utils = { version = "8", default-features = false, features = ["debug-embed", "include-exclude"] }
 serde = { version = "1", features = ["alloc", "derive"] }
@@ -92,32 +120,48 @@ serde_core = { version = "1", features = ["alloc"] }
 serde_derive = { version = "1" }
 serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
 serde_spanned = { version = "1" }
-smallvec = { version = "1", default-features = false, features = ["const_generics", "serde"] }
+slab = { version = "0.4" }
+slotmap = { version = "1", features = ["serde"] }
+smallvec = { version = "1", default-features = false, features = ["const_new", "serde", "union", "write"] }
 smartstring = { version = "1", features = ["serde"] }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
-syn-dff4ba8e3ae991db = { package = "syn", version = "1", features = ["extra-traits", "full"] }
+stable_deref_trait = { version = "1", default-features = false, features = ["alloc"] }
+strum = { version = "0.27", features = ["derive"] }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
+syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["extra-traits"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 tabled = { version = "0.22", features = ["ansi"] }
 testing_table = { version = "0.3", default-features = false, features = ["ansi", "std"] }
-time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
+time = { version = "0.3", features = ["formatting", "local-offset", "macros", "parsing"] }
+tinystr = { version = "0.8", features = ["serde", "zerovec"] }
+toml = { version = "0.8" }
 toml_datetime = { version = "1", features = ["serde"] }
 toml_parser = { version = "1" }
 toml_writer = { version = "1" }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
+unic-langid-impl = { version = "0.9", default-features = false, features = ["serde"] }
 winnow-ca01ad9e24f5d932 = { package = "winnow", version = "0.7" }
 winnow-dff4ba8e3ae991db = { package = "winnow", version = "1" }
+yoke = { version = "0.8", features = ["derive", "serde"] }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
+zerofrom = { version = "0.1", default-features = false, features = ["alloc", "derive"] }
+zerovec = { version = "0.11", default-features = false, features = ["alloc", "derive", "serde", "yoke"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
 bitflags = { version = "2", default-features = false, features = ["std"] }
 libc = { version = "0.2", features = ["extra_traits"] }
+miniz_oxide = { version = "0.8", features = ["simd"] }
+mio = { version = "1", features = ["net", "os-ext"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
+simd-adler32 = { version = "0.3" }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
 bitflags = { version = "2", default-features = false, features = ["std"] }
 libc = { version = "0.2", features = ["extra_traits"] }
+miniz_oxide = { version = "0.8", features = ["simd"] }
+mio = { version = "1", features = ["net", "os-ext"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
+simd-adler32 = { version = "0.3" }
 
 ### END HAKARI SECTION
 

@@ -10,17 +10,17 @@
 //! #graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 //! #numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 //! #symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-//! graphica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
-//! numerica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78" }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ba3737137c2a2ccd7bb39f0441837d38ec867e78" }
 //!
 //! ```
 //!
 //! Run from the repository root with `rust-script`, for example:
-//! `NO_SYMBOLICA_OEM_LICENSE=1 EXTRA_MACOS_LIBS_FOR_GNU_GCC=T rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs`
+//! `SYMBOLICA_LICENSE=... EXTRA_MACOS_LIBS_FOR_GNU_GCC=T rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs`
 //!
-//! If you change the OEM-license environment at build time, add `--force` so
-//! `rust-script` does not reuse an incompatible cached build.
+//! This library example uses your runtime Symbolica license, not the CLI's OEM
+//! token. Add `--force` after dependency changes to refresh rust-script's cache.
 
 use std::{env, path::PathBuf};
 

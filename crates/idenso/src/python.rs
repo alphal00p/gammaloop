@@ -199,11 +199,11 @@ pub fn expand_mink_bis(expression: &PythonExpression) -> Vec<PythonTerm> {
 /// # Examples
 /// ```python
 /// >>> from symbolica.community.idenso import expand_color
-/// >>> from symbolica.community.spenso import Representation, TensorName
+/// >>> from symbolica.community.spenso import Representation, TensorExpression
 /// >>> # Built-in representations are registered automatically on import.
 /// >>> adjoint, fundamental = Representation.coad(8), Representation.cof(3)
 /// >>> antifundamental = fundamental.dual()
-/// >>> generator = TensorName.t()
+/// >>> generator = TensorExpression.t(8, 3)
 /// >>> t_a = generator(
 /// ...     adjoint("a"), fundamental("i"), antifundamental("j")
 /// ... ).to_expression()
@@ -246,10 +246,10 @@ pub fn expand_color(expression: &PythonExpression) -> Vec<PythonTerm> {
 /// # Examples
 /// ```python
 /// >>> from symbolica.community.idenso import expand_metrics
-/// >>> from symbolica.community.spenso import Representation, TensorName
+/// >>> from symbolica.community.spenso import Representation, TensorExpression
 /// >>> # Built-in representations are registered automatically on import.
 /// >>> minkowski = Representation.mink(4)
-/// >>> metric = TensorName.g()
+/// >>> metric = TensorExpression.g(minkowski)
 /// >>> g_mn = metric(minkowski("mu"), minkowski("nu")).to_expression()
 /// >>> g_rs = metric(minkowski("rho"), minkowski("sigma")).to_expression()
 /// >>> g_ab = metric(minkowski("alpha"), minkowski("beta")).to_expression()

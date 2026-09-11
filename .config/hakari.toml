@@ -61,6 +61,14 @@ workspace-members = [
     "gammaloop-tracing-filter-macros",
     "spenso-macros",
 ]
+# These std feature anchors are maintained outside Hakari's generated section.
+# Keep traversing their dependencies, but do not emit duplicate declarations.
+third-party = [
+    { name = "arrayvec", version = "0.7" },
+    { name = "indenter", version = "0.3" },
+    # Stub generation is opt-in and must not leak into ordinary abi3 builds.
+    { name = "pyo3-stub-gen" },
+]
 
 # Write out exact versions rather than a semver range. (Defaults to false.)
 # exact-versions = true

@@ -34,13 +34,13 @@ Save the following as `metric_first.py`:
 // docs-example: compile idenso-controlled-identity
 ```python
 from symbolica.community.idenso import list_dangling, simplify_metrics
-from symbolica.community.spenso import Representation, TensorName
+from symbolica.community.spenso import Representation, TensorExpression, TensorName
 
 rep = Representation.mink(4)
 mu = rep("mu")
 nu = rep("nu")
 
-g = TensorName.g()
+g = TensorExpression.g(rep)
 q = TensorName("q")
 expression = g(mu, nu) * q(mu)
 
