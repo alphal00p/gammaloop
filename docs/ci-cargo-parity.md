@@ -321,17 +321,36 @@ and execution labels, and their limitations.
 
 Synchronous dependency discovery is already enabled in this candidate. We retain
 our explicit generated graph, so this does not adopt all of [PR #104](https://github.com/alphal00p/gammaloop/pull/104).
-[PR #105](https://github.com/alphal00p/gammaloop/pull/105) remains a separate local
-cache-upload setup; neither PR was merged during this experiment. Local validation
-runs with upload hooks disabled so transfers do not contaminate its build clock.
+[PR #105](https://github.com/alphal00p/gammaloop/pull/105) was absent from these
+measurements. Its local cache-upload setup is now incorporated in a separate
+follow-up change, adapted to the refactored flake. Benchmark runs still disable
+upload hooks so transfers do not contaminate the build clock. Setup and limitations
+are documented in [CONTRIBUTING.md](../CONTRIBUTING.md#nixci-cache).
 
-There is one conditional correction to propose for #105: its
-[pinned hook](https://github.com/alphal00p/gammaloop/blob/13d6826ddee00d7cb4cbd733a837d23c248658f3/flake.nix#L2517-L2533)
+The incorporated hook also corrects one conditional issue: the
+[pinned upstream hook](https://github.com/alphal00p/gammaloop/blob/13d6826ddee00d7cb4cbd733a837d23c248658f3/flake.nix#L2517-L2533)
 changes only `XDG_CACHE_HOME`, but Nix 2.34.7
 [uses `NIX_CACHE_HOME` first when inherited](https://github.com/NixOS/nix/blob/2.34.7/src/libutil/users.cc#L15-L24).
-Explicitly setting `NIX_CACHE_HOME="$XDG_CACHE_HOME/nix"` in that hook would preserve
-its intended temporary cache isolation. A minimal patch is saved locally; it has
-not been applied or sent.
+Setting `NIX_CACHE_HOME="$XDG_CACHE_HOME/nix"` as well preserves the hook's intended
+temporary cache isolation.
+
+Local validation on 2026-09-11 with Nix 2.34.8 confirmed:
+
+- All nine dev shells evaluate, and activation preserves existing Nix settings
+  both with and without a readable netrc file.
+- The Nix-built hook forwards multiple outputs, isolates both cache directories,
+  cleans up, and returns success with a warning when the upload command fails.
+- A real build in a disposable local store succeeds when the hook's upload command
+  is deliberately made to fail; repeating that cached build does not invoke the
+  hook. These use a stub upload command, not an authenticated remote transfer.
+- All 53 selected CI derivations, 15 runtime/Python roots and 35 package producers
+  retain their derivation paths. Generated `nix-ci.nix` matches, and the flake
+  passes parsing and Alejandra checks. This addition does not invalidate them.
+
+The current shell has no cache-token file and reports `trusted: false` for its
+Nix daemon. Authenticated upload and signed restore remain unverified here, and
+automatic uploads require that machine setup. No NixCI suite was started for this
+change. Scripts and raw results are under `/tmp/ci-pr105-integration/`.
 
 Nix also [caches missing paths for one hour by default](https://github.com/NixOS/nix/blob/2.34.7/src/libstore/include/nix/store/globals.hh#L55-L73),
 and [checks process memory before its disk cache](https://github.com/NixOS/nix/blob/2.34.7/src/libstore/store-api.cc#L608-L650).

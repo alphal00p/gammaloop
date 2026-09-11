@@ -202,6 +202,30 @@ from the rendered PDF.
   symbol, try building with `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T`; see `build.rs`
   for the impact of this setting.
 
+## NixCI Cache
+
+Before pushing, run `just ci-checks` inside `nix develop` to build and run the
+selected CI checks locally. `nix flake check --impure` additionally builds the
+CLI, documentation and WASM checks exported by the flake. Licensed tests need
+`SYMBOLICA_LICENSE` in the environment. NixCI can reuse matching outputs that
+have been uploaded to its cache; running bare Cargo does not populate it.
+
+Put a NixCI token in `~/.netrc`; see
+[the NixCI cache documentation](https://nix-ci.com/documentation/nix-ci-cache).
+The dev shell points Nix at that file and enables a `post-build-hook` which
+uploads newly built outputs. The flake also configures reading from the cache;
+accept its cache settings when Nix asks. Upload failures print a warning while
+leaving a successful local build successful.
+
+Nix honours the hook and the client's `netrc-file` setting only for a trusted
+user, which `nix store info --json` reports. If nothing is being pushed, check
+that first. The hook runs after executed builds; already-cached outputs need an
+explicit `nix copy .#OUTPUT --to https://cache.nix-ci.com` to publish them.
+
+Uploads run synchronously and add to local build time. For local compilation
+benchmarks, disable the hook with `--option post-build-hook ""` and record cache
+transfer time separately.
+
 ## Version Control Workflow
 
 ### jj
