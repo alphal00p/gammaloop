@@ -64,6 +64,13 @@ environment with Playwright and Chromium to wait for a real SVG render from
 each Pyodide notebook. Use `--notebook layout_stream` to export just the live
 layout demo, and `--browser-executable /path/to/chromium` for a Nix browser.
 
+To add live cells to a built documentation site, run `nix develop --command just
+docs-site linnet`, then `nix develop --command just docs-notebooks /path/to/browser.whl`.
+This exports the DOT playground and the canonical Python quickstart as Marimo islands
+under the Linnet version's `assets/notebooks/` directory. The Pages workflow builds a
+wheel for the documented revision and includes these assets automatically. Each page
+starts its browser runtime only when the reader selects **Launch notebook**.
+
 The exported pages embed their Python source and open with editable code cells;
 browser edits do not modify the checked-in notebooks. The Linnet wheel is bundled;
 Marimo, Pyodide, and other dependencies load from the network on first use.

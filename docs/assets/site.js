@@ -77,6 +77,47 @@
     if (event.target.value) window.location.assign(event.target.value);
   });
 
+  let notebookRuntime;
+  document.querySelectorAll("[data-linnet-notebook]").forEach((container) => {
+    const launch = document.createElement("button");
+    launch.type = "button";
+    launch.className = "live-notebook-launch";
+    launch.textContent = "Launch notebook";
+    const status = document.createElement("p");
+    status.setAttribute("role", "status");
+    container.append(launch, status);
+    launch.addEventListener("click", async () => {
+      launch.disabled = true;
+      status.textContent = "Loading the notebook. Python packages may take a moment on the first visit.";
+      const notebook = document.createElement("div");
+      notebook.className = "live-notebook-cells";
+      try {
+        const url = new URL(`${docsRoot}assets/notebooks/${container.dataset.linnetNotebook}.json`, document.baseURI);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("This documentation build does not include the browser notebook assets.");
+        const payload = await response.json();
+        // Islands run Python in a worker, whose URL can belong to the CDN.
+        // Resolve our wheel against the version-local asset URL on this page.
+        const wheel = new URL(payload.wheel, url).href;
+        notebook.innerHTML = payload.body.replaceAll("__LINNET_WHEEL_URL__", wheel);
+        container.append(notebook);
+        if (!notebookRuntime) {
+          const head = new DOMParser().parseFromString(payload.head, "text/html");
+          head.querySelectorAll("link").forEach((link) => document.head.append(link));
+          notebookRuntime = import(head.querySelector('script[type="module"]').src);
+        }
+        await notebookRuntime;
+        status.textContent = "The notebook runs in your browser. Edit DOT to update the layout, or use the cell’s play button to run Python code.";
+        launch.remove();
+      } catch (error) {
+        notebook.remove();
+        notebookRuntime = undefined;
+        launch.disabled = false;
+        status.textContent = `${error.message} You can still use the documented example locally.`;
+      }
+    });
+  });
+
   let indexPromise;
   const getIndex = () => indexPromise ||= fetch(searchIndex)
     .then((response) => response.ok ? response.json() : [])
@@ -198,8 +239,10 @@
       }
       return;
     }
-    const shortcut = (event.key === "/" && !/input|textarea/i.test(document.activeElement?.tagName)) ||
-      (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey));
+    const shortcut = !event.composedPath().some((target) => target.isContentEditable) && (
+      (event.key === "/" && !/input|textarea/i.test(document.activeElement?.tagName)) ||
+      (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey))
+    );
     if (shortcut && openSearch()) {
       event.preventDefault();
     }

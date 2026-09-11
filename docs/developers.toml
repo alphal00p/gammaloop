@@ -208,7 +208,11 @@ review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloo
 path = "crates/gammaloop-api/src/templates.rs"
 symbol = "gammaloop_api::templates::Assets::extract_templates"
 anchor = "pub fn extract_templates<P: AsRef<Path>>"
-digest = "c3d1ef9ba1d26c5bfdca07d92433afa0cb9d83ab"
+# No-impact attestation 2026-09-11: the entire production source, including
+# extract_templates and its destination contract, is byte-identical to the
+# previous verified scope; only test coverage changed. The migration record's
+# current preface now names the style composer alongside its three adapters.
+digest = "040793fcba3b6f372a03187cfe82cfacc32fa953"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -754,7 +758,12 @@ anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
 # Reviewed 2026-08-31: the same terminal source closure now carries the MIT
 # notices embedded with linnet-py, Linnest, and Kurvst. This changes packaging
 # inputs but not the producer partition or cache-reuse architecture.
-digest = "ee101699c38ad35e7052cb4e1d3692f51a8638d6"
+# No producer-boundary impact 2026-09-11: streaming/WASM examples and tests
+# extend the terminal documentation closure; the separately pinned docs Typst,
+# Roboto package, and renamed Typst-plugin features leave the reusable
+# Cargo producer ownership unchanged. The note separately records the Pages
+# workflow's new notebook export after the static Nix documentation build.
+digest = "557a992ce9afc85c956fc0251205f7abf8c5796b"
 
 [[section.note.scope]]
 path = "crates/alphal00p-docs-builder/src/typst_render.rs"
@@ -813,7 +822,11 @@ anchor = "pub fn check(&self) -> Result<()> {"
 # No documentation-system architecture impact 2026-08-28: portal dependency
 # validation follows the GammaLoop-owned template path, and generated Linnet
 # navigation describes domain templates instead of the removed physics route.
-digest = "b765be98e05dd4eedf3a4e448ecf8254925d248e"
+# No lifecycle-policy impact 2026-09-11: the source changes update GammaLoop
+# rendering tests and exclude top-level generated dist exports from authored
+# prose discovery. Verified-scope enforcement and developer HTML restrictions
+# remain byte-identical to the previous reviewed implementation.
+digest = "08d7b0f2679d4c02a9fca64de4e003a8f3b88b98"
 
 [[section.note]]
 id = "documentation-improvement-plan"

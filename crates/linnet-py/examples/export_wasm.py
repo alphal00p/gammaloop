@@ -8,6 +8,7 @@ import contextlib
 import filecmp
 import functools
 import http.server
+import json
 import re
 import shlex
 import shutil
@@ -15,8 +16,10 @@ import subprocess
 import sys
 import tempfile
 import threading
+import tomllib
 import urllib.parse
 import urllib.request
+import uuid
 import zipfile
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
@@ -41,6 +44,8 @@ class Notebook:
 
     @property
     def ready_selector(self) -> str:
+        if self.ready_value == "quickstart":
+            return '[data-linnet-notebook="python_quickstart"] svg.typst-doc'
         return f'[data-linnet-render-ready="{self.ready_value}"] svg'
 
 
@@ -150,10 +155,94 @@ def lint(staged: Sequence[tuple[Notebook, Path]]) -> None:
 
 
 def export(
-    staged: Sequence[tuple[Notebook, Path]], output: Path
+    staged: Sequence[tuple[Notebook, Path]], output: Path, *, docs: bool = False
 ) -> tuple[tuple[Notebook, Path], ...]:
     output.mkdir(parents=True, exist_ok=True)
     artifacts = []
+    if docs:
+        import marimo as mo
+
+        generators = []
+        # Islands omit PEP 723 metadata. Install the staged wheel explicitly and
+        # make the import cell depend on it; the browser supplies its absolute URL.
+        for notebook, source in staged:
+            text = source.read_text(encoding="utf-8")
+            metadata = re.search(r"# /// script\n(.*?)# ///", text, re.DOTALL)
+            requirements = tomllib.loads(re.sub(r"(?m)^# ?", "", metadata.group(1)))[
+                "dependencies"
+            ]
+            requirements = [
+                "__LINNET_WHEEL_URL__" if item.startswith("linnet-py @") else item
+                for item in requirements
+                if not item.startswith("marimo==")
+            ]
+            source.write_text(
+                text.replace("    import ", "    linnet_browser_ready\n    import ", 1),
+                encoding="utf-8",
+            )
+            generator = mo.MarimoIslandGenerator.from_file(str(source))
+            generator.add_code(
+                "import micropip as _micropip\n"
+                f"await _micropip.install({requirements!r}, reinstall=True)\n"
+                "linnet_browser_ready = True",
+            )
+            generators.append((notebook, generator))
+
+        # The live quickstart uses the canonical documented example verbatim,
+        # then renders the resulting graph. Keeping
+        # output in the editable cell also gives it Marimo's rerun control.
+        quickstart = (
+            EXAMPLES_DIR.parents[2]
+            / "docs/products/linnet/content/quickstart-python.typ"
+        )
+        match = re.search(
+            r"// docs-example: compile linnet-python-quickstart\s*```python\n(.*?)\n```",
+            quickstart.read_text(encoding="utf-8"),
+            re.DOTALL,
+        )
+        if match is None:
+            raise ValueError("The canonical Linnet Python quickstart was not found")
+        generator = mo.MarimoIslandGenerator()
+        generator.add_code(
+            "import micropip as _micropip\n"
+            "await _micropip.install('__LINNET_WHEEL_URL__')\n"
+            "linnet_browser_ready = True",
+        )
+        generator.add_code(
+            "linnet_browser_ready\n" + match.group(1) + "\n\n"
+            "import marimo as mo\n"
+            "mo.Html(graph.to_svg())",
+            display_code=True,
+        )
+        generators.append((Notebook("python_quickstart.py", "quickstart"), generator))
+        wheel = next((staged[0][1].parent / "wheels").glob("*.whl"))
+        hosted_wheel = output / "public" / "wheels" / wheel.name
+        hosted_wheel.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(wheel, hosted_wheel)
+        for notebook, generator in generators:
+            body = generator.render_body(
+                include_init_island=False, include_payload=True
+            )
+            # Static editor handles are random UUIDs in Marimo. Stable handles
+            # keep repeated exports identical for immutable documentation snapshots.
+            for index, identifier in enumerate(
+                dict.fromkeys(re.findall(r"object-id='([^']+)'", body))
+            ):
+                stable = uuid.uuid5(uuid.NAMESPACE_URL, f"{notebook.filename}:{index}")
+                body = body.replace(f"'{identifier}'", f"'{stable}'")
+            artifact = (output / notebook.output_name).with_suffix(".json")
+            artifact.write_text(
+                json.dumps(
+                    {
+                        "head": generator.render_head(),
+                        "body": body,
+                        "wheel": "public/wheels/" + wheel.name,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            artifacts.append((notebook, artifact))
+        return tuple(artifacts)
     for notebook, source in staged:
         artifact = output / notebook.output_name
         marimo(
@@ -197,9 +286,13 @@ def http_smoke(
     artifacts: Sequence[tuple[Notebook, Path]],
     output: Path,
     wheel: Path | None,
+    *,
+    docs: bool = False,
 ) -> None:
     assets = output / "assets"
-    if not assets.is_dir() or not any(path.is_file() for path in assets.rglob("*")):
+    if not docs and (
+        not assets.is_dir() or not any(path.is_file() for path in assets.rglob("*"))
+    ):
         raise RuntimeError(f"Marimo export did not produce assets under {assets}")
 
     if wheel is not None:
@@ -215,6 +308,18 @@ def http_smoke(
             body = response.read().decode("utf-8")
             if response.status != 200:
                 raise RuntimeError(f"Invalid Marimo WASM response from {url}")
+            if docs:
+                payload = json.loads(body)
+                if (
+                    "<marimo-island" not in payload["body"]
+                    or "__LINNET_WHEEL_URL__" not in body
+                ):
+                    raise RuntimeError(
+                        f"{artifact.name} is missing its executable islands"
+                    )
+                if payload["wheel"] != "public/wheels/" + wheel.name:
+                    raise RuntimeError(f"{artifact.name} references the wrong wheel")
+                continue
             required = {
                 "embedded notebook source": "<marimo-code",
                 "edit-mode configuration": '"mode": "edit"',
@@ -242,6 +347,8 @@ def browser_smoke(
     artifacts: Sequence[tuple[Notebook, Path]],
     timeout_seconds: float,
     browser_executable: Path | None,
+    *,
+    docs: bool = False,
 ) -> None:
     try:
         from playwright.sync_api import sync_playwright
@@ -264,7 +371,16 @@ def browser_smoke(
                     "pageerror",
                     lambda error, errors=errors: errors.append(str(error)),
                 )
-                url = urllib.parse.urljoin(base_url, urllib.parse.quote(artifact.name))
+                route = (
+                    (
+                        "quickstart/python/"
+                        if notebook.ready_value == "quickstart"
+                        else "playground/"
+                    )
+                    if docs
+                    else urllib.parse.quote(artifact.name)
+                )
+                url = urllib.parse.urljoin(base_url, route)
                 response = page.goto(
                     url,
                     wait_until="domcontentloaded",
@@ -272,12 +388,17 @@ def browser_smoke(
                 )
                 if response is None or not response.ok:
                     raise RuntimeError(f"Browser failed to load {url}")
-                page.locator(".cm-editor").first.wait_for(
-                    state="visible",
-                    timeout=timeout,
-                )
-                # Editable exports intentionally start with unexecuted cells.
-                page.locator('[data-testid="run-button"]').last.click()
+                if docs:
+                    page.locator("[data-linnet-notebook]").get_by_role(
+                        "button", name="Launch notebook"
+                    ).click()
+                else:
+                    page.locator(".cm-editor").first.wait_for(
+                        state="visible",
+                        timeout=timeout,
+                    )
+                    # Editable exports intentionally start with unexecuted cells.
+                    page.locator('[data-testid="run-button"]').last.click()
                 page.locator(notebook.ready_selector).wait_for(
                     state="visible",
                     timeout=timeout,
@@ -299,6 +420,11 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         required=True,
         help="Directory for the editable HTML-WASM notebooks",
+    )
+    parser.add_argument(
+        "--docs",
+        action="store_true",
+        help="Export live documentation cells into a built product's assets/notebooks directory (requires --wheel)",
     )
     parser.add_argument(
         "--notebook",
@@ -338,24 +464,53 @@ def main(arguments: Sequence[str] | None = None) -> int:
         raise ValueError("--timeout must be greater than zero")
     wheel = validate_wasm_wheel(options.wheel) if options.wheel else None
     output = options.output.expanduser().resolve()
+    if options.docs and (
+        wheel is None or options.notebook not in (None, "layout_stream")
+    ):
+        raise ValueError(
+            "--docs requires --wheel and exports the layout stream and Python quickstart"
+        )
+    if options.docs and (
+        (output.parent.name, output.name) != ("assets", "notebooks")
+        or (
+            options.browser_smoke
+            and not (output.parent.parent / "playground/index.html").is_file()
+        )
+    ):
+        raise ValueError(
+            "Build the Linnet docs first and use --output <product-version>/assets/notebooks"
+        )
+    selected = "layout_stream" if options.docs else options.notebook
 
     notebooks = tuple(
         notebook
         for notebook in NOTEBOOKS
-        if options.notebook is None or Path(notebook.filename).stem == options.notebook
+        if selected is None or Path(notebook.filename).stem == selected
     )
     with staged_notebooks(wheel, notebooks) as staged:
         lint(staged)
-        artifacts = export(staged, output)
+        artifacts = export(staged, output, docs=options.docs)
 
-    with serve(output) as base_url:
-        http_smoke(base_url, artifacts, output, wheel)
+    with serve(output.parent.parent if options.docs else output) as base_url:
+        http_smoke(
+            urllib.parse.urljoin(base_url, "assets/notebooks/")
+            if options.docs
+            else base_url,
+            artifacts,
+            output,
+            wheel,
+            docs=options.docs,
+        )
         if options.browser_smoke:
             browser_smoke(
-                base_url, artifacts, options.timeout, options.browser_executable
+                base_url,
+                artifacts,
+                options.timeout,
+                options.browser_executable,
+                docs=options.docs,
             )
 
-    print(f"Editable Marimo WASM notebooks exported to {output}")
+    print(f"Marimo WASM notebooks exported to {output}")
     return 0
 
 

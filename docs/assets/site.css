@@ -1178,3 +1178,30 @@ button[data-copy-target] { display: none; }
   .docs-shell { display: block; padding: 0; }
   .docs-main { width: 100%; max-width: none; padding: 0; }
 }
+
+/* Live notebooks load only when requested; the authored example remains readable. */
+.live-notebook {
+  margin-block: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--hairline);
+  border-radius: .5rem;
+  min-width: 0;
+}
+.live-notebook-launch {
+  cursor: pointer;
+  padding: .55rem .85rem;
+  font: inherit;
+  border: 1px solid currentColor;
+  border-radius: .35rem;
+}
+.live-notebook [role="status"] {
+  font-size: .9rem;
+}
+.live-notebook-cells {
+  min-width: 0;
+  overflow-x: auto;
+}
+.live-notebook marimo-island {
+  display: block;
+  margin-block: 1rem;
+}

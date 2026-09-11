@@ -6,6 +6,7 @@
 #import "content/quickstart-typst.typ": quickstart-typst
 #import "content/tutorial.typ": tutorial
 #import "content/algorithms.typ": algorithms
+#import "content/playground.typ": playground
 #import "content/clinnet.typ": clinnet
 #import "content/linnest.typ": linnest
 #import "content/api.typ": api
@@ -32,6 +33,7 @@
     #quickstart-typst
     #tutorial
     #algorithms
+    #playground
     #clinnet
     #linnest
     #api
