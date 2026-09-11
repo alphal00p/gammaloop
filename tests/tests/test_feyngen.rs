@@ -629,6 +629,77 @@ fn feyngen_str(
 
 #[test]
 #[serial]
+fn numerator_grouping_preserves_graphs_across_worker_counts() -> Result<()> {
+    let test_name = "numerator_grouping_preserves_graphs_across_worker_counts";
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    cli.run_command("import model sm-default.json")?;
+    let mut baseline = None;
+    for grouping in [
+        "group_identical_graphs_up_to_sign",
+        "group_identical_graphs_up_to_scalar_rescaling",
+    ] {
+        for cores in [1, 4] {
+            cli.run_command(&format!("set global kv global.n_cores.feyngen={cores}"))?;
+            assert_eq!(
+                feyngen_str(
+                    &mut cli,
+                    "xs",
+                    &format!(
+                        "e+ e- > d d~ | e- a d g QED^2==4 [{{{{2}}}} QCD] --numerator-grouping {grouping} --symmetrize-left-right-states false"
+                    ),
+                    false,
+                )?,
+                "2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3",
+                "{grouping}, {cores} workers",
+            );
+            let ProcessCollection::CrossSections(cross_sections) =
+                &cli.state.process_list.processes[0].collection
+            else {
+                panic!("expected a cross-section process");
+            };
+            let mut graphs = cross_sections
+                .values()
+                .next()
+                .unwrap()
+                .supergraphs
+                .iter()
+                .map(|graph| {
+                    (
+                        graph.graph.name.clone(),
+                        graph.graph.overall_factor.clone(),
+                        graph.graph.debug_dot(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            // Worker scheduling may change container order. The minimum-ID representative,
+            // complete grouping provenance, directed topology and momentum routing must agree.
+            graphs.sort_by(|a, b| a.0.cmp(&b.0));
+            assert_eq!(
+                graphs
+                    .iter()
+                    .map(|(name, factor, _)| {
+                        (name.as_str(), evaluate_overall_factor(factor.as_view()))
+                    })
+                    .collect::<Vec<_>>(),
+                vec![("GL0", Atom::num(-2)), ("GL2", Atom::num(-1))],
+            );
+            if let Some(baseline) = &baseline {
+                assert_eq!(&graphs, baseline, "{grouping}, {cores} workers");
+            } else {
+                baseline = Some(graphs);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
     let mut cli = get_test_cli(
         Some("scalars_load.toml".into()),
@@ -660,7 +731,7 @@ fn amplitude_standalone_export_reloads_and_evaluates() -> Result<()> {
         true,
     )?;
     cli.run_command("set global kv global.generation.evaluator.store_atom=true")?;
-    cli.run_command("generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i archive_eval --global-prefactor-num '1𝑖'")?;
+    cli.run_command("generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i archive_eval")?;
     cli.run_command("generate")?;
 
     cli.state.process_list.export_standalone(
@@ -1176,6 +1247,8 @@ fn cp_fix_from_symbolica()->Result<()>{
     // Choose the model to consider
     cli.run_command("import model sm-default.json")?;
 
+    // Group IDs here use the explicitly requested CP canonicalization;
+    // default forward-side generation has a different label assignment.
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-12*G^2*ee^(-2)+-9*G^2*Nc*ee^(-2)+9*G^2*Nc^(-1)*ee^(-2)");//good
     Ok(())
 }
@@ -1189,8 +1262,11 @@ fn test_generate_sm_full_a_ddx() -> Result<()> {
     // Full particle contents
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"1 | -1 = -1");//good
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"47 | -47 = -47");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"37 | -35+Group(29,1,-1)+Group(30,1,-1)+Group(31,1,-1)+Group(32,1,-1) = -39");//less 37 vs 45 due to lorentz cancellations
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?,@"36 | -33+Group(29,1,-1)+Group(30,1,-1)+Group(32,1,-1)+Group(33,1,-1)+Group(35,1,-1)+Group(36,1,-1) = -39");//as above
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"45 | -43+Group(29,1,-1)+Group(30,1,-1)+Group(31,1,-1)+Group(32,1,-1) = -47");//The previous 37 omitted eight mixed W/Goldstone diagrams made spuriously zero by reversed scalar projectors.
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?,@"44 | -41+Group(29,1,-1)+Group(30,1,-1)+Group(31,1,-1)+Group(32,1,-1)+Group(35,1,-1)+Group(36,1,-1) = -47");//As above: all eight mass-insertion contributions survive with the corrected scalar projectors.
+    // CP pairs the eight restored mixed W/Goldstone mass-insertion diagrams
+    // into four groups; the signed contribution count remains -47.
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?,@"40 | -33+Group(12,1,-1)+Group(13,1,-1)+Group(29,1,-1)+Group(30,1,-1)+Group(32,1,-1)+Group(33,1,-1)+Group(35,1,-1)+Group(36,1,-1)+Group(39,1,-1)+Group(40,1,-1)+Group(42,1,-1)+Group(43,1,-1)+Group(5,1,-1)+Group(6,1,-1) = -47");//as above
 
     Ok(())
 }
@@ -1198,11 +1274,53 @@ fn test_generate_sm_full_a_ddx() -> Result<()> {
 #[test]
 #[rustfmt::skip]
 fn test_vacuum_amplitude_kaapo() -> Result<()> {
+    use linnet::half_edge::subgraph::{Inclusion, SuBitGraph};
+    use std::collections::BTreeMap;
+
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
     cli.run_command("import model sm-default.json")?;
 
     // 4-loop vaccuum contribution to the neutron start equation of state
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --number-of-fermion-loops 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",false)?,@"52 | -44/3 = -44/3");
+    let description = feyngen_str(&mut cli, "amp", "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --number-of-anticommutating-loops 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",false)?;
+    let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection else {
+        panic!("expected a vacuum amplitude inventory");
+    };
+    let mut histogram = BTreeMap::<(usize, usize), (usize, Atom)>::new();
+    let mut old_count = 0;
+    let mut old_sum = Atom::Zero;
+    for amplitude_graph in &amplitudes.values().next().unwrap().graphs {
+        let graph = &amplitude_graph.graph;
+        let fermions: SuBitGraph = graph.underlying.from_filter(|edge| edge.particle.is_fermion());
+        let ghosts: SuBitGraph = graph.underlying.from_filter(|edge| {
+            edge.particle.is_anticommutating() && !edge.particle.is_fermion()
+        });
+        // These QCD species form disjoint closed chains, so cycle rank counts loops.
+        for subset in [&fermions, &ghosts] {
+            for (_, neighbors, _) in graph.underlying.iter_nodes_of(subset) {
+                assert_eq!(neighbors.filter(|hedge| subset.includes(hedge)).count(), 2);
+            }
+        }
+        let f = graph.underlying.cyclotomatic_number(&fermions);
+        let g = graph.underlying.cyclotomatic_number(&ghosts);
+        assert!(f + g >= 1);
+        let weight = evaluate_overall_factor(graph.overall_factor.as_view());
+        let bucket = histogram.entry((f, g)).or_insert((0, Atom::Zero));
+        bucket.0 += 1;
+        bucket.1 += &weight;
+        // Undo only the new ghost statistics sign and restore the old F >= 1 filter.
+        // OnlyDetectZeroes does not merge nonzero numerators; UUV1 signs cannot alter zeros.
+        if f > 0 {
+            old_count += 1;
+            old_sum += weight * Atom::num(-1).pow(g as i64);
+        }
+    }
+    for ((f, g), (count, sum)) in histogram {
+        println!("Kaapo F={f}, G={g}: {count} graphs, signed sum {sum}");
+    }
+    println!("Kaapo aggregate: {description}");
+    assert_eq!(old_count, 52);
+    assert_eq!(old_sum, Atom::num((-44, 3)));
+    assert_snapshot!(description,@"91 | -25/3 = -25/3");
 
     Ok(())
 }

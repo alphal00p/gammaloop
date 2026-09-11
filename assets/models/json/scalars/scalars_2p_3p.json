@@ -226,19 +226,19 @@
     {
       "name": "scalar_0_propFeynman",
       "particle": "scalar_0",
-      "numerator": "1",
+      "numerator": "1𝑖",
       "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2"
     },
     {
       "name": "scalar_1_propFeynman",
       "particle": "scalar_1",
-      "numerator": "1",
+      "numerator": "1𝑖",
       "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::mass_scalar_1^2"
     },
     {
       "name": "scalar_2_propFeynman",
       "particle": "scalar_2",
-      "numerator": "1",
+      "numerator": "1𝑖",
       "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::mass_scalar_2^2"
     }
   ],
@@ -264,7 +264,7 @@
   "couplings": [
     {
       "name": "SCALAR_COUPLING",
-      "expression": "1𝑖*UFO::{}::lam",
+      "expression": "-1𝑖*UFO::{}::lam",
       "orders": [
         [
           "QCD",
@@ -273,7 +273,7 @@
       ],
       "value": [
         0.0,
-        1.0
+        -1.0
       ]
     }
   ],

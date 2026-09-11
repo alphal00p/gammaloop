@@ -17,6 +17,7 @@ use spenso::{
 // use petgraph::Direction::Outgoing;
 use symbolica::{
     atom::{Atom, AtomCore},
+    function,
     id::Replacement,
 };
 use typed_index_collections::TiVec;
@@ -24,11 +25,11 @@ use typed_index_collections::TiVec;
 use crate::{
     cff::generation::ShiftRewrite,
     integrands::process::param_builder::{ParamBuilderGraph, SplitPolarizations},
-    model::{ArcParticle, Model},
+    model::{ArcParticle, Model, UFOSymbol},
     momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
     momentum::signature::{ExternalSignature, SignatureLike},
     momentum::{PolDef, SignOrZero},
-    numerator::graph::ReversibleEdge,
+    numerator::{graph::ReversibleEdge, ufo::UFO},
     utils::{F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index},
     uv::uv_graph::UVE,
 };
@@ -85,6 +86,57 @@ pub trait FeynmanGraph {
         target_nodes: HedgeNode,
         initial_state_tree: &SuBitGraph,
     ) -> Vec<(SuBitGraph, OrientedCut, SuBitGraph)>;
+}
+
+impl Graph {
+    /// LU uses real on-shell energies and stable-particle cuts; width metadata alone
+    /// does not turn a real mass into a complex-mass-scheme propagator.
+    /// Used UFO denominators must agree with the standard pole reconstructed from the mass.
+    pub(crate) fn validate_real_masses(&self, model: &Model) -> eyre::Result<()> {
+        // DOT mass expressions use evaluator slots, which may predate a model update.
+        let mut parameters = self.param_builder.clone();
+        parameters.update_model_values(model);
+        for (pair, edge_id, edge) in self.iter_edges() {
+            if let Some(mass) = edge.data.mass_value::<f64>(model, &parameters)
+                && !mass.im.is_zero()
+            {
+                return Err(eyre::eyre!(
+                    "Cross-section graph '{}' has unsupported complex mass '{}' = {} on edge {}. LU requires real masses; the complex-mass scheme and finite-width propagators are not supported.",
+                    self.name,
+                    edge.data.mass_atom(),
+                    mass,
+                    edge_id
+                ));
+            }
+            if matches!(pair, HedgePair::Paired { .. })
+                && let Some(particle) = edge.data.particle()
+            {
+                let propagator = model.get_propagator_for_particle(&particle.name);
+                let momentum = function!(UFO.momentum, 1);
+                let expected = momentum.pow(2) - Atom::var(particle.mass.0.0).pow(2);
+                // Normalize only the model denominator, never the graph numerator.
+                // DOT mass overrides replace the declared pole after this compatibility check.
+                let difference = (propagator
+                    .denominator
+                    .replace(function!(UFO.momentum, function!(UFO.idx, 1, 1)))
+                    .with(momentum)
+                    - &expected)
+                    .replace(UFOSymbol::zero().0)
+                    .with(Atom::Zero);
+                if !difference.expand().is_zero() {
+                    return Err(eyre::eyre!(
+                        "Cross-section graph '{}' has unsupported propagator denominator '{}' for particle '{}' on edge {}. LU reconstructs the standard real pole '{}'; custom denominators, including explicit finite-width terms, are not supported.",
+                        self.name,
+                        propagator.denominator,
+                        particle.name,
+                        edge_id,
+                        expected
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Deref for Graph {
@@ -766,5 +818,189 @@ impl FeynmanGraph for Graph {
                 (l, c, r)
             })
             .collect_vec()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        graph::parse::from_dot::IntoGraph, initialisation::test_initialise,
+        utils::load_generic_model,
+    };
+
+    #[test]
+    fn cross_section_real_masses_accept_zero_real_and_width_metadata() -> eyre::Result<()> {
+        test_initialise()?;
+        let model = load_generic_model("sm");
+        assert!(!model.get_parameter("WT").value.unwrap().re.is_zero());
+        let graph: Graph = r#"
+            digraph real_masses {
+                node [num=1];
+                edge [num=1];
+                A -> B [id=0 mass=0];
+                A -> B [id=1 mass=2];
+                A -> B [id=2 particle="t"];
+            }
+        "#
+        .into_graph(&model)?;
+        graph.validate_real_masses(&model)
+    }
+
+    #[test]
+    fn cross_section_standard_denominators_accept_wrapping_and_factorization() -> eyre::Result<()> {
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        for name in ["g", "t"] {
+            let position = model
+                .propagators
+                .iter()
+                .position(|propagator| propagator.particle.name == name)
+                .unwrap();
+            let mass = Atom::var(model.get_particle(name).mass.0.0);
+            for momentum in [
+                function!(UFO.momentum, 1),
+                function!(UFO.momentum, function!(UFO.idx, 1, 1)),
+            ] {
+                // The factored form certifies denominator-only normalization.
+                std::sync::Arc::make_mut(&mut model.propagators[position]).denominator =
+                    (&momentum - &mass) * (&momentum + &mass);
+                let graph: Graph = format!(
+                    r#"digraph standard_denominator {{
+                        node [num=1]; edge [num=1];
+                        A -> B [particle="{name}"];
+                    }}"#
+                )
+                .into_graph(&model)?;
+                graph.validate_real_masses(&model)?;
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn cross_section_custom_denominators_reject_used_lines_only() -> eyre::Result<()> {
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let position = model
+            .propagators
+            .iter()
+            .position(|propagator| propagator.particle.name == "H")
+            .unwrap();
+        let width_term = Atom::i()
+            * Atom::var(model.get_parameter("MH").name.0)
+            * Atom::var(model.get_parameter("WH").name.0);
+        std::sync::Arc::make_mut(&mut model.propagators[position]).denominator += width_term;
+        let unused: Graph = r#"digraph unused_width {
+            node [num=1]; edge [num=1];
+            A -> B [particle="g"];
+        }"#
+        .into_graph(&model)?;
+        unused.validate_real_masses(&model)?;
+        let amputated: Graph = r#"digraph amputated_width {
+            ext [style=invis]; vertex [num=1]; edge [num=1];
+            ext -> vertex [particle="H"];
+        }"#
+        .into_graph(&model)?;
+        assert!(amputated.iter_edges().all(|(pair, _, _)| !pair.is_paired()));
+        amputated.validate_real_masses(&model)?;
+        let used: Graph = r#"digraph explicit_width {
+            node [num=1]; edge [num=1];
+            A -> B [particle="H"];
+        }"#
+        .into_graph(&model)?;
+        let error = used.validate_real_masses(&model).unwrap_err().to_string();
+        assert!(error.contains("explicit_width"));
+        assert!(error.contains("unsupported propagator denominator"));
+        assert!(error.contains("finite-width"));
+        Ok(())
+    }
+
+    #[test]
+    fn cross_section_denominator_validation_uses_the_current_model() -> eyre::Result<()> {
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let mass = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
+        let graph: Graph = format!(
+            r#"digraph updated_denominator {{
+                node [num=1]; edge [num=1];
+                A -> B [particle="t" mass="{mass}+1"];
+            }}"#
+        )
+        .into_graph(&model)?;
+        graph.validate_real_masses(&model)?;
+        let position = model
+            .propagators
+            .iter()
+            .position(|propagator| propagator.particle.name == "t")
+            .unwrap();
+        // A loaded graph must not keep validating its old propagator declaration.
+        // The same owner runs again at direct integrand warm-up.
+        std::sync::Arc::make_mut(&mut model.propagators[position]).denominator += Atom::one();
+        let error = graph.validate_real_masses(&model).unwrap_err().to_string();
+        assert!(error.contains("updated_denominator"));
+        assert!(error.contains("unsupported propagator denominator"));
+        Ok(())
+    }
+
+    #[test]
+    fn cross_section_complex_mass_is_rejected_at_generation() -> eyre::Result<()> {
+        test_initialise()?;
+        let model = load_generic_model("sm");
+        let graph: Graph = r#"
+            digraph complex_mass {
+                node [num=1];
+                edge [num=1];
+                A -> B [id=0 mass="1+1𝑖"];
+                A -> B [id=1 mass=0];
+            }
+        "#
+        .into_graph(&model)?;
+        let error = graph.validate_real_masses(&model).unwrap_err().to_string();
+        assert!(error.contains("complex_mass"));
+        assert!(error.contains("unsupported complex mass"));
+        assert!(error.contains("edge e0"));
+        assert!(error.contains("complex-mass scheme"));
+        Ok(())
+    }
+
+    #[test]
+    fn cross_section_mass_validation_refreshes_runtime_model_values() -> eyre::Result<()> {
+        test_initialise()?;
+        for offset in ["", "+1"] {
+            let mut model = load_generic_model("sm");
+            let mass = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
+            let graph: Graph = format!(
+                r#"digraph runtime_mass {{
+                    node [num=1];
+                    edge [num=1];
+                    A -> B [id=0 mass="{mass}{offset}"];
+                    A -> B [id=1 mass=0];
+                }}"#
+            )
+            .into_graph(&model)?;
+            graph.validate_real_masses(&model)?;
+            let cached_values = graph.param_builder.values.clone();
+
+            model.get_parameter_mut("MT")?.value = Some(Complex::new(F(2.0), F(0.5)));
+            if !offset.is_empty() {
+                // The DOT evaluator still sees the old real value until its slots refresh.
+                assert!(
+                    graph[EdgeIndex(0)]
+                        .mass_value::<f64>(&model, &graph.param_builder)
+                        .unwrap()
+                        .im
+                        .is_zero()
+                );
+            }
+            let error = graph.validate_real_masses(&model).unwrap_err().to_string();
+            assert!(error.contains("runtime_mass"));
+            assert!(error.contains("unsupported complex mass"));
+            assert_eq!(graph.param_builder.values, cached_values);
+
+            model.get_parameter_mut("MT")?.value = Some(Complex::new_re(F(3.0)));
+            graph.validate_real_masses(&model)?;
+        }
+        Ok(())
     }
 }

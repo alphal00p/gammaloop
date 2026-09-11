@@ -137,6 +137,8 @@ fn legacy_renormalization_part(
     settings: &UVgenerationSettings,
 ) -> Result<RenormalizationPart> {
     let mut vk_settings = settings.vakint.true_settings();
+    vk_settings.project_onto_tensor_integrals =
+        settings.project_integrated_uv_cts_onto_tensor_integrals;
     let wood = graph.wood_with_settings(&graph.no_dummy(), settings, &graph.loop_momentum_basis);
     // MUV renormalization extracts the finite term, so retain one term beyond
     // the maximal pole order, as in the other forest integration paths.
@@ -224,6 +226,13 @@ impl IntegrandMapComparison<'_> {
             .checked_zip(self.hedge, |key, legacy_expr, hedge_expr| {
                 if !ComparableExpr::new(legacy_expr).equivalent_to(&ComparableExpr::new(hedge_expr))
                 {
+                    crate::debug_tags!(#uv, #compare, #mismatch;
+                        cut_index = self.cut_index,
+                        residue = ?key,
+                        file.legacy = legacy_expr.to_canonical_string(),
+                        file.hedge = hedge_expr.to_canonical_string(),
+                        "UV orchestrator expressions differ at the shared residue boundary"
+                    );
                     return Err(eyre!(
                         "UV orchestrator compare mismatch at cut {} residue {:?}",
                         self.cut_index,
@@ -287,7 +296,6 @@ impl<'a> ComparableExpr<'a> {
             .simplify_metrics()
             .to_dots()
             .simplify_color()
-            .expand_num()
     }
 }
 
@@ -301,12 +309,13 @@ mod tests {
     #[test]
     fn compare_canonicalizes_contracted_uv_indices() {
         crate::initialisation::test_initialise().unwrap();
+        let spectator = symbolica::parse!("2*(compare_a+compare_b)*(compare_c+compare_d)");
         let expression = |topology| {
             let contracted = mink!(4, Atom::from(Aind::UVTerm(topology, 2)));
             let fixed = mink!(4, Atom::from(Aind::Edge(2, 1)));
             let start = bis!(4, Atom::from(Aind::Hedge(0, 0)));
             let end = bis!(4, Atom::from(Aind::Hedge(1, 0)));
-            let common = Atom::var(symbol!("compare_common_factor"));
+            let common = &spectator * Atom::var(symbol!("compare_common_factor"));
             let term = |index: Atom| {
                 common.clone()
                     * chain!(start.clone(), end.clone(), gamma!(index.clone()))
@@ -320,6 +329,15 @@ mod tests {
         let hedge = ComparableExpr::new(&hedge);
 
         assert_ne!(legacy.normalized(), hedge.normalized());
+        for expression in [&legacy, &hedge] {
+            assert!(
+                expression
+                    .normalized()
+                    .pattern_match(&spectator.to_pattern(), None, None)
+                    .next()
+                    .is_some()
+            );
+        }
         assert!(legacy.equivalent_to(&hedge));
     }
 }

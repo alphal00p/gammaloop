@@ -573,6 +573,17 @@ impl<'a> Localizer<'a> {
         };
         let no_valid_production_ids = BTreeSet::new();
         let indices = cff.terms.keys().copied().collect::<Vec<_>>();
+        let source_orientation_count = cff
+            .terms
+            .values()
+            .map(|term| term.orientations.len())
+            .sum::<usize>();
+        let source_variant_count = cff
+            .terms
+            .values()
+            .flat_map(|term| &term.orientations)
+            .map(|term| term.orientation.variants.len())
+            .sum::<usize>();
         // Convert this reduced CFF's energy-factor convention once. Any
         // localized finite coefficient keeps its existing forest signs.
         let production_prefactor = Atom::num(cff.production_prefactor_factor());
@@ -634,6 +645,21 @@ impl<'a> Localizer<'a> {
                         .expect("all projected CFF branch keys were initialized") += expression;
                 }
             }
+        }
+
+        if terms.is_empty() {
+            // A reduced cograph can have no residue at the selected threshold.
+            // Preserve that zero on its cut-order support, just as for a zero
+            // integrated coefficient, before entering the nonempty direct lane.
+            debug_tags!(#generation, #uv, #integrated, #projection;
+                stage = "empty_cff_projection",
+                source_orientation_count,
+                source_variant_count,
+                contracted = %to_contract.string_label(),
+                residue_selector = ?self.cutset.residue_selector,
+                "Retaining a zero CFF projection on the selected cut orders"
+            );
+            return Ok(OrientationIntegrands::from_ids_and_indices(ids, &indices));
         }
 
         Ok(OrientationIntegrands(

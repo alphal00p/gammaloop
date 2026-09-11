@@ -507,13 +507,67 @@ struct InspectProbeResult {
 }
 
 impl InspectProbeResult {
-    fn threshold_ratio(&self) -> f64 {
-        let ratio = self.relative_delta / self.required_relative_delta.max(f64::MIN_POSITIVE);
-        if ratio.is_finite() {
-            ratio
-        } else {
-            f64::NEG_INFINITY
+    fn threshold_ratio(&self) -> Result<f64> {
+        let ratio = self.relative_delta / self.required_relative_delta;
+        if !self.relative_delta.is_finite()
+            || self.relative_delta < 0.0
+            || !self.relative_accuracy.is_finite()
+            || self.relative_accuracy <= 0.0
+            || !self.required_relative_delta.is_finite()
+            || self.required_relative_delta <= 0.0
+            || !ratio.is_finite()
+        {
+            return Err(eyre::eyre!(
+                "invalid or non-finite inspect probe at exponent={:+.1}, seed={}: relative delta={}, accuracy={}, required delta={}",
+                self.probe.scale_exponent,
+                self.probe.seed_index,
+                self.relative_delta,
+                self.relative_accuracy,
+                self.required_relative_delta,
+            ));
         }
+        Ok(ratio)
+    }
+
+    fn passes(&self, allow_absent_dependence: bool) -> Result<bool> {
+        Ok(self.threshold_ratio()? >= 1.0
+            || (allow_absent_dependence && self.relative_delta <= self.relative_accuracy))
+    }
+}
+
+#[test]
+fn inspect_probe_dependence_uses_reported_accuracy_and_rejects_nonfinite_probes() {
+    let probe = |relative_delta, relative_accuracy| InspectProbeResult {
+        probe: InspectProbePoint {
+            point: vec![1.0],
+            scale_exponent: 0.0,
+            seed_index: 0,
+        },
+        relative_delta,
+        relative_accuracy,
+        required_relative_delta: INSPECT_DEPENDENCE_ACCURACY_FACTOR * relative_accuracy,
+    };
+    let accuracy = 1.0e-10;
+    let threshold = INSPECT_DEPENDENCE_ACCURACY_FACTOR * accuracy;
+    for (delta, allow_absence, expected) in [
+        (0.0, true, true),
+        (f64::EPSILON, true, true),
+        (accuracy, true, true),
+        (10.0 * accuracy, true, false),
+        (0.0, false, false),
+        (f64::EPSILON, false, false),
+        (0.99 * threshold, false, false),
+        (threshold, false, true),
+        (threshold, true, true),
+    ] {
+        assert_eq!(
+            probe(delta, accuracy).passes(allow_absence).unwrap(),
+            expected
+        );
+    }
+    for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(probe(invalid, accuracy).passes(true).is_err());
+        assert!(probe(0.0, invalid).passes(true).is_err());
     }
 }
 
@@ -618,7 +672,7 @@ fn inspect_scale_dependence_row(
     let accuracy_floor = required_stability_accuracy_floor(cli, case.process, baseline_name)?;
     let probes = deterministic_uv_momentum_points(cli, case.process, baseline_name)?;
     let n_probes = probes.len();
-    let mut best: Option<InspectProbeResult> = None;
+    let mut best: Option<(f64, InspectProbeResult)> = None;
     for probe in probes {
         let baseline = evaluate_summed_momentum_sample(
             cli,
@@ -654,26 +708,32 @@ fn inspect_scale_dependence_row(
             relative_accuracy,
             required_relative_delta,
         };
+        // Validate every probe before ranking so a non-finite result cannot be
+        // silently discarded in favor of a finite sample.
+        let ratio = probe_result.threshold_ratio()?;
         if match &best {
-            Some(current) => probe_result.threshold_ratio() > current.threshold_ratio(),
+            Some((current, _)) => ratio > *current,
             None => true,
         } {
-            best = Some(probe_result);
+            best = Some((ratio, probe_result));
         }
     }
 
-    let best = best.ok_or_else(|| eyre::eyre!("{check} should have at least one inspect probe"))?;
-    let dependence_found =
-        best.relative_delta.is_finite() && best.relative_delta >= best.required_relative_delta;
-    let absent_dependence_allowed = allow_absent_dependence && best.relative_delta == 0.0;
-    let passed = dependence_found || absent_dependence_allowed;
+    let (_, best) =
+        best.ok_or_else(|| eyre::eyre!("{check} should have at least one inspect probe"))?;
+    // The maximum delta/accuracy ratio bounds every validated probe. Allowed
+    // absence is a numerical statement at the reported accuracy, not bit equality.
+    let absent_dependence_allowed =
+        allow_absent_dependence && best.relative_delta <= best.relative_accuracy;
+    let passed = best.passes(allow_absent_dependence)?;
     let threshold = if absent_dependence_allowed {
         format!(
-            "no inspect-level dependence across {n_probes} probes (allowed; integrated invariance checked separately)"
+            "all {n_probes} inspect probes compatible with absence: best relative delta {:.3e} <= accuracy {:.3e} (allowed; integrated invariance checked separately)",
+            best.relative_delta, best.relative_accuracy,
         )
     } else {
         format!(
-            "best inspect relative delta {:.3e} >= {INSPECT_DEPENDENCE_ACCURACY_FACTOR:.0}*accuracy {:.3e} (accuracy={:.3e}, exponent={:+.1}, seed={}, probes={n_probes})",
+            "best inspect relative delta {:.3e}; required >= {INSPECT_DEPENDENCE_ACCURACY_FACTOR:.0}*accuracy {:.3e} (accuracy={:.3e}, exponent={:+.1}, seed={}, probes={n_probes})",
             best.relative_delta,
             best.required_relative_delta,
             best.relative_accuracy,
@@ -1805,7 +1865,7 @@ fn dod0_bubble_uv() {
         shifted_mu_r: 0.8,
         skip_uv_profile: true,
         targets: IntegratedUvTargets {
-            integrated: Some(Complex::new(F(0.0), F(0.01451155120018305))),
+            integrated: Some(Complex::new(F(0.0), F(-0.01451155120018305))),
         },
         integrated_ct_relative_error_limit: None,
         check_mu_r_dependence: true,
@@ -1828,7 +1888,7 @@ fn dod1_bubble_uv() {
         shifted_mu_r: 0.8,
         skip_uv_profile: true,
         targets: IntegratedUvTargets {
-            integrated: Some(Complex::new(F(0.0), F(0.003628430563793077))),
+            integrated: Some(Complex::new(F(0.0), F(-0.003628430563793077))),
         },
         integrated_ct_relative_error_limit: None,
         check_mu_r_dependence: true,
@@ -1851,7 +1911,7 @@ fn dod2_bubble_uv() {
         shifted_mu_r: 0.8,
         skip_uv_profile: true,
         targets: IntegratedUvTargets {
-            integrated: Some(Complex::new(F(0.0), F(0.01234018404957018))),
+            integrated: Some(Complex::new(F(0.0), F(-0.01234018404957018))),
         },
         integrated_ct_relative_error_limit: None,
         check_mu_r_dependence: true,
@@ -1874,7 +1934,7 @@ fn se1l_uv() {
         shifted_mu_r: 0.8,
         skip_uv_profile: false,
         targets: IntegratedUvTargets {
-            integrated: Some(Complex::new(F(13169.321086130927), F(56907.637709852635))),
+            integrated: Some(Complex::new(F(-13169.321086130927), F(-56907.637709852635))),
         },
         integrated_ct_relative_error_limit: None,
         check_mu_r_dependence: true,

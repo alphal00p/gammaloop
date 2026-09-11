@@ -8,6 +8,69 @@ comparisons, temporary log locations, and external-reference convention tables
 belong in tests or investigation records rather than in the current
 architecture.
 
+## Physical loop measure
+
+The amplitude measure is $\prod_\ell d^4k_\ell/(2\pi)^4$. Signed CFF
+contours use $dq^0/(2\pi i)$, so each remaining CFF loop contributes
+$i/(2\pi)^3$. Integrated UV subgraphs use the same Minkowski convention:
+`VakintSettings::additional_normalization` defaults to `"1"`; the historical
+`"-1"` inserted an extra minus sign per integrated loop. The standard Vakint
+normalization, forest subtraction signs, and causal prescriptions retain
+their separate meanings. A graph with $L$ loops consequently receives the
+same phase whether a loop is represented by CFF or by an integrated UV term.
+
+## Dimensional numerator algebra
+
+The covariant `Local4dCts` representation retains symbolic Lorentz dimension
+`d`; its name does not mean that spin algebra has been evaluated at four.
+Analytic UV preparation reconstructs the subgraph's Feynman-rule numerator and
+changes its Minkowski slots to `d` before contracting metrics or evaluating
+ordinary closed fermion traces. The spinor trace normalization remains four.
+Expansion is permitted within the subgraph being analytically integrated, while
+the retained cograph and numerical-production numerator remain factorized.
+
+GammaLoop owns the Dirac algebra. Vakint sees the Lorentz slots of opaque spin
+tensors and performs vacuum tensor projection in `d = 4 - 2 epsilon`.
+Projection can create new contractions between those slots. GammaLoop must
+restore and simplify the projected tensors in symbolic `d`, expose their scalar
+dimension dependence, and only then let Vakint select scalar backend orders and
+form Laurent coefficients. Merely collecting the resulting gamma chains does
+not evaluate their contractions. No hidden dimension-dependent trace may be
+deferred to final four-dimensional numerical assembly.
+The completed analytic result is expanded before its Laurent coefficients are
+stored and reinserted into the cograph, so equivalent scalar-master groupings
+produce the same counterterm. This normalization never expands the cograph.
+
+Unresolved closed spin/Lorentz traces and internal contractions between open
+spin chains must report unsupported dimensional algebra. Retained free tensor
+slots remain a valid external basis. This avoids implicitly assigning a
+four-dimensional value to an evanescent operator; Sigma tensors also require a
+symbolic dimensional implementation before analytic UV use.
+
+The required backend depth includes epsilon poles in numerator coefficients and
+loop-normalization factors. Positive epsilon orders needed by enclosing UV
+operations are retained using the forest's loop-order bound. A backend that
+cannot supply the required depth must report an error instead of silently
+returning a shallower expansion.
+The Laurent-series boundary also verifies integer powers and epsilon-independent
+coefficients. Supported scalar mathematical functions are expanded there;
+unresolved opaque epsilon dependence produces an error.
+
+When integrated counterterms are enabled, the shared UV entry checks the raw
+edge and vertex numerators of the current UV subgraph before simplification.
+Gamma5 and chiral projectors are rejected with graph, subgraph and source
+context, including gamma5 pairs that could subsequently cancel. A dimensional
+gamma5 prescription is not implemented. Gamma5 belonging only to the cograph
+or an external-state projector is outside this check.
+
+The generation setting `uv.project_integrated_uv_cts_onto_tensor_integrals` defaults to `true`.
+It selects Vakint's universal tensor kernels and isolated scalar coefficients.
+With `false`, each complete numerator follows the base branch's full FORM
+reduction and scalar-backend input path. Distinct denominator topologies remain
+separate; both modes use the same GammaLoop dimensional-algebra boundaries and
+conservative forest epsilon depth. Positive epsilon prefactors do not reduce
+that depth, and final truncation removes any excess orders.
+
 ## Orchestrators
 
 `UVgenerationSettings::orchestrator` selects one of three execution modes:

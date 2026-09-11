@@ -1,5 +1,12 @@
 # `kysvnqlq` rebase architecture and review log
 
+Phase convention update: recorded numerical campaigns below retain their
+historical phases. The current amplitude measure uses $i^L$ after the signed
+$dq^0/(2\pi i)$ contour, and the scalar model uses $-i\lambda$ vertices with
+$+i$ propagator numerators. See [PHASE_CONVENTIONS_FIX.md](../../PHASE_CONVENTIONS_FIX.md)
+for the accepted convention and subsequent implementation evidence. Historical
+values below are not current signed reference targets.
+
 For a concise cross-machine continuation guide, see
 [`raised-energy-cff-handoff.md`](raised-energy-cff-handoff.md). This file remains
 the authoritative chronological decision and evidence ledger.

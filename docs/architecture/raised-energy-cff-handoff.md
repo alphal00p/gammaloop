@@ -1,5 +1,12 @@
 # Raised-energy CFF rebase handoff
 
+Phase convention update: recorded numerical campaigns below retain their
+historical phases. The current amplitude measure uses $i^L$ after the signed
+$dq^0/(2\pi i)$ contour, and the scalar model uses $-i\lambda$ vertices with
+$+i$ propagator numerators. See [PHASE_CONVENTIONS_FIX.md](../../PHASE_CONVENTIONS_FIX.md)
+for the accepted convention and subsequent implementation evidence. Historical
+values below are not current signed reference targets.
+
 All discrepancy investigations in this work must follow the mandatory
 [bird's-eye discrepancy triage](../../CONTRIBUTING.md#discrepancy-triage) before
 entering CFF, UV, or evaluator internals. In particular, first identify the last

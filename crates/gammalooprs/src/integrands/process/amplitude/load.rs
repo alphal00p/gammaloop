@@ -154,7 +154,10 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 println!("Comparing fnmap summed fn and parametric epression");
 
                 if a != exprs[0] {
-                    println!("They are the different:\n {}!", (&a - &exprs[0]).expand());
+                    println!(
+                        "They are the different:\n {}!",
+                        (&a - &exprs[0]).collect_factors()
+                    );
                 } else {
                     println!("They are the same!")
                 }

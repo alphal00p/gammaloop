@@ -24,8 +24,8 @@ dependencies = [
   "pydot",
   "pytest",
   "pyyaml>=6.0.1",
-  "symbolica>=0.14.0",
-  "ufo-model-loader>=0.1.6",
+  "symbolica>=2.0.0",
+  "ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@0bdd60af9927114a38df73d4823da07aafb1d158",
 ]
 
 [project.urls]
@@ -38,8 +38,8 @@ dev = [
   "black>=23.12.1,<24",
   "inline-snapshot>=0.21.2",
   "pytest>=8.3.5,<9",
-  "symbolica>=0.16.0",
-  "ufo-model-loader>=0.1.6",
+  "symbolica>=2.0.0",
+  "ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@0bdd60af9927114a38df73d4823da07aafb1d158",
 ]
 
 [build-system]

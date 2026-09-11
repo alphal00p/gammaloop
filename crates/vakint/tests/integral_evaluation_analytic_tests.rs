@@ -21,6 +21,228 @@ use vakint::{externals_from_f64, params_from_f64, vakint_parse};
 const N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS: u32 = 32;
 
 #[test_log::test]
+fn analytic_backends_preserve_coefficients_and_epsilon_pole_orders() {
+    use symbolica::domains::float::RealLike;
+
+    for evaluation_order in [
+        EvaluationOrder::alphaloop_only(),
+        EvaluationOrder::matad_only(None),
+    ] {
+        let vakint = get_vakint(VakintSettings {
+            number_of_terms_in_epsilon_expansion: 2,
+            use_dot_product_notation: false,
+            integral_normalization_factor: LoopNormalizationFactor::pySecDec,
+            evaluation_order,
+            ..VakintSettings::default()
+        });
+        let left = vakint_parse!("(spectator_a+spectator_b)").unwrap();
+        let right = vakint_parse!("(spectator_c+spectator_d)").unwrap();
+        let integral = &left
+            * &right
+            * vakint_parse!("dot(p(1),p(1))*ε^-1*topo(prop(1,edge(1,1),k(1),muvsq,1))").unwrap();
+        let evaluated = vakint.evaluate_integral(integral.as_view()).unwrap();
+        assert!(
+            !evaluated
+                .get_all_symbols(true)
+                .contains(&vakint::symbols::S.dot)
+        );
+        // Neither spectator binomial may be distributed by the backend or
+        // by the epsilon series used after restoring its opaque coefficient.
+        for factor in [&left, &right] {
+            assert!(
+                evaluated
+                    .pattern_match(&factor.to_pattern(), None, None)
+                    .next()
+                    .is_some()
+            );
+        }
+        let parameters = vakint.params_from_f64(&HashMap::from_iter([
+            ("spectator_a".into(), 2.0),
+            ("spectator_b".into(), 3.0),
+            ("spectator_c".into(), 4.0),
+            ("spectator_d".into(), 5.0),
+            ("muvsq".into(), 1.0),
+            ("mursq".into(), 1.0),
+        ]));
+        let (result, _) = vakint
+            .numerical_evaluation(
+                evaluated.as_view(),
+                &parameters,
+                &HashMap::default(),
+                Some(&vakint.externals_from_f64(&HashMap::from_iter([(1, (1.0, 0.0, 0.0, 0.0))]))),
+            )
+            .unwrap();
+        // I1 = 1/epsilon + (1-gamma_E) +
+        // epsilon*(1-gamma_E+gamma_E^2/2+pi^2/12) in this normalization.
+        // The coefficient's pole makes the last term necessary at finite order.
+        let gamma = 0.577_215_664_901_532_9;
+        let coefficients = [
+            1.0,
+            1.0 - gamma,
+            1.0 - gamma + gamma * gamma / 2.0 + std::f64::consts::PI.powi(2) / 12.0,
+        ];
+        assert_eq!(result.0.len(), 3);
+        for (power, coefficient) in (-2..=0).zip(coefficients) {
+            let actual = result.get_epsilon_coefficient(power);
+            assert!((actual.re.to_f64() - 45.0 * coefficient).abs() < 1e-11);
+            assert!(actual.im.to_f64().abs() < 1e-11);
+        }
+    }
+}
+
+#[test_log::test]
+fn analytic_backends_resolve_dimensional_prefactors_through_double_poles() {
+    use symbolica::domains::float::RealLike;
+
+    let gamma = 0.577_215_664_901_532_9;
+    let finite = 1.0 - gamma;
+    let linear = finite + gamma * gamma / 2.0 + std::f64::consts::PI.powi(2) / 12.0;
+    for evaluation_order in [
+        EvaluationOrder::alphaloop_only(),
+        EvaluationOrder::matad_only(None),
+    ] {
+        let vakint = get_vakint(VakintSettings {
+            number_of_terms_in_epsilon_expansion: 2,
+            evaluation_order,
+            integral_normalization_factor: LoopNormalizationFactor::pySecDec,
+            ..VakintSettings::default()
+        });
+        // These are the scalar remnants of completed d-dimensional traces
+        // and projectors. Their epsilon dependence must multiply the integral
+        // poles before extracting any requested coefficient.
+        for (coefficient, expected) in [
+            ("4-2*ε", vec![(-1, 4.0), (0, 4.0 * finite - 2.0)]),
+            ("(4-2*ε)^-1", vec![(-1, 0.25), (0, finite / 4.0 + 0.125)]),
+            (
+                "(4-2*ε)^2/ε",
+                vec![
+                    (-2, 16.0),
+                    (-1, 16.0 * finite - 16.0),
+                    (0, 16.0 * linear - 16.0 * finite + 4.0),
+                ],
+            ),
+            ("((4-2*ε)-4)^2/ε", vec![(0, 4.0)]),
+        ] {
+            let input = vakint_parse!(format!(
+                "({coefficient})*topo(prop(1,edge(1,1),k(1),muvsq,1))"
+            ))
+            .unwrap();
+            let evaluated = vakint.evaluate_integral(input.as_view()).unwrap();
+            let parameters = vakint.params_from_f64(&HashMap::from_iter([
+                ("muvsq".into(), 1.0),
+                ("mursq".into(), 1.0),
+            ]));
+            let (result, _) = vakint
+                .numerical_evaluation(evaluated.as_view(), &parameters, &HashMap::default(), None)
+                .unwrap();
+            assert_eq!(result.0.len(), expected.len(), "{coefficient}");
+            for (power, expected) in expected {
+                let actual = result.get_epsilon_coefficient(power);
+                assert!(
+                    (actual.re.to_f64() - expected).abs() < 1e-11,
+                    "{coefficient}, epsilon^{power}"
+                );
+                assert!(actual.im.to_f64().abs() < 1e-11);
+            }
+        }
+    }
+}
+
+#[test_log::test]
+fn analytic_backends_account_for_normalization_and_nested_coefficient_poles() {
+    use symbolica::domains::float::RealLike;
+
+    for evaluation_order in [
+        EvaluationOrder::alphaloop_only(),
+        EvaluationOrder::matad_only(None),
+    ] {
+        for (n_loops, topology, cases) in [
+            (
+                1,
+                "topo(I1L(muvsq,1))",
+                vec![
+                    ("eps^-1", "1", 1),
+                    ("eps^-2", "1", 2),
+                    ("eps^-1", "ε^-1", 2),
+                    ("1", "ε^-2", 2),
+                ],
+            ),
+            (
+                2,
+                "topo(I2L(muvsq,1,1,1))",
+                vec![("eps^(1-n_loops)", "1", 1)],
+            ),
+        ] {
+            let mut vakint = get_vakint(VakintSettings {
+                number_of_terms_in_epsilon_expansion: 4,
+                evaluation_order: evaluation_order.clone(),
+                integral_normalization_factor: LoopNormalizationFactor::pySecDec,
+                ..VakintSettings::default()
+            });
+            let input = vakint_parse!(topology).unwrap();
+            let reference = vakint.evaluate_integral(input.as_view()).unwrap();
+            let parameters = vakint.params_from_f64(&HashMap::from_iter([
+                ("muvsq".into(), 1.0),
+                ("mursq".into(), 1.0),
+            ]));
+            let (reference, _) = vakint
+                .numerical_evaluation(reference.as_view(), &parameters, &HashMap::default(), None)
+                .unwrap();
+            for (normalization, coefficient, total_poles) in cases {
+                vakint.settings.number_of_terms_in_epsilon_expansion = n_loops + 1;
+                vakint.settings.integral_normalization_factor =
+                    LoopNormalizationFactor::Custom(format!(
+                        "({normalization})*({})",
+                        LoopNormalizationFactor::pySecDec.to_expression()
+                    ));
+                let weighted = vakint_parse!(coefficient).unwrap() * &input;
+                let evaluated = vakint.evaluate_integral(weighted.as_view()).unwrap();
+                let (result, _) = vakint
+                    .numerical_evaluation(
+                        evaluated.as_view(),
+                        &parameters,
+                        &HashMap::default(),
+                        None,
+                    )
+                    .unwrap();
+                // A normalization pole and an already-integrated nested
+                // coefficient pole have independent, additive order costs.
+                for power in (-n_loops - total_poles)..=0 {
+                    let actual = result.get_epsilon_coefficient(power);
+                    let expected = reference.get_epsilon_coefficient(power + total_poles);
+                    assert!(
+                        (actual.re.to_f64() - expected.re.to_f64()).abs() < 1e-11,
+                        "{n_loops} loops, {normalization}, {coefficient}, epsilon^{power}"
+                    );
+                    assert!((actual.im.to_f64() - expected.im.to_f64()).abs() < 1e-11);
+                }
+            }
+        }
+    }
+}
+
+#[test_log::test]
+fn analytic_backends_reject_unavailable_epsilon_depth() {
+    for (normalization, coefficient, topology, terms) in [
+        ("1", "ε^-4", "topo(I1L(muvsq,1))", 2),
+        ("eps^-4", "1", "topo(I1L(muvsq,1))", 2),
+        ("eps^(1-n_loops)", "1", "topo(I2L(muvsq,1,1,1))", 5),
+    ] {
+        let vakint = get_vakint(VakintSettings {
+            number_of_terms_in_epsilon_expansion: terms,
+            evaluation_order: EvaluationOrder::analytic_only(),
+            integral_normalization_factor: LoopNormalizationFactor::Custom(normalization.into()),
+            ..VakintSettings::default()
+        });
+        let input = vakint_parse!(format!("({coefficient})*({topology})")).unwrap();
+        assert!(matches!(
+            vakint.evaluate_integral(input.as_view()),
+            Err(vakint::VakintError::NoEvaluationMethodFound(_, _))
+        ));
+    }
+}
+
+#[test_log::test]
 fn test_integrate_1l_a() {
     let mut vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
@@ -37,7 +259,7 @@ fn test_integrate_1l_a() {
     let mut integral = vakint
         .to_canonical(
             vakint_parse!(
-                "(k(1,1)*k(1,2)+k(1,3)*p(1,3))*topo(\
+                "(k(1,1)*k(1,2))*topo(\
                 prop(1,edge(1,1),k(1),muvsq,1)\
             )"
             )
@@ -57,24 +279,24 @@ fn test_integrate_1l_a() {
     let mut targets: HashMap<Atom, Atom> = HashMap::default();
 
     // The common phase is Symbolica's exact imaginary unit, not a namespaced variable.
-    for (eps_term, trgt) in [
-        ("ε^-1", "1/64*vakint::muvsq^2*vakint::g(1,2)/𝜋^2"),
-        (
-            "1",
-            "-1/64*vakint::muvsq^2*log(vakint::muvsq)*vakint::g(1,2)/𝜋^2+1/64*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+3/128*vakint::muvsq^2*vakint::g(1,2)/𝜋^2",
-        ),
+    let prefactor = Atom::i() * vakint_parse!("muvsq^2*g(1,2)/(64*𝜋^2)").unwrap();
+    // For this positive mass-squared and renormalization-scale fixture, retain
+    // the dimensionless scale-ratio logarithm in every Laurent coefficient.
+    for (eps_term, target) in [
+        ("ε^-1", "1"),
+        ("1", "3/2-log(muvsq/mursq)"),
         (
             "ε",
-            "-(1/64*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+3/128*vakint::muvsq^2*vakint::g(1,2)/𝜋^2)*log(vakint::muvsq)+1/16*(7/16*vakint::muvsq^2*vakint::g(1,2)+1/48*𝜋^2*vakint::muvsq^2*vakint::g(1,2))/𝜋^2+3/128*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+1/128*vakint::muvsq^2*log(vakint::muvsq)^2*vakint::g(1,2)/𝜋^2+1/128*vakint::muvsq^2*log(vakint::mursq)^2*vakint::g(1,2)/𝜋^2",
+            "7/4+𝜋^2/12-3/2*log(muvsq/mursq)+1/2*log(muvsq/mursq)^2",
         ),
         (
             "ε^2",
-            "1/2*(1/64*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+3/128*vakint::muvsq^2*vakint::g(1,2)/𝜋^2)*log(vakint::muvsq)^2-(1/16*(7/16*vakint::muvsq^2*vakint::g(1,2)+1/48*𝜋^2*vakint::muvsq^2*vakint::g(1,2))/𝜋^2+3/128*vakint::muvsq^2*log(vakint::mursq)*vakint::g(1,2)/𝜋^2+1/128*vakint::muvsq^2*log(vakint::mursq)^2*vakint::g(1,2)/𝜋^2)*log(vakint::muvsq)+1/16*(7/16*vakint::muvsq^2*vakint::g(1,2)+1/48*𝜋^2*vakint::muvsq^2*vakint::g(1,2))*log(vakint::mursq)/𝜋^2+1/16*(-1/12*vakint::muvsq^2*vakint::z3*vakint::g(1,2)+15/32*vakint::muvsq^2*vakint::g(1,2)+1/32*𝜋^2*vakint::muvsq^2*vakint::g(1,2))/𝜋^2-1/384*vakint::muvsq^2*log(vakint::muvsq)^3*vakint::g(1,2)/𝜋^2+3/256*vakint::muvsq^2*log(vakint::mursq)^2*vakint::g(1,2)/𝜋^2+1/384*vakint::muvsq^2*log(vakint::mursq)^3*vakint::g(1,2)/𝜋^2",
+            "15/8+𝜋^2/8-z3/3-(7/4+𝜋^2/12)*log(muvsq/mursq)+3/4*log(muvsq/mursq)^2-1/6*log(muvsq/mursq)^3",
         ),
     ] {
         targets.insert(
             vakint_parse!(eps_term).unwrap(),
-            Atom::i() * vakint_parse!(trgt).unwrap(),
+            &prefactor * vakint_parse!(target).unwrap(),
         );
     }
     for (v, c) in evaluated_integral
@@ -106,7 +328,8 @@ fn test_integrate_1l_a() {
         &params,
         &HashMap::default(),
         None,
-    );
+    )
+    .unwrap();
     // numerical_partial_eval = numerical_partial_eval.expand();
 
     // This test is too unstable as the printout at fixed precision is not accurate enough
@@ -1137,4 +1360,42 @@ fn run_integral_evaluation_analytic_tests() {
     test_integrate_4l_clover_with_non_unit_scales();
     test_integrate_4l_dotted_clover();
     test_integrate_4l_clover_with_numerator();
+}
+
+#[test_log::test]
+fn whole_numerator_and_projected_analytic_backends_have_identical_laurent_coefficients() {
+    for evaluation_order in [
+        EvaluationOrder::alphaloop_only(),
+        EvaluationOrder::matad_only(None),
+    ] {
+        let mut vakint = get_vakint(VakintSettings {
+            number_of_terms_in_epsilon_expansion: 2,
+            evaluation_order,
+            integral_normalization_factor: LoopNormalizationFactor::Custom(format!(
+                "eps^-1*({})",
+                LoopNormalizationFactor::pySecDec.to_expression()
+            )),
+            ..VakintSettings::default()
+        });
+        for coefficient in [
+            "(1+2𝑖)*(user_space::a+user_space::b)*(4-2*ε)^2/ε",
+            "-3*(user_space::a+user_space::b)/(4-2*ε)",
+            "(4-2*ε-4)^2",
+            "log(exp(user_space::z))",
+            "log(user_space::z^2)",
+            "exp(user_space::z)^user_space::a",
+        ] {
+            let input = vakint_parse!(format!("({coefficient})*topo(I1L(muvsq,1))")).unwrap();
+            vakint.settings.project_onto_tensor_integrals = true;
+            let projected = vakint.evaluate_integral(input.as_view()).unwrap();
+            vakint.settings.project_onto_tensor_integrals = false;
+            let whole = vakint.evaluate_integral(input.as_view()).unwrap();
+            // Only the analytic UV numerator is expanded for this exact
+            // comparison; no numerical absolute value can conceal a phase.
+            assert!(
+                (&whole - &projected).expand().is_zero(),
+                "{coefficient}; whole={whole}; projected={projected}"
+            );
+        }
+    }
 }

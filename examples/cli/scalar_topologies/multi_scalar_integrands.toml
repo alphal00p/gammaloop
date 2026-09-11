@@ -25,7 +25,7 @@ commands = [
     "import model scalars-default.json",
 
     "remove processes",
-    "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri_below_thres --global-prefactor-num '1𝑖'",
+    "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri_below_thres",
     "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box_below_thres --select-graphs GL0",
 	"generate",
     "duplicate integrand -p triangle -i scalar_tri_below_thres --output_process_name triangle --output_integrand_name scalar_tri_above_thres",
@@ -176,7 +176,7 @@ commands = [
     "set process -p triangle -i scalar_tri_below_thres kv integrator.target_relative_accuracy=0.00001 integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=200000000000 integrator.seed=1337",
 
 	"""integrate --process triangle -i scalar_tri_below_thres --n-cores 1
-	             --target -8.086356446518081e-4 0.0
+	             --target 0.0 -8.086356446518081e-4
                  --restart
     """,
 
@@ -188,10 +188,10 @@ commands = [
 name = "integrate_triangle_above_threshold"
 commands = [
 
-    "set process -p triangle -i scalar_tri_above_thres kv integrator.target_relative_accuracy=0.001 integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=200000000000 integrator.seed=1337",
+    "set process -p triangle -i scalar_tri_above_thres kv integrator.integrated_phase=real integrator.target_relative_accuracy=0.001 integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=200000000000 integrator.seed=1337",
 
 	"""integrate --process triangle -i scalar_tri_above_thres --n-cores 1
-	             --target -1.5883680319580244e-6 -6.234096084919228e-4
+	             --target 6.234096084919228e-4 -1.5883680319580244e-6
                  --restart
     """,
 
@@ -204,7 +204,7 @@ commands = [
     "set process -p box -i scalar_box_below_thres kv integrator.target_relative_accuracy=0.0001 integrator.n_increase=0 integrator.n_start=100000 integrator.n_max=2000000000 integrator.seed=1337",
 
 	"""integrate --process box -i scalar_box_below_thres --n-cores 1
-	             --target 6.626887713315055e-05 0.0
+	             --target 0.0 6.626887713315055e-05
 				 --renderer ratatui
                  --restart
     """,
@@ -218,7 +218,7 @@ commands = [
     "set process -p box -i scalar_box_above_thres kv integrator.target_relative_accuracy=0.001 integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000000 integrator.seed=1337",
 
 	"""integrate --process box -i scalar_box_above_thres --n-cores 1
-	             --target 7.841453335814232e-6 7.410964890068131e-5
+	             --target -7.410964890068131e-5 7.841453335814232e-6
                  --restart
     """,
 
@@ -231,7 +231,7 @@ commands = [
     "set process -p triangle -i scalar_tri_below_thres kv integrator.target_relative_accuracy=0.001 integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000 integrator.seed=1337",
 
 	"""integrate -p triangle -i scalar_tri_below_thres -p box -i scalar_box_below_thres --n-cores 1
-                 --target triangle@scalar_tri_below_thres=-8.086356446518081e-4,0.0 box@scalar_box_below_thres=6.626887713315055e-05,0.0
+                 --target triangle@scalar_tri_below_thres=0.0,-8.086356446518081e-4 box@scalar_box_below_thres=0.0,6.626887713315055e-05
                  --restart
     """,
 
@@ -277,7 +277,7 @@ commands = [
 	#			 --show-max-weight-info
 	#			 --renderer ratatui
 	"""integrate -p box -i scalar_box_above_thres -p box -i scalar_box_below_thres --n-cores 5
-                 --target box@scalar_box_above_thres=7.841453335814232e-6,7.410964890068131e-5 box@scalar_box_below_thres=6.626887713315055e-05,0.0
+                 --target box@scalar_box_above_thres=-7.410964890068131e-5,7.841453335814232e-6 box@scalar_box_below_thres=0.0,6.626887713315055e-05
 				 --renderer ratatui
 				 --batch-size 10000
 				 --show-phase both
@@ -310,3 +310,6 @@ check_esurface_at_generation = false
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false
+
+[default_runtime_settings.integrator]
+integrated_phase = "imag"

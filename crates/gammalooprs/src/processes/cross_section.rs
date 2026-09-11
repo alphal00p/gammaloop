@@ -8,6 +8,11 @@ use std::{
     sync::Mutex,
 };
 
+#[cfg(test)]
+mod gauge_sewing_tests;
+#[cfg(test)]
+mod sewing_tests;
+
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -885,11 +890,12 @@ impl CrossSection {
     pub fn build_integrand(
         &mut self,
         model: &Model,
-        process_name: &str,
+        process_definition: &ProcessDefinition,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
+        let process_name = process_definition.folder_name.as_str();
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #graph, #summary;
             stage = "cross_section_build_integrand_start",
@@ -1021,6 +1027,7 @@ impl CrossSection {
                 external_cache_id: 0,
                 base_external_cache_id: 0,
                 rotations: None,
+                symmetrize_left_right_states: process_definition.symmetrize_left_right_states,
                 name: self.name.clone(),
                 external_connections: self.external_connections.clone(),
                 n_incoming: self.n_incmoming,
@@ -1213,8 +1220,8 @@ impl CrossSectionCut {
                 })
                 .collect_vec();
 
-            let any_pdg_list_passes = process
-                .final_pdgs_lists
+            let covariant_states = process.covariant_cut_states(model)?;
+            let any_pdg_list_passes = covariant_states
                 .iter()
                 .map(|x| {
                     x.iter()
@@ -1413,6 +1420,10 @@ impl CrossSectionGraph {
     ) -> Result<GraphGenerationStats> {
         let preprocess_started = std::time::Instant::now();
         let mut stats = GraphGenerationStats::default();
+        self.graph.validate_real_masses(model)?;
+        process_definition.covariant_cut_states(model)?;
+        self.derived_data.covariant_cut_representatives =
+            process_definition.covariant_cut_representatives(model);
         self.apply_spin_sum(model, settings, &runtime_default)?;
         debug_tags!(#generation; "generating cuts");
         self.generate_cuts(model, process_definition, settings)?;
@@ -1786,8 +1797,6 @@ impl CrossSectionGraph {
             .as_ref()
             .expect("global_cff_expression should have been created");
 
-        let lu_prefactor = self.lu_prefactor_helper();
-
         let orchestration_started = std::time::Instant::now();
         let parametric_integrands = settings.uv.orchestrator.parametric_integrands(
             &mut self.graph,
@@ -1814,8 +1823,13 @@ impl CrossSectionGraph {
         let finalize_started = std::time::Instant::now();
         let result = parametric_integrands
             .into_iter()
-            .map(|integrand| integrand.map(|a| a * &lu_prefactor))
-            .collect();
+            .enumerate()
+            .map(|(index, integrand)| {
+                let group = &self.derived_data.cut_group_data.cut_groups[CutGroupId(index)];
+                let lu_prefactor = group.lu_prefactor(&self.graph, &self.cuts)?;
+                Ok(integrand.map(|a| a * &lu_prefactor))
+            })
+            .collect::<Result<_>>()?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "supergraph_build_integrand_done",
             graph = %self.graph.name,
@@ -1824,27 +1838,6 @@ impl CrossSectionGraph {
             "Generation timing milestone"
         );
         Ok(result)
-    }
-
-    fn lu_prefactor_helper(&self) -> Atom {
-        let loop_number = self.graph.cyclotomatic_number(&self.graph.full_filter())
-            - self.graph.initial_state_cut.nedges(&self.graph);
-
-        let loop_3 = loop_number as i64 * 3;
-        let energy_conservation_delta_factor = Atom::num(2) * Atom::var(GS.pi);
-
-        crate::debug_tags!(#generation, #normalization, #lu, #graph, #summary;
-            stage = "cross_section_lu_prefactor",
-            graph = %self.graph.name,
-            loop_number,
-            loop_3,
-            "Cross-section LU prefactor normalization"
-        );
-
-        let tstar = Atom::var(GS.rescale_star);
-        let tsrat_pow = tstar.pow(loop_3);
-        let hfunction = Atom::var(GS.hfunction_lu_cut);
-        tsrat_pow * hfunction * energy_conservation_delta_factor
     }
 
     fn single_th_prefactor_helper_atom(
@@ -1901,10 +1894,12 @@ impl CrossSectionGraph {
             &jacobian_ratio * (uv_damp_plus / &delta_r_plus + uv_damp_minus / &delta_r_minus);
 
         let integrated_prefactor = if include_integrated {
+            // Runtime subtracts this helper. The left causal surface therefore
+            // needs -i*pi here to restore +i*pi*delta(eta), and the right its conjugate.
             if is_on_right {
-                -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction
-            } else {
                 i * Atom::var(GS.pi) * &jacobian_ratio * hfunction
+            } else {
+                -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction
             }
         } else {
             Atom::zero()
@@ -2197,7 +2192,7 @@ impl CrossSectionGraph {
     //        Atom::var(GS.hfunction_left_th)
     //    };
 
-    //    let i = if is_on_right { -Atom::i() } else { Atom::i() };
+    //    let i = if is_on_right { Atom::i() } else { -Atom::i() };
     //    let pi = Atom::var(GS.pi);
 
     //    let jacobian_ratio = (&radius_star / &radius).pow(subspace_loop_count as i64 * 3 - 1);
@@ -3076,15 +3071,14 @@ impl CrossSectionGraph {
             )?
             .into_iter();
 
-        let lu_prefactor = self.lu_prefactor_helper();
-
         let mut result = TiVec::<CutGroupId, LUCounterTermData>::new();
-        for (cut_group_id, _cut_group) in self
+        for (cut_group_id, cut_group) in self
             .derived_data
             .cut_group_data
             .cut_groups
             .iter_enumerated()
         {
+            let lu_prefactor = cut_group.lu_prefactor(&self.graph, &self.cuts)?;
             let (left_subspace, right_subspace) = &self.derived_data.subspace_data[cut_group_id];
 
             let left_rstar_pow =
@@ -3300,6 +3294,9 @@ impl CrossSectionGraph {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionDerivedData {
+    /// Observable labels of the physical states represented by covariant
+    /// Goldstone/ghost cuts; explicit unphysical diagnostic states stay intact.
+    pub covariant_cut_representatives: BTreeMap<isize, isize>,
     pub orientations: Option<TiVec<OrientationID, EdgeVec<Orientation>>>,
     pub cut_paramatric_integrand: TiVec<CutGroupId, ParametricIntegrands>,
     pub global_cff_expression: Option<
@@ -3337,6 +3334,58 @@ pub struct CutGroup {
 }
 
 impl CutGroup {
+    pub(crate) fn lu_prefactor(
+        &self,
+        graph: &Graph,
+        cuts: &TiVec<CutId, CrossSectionCut>,
+    ) -> Result<Atom> {
+        let loop_number =
+            graph.cyclotomatic_number(&graph.full_filter()) - graph.initial_state_cut.nedges(graph);
+
+        let loop_3 = loop_number as i64 * 3;
+        // The inverse UFO vertices already supply the Hermitian-partner
+        // tensors/couplings. Marking the RHS gives (-1)^(V_R+I_R), and its
+        // anti-causal virtual contours give (-1)^L_R: together (-1)^C_R.
+        // Retain cut hairs when counting components, including a contact RHS.
+        let component_parities = self
+            .cuts
+            .iter()
+            .map(|cut| {
+                graph
+                    .underlying
+                    .count_connected_components(&cuts[*cut].right)
+                    % 2
+            })
+            .unique()
+            .collect_vec();
+        let [parity] = component_parities.as_slice() else {
+            return Err(eyre!(
+                "Graph '{}' has incompatible RHS marking signs in raised cut group {:?}",
+                graph.name,
+                self.cuts
+            ));
+        };
+        // CFF retains the cut propagator numerators, including their i factors.
+        // The residue conversion supplies 2πi, making the complete physical
+        // cut i/(q²-m²+i0) -> 2π δ_+(q²-m²) real. For connected RHS, this
+        // combines with marking to -2πi, independent of cut multiplicity.
+        let energy_conservation_delta_factor =
+            Atom::num(2) * Atom::var(GS.pi) * Atom::i() * Atom::num(-1).pow(*parity as i64);
+
+        crate::debug_tags!(#generation, #normalization, #lu, #graph, #summary;
+            stage = "cross_section_lu_prefactor",
+            graph = %graph.name,
+            loop_number,
+            loop_3,
+            "Cross-section LU prefactor normalization"
+        );
+
+        let tstar = Atom::var(GS.rescale_star);
+        let tsrat_pow = tstar.pow(loop_3);
+        let hfunction = Atom::var(GS.hfunction_lu_cut);
+        Ok(tsrat_pow * hfunction * energy_conservation_delta_factor)
+    }
+
     pub(crate) fn lu_cut_selection(
         &self,
         graph: &Graph,
@@ -3444,6 +3493,7 @@ impl CutGroupData {
 impl CrossSectionDerivedData {
     fn new_empty() -> Self {
         Self {
+            covariant_cut_representatives: BTreeMap::new(),
             orientations: None,
             global_cff_expression: None,
             cut_paramatric_integrand: TiVec::new(),
@@ -3715,6 +3765,74 @@ mod tests {
             cut_group_data.cut_groups[super::CutGroupId(0)].cuts,
             vec![super::CutId(0), super::CutId(1)],
         );
+    }
+
+    #[test]
+    fn scalar_cut_residue_keeps_the_propagator_i_exactly_once() {
+        use crate::graph::{FeynmanGraph, Graph};
+        use symbolica::atom::Atom;
+
+        test_initialise().unwrap();
+        // This one-line cut is a residue-boundary diagnostic, not a 1->1
+        // scattering-rate fixture. It deliberately bypasses the physical
+        // process selector's requirement of at least two final particles.
+        let graph: Graph = dot!(
+            digraph scalar_cut_line {
+                node [num=1];
+                edge [particle="scalar_0", num="1𝑖"];
+                ext [style=invis];
+                ext -> left [is_cut=0];
+                right -> ext [is_cut=0];
+                left -> right;
+            }, "scalars"
+        )
+        .unwrap();
+        let mut graph = super::CrossSectionGraph::new(graph);
+        graph.cuts = graph
+            .graph
+            .all_st_cuts_for_cs(
+                graph.source_nodes.clone(),
+                graph.target_nodes.clone(),
+                &graph.graph.get_initial_state_tree().0,
+            )
+            .into_iter()
+            .map(|(left, cut, right)| super::CrossSectionCut { cut, left, right })
+            .collect();
+        assert_eq!(graph.cuts.len(), 1);
+        let group = super::CutGroup {
+            cuts: vec![super::CutId(0)],
+            related_esurface_group: RaisedEsurfaceGroup {
+                esurface_ids: vec![EsurfaceID(0)],
+                max_occurence: 1,
+            },
+        };
+        let conversion = group
+            .lu_prefactor(&graph.graph, &graph.cuts)
+            .unwrap()
+            .replace(Atom::var(GS.rescale_star))
+            .with(Atom::one())
+            .replace(Atom::var(GS.hfunction_lu_cut))
+            .with(Atom::one());
+        let two_pi = Atom::num(2) * Atom::var(GS.pi);
+        assert_eq!(conversion, -&two_pi * Atom::i());
+
+        // i/(x+i0)-i/(x-i0)=2*pi*delta(x): the normalized pole
+        // coefficient -2*pi*i multiplies the retained numerator i once.
+        assert_eq!(&conversion * Atom::i(), two_pi);
+        for energy in [1, 2, 5] {
+            let q0 = Atom::var(symbol!("scalar_cut_residue_q0"));
+            let energy = Atom::num(energy);
+            let positive_pole_residue = (Atom::i() / ((&q0 - &energy) * (&q0 + &energy))
+                * (&q0 - &energy))
+                .replace(q0)
+                .with(energy.to_pattern());
+            // The delta_+ energy measure is positive pi/E. Inserting an
+            // extra cut-line i or reversing the residue sign violates this.
+            assert_eq!(
+                &conversion * positive_pole_residue,
+                Atom::var(GS.pi) / energy
+            );
+        }
     }
 
     #[test]
@@ -4118,6 +4236,102 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn iterated_threshold_helpers_match_signed_nonlinear_pole_distributions() {
+        use symbolica::atom::Atom;
+
+        test_initialise().unwrap();
+        // For x=r-r*, take f=2+7x+11x²/2 and eta=2x+3x²/2+5x³/6.
+        // Direct meromorphic residues of f/eta^n for n=1,2,3 are 1,1,-3/4.
+        // The remaining Laurent coefficients are (1/2) for n=2 and
+        // (5/16,1/4) for n=3. At r=2,r*=1 and dampers (3,5), their
+        // principal-value helpers are 4/3,17/9,-89/216 before r^(1-3L).
+        // These fixed scalar jets are not a graph or loop-momentum numerator.
+        let residues = [Atom::one(), Atom::one(), Atom::num((-3, 4))];
+        let principal_values = [Atom::num((4, 3)), Atom::num((17, 9)), Atom::num((-89, 216))];
+        let f_jets = [2_i64, 7, 11];
+        let eta_jets = [2_i64, 3, 5];
+        let f = symbol!("f");
+        for left_order in 1..=3_u8 {
+            for right_order in 1..=3_u8 {
+                let helper = super::CrossSectionGraph::iterated_th_prefactor_helper_atom(
+                    left_order,
+                    right_order,
+                    1,
+                    2,
+                    true,
+                );
+                let mut sampled = helper;
+                // A separable bivariate test function fixes every mixed jet
+                // independently of the production parameter-layout helpers.
+                for (left_degree, left_jet) in f_jets.iter().enumerate() {
+                    for (right_degree, right_jet) in f_jets.iter().enumerate() {
+                        let mut derivative =
+                            function!(f, GS.radius_star_left, GS.radius_star_right);
+                        for _ in 0..left_degree {
+                            derivative = derivative.derivative(GS.radius_star_left);
+                        }
+                        for _ in 0..right_degree {
+                            derivative = derivative.derivative(GS.radius_star_right);
+                        }
+                        sampled = sampled
+                            .replace(derivative)
+                            .with(Atom::num(left_jet * right_jet));
+                    }
+                }
+                for (eta, radius_star) in [
+                    (GS.eta_left, GS.radius_star_left),
+                    (GS.eta_right, GS.radius_star_right),
+                ] {
+                    let mut derivative = function!(eta, radius_star);
+                    for jet in eta_jets {
+                        derivative = derivative.derivative(radius_star);
+                        sampled = sampled.replace(derivative.clone()).with(Atom::num(jet));
+                    }
+                }
+                for (parameter, value) in [
+                    (GS.radius_left, 2),
+                    (GS.radius_right, 2),
+                    (GS.radius_star_left, 1),
+                    (GS.radius_star_right, 1),
+                    (GS.uv_damp_plus_left, 3),
+                    (GS.uv_damp_plus_right, 3),
+                    (GS.uv_damp_minus_left, 5),
+                    (GS.uv_damp_minus_right, 5),
+                    (GS.pi, 3),
+                ] {
+                    sampled = sampled.replace(parameter).with(Atom::num(value));
+                }
+                for (left_integrated, right_integrated) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                    let actual = sampled
+                        .replace(GS.hfunction_left_th)
+                        .with(Atom::num(left_integrated))
+                        .replace(GS.hfunction_right_th)
+                        .with(Atom::num(right_integrated));
+                    // Sokhotski-Plemelj fixes the helper signs because runtime
+                    // subtracts each single CT and adds their intersection.
+                    // The mixed terms have opposite imaginary signs, while
+                    // the two delta terms multiply to positive pi².
+                    let left = (&principal_values[left_order as usize - 1]
+                        - Atom::i()
+                            * Atom::num(3 * left_integrated)
+                            * &residues[left_order as usize - 1])
+                        * Atom::num((1, 4));
+                    let right = (&principal_values[right_order as usize - 1]
+                        + Atom::i()
+                            * Atom::num(3 * right_integrated)
+                            * &residues[right_order as usize - 1])
+                        * Atom::num((1, 32));
+                    assert_eq!(
+                        actual,
+                        left * right,
+                        "orders {left_order}x{right_order}, integrated {left_integrated}/{right_integrated}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

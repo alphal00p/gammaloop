@@ -520,7 +520,7 @@ mod tests {
             let one_pole_projection = fixed_point(one_pole_projection.clone());
             let energy_squared = energy.pow(2);
             let constant = Atom::one() - mass.pow(2);
-            let one_pole = Atom::i() / (Atom::num(16) * Atom::var(GS.pi).pow(3) * energy);
+            let one_pole = -Atom::i() / (Atom::num(16) * Atom::var(GS.pi).pow(3) * energy);
             let expected_powered = &one_pole * (Atom::num(2) * &energy_squared - &constant)
                 / (Atom::num(2) * &energy_squared);
             let difference = (&powered - &expected_powered).together();
@@ -656,7 +656,7 @@ mod tests {
             }
         }
         assert!(
-            (batched.clone() - sequential).expand().is_zero(),
+            (batched.collect_factors() - sequential.collect_factors()).is_zero(),
             "batched production projection must equal independently generated sequential CFFs"
         );
 
@@ -847,9 +847,9 @@ mod tests {
             1,
             "every state entering the second component wave must reuse its one canonical topology"
         );
-        assert!((cached.clone() - &sequential).expand().is_zero());
+        assert!((cached.collect_factors() - sequential.collect_factors()).is_zero());
         assert!(
-            (batched - sequential).expand().is_zero(),
+            (batched.collect_factors() - sequential.collect_factors()).is_zero(),
             "the production two-pass waves must equal fully uncached sequential component projection"
         );
         Ok(())

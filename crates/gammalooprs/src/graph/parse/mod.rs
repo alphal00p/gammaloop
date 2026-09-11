@@ -121,13 +121,14 @@ impl Deref for ParseGraph {
 }
 
 impl ParseGraph {
-    pub fn n_fermion_loops(&self) -> usize {
-        let fermions: SuBitGraph = self.graph.from_filter(|a| a.particle.is_fermion());
+    pub fn n_anticommutating_loops(&self) -> usize {
+        let anticommutating: SuBitGraph =
+            self.graph.from_filter(|a| a.particle.is_anticommutating());
 
-        self.graph.cyclotomatic_number(&fermions)
+        self.graph.cyclotomatic_number(&anticommutating)
     }
-    pub fn n_external_fermion_loops(&mut self) -> Result<usize> {
-        let internal = self.n_fermion_loops();
+    pub fn n_external_anticommutating_loops(&mut self) -> Result<usize> {
+        let internal = self.n_anticommutating_loops();
         self.graph
             .sew(
                 |_, ae, _, be| {
@@ -145,7 +146,7 @@ impl ParseGraph {
             )
             .map_err(|e| eyre::eyre!("Graph sewing failed: {:?}", e))?;
 
-        Ok(self.n_fermion_loops() - internal)
+        Ok(self.n_anticommutating_loops() - internal)
     }
 
     pub fn debug_dot(&self) -> String {

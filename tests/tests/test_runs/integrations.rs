@@ -35,7 +35,7 @@ fn scalar_bubble() -> Result<()> {
         ..Default::default()
     });
 
-    // from Kaapo: m=1 muv=5 2.03838e-02 m=2 muv=5 	1.16050e-02	 m=3 muv=5 6.46968e-03
+    // Kaapo reference magnitudes: m=1 muv=5 2.03838e-02 m=2 muv=5 	1.16050e-02	 m=3 muv=5 6.46968e-03
 
     cli.run_command("set model mass_scalar_1=1.0")?;
     let res = profile_cmd
@@ -43,15 +43,15 @@ fn scalar_bubble() -> Result<()> {
         .unwrap_uv();
     assert_eq!(res.pass_fail(-0.9).failed, 0);
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert!(integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(2.03838e-02)), 2));
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(-2.03838e-02)), 2));
 
     cli.run_command("set model mass_scalar_1=2.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert!(integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(1.16050e-02)), 2));
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(-1.16050e-02)), 2));
 
     cli.run_command("set model mass_scalar_1=3.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert!(integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(6.46968e-03)), 2));
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(-6.46968e-03)), 2));
     let renorm_command = Renormalize::default();
 
     let res = renorm_command.run(&mut cli.state, &cli.cli_settings)?;
@@ -137,6 +137,9 @@ mod failing {
         cli.run_command("run import_graph")?;
 
         cli.run_command("run integrated")?;
+        // These historical targets describe the local-only subtraction at m_uv=5.
+        // Enabling the integrated addback instead gives the MS-bar result at mu_r;
+        // its reference scale must be reconciled before this failing case is restored.
 
         cli.run_command("generate")?;
 
@@ -148,7 +151,7 @@ mod failing {
             ..Default::default()
         });
 
-        // from Kaapo: m=1 muv=5 2.03838e-02 m=2 muv=5 	1.16050e-02	 m=3 muv=5 6.46968e-03
+        // Kaapo reference magnitudes: m=1 muv=5 2.03838e-02 m=2 muv=5 	1.16050e-02	 m=3 muv=5 6.46968e-03
 
         cli.run_command("set model mass_scalar_1=1.0")?;
         let res = profile_cmd
@@ -157,19 +160,19 @@ mod failing {
         assert_eq!(res.pass_fail(-0.9).failed, 0);
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
         assert!(
-            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(2.03838e-02)), 2)
+            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(-2.03838e-02)), 2)
         );
 
         cli.run_command("set model mass_scalar_1=2.0")?;
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
         assert!(
-            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(1.16050e-02)), 2)
+            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(-1.16050e-02)), 2)
         );
 
         cli.run_command("set model mass_scalar_1=3.0")?;
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
         assert!(
-            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(6.46968e-03)), 2)
+            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(-6.46968e-03)), 2)
         );
         let renorm_command = Renormalize::default();
 
@@ -261,6 +264,10 @@ mod failing {
         //1.47240e-03	7.15184e-04	2.27485e-04
 
         // from Kaapo: m=1 muv=5 1.47240e-03 m=2 muv=5 	7.15184e-04	 m=3 muv=5 2.27485e-04
+        // Four propagator i factors and three loops convert the historical
+        // Euclidean targets below to the physical -i axis. Their subdivergence
+        // prescription and p^2=1 magnitudes remain unverified; this phase migration
+        // does not certify the old baselines for the current subtraction settings.
         cli.run_command("set model mass_scalar_1=1.0")?;
         let res = profile_cmd
             .run(&mut cli.state, &cli.cli_settings)?
@@ -268,7 +275,7 @@ mod failing {
         assert_eq!(res.pass_fail(-0.9).failed, 0);
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
         assert!(
-            integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.47240e-03)), 1),
+            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(-1.47240e-03)), 1),
             "Not compatible: {integral_no_cache}",
         );
 
@@ -277,7 +284,7 @@ mod failing {
         // assert_eq!(res.pass_fail(-0.9).failed, 0);
         // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
         // assert!(
-        //     integral_no_cache.is_compatible_with_target(Complex::new_re(F(7.15184e-04)), 3),
+        //     integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(-7.15184e-04)), 3),
         //     "Not compatible: {integral_no_cache}",
         // );
 
@@ -286,7 +293,7 @@ mod failing {
         // assert_eq!(res.pass_fail(-0.9).failed, 0);
         // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
         // assert!(
-        //     integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.27485e-04)), 3),
+        //     integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(-2.27485e-04)), 3),
         //     "Not compatible: {integral_no_cache}",
         // );
 
@@ -313,7 +320,10 @@ mod failing {
         }
         .run(&mut cli)?;
 
-        assert_snapshot!(format!("{a:.8e}"),@"(1.3485885914334373e-3+0e0i)");
+        // At these subthreshold inputs the four-vertex/four-propagator scalar
+        // box has positive imaginary phase. Preserve the historical magnitude
+        // on that axis; it still needs an independent pointwise certificate.
+        assert_snapshot!(format!("{a:.8e}"),@"(0e0+1.3485885914334373e-3i)");
 
         cli.run_command("set process -p 0 -i default kv general.enable_cache=false")?;
         let integral_no_cache = Integrate {
@@ -434,7 +444,11 @@ mod slow {
 
         //5.89551e-06	3.35645e-06	1.87120e-06
 
-        // from Kaapo: m=1 muv=5 5.89551e-06 m=2 muv=5 	3.35645e-06	 m=3 muv=5 1.87120e-06
+        // Kaapo magnitudes: m=1 muv=5 5.89551e-06 m=2 muv=5 	3.35645e-06	 m=3 muv=5 1.87120e-06
+        // This primitive K4 vacuum graph has period 6*zeta(3), so local subtraction
+        // gives i*6*zeta(3)*log(25/m^2)/(16*pi^2)^3. Vertex numerators are one;
+        // six propagator i factors and three Wick rotations give +i.
+        // Independent period: https://arxiv.org/abs/hep-ph/9504352.
         cli.run_command("set model mass_scalar_1=1.0")?;
         let res = profile_cmd
             .run(&mut cli.state, &cli.cli_settings)?
@@ -442,21 +456,24 @@ mod slow {
         assert_eq!(res.pass_fail(-0.9).failed, 0);
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
         assert!(
-            integral_no_cache.is_compatible_with_target(Complex::new_re(F(5.89551e-06)), 1),
+            integral_no_cache
+                .is_compatible_with_target(Complex::new(F(0.0), F(5.895509129899469e-06)), 1),
             "Not compatible: {integral_no_cache}",
         );
 
         cli.run_command("set model mass_scalar_1=2.0")?;
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
         assert!(
-            integral_no_cache.is_compatible_with_target(Complex::new_re(F(3.35645e-06)), 3),
+            integral_no_cache
+                .is_compatible_with_target(Complex::new(F(0.0), F(3.3564515497441014e-06)), 3),
             "Not compatible: {integral_no_cache}",
         );
 
         cli.run_command("set model mass_scalar_1=3.0")?;
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
         assert!(
-            integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.87120e-06)), 3),
+            integral_no_cache
+                .is_compatible_with_target(Complex::new(F(0.0), F(1.8711980781814097e-06)), 3),
             "Not compatible: {integral_no_cache}",
         );
 
@@ -489,6 +506,10 @@ mod slow {
         //2.90078e-06	1.59168e-06	6.86001e-07
 
         // from Kaapo: m=1 muv=5 2.90078e-06 m=2 muv=5 	1.59168e-06	 m=3 muv=5 6.86001e-07
+        // These historical targets have an unresolved input mismatch: the card
+        // uses m_uv=1 and p^2=-12. Seven propagator i factors and four loops
+        // convert the historical Euclidean targets to the physical +i axis;
+        // this does not certify their signs or magnitudes for the current inputs.
         cli.run_command("set model mass_scalar_1=1.0")?;
         let res = profile_cmd
             .run(&mut cli.state, &cli.cli_settings)?
@@ -497,21 +518,21 @@ mod slow {
 
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
         assert!(
-            integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.90078e-06)), 1),
+            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(2.90078e-06)), 1),
             "Not compatible: {integral_no_cache}",
         );
 
         cli.run_command("set model mass_scalar_1=2.0")?;
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
         assert!(
-            integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.59168e-06)), 3),
+            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(1.59168e-06)), 3),
             "Not compatible: {integral_no_cache}",
         );
 
         cli.run_command("set model mass_scalar_1=3.0")?;
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
         assert!(
-            integral_no_cache.is_compatible_with_target(Complex::new_re(F(6.86001e-07)), 3),
+            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(6.86001e-07)), 3),
             "Not compatible: {integral_no_cache}",
         );
 

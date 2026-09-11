@@ -4,6 +4,10 @@ linker = "cc"
 [target.wasm32-unknown-unknown]
 linker = "rust-lld"
 
+[target.'cfg(target_os = "macos")']
+# GCC's Darwin driver disables compact unwind tables, breaking Rust panic handling.
+linker = "/usr/bin/clang"
+
 [env]
 # Visible to every rustc and every build script in the workspace build.
 SYMBOLICA_OEM_LICENSE = { value = "SYMBOLICA_OEM_GAMMALOOP", force = false }

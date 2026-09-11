@@ -81,7 +81,7 @@ use symbolica::{
     domains::{dual::HyperDual, float::SingleFloat},
     numerical_integration::{Grid, Sample},
 };
-use tracing::debug;
+use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
 use super::{
@@ -130,6 +130,8 @@ pub struct CrossSectionIntegrandData {
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
     pub graph_to_group_id: Vec<usize>,
     pub explicit_orientation_sum_only: bool,
+    /// Frozen CP optimization choice; its validity after model updates is user supplied.
+    pub symmetrize_left_right_states: bool,
     // pub builder_cache: ParamBuilder<f64>,
 }
 
@@ -215,6 +217,7 @@ impl CrossSectionIntegrand {
                 graph_group_structure,
                 graph_to_group_id,
                 explicit_orientation_sum_only: self.data.explicit_orientation_sum_only,
+                symmetrize_left_right_states: self.data.symmetrize_left_right_states,
             },
             event_processing_runtime: RuntimeCache::default(),
             active_f64_backend: self.active_f64_backend.clone(),
@@ -455,6 +458,11 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
     }
 
     fn warm_up(&mut self, model: &Model) -> Result<()> {
+        if self.data.symmetrize_left_right_states {
+            warn!(
+                "This integrand was generated with symmetrize_left_right_states=true, which assumes CP symmetry. Complex couplings or model updates can invalidate that assumption; verifying it at the current parameter point is the user's responsibility"
+            );
+        }
         validate_process_runtime_settings(&self.settings, self.data.explicit_orientation_sum_only)?;
 
         self.data.rotations = Some(
@@ -567,6 +575,7 @@ pub struct CrossSectionGraphTerm {
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cuts: TiVec<CutId, CrossSectionCut>,
+    pub covariant_cut_representatives: BTreeMap<isize, isize>,
     pub topological_threshold_esurfaces: TiVec<TopologicalThresholdId, Esurface>,
     pub cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations>,
     pub reversed_edges: TiVec<CutGroupId, Vec<EdgeIndex>>,
@@ -1058,6 +1067,10 @@ impl CrossSectionGraphTerm {
                 graph: graph.graph.clone(),
                 cut_esurface: graph.cut_esurface.clone(),
                 cuts: graph.cuts.clone(),
+                covariant_cut_representatives: graph
+                    .derived_data
+                    .covariant_cut_representatives
+                    .clone(),
                 topological_threshold_esurfaces: graph
                     .derived_data
                     .topological_threshold_esurfaces
@@ -1286,7 +1299,12 @@ impl CrossSectionGraphTerm {
             );
 
             new_event.kinematic_configuration.1.push(cut_four_momentum);
-            new_event.cut_info.particle_pdgs.1.push(cut_pdg);
+            new_event.cut_info.particle_pdgs.1.push(
+                self.covariant_cut_representatives
+                    .get(&cut_pdg)
+                    .copied()
+                    .unwrap_or(cut_pdg),
+            );
         }
 
         Ok(new_event)
@@ -1350,6 +1368,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     }
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
+        self.graph.validate_real_masses(model)?;
         self.estimated_scale = Some(
             self.graph
                 .expected_scale(F(settings.kinematics.e_cm), model),

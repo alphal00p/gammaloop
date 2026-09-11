@@ -92,9 +92,10 @@ commands = [
   # '""",
 
   "set process -p gg_hhh -i 1L kv integrator.n_start=1000000 integrator.n_max=10000000000",
-  # Target for "euclidean" point confirmed with MadLoop
+  # Target for "euclidean" point confirmed with MadLoop, converted to the
+  # physical loop phase.
   """integrate --process gg_hhh -i 1L --n-cores 10
-        --target 6.56089133881216768e-4 -4.17078968913725420e-6
+        --target -6.56089133881216768e-4 4.17078968913725420e-6
         --no-show-integration-statistics
         --restart
     """,
@@ -111,13 +112,14 @@ commands = [
     rotation_axis = [ ]
     '""",
 
-  # Target for the physical top mass of 173 GeV is also confirmed with MadLoop
+  # Target for the physical top mass of 173 GeV is also confirmed with MadLoop,
+  # with the same phase conversion.
   "set model MT=173.0",
   "set model WT=0.0",
   "set model ymt=173.0",
   "set process -p gg_hhh -i 1L kv integrator.n_start=1000000 integrator.n_max=1000000000",
   """integrate --process gg_hhh -i 1L --n-cores 10
-        --target 1.89203604685291554e-6 -5.46603099163412881e-6
+        --target -1.89203604685291554e-6 5.46603099163412881e-6
         --restart
     """,
 ]

@@ -1,4 +1,9 @@
 {
+  "covariant_cut_multiplets": {
+    "23": [23, 250, 9000002, -9000002],
+    "24": [24, 251, 9000003, -9000004],
+    "-24": [-24, -251, 9000004, -9000003]
+  },
   "couplings": [{
     "expression": "-1𝑖/3*UFO::{}::ee",
     "name": "GC_1",
@@ -763,7 +768,7 @@
   }, {
     "name": "UUV1",
     "spins": [-1, -1, 3],
-    "structure": "-1*UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,2))"
+    "structure": "UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,2))"
   }, {
     "name": "SSS1",
     "spins": [1, 1, 1],
@@ -771,15 +776,15 @@
   }, {
     "name": "FFS1",
     "spins": [2, 2, 1],
-    "structure": "UFO::{}::ProjM(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
+    "structure": "1/2*UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+1/2*UFO::{}::Gamma5(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFS2",
     "spins": [2, 2, 1],
-    "structure": "-1*UFO::{}::ProjP(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::ProjM(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
+    "structure": "UFO::{}::Gamma5(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFS3",
     "spins": [2, 2, 1],
-    "structure": "UFO::{}::ProjP(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
+    "structure": "1/2*UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+-1/2*UFO::{}::Gamma5(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFS4",
     "spins": [2, 2, 1],
@@ -791,19 +796,19 @@
   }, {
     "name": "FFV2",
     "spins": [2, 2, 3],
-    "structure": "UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjM(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
+    "structure": "1/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::idx(1,2))+-1/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::Gamma5(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFV3",
     "spins": [2, 2, 3],
-    "structure": "-2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjP(UFO::{}::dummy(1),UFO::{}::idx(1,2))+UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjM(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
+    "structure": "-1/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::idx(1,2))+-3/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::Gamma5(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFV4",
     "spins": [2, 2, 3],
-    "structure": "2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjP(UFO::{}::dummy(1),UFO::{}::idx(1,2))+UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjM(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
+    "structure": "3/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::idx(1,2))+1/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::Gamma5(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFV5",
     "spins": [2, 2, 3],
-    "structure": "4*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjP(UFO::{}::dummy(1),UFO::{}::idx(1,2))+UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjM(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
+    "structure": "5/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::idx(1,2))+3/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::Gamma5(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
   }, {
     "name": "VSS1",
     "spins": [3, 1, 1],
@@ -1915,6 +1920,7 @@
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
+    "goldstone": true,
     "mass": "MZ",
     "name": "G0",
     "pdg_code": 250,
@@ -1929,6 +1935,7 @@
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
+    "goldstone": true,
     "mass": "MW",
     "name": "G+",
     "pdg_code": 251,
@@ -1943,6 +1950,7 @@
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
+    "goldstone": true,
     "mass": "MW",
     "name": "G-",
     "pdg_code": -251,
@@ -2043,17 +2051,17 @@
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MZ^2",
     "name": "Z_propFeynman",
-    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MZ^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*1𝑖",
+    "numerator": "-1𝑖*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "Z"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "W+_propFeynman",
-    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MW^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*1𝑖",
+    "numerator": "-1𝑖*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "W+"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "W-_propFeynman",
-    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MW^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*1𝑖",
+    "numerator": "-1𝑖*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "W-"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",

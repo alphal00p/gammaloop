@@ -21,7 +21,6 @@ commands = [
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
       -p epem_a_ddx -i NLO
-      --global-prefactor-num "-1𝑖"
       --only-diagrams""",
   "save dot",
 ]

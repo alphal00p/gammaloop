@@ -5,7 +5,7 @@ use eyre::eyre;
 use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
     color::ColorSimplifier,
-    dirac::GammaSimplifier,
+    dirac::{AGS, GammaSimplifier},
     representations::Bispinor,
     shorthands::{
         chain::Chain,
@@ -30,7 +30,7 @@ use crate::utils::symbols::UvMomentumProvenanceRole;
 use crate::{
     debug_tags,
     graph::{FourDDenominator, Graph, LMBext, LoopMomentumBasis},
-    numerator::aind::Aind,
+    numerator::{aind::Aind, ufo::UFO},
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
@@ -361,7 +361,7 @@ impl FourDTerm {
         left
     }
 
-    fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
+    pub(super) fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
         // A denominator-free subtree is an opaque numerator. Inspect its symbols
         // once instead of recursively rebuilding its sums/products just to prove
         // that every child has the same empty denominator topology.
@@ -925,6 +925,38 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
 ) -> Result<Local4dCts> {
     match current.renormalization_scheme() {
         ApproximationType::MUV | ApproximationType::PolePart => {
+            if ctx.settings.generate_integrated {
+                // Inspect the original UV-subgraph factors before multiplication,
+                // zero-sector pruning, or Dirac simplification can hide gamma5
+                // pairs. Chiral projectors contain gamma5 implicitly. Cograph
+                // factors and external-state projectors are outside this integral.
+                let forbidden = [
+                    AGS.gamma5, AGS.projm, AGS.projp, UFO.gamma5, UFO.projm, UFO.projp,
+                ];
+                let edges = ctx
+                    .graph
+                    .underlying
+                    .iter_edges_of(current.subgraph())
+                    .filter(|(pair, _, _)| pair.is_paired())
+                    .map(|(_, edge, data)| ("edge", edge.0, &data.data.num.value));
+                let vertices = ctx
+                    .graph
+                    .underlying
+                    .iter_nodes_of(current.subgraph())
+                    .map(|(vertex, _, data)| ("vertex", vertex.0, &data.num.value));
+                for (kind, index, numerator) in edges.chain(vertices) {
+                    if let Some(symbol) = forbidden
+                        .iter()
+                        .find(|symbol| numerator.contains_symbol(**symbol))
+                    {
+                        return Err(eyre!(
+                            "Cannot analytically integrate UV subgraph {} of graph '{}': {kind} {index} contains {symbol}. Gamma5 and chiral projectors are unsupported in d-dimensional analytic UV numerator algebra; no gamma5 prescription is implemented.",
+                            current.subgraph().string_label(),
+                            ctx.graph.name,
+                        ));
+                    }
+                }
+            }
             let marker = UvMarker::new(ctx.settings);
             let reduced_subgraph = current.reduced_subgraph(given);
             let crown = ctx
@@ -1098,6 +1130,150 @@ mod tests {
     use linnet::half_edge::subgraph::{InternalSubGraph, SubSetOps};
     use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
     use symbolica::{domains::rational::Rational, function, symbol};
+
+    #[test]
+    fn analytic_uv_rejects_gamma5_before_simplification_with_subgraph_scope() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph gamma5_uv_scope {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            a -> b [id=1 lmb_id=0]
+            b -> a [id=2]
+            b -> c [id=3]
+            c -> d [id=4 lmb_id=1]
+            d -> c [id=5]
+            d -> outgoing [id=6]
+        })?;
+        let filter = graph
+            .get_edge_subgraph(EdgeIndex(1))
+            .union(&graph.get_edge_subgraph(EdgeIndex(2)));
+        let sibling = graph
+            .get_edge_subgraph(EdgeIndex(4))
+            .union(&graph.get_edge_subgraph(EdgeIndex(5)));
+        let vertex = graph.underlying.iter_nodes_of(&filter).next().unwrap().0;
+        let sibling_vertex = graph.underlying.iter_nodes_of(&sibling).next().unwrap().0;
+        let mut current = OwnedForestNode {
+            spinney: Spinney::with_scheme(
+                InternalSubGraph::cleaned_filter_optimist(filter, graph.as_ref()),
+                &graph,
+                &graph.loop_momentum_basis,
+                ApproximationType::MUV,
+                0,
+            )
+            .expect("the scalar bubble has a compatible UV loop-momentum basis"),
+            topo_order: 0,
+        };
+        let given = OwnedForestNode {
+            spinney: Spinney::empty(&graph),
+            topo_order: 0,
+        };
+        let settings = UVgenerationSettings::default();
+        let input = Full4dCts(FourDSectors::active_atom(Atom::one()));
+        let run = |graph: &Graph, current: &OwnedForestNode, settings: &UVgenerationSettings| {
+            uv_limit(
+                &input,
+                &UVCtx::new(graph, settings),
+                current,
+                &given,
+                current,
+                &given,
+            )
+        };
+        let start = idenso::bis!(4, Atom::from(Aind::Normal(17)));
+        let end = idenso::bis!(4, Atom::from(Aind::Normal(18)));
+        let open = idenso::gamma5!(&start, &end);
+        let closed = spenso::trace!(Bispinor {}.new_rep(4).to_symbolic([]), idenso::gamma5!());
+        let pair = spenso::chain!(&start, &end, idenso::gamma5!(), idenso::gamma5!());
+        assert!(!pair.simplify_gamma().contains_symbol(AGS.gamma5));
+        let cases = [
+            ("open", open.clone()),
+            ("closed", closed),
+            ("pair", pair.clone()),
+            ("left projector", function!(AGS.projm, &start, &end)),
+            ("right projector", function!(AGS.projp, &start, &end)),
+            ("UFO gamma5", function!(UFO.gamma5, 1, 2)),
+            ("UFO left projector", function!(UFO.projm, 1, 2)),
+            ("UFO right projector", function!(UFO.projp, 1, 2)),
+        ];
+        for scheme in [ApproximationType::MUV, ApproximationType::PolePart] {
+            current.spinney.renormalization_scheme = scheme;
+            for (label, numerator) in &cases {
+                for on_vertex in [false, true] {
+                    if on_vertex {
+                        graph.underlying[vertex].num.value = numerator.clone();
+                    } else {
+                        graph.underlying[EdgeIndex(1)].num.value = numerator.clone();
+                    }
+                    let error = run(&graph, &current, &settings).unwrap_err().to_string();
+                    assert!(
+                        error.contains("d-dimensional analytic UV numerator algebra"),
+                        "{label}: {error}"
+                    );
+                    assert!(error.contains(&graph.name), "{label}: {error}");
+                    assert!(
+                        error.contains(&current.subgraph().string_label()),
+                        "{label}: {error}"
+                    );
+                    let source = if on_vertex {
+                        format!("vertex {}", vertex.0)
+                    } else {
+                        "edge 1".to_owned()
+                    };
+                    assert!(error.contains(&source), "{label}: {error}");
+                    graph.underlying[vertex].num.value = Atom::one();
+                    graph.underlying[EdgeIndex(1)].num.value = Atom::one();
+                }
+            }
+        }
+
+        let expected = run(&graph, &current, &settings)?;
+        assert!(!expected.atom().is_zero());
+        // A sibling loop, its vertices, and global external-state projectors
+        // belong to the cograph of this integration and must remain untouched.
+        graph.underlying[EdgeIndex(4)].num.value = open.clone();
+        graph.underlying[sibling_vertex].num.value = open.clone();
+        graph.global_prefactor.projector = open;
+        assert_eq!(run(&graph, &current, &settings)?, expected);
+        assert!(
+            graph.underlying[EdgeIndex(4)]
+                .num
+                .value
+                .contains_symbol(AGS.gamma5)
+        );
+        assert!(
+            graph.underlying[sibling_vertex]
+                .num
+                .value
+                .contains_symbol(AGS.gamma5)
+        );
+        assert!(graph.global_prefactor.projector.contains_symbol(AGS.gamma5));
+
+        graph.underlying[EdgeIndex(1)].num.value = pair;
+        let local_only = UVgenerationSettings {
+            generate_integrated: false,
+            ..settings
+        };
+        assert!(run(&graph, &current, &local_only).is_ok());
+        // Even a vanishing incoming sector must not bypass the source check.
+        let zero = Full4dCts(FourDSectors::active_atom(Atom::Zero));
+        assert!(
+            uv_limit(
+                &zero,
+                &UVCtx::new(&graph, &UVgenerationSettings::default()),
+                &current,
+                &given,
+                &current,
+                &given,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("Gamma5")
+        );
+        Ok(())
+    }
 
     #[test]
     fn term_projection_keeps_factorized_numerator_atoms() -> Result<()> {
@@ -1420,7 +1596,7 @@ mod tests {
         let erased = GS.erase_uv_momentum_provenance(&tagged);
         assert!(!erased.contains_symbol(GS.uv_momentum_provenance));
         assert!(
-            (erased - plain).expand().together().is_zero(),
+            (erased.collect_factors() - plain.collect_factors()).is_zero(),
             "tag erasure must recover the independent child-sub-LMB Taylor coefficient",
         );
 
@@ -1465,17 +1641,9 @@ mod tests {
             ])
         );
 
-        // Expand and cancel only inside this ownership oracle. Production
-        // retains each Taylor topology and its factorized numerator.
-        let expanded = tagged.expand();
-        let expanded_terms = match expanded.as_view() {
-            AtomView::Add(add) => add.iter().map(|term| term.to_owned()).collect(),
-            _ => vec![expanded],
-        };
-        let mut leaves = Vec::new();
-        for expanded_term in expanded_terms {
-            leaves.extend(FourDTerm::from_view(expanded_term.cancel().as_view())?);
-        }
+        // Read the natural Taylor leaves directly in this ownership oracle.
+        // Production retains the same topologies and factorized numerators.
+        let mut leaves = FourDTerm::from_view(tagged.as_view())?;
         leaves.sort_by_key(|leaf| {
             leaf.denominators
                 .iter()
@@ -1537,8 +1705,8 @@ mod tests {
         test_initialise()?;
         // This is the GL24 skeleton and generation LMB used by the scalar LU
         // acceptance test. The quartic factor is local to e1. The deliberately
-        // collected common denominator and algebraic leaf extraction below
-        // stress ownership on a test copy; production keeps Taylor topologies separate.
+        // collected common denominator below stresses ownership while each
+        // numerator stays factorized; production keeps Taylor topologies separate.
         let graph: Graph = dot!(
             digraph gl24_dod_two_taylor {
                 edge [particle="scalar_0" num=1]
@@ -1593,12 +1761,80 @@ mod tests {
             .coefficient(Rational::from(0))
             .simplify_metrics()
             .to_dots()
-            .normalize_dots()
-            .together();
+            .normalize_dots();
 
-        let common_terms = FourDTerm::from_view(expanded.as_view())?;
-        assert_eq!(common_terms.len(), 1);
-        let common = &common_terms[0];
+        let natural_terms = FourDTerm::from_view(expanded.as_view())?;
+        // Typed denominator kinematics erase hard-momentum tags. A positive
+        // denominator factor in the numerator must instead retain the original
+        // wrapper, so e2/e7 keep their own derivative families even when their
+        // hard momenta share the e1 carrier in this child LMB.
+        let mut tagged_denominators = Vec::<(FourDDenominator, Atom)>::new();
+        for matched in expanded.pattern_match(
+            &GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_).to_pattern(),
+            None,
+            None,
+        ) {
+            let tagged = GS.den(
+                &matched[&W_.a_],
+                &matched[&W_.mom_],
+                &matched[&W_.mass_],
+                &matched[&W_.prop_],
+            );
+            let denominator = FourDDenominator::from_view(tagged.as_view())?.unwrap();
+            if let Some((_, previous)) = tagged_denominators
+                .iter()
+                .find(|(candidate, _)| candidate == &denominator)
+            {
+                assert_eq!(previous, &tagged);
+            } else {
+                tagged_denominators.push((denominator, tagged));
+            }
+        }
+        assert_eq!(tagged_denominators.len(), owners.len());
+        let mut common_denominators = Vec::new();
+        for term in &natural_terms {
+            let mut available = common_denominators.clone();
+            for denominator in &term.denominators {
+                if let Some(index) = available.iter().position(|item| item == denominator) {
+                    available.remove(index);
+                } else {
+                    common_denominators.push(denominator.clone());
+                }
+            }
+        }
+        let denominator_product = |denominators: &[FourDDenominator]| {
+            denominators
+                .iter()
+                .fold(Atom::one(), |product, denominator| {
+                    product
+                        * &tagged_denominators
+                            .iter()
+                            .find(|(candidate, _)| candidate == denominator)
+                            .expect("every typed denominator has its original tagged wrapper")
+                            .1
+                })
+        };
+        let common_denominator = denominator_product(&common_denominators);
+        let common_numerator = natural_terms.iter().fold(Atom::Zero, |sum, term| {
+            let mut missing = common_denominators.clone();
+            for denominator in &term.denominators {
+                let index = missing.iter().position(|item| item == denominator).unwrap();
+                missing.remove(index);
+            }
+            // Only multiply the existing numerator by missing denominator
+            // factors. Certify each contribution by exact factor cancellation,
+            // without forming or distributing a common polynomial numerator.
+            let contribution = &term.numerator * denominator_product(&missing);
+            assert_eq!(
+                (&contribution / &common_denominator).collect_factors(),
+                (&term.numerator / denominator_product(&term.denominators)).collect_factors(),
+            );
+            sum + contribution
+        });
+        let common = FourDTerm {
+            numerator: common_numerator,
+            denominators: common_denominators,
+        };
         let owner_multiplicities = owners.map(|owner| {
             common
                 .denominators
@@ -1704,32 +1940,25 @@ mod tests {
             BTreeSet::from([(1, false), (1, true), (2, true), (7, true)]),
         );
 
-        // Reduce only the test copy to its natural Taylor leaves. Regrouping by
-        // denominator multiplicity restores each factorized C_i after the
-        // test-only expansion of its soft-shift and mass pieces.
-        let expanded_for_oracle = expanded.expand();
-        let additive_terms = match expanded_for_oracle.as_view() {
-            AtomView::Add(add) => add.iter().map(|term| term.to_owned()).collect(),
-            _ => vec![expanded_for_oracle],
-        };
+        // Read the same natural Taylor leaves before collecting their common
+        // denominator. Regrouping by denominator multiplicity preserves each
+        // factorized C_i and its soft-shift and mass pieces.
         let analyzer = EnergyPowerAnalyzer::for_physical_emr_edges(owners);
         let mut reduced_numerators = BTreeMap::<[usize; 3], Atom>::new();
-        for additive_term in additive_terms {
-            for leaf in FourDTerm::from_view(additive_term.cancel().as_view())? {
-                if leaf.numerator.is_zero() {
-                    continue;
-                }
-                let multiplicities = owners.map(|owner| {
-                    leaf.denominators
-                        .iter()
-                        .filter(|denominator| denominator.source_edge == owner)
-                        .count()
-                });
-                let reduced_numerator = reduced_numerators
-                    .entry(multiplicities)
-                    .or_insert(Atom::Zero);
-                *reduced_numerator = &*reduced_numerator + &leaf.numerator;
+        for leaf in natural_terms {
+            if leaf.numerator.is_zero() {
+                continue;
             }
+            let multiplicities = owners.map(|owner| {
+                leaf.denominators
+                    .iter()
+                    .filter(|denominator| denominator.source_edge == owner)
+                    .count()
+            });
+            let reduced_numerator = reduced_numerators
+                .entry(multiplicities)
+                .or_insert(Atom::Zero);
+            *reduced_numerator = &*reduced_numerator + &leaf.numerator;
         }
         let reduced_leaves = reduced_numerators
             .iter()
@@ -1805,10 +2034,7 @@ mod tests {
             .to_dots()
             .normalize_dots();
         assert!(
-            (&production - scalar_series_oracle)
-                .expand()
-                .together()
-                .is_zero(),
+            (production.collect_factors() - scalar_series_oracle.collect_factors()).is_zero(),
             "production T must equal the complete scalar Taylor series, including leading and linear layers",
         );
         let mut production_numerators = BTreeMap::<[usize; 3], Atom>::new();
@@ -1868,10 +2094,16 @@ mod tests {
                 .with(Atom::Zero)
                 .replace(physical_mass_variable.get_symbol())
                 .with(Atom::Zero);
-            let actual_mass_part =
-                GS.erase_uv_momentum_provenance(&(coefficient - without_mass_constants).expand());
-            let expected_mass_part =
-                (&numerator * (physical_mass.pow(2) - &expansion_mass_squared)).expand();
+            let actual_mass_part = GS
+                .erase_uv_momentum_provenance(&(coefficient - without_mass_constants))
+                .collect_factors()
+                // Normalize numerical coefficients within the mass sum only;
+                // momentum factors and products of sums stay factorized.
+                .expand_num();
+            let expected_mass_part = (&numerator
+                * (physical_mass.pow(2) - &expansion_mass_squared))
+                .collect_factors()
+                .expand_num();
             assert_eq!(
                 actual_mass_part,
                 expected_mass_part,
@@ -2092,7 +2324,7 @@ mod tests {
             .simplify_metrics()
             .to_dots()
             .normalize_dots();
-        assert!((expanded - independent).expand().together().is_zero());
+        assert!((expanded.collect_factors() - independent.collect_factors()).is_zero());
 
         let options = graph.denominator_only_cff_3d_expression_options();
         let mut cache = ExactCffGenerationCache::default();

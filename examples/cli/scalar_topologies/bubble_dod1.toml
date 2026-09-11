@@ -114,7 +114,7 @@ commands = [
 	""",
 
 	"""integrate -p bubble_dod1_no_integrated_UV -i scalar_bubble_below_thres -p bubble_dod1 -i scalar_bubble_below_thres --n-cores 10
-	             --target bubble_dod1_no_integrated_UV@scalar_bubble_below_thres=7.358320108607984e-3,0.0 bubble_dod1@scalar_bubble_below_thres=1.3514937842276269e-3,0.0
+	             --target bubble_dod1_no_integrated_UV@scalar_bubble_below_thres=0.0,7.358320108607984e-3 bubble_dod1@scalar_bubble_below_thres=0.0,1.3514937842276269e-3
                  --restart
     """,
 ]
@@ -131,7 +131,7 @@ commands = [
 	""",
 
 	"""integrate -p bubble_dod1_no_integrated_UV -i scalar_bubble_above_thres -p bubble_dod1 -i scalar_bubble_above_thres --n-cores 1
-	             --target bubble_dod1_no_integrated_UV@scalar_bubble_above_thres=0.5910159226920848,0.4558372337156246 bubble_dod1@scalar_bubble_above_thres=-9.6667097459509e-3,0.4558372337156246
+	             --target bubble_dod1_no_integrated_UV@scalar_bubble_above_thres=-0.4558372337156246,0.5910159226920848 bubble_dod1@scalar_bubble_above_thres=-0.4558372337156246,-9.6667097459509e-3
                  --restart
     """,
 ]
@@ -182,3 +182,6 @@ precision = "Arb"
 required_precision_for_re = 0.00001
 required_precision_for_im = 0.00001
 escalate_for_large_weight_threshold = -1.0
+
+[default_runtime_settings.integrator]
+integrated_phase = "imag"

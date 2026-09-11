@@ -1,6 +1,6 @@
 #![allow(uncommon_codepoints)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use eyre::eyre;
 use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike};
@@ -368,19 +368,49 @@ impl IndexTooling for AtomView<'_> {
             }
         }
 
+        let external = net.graph.dangling_indices();
         let expr = net.simple_execute::<()>();
-        let a = expr.canonize_tensors(dummies).unwrap();
+        // Spenso owns contraction and external-slot validation. Symbolica
+        // canonizes the complete expression, including contractions completed
+        // inside nested sums, without distributing any products of sums.
+        let canonical = expr.canonize_tensors(dummies).unwrap();
 
-        let mut reps = vec![];
-
-        for (i, (d, r)) in a.dummy_indices.into_iter().enumerate() {
-            reps.push(Replacement::new(
-                d.to_pattern(),
-                r.slot::<Aind, Aind>(new_dummy(i)).to_atom(),
-            ));
+        // Sum branches also have paired copies of genuinely external slots.
+        // Preserve those labels after Symbolica has validated their incidence.
+        let mut reserved = BTreeSet::new();
+        for slot in external {
+            let slot = if slot.rep_name().is_dual() {
+                slot.dual()
+            } else {
+                slot
+            };
+            let slot = slot.to_atom();
+            reserved.insert(slot);
         }
 
-        a.canonical_form
+        let mut reps = vec![];
+        let mut next_dummy = 0;
+
+        // Only relabel names that Symbolica validated as contracted indices;
+        // keep their replacements distinct from the genuine external slots.
+        // Canceled terms can leave unused names in the validated index pool.
+        for (d, r) in canonical
+            .dummy_indices
+            .into_iter()
+            .filter(|(index, _)| canonical.canonical_form.contains(index))
+        {
+            let target = loop {
+                let candidate = r.slot::<Aind, Aind>(new_dummy(next_dummy)).to_atom();
+                next_dummy += 1;
+                if reserved.insert(candidate.clone()) {
+                    break candidate;
+                }
+            };
+            reps.push(Replacement::new(d.to_pattern(), target));
+        }
+
+        canonical
+            .canonical_form
             .replace_multiple(&reps)
             .replace_multiple(&redual_reps)
     }
