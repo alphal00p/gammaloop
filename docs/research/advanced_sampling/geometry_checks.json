@@ -1,0 +1,94 @@
+{
+  "scope": "Standalone numerical geometry and quadrature audit, not a GammaLoop sampler implementation or GL638 integration",
+  "surface": "sum_i((k_i-c_i)/a_i)^2=1; sampled ellipsoid rho<2",
+  "axes": [
+    1.0,
+    2.0,
+    3.0
+  ],
+  "center": [
+    0.1,
+    -0.2,
+    0.3
+  ],
+  "signed_radial_power": 2.0,
+  "points": [
+    {
+      "cube": [
+        0.23,
+        0.34,
+        0.19
+      ],
+      "analytic_jacobian": 72.84257169143257,
+      "numeric_jacobian": 72.84257169020943,
+      "relative_jacobian_error": 1.679156813594318e-11,
+      "inverse_max_error": 2.7755575615628914e-17
+    },
+    {
+      "cube": [
+        0.63,
+        0.71,
+        0.42
+      ],
+      "analytic_jacobian": 25.442635328394964,
+      "numeric_jacobian": 25.44263533111643,
+      "relative_jacobian_error": 1.0696488139672056e-10,
+      "inverse_max_error": 1.1102230246251565e-16
+    },
+    {
+      "cube": [
+        0.83,
+        0.41,
+        0.67
+      ],
+      "analytic_jacobian": 256.7425288617533,
+      "numeric_jacobian": 256.7425288374599,
+      "relative_jacobian_error": 9.462186589814792e-11,
+      "inverse_max_error": 1.1102230246251565e-16
+    }
+  ],
+  "unit_volume": 0.9999999999999966,
+  "expected_volume": 201.06192982974676,
+  "computed_volume": 201.06192982974608,
+  "first_moment": [
+    0.10000000000000092,
+    -0.20000000000000162,
+    0.3000000000000126
+  ],
+  "expected_first_moment": [
+    0.1,
+    -0.2,
+    0.3
+  ],
+  "central_second_moments": [
+    0.8000000000000139,
+    3.200000000000092,
+    7.200000000000035
+  ],
+  "expected_central_second_moments": [
+    0.8,
+    3.2,
+    7.2
+  ],
+  "quadrature": {
+    "angular_cosine_gauss_legendre_nodes": 80,
+    "azimuth_midpoints": 160,
+    "radial_gauss_legendre_nodes_per_half": 80,
+    "radial_halves": [
+      [
+        0,
+        0.5
+      ],
+      [
+        0.5,
+        1
+      ]
+    ],
+    "cartesian_finite_difference_step": 1e-06
+  },
+  "arithmetic": {
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "precision": "f64"
+  }
+}
