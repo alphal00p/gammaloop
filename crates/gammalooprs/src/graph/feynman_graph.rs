@@ -267,8 +267,8 @@ where
                 match (self[edge].is_fermion(), derivative_order) {
                     (true, 0) => Some((thermal_sign + tanh().call_args([arg])) / Atom::num(2)),
                     (false, 0) => Some((thermal_sign + coth().call_args([arg])) / Atom::num(2)),
-                    (true, 1) => Some(-beta * sech().call_args([arg]).pow(2) / Atom::num(4)),
-                    (false, 1) => Some(beta * csch().call_args([arg]).pow(2) / Atom::num(4)),
+                    (true, 1) => Some(beta * sech().call_args([arg]).pow(2) / Atom::num(4)),
+                    (false, 1) => Some(-beta * csch().call_args([arg]).pow(2) / Atom::num(4)),
                     (true, 2) => Some(
                         -beta.pow(2) * sech().call_args([&arg]).pow(2) * tanh().call_args([arg])
                             / Atom::num(4),
@@ -1099,6 +1099,46 @@ mod tests {
     }
 
     #[test]
+    fn thermal_distribution_bodies_are_energy_derivatives() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph thermal {
+            node [num=1]
+            edge [num=1]
+            A -> B [particle="d"]
+            B -> A [particle="d"]
+            A -> B [particle="g"]
+        })
+        .unwrap();
+        let energy = symbol!("thermal_derivative_energy");
+        let thermal_sign = symbol!("thermal_derivative_sign").to_atom();
+        for fermion in [true, false] {
+            let edge = graph
+                .iter_edge_ids()
+                .find(|&edge| graph[edge].is_fermion() == fermion)
+                .unwrap();
+            let bodies = [0, 1, 2].map(|order| {
+                graph
+                    .explicit_thermal_distribution_atom(
+                        edge,
+                        order,
+                        thermal_sign.clone(),
+                        ThermalDistributionLimit::Default,
+                    )
+                    .unwrap()
+                    .replace(ose_atom_from_index(edge))
+                    .with(energy)
+            });
+            // Temperature, chemical potential, and orientation stay symbolic and fixed.
+            for (order, pair) in bodies.windows(2).enumerate() {
+                assert!(
+                    (pair[0].derivative(energy) - &pair[1]).expand().is_zero(),
+                    "energy derivative of thermal distribution order {order} on edge {edge}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn native_thermal_distributions() {
         test_initialise().unwrap();
         let graph: Graph = dot!(digraph thermal {
@@ -1203,9 +1243,9 @@ mod tests {
                                 0 => (sign + hyperbolic) / 2.0,
                                 1 => {
                                     if fermion {
-                                        -squared / 2.0
-                                    } else {
                                         squared / 2.0
+                                    } else {
+                                        -squared / 2.0
                                     }
                                 }
                                 2 => {

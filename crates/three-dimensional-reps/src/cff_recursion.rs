@@ -468,11 +468,24 @@ fn enumerate_cff_branches(
         },
         numerators: Vec::new(),
     };
+    // An m-edge cyclic chain contributes (-1)^(m-1) times the ordinary
+    // (m-1)th energy derivative. Count only factors stripped at this step.
+    let reduction_sign = weight
+        .distributions
+        .iter()
+        .map(|factor| {
+            if factor.derivative_order.is_multiple_of(2) {
+                1
+            } else {
+                -1
+            }
+        })
+        .product::<i32>();
     if graph.vertices.len() < 2 {
         branch_acc.push(CffSurfaceChain {
             surfaces: Vec::new(),
             thermal_weight: weight,
-            sign: 1,
+            sign: reduction_sign,
         });
         return;
     }
@@ -512,7 +525,7 @@ fn enumerate_cff_branches(
             continue;
         }
         let mut branch_weight = weight.clone();
-        let mut sign = 1;
+        let mut sign = reduction_sign;
         if thermal {
             // Edges joining the contracted vertices carry the thermal numerator
             // for that contraction, with outgoing minus incoming ordering.
@@ -534,7 +547,7 @@ fn enumerate_cff_branches(
                 .collect();
             let (numerator, numerator_sign) =
                 ThermalNumerator::from_edge_lists_canonicalized(outgoing, incoming);
-            sign = surface_sign * numerator_sign;
+            sign *= surface_sign * numerator_sign;
             if !numerator.is_trivial() {
                 branch_weight.numerators.push(numerator);
             }
@@ -966,7 +979,7 @@ mod thermal_tests {
         for edge in &mut parsed.internal_edges {
             edge.signature.external_signature.clear();
         }
-        for (count, derivative_order) in [(2, 1), (3, 2)] {
+        for (count, derivative_order, sign) in [(1, 0, 1), (2, 1, -1), (3, 2, 1), (4, 3, -1)] {
             let mut cycle = parsed.clone();
             cycle.internal_edges.truncate(count);
             cycle.internal_edges[count - 1].head = 0;
@@ -977,6 +990,7 @@ mod thermal_tests {
             );
             assert_eq!(chains.len(), 1);
             assert!(chains[0].surfaces.is_empty());
+            assert_eq!(chains[0].sign, sign);
             assert_eq!(
                 chains[0].thermal_weight.distributions,
                 vec![ThermalDistributionFactor {
@@ -985,6 +999,54 @@ mod thermal_tests {
                     derivative_order,
                 }]
             );
+        }
+    }
+
+    #[test]
+    fn thermal_cycle_signs_compose_across_stripping_and_recursion() {
+        for (edges, expected) in [
+            (
+                vec![(0, 1), (1, 0), (0, 2), (2, 0)],
+                vec![(0, 1, vec![(0, 1), (2, 1)])],
+            ),
+            (vec![(0, 1), (1, 0), (0, 2)], vec![(1, -1, vec![(0, 1)])]),
+            (
+                // Contracting 0 with 2 exposes a two-edge cycle below recursion.
+                vec![(0, 1), (0, 2), (2, 0), (1, 2)],
+                vec![(1, -1, vec![(0, 1)]), (2, 1, vec![])],
+            ),
+        ] {
+            let mut parsed = crate::graph_io::test_graphs::box_graph();
+            parsed.external_edges.clear();
+            parsed.external_names.clear();
+            parsed.internal_edges.truncate(edges.len());
+            for (edge, &(tail, head)) in parsed.internal_edges.iter_mut().zip(&edges) {
+                edge.tail = tail;
+                edge.head = head;
+                edge.signature.external_signature.clear();
+            }
+            for mode in [
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
+            ] {
+                let mut actual = enumerate_cff_surface_chains(&parsed, &vec![1; edges.len()], mode)
+                    .into_iter()
+                    .map(|chain| {
+                        (
+                            chain.surfaces.len(),
+                            chain.sign,
+                            chain
+                                .thermal_weight
+                                .distributions
+                                .iter()
+                                .map(|factor| (factor.edge_id.0, factor.derivative_order))
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                actual.sort();
+                assert_eq!(actual, expected, "{edges:?}, {mode:?}");
+            }
         }
     }
 
