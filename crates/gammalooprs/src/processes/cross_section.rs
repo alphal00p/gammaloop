@@ -1985,7 +1985,7 @@ impl CrossSectionGraph {
         Atom::var(radius_star).pow(subspace_loop_count as i32 * 3 - 1)
     }
 
-    fn single_th_prefactor_helper_atoms(
+    pub(crate) fn single_th_prefactor_helper_atoms(
         order: u8,
         subspace_loop_count: usize,
         is_on_right: bool,
