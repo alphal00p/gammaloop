@@ -48,6 +48,8 @@ pub mod cache_debugging;
 pub mod cross_section;
 pub mod gammaloop_sample;
 pub mod ir;
+pub mod sampling_maps;
+pub mod sampling_reference;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, settings::RuntimeSettings,
     settings::runtime::DiscreteGraphSamplingSettings, settings::runtime::DiscreteGraphSamplingType,
@@ -64,6 +66,10 @@ pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
 
 pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
+pub use sampling_maps::{
+    SamplingJacobian, SamplingMapContract, SamplingMapDefinition, SamplingSupport,
+};
+pub use sampling_reference::GaussianReferenceFunction;
 
 pub mod threshold_multiplier;
 
@@ -847,6 +853,27 @@ impl ProcessIntegrand {
             }
             ProcessIntegrand::CrossSection(integrand) => {
                 evaluate_sample_precise(integrand, model, sample, wgt, use_arb_prec, max_eval)
+            }
+        }
+    }
+
+    /// Evaluate a normalized reference function through the real process
+    /// parameterization, retaining its Jacobian and integrator weight.
+    ///
+    /// This is intentionally a test-only style overlay: graph routing,
+    /// orientation/channel selection and all sampling maps are still exercised,
+    /// while the physical graph evaluation is replaced by `reference`.
+    pub fn evaluate_reference_sample(
+        &mut self,
+        sample: &Sample<F<f64>>,
+        reference: &GaussianReferenceFunction,
+    ) -> Result<EvaluationResult> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                evaluate_reference_sample(integrand, sample, reference)
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                evaluate_reference_sample(integrand, sample, reference)
             }
         }
     }
@@ -2252,6 +2279,7 @@ impl LmbMultiChannelingSetup {
                 b: parameterization_settings.b,
                 power: parameterization_settings.power,
                 lmb_basis_ids: Default::default(),
+                sampling_channels: Default::default(),
             };
             let common_radial_settings = ParameterizationSettings {
                 mode: ParameterizationMode::SphericalCommonRadial,
@@ -2259,6 +2287,7 @@ impl LmbMultiChannelingSetup {
                 b: parameterization_settings.b,
                 power: parameterization_settings.power,
                 lmb_basis_ids: Default::default(),
+                sampling_channels: Default::default(),
             };
             let sampled_branch = momentum_sample.sample.parameterization_branch;
             let denominator = effective_channels
@@ -4131,6 +4160,22 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
         use_arb_prec,
         max_eval,
     )
+}
+
+fn evaluate_reference_sample<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    sample: &Sample<F<f64>>,
+    reference: &GaussianReferenceFunction,
+) -> Result<EvaluationResult> {
+    let source = EvaluationSource::XSpace(sample);
+    let (gamma_sample, parameterization_time) = source.build_gamma_sample::<f64, I>(integrand)?;
+    let default_sample = gamma_sample.get_default_sample();
+    let mut result = EvaluationResult::zero();
+    result.integrand_result = Complex::new_re(reference.evaluate(default_sample.loop_moms())?);
+    result.parameterization_jacobian = Some(default_sample.jacobian());
+    result.integrator_weight = sample.get_weight();
+    result.evaluation_metadata.parameterization_time = parameterization_time;
+    Ok(result)
 }
 
 fn evaluate_sample_precise<I: ProcessIntegrandImpl>(

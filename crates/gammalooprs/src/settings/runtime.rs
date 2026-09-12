@@ -16,6 +16,7 @@ use crate::{
     DependentMomentaConstructor, GammaLoopContext,
     cff::esurface::Esurface,
     graph::LoopMomentumBasis,
+    integrands::process::SamplingMapDefinition,
     integrands::process::evaluators::EvaluatorMethod,
     momentum::{Helicity, RotationMethod, sample::ExternalIndex, signature::SignatureLike},
     observables::ObservableFileFormat,
@@ -423,6 +424,11 @@ pub struct ParameterizationSettings {
     pub power: f64,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub lmb_basis_ids: BTreeMap<String, Vec<usize>>,
+    /// Advanced graph-aware sampling channels.  The production sampler does not
+    /// consume this catalogue yet, but keeping it with the parameterisation
+    /// makes it survive the `SamplingSettings` enum round trip.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub sampling_channels: SamplingChannelSelection,
 }
 
 impl Default for ParameterizationSettings {
@@ -433,6 +439,7 @@ impl Default for ParameterizationSettings {
             mode: ParameterizationMode::default(),
             mapping: ParameterizationMapping::default(),
             lmb_basis_ids: BTreeMap::new(),
+            sampling_channels: SamplingChannelSelection::default(),
         }
     }
 }
@@ -1100,13 +1107,16 @@ pub struct SamplingSettingsParser {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientations: SumMode,
     #[serde(skip_serializing_if = "is_false")]
+    #[serde(rename = "sampling_multichanneling", alias = "lmb_multichanneling")]
     pub lmb_multichanneling: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(rename = "sampling_channels", alias = "lmb_channels")]
     pub lmb_channels: SumMode,
     #[serde(skip_serializing_if = "is_float::<3>")]
     pub alpha: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub lmb_channel_weight: LmbChannelWeight,
+    #[serde(rename = "sampling_channel_weight", alias = "lmb_channel_weight")]
+    pub lmb_channel_weight: SamplingChannelWeight,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub coordinate_system: CoordinateSystem,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -1117,6 +1127,12 @@ pub struct SamplingSettingsParser {
     pub power: f64,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub lmb_basis_ids: BTreeMap<String, Vec<usize>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub default_channel_selection: Vec<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub channel_selection: BTreeMap<String, Vec<String>>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub channel_definitions: BTreeMap<String, BTreeMap<String, SamplingChannelDefinition>>,
 }
 
 impl Default for SamplingSettingsParser {
@@ -1128,12 +1144,108 @@ impl Default for SamplingSettingsParser {
             lmb_multichanneling: false,
             lmb_channels: SumMode::Summed,
             alpha: 3.0,
-            lmb_channel_weight: LmbChannelWeight::default(),
+            lmb_channel_weight: SamplingChannelWeight::default(),
             coordinate_system: CoordinateSystem::Spherical,
             mapping: ParameterizationMapping::Linear,
             b: 1.0,
             power: 1.0,
             lmb_basis_ids: BTreeMap::new(),
+            default_channel_selection: Vec::new(),
+            channel_selection: BTreeMap::new(),
+            channel_definitions: BTreeMap::new(),
+        }
+    }
+}
+
+/// Weighting strategy for the resolved sampling-channel partition.
+///
+/// `Ose` and `InverseJacobian` are retained as input aliases for old cards;
+/// new cards should use `map_density` or `singularity_proxy`.
+#[derive(
+    Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
+)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+pub enum SamplingChannelWeight {
+    #[serde(rename = "map_density", alias = "ose")]
+    #[default]
+    MapDensity,
+    #[serde(rename = "singularity_proxy")]
+    SingularityProxy,
+    #[serde(rename = "inverse_jacobian")]
+    InverseJacobian,
+}
+
+impl From<LmbChannelWeight> for SamplingChannelWeight {
+    fn from(value: LmbChannelWeight) -> Self {
+        match value {
+            LmbChannelWeight::Ose => Self::MapDensity,
+            LmbChannelWeight::InverseJacobian => Self::InverseJacobian,
+        }
+    }
+}
+
+impl SamplingChannelWeight {
+    fn into_lmb(self) -> Result<LmbChannelWeight, String> {
+        match self {
+            Self::MapDensity | Self::InverseJacobian | Self::SingularityProxy => Ok(match self {
+                Self::MapDensity => LmbChannelWeight::Ose,
+                Self::InverseJacobian => LmbChannelWeight::InverseJacobian,
+                Self::SingularityProxy => LmbChannelWeight::Ose,
+            }),
+        }
+    }
+}
+
+/// A graph-scoped channel definition.  `parent_lmb` is deliberately explicit:
+/// resolving a short expression against a graph is a later validation step,
+/// while exported definitions must never lose the routing frame they use.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[serde(default, deny_unknown_fields)]
+pub struct SamplingChannelDefinition {
+    pub around: String,
+    pub parent_lmb: Vec<usize>,
+    pub on_cut: Vec<usize>,
+}
+
+impl Default for SamplingChannelDefinition {
+    fn default() -> Self {
+        Self {
+            around: String::new(),
+            parent_lmb: Vec::new(),
+            on_cut: Vec::new(),
+        }
+    }
+}
+
+/// Selection and user definitions for graph-aware sampling channels.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[serde(default, deny_unknown_fields)]
+pub struct SamplingChannelSelection {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub weight: SamplingChannelWeight,
+    pub default_channel_selection: Vec<String>,
+    pub channel_selection: BTreeMap<String, Vec<String>>,
+    pub channel_definitions: BTreeMap<String, BTreeMap<String, SamplingChannelDefinition>>,
+}
+
+impl Default for SamplingChannelSelection {
+    fn default() -> Self {
+        Self {
+            weight: SamplingChannelWeight::default(),
+            default_channel_selection: Vec::new(),
+            channel_selection: BTreeMap::new(),
+            channel_definitions: BTreeMap::new(),
         }
     }
 }
@@ -1220,6 +1332,65 @@ fn validate_lmb_basis_ids(lmb_basis_ids: &BTreeMap<String, Vec<usize>>) -> Resul
     Ok(())
 }
 
+fn validate_sampling_channel_selection(
+    default_selection: &[String],
+    selection: &BTreeMap<String, Vec<String>>,
+    definitions: &BTreeMap<String, BTreeMap<String, SamplingChannelDefinition>>,
+) -> Result<(), String> {
+    for (label, entries) in [("default_channel_selection", default_selection)] {
+        if entries.iter().any(|entry| entry.trim().is_empty()) {
+            return Err(format!(
+                "Invalid sampling settings: {label} contains an empty channel selector."
+            ));
+        }
+    }
+    for (graph, entries) in selection {
+        if graph.trim().is_empty() {
+            return Err(
+                "Invalid sampling settings: channel_selection contains an empty graph name."
+                    .to_string(),
+            );
+        }
+        if entries.iter().any(|entry| entry.trim().is_empty()) {
+            return Err(format!(
+                "Invalid sampling settings: channel_selection entry for graph '{graph}' contains an empty selector."
+            ));
+        }
+    }
+    for (graph, graph_definitions) in definitions {
+        if graph.trim().is_empty() {
+            return Err(
+                "Invalid sampling settings: channel_definitions contains an empty graph name."
+                    .to_string(),
+            );
+        }
+        for (name, definition) in graph_definitions {
+            if name.trim().is_empty() || definition.around.trim().is_empty() {
+                return Err(format!(
+                    "Invalid sampling settings: channel definition '{graph}.{name}' requires a non-empty around expression."
+                ));
+            }
+            if definition.parent_lmb.is_empty() {
+                return Err(format!(
+                    "Invalid sampling settings: channel definition '{graph}.{name}' requires a non-empty parent_lmb."
+                ));
+            }
+            let mut seen = BTreeSet::new();
+            if definition.parent_lmb.iter().any(|edge| !seen.insert(edge)) {
+                return Err(format!(
+                    "Invalid sampling settings: channel definition '{graph}.{name}' contains duplicate parent_lmb edge ids."
+                ));
+            }
+            SamplingMapDefinition::parse(&definition.around).map_err(|error| {
+                format!(
+                    "Invalid sampling settings: channel definition '{graph}.{name}' has an invalid around expression: {error}"
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
 impl SamplingSettings {
     fn as_parser(&self) -> SamplingSettingsParser {
         match self {
@@ -1230,12 +1401,18 @@ impl SamplingSettings {
                 lmb_multichanneling: false,
                 lmb_channels: SumMode::Summed,
                 alpha: 3.0,
-                lmb_channel_weight: LmbChannelWeight::default(),
+                lmb_channel_weight: settings.sampling_channels.weight,
                 coordinate_system: CoordinateSystem::from_mode(settings.mode.clone()),
                 mapping: settings.mapping.clone(),
                 b: settings.b,
                 power: settings.power,
                 lmb_basis_ids: settings.lmb_basis_ids.clone(),
+                default_channel_selection: settings
+                    .sampling_channels
+                    .default_channel_selection
+                    .clone(),
+                channel_selection: settings.sampling_channels.channel_selection.clone(),
+                channel_definitions: settings.sampling_channels.channel_definitions.clone(),
             },
             SamplingSettings::MultiChanneling(settings) => SamplingSettingsParser {
                 graphs: SumMode::Summed,
@@ -1244,7 +1421,14 @@ impl SamplingSettings {
                 lmb_multichanneling: true,
                 lmb_channels: SumMode::Summed,
                 alpha: settings.alpha,
-                lmb_channel_weight: settings.channel_weight,
+                lmb_channel_weight: if matches!(
+                    settings.channel_weight,
+                    LmbChannelWeight::InverseJacobian
+                ) {
+                    SamplingChannelWeight::InverseJacobian
+                } else {
+                    settings.parameterization_settings.sampling_channels.weight
+                },
                 coordinate_system: CoordinateSystem::from_mode(
                     settings.parameterization_settings.mode.clone(),
                 ),
@@ -1252,6 +1436,21 @@ impl SamplingSettings {
                 b: settings.parameterization_settings.b,
                 power: settings.parameterization_settings.power,
                 lmb_basis_ids: settings.parameterization_settings.lmb_basis_ids.clone(),
+                default_channel_selection: settings
+                    .parameterization_settings
+                    .sampling_channels
+                    .default_channel_selection
+                    .clone(),
+                channel_selection: settings
+                    .parameterization_settings
+                    .sampling_channels
+                    .channel_selection
+                    .clone(),
+                channel_definitions: settings
+                    .parameterization_settings
+                    .sampling_channels
+                    .channel_definitions
+                    .clone(),
             },
             SamplingSettings::DiscreteGraphs(settings) => {
                 let orientations = if settings.sample_orientations {
@@ -1269,7 +1468,7 @@ impl SamplingSettings {
                             lmb_multichanneling: false,
                             lmb_channels: SumMode::Summed,
                             alpha: 3.0,
-                            lmb_channel_weight: LmbChannelWeight::default(),
+                            lmb_channel_weight: parameterization_settings.sampling_channels.weight,
                             coordinate_system: CoordinateSystem::from_mode(
                                 parameterization_settings.mode.clone(),
                             ),
@@ -1277,6 +1476,18 @@ impl SamplingSettings {
                             b: parameterization_settings.b,
                             power: parameterization_settings.power,
                             lmb_basis_ids: parameterization_settings.lmb_basis_ids.clone(),
+                            default_channel_selection: parameterization_settings
+                                .sampling_channels
+                                .default_channel_selection
+                                .clone(),
+                            channel_selection: parameterization_settings
+                                .sampling_channels
+                                .channel_selection
+                                .clone(),
+                            channel_definitions: parameterization_settings
+                                .sampling_channels
+                                .channel_definitions
+                                .clone(),
                         }
                     }
                     DiscreteGraphSamplingType::MultiChanneling(multichanneling_settings) => {
@@ -1287,7 +1498,17 @@ impl SamplingSettings {
                             lmb_multichanneling: true,
                             lmb_channels: SumMode::Summed,
                             alpha: multichanneling_settings.alpha,
-                            lmb_channel_weight: multichanneling_settings.channel_weight,
+                            lmb_channel_weight: if matches!(
+                                multichanneling_settings.channel_weight,
+                                LmbChannelWeight::InverseJacobian
+                            ) {
+                                SamplingChannelWeight::InverseJacobian
+                            } else {
+                                multichanneling_settings
+                                    .parameterization_settings
+                                    .sampling_channels
+                                    .weight
+                            },
                             coordinate_system: CoordinateSystem::from_mode(
                                 multichanneling_settings
                                     .parameterization_settings
@@ -1304,6 +1525,21 @@ impl SamplingSettings {
                                 .parameterization_settings
                                 .lmb_basis_ids
                                 .clone(),
+                            default_channel_selection: multichanneling_settings
+                                .parameterization_settings
+                                .sampling_channels
+                                .default_channel_selection
+                                .clone(),
+                            channel_selection: multichanneling_settings
+                                .parameterization_settings
+                                .sampling_channels
+                                .channel_selection
+                                .clone(),
+                            channel_definitions: multichanneling_settings
+                                .parameterization_settings
+                                .sampling_channels
+                                .channel_definitions
+                                .clone(),
                         }
                     }
                     DiscreteGraphSamplingType::DiscreteMultiChanneling(
@@ -1315,7 +1551,17 @@ impl SamplingSettings {
                         lmb_multichanneling: true,
                         lmb_channels: SumMode::MonteCarlo,
                         alpha: multichanneling_settings.alpha,
-                        lmb_channel_weight: multichanneling_settings.channel_weight,
+                        lmb_channel_weight: if matches!(
+                            multichanneling_settings.channel_weight,
+                            LmbChannelWeight::InverseJacobian
+                        ) {
+                            SamplingChannelWeight::InverseJacobian
+                        } else {
+                            multichanneling_settings
+                                .parameterization_settings
+                                .sampling_channels
+                                .weight
+                        },
                         coordinate_system: CoordinateSystem::from_mode(
                             multichanneling_settings
                                 .parameterization_settings
@@ -1332,6 +1578,21 @@ impl SamplingSettings {
                             .parameterization_settings
                             .lmb_basis_ids
                             .clone(),
+                        default_channel_selection: multichanneling_settings
+                            .parameterization_settings
+                            .sampling_channels
+                            .default_channel_selection
+                            .clone(),
+                        channel_selection: multichanneling_settings
+                            .parameterization_settings
+                            .sampling_channels
+                            .channel_selection
+                            .clone(),
+                        channel_definitions: multichanneling_settings
+                            .parameterization_settings
+                            .sampling_channels
+                            .channel_definitions
+                            .clone(),
                     },
                     DiscreteGraphSamplingType::TropicalSampling(_) => SamplingSettingsParser {
                         graphs: SumMode::MonteCarlo,
@@ -1340,12 +1601,15 @@ impl SamplingSettings {
                         lmb_multichanneling: false,
                         lmb_channels: SumMode::Summed,
                         alpha: 3.0,
-                        lmb_channel_weight: LmbChannelWeight::default(),
+                        lmb_channel_weight: SamplingChannelWeight::default(),
                         coordinate_system: CoordinateSystem::MomTrop,
                         mapping: ParameterizationMapping::default(),
                         b: 1.0,
                         power: 1.0,
                         lmb_basis_ids: BTreeMap::new(),
+                        default_channel_selection: Vec::new(),
+                        channel_selection: BTreeMap::new(),
+                        channel_definitions: BTreeMap::new(),
                     },
                 }
             }
@@ -1366,9 +1630,25 @@ impl SamplingSettings {
             b,
             power,
             lmb_basis_ids,
+            default_channel_selection,
+            channel_selection,
+            channel_definitions,
         } = parser;
 
         validate_lmb_basis_ids(&lmb_basis_ids)?;
+        let default_channel_selection =
+            if lmb_multichanneling && default_channel_selection.is_empty() {
+                vec!["auto:optimized_lmb".to_string()]
+            } else {
+                default_channel_selection
+            };
+        validate_sampling_channel_selection(
+            &default_channel_selection,
+            &channel_selection,
+            &channel_definitions,
+        )?;
+        let parser_channel_weight = lmb_channel_weight;
+        let lmb_channel_weight = lmb_channel_weight.into_lmb()?;
 
         let mut seen_graph_names = BTreeSet::new();
         for graph_name in &graph_names {
@@ -1397,6 +1677,16 @@ impl SamplingSettings {
         };
 
         if matches!(coordinate_system, CoordinateSystem::MomTrop) {
+            if parser_channel_weight != SamplingChannelWeight::MapDensity
+                || !default_channel_selection.is_empty()
+                || !channel_selection.is_empty()
+                || !channel_definitions.is_empty()
+            {
+                return Err(
+                    "Invalid sampling settings: advanced sampling channels are incompatible with tropical coordinates."
+                        .to_string(),
+                );
+            }
             if !lmb_basis_ids.is_empty() {
                 return Err(
                     "Invalid sampling settings: coordinate_system = 'tropical' is incompatible with lmb_basis_ids."
@@ -1472,6 +1762,12 @@ impl SamplingSettings {
             b,
             power,
             lmb_basis_ids,
+            sampling_channels: SamplingChannelSelection {
+                weight: parser_channel_weight,
+                default_channel_selection,
+                channel_selection,
+                channel_definitions,
+            },
         };
 
         match graphs {

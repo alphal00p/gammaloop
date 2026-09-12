@@ -3824,6 +3824,7 @@ pub(crate) fn global_parameterize<T: FloatLike>(
                 b: settings.b,
                 power: settings.power,
                 lmb_basis_ids: Default::default(),
+                sampling_channels: Default::default(),
             };
             let (common, common_jac) = parameterize3d(&x[0..3], e_cm.clone(), &spherical_settings);
             let (relative, relative_jac) =
@@ -3927,6 +3928,7 @@ pub(crate) fn global_parameterize<T: FloatLike>(
                     b: settings.b,
                     power: settings.power,
                     lmb_basis_ids: Default::default(),
+                    sampling_channels: Default::default(),
                 }
             } else {
                 branch_x[0] = (&x[0] - F::<T>::from_f64(0.5)) * F::<T>::from_f64(2.0);
@@ -3936,6 +3938,7 @@ pub(crate) fn global_parameterize<T: FloatLike>(
                     b: settings.b,
                     power: settings.power,
                     lmb_basis_ids: Default::default(),
+                    sampling_channels: Default::default(),
                 }
             };
             let (momenta, jac) = global_parameterize(&branch_x, e_cm, &branch_settings);
@@ -4062,6 +4065,7 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
                 b: settings.b,
                 power: settings.power,
                 lmb_basis_ids: Default::default(),
+                sampling_channels: Default::default(),
             };
             let (common_xs, common_inv_jac) =
                 inv_parametrize3d(&common, e_cm.clone(), &spherical_settings);
@@ -4170,6 +4174,7 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
                 b: settings.b,
                 power: settings.power,
                 lmb_basis_ids: Default::default(),
+                sampling_channels: Default::default(),
             };
             let common_radial_settings = ParameterizationSettings {
                 mode: ParameterizationMode::SphericalCommonRadial,
@@ -4177,6 +4182,7 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
                 b: settings.b,
                 power: settings.power,
                 lmb_basis_ids: Default::default(),
+                sampling_channels: Default::default(),
             };
             let (mut xs, product_inv_jac) =
                 global_inv_parameterize(moms, e_cm.clone(), &spherical_settings);

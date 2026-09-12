@@ -143,7 +143,7 @@ mod tests {
             global::{GammaloopCompileOptions, GenerationSettings, ThresholdSubtractionSettings},
             runtime::{
                 DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
-                GammaloopTropicalSamplingSettings,
+                GammaloopTropicalSamplingSettings, SamplingChannelWeight,
                 kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
             },
         },
@@ -750,15 +750,72 @@ mod tests {
         let toml = toml::to_string_pretty(&sampling_settings).unwrap();
         assert!(toml.contains("graphs = \"monte_carlo\""));
         assert!(toml.contains("orientations = \"monte_carlo\""));
-        assert!(toml.contains("lmb_multichanneling = true"));
-        assert!(toml.contains("lmb_channels = \"monte_carlo\""));
+        assert!(toml.contains("sampling_multichanneling = true"));
+        assert!(toml.contains("sampling_channels = \"monte_carlo\""));
         assert!(toml.contains("alpha = 3.0"));
-        assert!(toml.contains("lmb_channel_weight = \"ose\""));
+        assert!(toml.contains("sampling_channel_weight = \"map_density\""));
         assert!(toml.contains("coordinate_system = \"spherical\""));
         assert!(toml.contains("power = 1.0"));
         assert!(toml.contains("graph_names = []"));
         assert!(!toml.contains("type = \"discrete_graph_sampling\""));
         assert!(!toml.contains("subtype = \"discrete_multi_channeling\""));
+    }
+
+    #[test]
+    fn sampling_settings_accepts_advanced_channel_selection() {
+        let toml = r#"
+sampling_multichanneling = true
+sampling_channel_weight = "singularity_proxy"
+default_channel_selection = ["auto:surfaces"]
+channel_selection = { GL638 = ["auto:optimized_lmb", "corner"] }
+
+[channel_definitions.GL638.corner]
+around = "intersect(surface(2,4,12), surface(3,10,13))"
+parent_lmb = [3, 4, 7, 10]
+on_cut = [2, 6, 10]
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        let parameterization = settings.get_parameterization_settings().unwrap();
+        assert_eq!(
+            parameterization.sampling_channels.weight,
+            SamplingChannelWeight::SingularityProxy
+        );
+        assert_eq!(
+            parameterization.sampling_channels.default_channel_selection,
+            ["auto:surfaces"]
+        );
+        assert_eq!(
+            parameterization
+                .sampling_channels
+                .channel_selection
+                .get("GL638")
+                .unwrap(),
+            &["auto:optimized_lmb", "corner"]
+        );
+        let reparsed: SamplingSettings =
+            toml::from_str(&toml::to_string_pretty(&settings).unwrap()).unwrap();
+        assert_eq!(settings, reparsed);
+    }
+
+    #[test]
+    fn sampling_settings_accepts_old_sampling_aliases() {
+        let settings: SamplingSettings = toml::from_str(
+            "lmb_multichanneling = true\nlmb_channels = 'summed'\nlmb_channel_weight = 'ose'",
+        )
+        .unwrap();
+        assert!(matches!(settings, SamplingSettings::MultiChanneling(_)));
+    }
+
+    #[test]
+    fn sampling_settings_requires_parent_lmb_for_channel_definitions() {
+        let err = toml::from_str::<SamplingSettings>(
+            r#"
+channel_definitions = { G = { bad = { around = "surface(1)" } } }
+"#,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("requires a non-empty parent_lmb"));
     }
 
     #[test]
@@ -992,6 +1049,7 @@ power = 2.0
                                 b: 5.0,
                                 power: 2.0,
                                 lmb_basis_ids: Default::default(),
+                                sampling_channels: Default::default(),
                             },
                     },
                 ),
@@ -1030,6 +1088,7 @@ power = 4.0
                                 b: 1.5,
                                 power: 4.0,
                                 lmb_basis_ids: Default::default(),
+                                sampling_channels: Default::default(),
                             },
                     },
                 ),
@@ -1083,6 +1142,7 @@ b = 1.0
                                 b: 1.0,
                                 power: 1.0,
                                 lmb_basis_ids: Default::default(),
+                                sampling_channels: Default::default(),
                             },
                     },
                 ),

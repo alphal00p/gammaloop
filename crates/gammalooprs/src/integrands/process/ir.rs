@@ -887,6 +887,7 @@ impl AmplitudeIntegrand {
                 b: 10.0,
                 power: 1.0,
                 lmb_basis_ids: Default::default(),
+                sampling_channels: Default::default(),
             }),
         });
 
@@ -1213,6 +1214,7 @@ impl CrossSectionIntegrand {
                 b: 10.0,
                 power: 1.0,
                 lmb_basis_ids: Default::default(),
+                sampling_channels: Default::default(),
             }),
         });
 
