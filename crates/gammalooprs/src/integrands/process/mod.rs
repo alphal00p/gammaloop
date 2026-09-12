@@ -48,6 +48,7 @@ pub mod cache_debugging;
 pub mod cross_section;
 pub mod gammaloop_sample;
 pub mod ir;
+pub mod sampling_context;
 pub mod sampling_maps;
 pub mod sampling_partition;
 pub mod sampling_reference;
@@ -70,9 +71,13 @@ pub use sampling_evaluator::{SamplingDualValue, SamplingExpressionEvaluator};
 
 pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
+pub use sampling_context::{
+    PreparedCutSamplingContext, PreparedSamplingSurface, PreparedSurfaceStatus, SamplingCutSide,
+};
 pub use sampling_maps::{
-    SamplingJacobian, SamplingMapContract, SamplingMapDefinition, SamplingMapKernel,
-    SamplingMapPoint, SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
+    SamplingJacobian, SamplingMapComponent, SamplingMapComposition, SamplingMapContract,
+    SamplingMapDefinition, SamplingMapEvaluation, SamplingMapKernel, SamplingMapPoint,
+    SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
 };
 pub use sampling_partition::{
     SamplingChannelScore, SamplingPartition, SamplingPartitionMode, SamplingScoreEvaluator,
