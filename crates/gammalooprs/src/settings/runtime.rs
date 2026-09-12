@@ -747,6 +747,37 @@ mod tests {
     }
 
     #[test]
+    fn uv_localisation_smooth_sliver_defaults_and_roundtrips() {
+        let defaults: UVLocalisationSettings = toml::from_str("").unwrap();
+        assert!(!defaults.smooth_sliver);
+        assert_eq!(defaults, UVLocalisationSettings::default());
+        {
+            let _guard = ShowDefaultsGuard::new(false);
+            assert!(
+                !toml::to_string(&defaults)
+                    .unwrap()
+                    .contains("smooth_sliver")
+            );
+            let settings = UVLocalisationSettings {
+                smooth_sliver: true,
+                ..defaults.clone()
+            };
+            let serialized = toml::to_string(&settings).unwrap();
+            assert!(serialized.contains("smooth_sliver = true"));
+            assert_eq!(
+                toml::from_str::<UVLocalisationSettings>(&serialized).unwrap(),
+                settings
+            );
+        }
+        let _guard = ShowDefaultsGuard::new(true);
+        assert!(
+            toml::to_string(&defaults)
+                .unwrap()
+                .contains("smooth_sliver = false")
+        );
+    }
+
+    #[test]
     fn integral_unit_auto_resolves_by_initial_state_count() {
         assert_eq!(
             IntegralUnit::Auto.resolve_for_cross_section(1),
@@ -1785,6 +1816,9 @@ pub struct LocalCounterTermSettings {
 pub struct UVLocalisationSettings {
     #[serde(skip_serializing_if = "is_float::<10>")]
     pub sliver_width: f64,
+    /// Make the compact sliver profile smooth at its support boundary.
+    #[serde(skip_serializing_if = "is_false")]
+    pub smooth_sliver: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub dynamic_width: bool,
     #[serde(skip_serializing_if = "is_float::<1>")]
@@ -1797,6 +1831,7 @@ impl Default for UVLocalisationSettings {
     fn default() -> Self {
         Self {
             sliver_width: 10.0,
+            smooth_sliver: false,
             dynamic_width: false,
             gaussian_width: 1.0,
             force_uv_dampers_to_one: false,

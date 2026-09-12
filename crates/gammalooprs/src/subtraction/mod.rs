@@ -52,8 +52,9 @@ fn evaluate_uv_damper<T: FloatLike>(
     };
 
     let delta_r = radius - radius_star;
+    let sliver_width = F::from_f64(settings.sliver_width) * normalizing_scale;
 
-    if delta_r.abs() > F::from_f64(settings.sliver_width) * normalizing_scale {
+    if delta_r.abs() > sliver_width || (settings.smooth_sliver && delta_r.abs() == sliver_width) {
         return radius.zero();
     }
 
@@ -61,7 +62,13 @@ fn evaluate_uv_damper<T: FloatLike>(
     let width = F::from_f64(settings.gaussian_width) * normalizing_scale;
     let width_sq = &width * &width;
 
-    (-delta_r_sq / width_sq).exp()
+    let mut exponent = -&delta_r_sq / width_sq;
+    if settings.smooth_sliver {
+        // This even bump is one at the pole and flat to all orders at the edge.
+        let gap = sliver_width.square() - &delta_r_sq;
+        exponent -= delta_r_sq / gap;
+    }
+    exponent.exp()
 }
 
 fn evaluate_uv_damper_dual<T: FloatLike>(
@@ -81,8 +88,12 @@ fn evaluate_uv_damper_dual<T: FloatLike>(
     };
 
     let delta_r = radius.clone() - radius_star.clone();
+    let sliver_width =
+        new_constant(radius, &F::from_f64(settings.sliver_width)) * normalizing_scale.clone();
 
-    if delta_r.values[0].abs() > F::from_f64(settings.sliver_width) * &normalizing_scale.values[0] {
+    if delta_r.values[0].abs() > sliver_width.values[0]
+        || (settings.smooth_sliver && delta_r.values[0].abs() == sliver_width.values[0])
+    {
         return new_constant(radius, &radius.values[0].zero());
     }
 
@@ -90,7 +101,12 @@ fn evaluate_uv_damper_dual<T: FloatLike>(
     let width = new_constant(radius, &F::from_f64(settings.gaussian_width)) * normalizing_scale;
     let width_sq = width.clone() * width;
 
-    (-delta_r_sq / width_sq).exp()
+    let mut exponent = -delta_r_sq.clone() / width_sq;
+    if settings.smooth_sliver {
+        let gap = sliver_width.clone() * sliver_width - delta_r_sq.clone();
+        exponent -= delta_r_sq / gap;
+    }
+    exponent.exp()
 }
 
 fn evaluate_integrated_ct_normalisation<T: FloatLike>(
@@ -400,6 +416,8 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
 mod tests {
     use super::*;
     use crate::{
+        integrands::process::GenericEvaluatorFloat,
+        processes::cross_section::CrossSectionGraph,
         settings::runtime::{HFunction, HFunctionSettings},
         utils::hyperdual_utils::new_from_values,
     };
@@ -484,6 +502,165 @@ mod tests {
             ];
             for (actual, expected) in actual.values.iter().zip(expected) {
                 assert!((actual.0 - expected).abs() < 2.0e-13 * expected.abs().max(1.0));
+            }
+        }
+    }
+
+    #[test]
+    fn uv_smooth_sliver_preserves_pole_symmetry_and_hard_mode() {
+        for dynamic_width in [false, true] {
+            let settings = UVLocalisationSettings {
+                smooth_sliver: true,
+                sliver_width: 0.5,
+                dynamic_width,
+                ..Default::default()
+            };
+            let radius_star = F(2.0_f64);
+            let e_cm = F(4.0_f64);
+            let half_width = if dynamic_width { 1.0 } else { 2.0 };
+            assert_eq!(
+                evaluate_uv_damper(&radius_star, &radius_star, &e_cm, &settings),
+                F(1.0)
+            );
+            for fraction in [0.25, 0.75] {
+                let delta = F(fraction * half_width);
+                assert_eq!(
+                    evaluate_uv_damper(&(radius_star + delta), &radius_star, &e_cm, &settings),
+                    evaluate_uv_damper(&(radius_star - delta), &radius_star, &e_cm, &settings)
+                );
+            }
+            let hard = UVLocalisationSettings {
+                smooth_sliver: false,
+                ..settings.clone()
+            };
+            for sign in [-1.0, 1.0] {
+                let edge = F(radius_star.0 + sign * half_width);
+                assert_eq!(
+                    evaluate_uv_damper(&edge, &radius_star, &e_cm, &settings),
+                    F(0.0)
+                );
+                // The existing hard sliver includes its endpoints.
+                assert_eq!(
+                    evaluate_uv_damper(&edge, &radius_star, &e_cm, &hard),
+                    F((-0.25_f64).exp())
+                );
+            }
+            let forced = UVLocalisationSettings {
+                force_uv_dampers_to_one: true,
+                ..settings
+            };
+            assert_eq!(
+                evaluate_uv_damper(&F(100.0), &radius_star, &e_cm, &forced),
+                F(1.0)
+            );
+        }
+    }
+
+    #[test]
+    fn uv_smooth_sliver_dual_matches_derivatives_and_flat_boundary() {
+        let shape = HyperDual::new(simple_n_deriv_shape(2));
+        let radius_star = new_from_values(&shape, &[F(2.0_f64), F(0.7), F(0.0)]);
+        for dynamic_width in [false, true] {
+            let settings = UVLocalisationSettings {
+                smooth_sliver: true,
+                sliver_width: 0.5,
+                dynamic_width,
+                ..Default::default()
+            };
+            let scale = if dynamic_width { 2.0 } else { 4.0 };
+            let scale_derivative = if dynamic_width { 0.7 } else { 0.0 };
+            for u in [-0.4_f64, 0.0, 0.125] {
+                let radius = new_from_values(&shape, &[F(2.0 + u * scale), F(0.3), F(0.0)]);
+                let actual = evaluate_uv_damper_dual(&radius, &radius_star, &F(4.0), &settings);
+                // Differentiate the dimensionless even profile, including S(t).
+                let gap = 0.25 - u * u;
+                let value = (-u * u - u * u / gap).exp();
+                let log_first = -2.0 * u - 0.5 * u / gap.powi(2);
+                let log_second = -2.0 - 0.5 / gap.powi(2) - 2.0 * u * u / gap.powi(3);
+                let u_first = (-0.4 - u * scale_derivative) / scale;
+                let u_second = -2.0 * scale_derivative * u_first / scale;
+                let expected = [
+                    value,
+                    value * log_first * u_first,
+                    value
+                        * ((log_first.powi(2) + log_second) * u_first.powi(2)
+                            + log_first * u_second)
+                        / 2.0,
+                ];
+                let scalar = evaluate_uv_damper(
+                    &radius.values[0],
+                    &radius_star.values[0],
+                    &F(4.0),
+                    &settings,
+                );
+                assert!((actual.values[0].0 - scalar.0).abs() < 2.0e-14);
+                for (actual, expected) in actual.values.iter().zip(expected) {
+                    assert!((actual.0 - expected).abs() < 2.0e-13 * expected.abs().max(1.0));
+                }
+            }
+            for u in [-0.6_f64, -0.5, -0.4995, 0.4995, 0.5, 0.6] {
+                let radius = new_from_values(&shape, &[F(2.0 + u * scale), F(0.3), F(0.0)]);
+                let actual = evaluate_uv_damper_dual(&radius, &radius_star, &F(4.0), &settings);
+                for coefficient in actual.values {
+                    assert!(coefficient.0.abs() < 1.0e-190);
+                    if u.abs() >= 0.5 {
+                        assert_eq!(coefficient, F(0.0));
+                    }
+                }
+            }
+            let forced = UVLocalisationSettings {
+                force_uv_dampers_to_one: true,
+                ..settings
+            };
+            let radius = new_from_values(&shape, &[F(100.0), F(0.3), F(0.0)]);
+            assert_eq!(
+                evaluate_uv_damper_dual(&radius, &radius_star, &F(4.0), &forced).values,
+                vec![F(1.0), F(0.0), F(0.0)]
+            );
+        }
+    }
+
+    #[test]
+    fn uv_smooth_sliver_helper_preserves_signed_radial_principal_value() {
+        crate::initialisation::test_initialise().unwrap();
+        let settings = UVLocalisationSettings {
+            smooth_sliver: true,
+            sliver_width: 1.5,
+            ..Default::default()
+        };
+        for loop_count in [1, 2] {
+            let (pieces, _) =
+                CrossSectionGraph::single_th_prefactor_helper_atoms(1, loop_count, false, false);
+            let mut helper = GenericEvaluator::new_from_raw_params(
+                [pieces.local],
+                &CrossSectionGraph::single_th_prefactor_helper_params(1, false),
+                &FunctionMap::new(),
+                vec![],
+                OptimizationSettings::default(),
+                None,
+                &EvaluatorSettings::default(),
+            )
+            .unwrap()
+            .into_eager_only();
+            for radius_star in [0.5, 2.0] {
+                // Equal midpoint bins pair around the pole. W > r_star in the
+                // first case requires the helper's negative-radius mirror term.
+                let step = 1.0 / 2048.0;
+                let steps = ((radius_star + settings.sliver_width) / step) as usize;
+                let mut integral = 0.0;
+                for i in 0..steps {
+                    let radius = F((i as f64 + 0.5) * step);
+                    let plus = evaluate_uv_damper(&radius, &F(radius_star), &F(1.0), &settings);
+                    let minus = evaluate_uv_damper(&(-radius), &F(radius_star), &F(1.0), &settings);
+                    let params = [F(1.0), F(1.0), radius, F(radius_star), plus, minus, F(0.0)]
+                        .map(Complex::new_re);
+                    let value = f64::get_evaluator_single(&mut helper)(&params);
+                    integral += value.re.0 * radius.0.powi(3 * loop_count as i32 - 1) * step;
+                }
+                assert!(
+                    integral.abs() < 1.0e-10,
+                    "{loop_count} loops, r_star={radius_star}: PV={integral}"
+                );
             }
         }
     }
