@@ -460,7 +460,7 @@ pub(crate) fn find_center(
     existing_esurfaces: &ExistingEsurfaces,
     external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
-) -> Option<LoopMomenta<F<f64>>> {
+) -> Result<Option<LoopMomenta<F<f64>>>> {
     let mut solver = construct_solver(
         overlap_input,
         esurfaces_to_consider,
@@ -470,6 +470,19 @@ pub(crate) fn find_center(
     );
 
     solver.solve();
+
+    crate::debug_tags!(#subtraction, #threshold, #overlap, #socp;
+        stage = "threshold_socp_result",
+        surfaces = ?esurfaces_to_consider,
+        status = ?solver.solution.status,
+        iterations = solver.solution.iterations,
+        primal_objective = solver.solution.obj_val,
+        dual_objective = solver.solution.obj_val_dual,
+        primal_residual = solver.solution.r_prim,
+        dual_residual = solver.solution.r_dual,
+        file.solution = ?solver.solution,
+        "finished threshold overlap solve"
+    );
 
     let loop_number = overlap_input
         .graph_data
@@ -484,36 +497,36 @@ pub(crate) fn find_center(
         .map(|&existing_esurface_id| existing_esurfaces[existing_esurface_id])
         .collect_vec();
 
-    if solver.solution.status == SolverStatus::Solved {
-        let center = extract_center(loop_number, &solver.solution.x);
-        check_center_for_group_esurfaces(
-            overlap_input,
-            &group_esurfaces_to_check,
-            &center,
-            external_momenta,
-        )
-        .then_some(center)
-    } else if solver.solution.status == SolverStatus::AlmostSolved
-        || solver.solution.status == SolverStatus::InsufficientProgress
-    {
-        // if the solver did not converge, we check if the solution is still valid
-        let center = extract_center(loop_number, &solver.solution.x);
-
-        let is_valid = check_center_for_group_esurfaces(
-            overlap_input,
-            &group_esurfaces_to_check,
-            &center,
-            external_momenta,
-        );
-
-        if is_valid { Some(center) } else { None }
-    } else {
-        if verbose {
-            println!("{:?}", solver.solution.x);
-        }
-
-        None
+    // Even if the solver did not converge, check whether its candidate is still valid.
+    let center = extract_center(loop_number, &solver.solution.x);
+    if check_center_for_group_esurfaces(
+        overlap_input,
+        &group_esurfaces_to_check,
+        &center,
+        external_momenta,
+    ) {
+        return Ok(Some(center));
     }
+
+    if solver.solution.status == SolverStatus::PrimalInfeasible {
+        return Ok(None);
+    }
+
+    if verbose {
+        println!("{:?}", solver.solution.x);
+    }
+
+    Err(eyre!(
+        "Threshold overlap solve has no valid interior center or primal-infeasibility certificate: status={:?}, existing_surface_ids={:?}, group_surface_ids={:?}, primal_objective={}, dual_objective={}, primal_residual={}, dual_residual={}, iterations={}",
+        solver.solution.status,
+        esurfaces_to_consider,
+        group_esurfaces_to_check,
+        solver.solution.obj_val,
+        solver.solution.obj_val_dual,
+        solver.solution.r_prim,
+        solver.solution.r_dual,
+        solver.solution.iterations,
+    ))
 }
 
 pub struct SingleGraphOverlapData<'a> {
@@ -690,7 +703,7 @@ pub(crate) fn find_maximal_overlap(
         existing_esurfaces,
         external_momenta,
         false,
-    );
+    )?;
 
     if let Some(center) = option_center {
         let single_group = OverlapGroup {
@@ -704,8 +717,8 @@ pub(crate) fn find_maximal_overlap(
         return Ok(res);
     }
 
-    // if the center is not valid, create a table of all pairs
-    let esurface_pairs = EsurfacePairs::new(overlap_input, existing_esurfaces, external_momenta);
+    // If the full intersection is infeasible, create a table of all pairs.
+    let esurface_pairs = EsurfacePairs::new(overlap_input, existing_esurfaces, external_momenta)?;
 
     // if settings.general.debug > 3 {
     //     DEBUG_LOGGER.write("overlap_pairs", &esurface_pairs);
@@ -722,7 +735,7 @@ pub(crate) fn find_maximal_overlap(
                 existing_esurfaces,
                 external_momenta,
                 false,
-            )
+            )?
             .ok_or_else(|| {
                 let (graph_group_pos, raised_esurface_id) =
                     get_representative(&overlap_input.group_esurface_map[esurface_id])
@@ -786,7 +799,7 @@ pub(crate) fn find_maximal_overlap(
                 existing_esurfaces,
                 external_momenta,
                 false,
-            );
+            )?;
 
             if let Some(center) = option_center {
                 res.overlap_groups.push(OverlapGroup {
@@ -864,7 +877,7 @@ impl EsurfacePairs {
         overlap_input: &OverlapInput,
         existing_esurfaces: &ExistingEsurfaces,
         external_momenta: &ExternalFourMomenta<F<f64>>,
-    ) -> Self {
+    ) -> Result<Self> {
         let mut res = Self::new_empty(existing_esurfaces.len());
 
         let all_existing_esurfaces = existing_esurfaces
@@ -880,7 +893,7 @@ impl EsurfacePairs {
                     existing_esurfaces,
                     external_momenta,
                     false,
-                );
+                )?;
 
                 if let Some(center) = center {
                     res.insert((esurface_id_1, esurface_id_2), center);
@@ -890,7 +903,7 @@ impl EsurfacePairs {
             }
         }
 
-        res
+        Ok(res)
     }
 
     fn has_no_overlap(&self, esurface_id: ExistingEsurfaceId) -> bool {
@@ -904,83 +917,30 @@ impl EsurfacePairs {
         result: &OverlapStructure,
     ) -> HashSet<Vec<ExistingEsurfaceId>> {
         let mut res = HashSet::default();
-        let existing_esurfaces_not_in_overlap = existing_esurfaces
-            .iter_enumerated()
-            .map(|a| a.0)
-            .filter(|&existing_esurface_id| {
-                !result
-                    .overlap_groups
-                    .iter()
-                    .any(|group| group.existing_esurfaces.contains(&existing_esurface_id))
-            });
-
-        let mut possible_options_from_esurfaces_not_in_overlap = HashSet::default();
-
-        for esurface in existing_esurfaces_not_in_overlap.filter(|existing_esurface_id| {
-            self.has_pair_with[Into::<usize>::into(*existing_esurface_id)].len() >= subset_len - 1
-        }) {
-            for possible_combination in self.has_pair_with[Into::<usize>::into(esurface)]
+        // A maximal overlap can have every pair covered by different larger overlaps.
+        // Only containment of the complete candidate permits skipping its SOCP problem.
+        for (first, _) in existing_esurfaces.iter_enumerated() {
+            for remaining in self.has_pair_with[usize::from(first)]
                 .iter()
+                .copied()
+                .filter(|&id| id > first)
                 .combinations(subset_len - 1)
             {
-                let mut option = vec![esurface];
-                option.extend(possible_combination.iter().copied());
-                let mut is_valid = true;
-
-                'pair_loop: for i in 0..subset_len - 1 {
-                    for j in i + 1..subset_len - 1 {
-                        let pair = (
-                            Into::<ExistingEsurfaceId>::into(*possible_combination[i]),
-                            Into::<ExistingEsurfaceId>::into(*possible_combination[j]),
-                        );
-
-                        if !self.pair_exists(pair) {
-                            is_valid = false;
-                            break 'pair_loop;
-                        }
-                    }
+                if !remaining
+                    .iter()
+                    .tuple_combinations()
+                    .all(|(&left, &right)| self.pair_exists((left, right)))
+                {
+                    continue;
                 }
-
-                if is_valid {
-                    option.sort_unstable();
-                    possible_options_from_esurfaces_not_in_overlap.insert(option);
+                let mut candidate = vec![first];
+                candidate.extend(remaining);
+                candidate.sort_unstable();
+                if !is_subset_of_result(&candidate, result) {
+                    res.insert(candidate);
                 }
             }
         }
-
-        let existing_pairs_not_in_overlap = self.data.keys().filter(|(left, right)| {
-            !is_subset_of_result(&[*left, *right], result)
-                && is_subset_of_result(&[*left], result)
-                && is_subset_of_result(&[*right], result)
-                && self.has_pair_with[Into::<usize>::into(*left)].len() >= subset_len - 1
-                && self.has_pair_with[Into::<usize>::into(*right)].len() >= subset_len - 1
-        });
-
-        let mut possible_options_from_pairs_not_in_overlap = HashSet::default();
-
-        for pair in existing_pairs_not_in_overlap {
-            let possible_additions = existing_esurfaces
-                .iter_enumerated()
-                .map(|a| a.0)
-                .filter(|&id| {
-                    id != pair.0
-                        && id != pair.1
-                        && self.has_pair_with[Into::<usize>::into(pair.0)].contains(&id)
-                        && self.has_pair_with[Into::<usize>::into(pair.1)].contains(&id)
-                })
-                .combinations(subset_len - 2);
-
-            for possible_addition in possible_additions {
-                let mut option = vec![pair.0, pair.1];
-                option.extend(possible_addition.iter().copied());
-                option.sort_unstable();
-                possible_options_from_pairs_not_in_overlap.insert(option);
-            }
-        }
-
-        res.extend(possible_options_from_esurfaces_not_in_overlap);
-        res.extend(possible_options_from_pairs_not_in_overlap);
-
         res
     }
 }
@@ -1339,7 +1299,8 @@ mod tests {
             &massless_overlap_input,
             &box4e.existing_esurfaces,
             &box4e.external_momenta,
-        );
+        )
+        .unwrap();
 
         assert_eq!(esurface_pairs.data.len(), 4);
 
@@ -1363,9 +1324,55 @@ mod tests {
             &massive_overlap_input,
             &box4e_massive.existing_esurfaces,
             &box4e_massive.external_momenta,
-        );
+        )
+        .unwrap();
 
         assert_eq!(esurface_pairs_massive.data.len(), 0);
+    }
+
+    #[test]
+    fn maximal_overlap_candidates_include_cliques_whose_pairs_are_already_covered() {
+        let existing: ExistingEsurfaces = (0..9).map(GroupEsurfaceId::from).collect();
+        let center = LoopMomenta::from_iter([ThreeMomentum::new(F(0.0), F(0.0), F(0.0))]);
+        // X,Y,Z have a common region. Two small balls in each pair's exclusive region
+        // produce the larger overlaps XYuv, XZwx, YZyz, while XYZ remains maximal too.
+        let larger = [[0, 1, 3, 4], [0, 2, 5, 6], [1, 2, 7, 8]];
+        let result = OverlapStructure {
+            existing_esurfaces: existing.clone(),
+            overlap_groups: larger
+                .map(|members| OverlapGroup {
+                    existing_esurfaces: members.into_iter().map(ExistingEsurfaceId::from).collect(),
+                    complement: vec![],
+                    center: center.clone(),
+                    prefactor_evaluator: None,
+                })
+                .to_vec(),
+        };
+        let mut pairs = EsurfacePairs::new_empty(existing.len());
+        for members in larger {
+            for (left, right) in members
+                .into_iter()
+                .map(ExistingEsurfaceId::from)
+                .tuple_combinations()
+            {
+                if !pairs.pair_exists((left, right)) {
+                    pairs.insert((left, right), center.clone());
+                    pairs.has_pair_with[usize::from(left)].push(right);
+                    pairs.has_pair_with[usize::from(right)].push(left);
+                }
+            }
+        }
+        let central = (0..3).map(ExistingEsurfaceId::from).collect_vec();
+        assert!(
+            central
+                .iter()
+                .tuple_combinations()
+                .all(|(&left, &right)| { is_subset_of_result(&[left, right], &result) })
+        );
+        assert_eq!(
+            pairs.construct_possible_subsets_of_len(&existing, 3, &result),
+            HashSet::from_iter([central]),
+        );
     }
 
     #[test]
@@ -1390,7 +1397,8 @@ mod tests {
             &overlap_input,
             &box4e.existing_esurfaces,
             &box4e.external_momenta,
-        );
+        )
+        .unwrap();
 
         let res = OverlapStructure {
             overlap_groups: vec![],

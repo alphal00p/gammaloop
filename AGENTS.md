@@ -17,6 +17,10 @@ label sequence in [CONTRIBUTING.typ](CONTRIBUTING.typ#ci-readiness). On `itphlie
 reuse/download matching NixCI cache outputs and finish `just ci-checks-and-upload`
 before pushing CI-enabled work, so NixCI can reuse the results.
 
+Ask for approval before changing a test expectation only when the change is
+non-trivial or deep. Fix routine fixture mistakes and straightforward obsolete
+expectations without asking, preserving the test's validation purpose.
+
 Prefer completion notifications over actively polling checks, uploads, or remote
 CI. Preserve the run/commit identity and logs, and resume on completion, failure,
 or required input. Never claim a completion wake-up is configured unless it is;

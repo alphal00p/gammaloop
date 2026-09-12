@@ -44,7 +44,7 @@ use gammalooprs::{
         GenerationProgressObserver, GenerationProgressObserverGuard, GenerationProgressPhase,
         GraphGenerationStats, GraphGroupSelectionMode, GraphGroupSelectionPlan,
         GraphGroupSelectionReport, GraphGroupSelectionSpec, NamedGraphGenerationReport, Process,
-        ProcessCollection, ProcessDefinition, ProcessList,
+        ProcessCollection, ProcessDefinition, ProcessList, ProcessLoadSelection,
     },
     settings::{
         global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings,
@@ -1591,6 +1591,8 @@ pub struct State {
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 7 stores CFF coefficients using native Rational encoding.
+// Version 7 stores master-topology amplitude metadata and removes the coerced
+// common-parent LU subspaces. Older generated states must be regenerated.
 // Version 6 removes obsolete deferred-integrand fields from the positional
 // amplitude and cut-integrand layouts.
 // Version 5 persists component-local generated-CFF ownership and prefactor
@@ -1916,12 +1918,19 @@ fn load_integrand_generation_summaries(
                     summary_path.display()
                 )
             })?;
-            let summary = serde_json::from_str(&raw_summary).with_context(|| {
-                format!(
-                    "Trying to parse integrand generation summary {}",
-                    summary_path.display()
-                )
-            })?;
+            let mut summary: IntegrandGenerationSummary = serde_json::from_str(&raw_summary)
+                .with_context(|| {
+                    format!(
+                        "Trying to parse integrand generation summary {}",
+                        summary_path.display()
+                    )
+                })?;
+            // Reports persist the process id from the state that generated them. A
+            // selective load renumbers the in-memory process list densely, so the
+            // summary must follow its owning process rather than retain a stale id.
+            for report in &mut summary.reports {
+                report.process_id = process_id;
+            }
             summaries.insert(
                 IntegrandGenerationSummaryKey {
                     process_id,
@@ -3247,6 +3256,15 @@ impl State {
         model_path: Option<PathBuf>,
         trace_logs_filename: Option<String>,
     ) -> Result<Self> {
+        Self::load_with_selection(save_path, model_path, trace_logs_filename, None)
+    }
+
+    pub fn load_with_selection(
+        save_path: PathBuf,
+        model_path: Option<PathBuf>,
+        trace_logs_filename: Option<String>,
+        selection: Option<&ProcessLoadSelection>,
+    ) -> Result<Self> {
         // let root_folder = root_folder.join("gammaloop_state");
         let manifest = load_state_manifest(&save_path)?;
         validate_state_layout(&manifest, &save_path)?;
@@ -3292,8 +3310,8 @@ impl State {
             model: &model,
         };
 
-        let process_list =
-            ProcessList::load(&save_path, context).context("Trying to load processList")?;
+        let process_list = ProcessList::load_with_selection(&save_path, context, selection)
+            .context("Trying to load processList")?;
 
         loaded_state.process_list = process_list;
         loaded_state.model = model;
@@ -4555,12 +4573,14 @@ b = 1.0
                 graphs,
                 categories,
                 hide_non_existing_thresholds,
+                show_threshold_functions,
             }) => {
                 assert_eq!(process, Some(ProcessRef::Id(12)));
                 assert_eq!(integrand_name, None);
                 assert!(graphs.is_empty());
                 assert!(categories.is_empty());
                 assert!(!hide_non_existing_thresholds);
+                assert!(!show_threshold_functions);
             }
             other => panic!("Expected display integrand command, got {other:?}"),
         }

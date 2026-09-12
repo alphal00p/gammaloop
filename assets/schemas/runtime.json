@@ -1684,6 +1684,10 @@
         "sliver_width": {
           "type": "number",
           "format": "double"
+        },
+        "smooth_sliver": {
+          "description": "Make the compact sliver profile smooth at its support boundary.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false

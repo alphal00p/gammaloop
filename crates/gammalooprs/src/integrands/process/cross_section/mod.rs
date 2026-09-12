@@ -17,6 +17,10 @@ use crate::{
             graph_to_group_id_for_group_structure,
             param_builder::LUParams,
             prepare_buffered_event,
+            threshold_multiplier::{
+                ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierExpression,
+                ThresholdMultiplierLayout,
+            },
         },
     },
     model::Model,
@@ -24,11 +28,16 @@ use crate::{
         Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum,
         sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
     },
-    observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
+    observables::{
+        AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup,
+        GenericThresholdCountertermEventInfo,
+    },
     processes::{
         self, CrossSectionCut, CrossSectionGraph, CutGroupData, CutGroupId, CutId,
         CutThresholdCountertermAssociations, GraphGenerationStats, GraphGroupSelectionPlan,
-        IteratedCtCollection, TopologicalThresholdId,
+        IteratedCtCollection, LUCounterTermData, LUThresholdHelperOutputs, LeftThresholdId,
+        RightThresholdId, ThresholdCountertermMetadataRegistry, ThresholdCountertermVariantId,
+        ThresholdCountertermVariantStatus, TopologicalThresholdId,
     },
     settings::{
         GlobalSettings, RuntimeSettings,
@@ -38,7 +47,8 @@ use crate::{
     subtraction::{
         generate_rstar_t_dependence_evaluator,
         lu_counterterm::{
-            LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators, LUThresholdHelperEvaluators,
+            LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators, LUCountertermEvaluation,
+            LUThresholdHelperEvaluators, LUVariantSubspaces,
         },
     },
     utils::{
@@ -47,7 +57,7 @@ use crate::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape,
         },
-        newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
+        newton_solver::{NewtonIterationResult, RadialRootIdentity},
         serde_utils::SmartSerde,
     },
 };
@@ -57,7 +67,8 @@ use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
+    slice,
     time::{Duration, Instant},
 };
 
@@ -597,7 +608,137 @@ struct CutEventGenerationContext<'a> {
     channel_id: Option<ChannelIndex>,
 }
 
+struct DeferredCutEvaluation<T: FloatLike> {
+    cut_group_id: CutGroupId,
+    kinematic_point: LUCTKinematicPoint<T>,
+    bare_cut_total: Complex<F<T>>,
+    threshold_counterterm_weights: Vec<Complex<F<T>>>,
+    accepted_event: Option<GenericEvent<T>>,
+    lmb_channel_prefactor: Complex<F<T>>,
+}
+
 impl CrossSectionGraphTerm {
+    pub fn threshold_counterterm_metadata(&self) -> Option<&ThresholdCountertermMetadataRegistry> {
+        self.counterterm.metadata_registry.as_ref()
+    }
+
+    fn build_threshold_multiplier_collection(
+        graph: &CrossSectionGraph,
+        cut_group_id: CutGroupId,
+        counterterm_data: &LUCounterTermData,
+        settings: &GlobalSettings,
+    ) -> Result<Option<ThresholdMultiplierEvaluatorCollection>> {
+        let resolved = graph
+            .derived_data
+            .resolved_threshold_counterterms
+            .as_ref()
+            .ok_or_else(|| {
+                eyre!(
+                    "graph '{}' has LU counterterms but no resolved threshold-counterterm variants",
+                    graph.graph.name,
+                )
+            })?;
+        let variant_ids = counterterm_data
+            .left_variant_ids
+            .iter()
+            .chain(counterterm_data.right_variant_ids.iter())
+            .copied()
+            .collect::<Vec<_>>();
+        if variant_ids
+            .iter()
+            .all(|variant_id| resolved.variants[*variant_id].multiplier.is_none())
+        {
+            return Ok(None);
+        }
+
+        let cut_group = &graph.derived_data.cut_group_data.cut_groups[cut_group_id];
+        let mut esurface_ids = cut_group
+            .cuts
+            .iter()
+            .map(|cut_id| graph.cut_esurface_id_map[*cut_id])
+            .chain(
+                cut_group
+                    .related_esurface_group
+                    .esurface_ids
+                    .iter()
+                    .copied(),
+            )
+            .collect::<BTreeSet<_>>();
+        for variant_id in variant_ids {
+            let variant = &resolved.variants[variant_id];
+            esurface_ids.extend(variant.threshold_esurface_ids.iter().copied());
+            esurface_ids.extend(variant.raised_esurface_group.esurface_ids.iter().copied());
+            esurface_ids.extend(
+                variant
+                    .associations
+                    .iter()
+                    .map(|association| association.esurface_id),
+            );
+        }
+        let layout = ThresholdMultiplierLayout::from_graph_esurfaces(&graph.graph, esurface_ids)
+            .with_context(|| {
+                format!(
+                    "Failed to construct threshold-multiplier inputs for graph '{}' cut group {}",
+                    graph.graph.name, cut_group_id.0,
+                )
+            })?;
+
+        let parse_variant = |variant_id: ThresholdCountertermVariantId| -> Result<(
+            ThresholdCountertermVariantId,
+            Option<ThresholdMultiplierExpression>,
+        )> {
+            let variant = &resolved.variants[variant_id];
+            let expression = variant
+                .multiplier
+                .as_ref()
+                .map(|multiplier| {
+                    if multiplier.symmetrize {
+                        unimplemented!(
+                            "symmetrized threshold-counterterm multipliers are not implemented"
+                        );
+                    }
+                    layout
+                        .parse_expression(&multiplier.expression)
+                        .with_context(|| {
+                            format!(
+                                "Invalid threshold multiplier for graph '{}' cut group {} variant '{}' ({})",
+                                graph.graph.name,
+                                cut_group_id.0,
+                                variant.name,
+                                variant_id.0,
+                            )
+                        })
+                })
+                .transpose()?;
+            Ok((variant_id, expression))
+        };
+        let left = counterterm_data
+            .left_variant_ids
+            .iter()
+            .copied()
+            .map(&parse_variant)
+            .collect::<Result<Vec<_>>>()?;
+        let right = counterterm_data
+            .right_variant_ids
+            .iter()
+            .copied()
+            .map(&parse_variant)
+            .collect::<Result<Vec<_>>>()?;
+
+        ThresholdMultiplierEvaluatorCollection::build(
+            layout,
+            left,
+            right,
+            &settings.generation.evaluator,
+        )
+        .with_context(|| {
+            format!(
+                "Failed to build threshold multipliers for graph '{}' cut group {}",
+                graph.graph.name, cut_group_id.0,
+            )
+        })
+    }
+
     pub fn from_cross_section_graph(
         graph: &CrossSectionGraph,
         settings: &GlobalSettings,
@@ -812,13 +953,27 @@ impl CrossSectionGraphTerm {
             );
         }
 
-        let mut ct_evaluators = TiVec::new();
+        let mut ct_evaluators = TiVec::<CutGroupId, LUCounterTermEvaluators>::new();
+        let include_threshold_metadata = graph
+            .derived_data
+            .resolved_threshold_counterterms
+            .as_ref()
+            .is_some_and(|resolved| {
+                !resolved.legacy_equivalent
+                    || (!graph.graph.threshold_counterterms.autogenerated
+                        && !graph.graph.threshold_counterterms.cuts.is_empty())
+            });
+        let threshold_helper_outputs =
+            match graph.derived_data.resolved_threshold_counterterms.as_ref() {
+                Some(resolved) if !resolved.legacy_equivalent => LUThresholdHelperOutputs::Pieces,
+                Some(_) if include_threshold_metadata => LUThresholdHelperOutputs::LegacyAndPieces,
+                _ => LUThresholdHelperOutputs::Legacy,
+            };
         for (cut_group_id, ct_data) in masked_threshold_counterterms.iter_enumerated() {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
 
-            let (left_subspace, right_subspace) = &graph.derived_data.subspace_data[cut_group_id];
             let include_integrated = !settings
                 .generation
                 .threshold_subtraction
@@ -860,6 +1015,7 @@ impl CrossSectionGraphTerm {
                             loop_count,
                             is_on_right,
                             include_integrated,
+                            threshold_helper_outputs,
                             dual_shape,
                             optimization_settings.clone(),
                             &settings.generation.evaluator,
@@ -869,8 +1025,11 @@ impl CrossSectionGraphTerm {
                     .collect::<Result<BTreeMap<_, _>>>()
             };
 
-            let build_iterated_helpers = |integrands: &crate::uv::forest::ParametricIntegrands| {
-                integrands
+            let build_iterated_helpers =
+                |integrands: &crate::uv::forest::ParametricIntegrands,
+                 left_loop_count: usize,
+                 right_loop_count: usize| {
+                    integrands
                     .integrands
                     .iter()
                     .map(|(cut_cff_index, _)| {
@@ -901,9 +1060,10 @@ impl CrossSectionGraphTerm {
                         let evaluator = graph.iterated_th_helper(
                             left_threshold_order as u8,
                             right_threshold_order as u8,
-                            left_subspace.loopcount(),
-                            right_subspace.loopcount(),
+                            left_loop_count,
+                            right_loop_count,
                             include_integrated,
+                            threshold_helper_outputs,
                             dual_shape,
                             optimization_settings.clone(),
                             &settings.generation.evaluator,
@@ -914,34 +1074,46 @@ impl CrossSectionGraphTerm {
                                 graph.graph.name,
                                 cut_group_id.0,
                                 cut_cff_index,
-                                left_subspace.loopcount(),
-                                right_subspace.loopcount(),
+                                left_loop_count,
+                                right_loop_count,
                             )
                         })?;
                         Ok((*cut_cff_index, evaluator))
                     })
                     .collect::<Result<BTreeMap<_, _>>>()
-            };
+                };
 
             let left_thresholds = ct_data
                 .left_atoms
                 .iter()
-                .map(|integrands| {
-                    build_single_helpers(integrands, false, left_subspace.loopcount())
+                .zip(&ct_data.left_subspaces)
+                .map(|(integrands, subspace)| {
+                    build_single_helpers(integrands, false, subspace.loopcount())
                 })
                 .collect::<Result<TiVec<_, _>>>()?;
             let right_thresholds = ct_data
                 .right_atoms
                 .iter()
-                .map(|integrands| {
-                    build_single_helpers(integrands, true, right_subspace.loopcount())
+                .zip(&ct_data.right_subspaces)
+                .map(|(integrands, subspace)| {
+                    build_single_helpers(integrands, true, subspace.loopcount())
                 })
                 .collect::<Result<TiVec<_, _>>>()?;
+            let num_right_thresholds = ct_data.iterated.num_right_thresholds();
             let iterated = IteratedCtCollection::new(
                 ct_data
                     .iterated
                     .iter()
-                    .map(build_iterated_helpers)
+                    .enumerate()
+                    .map(|(flat_index, integrands)| {
+                        let left_id = LeftThresholdId::from(flat_index / num_right_thresholds);
+                        let right_id = RightThresholdId::from(flat_index % num_right_thresholds);
+                        build_iterated_helpers(
+                            integrands,
+                            ct_data.left_subspaces[left_id].loopcount(),
+                            ct_data.right_subspaces[right_id].loopcount(),
+                        )
+                    })
                     .collect::<Result<Vec<_>>>()?,
                 left_thresholds.len(),
                 right_thresholds.len(),
@@ -951,6 +1123,12 @@ impl CrossSectionGraphTerm {
                 right_thresholds,
                 iterated,
             };
+            let threshold_multipliers = Self::build_threshold_multiplier_collection(
+                graph,
+                cut_group_id,
+                ct_data,
+                settings,
+            )?;
 
             let (evaluators, evaluator_timings) = LUCounterTermEvaluators::from_atoms(
                 ct_data,
@@ -958,6 +1136,7 @@ impl CrossSectionGraphTerm {
                     .related_esurface_group
                     .max_occurence,
                 threshold_helpers,
+                threshold_multipliers,
                 &graph.graph.param_builder,
                 settings,
                 &orientations,
@@ -1013,10 +1192,105 @@ impl CrossSectionGraphTerm {
             })
             .collect::<Result<TiVec<CutGroupId, _>>>()?;
 
+        let (variant_subspaces, metadata_registry) = if let Some(resolved) =
+            graph.derived_data.resolved_threshold_counterterms.as_ref()
+        {
+            let variant_subspaces = if resolved.legacy_equivalent {
+                None
+            } else {
+                Some(
+                    graph
+                        .derived_data
+                        .threshold_counterterms
+                        .iter()
+                        .map(|counterterm_data| LUVariantSubspaces {
+                            left_variant_ids: counterterm_data.left_variant_ids.clone(),
+                            right_variant_ids: counterterm_data.right_variant_ids.clone(),
+                            left: counterterm_data.left_subspaces.clone(),
+                            right: counterterm_data.right_subspaces.clone(),
+                        })
+                        .collect::<TiVec<CutGroupId, _>>(),
+                )
+            };
+
+            let metadata_registry = if include_threshold_metadata {
+                let mut variant_statuses = resolved
+                    .variants
+                    .iter()
+                    .map(|variant| ThresholdCountertermVariantStatus {
+                        generated: variant
+                            .associations
+                            .iter()
+                            .any(|association| association.eligible),
+                        active: false,
+                    })
+                    .collect::<Vec<_>>();
+                for (cut_group_id, counterterm_data) in
+                    graph.derived_data.threshold_counterterms.iter_enumerated()
+                {
+                    for (&variant_id, &active) in counterterm_data
+                        .left_variant_ids
+                        .iter()
+                        .zip(&active_left_thresholds[cut_group_id])
+                        .chain(
+                            counterterm_data
+                                .right_variant_ids
+                                .iter()
+                                .zip(&active_right_thresholds[cut_group_id]),
+                        )
+                    {
+                        variant_statuses[variant_id.0].active |= active;
+                    }
+                }
+                let evaluator_registrations = ct_evaluators
+                    .iter_enumerated()
+                    .flat_map(|(cut_group_id, evaluators)| {
+                        evaluators
+                            .threshold_multipliers
+                            .as_ref()
+                            .into_iter()
+                            .flat_map(move |collection| {
+                                collection.metadata_registrations(Some(cut_group_id.0))
+                            })
+                    })
+                    .collect();
+                Some(ThresholdCountertermMetadataRegistry::build(
+                    graph.graph.name.clone(),
+                    resolved,
+                    graph.derived_data.lmbs.as_ref().ok_or_else(|| {
+                        eyre!(
+                            "graph '{}' has threshold metadata but no loop-momentum bases",
+                            graph.graph.name,
+                        )
+                    })?,
+                    &variant_statuses,
+                    evaluator_registrations,
+                )?)
+            } else {
+                None
+            };
+            (variant_subspaces, metadata_registry)
+        } else {
+            if !graph.derived_data.threshold_counterterms.is_empty()
+                || !ct_evaluators.is_empty()
+                || !thresholds.is_empty()
+            {
+                return Err(eyre!(
+                    "graph '{}' has LU counterterms but no resolved threshold-counterterm variants",
+                    graph.graph.name,
+                ));
+            }
+            // Threshold generation may be disabled entirely. This is the pre-existing empty LU
+            // representation and must not allocate generalized subspace or metadata state.
+            (None, None)
+        };
+
         let counterterm = LUCounterTerm {
             evaluators: ct_evaluators,
             thresholds,
             subspaces: graph.derived_data.subspace_data.clone(),
+            variant_subspaces,
+            metadata_registry,
             rstar_dependence_calculator,
             active_cut_groups,
             active_left_thresholds,
@@ -1484,7 +1758,11 @@ impl GraphTerm for CrossSectionGraphTerm {
         let hel = context.settings.kinematics.externals.get_helicities();
         let mut cut_results: TiVec<CutGroupId, Vec<Complex<F<T>>>> =
             ti_vec![Vec::new(); self.cut_group_data.cut_groups.len()];
-        let mut cut_threshold_counterterms = TiVec::<CutGroupId, Complex<F<T>>>::new();
+        let mut cut_threshold_counterterms = ti_vec![
+            Complex::new_re(momentum_sample.zero());
+            self.cut_group_data.cut_groups.len()
+        ];
+        let mut deferred_cut_evaluations = Vec::new();
         let mut differential_result = GraphEvaluationResult::zero(momentum_sample.zero());
         let mut accepted_event_group = GenericEventGroup::default();
 
@@ -1522,20 +1800,14 @@ impl GraphTerm for CrossSectionGraphTerm {
             momentum_sample.loop_moms()
         );
 
+        // Record every active cut root at each precision, even if another cut fails. A
+        // later cut then retains its own lower-precision baseline for roundoff rescue.
+        let mut lu_solutions = BTreeMap::new();
+        let mut lu_root_errors = Vec::new();
         for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
-            let max_occurrence = cut_group.related_esurface_group.max_occurence;
             if !self.counterterm.cut_group_is_active(cut_group_id) {
-                let zero = Complex::new_re(momentum_sample.zero());
-                for _ in 1..=max_occurrence {
-                    cut_results[cut_group_id].push(zero.clone());
-                }
-                cut_threshold_counterterms.push(zero);
                 continue;
             }
-            crate::debug_tags!(#integration, #cut;
-                "\n =====START EVALUATION FOR CUT GROUP {}=====",
-                cut_group_id.0
-            );
             let representative_esurface = &self.cut_esurface[cut_group.cuts[0]];
 
             crate::debug_tags!(#integration, #cut, #inspect;
@@ -1560,13 +1832,46 @@ impl GraphTerm for CrossSectionGraphTerm {
                 &self.graph.loop_momentum_basis,
             );
 
-            let solution = newton_iteration_and_derivative(
+            // A physical LU cut needs an isolated positive root with a finite, positive
+            // Jacobian. Validate the bracket and root before constructing any cut kinematics.
+            let identity = RadialRootIdentity::new(format!(
+                "LU cut graph '{}' cut group {} probe rotation {}",
+                self.graph.name, cut_group_id.0, context.rotation.method,
+            ));
+            let solution = match context.evaluation_metadata.radial_root_diagnostics.solve(
+                &identity,
+                &guess.zero(),
                 &guess,
                 function,
-                &F::from_f64(1.0),
+                &guess.one(),
                 2000,
+                64,
                 &F::from_f64(context.settings.kinematics.e_cm),
-            );
+            ) {
+                Ok(solution) => solution,
+                Err(error) => {
+                    crate::debug_tags!(#integration, #cut, #solver;
+                        graph = %self.graph.name,
+                        cut_group_id = cut_group_id.0,
+                        edges = ?representative_esurface.energies,
+                        initial_guess = %guess,
+                        error = ?error,
+                        "LU radial root requires precision escalation"
+                    );
+                    // Use the existing residue-failure path so a recoverable numerical
+                    // failure is retried at higher precision and remains fatal at the final
+                    // level, without ever exposing invalid cut kinematics to the evaluator.
+                    lu_root_errors.push(format!(
+                        "Could not solve LU cut group {} of graph '{}', edges {:?}, initial guess {}: {:?}",
+                        cut_group_id.0,
+                        self.graph.name,
+                        representative_esurface.energies,
+                        guess,
+                        error,
+                    ));
+                    continue;
+                }
+            };
 
             crate::debug_tags!(#integration, #cut, #solver;
                 "tolerance for newton solver: {}",
@@ -1577,6 +1882,35 @@ impl GraphTerm for CrossSectionGraphTerm {
                 "solution: {:?}",
                 solution
             );
+
+            lu_solutions.insert(cut_group_id, solution);
+        }
+        if !lu_root_errors.is_empty() {
+            context
+                .evaluation_metadata
+                .record_threshold_counterterm_error(lu_root_errors.join("\n"));
+            differential_result.integrand_result = Complex::new_re(F::from_f64(f64::NAN));
+            return Ok(differential_result);
+        }
+
+        for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
+            let max_occurrence = cut_group.related_esurface_group.max_occurence;
+            if !self.counterterm.cut_group_is_active(cut_group_id) {
+                let zero = Complex::new_re(momentum_sample.zero());
+                for _ in 1..=max_occurrence {
+                    cut_results[cut_group_id].push(zero.clone());
+                }
+                cut_threshold_counterterms[cut_group_id] = zero;
+                continue;
+            }
+            crate::debug_tags!(#integration, #cut;
+                "\n =====START EVALUATION FOR CUT GROUP {}=====",
+                cut_group_id.0
+            );
+            let solution = lu_solutions
+                .remove(&cut_group_id)
+                .expect("all active LU cut roots were validated before evaluation");
+            let representative_esurface = &self.cut_esurface[cut_group.cuts[0]];
 
             let prepared_event = prepare_buffered_event(
                 context.settings,
@@ -1610,13 +1944,13 @@ impl GraphTerm for CrossSectionGraphTerm {
                 for _ in 1..=max_occurrence {
                     cut_results[cut_group_id].push(zero.clone());
                 }
-                cut_threshold_counterterms.push(zero);
+                cut_threshold_counterterms[cut_group_id] = zero;
                 continue;
             }
 
             let accepted_event = prepared_event.buffered_event;
             let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
-            let mut threshold_counterterm_weights = Vec::with_capacity(max_occurrence);
+            let threshold_counterterm_weights = Vec::with_capacity(max_occurrence);
             let mut kinematic_point = LUCTKinematicPoint::new(momentum_sample.clone());
             // LMB channel weights partition the fully subtracted LU-cut integrand. Apply the
             // sampling partition after the raised-residue derivatives: it is not part of the
@@ -1832,41 +2166,98 @@ impl GraphTerm for CrossSectionGraphTerm {
                 cut_results[cut_group_id].push(bare_contribution);
             }
 
-            let ct_result = if context.settings.subtraction.disable_threshold_subtraction {
-                Complex::new_re(momentum_sample.zero())
+            deferred_cut_evaluations.push(DeferredCutEvaluation {
+                cut_group_id,
+                kinematic_point,
+                bare_cut_total,
+                threshold_counterterm_weights,
+                accepted_event,
+                lmb_channel_prefactor,
+            });
+        }
+
+        let deferred_points = deferred_cut_evaluations
+            .iter()
+            .map(|deferred| (deferred.cut_group_id, &deferred.kinematic_point))
+            .collect_vec();
+        let shared_overlaps = if context.settings.subtraction.disable_threshold_subtraction {
+            ti_vec![None; self.cut_group_data.cut_groups.len()]
+        } else {
+            self.counterterm.prepare_shared_overlaps(
+                &deferred_points,
+                &self.graph,
+                &self.graph.get_real_mass_vector(context.model),
+                &self.reversed_edges,
+                &self.lmbs,
+                context.settings,
+                context.rotation,
+            )?
+        };
+
+        for deferred in deferred_cut_evaluations {
+            let cut_group_id = deferred.cut_group_id;
+            let record_threshold_decomposition = deferred.accepted_event.is_some()
+                && context.settings.general.store_additional_weights_in_event
+                && self.counterterm.metadata_registry.is_some();
+            let counterterm_evaluation =
+                if context.settings.subtraction.disable_threshold_subtraction {
+                    LUCountertermEvaluation {
+                        total: Complex::new_re(momentum_sample.zero()),
+                        components: record_threshold_decomposition.then(Vec::new),
+                    }
+                } else {
+                    self.counterterm.evaluate(
+                        &deferred.kinematic_point,
+                        cut_group_id,
+                        &self.reversed_edges[cut_group_id],
+                        &self.lmbs,
+                        &self.graph,
+                        &self.graph.get_real_mass_vector(context.model),
+                        context.rotation,
+                        context.settings,
+                        &mut self.param_builder,
+                        orientations,
+                        context.evaluation_metadata,
+                        context.record_primary_timing,
+                        record_threshold_decomposition,
+                        shared_overlaps[cut_group_id].as_ref(),
+                    )?
+                };
+            let threshold_decomposition = counterterm_evaluation.components.map(|components| {
+                let mut decomposition = GenericThresholdCountertermEventInfo {
+                    original: Complex::new_re(momentum_sample.zero()),
+                    components,
+                };
+                decomposition.apply_multiplicative_factor(&deferred.lmb_channel_prefactor);
+                decomposition.original = deferred.bare_cut_total.clone();
+                decomposition
+            });
+            let ct_result = if let Some(decomposition) = &threshold_decomposition {
+                decomposition.components.iter().fold(
+                    Complex::new_re(momentum_sample.zero()),
+                    |total, component| total + &component.weighted,
+                )
             } else {
-                self.counterterm.evaluate(
-                    &kinematic_point,
-                    cut_group_id,
-                    &self.reversed_edges[cut_group_id],
-                    &self.lmbs,
-                    &self.graph,
-                    &self.graph.get_real_mass_vector(context.model),
-                    context.rotation,
-                    context.settings,
-                    &mut self.param_builder,
-                    orientations,
-                    context.evaluation_metadata,
-                    context.record_primary_timing,
-                )? * lmb_channel_prefactor.clone()
+                counterterm_evaluation.total * deferred.lmb_channel_prefactor.clone()
             };
 
+            let mut threshold_counterterm_weights = deferred.threshold_counterterm_weights;
             threshold_counterterm_weights.push(ct_result.clone());
-            cut_threshold_counterterms.push(ct_result.clone());
+            cut_threshold_counterterms[cut_group_id] = ct_result;
 
-            if let Some(mut event) = accepted_event {
+            if let Some(mut event) = deferred.accepted_event {
                 let threshold_counterterm_total = threshold_counterterm_weights
                     .iter()
                     .fold(Complex::new_re(momentum_sample.zero()), |acc, value| {
                         acc + value.clone()
                     });
-                event.weight = bare_cut_total.clone() + threshold_counterterm_total;
+                event.weight = deferred.bare_cut_total.clone() + threshold_counterterm_total;
 
                 if context.settings.general.store_additional_weights_in_event {
                     event
                         .additional_weights
                         .weights
-                        .insert(AdditionalWeightKey::Original, bare_cut_total);
+                        .insert(AdditionalWeightKey::Original, deferred.bare_cut_total);
                     for (subset_index, threshold_counterterm) in
                         threshold_counterterm_weights.into_iter().enumerate()
                     {
@@ -1874,6 +2265,10 @@ impl GraphTerm for CrossSectionGraphTerm {
                             AdditionalWeightKey::ThresholdCounterterm { subset_index },
                             threshold_counterterm,
                         );
+                    }
+                    if let Some(decomposition) = threshold_decomposition {
+                        event.weight = decomposition.total();
+                        event.additional_weights.threshold_counterterms = Some(decomposition);
                     }
                 }
 
@@ -1967,7 +2362,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         if context.settings.should_buffer_generated_events() {
             let flux_factor = Complex::new_re(flux_factor);
             for event in accepted_event_group.iter_mut() {
-                event.weight *= flux_factor.clone();
+                event.apply_multiplicative_factor(&flux_factor);
                 if !event.additional_weights.weights.is_empty() {
                     event.additional_weights.weights.insert(
                         AdditionalWeightKey::FullMultiplicativeFactor,
