@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "scope": "Documentation and historical numerical records only; no GammaLoop source, configuration, tests, state or integrations changed.",
+  "audited_repository_commit": "451a36212f7ec0271094eed21e8ff09ddf8b3255",
+  "snapshot_repository_base_commit": "451a36212f7ec0271094eed21e8ff09ddf8b3255",
+  "archive_date_utc": "2026-09-12",
+  "files": {
+    "REPORT.md": {
+      "source_path": "/common/dev/gl638_sampling_research/REPORT.md",
+      "source_sha256": "f6ef27e3998676c1a8ac5c1c8a7e8b3d07cd37d221eea4bd97541550be92952b",
+      "sha256": "96777791db4586331aa99b334c3bcbae7bae0f5338140fa49d2d9a6f7b1e0531",
+      "transformation": "Markdown link destinations made repository-relative; historical line suffixes removed from local link targets"
+    },
+    "SOPER_AND_SAMPLING_API.md": {
+      "source_path": "/common/dev/gl638_sampling_research/SOPER_AND_SAMPLING_API.md",
+      "source_sha256": "37642e7451ab9d9929a0698871847dd59faefeee43f3755c94c5ba3b6a59b560",
+      "sha256": "d42927357e8bbcf29a797940c259b391806118f113fe5bdda2066010d997c6f9",
+      "transformation": "Markdown link destinations made repository-relative; historical line suffixes removed from local link targets"
+    },
+    "API_AND_GENERICITY_ADDENDUM.md": {
+      "source_path": "/common/dev/gl638_sampling_research/API_AND_GENERICITY_ADDENDUM.md",
+      "source_sha256": "908db32a61312899b7a6f66a1fe655dd76f8f58749402f2484d3952a3e0c5e2e",
+      "sha256": "908db32a61312899b7a6f66a1fe655dd76f8f58749402f2484d3952a3e0c5e2e",
+      "transformation": "Markdown link destinations made repository-relative; historical line suffixes removed from local link targets"
+    },
+    "api.md": {
+      "source_path": "/common/dev/gl638_sampling_research/api.md",
+      "source_sha256": "12a5b6a7d82521b2691c3fa8510dbf852dcc3d898f1431cd2a026837f00e1eb7",
+      "sha256": "dd75b528803ca405f15a1407eb0ed6f60e620b4bfdf1d0e3058b5f2222fe1fb1",
+      "transformation": "Markdown link destinations made repository-relative; historical line suffixes removed from local link targets"
+    },
+    "gl638.md": {
+      "source_path": "/common/dev/gl638_sampling_research/gl638.md",
+      "source_sha256": "9666ca3c99be0db1c10e36ddb269b689d25322680d81756bda2b800c4e8dafe5",
+      "sha256": "94f0643db38d27a380c880af90a1abef698949cb5bf0889be702006f288bcdcb",
+      "transformation": "Markdown link destinations made repository-relative; historical line suffixes removed from local link targets"
+    },
+    "literature.md": {
+      "source_path": "/common/dev/gl638_sampling_research/literature.md",
+      "source_sha256": "6f7220d3232aca48ac5fe8032273a501111c1650b66a8c43d2928ede1c5616f6",
+      "sha256": "6f7220d3232aca48ac5fe8032273a501111c1650b66a8c43d2928ede1c5616f6",
+      "transformation": "Markdown link destinations made repository-relative; historical line suffixes removed from local link targets"
+    },
+    "SOPER_ANGULAR_REVIEW.md": {
+      "source_path": "/common/dev/gl638_sampling_research/SOPER_ANGULAR_REVIEW.md",
+      "source_sha256": "e598c785ed4124695cfe975c48423a640abadcfe20753899940f97aba18eea90",
+      "sha256": "e598c785ed4124695cfe975c48423a640abadcfe20753899940f97aba18eea90",
+      "transformation": "Markdown link destinations made repository-relative; historical line suffixes removed from local link targets"
+    },
+    "geometry_checks.json": {
+      "source_path": "/common/dev/gl638_sampling_research/geometry_checks.json",
+      "source_sha256": "098906f3cfde8103123b0a589074db4cc5382eed88dda79901f5b82e3bc032e8",
+      "sha256": "098906f3cfde8103123b0a589074db4cc5382eed88dda79901f5b82e3bc032e8",
+      "transformation": "byte-for-byte copy"
+    },
+    "gl638_geometry_checks.json": {
+      "source_path": "/common/dev/gl638_sampling_research/gl638_geometry_checks.json",
+      "source_sha256": "4402a0dfc86916229fd1d93d8d918b84255ddd42b3fc0a7a65310e6582035469",
+      "sha256": "4402a0dfc86916229fd1d93d8d918b84255ddd42b3fc0a7a65310e6582035469",
+      "transformation": "byte-for-byte copy"
+    },
+    "normal_plane_moments.csv": {
+      "source_path": "/common/dev/gl638_sampling_research/normal_plane_moments.csv",
+      "source_sha256": "e4fffc7988a6dde5d7e85c04ae52845ec51e0c7166127245ef6d5e16e7c83938",
+      "sha256": "e4fffc7988a6dde5d7e85c04ae52845ec51e0c7166127245ef6d5e16e7c83938",
+      "transformation": "byte-for-byte copy"
+    },
+    "TWO_NORMAL_PROPOSAL.md": {
+      "source_path": "/common/dev/gl638_integration_validation/twenty-core/a-star-pullback/TWO_NORMAL_PROPOSAL.md",
+      "source_sha256": "b09b122b81a785214492b1f2fd38a382361d62b30208be9445f99044883e3181",
+      "sha256": "b09b122b81a785214492b1f2fd38a382361d62b30208be9445f99044883e3181",
+      "transformation": "Markdown link destinations made repository-relative; historical line suffixes removed from local link targets"
+    },
+    "hard_hz_points.json": {
+      "source_path": "/common/dev/gl638_integration_validation/full-explicit/hard-hz-check/points.json",
+      "source_sha256": "12fe658c571a60fab016037fad41afa5ec43f566b955357ef98cdb2bfc2110d3",
+      "sha256": "12fe658c571a60fab016037fad41afa5ec43f566b955357ef98cdb2bfc2110d3",
+      "transformation": "byte-for-byte copy"
+    },
+    "a_star_pullback_points.json": {
+      "source_path": "/common/dev/gl638_integration_validation/twenty-core/a-star-pullback/points.json",
+      "source_sha256": "31a44da4dd55e79cd924341afb3014039bf7ebe20d60bf1c43361302abb8e1ce",
+      "sha256": "31a44da4dd55e79cd924341afb3014039bf7ebe20d60bf1c43361302abb8e1ce",
+      "transformation": "byte-for-byte copy"
+    },
+    "README.md": {
+      "source_path": null,
+      "sha256": "7b37a9768ff4673a73a7cc6376a0fc87ab52fa6462b396774b79313efba7437c",
+      "transformation": "Archive index and provenance explanation written for this snapshot"
+    }
+  },
+  "excluded": [
+    "Original scratch replay script with machine-specific dependencies",
+    "PDFs and extracted full paper texts",
+    "Prepared GammaLoop states and large integration workspaces"
+  ],
+  "manifest_hash_note": "Manifest hashes all other files in this archive; it cannot contain its own hash."
+}
