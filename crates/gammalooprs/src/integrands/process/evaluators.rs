@@ -3281,6 +3281,9 @@ impl_eager_evaluator_float!(SamplingFloat, evaluator => evaluator.sampling_fixed
     .expect("fixed256 sampling evaluator must be prepared during warmup"));
 
 #[cfg(test)]
+mod hyperbolic_tests;
+
+#[cfg(test)]
 mod tests {
     use std::io::Cursor;
 
