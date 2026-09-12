@@ -744,6 +744,7 @@ impl Esurface {
 
     // #[inline]
     /// the "loops_unit_in_subspace" means that the loop momenta that are part of the subspace are jointly normalized to unit length
+    /// A ray with no radial dependence has no isolated root and returns zero guesses.
     pub(crate) fn get_radius_guess_subspace<T: FloatLike>(
         &self,
         loops_unit_in_subspace: &LoopMomenta<F<T>>,
@@ -794,6 +795,11 @@ impl Esurface {
             //./bprintln!("computed_shift {:?}", shift);
 
             let norm_unit_loop_part_squared = unit_loop_part.norm_squared();
+            // An energy with zero radial momentum is constant along this ray. It contributes
+            // no large-radius growth or directional shift, even when its mass is nonzero.
+            if norm_unit_loop_part_squared == const_builder.zero() {
+                continue;
+            }
             let loop_dot_shift = &unit_loop_part * three_shift;
 
             debug!(
@@ -815,6 +821,7 @@ impl Esurface {
         (radius_guess, negative_radius)
     }
 
+    /// A ray with no radial dependence has no isolated root and returns zero guesses.
     pub(crate) fn get_radius_guess<T: FloatLike>(
         &self,
         unit_loops: &LoopMomenta<F<T>>,
@@ -841,13 +848,19 @@ impl Esurface {
             //./bprintln!("computed_shift {:?}", shift);
 
             let norm_unit_loop_part_squared = unit_loop_part.norm_squared();
+            // Constant energies have no directional contribution to the radius estimate.
+            if norm_unit_loop_part_squared == const_builder.zero() {
+                continue;
+            }
             let loop_dot_shift = &unit_loop_part * three_shift;
 
             radius_guess += loop_dot_shift.abs() / &norm_unit_loop_part_squared;
             denominator += norm_unit_loop_part_squared.sqrt();
         }
 
-        radius_guess += esurface_shift.abs() / denominator;
+        if denominator != const_builder.zero() {
+            radius_guess += esurface_shift.abs() / denominator;
+        }
         let negative_radius = radius_guess.ref_neg();
         (radius_guess, negative_radius)
     }
@@ -1175,18 +1188,116 @@ mod tests {
     use symbolica::parse;
 
     use crate::cff::VertexSet;
-    use crate::graph::LoopMomentumBasis;
-    use crate::momentum::{FourMomentum, sample::ExternalFourMomenta, signature::LoopExtSignature};
+    use crate::graph::{Graph, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph};
+    use crate::initialisation::test_initialise;
+    use crate::momentum::{
+        FourMomentum, ThreeMomentum,
+        sample::{ExternalFourMomenta, LoopMomenta, SubspaceData},
+        signature::LoopExtSignature,
+    };
     use crate::processes::CrossSectionCut;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
+        dot,
         utils::{
             DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F,
+            newton_solver::{SafeguardedNewtonError, safeguarded_newton_iteration_and_derivative},
             test_utils::dummy_hedge_graph,
         },
     };
+    use typed_index_collections::ti_vec;
 
     use super::{EsurfaceExistence, add_external_shifts};
+
+    #[test]
+    fn radial_guesses_and_lu_roots_handle_constant_massive_energies() {
+        test_initialise().unwrap();
+        // A ttH cut with back-to-back tops and a Higgs at rest has the analytic root
+        // sqrt(((Q-mH)/2)^2-mt^2)/|p|. The Higgs momentum vanishes by cancellation of
+        // two nonzero basis momenta, not because its graph signature is constant.
+        let graph: Graph = dot!(digraph massive_energy_at_rest {
+            ext [style=invis]
+            node [num=1]
+            edge [num=1 mass=0]
+            ext -> a:0 [id=0]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2 lmb_id=1]
+            a -> b [id=3]
+            b:1 -> ext [id=4]
+        })
+        .unwrap();
+        let lmbs = ti_vec![graph.loop_momentum_basis.clone()];
+        let lmb = &lmbs[LmbIndex::from(0)];
+        let subspace = SubspaceData::new_from_parent_basis_edges(
+            &[EdgeIndex(1), EdgeIndex(2)],
+            &graph.underlying.full_filter(),
+            LmbIndex::from(0),
+            &graph,
+            &lmbs,
+        )
+        .unwrap();
+        let surface = Esurface {
+            energies: vec![EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let masses = graph
+            .underlying
+            .new_edgevec_from_iter([F(0.0), F(173.0), F(173.0), F(125.0), F(0.0)])
+            .unwrap();
+        // Supply both external ports as future-directed momenta; the graph's incoming and
+        // outgoing edge flows provide their relative sign in momentum conservation.
+        let externals = ExternalFourMomenta::from_iter(
+            [FourMomentum::from_args(F(1000.0), F(0.0), F(0.0), F(0.0)); 2],
+        );
+        let center = LoopMomenta::from_iter([ThreeMomentum::new(F(0.0), F(0.0), F(0.0)); 2]);
+
+        for momentum in [0.0, 100.0] {
+            let loops = LoopMomenta::from_iter([
+                ThreeMomentum::new(F(momentum), F(0.0), F(0.0)),
+                ThreeMomentum::new(F(-momentum), F(0.0), F(0.0)),
+            ]);
+            let guesses = [
+                surface.get_radius_guess(&loops, &externals, lmb),
+                surface.get_radius_guess_subspace(
+                    &loops, &externals, &subspace, &lmbs, &graph, &masses,
+                ),
+            ];
+            for (positive, negative) in guesses {
+                assert!(positive.0.is_finite());
+                assert_eq!(negative, -positive);
+                let result = safeguarded_newton_iteration_and_derivative(
+                    &F(0.0),
+                    &positive,
+                    |radius| {
+                        surface.compute_self_and_r_derivative(
+                            radius, &loops, &center, &externals, &masses, lmb,
+                        )
+                    },
+                    &F(1.0),
+                    2000,
+                    64,
+                    &F(1000.0),
+                );
+                if momentum == 0.0 {
+                    assert_eq!(positive, F(0.0));
+                    // The constant surface is negative everywhere: no finite radial root
+                    // exists. Reject the ray instead of propagating a NaN or inventing a root.
+                    assert!(matches!(
+                        result,
+                        Err(SafeguardedNewtonError::InvalidOutside { .. })
+                    ));
+                } else {
+                    let result = result.unwrap();
+                    let top_energy = (1000.0_f64 - 125.0) / 2.0;
+                    let expected = (top_energy.powi(2) - 173.0_f64.powi(2)).sqrt() / momentum;
+                    assert!((result.solution.0 - expected).abs() < 1.0e-14);
+                    assert!(result.derivative_at_solution.0 > 0.0);
+                    assert!(result.error_of_function.0.abs() < 1.0e-12);
+                }
+            }
+        }
+    }
 
     #[test]
     fn classification_preserves_the_previous_existing_predicate() {

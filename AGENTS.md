@@ -7,8 +7,9 @@ for this repository.
 If instructions conflict, prefer the more specific local guidance and preserve
 the user's current work unless explicitly asked to change it.
 
-If a test is failing, and you want to change the test itself explicitly ask whether this is intended.
-
+Ask for approval before changing a test expectation only when the change is
+non-trivial or deep. Fix routine fixture mistakes and straightforward obsolete
+expectations without asking, preserving the test's validation purpose.
 
 Before adding helper functions, structs, or methods, check the codebase for
 similar use cases, and whether the functionality is already provided by the

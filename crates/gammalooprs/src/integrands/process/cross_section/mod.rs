@@ -57,7 +57,7 @@ use crate::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape,
         },
-        newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
+        newton_solver::{NewtonIterationResult, RadialRootIdentity},
         serde_utils::SmartSerde,
     },
 };
@@ -1808,20 +1808,14 @@ impl GraphTerm for CrossSectionGraphTerm {
             momentum_sample.loop_moms()
         );
 
+        // Record every active cut root at each precision, even if another cut fails. A
+        // later cut then retains its own lower-precision baseline for roundoff rescue.
+        let mut lu_solutions = BTreeMap::new();
+        let mut lu_root_errors = Vec::new();
         for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
-            let max_occurrence = cut_group.related_esurface_group.max_occurence;
             if !self.counterterm.cut_group_is_active(cut_group_id) {
-                let zero = Complex::new_re(momentum_sample.zero());
-                for _ in 1..=max_occurrence {
-                    cut_results[cut_group_id].push(zero.clone());
-                }
-                cut_threshold_counterterms[cut_group_id] = zero;
                 continue;
             }
-            crate::debug_tags!(#integration, #cut;
-                "\n =====START EVALUATION FOR CUT GROUP {}=====",
-                cut_group_id.0
-            );
             let representative_esurface = &self.cut_esurface[cut_group.cuts[0]];
 
             crate::debug_tags!(#integration, #cut, #inspect;
@@ -1846,13 +1840,46 @@ impl GraphTerm for CrossSectionGraphTerm {
                 &self.graph.loop_momentum_basis,
             );
 
-            let solution = newton_iteration_and_derivative(
+            // A physical LU cut needs an isolated positive root with a finite, positive
+            // Jacobian. Validate the bracket and root before constructing any cut kinematics.
+            let identity = RadialRootIdentity::new(format!(
+                "LU cut graph '{}' cut group {} probe rotation {}",
+                self.graph.name, cut_group_id.0, context.rotation.method,
+            ));
+            let solution = match context.evaluation_metadata.radial_root_diagnostics.solve(
+                &identity,
+                &guess.zero(),
                 &guess,
                 function,
-                &F::from_f64(1.0),
+                &guess.one(),
                 2000,
+                64,
                 &F::from_f64(context.settings.kinematics.e_cm),
-            );
+            ) {
+                Ok(solution) => solution,
+                Err(error) => {
+                    crate::debug_tags!(#integration, #cut, #solver;
+                        graph = %self.graph.name,
+                        cut_group_id = cut_group_id.0,
+                        edges = ?representative_esurface.energies,
+                        initial_guess = %guess,
+                        error = ?error,
+                        "LU radial root requires precision escalation"
+                    );
+                    // Use the existing residue-failure path so a recoverable numerical
+                    // failure is retried at higher precision and remains fatal at the final
+                    // level, without ever exposing invalid cut kinematics to the evaluator.
+                    lu_root_errors.push(format!(
+                        "Could not solve LU cut group {} of graph '{}', edges {:?}, initial guess {}: {:?}",
+                        cut_group_id.0,
+                        self.graph.name,
+                        representative_esurface.energies,
+                        guess,
+                        error,
+                    ));
+                    continue;
+                }
+            };
 
             crate::debug_tags!(#integration, #cut, #solver;
                 "tolerance for newton solver: {}",
@@ -1863,6 +1890,35 @@ impl GraphTerm for CrossSectionGraphTerm {
                 "solution: {:?}",
                 solution
             );
+
+            lu_solutions.insert(cut_group_id, solution);
+        }
+        if !lu_root_errors.is_empty() {
+            context
+                .evaluation_metadata
+                .record_threshold_counterterm_error(lu_root_errors.join("\n"));
+            differential_result.integrand_result = Complex::new_re(F::from_f64(f64::NAN));
+            return Ok(differential_result);
+        }
+
+        for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
+            let max_occurrence = cut_group.related_esurface_group.max_occurence;
+            if !self.counterterm.cut_group_is_active(cut_group_id) {
+                let zero = Complex::new_re(momentum_sample.zero());
+                for _ in 1..=max_occurrence {
+                    cut_results[cut_group_id].push(zero.clone());
+                }
+                cut_threshold_counterterms[cut_group_id] = zero;
+                continue;
+            }
+            crate::debug_tags!(#integration, #cut;
+                "\n =====START EVALUATION FOR CUT GROUP {}=====",
+                cut_group_id.0
+            );
+            let solution = lu_solutions
+                .remove(&cut_group_id)
+                .expect("all active LU cut roots were validated before evaluation");
+            let representative_esurface = &self.cut_esurface[cut_group.cuts[0]];
 
             let prepared_event = prepare_buffered_event(
                 context.settings,
