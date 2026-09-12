@@ -113,6 +113,8 @@ pub trait ParamBuilderGraph {
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom>;
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
     /// Expand the medium numerator weight at the requested temperature limit.
+    /// Derivatives are with respect to positive on-shell energy, holding temperature,
+    /// chemical potential, and orientation fixed; cyclic-chain signs belong to CFF reduction.
     fn explicit_thermal_distribution_atom(
         &self,
         edge: EdgeIndex,

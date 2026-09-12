@@ -172,8 +172,11 @@ GammaLoop owns production graph/source construction, UV orchestration, exact sou
 Finite-temperature and zero-temperature equilibrium share `MediumMode` and the
 structural CFF recursion in `three-dimensional-reps`. Cyclic orientations,
 thermal contraction numerators, and distribution derivatives are retained in
-`CFFVariant::thermal_weight`, separately from rational coefficients. These
-weights survive serialization, variant fusion, source-edge remapping, and
+`CFFVariant::thermal_weight`, separately from rational coefficients. Distribution
+derivatives are ordinary energy derivatives at fixed temperature, chemical
+potential, and orientation. Reducing an m-edge cyclic chain contributes
+`(-1)^(m-1)` to the CFF coefficient and a distribution derivative of order `m-1`.
+These weights survive serialization, variant fusion, source-edge remapping, and
 products of disconnected components. Initial-state cuts remain external energy
 aliases and never acquire thermal distribution factors. GammaLoop's graph and
 parameter layer expands the symbolic weights using particle statistics,

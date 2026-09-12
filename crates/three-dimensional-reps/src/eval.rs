@@ -4118,7 +4118,7 @@ mod thermal_reference_tests {
                     let coth = 1.0 / (evaluator.internal_energies[edge] / 2.0).tanh();
                     match derivative_order {
                         0 => (f64::from(sign) + coth) / 2.0,
-                        1 => (coth * coth - 1.0) / 4.0,
+                        1 => -(coth * coth - 1.0) / 4.0,
                         2 => (coth * coth - 1.0) * coth / 4.0,
                         _ => {
                             panic!("{name}: unexpected distribution derivative {derivative_order}")
