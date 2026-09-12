@@ -73,7 +73,9 @@ pub use sampling_maps::{
     SamplingJacobian, SamplingMapContract, SamplingMapDefinition, SamplingMapKernel,
     SamplingMapPoint, SamplingSupport,
 };
-pub use sampling_reference::GaussianReferenceFunction;
+pub use sampling_reference::{
+    GaussianReferenceFunction, ReferenceSampleEvaluation, ReferenceSamplingReport,
+};
 pub use sampling_selection::{
     ResolvedNamedSamplingChannel, ResolvedSamplingChannelSelection, SamplingCatalogueEntry,
     SamplingChannelCatalogue, SamplingChannelPreset, SamplingChannelSelector,
@@ -879,6 +881,41 @@ impl ProcessIntegrand {
         sample: &Sample<F<f64>>,
         reference: &GaussianReferenceFunction,
     ) -> Result<EvaluationResult> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                Ok(evaluate_reference_sample(integrand, sample, reference)?.evaluation)
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                Ok(evaluate_reference_sample(integrand, sample, reference)?.evaluation)
+            }
+        }
+    }
+
+    /// Evaluate a batch of samples with a normalized reference function while
+    /// retaining the process maps, Jacobians and sampling-grid weights.
+    pub fn evaluate_reference_samples(
+        &mut self,
+        samples: &[Sample<F<f64>>],
+        reference: &GaussianReferenceFunction,
+    ) -> Result<ReferenceSamplingReport> {
+        let evaluations = samples
+            .iter()
+            .map(|sample| self.evaluate_reference_sample_detailed(sample, reference))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(ReferenceSamplingReport::from_evaluations(
+            evaluations,
+            reference,
+        ))
+    }
+
+    /// Detailed variant used by acceptance harnesses that also check raw
+    /// momentum moments.  The public scalar method above remains convenient
+    /// for callers interested only in the mapped value.
+    pub fn evaluate_reference_sample_detailed(
+        &mut self,
+        sample: &Sample<F<f64>>,
+        reference: &GaussianReferenceFunction,
+    ) -> Result<ReferenceSampleEvaluation> {
         match self {
             ProcessIntegrand::Amplitude(integrand) => {
                 evaluate_reference_sample(integrand, sample, reference)
@@ -4208,7 +4245,7 @@ fn evaluate_reference_sample<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     sample: &Sample<F<f64>>,
     reference: &GaussianReferenceFunction,
-) -> Result<EvaluationResult> {
+) -> Result<ReferenceSampleEvaluation> {
     let source = EvaluationSource::XSpace(sample);
     let (gamma_sample, parameterization_time) = source.build_gamma_sample::<f64, I>(integrand)?;
     let default_sample = gamma_sample.get_default_sample();
@@ -4217,7 +4254,10 @@ fn evaluate_reference_sample<I: ProcessIntegrandImpl>(
     result.parameterization_jacobian = Some(default_sample.jacobian());
     result.integrator_weight = sample.get_weight();
     result.evaluation_metadata.parameterization_time = parameterization_time;
-    Ok(result)
+    Ok(ReferenceSampleEvaluation {
+        evaluation: result,
+        loop_momenta: default_sample.loop_moms().clone(),
+    })
 }
 
 fn evaluate_sample_precise<I: ProcessIntegrandImpl>(
