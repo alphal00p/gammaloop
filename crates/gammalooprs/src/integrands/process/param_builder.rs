@@ -1920,10 +1920,7 @@ mod tests {
 
     #[test]
     fn thermal_tanh_remains_finite_at_uv_scales_and_preserves_derivatives() {
-        use symbolica::{
-            domains::dual::HyperDual,
-            prelude::{Complex as SymComplex, Dualizer},
-        };
+        use symbolica::prelude::Complex as SymComplex;
 
         test_initialise().unwrap();
         let graph: Graph = dot!(
@@ -1934,11 +1931,12 @@ mod tests {
             }
         )
         .unwrap();
-        let argument = Atom::var(symbol!("thermal_tanh_argument"));
+        let argument_symbol = symbol!("thermal_tanh_argument");
+        let argument = Atom::var(argument_symbol);
         // Thermal arguments are real, but native tanh must also preserve complex
         // values and remain finite at UV scales, with analytic derivatives at x=0.
-        let evaluator = symbolica::transcendental::tanh()
-            .call_args([argument.clone()])
+        let expression = symbolica::transcendental::tanh().call_args([argument.clone()]);
+        let evaluator = expression
             .evaluator(std::slice::from_ref(&argument))
             .function_map(graph.param_builder.fn_map.clone())
             .build()
@@ -1946,26 +1944,30 @@ mod tests {
         let mut real = evaluator
             .clone()
             .map_coeff(&|coefficient| coefficient.re.to_f64());
-        let dualizer = Dualizer::new(
-            HyperDual::<SymComplex<Rational>>::new(
-                crate::utils::hyperdual_utils::simple_n_deriv_shape(2),
-            ),
-            vec![],
-        );
-        let mut dual = evaluator
-            .clone()
-            .vectorize(&dualizer)
-            .unwrap()
-            .map_coeff(&|coefficient| coefficient.re.to_f64());
+        // Native hyperbolic functions support symbolic differentiation, but their
+        // evaluator hyperdual vectorization is not yet supported by Symbolica.
+        // TODO: Test dualization once it is supported.
+        let first = expression.derivative(argument_symbol);
+        let second = first.derivative(argument_symbol);
+        let mut derivatives = [first, second].map(|expression| {
+            expression
+                .evaluator(std::slice::from_ref(&argument))
+                .function_map(graph.param_builder.fn_map.clone())
+                .build()
+                .unwrap()
+                .map_coeff(&|coefficient| coefficient.re.to_f64())
+        });
         for value in [-1e12_f64, -1000., -1., 0., 1., 1000., 1e12] {
             let tanh = value.tanh();
             let first_derivative = 1. - tanh * tanh;
-            let expected = [tanh, first_derivative, -tanh * first_derivative];
+            let expected = [first_derivative, -2. * tanh * first_derivative];
             assert!((real.evaluate_single(&[value]) - tanh).abs() < 1e-14);
-            let mut actual = [0.; 3];
-            dual.evaluate(&[value, 1., 0.], &mut actual);
-            for (actual, expected) in actual.into_iter().zip(expected) {
-                assert!((actual - expected).abs() < 1e-14, "tanh at {value}");
+            for (derivative, expected) in derivatives.iter_mut().zip(expected) {
+                let actual = derivative.evaluate_single(&[value]);
+                assert!(
+                    (actual - expected).abs() < 1e-14,
+                    "tanh derivative at {value}"
+                );
             }
         }
 
