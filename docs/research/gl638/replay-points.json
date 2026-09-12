@@ -1,0 +1,632 @@
+{
+  "schema_version": 1,
+  "scope": "Five frozen diagnostic points, all 936 source orientations and all six physical cuts. All 13 corrected runtime-only portable comparisons executed successfully against the existing compatible state, reproducing historical results and limitations. Two exact A/P cases remain invalid (is_nan=true); four other cases remain finite Unstable. This is reproducibility validation, not a complete physical cure. See REPLAY.md.",
+  "coordinates": {
+    "units": "GeV",
+    "generation_lmb_edges": [
+      3,
+      4,
+      7,
+      10
+    ],
+    "order": "Four spatial [px,py,pz] vectors, one per generation-LMB edge, BEFORE each cut solves its own LU t-star rescaling. These are not native threshold subspace coordinates.",
+    "entry_point": "inspect -p epem_a_tth -i NNLO -m --graph-id 0",
+    "measure": "Raw momentum-space integrand; parameterization_jacobian=null and integrator_weight=1. No sampling PDF."
+  },
+  "physics": {
+    "process": "epem_a_tth",
+    "integrand": "NNLO",
+    "model": "sm-default.json",
+    "model_command": "set model MT=173 MH=125 WT=0 ymt=173 aS=0.118 aEWM1=132.507 Gf=1.166390e-05 MZ=91.188",
+    "Q_GeV": 1000,
+    "mt_GeV": 173,
+    "mh_GeV": 125,
+    "source_orientations": 936,
+    "explicit_orientation_sum_only": true,
+    "direct_3D_local_UV": true,
+    "integrated_UV": true,
+    "graph_card": "examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO_test_GL638.toml"
+  },
+  "common_runtime_kv": {
+    "general.mu_r": 91.188,
+    "general.m_uv": 91.188,
+    "general.evaluator_method": "SingleParametric",
+    "general.enable_cache": false,
+    "general.generate_events": true,
+    "general.store_additional_weights_in_event": false,
+    "h_function.function": "poly_exponential",
+    "h_function.sigma": 1.0,
+    "h_function.power": 3,
+    "subtraction.esurface_existence_threshold": 1e-14,
+    "subtraction.local_ct_settings.uv_localisation.gaussian_width": 1.0,
+    "subtraction.local_ct_settings.uv_localisation.dynamic_width": false,
+    "subtraction.local_ct_settings.uv_localisation.force_uv_dampers_to_one": false,
+    "stability.check_on_norm": true,
+    "stability.escalate_if_exact_zero": false,
+    "stability.levels": [
+      {
+        "precision": "Double",
+        "required_precision_for_re": 1e-06,
+        "required_precision_for_im": 1e-06,
+        "escalate_for_large_weight_threshold": 0.9
+      },
+      {
+        "precision": "Quad",
+        "required_precision_for_re": 1e-10,
+        "required_precision_for_im": 1e-10,
+        "escalate_for_large_weight_threshold": -1.0
+      },
+      {
+        "precision": "Arb",
+        "required_precision_for_re": 1e-12,
+        "required_precision_for_im": 1e-12,
+        "escalate_for_large_weight_threshold": -1.0
+      }
+    ]
+  },
+  "profiles": {
+    "ct_off": {
+      "subtraction.disable_threshold_subtraction": true,
+      "subtraction.local_ct_settings.uv_localisation.sliver_width": 10.0,
+      "subtraction.local_ct_settings.uv_localisation.smooth_sliver": false
+    },
+    "baseline": {
+      "subtraction.disable_threshold_subtraction": false,
+      "subtraction.local_ct_settings.uv_localisation.sliver_width": 10.0,
+      "subtraction.local_ct_settings.uv_localisation.smooth_sliver": false
+    },
+    "hard_sliver": {
+      "subtraction.disable_threshold_subtraction": false,
+      "subtraction.local_ct_settings.uv_localisation.sliver_width": 0.1,
+      "subtraction.local_ct_settings.uv_localisation.smooth_sliver": false
+    },
+    "smooth_sliver": {
+      "subtraction.disable_threshold_subtraction": false,
+      "subtraction.local_ct_settings.uv_localisation.sliver_width": 0.1,
+      "subtraction.local_ct_settings.uv_localisation.smooth_sliver": true
+    }
+  },
+  "rotations": {
+    "z": [
+      {
+        "type": "z"
+      }
+    ],
+    "euler": [
+      {
+        "type": "euler_angles",
+        "alpha": 0.1,
+        "beta": 0.2,
+        "gamma": 0.3
+      }
+    ]
+  },
+  "source_archives": {
+    "ordinary_soft": {
+      "archive_relative_path": "twenty-core/ordinary-soft/points.json",
+      "sha256": "309da4ae9a718891951688aec21e17af648d36ba6c43c289d85a9fe852c16a4f"
+    },
+    "ap": {
+      "archive_relative_path": "full-explicit/ap-check/definition.json",
+      "sha256": "acc86472b7457ea6bb7bf86c8ba18f65cdb64b8ed9cfb6853839044bbbc4c628"
+    },
+    "boundary": {
+      "archive_relative_path": "twenty-core/h-profiles/sliver-boundary/points.json",
+      "sha256": "f2558056250c90def86e863c7bee970ea88f9c9512ab3ba448c581faa1a2b459"
+    },
+    "runtime_settings": {
+      "archive_relative_path": "runs/GL638-full-explicit-release-inverse-jacobian/workspace/integrands/epem_a_tth@NNLO/settings.toml",
+      "sha256": "66896281cce0f2147b239cd1b539c9d25a0c63771cf3731833502f8a21f571b6"
+    }
+  },
+  "points": {
+    "soft22": {
+      "source": "ordinary_soft",
+      "source_id": 22,
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          37.002020305089104,
+          125.99696954236634,
+          -108.99393908473269
+        ],
+        [
+          36.996969542366344,
+          125.99393908473269,
+          -109.0020203050891
+        ]
+      ],
+      "geometry": {
+        "family": "both gluons soft, positive signed ray",
+        "lambda_GeV": 0.01,
+        "lambda_definition": "sqrt(|q13|^2+|q14|^2) before LU rescaling; each radius is lambda/sqrt(2).",
+        "radial_measure": "lambda^5 d(lambda)"
+      },
+      "interpretation": "With threshold CTs disabled, historical z rotation falsely accepts Double Im of the wrong sign and about 6.46e4 times the Arb magnitude. Euler rejects Double and accepts Quad, agreeing with Arb here. Rotation agreement remains heuristic; the tiny Re remnant is not a resolved physical component."
+    },
+    "ap_equal": {
+      "source": "ap",
+      "source_id": 0,
+      "parent_momenta_GeV": [
+        [
+          -251.03855708408048,
+          -125.51927854204024,
+          376.5578356261207
+        ],
+        [
+          -467.21868354918456,
+          -17.429215309488185,
+          571.1199494447144
+        ],
+        [
+          376.5578356261207,
+          -125.51927854204024,
+          251.03855708408048
+        ],
+        [
+          108.09006323255205,
+          172.9441011720833,
+          0.0
+        ]
+      ],
+      "geometry": {
+        "eta_P_GeV": 1.0,
+        "eta_A_over_eta_P": 1.0,
+        "offset_definition": "Threshold energy offset, not a soft radius. A=(7,8), P=(3,12), native subspace [3,7] with parent [3,6,7,10] on cut (2,6,10)."
+      },
+      "interpretation": "Equal norms by exact component permutation produce coincident A/P radial roots. Both recorded modes flag is_nan; returned zero is sanitization, not a physical zero."
+    },
+    "ap_nearby": {
+      "source": "ap",
+      "source_id": 13,
+      "parent_momenta_GeV": [
+        [
+          -250.7537212371647,
+          -125.37686061858236,
+          376.13058185574704
+        ],
+        [
+          -466.93384770226885,
+          -17.2867973860303,
+          570.6926956743407
+        ],
+        [
+          376.13058185578984,
+          -125.37686061859662,
+          250.75372123719325
+        ],
+        [
+          108.09006323255205,
+          172.9441011720833,
+          0.0
+        ]
+      ],
+      "geometry": {
+        "eta_P_GeV": 1e-06,
+        "eta_A_over_eta_P": 1.0001,
+        "offset_definition": "Threshold energy offset, not a soft radius. A=(7,8), P=(3,12), native subspace [3,7] with parent [3,6,7,10] on cut (2,6,10)."
+      },
+      "interpretation": "Nearby distinct A/P roots: historical z-based normal policy accepts Quad, but its Im magnitude is 1120.29 times forced Arb. The current Euler policy is a separate experiment; no outcome is assumed for it. This is numerical conditioning, not proof of a physical nonintegrable pole."
+    },
+    "boundary_001": {
+      "source": "boundary",
+      "source_id": 5,
+      "parent_momenta_GeV": [
+        [
+          -56.22847230736766,
+          262.5735627694048,
+          300.73168984300094
+        ],
+        [
+          -106.21989432198902,
+          130.32717714586022,
+          282.7946806904733
+        ],
+        [
+          -446.125720663391,
+          259.5806309595205,
+          118.76642543408406
+        ],
+        [
+          -56.219421679007596,
+          262.57700564618153,
+          300.7341863857681
+        ]
+      ],
+      "geometry": {
+        "family": "q13 soft, outer A local-CT sliver boundary, nu=0",
+        "lambda_GeV": 0.01,
+        "construction": "In prepared cut1 coordinates p=t+lambda*n13, s=t+(rA+100GeV)*ns; cut1 has t-star=1, other cuts rescale independently.",
+        "fixed_cut1_a_GeV": [
+          -49.99142201462135,
+          -132.2463856235446,
+          -17.93700915252765
+        ],
+        "fixed_cut1_t_GeV": [
+          -56.219421679007596,
+          262.57700564618153,
+          300.7341863857681
+        ],
+        "n13": [
+          -0.905062836006706,
+          -0.34428767767213686,
+          -0.2496542767160719
+        ],
+        "ns": [
+          -0.9061509368005501,
+          -0.006963641614397563,
+          -0.42289713575638155
+        ],
+        "rA_from_t_GeV": 330.288468675064
+      },
+      "interpretation": "The pair shows roughly 10x growth of baseline/smooth Im versus 1000x with the hard sliver as lambda decreases 10x. Finite Arb baseline/smooth results miss the rotation tolerance; retain that status. These two points illustrate the recorded longer ray scan, not a global integrability proof."
+    },
+    "boundary_0001": {
+      "source": "boundary",
+      "source_id": 6,
+      "parent_momenta_GeV": [
+        [
+          -56.2203267418436,
+          262.5766613585039,
+          300.7339367314914
+        ],
+        [
+          -106.21174875646494,
+          130.3302757349593,
+          282.79692757896373
+        ],
+        [
+          -446.125720663391,
+          259.5806309595205,
+          118.76642543408406
+        ],
+        [
+          -56.219421679007596,
+          262.57700564618153,
+          300.7341863857681
+        ]
+      ],
+      "geometry": {
+        "family": "q13 soft, outer A local-CT sliver boundary, nu=0",
+        "lambda_GeV": 0.001,
+        "construction": "In prepared cut1 coordinates p=t+lambda*n13, s=t+(rA+100GeV)*ns; cut1 has t-star=1, other cuts rescale independently.",
+        "fixed_cut1_a_GeV": [
+          -49.99142201462135,
+          -132.2463856235446,
+          -17.93700915252765
+        ],
+        "fixed_cut1_t_GeV": [
+          -56.219421679007596,
+          262.57700564618153,
+          300.7341863857681
+        ],
+        "n13": [
+          -0.905062836006706,
+          -0.34428767767213686,
+          -0.2496542767160719
+        ],
+        "ns": [
+          -0.9061509368005501,
+          -0.006963641614397563,
+          -0.42289713575638155
+        ],
+        "rA_from_t_GeV": 330.288468675064
+      },
+      "interpretation": "The pair shows roughly 10x growth of baseline/smooth Im versus 1000x with the hard sliver as lambda decreases 10x. Finite Arb baseline/smooth results miss the rotation tolerance; retain that status. These two points illustrate the recorded longer ray scan, not a global integrability proof."
+    }
+  },
+  "cases": [
+    {
+      "id": "soft22_z",
+      "point": "soft22",
+      "profile": "ct_off",
+      "rotation": "z",
+      "precision": "normal",
+      "historical_observation": {
+        "raw_result": {
+          "re": -1.605485873518986e-32,
+          "im": 3.0977887620167446e-26
+        },
+        "is_nan": false,
+        "final_precision": "Double",
+        "final_status": {
+          "Stable": 2
+        },
+        "estimated_rotation_error": 0.0,
+        "source_result": "twenty-core/ordinary-soft/normal-ct-off-765c9e99/point-00022.json",
+        "binary_sha256": "5309304eceafcd6b27fcca2a5087ae983d96c16a08fef4399ada3bb3e6bff84b"
+      }
+    },
+    {
+      "id": "soft22_euler",
+      "point": "soft22",
+      "profile": "ct_off",
+      "rotation": "euler",
+      "precision": "normal",
+      "historical_observation": {
+        "raw_result": {
+          "re": 1.4532236519417696e-48,
+          "im": -4.798908444994201e-31
+        },
+        "is_nan": false,
+        "final_precision": "Quad",
+        "final_status": {
+          "Stable": 2
+        },
+        "estimated_rotation_error": 5.087998559187261e-12,
+        "source_result": "twenty-core/ordinary-soft/euler-all/ct-off-normal-euler-point-00022.json",
+        "binary_sha256": "5309304eceafcd6b27fcca2a5087ae983d96c16a08fef4399ada3bb3e6bff84b"
+      }
+    },
+    {
+      "id": "soft22_arb",
+      "point": "soft22",
+      "profile": "ct_off",
+      "rotation": "z",
+      "precision": "arb",
+      "historical_observation": {
+        "raw_result": {
+          "re": 3.4257124e-317,
+          "im": -4.798908445010854e-31
+        },
+        "is_nan": false,
+        "final_precision": "Arb",
+        "final_status": {
+          "Stable": 2
+        },
+        "estimated_rotation_error": 2.27512589313007e-281,
+        "source_result": "twenty-core/ordinary-soft/arb-ct-off-765c9e99/point-00022.json",
+        "binary_sha256": "5309304eceafcd6b27fcca2a5087ae983d96c16a08fef4399ada3bb3e6bff84b"
+      }
+    },
+    {
+      "id": "ap_equal_normal",
+      "point": "ap_equal",
+      "profile": "baseline",
+      "rotation": "z",
+      "precision": "normal",
+      "historical_observation": {
+        "raw_result": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": true,
+        "final_precision": "Arb",
+        "final_status": {
+          "Stable": 2
+        },
+        "estimated_rotation_error": 0.0,
+        "source_result": "full-explicit/ap-check/batch-gijfi5x5/ap-00-normal.json",
+        "binary_sha256": "ce79cac84b5dca80413441fa07fbbb4ab3d3ec60bdaba9dcb73624d6c48a4c5a"
+      }
+    },
+    {
+      "id": "ap_equal_arb",
+      "point": "ap_equal",
+      "profile": "baseline",
+      "rotation": "z",
+      "precision": "arb",
+      "historical_observation": {
+        "raw_result": {
+          "re": 0.0,
+          "im": 0.0
+        },
+        "is_nan": true,
+        "final_precision": "Arb",
+        "final_status": {
+          "Stable": 2
+        },
+        "estimated_rotation_error": 0.0,
+        "source_result": "full-explicit/ap-check/batch-gijfi5x5/ap-00-arb.json",
+        "binary_sha256": "ce79cac84b5dca80413441fa07fbbb4ab3d3ec60bdaba9dcb73624d6c48a4c5a"
+      }
+    },
+    {
+      "id": "ap_nearby_normal",
+      "point": "ap_nearby",
+      "profile": "baseline",
+      "rotation": "z",
+      "precision": "normal",
+      "historical_observation": {
+        "raw_result": {
+          "re": -7.394131575452668e-42,
+          "im": -3.445765925524822e-40
+        },
+        "is_nan": false,
+        "final_precision": "Quad",
+        "final_status": {
+          "Stable": 2
+        },
+        "estimated_rotation_error": 3.6984603519307134e-13,
+        "source_result": "full-explicit/ap-check/batch-gijfi5x5/ap-13-normal.json",
+        "binary_sha256": "ce79cac84b5dca80413441fa07fbbb4ab3d3ec60bdaba9dcb73624d6c48a4c5a"
+      }
+    },
+    {
+      "id": "ap_nearby_arb",
+      "point": "ap_nearby",
+      "profile": "baseline",
+      "rotation": "z",
+      "precision": "arb",
+      "historical_observation": {
+        "raw_result": {
+          "re": -7.394130188969977e-42,
+          "im": -3.0757937896948634e-43
+        },
+        "is_nan": false,
+        "final_precision": "Arb",
+        "final_status": {
+          "Stable": 2
+        },
+        "estimated_rotation_error": 3.369714238247868e-282,
+        "source_result": "full-explicit/ap-check/batch-gijfi5x5/ap-13-arb.json",
+        "binary_sha256": "ce79cac84b5dca80413441fa07fbbb4ab3d3ec60bdaba9dcb73624d6c48a4c5a"
+      }
+    },
+    {
+      "id": "boundary_001_baseline",
+      "point": "boundary_001",
+      "profile": "baseline",
+      "rotation": "z",
+      "precision": "arb",
+      "historical_observation": {
+        "raw_result": {
+          "re": -1.3678544624369888e-32,
+          "im": -1.2965523187531952e-32
+        },
+        "is_nan": false,
+        "final_precision": "Arb",
+        "final_status": {
+          "Unstable": 2
+        },
+        "estimated_rotation_error": 3.802151912639308e-09,
+        "source_result": "twenty-core/h-profiles/sliver-boundary/arb-baseline-91b3ffee/point-00005.json",
+        "binary_sha256": "ce79cac84b5dca80413441fa07fbbb4ab3d3ec60bdaba9dcb73624d6c48a4c5a"
+      }
+    },
+    {
+      "id": "boundary_001_hard_sliver",
+      "point": "boundary_001",
+      "profile": "hard_sliver",
+      "rotation": "z",
+      "precision": "arb",
+      "historical_observation": {
+        "raw_result": {
+          "re": -1.3678458770258766e-32,
+          "im": 7.211847858531685e-25
+        },
+        "is_nan": false,
+        "final_precision": "Arb",
+        "final_status": {
+          "Stable": 2
+        },
+        "estimated_rotation_error": 1.33884154875177e-16,
+        "source_result": "twenty-core/h-profiles/sliver-boundary/arb-sliver-q010-eedbe86e/point-00005.json",
+        "binary_sha256": "ce79cac84b5dca80413441fa07fbbb4ab3d3ec60bdaba9dcb73624d6c48a4c5a"
+      }
+    },
+    {
+      "id": "boundary_001_smooth_sliver",
+      "point": "boundary_001",
+      "profile": "smooth_sliver",
+      "rotation": "z",
+      "precision": "arb",
+      "historical_observation": {
+        "raw_result": {
+          "re": -1.3678645764489352e-32,
+          "im": 2.272364749759697e-34
+        },
+        "is_nan": false,
+        "final_precision": "Arb",
+        "final_status": {
+          "Unstable": 2
+        },
+        "estimated_rotation_error": 3.6636821897960176e-09,
+        "source_result": "twenty-core/h-profiles/smooth-controls/arb-smooth-sliver-q010-9dfc9d5a/point-00005.json",
+        "binary_sha256": "5309304eceafcd6b27fcca2a5087ae983d96c16a08fef4399ada3bb3e6bff84b"
+      }
+    },
+    {
+      "id": "boundary_0001_baseline",
+      "point": "boundary_0001",
+      "profile": "baseline",
+      "rotation": "z",
+      "precision": "arb",
+      "historical_observation": {
+        "raw_result": {
+          "re": -1.3647607533068802e-31,
+          "im": -1.293437608679382e-31
+        },
+        "is_nan": false,
+        "final_precision": "Arb",
+        "final_status": {
+          "Unstable": 2
+        },
+        "estimated_rotation_error": 3.811918170464561e-08,
+        "source_result": "twenty-core/h-profiles/sliver-boundary/arb-baseline-91b3ffee/point-00006.json",
+        "binary_sha256": "ce79cac84b5dca80413441fa07fbbb4ab3d3ec60bdaba9dcb73624d6c48a4c5a"
+      }
+    },
+    {
+      "id": "boundary_0001_hard_sliver",
+      "point": "boundary_0001",
+      "profile": "hard_sliver",
+      "rotation": "z",
+      "precision": "arb",
+      "historical_observation": {
+        "raw_result": {
+          "re": -1.3647598947362634e-31,
+          "im": 7.211077753212264e-22
+        },
+        "is_nan": false,
+        "final_precision": "Arb",
+        "final_status": {
+          "Stable": 2
+        },
+        "estimated_rotation_error": 6.952519673569154e-16,
+        "source_result": "twenty-core/h-profiles/sliver-boundary/arb-sliver-q010-eedbe86e/point-00006.json",
+        "binary_sha256": "ce79cac84b5dca80413441fa07fbbb4ab3d3ec60bdaba9dcb73624d6c48a4c5a"
+      }
+    },
+    {
+      "id": "boundary_0001_smooth_sliver",
+      "point": "boundary_0001",
+      "profile": "smooth_sliver",
+      "rotation": "z",
+      "precision": "arb",
+      "historical_observation": {
+        "raw_result": {
+          "re": -1.3647617646578949e-31,
+          "im": 2.270148613492322e-33
+        },
+        "is_nan": false,
+        "final_precision": "Arb",
+        "final_status": {
+          "Unstable": 2
+        },
+        "estimated_rotation_error": 3.672752705951568e-08,
+        "source_result": "twenty-core/h-profiles/smooth-controls/arb-smooth-sliver-q010-9dfc9d5a/point-00006.json",
+        "binary_sha256": "5309304eceafcd6b27fcca2a5087ae983d96c16a08fef4399ada3bb3e6bff84b"
+      }
+    }
+  ],
+  "runtime_card_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01/assets/schemas/runtime.json\n[default_runtime_settings.general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\n\n[default_runtime_settings.kinematics]\ne_cm = 1000.0\n\n[default_runtime_settings.kinematics.externals]\ntype = \"constant\"\n\n[default_runtime_settings.kinematics.externals.data]\nmomenta = [\n    [\n    500.0,\n    0.0,\n    0.0,\n    500.0,\n],\n    [\n    500.0,\n    0.0,\n    0.0,\n    -500.0,\n],\n]\nhelicities = [\n    \"summed_averaged\",\n    \"summed_averaged\",\n]\n\n[default_runtime_settings.integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 7500\nn_increase = 0\nn_max = 75000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\n\n[default_runtime_settings.stability]\nescalate_if_exact_zero = false\n\n[[default_runtime_settings.stability.rotation_axis]]\ntype = \"z\"\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = 0.9\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[default_runtime_settings.sampling]\ngraphs = \"monte_carlo\"\nlmb_multichanneling = true\nlmb_channels = \"monte_carlo\"\nlmb_channel_weight = \"inverse_jacobian\"\n\n[default_runtime_settings.subtraction]\nesurface_existence_threshold = 0.00000000000001\n\n[default_runtime_settings.h_function]\npower = 3\n",
+  "validation": {
+    "status": "executed_against_existing_compatible_full_state",
+    "date_utc": "2026-09-12",
+    "script_sha256": "0ba781964450baad7ec31d4dc0ecae224041b8bdb8beabb50c2b1b6bfa671930",
+    "binary_sha256": "5309304eceafcd6b27fcca2a5087ae983d96c16a08fef4399ada3bb3e6bff84b",
+    "runtime_card_sha256": "d566a7b45ecdaf3201557e376e0134effc6e63bca685c00a8e3bc5f3e989b4c3",
+    "runtime_card_matches_recorded_settings": true,
+    "source_and_executed_points_match_f64_bits": true,
+    "all13_historical_observations_and_per_cut_weights_match_exactly": true,
+    "returncode": 0,
+    "elapsed_seconds": 64.56289837800432,
+    "peak_process_tree_bytes": 5371596800,
+    "counts": {
+      "outputs": 13,
+      "finite_with_is_nan_false": 11,
+      "is_nan_true": 2,
+      "final_statuses_including_nan": {
+        "Stable": 9,
+        "Unstable": 4
+      },
+      "final_precisions": {
+        "Double": 1,
+        "Quad": 2,
+        "Arb": 10
+      }
+    },
+    "limitations": "Generation command not rerun by this replay. Two A/P coincident-root failures remain is_nan=true despite sanitized zero; four baseline/smooth cases remain finite Unstable. No global accuracy or integrability claim.",
+    "original_failed_attempt": "Generation-card command-block conflict before evaluation; preserved separately."
+  }
+}

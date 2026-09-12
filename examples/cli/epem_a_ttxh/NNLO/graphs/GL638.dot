@@ -3,116 +3,106 @@ digraph GL638{
     overall_factor = "NumeratorDependentGrouping(638,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))+NumeratorDependentGrouping(639,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))";
     overall_factor_evaluated = "-4";
     projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
-    // This shared one-loop association and these ratios cure the selected-orientation correlated
-    // q13 soft/threshold limit of cut (2,4,12); their sufficiency for every other cut has not yet
-    // been demonstrated. In each cut, eta(eset(7,8)) and the secondary eta denote actual
-    // catalogued E-surfaces; the weights are complementary away from their common zero.
-    // Unrelated thresholds stay implicit.
-    // The soft-ray checks do not certify ordinary threshold cancellation: on cut (2,4,12),
-    // the embedded_2l (7,8) projection moves the right threshold (5,12,13), and the current
-    // iterated helper leaves a pole. This prescription remains a diagnostic pending a coupled
-    // subtraction treatment; see IR_SAFE_THRESHOL_UPDATE.md for the measured failure.
+    // Higgs-aware threshold splitting on cut (2,6,10); all other cuts retain their
+    // natural one-loop subspaces. Every explicit parent [3,6,7,10] preserves this cut.
+    // A=(7,8), U=(8,12,14): [7] weight 1-W_H, [3,7] weight W_H.
+    // F=(8,10,13,14): [7] weight 1-W_F, [3,7] weight W_F.
+    // V=(3,7,14), P=(3,12), Z=(3,10,13) retain unit-weight [3,7] variants.
+    // At each variant's star, Q=P0^0+P1^0, H=eta(2,4,12),
+    // G0=eta(2,6,12,13), G4=eta(2,4,10,13):
+    // W_H=H^2/(H^2+(P*Z/Q)^2), W_F=G0^2*G4^2/(G0^2*G4^2+P^2*Z^2).
+    // The explicit energy expressions below avoid requiring foreign-cut surfaces in
+    // the local catalogue; rationalized energy differences preserve soft cancellations.
+    // W_H and its complement have explicit complementary values at their common zero.
+    // This replaces the old (2,4,12) embedded projection that moved the opposite side.
+    // The candidate passes the sampled soft/ordinary-threshold checks and generates
+    // all 936 orientations with full UV. Exact coincident A/P radial roots still need
+    // a stable combined-residue limit; generation and pilot runs do not certify it.
+    // See IR_SAFE_THRESHOL_UPDATE.md for validation, weights and remaining limitations.
     threshold_counterterms = "
 schema_version = 1
 
 [[cuts]]
-edges = [2, 6, 12, 13]
-
-  [[cuts.thresholds]]
-  edges = [7, 8]
-
-    [[cuts.thresholds.counterterms]]
-    name = \"intrinsic_1l\"
-    subspace = [7]
-    parent_lmb = [3, 4, 7, 10]
-
-      [cuts.thresholds.counterterms.multiplier]
-      expression = \"eta(star, eset(7, 8))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)\"
-
-    [[cuts.thresholds.counterterms]]
-    name = \"embedded_2l\"
-    subspace = [3, 7]
-    parent_lmb = [3, 4, 7, 10]
-
-      [cuts.thresholds.counterterms.multiplier]
-      expression = \"eta(star, eset(8, 12, 14))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)\"
-
-[[cuts]]
 edges = [2, 6, 10]
 
-  # The legacy maximal subspace is [3,7] only for this association. Solving it in the shared [7]
-  # frame supplies the missing LU partner of the same threshold under cuts (2,6,12,13) and
-  # (2,4,12), removing the q13-soft inverse powers.
-  [[cuts.thresholds]]
-  edges = [8, 12, 14]
+# The natural maximal subspace on this side is [3,7]. Its [7] variants supply
+# the common-cycle LU partners on cuts (2,6,12,13) and (2,4,12), while the
+# complementary [3,7] variants retain same-amplitude dual cancellation.
 
-    [[cuts.thresholds.counterterms]]
-    name = \"shared_1l\"
-    subspace = [7]
-    parent_lmb = [3, 4, 7, 10]
+[[cuts.thresholds]]
+edges = [7, 8]
 
-  [[cuts.thresholds]]
-  edges = [7, 8]
+[[cuts.thresholds.counterterms]]
+name = \"shared_1l\"
+subspace = [7]
+parent_lmb = [3, 6, 7, 10]
+[cuts.thresholds.counterterms.multiplier]
+expression = \"if(((((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))+(Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))+(Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))+(Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))+(Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))))^2+((2*sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))*(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))+sqrt((Q3(star,13,cind(1))^2+Q3(star,13,cind(2))^2+Q3(star,13,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))/(P(0,cind(0))+P(1,cind(0))))^2),((2*sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))*(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))+sqrt((Q3(star,13,cind(1))^2+Q3(star,13,cind(2))^2+Q3(star,13,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))/(P(0,cind(0))+P(1,cind(0))))^2/((((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))+(Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))+(Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))+(Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))+(Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))))^2+((2*sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))*(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))+sqrt((Q3(star,13,cind(1))^2+Q3(star,13,cind(2))^2+Q3(star,13,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))/(P(0,cind(0))+P(1,cind(0))))^2),1)\"
 
-    [[cuts.thresholds.counterterms]]
-    name = \"intrinsic_1l\"
-    subspace = [7]
-    parent_lmb = [3, 4, 7, 10]
+[[cuts.thresholds.counterterms]]
+name = \"native_2l\"
+subspace = [3, 7]
+parent_lmb = [3, 6, 7, 10]
+[cuts.thresholds.counterterms.multiplier]
+expression = \"if(((((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))+(Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))+(Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))+(Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))+(Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))))^2+((2*sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))*(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))+sqrt((Q3(star,13,cind(1))^2+Q3(star,13,cind(2))^2+Q3(star,13,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))/(P(0,cind(0))+P(1,cind(0))))^2),(((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))+(Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))+(Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))+(Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))+(Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))))^2/((((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))+(Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))+(Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))+(Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))+(Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))))^2+((2*sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))*(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))+sqrt((Q3(star,13,cind(1))^2+Q3(star,13,cind(2))^2+Q3(star,13,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))/(P(0,cind(0))+P(1,cind(0))))^2),0)\"
 
-      [cuts.thresholds.counterterms.multiplier]
-      expression = \"eta(star, eset(7, 8))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)\"
+[[cuts.thresholds]]
+edges = [8, 12, 14]
 
-    [[cuts.thresholds.counterterms]]
-    name = \"embedded_2l\"
-    subspace = [3, 7]
-    parent_lmb = [3, 4, 7, 10]
+[[cuts.thresholds.counterterms]]
+name = \"shared_1l\"
+subspace = [7]
+parent_lmb = [3, 6, 7, 10]
+[cuts.thresholds.counterterms.multiplier]
+expression = \"if(((((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))+(Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))+(Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))+(Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))+(Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))))^2+((2*sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))*(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))+sqrt((Q3(star,13,cind(1))^2+Q3(star,13,cind(2))^2+Q3(star,13,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))/(P(0,cind(0))+P(1,cind(0))))^2),((2*sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))*(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))+sqrt((Q3(star,13,cind(1))^2+Q3(star,13,cind(2))^2+Q3(star,13,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))/(P(0,cind(0))+P(1,cind(0))))^2/((((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))+(Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))+(Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))+(Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))+(Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))))^2+((2*sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))*(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))+sqrt((Q3(star,13,cind(1))^2+Q3(star,13,cind(2))^2+Q3(star,13,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))/(P(0,cind(0))+P(1,cind(0))))^2),1)\"
 
-      [cuts.thresholds.counterterms.multiplier]
-      expression = \"eta(star, eset(8, 12, 14))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)\"
+[[cuts.thresholds.counterterms]]
+name = \"native_2l\"
+subspace = [3, 7]
+parent_lmb = [3, 6, 7, 10]
+[cuts.thresholds.counterterms.multiplier]
+expression = \"if(((((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))+(Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))+(Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))+(Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))+(Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))))^2+((2*sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))*(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))+sqrt((Q3(star,13,cind(1))^2+Q3(star,13,cind(2))^2+Q3(star,13,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))/(P(0,cind(0))+P(1,cind(0))))^2),(((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))+(Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))+(Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))+(Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))+(Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))))^2/((((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))+(Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))+(Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))+(Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))+(Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))))^2+((2*sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))*(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))+sqrt((Q3(star,13,cind(1))^2+Q3(star,13,cind(2))^2+Q3(star,13,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))/(P(0,cind(0))+P(1,cind(0))))^2),0)\"
 
-[[cuts]]
-edges = [2, 4, 12]
+[[cuts.thresholds]]
+edges = [8, 10, 13, 14]
 
-  [[cuts.thresholds]]
-  edges = [7, 8]
+[[cuts.thresholds.counterterms]]
+name = \"shared_1l\"
+subspace = [7]
+parent_lmb = [3, 6, 7, 10]
+[cuts.thresholds.counterterms.multiplier]
+expression = \"1-((((((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))) + ((Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))) + ((Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3)))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2)))+sqrt(Q3(star,13,cind(1))^2 + Q3(star,13,cind(2))^2 + Q3(star,13,cind(3))^2))^2*((((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))) + ((Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))) + ((Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3)))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+sqrt(Q3(star,13,cind(1))^2 + Q3(star,13,cind(2))^2 + Q3(star,13,cind(3))^2))^2)/((((((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))) + ((Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))) + ((Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3)))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2)))+sqrt(Q3(star,13,cind(1))^2 + Q3(star,13,cind(2))^2 + Q3(star,13,cind(3))^2))^2*((((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))) + ((Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))) + ((Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3)))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+sqrt(Q3(star,13,cind(1))^2 + Q3(star,13,cind(2))^2 + Q3(star,13,cind(3))^2))^2)+((2*sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))^2*(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))+sqrt((Q3(star,13,cind(1))^2+Q3(star,13,cind(2))^2+Q3(star,13,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))^2)))\"
 
-    [[cuts.thresholds.counterterms]]
-    name = \"intrinsic_1l\"
-    subspace = [7]
-    parent_lmb = [3, 4, 7, 10]
+[[cuts.thresholds.counterterms]]
+name = \"native_2l\"
+subspace = [3, 7]
+parent_lmb = [3, 6, 7, 10]
+[cuts.thresholds.counterterms.multiplier]
+expression = \"((((((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))) + ((Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))) + ((Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3)))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2)))+sqrt(Q3(star,13,cind(1))^2 + Q3(star,13,cind(2))^2 + Q3(star,13,cind(3))^2))^2*((((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))) + ((Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))) + ((Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3)))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+sqrt(Q3(star,13,cind(1))^2 + Q3(star,13,cind(2))^2 + Q3(star,13,cind(3))^2))^2)/((((((Q3(star,3,cind(1))-Q3(star,10,cind(1)))*(Q3(star,3,cind(1))+Q3(star,10,cind(1)))) + ((Q3(star,3,cind(2))-Q3(star,10,cind(2)))*(Q3(star,3,cind(2))+Q3(star,10,cind(2)))) + ((Q3(star,3,cind(3))-Q3(star,10,cind(3)))*(Q3(star,3,cind(3))+Q3(star,10,cind(3)))))/(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2)))+sqrt(Q3(star,13,cind(1))^2 + Q3(star,13,cind(2))^2 + Q3(star,13,cind(3))^2))^2*((((Q3(star,4,cind(1))-Q3(star,6,cind(1)))*(Q3(star,4,cind(1))+Q3(star,6,cind(1)))) + ((Q3(star,4,cind(2))-Q3(star,6,cind(2)))*(Q3(star,4,cind(2))+Q3(star,6,cind(2)))) + ((Q3(star,4,cind(3))-Q3(star,6,cind(3)))*(Q3(star,4,cind(3))+Q3(star,6,cind(3)))))/(sqrt(UFO::MT^2+(Q3(star,4,cind(1))^2+Q3(star,4,cind(2))^2+Q3(star,4,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,6,cind(1))^2+Q3(star,6,cind(2))^2+Q3(star,6,cind(3))^2)))+sqrt(Q3(star,13,cind(1))^2 + Q3(star,13,cind(2))^2 + Q3(star,13,cind(3))^2))^2)+((2*sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))^2*(sqrt(UFO::MT^2+(Q3(star,3,cind(1))^2+Q3(star,3,cind(2))^2+Q3(star,3,cind(3))^2))+sqrt(UFO::MT^2+(Q3(star,10,cind(1))^2+Q3(star,10,cind(2))^2+Q3(star,10,cind(3))^2))+sqrt((Q3(star,13,cind(1))^2+Q3(star,13,cind(2))^2+Q3(star,13,cind(3))^2))-(P(0,cind(0))+P(1,cind(0))))^2)))\"
 
-      [cuts.thresholds.counterterms.multiplier]
-      expression = \"eta(star, eset(7, 8))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)\"
+[[cuts.thresholds]]
+edges = [3, 7, 14]
 
-    [[cuts.thresholds.counterterms]]
-    name = \"embedded_2l\"
-    subspace = [3, 7]
-    parent_lmb = [3, 4, 7, 10]
+[[cuts.thresholds.counterterms]]
+name = \"native_2l\"
+subspace = [3, 7]
+parent_lmb = [3, 6, 7, 10]
 
-      [cuts.thresholds.counterterms.multiplier]
-      expression = \"eta(star, eset(8, 12, 14))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)\"
+[[cuts.thresholds]]
+edges = [3, 12]
 
-[[cuts]]
-edges = [2, 4, 10, 13]
+[[cuts.thresholds.counterterms]]
+name = \"native_2l\"
+subspace = [3, 7]
+parent_lmb = [3, 6, 7, 10]
 
-  [[cuts.thresholds]]
-  edges = [7, 8]
+[[cuts.thresholds]]
+edges = [3, 10, 13]
 
-    [[cuts.thresholds.counterterms]]
-    name = \"intrinsic_1l\"
-    subspace = [7]
-    parent_lmb = [3, 4, 7, 10]
-
-      [cuts.thresholds.counterterms.multiplier]
-      expression = \"eta(star, eset(7, 8))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(2, 4, 10, 13))^2)\"
-
-    [[cuts.thresholds.counterterms]]
-    name = \"embedded_2l\"
-    subspace = [3, 7]
-    parent_lmb = [3, 4, 7, 10]
-
-      [cuts.thresholds.counterterms.multiplier]
-      expression = \"eta(star, eset(2, 4, 10, 13))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(2, 4, 10, 13))^2)\"
+[[cuts.thresholds.counterterms]]
+name = \"native_2l\"
+subspace = [3, 7]
+parent_lmb = [3, 6, 7, 10]
 ";
 
 	0 [int_id="V_141"];
