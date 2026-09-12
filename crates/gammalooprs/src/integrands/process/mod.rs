@@ -1632,24 +1632,23 @@ fn stability_check<T: FloatLike>(
     is_final_level: bool,
     escalate_if_exact_zero: bool,
 ) -> StabilityCheckResult<T> {
-    if results.len() == 1 {
-        return (results[0].clone(), None, true, None);
-    }
-
-    if !is_final_level
-        && results.iter().any(|result| {
-            result.re.is_nan()
-                || result.re.is_infinite()
-                || result.im.is_nan()
-                || result.im.is_infinite()
-        })
-    {
+    // Nonfinite probes cannot establish stability, even at the final precision.
+    if results.iter().any(|result| {
+        result.re.is_nan()
+            || result.re.is_infinite()
+            || result.im.is_nan()
+            || result.im.is_infinite()
+    }) {
         return (
             results[0].clone(),
             None,
             false,
             Some(StabilityFailureReason::ErrorThreshold),
         );
+    }
+
+    if results.len() == 1 {
+        return (results[0].clone(), None, true, None);
     }
 
     let average = results
@@ -1757,24 +1756,23 @@ fn stability_check_on_norm<T: FloatLike>(
     is_final_level: bool,
     escalate_if_exact_zero: bool,
 ) -> StabilityCheckResult<T> {
-    if results.len() == 1 {
-        return (results[0].clone(), None, true, None);
-    }
-
-    if !is_final_level
-        && results.iter().any(|result| {
-            result.re.is_nan()
-                || result.re.is_infinite()
-                || result.im.is_nan()
-                || result.im.is_infinite()
-        })
-    {
+    // Nonfinite probes cannot establish stability, even at the final precision.
+    if results.iter().any(|result| {
+        result.re.is_nan()
+            || result.re.is_infinite()
+            || result.im.is_nan()
+            || result.im.is_infinite()
+    }) {
         return (
             results[0].clone(),
             None,
             false,
             Some(StabilityFailureReason::ErrorThreshold),
         );
+    }
+
+    if results.len() == 1 {
+        return (results[0].clone(), None, true, None);
     }
 
     let average = results.iter().fold(F::<T>::from_f64(0.0), |acc, x| {
@@ -4219,6 +4217,123 @@ mod tests {
     };
     use std::sync::OnceLock;
     use typed_index_collections::TiVec;
+
+    #[test]
+    fn stability_checks_reject_nonfinite_probes_at_every_level() {
+        use super::{StabilityFailureReason, StabilityLevelSetting};
+        use spenso::algebra::complex::Complex;
+
+        let settings = RuntimeSettings::default();
+        let level = StabilityLevelSetting::default_double();
+        for check_on_norm in [false, true] {
+            let check = if check_on_norm {
+                super::stability_check_on_norm::<f64>
+            } else {
+                super::stability_check::<f64>
+            };
+            for is_final_level in [false, true] {
+                for nonfinite in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                    for invalid in [(nonfinite, 2.0), (2.0, nonfinite)] {
+                        for probes in [
+                            vec![invalid, (2.0, 3.0)],
+                            vec![(2.0, 3.0), invalid],
+                            vec![invalid],
+                        ] {
+                            let results = probes
+                                .into_iter()
+                                .map(|(re, im)| Complex::new(F(re), F(im)))
+                                .collect::<Vec<_>>();
+                            let (result, accuracy, stable, reason) = check(
+                                &settings,
+                                &results,
+                                &level,
+                                Complex::new_zero(),
+                                F(1.0),
+                                is_final_level,
+                                false,
+                            );
+                            assert!(
+                                !stable,
+                                "nonfinite probe accepted: norm={check_on_norm}, final={is_final_level}, probes={results:?}"
+                            );
+                            assert!(accuracy.is_none());
+                            assert_eq!(reason, Some(StabilityFailureReason::ErrorThreshold));
+                            // Preserve even a nonfinite primary for the existing
+                            // validity flag and later component sanitization.
+                            assert_eq!(result.re.0.to_bits(), results[0].re.0.to_bits());
+                            assert_eq!(result.im.0.to_bits(), results[0].im.0.to_bits());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stability_checks_preserve_finite_controls_at_every_level() {
+        use super::{StabilityFailureReason, StabilityLevelSetting, StabilityStatus};
+        use spenso::algebra::complex::Complex;
+
+        let settings = RuntimeSettings::default();
+        let level = StabilityLevelSetting::default_double();
+        for check_on_norm in [false, true] {
+            let check = if check_on_norm {
+                super::stability_check_on_norm::<f64>
+            } else {
+                super::stability_check::<f64>
+            };
+            for is_final_level in [false, true] {
+                for count in [1, 2] {
+                    for (re, im) in [(0.0, 0.0), (2.0, 3.0)] {
+                        let results = vec![Complex::new(F(re), F(im)); count];
+                        let (result, accuracy, stable, reason) = check(
+                            &settings,
+                            &results,
+                            &level,
+                            Complex::new_zero(),
+                            F(1.0),
+                            is_final_level,
+                            false,
+                        );
+                        assert_eq!(result, results[0]);
+                        assert!(stable);
+                        assert_eq!(reason, None);
+                        if count == 1 {
+                            assert!(accuracy.is_none());
+                            assert_eq!(
+                                StabilityStatus::from_sample_count(count, stable),
+                                StabilityStatus::Unknown
+                            );
+                        } else {
+                            assert_eq!(accuracy, Some(F(0.0)));
+                        }
+                    }
+                }
+
+                let results = [Complex::new(F(2.0), F(3.0)), Complex::new(F(4.0), F(6.0))];
+                let (result, accuracy, stable, reason) = check(
+                    &settings,
+                    &results,
+                    &level,
+                    Complex::new_zero(),
+                    F(1.0),
+                    is_final_level,
+                    false,
+                );
+                assert!(!stable);
+                assert!(accuracy.unwrap() > F(level.required_precision_for_re));
+                assert_eq!(reason, Some(StabilityFailureReason::ErrorThreshold));
+                assert_eq!(
+                    result,
+                    if check_on_norm {
+                        results[0]
+                    } else {
+                        Complex::new(F(3.0), F(4.5))
+                    }
+                );
+            }
+        }
+    }
 
     #[test]
     fn precise_event_normalization_preserves_prior_factors_and_partial_weights() {
