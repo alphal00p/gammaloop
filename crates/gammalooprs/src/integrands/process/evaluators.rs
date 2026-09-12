@@ -3333,6 +3333,9 @@ impl GenericEvaluatorFloat for ArbPrec {
 }
 
 #[cfg(test)]
+mod hyperbolic_tests;
+
+#[cfg(test)]
 mod tests {
     use std::io::Cursor;
 
