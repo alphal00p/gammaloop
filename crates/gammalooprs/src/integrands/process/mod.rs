@@ -49,6 +49,7 @@ pub mod cross_section;
 pub mod gammaloop_sample;
 pub mod ir;
 pub mod sampling_maps;
+pub mod sampling_partition;
 pub mod sampling_reference;
 pub mod sampling_selection;
 use crate::{
@@ -72,6 +73,10 @@ pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAn
 pub use sampling_maps::{
     SamplingJacobian, SamplingMapContract, SamplingMapDefinition, SamplingMapKernel,
     SamplingMapPoint, SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
+};
+pub use sampling_partition::{
+    SamplingChannelScore, SamplingPartition, SamplingPartitionMode, SamplingScoreEvaluator,
+    SamplingScoreFunction,
 };
 pub use sampling_reference::{
     GaussianReferenceFunction, ReferenceSampleEvaluation, ReferenceSamplingReport,
