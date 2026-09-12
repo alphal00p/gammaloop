@@ -92,18 +92,24 @@ For a projected local-4D UV-to-CFF mismatch, reconstruction must be certified
 *before* investigating CFF recursion, contour signs, or residue aggregation.
 This is a mandatory correctness boundary, not an optional diagnostic:
 
-1. Retain the completed post-Taylor numerator in the compatible hard sub-LMB,
-   including the original edge owner on every pre-existing numerator factor.
-2. Construct the factorized UV skeleton only from those original owners. A UV
-   derivative may add serial copies of its own physical line; do not infer a
-   graph from denominator incidence or use momentum conservation across lines
-   to reassign numerator factors.
-3. Keep every original numerator factor on its retained owner. New hard energy
-   factors created by differentiating a denominator may be dispatched only
-   among the derivative-created serial copies of that same line. New soft
-   factors retain explicit denominator-derived provenance until outer-CFF
-   assembly; only those factors may use an exactly certified off-shell routing
-   through the active cograph edges, including every fixed external shift.
+1. Retain raw post-Taylor sectors in the compatible hard sub-LMB, including
+   original edge owners and provenance roles for subsequent outer Taylor
+   operations. Build canonical algebra only in a separate projection view.
+2. Resolve denominator classes by exact signed routing, mass, full polynomial
+   (including its prescription), and component domain. Keep physical source
+   occurrences as a separate incidence witness. Construct the UV skeleton from
+   that witness; derivatives may add serial copies of retained lines. Contract
+   equivalent channels only with a certified serial-path or pure-cycle
+   incidence. Nonadjacent equivalent channels retain their original incidence;
+   do not infer a graph from a signature matrix.
+3. Completed hard provenance roles zero and one may transfer to a certified
+   denominator class and use occurrences of that class, including original
+   numerator factors. Preserve the literal odd-momentum sign independently of
+   denominator evenness. A hard carrier without an unambiguous surviving pole
+   class stays a fixed affine carrier; physical-source and soft provenance keep
+   their existing meanings. New soft factors retain explicit provenance until
+   outer-CFF assembly; only those factors may use an exactly certified off-shell
+   routing through active cograph edges, including every fixed external shift.
 4. Apply the exact immutable production assignment plan, including the signed
    hard/raw/parsed conversion `H = h R`, `P = r R`, and `H^0 = h r P^0`.
 5. Substitute the source post-Taylor numerator and the reconstructed UV-EMR

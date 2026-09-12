@@ -2107,6 +2107,150 @@ impl GraphUvRichInspectCase {
         Ok(cli)
     }
 
+    fn run_graph_local_uv_route_comparison(
+        &self,
+        graph: &str,
+        source: &str,
+        integrand_name: &str,
+        point: &[f64],
+    ) -> Result<()> {
+        use gammalooprs::{integrands::process::ProcessIntegrand, uv::UltravioletGraph};
+        use linnet::half_edge::subgraph::SubSetLike;
+        use std::collections::BTreeSet;
+
+        let points = [
+            point.to_vec(),
+            point.iter().map(|value| 100.0 * value).collect(),
+            [0.23, 0.31, -0.17, 0.41, -0.29, 0.13, -0.37, 0.47, 0.59][..point.len()].to_vec(),
+        ];
+        let mut results = Vec::new();
+        for (route, explicit, direct) in [
+            ("localized_3d", false, false),
+            ("erased_3d", true, false),
+            ("direct_4d", true, true),
+        ] {
+            let test_name = format!("aa_aa_{graph}_local_uv_routes_{route}");
+            // The run card prepares the physical model and kinematics. Import
+            // directly: its existing generate blocks enable integrated CTs.
+            let mut cli = get_test_cli(
+                Some(self.run_card.into()),
+                get_tests_workspace_path().join(&test_name),
+                Some(test_name),
+                true,
+            )?;
+            let generation = &mut cli.cli_settings.global.generation;
+            generation.explicit_orientation_sum_only = explicit;
+            generation.uv.local_uv_cts_from_expanded_4d_integrands = direct;
+            generation.uv.generate_integrated = false;
+            generation.uv.orchestrator = UVOrchestrator::Compare;
+            generation.threshold_subtraction.enable_thresholds = false;
+            generation
+                .threshold_subtraction
+                .check_esurface_at_generation = false;
+            let process = format!("aa_aa_{integrand_name}_{graph}_{route}");
+            cli.run_command(&format!(
+                "import graphs ./{source} -p {process} -i {integrand_name} -o"
+            ))?;
+            let started = Instant::now();
+            cli.run_command(&format!(
+                "generate existing -p {process} -i {integrand_name}"
+            ))?;
+            println!(
+                "physical {graph} {route}: generation {:?}",
+                started.elapsed()
+            );
+
+            let process_id = cli
+                .state
+                .resolve_process_ref(Some(&ProcessRef::Unqualified(process.clone())))?;
+            let integrand = cli
+                .state
+                .process_list
+                .get_integrand(process_id, integrand_name)?
+                .require_generated()?;
+            assert_eq!(integrand.get_n_dim(), point.len());
+            if graph == "GL262" {
+                let ProcessIntegrand::Amplitude(amplitude) = integrand else {
+                    panic!("GL262 must be an amplitude")
+                };
+                let graph = &amplitude.data.graph_terms[0].graph;
+                let regions = graph
+                    .spinneys(&graph.full_filter())
+                    .into_iter()
+                    .filter(|region| !region.is_empty())
+                    .map(|region| {
+                        let mut edges = graph
+                            .iter_edges_of(&region)
+                            .map(|(_, edge, _)| usize::from(edge))
+                            .collect::<Vec<_>>();
+                        edges.sort_unstable();
+                        (edges, graph.n_loops(&region), graph.local_dod(&region))
+                    })
+                    .collect::<BTreeSet<_>>();
+                // The strict gluon-self-energy / top-self-energy / full-graph
+                // chain gives eight conventional forests, including empty.
+                assert_eq!(
+                    regions,
+                    BTreeSet::from([
+                        (vec![9, 10], 1, 2),
+                        (vec![4, 5, 7, 9, 10], 2, 1),
+                        ((4..14).collect(), 3, 0),
+                    ]),
+                    "GL262 must retain the physical DOD-2 gluon self-energy chain",
+                );
+            }
+
+            let evaluations = points
+                .iter()
+                .map(|point| {
+                    evaluate_summed_momentum_sample(
+                        &mut cli,
+                        &process,
+                        integrand_name,
+                        point,
+                        1.0e-12,
+                    )
+                })
+                .collect::<Result<Vec<_>>>()?;
+            for evaluation in &evaluations {
+                assert!(
+                    evaluation.value.re.is_finite()
+                        && evaluation.value.im.is_finite()
+                        && evaluation.value.re.hypot(evaluation.value.im) > 0.0,
+                    "{graph} {route} must evaluate to a finite, nonzero value",
+                );
+            }
+            results.push((route, evaluations));
+            clean_test(&cli.cli_settings.state.folder);
+        }
+
+        let reference = &results[0].1;
+        for (route, evaluations) in &results[1..] {
+            for ((point, expected), actual) in points.iter().zip(reference).zip(evaluations) {
+                let delta = (actual.value.re - expected.value.re)
+                    .hypot(actual.value.im - expected.value.im);
+                let scale = actual
+                    .value
+                    .re
+                    .hypot(actual.value.im)
+                    .max(expected.value.re.hypot(expected.value.im));
+                let tolerance = 1_000.0
+                    * actual
+                        .relative_accuracy
+                        .max(expected.relative_accuracy)
+                        .max(1.0e-12);
+                assert!(
+                    delta / scale <= tolerance,
+                    "{graph} {route} differs from localized 3D at {point:?}: actual={:?}, reference={:?}, relative delta={:.3e}, tolerance={tolerance:.3e}",
+                    actual.value,
+                    expected.value,
+                    delta / scale,
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn momentum_point(&self, cli: &CLIState, process: &str) -> Result<Vec<f64>> {
         let process_id = cli
             .state
@@ -2342,6 +2486,39 @@ fn assert_json_approx_eq(actual: &Value, expected: &Value, path: &str) {
 
 mod slow {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn aa_aa_2l_gl00_matches_across_local_uv_routes() -> Result<()> {
+        AA_AA_2L_UV_RICH_INSPECT.run_graph_local_uv_route_comparison(
+            "GL00",
+            "examples/cli/aa_aa/2L/graphs/GL00.dot",
+            "2L",
+            &[0.11, -0.07, 0.19, -0.13, 0.05, 0.29],
+        )
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn aa_aa_2l_gl01_matches_across_local_uv_routes() -> Result<()> {
+        AA_AA_2L_UV_RICH_INSPECT.run_graph_local_uv_route_comparison(
+            "GL01",
+            "examples/cli/aa_aa/2L/graphs/GL01.dot",
+            "2L",
+            &[0.11, -0.07, 0.19, -0.13, 0.05, 0.29],
+        )
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn aa_aa_3l_gl262_matches_across_local_uv_routes() -> Result<()> {
+        AA_AA_2L_UV_RICH_INSPECT.run_graph_local_uv_route_comparison(
+            "GL262",
+            "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL262.dot",
+            "3L",
+            &[0.11, -0.07, 0.19, -0.13, 0.05, 0.29, 0.17, -0.23, 0.31],
+        )
+    }
 
     #[test]
     #[serial_test::serial]

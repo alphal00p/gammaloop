@@ -51,7 +51,7 @@ use crate::{
             integrated::{Integrated, IntegratedCts},
             local_3d::{Local3DCts, Localizer},
             local_4d::{self, Full4dCts, Local4dCts},
-            projected_4d::Projected4dApproximation,
+            projected_4d::{Local4dProjectionContext, Projected4dApproximation},
         },
         export::UVForestNodeExpression,
         forest::ParametricIntegrands,
@@ -1074,6 +1074,7 @@ impl Forests {
         cutset: &CutSet,
         localizer: Localizer<'_>,
         settings: &UVgenerationSettings,
+        projection_context: &mut Local4dProjectionContext,
     ) -> Result<CutComputation> {
         let operation = &self.graph[node];
         let forest_node = ForestNode {
@@ -1090,7 +1091,7 @@ impl Forests {
             let local_4d = self.compute_store.require(operation)?.local_4d(operation)?;
             Local3DCts::Projected4d(
                 Projected4dApproximation::new(localizer, graph, settings)
-                    .project_local_4d(local_4d)?,
+                    .project_local_4d(local_4d, projection_context)?,
             )
         } else if self.graph.is_disjoint_union(node) {
             // Both direct variants replay the Taylor operators on the complete
@@ -1277,6 +1278,7 @@ impl Forests {
         settings: &UVgenerationSettings,
     ) -> Result<()> {
         self.integrate(graph, vakint, settings)?;
+        let mut projection_context = Local4dProjectionContext::default();
 
         for (compatible_subset, cutset) in self.cuts.clone() {
             let localizer = Localizer::new(&cutset, orientation);
@@ -1290,8 +1292,14 @@ impl Forests {
                 // Direct local-3D nodes Taylor-expand the complete post-energy-integration CFF.
                 // Expanded-4D nodes instead project their typed local coefficients and attach
                 // the outer CFF only during final assembly.
-                let cut_computation =
-                    self.local_3d_for_node(nidx, graph, &cutset, localizer, settings)?;
+                let cut_computation = self.local_3d_for_node(
+                    nidx,
+                    graph,
+                    &cutset,
+                    localizer,
+                    settings,
+                    &mut projection_context,
+                )?;
                 self.compute_store
                     .entry(operation)
                     .or_default()
@@ -1826,8 +1834,14 @@ mod tests {
                 false,
             ),
         );
-        let seed =
-            forests.local_3d_for_node(forests.root, &mut graph, &cutset, localizer, &settings)?;
+        let seed = forests.local_3d_for_node(
+            forests.root,
+            &mut graph,
+            &cutset,
+            localizer,
+            &settings,
+            &mut Local4dProjectionContext::default(),
+        )?;
         let root_store_marker = symbolica::symbol!("root_store_marker");
         let frontier_store_marker = symbolica::symbol!("frontier_store_marker");
         // Mark cached local terms so the union result proves that replay starts from typed roots.
@@ -1858,6 +1872,7 @@ mod tests {
             &cutset,
             localizer,
             &settings,
+            &mut Local4dProjectionContext::default(),
         )?;
         assert!(
             root_result
@@ -1877,6 +1892,7 @@ mod tests {
             &cutset,
             localizer,
             &settings,
+            &mut Local4dProjectionContext::default(),
         )?;
         let replay_states = forests.union_replay_states(dependent_disconnected)?;
         let state = replay_states

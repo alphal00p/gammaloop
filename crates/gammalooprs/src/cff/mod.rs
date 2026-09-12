@@ -1,4 +1,10 @@
-use std::{collections::BTreeMap, fmt::Display, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Display,
+    hash::{Hash, Hasher},
+    sync::Arc,
+    time::Instant,
+};
 
 use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::{
@@ -6,7 +12,7 @@ use linnet::half_edge::{
     subgraph::{SubGraphLike, SubSetLike, SubSetOps},
 };
 use serde::{Deserialize, Serialize};
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
 
 use crate::{
     cff::{
@@ -21,13 +27,18 @@ use crate::{
     },
     graph::{
         ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator, Graph, GraphThreeDSource,
-        LoopMomentumBasis, cuts::CutSet, get_cff_inverse_energy_product_impl,
-        three_d_source::ExactSourceEnergyMapper,
+        LoopMomentumBasis,
+        cuts::CutSet,
+        get_cff_inverse_energy_product_impl,
+        three_d_source::{ExactSourceEnergyMapper, ExactSourceMappingContext},
     },
-    numerator::energy_degree::EnergyPowerAssignmentPlan,
+    numerator::energy_degree::{EnergyPowerAssignmentPlan, PlannedEnergyExpression},
     settings::global::OrientationPattern,
     utils::GS,
-    uv::Integrands,
+    uv::{
+        Integrands,
+        approx::{local_4d::CanonicalUvDenominatorClass, projected_4d::Local4dProjectionContext},
+    },
 };
 use color_eyre::Result;
 use three_dimensional_reps::{
@@ -59,9 +70,361 @@ pub struct CFFTerm {
     exact_source_numerator: Option<Arc<PlannedExactSourceNumerator>>,
 }
 
-struct PlannedExactSourceNumerator {
-    mapper: ExactSourceEnergyMapper,
+#[derive(PartialEq, Eq, Hash)]
+struct ExactNumeratorTemplateBinding {
+    context: ExactSourceMappingContext,
     assignment: EnergyPowerAssignmentPlan,
+}
+
+/// Hash the complete binding once. Equality still checks the exact structure;
+/// neither a hash collision nor a cache eviction changes the chosen assignment.
+#[derive(Clone)]
+pub(crate) struct ExactNumeratorTemplateKey {
+    binding: Arc<ExactNumeratorTemplateBinding>,
+    hash: u64,
+}
+
+impl PartialEq for ExactNumeratorTemplateKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash && self.binding == other.binding
+    }
+}
+
+impl Eq for ExactNumeratorTemplateKey {}
+
+impl Hash for ExactNumeratorTemplateKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.hash.hash(state);
+    }
+}
+
+/// A small allocation binds memo rows to one immutable prepared template.
+/// Keeping it alive prevents address reuse without retaining an evicted AST.
+#[derive(Clone)]
+struct ExactNumeratorTemplateIdentity(Arc<()>);
+
+impl PartialEq for ExactNumeratorTemplateIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for ExactNumeratorTemplateIdentity {}
+
+impl Hash for ExactNumeratorTemplateIdentity {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Arc::as_ptr(&self.0).hash(state);
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) struct ExactNumeratorRowKey {
+    template: ExactNumeratorTemplateIdentity,
+    node: usize,
+    samples: Vec<Atom>,
+}
+
+pub(crate) struct PlannedExactSourceNumerator {
+    mapper: ExactSourceEnergyMapper,
+    binding: ExactNumeratorTemplateKey,
+    identity: ExactNumeratorTemplateIdentity,
+    template: PlannedEnergyExpression,
+    parameters: Vec<Atom>,
+    dependencies: Vec<Vec<usize>>,
+    node_ends: Vec<usize>,
+    constants: Vec<Option<Atom>>,
+}
+
+impl PlannedExactSourceNumerator {
+    fn prepare(
+        mapper: ExactSourceEnergyMapper,
+        assignment: EnergyPowerAssignmentPlan,
+        context: Option<&mut Local4dProjectionContext>,
+    ) -> Result<Arc<Self>> {
+        let started = Instant::now();
+        let binding = ExactNumeratorTemplateBinding {
+            context: mapper.mapping_context()?,
+            assignment,
+        };
+        let mut hash = std::hash::DefaultHasher::new();
+        binding.hash(&mut hash);
+        let key = ExactNumeratorTemplateKey {
+            binding: Arc::new(binding),
+            hash: hash.finish(),
+        };
+        let mut context = context;
+        if let Some(context) = context.as_deref_mut()
+            && let Some(template) = context.numerator_templates.get(&key)
+        {
+            crate::debug_tags!(#generation, #uv, #local, #four_d, #profile;
+                stage = "numerator_template",
+                cache_hit = true,
+                elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                "Reused immutable exact-source numerator template"
+            );
+            return Ok(Arc::clone(template));
+        }
+        let (template, parameters) = mapper.prepare_numerator(&key.binding.assignment)?;
+        let mut prepared = Self {
+            mapper,
+            binding: key.clone(),
+            identity: ExactNumeratorTemplateIdentity(Arc::new(())),
+            template,
+            parameters,
+            dependencies: Vec::new(),
+            node_ends: Vec::new(),
+            constants: Vec::new(),
+        };
+        Self::parameter_dependencies(
+            &prepared.template,
+            &prepared.parameters,
+            &mut prepared.dependencies,
+            &mut prepared.node_ends,
+            &mut prepared.constants,
+        );
+        let bytes = prepared.accounted_bytes();
+        let prepared = Arc::new(prepared);
+        if let Some(context) = context {
+            context.numerator_template_builds += 1;
+            context
+                .numerator_templates
+                .insert(key, Arc::clone(&prepared), bytes);
+        }
+        crate::debug_tags!(#generation, #uv, #local, #four_d, #profile;
+            stage = "numerator_template",
+            cache_hit = false,
+            template_nodes = prepared.dependencies.len(),
+            parameters = prepared.parameters.len(),
+            accounted_bytes = bytes,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Prepared immutable exact-source numerator template"
+        );
+        Ok(prepared)
+    }
+
+    fn parameter_dependencies(
+        expression: &PlannedEnergyExpression,
+        parameters: &[Atom],
+        nodes: &mut Vec<Vec<usize>>,
+        node_ends: &mut Vec<usize>,
+        constants: &mut Vec<Option<Atom>>,
+    ) -> usize {
+        let node = nodes.len();
+        nodes.push(Vec::new());
+        node_ends.push(0);
+        constants.push(None);
+        let (dependencies, constant) = match expression {
+            PlannedEnergyExpression::Factor { expression, .. } => {
+                let mut used = BTreeSet::new();
+                let _ = expression.replace_map(|view, _, _| {
+                    if let Some(index) = parameters
+                        .iter()
+                        .position(|parameter| parameter.as_view() == view)
+                    {
+                        used.insert(index);
+                    }
+                });
+                let constant = used.is_empty().then(|| expression.clone());
+                (used, constant)
+            }
+            PlannedEnergyExpression::Add(children)
+            | PlannedEnergyExpression::Mul(children)
+            | PlannedEnergyExpression::MultilinearFunction {
+                arguments: children,
+                ..
+            } => {
+                let children = children
+                    .iter()
+                    .map(|child| {
+                        Self::parameter_dependencies(child, parameters, nodes, node_ends, constants)
+                    })
+                    .collect::<Vec<_>>();
+                let dependencies = children
+                    .iter()
+                    .flat_map(|child| nodes[*child].iter().copied())
+                    .collect::<BTreeSet<_>>();
+                let constant = dependencies.is_empty().then(|| match expression {
+                    PlannedEnergyExpression::Add(_) => {
+                        children.iter().fold(Atom::Zero, |sum, child| {
+                            sum + constants[*child].as_ref().unwrap()
+                        })
+                    }
+                    PlannedEnergyExpression::Mul(_) => {
+                        children.iter().fold(Atom::one(), |product, child| {
+                            product * constants[*child].as_ref().unwrap()
+                        })
+                    }
+                    PlannedEnergyExpression::MultilinearFunction { symbol, .. } => {
+                        let mut builder = FunctionBuilder::new(*symbol);
+                        for child in &children {
+                            builder =
+                                builder.add_arg(constants[*child].as_ref().unwrap().as_view());
+                        }
+                        builder.finish()
+                    }
+                    _ => unreachable!(),
+                });
+                (dependencies, constant)
+            }
+            PlannedEnergyExpression::Repeat { base, exponent } => {
+                let child =
+                    Self::parameter_dependencies(base, parameters, nodes, node_ends, constants);
+                (
+                    nodes[child].iter().copied().collect(),
+                    constants[child]
+                        .as_ref()
+                        .map(|constant| constant.pow(*exponent as u64)),
+                )
+            }
+        };
+        nodes[node] = dependencies.iter().copied().collect();
+        node_ends[node] = nodes.len();
+        constants[node] = constant;
+        node
+    }
+
+    fn accounted_bytes(&self) -> usize {
+        // The binding and the owned mapper both retain source coordinates and
+        // replacements. Arc key copies share the binding payload.
+        std::mem::size_of::<Self>()
+            + 128
+            + 2 * std::mem::size_of::<ExactNumeratorTemplateKey>()
+            + 2 * self.binding.binding.context.accounted_bytes()
+            + self.binding.binding.assignment.accounted_bytes()
+            + self.template.accounted_bytes()
+            + self.parameters.capacity() * std::mem::size_of::<Atom>()
+            + self
+                .parameters
+                .iter()
+                .map(|atom| atom.as_view().get_byte_size())
+                .sum::<usize>()
+            + self.dependencies.capacity() * std::mem::size_of::<Vec<usize>>()
+            + self
+                .dependencies
+                .iter()
+                .map(|indices| indices.capacity() * std::mem::size_of::<usize>())
+                .sum::<usize>()
+            + self.node_ends.capacity() * std::mem::size_of::<usize>()
+            + self.constants.capacity() * std::mem::size_of::<Option<Atom>>()
+            + self
+                .constants
+                .iter()
+                .flatten()
+                .map(|atom| atom.as_view().get_byte_size())
+                .sum::<usize>()
+    }
+
+    fn sample(
+        &self,
+        orientation: &OrientationExpression,
+        context: Option<&mut Local4dProjectionContext>,
+    ) -> Result<Atom> {
+        let started = Instant::now();
+        let required = &self.dependencies[0];
+        let values = self.mapper.sample_energies(
+            &orientation.loop_energy_map,
+            &orientation.edge_energy_map,
+            required,
+        )?;
+        let samples = required
+            .iter()
+            .copied()
+            .zip(values)
+            .collect::<BTreeMap<_, _>>();
+        let mut cache = context.map(|context| &mut context.numerator_rows);
+        let mapped = self.map_template(&self.template, &samples, &mut 0, &mut cache);
+        let mapped = self.mapper.set_inactive_loop_energies_to_zero(mapped);
+        crate::debug_tags!(#generation, #uv, #local, #four_d, #profile;
+            stage = "numerator_row_mapping",
+            required_energies = required.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Mapped one exact-source residue sample"
+        );
+        Ok(mapped)
+    }
+
+    fn map_template(
+        &self,
+        expression: &PlannedEnergyExpression,
+        samples: &BTreeMap<usize, Atom>,
+        next_node: &mut usize,
+        cache: &mut Option<&mut generation::GenerationCache<ExactNumeratorRowKey, Atom>>,
+    ) -> Atom {
+        let node = *next_node;
+        *next_node += 1;
+        if let Some(constant) = &self.constants[node] {
+            *next_node = self.node_ends[node];
+            return constant.clone();
+        }
+        let key = cache.as_ref().map(|_| ExactNumeratorRowKey {
+            template: self.identity.clone(),
+            node,
+            samples: self.dependencies[node]
+                .iter()
+                .map(|index| samples[index].clone())
+                .collect(),
+        });
+        if let Some(cache) = cache.as_deref_mut()
+            && let Some(value) = cache.get(key.as_ref().unwrap())
+        {
+            *next_node = self.node_ends[node];
+            return value.clone();
+        }
+        let mapped = match expression {
+            PlannedEnergyExpression::Factor { expression, .. } => {
+                let dependencies = &self.dependencies[node];
+                if dependencies.is_empty() {
+                    return expression.clone();
+                }
+                expression.replace_map(|view, _, output| {
+                    for index in dependencies {
+                        if self.parameters[*index].as_view() == view {
+                            **output = samples[index].clone();
+                            return;
+                        }
+                    }
+                })
+            }
+            PlannedEnergyExpression::Add(children) => {
+                children.iter().fold(Atom::Zero, |sum, child| {
+                    sum + self.map_template(child, samples, next_node, cache)
+                })
+            }
+            PlannedEnergyExpression::Mul(children) => {
+                children.iter().fold(Atom::one(), |product, child| {
+                    product * self.map_template(child, samples, next_node, cache)
+                })
+            }
+            PlannedEnergyExpression::MultilinearFunction { symbol, arguments } => {
+                let mut builder = FunctionBuilder::new(*symbol);
+                for child in arguments {
+                    builder = builder.add_arg(self.map_template(child, samples, next_node, cache));
+                }
+                builder.finish()
+            }
+            PlannedEnergyExpression::Repeat { base, exponent } => self
+                .map_template(base, samples, next_node, cache)
+                .pow(*exponent as u64),
+        };
+        if let Some(cache) = cache.as_deref_mut() {
+            let key = key.unwrap();
+            let bytes = 2
+                * (std::mem::size_of::<ExactNumeratorRowKey>()
+                    + key.samples.capacity() * std::mem::size_of::<Atom>()
+                    + key
+                        .samples
+                        .iter()
+                        .map(|atom| atom.as_view().get_byte_size())
+                        .sum::<usize>())
+                + std::mem::size_of::<Atom>()
+                + mapped.as_view().get_byte_size()
+                + 96;
+            if cache.can_retain(bytes) {
+                cache.insert(key, mapped.clone(), bytes);
+            }
+        }
+        mapped
+    }
 }
 
 impl CFFTerm {
@@ -102,16 +465,13 @@ impl CFFTerm {
     pub(crate) fn map_exact_source_numerator(
         &self,
         orientation: &OrientationExpression,
+        context: Option<&mut Local4dProjectionContext>,
     ) -> Result<Atom> {
         let planned = self
             .exact_source_numerator
             .as_ref()
             .ok_or_else(|| eyre::eyre!("ordinary CFF term has no exact-source numerator plan"))?;
-        planned.mapper.map_planned_numerator(
-            &orientation.loop_energy_map,
-            &orientation.edge_energy_map,
-            &planned.assignment,
-        )
+        planned.sample(orientation, context)
     }
 
     pub fn expression_with_selectors(&self) -> Atom {
@@ -491,7 +851,7 @@ impl Graph {
         cutset: &CutSet,
         options: &Generate3DExpressionOptions,
         analysis_numerator: &Atom,
-        generation_cache: Option<&mut generation::ExactCffGenerationCache>,
+        context: Option<&mut Local4dProjectionContext>,
     ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
         self.cff_from_4d_denominators_in_uv_edges_and_boundaries(
             denominators,
@@ -500,7 +860,7 @@ impl Graph {
             cutset,
             options,
             analysis_numerator,
-            generation_cache,
+            context,
         )
     }
 
@@ -516,7 +876,7 @@ impl Graph {
         cutset: &CutSet,
         options: &Generate3DExpressionOptions,
         analysis_numerator: &Atom,
-        generation_cache: Option<&mut generation::ExactCffGenerationCache>,
+        context: Option<&mut Local4dProjectionContext>,
     ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
         self.cff_from_4d_denominators_in_uv_coordinates(
             denominators,
@@ -526,7 +886,8 @@ impl Graph {
             cutset,
             options,
             analysis_numerator,
-            generation_cache,
+            context,
+            &[],
         )
     }
 
@@ -544,7 +905,8 @@ impl Graph {
         cutset: &CutSet,
         options: &Generate3DExpressionOptions,
         analysis_numerator: &Atom,
-        generation_cache: Option<&mut generation::ExactCffGenerationCache>,
+        context: Option<&mut Local4dProjectionContext>,
+        classes: &[CanonicalUvDenominatorClass],
     ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
         self.cff_from_4d_denominators_in_uv_coordinates(
             denominators,
@@ -554,7 +916,8 @@ impl Graph {
             cutset,
             options,
             analysis_numerator,
-            generation_cache,
+            context,
+            classes,
         )
     }
 
@@ -568,7 +931,8 @@ impl Graph {
         cutset: &CutSet,
         options: &Generate3DExpressionOptions,
         analysis_numerator: &Atom,
-        generation_cache: Option<&mut generation::ExactCffGenerationCache>,
+        context: Option<&mut Local4dProjectionContext>,
+        classes: &[CanonicalUvDenominatorClass],
     ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
         let (
             generated,
@@ -582,6 +946,8 @@ impl Graph {
             physical_cut_support_edges,
             production_prefactor_bridge,
         ) = {
+            let mut context = context;
+            let source_started = Instant::now();
             let source = if let Some((sub_lmb, frame)) = coordinates {
                 GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
                     self,
@@ -599,6 +965,14 @@ impl Graph {
                     uv_boundary_hedges,
                 )?
             };
+            crate::debug_tags!(#generation, #uv, #local, #four_d, #profile;
+                stage = "source_reconstruction",
+                graph = %self.name,
+                denominator_occurrences = denominators.len(),
+                classes = classes.len(),
+                elapsed_ms = source_started.elapsed().as_secs_f64() * 1000.0,
+                "Reconstructed and certified exact denominator source incidence"
+            );
             let (
                 generated,
                 exact_source_energy_mapper,
@@ -608,7 +982,10 @@ impl Graph {
                 &source,
                 options,
                 analysis_numerator,
-                generation_cache,
+                context
+                    .as_deref_mut()
+                    .map(|context| &mut context.generation_cache),
+                classes,
             )?;
             let physical_surfaces = generated
                 .expression
@@ -625,10 +1002,11 @@ impl Graph {
                 generated,
                 physical_surfaces,
                 physical_energy_edges,
-                Arc::new(PlannedExactSourceNumerator {
-                    mapper: exact_source_energy_mapper,
-                    assignment: energy_assignment,
-                }),
+                PlannedExactSourceNumerator::prepare(
+                    exact_source_energy_mapper,
+                    energy_assignment,
+                    context,
+                )?,
                 source
                     .exact_inverse_energy_product()
                     .expect("exact 4D source has an occurrence-local energy product"),
@@ -971,6 +1349,106 @@ mod tests {
     use typed_index_collections::TiVec;
 
     #[test]
+    fn exact_numerator_templates_and_subtrees_are_retention_invariant() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_template_retention {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let denominators = [EdgeIndex(0), EdgeIndex(1)].map(|source_edge| FourDDenominator {
+            source_edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(source_edge))
+                .finish(),
+            mass_squared: Atom::one(),
+            full_expr: Atom::one(),
+        });
+        // A vertex-local polynomial exercises products, sums, and unequal
+        // subtree dependencies. This tests mapping, not a UV locality claim.
+        let q0 = GS.emr_mom(EdgeIndex(0), GS.cind(0));
+        let q1 = GS.emr_mom(EdgeIndex(1), GS.cind(0));
+        let numerator = (&q0 + Atom::num(3)) * (&q1 + Atom::num(2));
+        let cutset = CutSet::empty(graph.n_hedges());
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let mut context = Local4dProjectionContext::default();
+        let (cff, _) = graph.cff_from_4d_denominators_in_uv_edges(
+            &denominators,
+            [],
+            &cutset,
+            &options,
+            &numerator,
+            Some(&mut context),
+        )?;
+        let term = cff.terms.values().next().unwrap();
+        let prepared = term.exact_source_numerator.as_ref().unwrap();
+        assert!(!term.orientations.is_empty());
+        let direct = term
+            .orientations
+            .iter()
+            .map(|orientation| {
+                prepared
+                    .mapper
+                    .map_planned_numerator(
+                        &orientation.orientation.loop_energy_map,
+                        &orientation.orientation.edge_energy_map,
+                        &prepared.binding.binding.assignment,
+                    )
+                    .map(|atom| atom.collect_factors())
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        for phase in ["cold", "warm", "disabled", "evicted"] {
+            if phase == "disabled" {
+                context.numerator_templates = generation::GenerationCache::new(0, 0);
+                context.numerator_rows = generation::GenerationCache::new(0, 0);
+            } else if phase == "evicted" {
+                context.numerator_templates = generation::GenerationCache::new(48 * 1024 * 1024, 1);
+                context.numerator_rows = generation::GenerationCache::new(16 * 1024 * 1024, 1);
+            }
+            let template = PlannedExactSourceNumerator::prepare(
+                prepared.mapper.clone(),
+                prepared.binding.binding.assignment.clone(),
+                Some(&mut context),
+            )?;
+            if phase == "cold" || phase == "warm" {
+                assert!(Arc::ptr_eq(prepared, &template));
+                assert_eq!(context.numerator_template_builds, 1);
+            }
+            if phase == "evicted" {
+                // A distinct complete binding displaces the first template;
+                // its live row samples must remain tied to their original AST.
+                let other = graph.cff_from_4d_denominators_in_uv_edges(
+                    &denominators,
+                    [],
+                    &cutset,
+                    &options,
+                    &(&q0 + Atom::one()),
+                    Some(&mut context),
+                )?;
+                assert!(!other.0.terms.is_empty());
+                assert_eq!(context.numerator_templates.evictions, 1);
+            }
+            for (orientation, expected) in term.orientations.iter().zip(&direct) {
+                let mapped = template.sample(&orientation.orientation, Some(&mut context))?;
+                assert_eq!(mapped.collect_factors(), *expected, "{phase}");
+            }
+            if phase == "warm" {
+                assert!(context.numerator_rows.hits > 0);
+            } else if phase == "disabled" {
+                assert_eq!(context.numerator_templates.len(), 0);
+                assert_eq!(context.numerator_rows.len(), 0);
+            } else if phase == "evicted" {
+                assert!(context.numerator_rows.evictions > 0);
+                assert_eq!(context.numerator_templates.len(), 1);
+                assert!(context.numerator_rows.len() <= 1);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn cff_term_selects_duplicate_physical_orientations_by_production_map_key() {
         let orientation = || OrientationExpression {
             data: OrientationData::new(EdgeVec::from_iter([Orientation::Default])),
@@ -1175,6 +1653,7 @@ mod tests {
             &options,
             &Atom::one(),
             None,
+            &[],
         )?;
         let exact_term = exact
             .terms
@@ -1185,7 +1664,7 @@ mod tests {
             |sum, orientation| -> Result<Atom> {
                 Ok(sum
                     + &orientation.expression
-                        * exact_term.map_exact_source_numerator(&orientation.orientation)?)
+                        * exact_term.map_exact_source_numerator(&orientation.orientation, None)?)
             },
         )? * Atom::num(exact.production_prefactor_factor());
 
@@ -1318,6 +1797,7 @@ mod tests {
                 &options,
                 &analysis_numerator,
                 None,
+                &[],
             )?;
             assert_eq!(report.physical_parent_bounds, vec![(1, 1)]);
             assert_eq!(
@@ -1367,6 +1847,7 @@ mod tests {
             &options,
             &Atom::one(),
             None,
+            &[],
         )?;
         Ok(())
     }
@@ -1433,6 +1914,7 @@ mod tests {
                     &options,
                     &Atom::one(),
                     None,
+                    &[],
                 )?;
                 child
                     .expression
@@ -1546,7 +2028,7 @@ mod tests {
             .iter()
             .map(|orientation| {
                 Ok(orientation.expression.clone()
-                    * exact_term.map_exact_source_numerator(&orientation.orientation)?)
+                    * exact_term.map_exact_source_numerator(&orientation.orientation, None)?)
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()
@@ -2083,7 +2565,7 @@ mod tests {
                 .flat_map(|term| {
                     term.orientations.iter().map(|orientation| {
                         Ok(orientation.expression.clone()
-                            * term.map_exact_source_numerator(&orientation.orientation)?
+                            * term.map_exact_source_numerator(&orientation.orientation, None)?
                             * &prefactor)
                     })
                 })
@@ -2497,7 +2979,8 @@ mod tests {
                 .iter()
                 .map(|orientation| {
                     Ok(orientation.expression.clone()
-                        * powered_term.map_exact_source_numerator(&orientation.orientation)?)
+                        * powered_term
+                            .map_exact_source_numerator(&orientation.orientation, None)?)
                 })
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
@@ -2512,7 +2995,7 @@ mod tests {
                 .iter()
                 .map(|orientation| {
                     Ok(orientation.expression.clone()
-                        * lower_term.map_exact_source_numerator(&orientation.orientation)?)
+                        * lower_term.map_exact_source_numerator(&orientation.orientation, None)?)
                 })
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
@@ -2693,7 +3176,7 @@ mod tests {
                 .iter()
                 .map(|orientation| {
                     Ok(orientation.expression.clone()
-                        * exact_term.map_exact_source_numerator(&orientation.orientation)?)
+                        * exact_term.map_exact_source_numerator(&orientation.orientation, None)?)
                 })
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
@@ -2907,7 +3390,7 @@ mod tests {
                         let scaled_kernel =
                             (&orientation.expression * &common_energy_denominator).together();
                         Ok(scaled_kernel
-                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                            * term.map_exact_source_numerator(&orientation.orientation, None)?)
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -2942,7 +3425,7 @@ mod tests {
                         let scaled_kernel =
                             (&orientation.expression * &common_energy_denominator).together();
                         Ok(scaled_kernel
-                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                            * term.map_exact_source_numerator(&orientation.orientation, None)?)
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -2994,7 +3477,7 @@ mod tests {
                         let scaled_kernel =
                             (&orientation.expression * &common_energy_denominator).together();
                         Ok(scaled_kernel
-                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                            * term.map_exact_source_numerator(&orientation.orientation, None)?)
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -3069,7 +3552,7 @@ mod tests {
                 .flat_map(|term| {
                     term.orientations.iter().map(|orientation| {
                         Ok(orientation.expression.clone()
-                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                            * term.map_exact_source_numerator(&orientation.orientation, None)?)
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -3097,7 +3580,7 @@ mod tests {
                 let planned = term.exact_source_numerator.as_ref().unwrap();
                 for orientation in &term.orientations {
                     assert_eq!(
-                        term.map_exact_source_numerator(&orientation.orientation)?,
+                        term.map_exact_source_numerator(&orientation.orientation, None)?,
                         planned.mapper.map_numerator(
                             &orientation.orientation.loop_energy_map,
                             &orientation.orientation.edge_energy_map,
@@ -3187,7 +3670,7 @@ mod tests {
                     for orientation in &term.orientations {
                         let carrier = fix(orientation.expression.clone()).together();
                         let numerator =
-                            fix(term.map_exact_source_numerator(&orientation.orientation)?)
+                            fix(term.map_exact_source_numerator(&orientation.orientation, None)?)
                                 .together();
                         // Preserve the production factorization at the symbolic oracle boundary.
                         // Multiplying before applying the shell point can leave equivalent positive
@@ -3322,7 +3805,8 @@ mod tests {
                     .iter()
                     .map(|orientation| {
                         Ok(orientation.expression.clone()
-                            * exact_term.map_exact_source_numerator(&orientation.orientation)?)
+                            * exact_term
+                                .map_exact_source_numerator(&orientation.orientation, None)?)
                     })
                     .collect::<Result<Vec<_>>>()?
                     .into_iter()
@@ -3413,7 +3897,7 @@ mod tests {
             .iter()
             .map(|orientation| {
                 Ok(orientation.expression.clone()
-                    * exact_term.map_exact_source_numerator(&orientation.orientation)?)
+                    * exact_term.map_exact_source_numerator(&orientation.orientation, None)?)
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()
@@ -3577,7 +4061,7 @@ mod tests {
                 .iter()
                 .map(|orientation| {
                     Ok(orientation.expression.clone()
-                        * exact_term.map_exact_source_numerator(&orientation.orientation)?)
+                        * exact_term.map_exact_source_numerator(&orientation.orientation, None)?)
                 })
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
@@ -3821,7 +4305,7 @@ mod tests {
                 .iter()
                 .map(|orientation| {
                     Ok(orientation.expression.clone()
-                        * term.map_exact_source_numerator(&orientation.orientation)?)
+                        * term.map_exact_source_numerator(&orientation.orientation, None)?)
                 })
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
@@ -4235,7 +4719,7 @@ mod tests {
                 .iter()
                 .map(|orientation| {
                     Ok(orientation.expression.clone()
-                        * term.map_exact_source_numerator(&orientation.orientation)?)
+                        * term.map_exact_source_numerator(&orientation.orientation, None)?)
                 })
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
@@ -4941,7 +5425,7 @@ mod tests {
                 .flat_map(|term| {
                     term.orientations.iter().map(|orientation| {
                         Ok(orientation.expression.clone()
-                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                            * term.map_exact_source_numerator(&orientation.orientation, None)?)
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -5055,6 +5539,7 @@ mod tests {
                 &options,
                 &Atom::one(),
                 None,
+                &[],
             )?;
 
             let ordinary_raw_sum = |cff: &CutCFF| {
@@ -5070,7 +5555,8 @@ mod tests {
                     .flat_map(|term| {
                         term.orientations.iter().map(|orientation| {
                             Ok(orientation.expression.clone()
-                                * term.map_exact_source_numerator(&orientation.orientation)?)
+                                * term
+                                    .map_exact_source_numerator(&orientation.orientation, None)?)
                         })
                     })
                     .collect::<Result<Vec<_>>>()?
@@ -5490,6 +5976,7 @@ mod tests {
             &options,
             &Atom::one(),
             None,
+            &[],
         )?;
         let exact_raw = |cff: &CutCFF| -> Result<Atom> {
             Ok(cff
@@ -5498,7 +5985,7 @@ mod tests {
                 .flat_map(|term| {
                     term.orientations.iter().map(|orientation| {
                         Ok(orientation.expression.clone()
-                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                            * term.map_exact_source_numerator(&orientation.orientation, None)?)
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -5767,7 +6254,7 @@ mod tests {
                 .flat_map(|term| {
                     term.orientations.iter().map(|orientation| {
                         Ok(orientation.expression.clone()
-                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                            * term.map_exact_source_numerator(&orientation.orientation, None)?)
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -6130,7 +6617,7 @@ mod tests {
             for term in cff.terms.values() {
                 for orientation in &term.orientations {
                     sum += &orientation.expression
-                        * term.map_exact_source_numerator(&orientation.orientation)?;
+                        * term.map_exact_source_numerator(&orientation.orientation, None)?;
                 }
             }
             Ok(sum.replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_)).with(W_.d_) * prefactor)

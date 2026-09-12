@@ -406,7 +406,10 @@ mod tests {
         )?;
         assert!(zero_local.atom().is_zero());
         let produced = Projected4dApproximation::new(localizer, &mut graph, &settings)
-            .project_local_4d(&zero_local)?;
+            .project_local_4d(
+                &zero_local,
+                &mut crate::uv::approx::projected_4d::Local4dProjectionContext::default(),
+            )?;
         assert_eq!(
             builder
                 .build_projected(&mut graph, &current, &produced, &IntegratedCts::root())?
@@ -420,7 +423,10 @@ mod tests {
             "a pruned local zero must preserve every allowed cut order without energy maps",
         );
         let missing_maps = Projected4dApproximation::new(localizer, &mut graph, &settings)
-            .project_local_4d(&Local4dCts::root())
+            .project_local_4d(
+                &Local4dCts::root(),
+                &mut crate::uv::approx::projected_4d::Local4dProjectionContext::default(),
+            )
             .expect_err("a nonzero local source still requires production maps");
         assert!(
             missing_maps

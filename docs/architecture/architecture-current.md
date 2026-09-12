@@ -124,12 +124,11 @@ that type until symbolic output converts it with `Atom::num`. Native rational
 serde/bincode support owns coefficient persistence; old Atom coefficient encodings
 are not a compatibility contract.
 
-All CFF power and capacity questions, including numerator and finite-pole
-powers of repeated occurrences, are expressed solely in physical EMR/source-edge
-energies. LMB coordinates describe momentum routing and are never consulted to
-identify, cap, or substitute an energy power. Production capacity analysis
-accepts physical `Q(edge, index)` atoms and rejects `K(loop, index)` until its
-producer normalizes it with physical edge provenance.
+CFF capacities belong to independently sampled denominator occurrences. Physical
+sources use their EMR/source-edge identities; completed UV sources additionally
+accept typed canonical denominator classes, which are distinct from `EdgeIndex`.
+LMB coordinates certify routing and fixed affine carriers. They do not authorize
+redistributing a physical source's energy powers or combining contours.
 
 Both direct local-3D modes first perform the complete loop-energy integration
 and build the complete/global CFF expression; the UV Taylor operators then act
@@ -142,75 +141,88 @@ applied independently to every keyed body and leaves that selector opaque.
 explicitly sums the same bodies. Neither direct mode reconstructs
 or projects completed local-4D Taylor structures.
 
-Only the projected local-4D route represents completed terms with raised
-propagators by source-backed occurrence graphs. The original `EdgeIndex`
-survives the Taylor operator in the typed denominator wrapper. Disjoint-set
-contraction of absent edges in the original graph then constructs the cograph
-and UV source minors, and every
-occurrence inherits the endpoints of its `source_edge` in the appropriate
-minor. Only repeated occurrences of that same source edge subdivide its
-incidence into a serial dotted chain. Exact momentum signatures are normalized
-up to sign to validate denominator equality and record repeated occurrences;
-they never infer endpoints or merge physical owners. The rank solve at this
-source-topology boundary selects a unique `+/-` routing sign modulo the opposite
-source domain on those
-already fixed endpoints. There is no incidence/Kirchhoff reconstruction and no
-external-balance synthesis. The raw `+/-Q` sign remains available to the
-numerator mapper, while a post-construction Graphica pass canonically relabels
-nodes and exact edges for deterministic cache keys.
+The projected local-4D route retains raw `Local4dCts`, recursive sectors and
+original provenance for subsequent outer Taylor operations. Its projection view
+normalizes completed hard roles zero and one into exact signed denominator
+classes. Each class includes the component domain, routing, mass and full
+polynomial; physical/soft provenance, frozen localizers and cograph bindings
+remain explicit. The class algebra contains powered denominators and a
+factorized numerator, with no CFF capacities or sampling conventions. This is
+the boundary a future LTD consumer can use directly.
 
-Projection prepares each genuinely outer additive Taylor term once, then
-compares at most three certified assignments by actual native source-map count.
-Generated expressions are reused only for equal canonical topology and
-identical per-occurrence capacity. Every term keeps its selected factorized
-assignment and matching generated payload.
-Equal physical energies do not authorize the cache to redistribute bounds
-between their distinct occurrences. Independent requests never contribute a
-shared capacity maximum, and no preliminary registration pass is needed.
-The real degree-one triangle regression retains the natural UV-owner
-multiplicities `(1,1,1)`, `(2,1,1)` and `(1,1,2)` as separate denominator
-topologies. Terms with the same denominators may share a factorized additive
-numerator; collecting a common denominator across different topologies would
-manufacture positive denominator factors and inflate the required CFF rank.
-Genuine positive typed denominator factors already present in a numerator
-remain supported, with their original ownership and CFF lower sectors intact.
-Non-vacuum exact sources retain pure-external boundaries as explicit
-source-crown hedges. Future on-shell two-point insertions such as `(m,0,0,0)`
-require an explicit fixed-boundary payload, not topology reconstruction.
-This exact-source reconstruction and bounded dispatch search is exclusive to
-the projected local-4D route; direct local-3D and LTD dispatch are unchanged.
-Original factors retain their own occurrences; newly denominator-derived hard
-factors may use only their line's serial copies. The descending rank envelope
-orders proposals, preferring `(4,2,2)` to `(4,3,1)` while the original quartic
-stays fixed. The hard search compares that baseline with at most two
-deterministic alternatives, each changing a single owner's assignment. New soft
-Taylor factors retain explicit crown provenance until outer assembly, where the
-completed child coefficient is multiplied by the untouched outer numerator.
-The soft search proposes at
-most three certified off-shell cograph routings, including every fixed external
-shift.
+Rational-shell extraction groups equal denominator multisets through sums,
+products and powers while leaving denominator-free numerator subtrees opaque.
+It adds powers and numerators, prunes exact zeros, and never constructs a global
+common denominator. Positive typed denominator factors remain indivisible
+numerator blocks with their complete polynomial and signed binding. Compatible
+sectors merge before reconstruction. After each independent component contour,
+states with equal remaining requests and bindings share numerators when their
+carriers agree, or share carriers when their numerators agree.
 
-Both searches select the smallest actual native generated source-map row count
-(`generated.expression.orientations.len()`), with proposal order breaking ties.
-This counts stored operational rows after the core's own emission/coalescing,
-including retained zero rows, before surface conversion and cut/host selection.
-It is not a degree-product estimate or a global union of keys across Taylor
-terms. Final selected host/map branches can have a different count. Existing
-rank/Pareto and basis restrictions define a bounded proposal class, so this is
-best-of-three selection, not a global optimum or a bound on generation time/RAM.
+Every algebra bucket retains one deterministic physical source witness. The
+existing source builder inherits original incidence, contracts omitted edges,
+and adds serial copies for raised occurrences. Only certified serial paths or
+pure cycles permit incidence contraction of equal channels. Nonadjacent equal
+channels can merge algebraically while retaining distinct edges in that witness.
+Exact signatures validate routing and its sign; they never infer endpoints.
+The source separately checks rank, measure, boundary attachments and contour.
+The class numerator is certified in one neutral momentum frame, independently
+of denominator routing, mass, multiplicity and domain. The signed occurrence
+lift obeys `H=hR`, `P=rR`, hence `H^0=hrP^0`.
 
-The hard cache admits full payloads only for winning keys and retains small
-count-only records for contenders under the same complete source/options/bounds
-key. The soft path has no persistent count memo: it holds an incumbent and
-challenger, drops the loser, then performs surface conversion, cut/hosting,
-reporting and numerator mapping only for the winner. Existing root-expression
-reuse bypasses this search instead of regenerating its established capacity.
-The chosen factorized expression and immutable plan supply both the generated
-capacity and numerator mapping. No numerator expansion, on-shell routing
-identity, or change of original ownership is involved.
-The full design, sign argument for `D(Q)=D(-Q)`, and concrete production fixtures
-are documented in
+Completed hard numerator factors may use any certified occurrence of their
+class, including occurrences inherited from different physical owners. Equal
+channels with unequal masses or prescriptions remain distinct pools. A hard
+carrier without a surviving class uses an exact fixed affine lift through
+retained base occurrences and external shifts; it creates no new pole family.
+Physical source ownership and soft crown provenance retain their restrictions.
+Non-vacuum exact sources retain pure-external boundaries as explicit source-crown
+hedges. Future on-shell insertions such as `(m,0,0,0)` require an explicit fixed
+boundary payload rather than inferred attachments.
+
+The immutable CFF assignment is constructed compositionally. Sums take the
+componentwise maximum, products and registered multilinear arguments add degrees,
+and positive integer powers retain compressed repetitions. Freely assignable
+leaves use cyclic offsets within each class; opaque blocks use deterministic
+least-loaded placement. An ordinary affine request admits one candidate. A
+nonlinear request admits at most three distinct valid candidates: baseline,
+packed unavoidable excess, then reversal of the best-scored placement (rotation
+only replaces a duplicate). Each challenger changes one class, with no Cartesian
+search across classes.
+
+Selection uses native `generated.expression.orientations.len()` before surface
+conversion and host selection. Maximum rank, descending rank envelope and stable
+candidate order break ties. The cache key preserves exact ordered capacities;
+identical physical energies do not authorize permuting loads. This bounded
+selection is not an exhaustive minimum. Tests retain small exhaustive oracles,
+including the 62-row full-vacuum source. All losing generation belongs to
+selection cost. Soft routing retains its existing bounded off-shell proposals,
+including every fixed external shift, and root-expression reuse retains its
+established capacities.
+
+One nonserialized `Local4dProjectionContext` spans each graph's complete UV
+computation in both forest orchestrators. Its deterministic LRU caches retain
+immutable numerator templates (48 MiB, 4,096 entries), winning CFF payloads and
+contender counts (64 MiB, 4,096 keys), and component-local mapped subtrees
+(16 MiB, 16,384 entries). Owned keys, containers and symbolic payloads are charged;
+oversized entries bypass retention. These are retained-payload limits, not RSS
+limits. Clearing or evicting entries changes computation cost only.
+
+`PlannedExactSourceNumerator` owns the assignment, prepared expression and exact
+signed mapping context behind an immutable `Arc`. A cache miss prepares the same
+generic template. Capture-free loop/occurrence parameters remain symbolic until
+a residue row arrives; each subtree records its exact dependencies. Mapping
+converts required energies once per row and memoizes only the relevant sample
+tuple. Constants are reused unchanged. Zero contact samples and the order of
+inactive-energy elimination are preserved. Mutable row caches live outside the
+immutable template and are cleared after each component wave. No graph-specific
+tables, global caches or serialized caches are involved.
+
+The full reconstruction invariant, sign argument for `D(Q)=D(-Q)`, and worked
+fixtures are documented in
 [`exact-powered-denominator-cff-lifting.md`](exact-powered-denominator-cff-lifting.md).
+The implementation and pending performance gates are tracked in the repository
+root `SPEED_UP_UV_CTS_FROM_4D.md`.
 
 The production numerator remains factorized. Degree analysis traverses its
 factors without expanding them, each UV step attaches only newly owned factors,

@@ -300,7 +300,7 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
             term.orientations.iter().map(|orientation| {
                 Ok::<_, eyre::Error>(
                     &orientation.expression
-                        * term.map_exact_source_numerator(&orientation.orientation)?,
+                        * term.map_exact_source_numerator(&orientation.orientation, None)?,
                 )
             })
         })

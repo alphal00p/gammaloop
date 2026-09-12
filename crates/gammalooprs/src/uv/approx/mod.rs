@@ -22,7 +22,7 @@ use crate::{
             integrated::{Integrated, IntegratedCts},
             local_3d::{Local3DCts, Localizer},
             local_4d::{Full4dCts, Local4dCts},
-            projected_4d::Projected4dApproximation,
+            projected_4d::{Local4dProjectionContext, Projected4dApproximation},
         },
         marker::UvMarker,
         settings::FinalIntegrandDimension,
@@ -491,12 +491,13 @@ impl Approximation {
         graph: &mut Graph,
         localizer: Localizer<'_>,
         settings: &UVgenerationSettings,
+        projection_context: &mut Local4dProjectionContext,
     ) -> Result<()> {
         let (local_3d, final_integrand) =
             if settings.local_uv_cts_from_expanded_4d_integrands {
                 let local_4d = self.local(graph)?;
                 let projected = Projected4dApproximation::new(localizer, graph, settings)
-                    .project_local_4d(local_4d)?;
+                    .project_local_4d(local_4d, projection_context)?;
                 let final_integrand = FinalIntegrandBuilder::new(localizer, settings)
                     .build_projected(graph, self, &projected, self.integrated(graph)?)?;
                 (Local3DCts::Projected4d(projected), final_integrand)
@@ -954,7 +955,13 @@ mod tests {
                 &root,
                 &settings,
             )?;
-            child.compute_3d(&root, &mut route_graph, localizer, &settings)?;
+            child.compute_3d(
+                &root,
+                &mut route_graph,
+                localizer,
+                &settings,
+                &mut Local4dProjectionContext::default(),
+            )?;
             // Both direct modes Taylor-expand the same complete CFF. Check
             // their selector contract at final assembly, after the opaque
             // residue-map keys have been materialized.
@@ -1068,7 +1075,13 @@ mod tests {
                 &root,
                 &settings,
             )?;
-            child.compute_3d(&root, &mut route_graph, localizer, &settings)?;
+            child.compute_3d(
+                &root,
+                &mut route_graph,
+                localizer,
+                &settings,
+                &mut Local4dProjectionContext::default(),
+            )?;
             let sectors = child.local_3d(&route_graph)?.direct()?.sectors()?;
             let mut hosts = sectors
                 .iter()
@@ -1308,7 +1321,13 @@ mod tests {
             } else {
                 Vec::new()
             };
-            child.compute_3d(&root, &mut route_graph, localizer, &settings)?;
+            child.compute_3d(
+                &root,
+                &mut route_graph,
+                localizer,
+                &settings,
+                &mut Local4dProjectionContext::default(),
+            )?;
             let integrand = child
                 .final_integrand(&route_graph)?
                 .iter()
@@ -1591,7 +1610,13 @@ mod tests {
                         &parent,
                         &settings,
                     )?;
-                    current.compute_3d(&parent, &mut route_graph, localizer, &settings)?;
+                    current.compute_3d(
+                        &parent,
+                        &mut route_graph,
+                        localizer,
+                        &settings,
+                        &mut Local4dProjectionContext::default(),
+                    )?;
                     let local = current.local_3d(&route_graph)?;
                     if let Local3DCts::Direct(direct) = local {
                         let value = direct.branches()?.factorized_sum();
@@ -1958,7 +1983,13 @@ mod tests {
                         .is_zero(),
                     "the local counterterm must equal the negative independently reconstructed Taylor sum"
                 );
-                child.compute_3d(&root, &mut route_graph, localizer, &settings)?;
+                child.compute_3d(
+                    &root,
+                    &mut route_graph,
+                    localizer,
+                    &settings,
+                    &mut Local4dProjectionContext::default(),
+                )?;
                 Ok(child.final_integrand(&route_graph)?.iter().collect())
             };
             let direct = build_child(graph.clone(), &cutset, false)?;

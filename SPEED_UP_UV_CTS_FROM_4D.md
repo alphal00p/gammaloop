@@ -221,3 +221,51 @@ Pending or failed original-4D runs remain explicitly labelled. They do not estab
 If a gate fails, use the measurements to continue the generic implementation, including the authorized narrowly targeted shared-code fixes. Do not declare success or silently change the dispatch policy, tolerance or benchmark population. Append results and unresolved findings to the plan file.
 
 **Mark the active goal complete only when the implementation, correctness checks, required generation/runtime gates and final documentation are complete.**
+
+
+## Implementation notes — 2026-09-12
+
+- Saved the accepted plan verbatim before changing code or tests. Its original
+  contents have SHA256 `5c3ce40e19a807015e346df66904d6e770a7bb7ead1128c3e15437578851428c`.
+- Created and pushed feature branch `faster_uv_from_4d`; the plan milestone is
+  commit `d533c8ca4`. Subsequent commits use the user-requested identity
+  `ValentinHirschi <valentin.hirschi@gmail.com>`.
+- Preserved baseline revision `78395e3ab3ddd8d8f62b2f674d7488484eace197` and both
+  optimized binaries under `tests/artifacts/aa_aa_uv_slowdown/baseline_78395e3/`.
+  The manifest records exact SHA256 binary identities. Subsequent original-route
+  runs use these immutable copies; the already-running GL262 process retains
+  its original executable. Existing cards, logs, and receipts remain preserved
+  in the same artifact tree.
+- Implementation is in progress. No optimized timing or correctness gate has
+  passed yet; the active goal remains incomplete.
+
+### 2026-09-12 — canonical projection and live mapping implementation
+
+- Added a separate canonical UV projection view and typed denominator-class
+  symbols. Raw sectors and outer Taylor recursion retain physical provenance.
+  Rational-shell extraction groups equal multisets without expanding graph
+  numerators. Positive denominator blocks retain their complete polynomial.
+- Retained incidence witnesses and added exact signed class routing/mass checks.
+  Completed hard factors use certified class occurrences. Pinched hard carriers
+  are lowered to an exactly certified fixed affine lift through retained base
+  occurrences; they do not create pole families.
+- Replaced the hard Cartesian assignment frontier with cyclic/greedy allocation,
+  compressed powers and at most three native-row-scored candidates. Ordered
+  capacities remain part of the CFF cache key.
+- Added generic live immutable numerator templates and bounded deterministic LRU
+  retention, with per-subtree parameter dependencies and component-local row
+  reuse. Both forest orchestrators share one projection context per graph.
+- Added cross-term state grouping after each independent component, allowing
+  equal remaining requests to reuse their summed numerators or carriers.
+- `cargo check -p gammalooprs --tests --profile dev-optim -j 8` passed after the
+  API migration. The licensed focused nextest snapshot is still in progress.
+  Two new factorized-equality assertion corrections remain pending user approval;
+  no existing physics expectation or tolerance has been changed.
+- An existing owner-relabelled projection test exposed inconsistent output
+  dialects (physical OSE aliases versus literal on-shell square roots) for equal
+  vacuum channels with different witnesses. Completed Taylor-vacuum sources now
+  use one canonical spatial frame. This fix still requires the focused and
+  physical acceptance runs.
+- Exact pre-generation lift certification, detailed timing records, full
+  acceptance coverage and all final performance gates remain in progress. No
+  optimized generation/runtime ratio is established by this milestone.
