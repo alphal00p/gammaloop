@@ -272,6 +272,277 @@ pub struct SamplingMapPoint<T: FloatLike> {
     pub residual: F<T>,
 }
 
+/// Result of evaluating one graph-independent sampling component.
+///
+/// The point is represented as a flat vector in the master raw coordinate
+/// frame.  A composition therefore never has to reinterpret a child's local
+/// coordinates.  `diagnostics` carries branch/support information to callers;
+/// it is deliberately data rather than logging so acceptance tests can audit
+/// every branch taken by a map.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SamplingMapEvaluation {
+    pub coordinates: Vec<f64>,
+    pub point: Vec<f64>,
+    pub jacobian: f64,
+    pub inverse_jacobian: f64,
+    pub residual: f64,
+    pub support: SamplingSupport,
+    pub diagnostics: Vec<String>,
+}
+
+/// A graph-independent map component which can participate in a product or
+/// ordered conditional composition.  `context` contains previously produced
+/// raw coordinates for `then` maps and is empty for independent products.
+pub trait SamplingMapComponent: std::fmt::Debug {
+    fn dimensions(&self) -> usize;
+    fn output_dimensions(&self) -> usize;
+    fn contract(&self) -> SamplingMapContract;
+    fn name(&self) -> &'static str;
+    fn forward(&self, coordinates: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation>;
+    fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation>;
+}
+
+/// A block-triangular composition of graph-independent map components.
+///
+/// Products split both input and output blocks and multiply the exact child
+/// determinants.  Ordered compositions pass all previous output blocks as
+/// context to each child; their derivative is block triangular, so the exact
+/// determinant is still the product of the diagonal child determinants.
+pub struct SamplingMapComposition {
+    kind: SamplingCompositionKind,
+    children: Vec<Box<dyn SamplingMapComponent>>,
+    dimensions: usize,
+    output_dimensions: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SamplingCompositionKind {
+    Product,
+    Then,
+}
+
+impl std::fmt::Debug for SamplingMapComposition {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SamplingMapComposition")
+            .field("kind", &self.kind)
+            .field("children", &self.children.len())
+            .field("dimensions", &self.dimensions)
+            .field("output_dimensions", &self.output_dimensions)
+            .finish()
+    }
+}
+
+impl SamplingMapComposition {
+    pub fn product(children: Vec<Box<dyn SamplingMapComponent>>) -> Result<Self> {
+        Self::new(SamplingCompositionKind::Product, children)
+    }
+
+    pub fn then(children: Vec<Box<dyn SamplingMapComponent>>) -> Result<Self> {
+        Self::new(SamplingCompositionKind::Then, children)
+    }
+
+    fn new(
+        kind: SamplingCompositionKind,
+        children: Vec<Box<dyn SamplingMapComponent>>,
+    ) -> Result<Self> {
+        if children.is_empty() {
+            return Err(eyre!(
+                "sampling-map composition requires at least one child"
+            ));
+        }
+        for (index, child) in children.iter().enumerate() {
+            if child.dimensions() == 0 || child.output_dimensions() == 0 {
+                return Err(eyre!(
+                    "sampling-map composition child {index} ({}) has zero dimensions (input {}, output {})",
+                    child.name(),
+                    child.dimensions(),
+                    child.output_dimensions()
+                ));
+            }
+        }
+        let dimensions = children.iter().map(|child| child.dimensions()).sum();
+        let output_dimensions = children.iter().map(|child| child.output_dimensions()).sum();
+        Ok(Self {
+            kind,
+            children,
+            dimensions,
+            output_dimensions,
+        })
+    }
+
+    pub fn is_product(&self) -> bool {
+        self.kind == SamplingCompositionKind::Product
+    }
+
+    pub fn is_then(&self) -> bool {
+        self.kind == SamplingCompositionKind::Then
+    }
+
+    pub fn children(&self) -> &[Box<dyn SamplingMapComponent>] {
+        &self.children
+    }
+
+    fn validate_input(&self, length: usize, kind: &str) -> Result<()> {
+        if length != self.dimensions {
+            return Err(eyre!(
+                "sampling-map {} received dimension {}, expected {}",
+                kind,
+                length,
+                self.dimensions
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_output(&self, length: usize) -> Result<()> {
+        if length != self.output_dimensions {
+            return Err(eyre!(
+                "sampling-map inverse received output dimension {}, expected {}",
+                length,
+                self.output_dimensions
+            ));
+        }
+        Ok(())
+    }
+
+    fn evaluate_forward(&self, coordinates: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.validate_input(coordinates.len(), "composition")?;
+        let mut offset = 0;
+        let mut context = Vec::new();
+        let mut evaluations = Vec::with_capacity(self.children.len());
+        for child in &self.children {
+            let end = offset + child.dimensions();
+            let child_coordinates = &coordinates[offset..end];
+            let evaluation = child.forward(
+                child_coordinates,
+                if self.is_then() { &context } else { &[] },
+            )?;
+            if self.is_then() {
+                context.extend_from_slice(&evaluation.point);
+            }
+            evaluations.push(evaluation);
+            offset = end;
+        }
+        Ok(combine_evaluations(evaluations))
+    }
+
+    fn evaluate_inverse(&self, point: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.validate_output(point.len())?;
+        let mut offset = 0;
+        let mut context = Vec::new();
+        let mut evaluations = Vec::with_capacity(self.children.len());
+        // In a triangular map, prior output blocks are known before later
+        // blocks are inverted, so inverse traversal remains in declaration
+        // order even though the determinant is block triangular.
+        for child in &self.children {
+            let end = offset + child.output_dimensions();
+            let child_point = &point[offset..end];
+            let evaluation =
+                child.inverse(child_point, if self.is_then() { &context } else { &[] })?;
+            if self.is_then() {
+                context.extend_from_slice(child_point);
+            }
+            evaluations.push(evaluation);
+            offset = end;
+        }
+        Ok(combine_evaluations(evaluations))
+    }
+}
+
+impl SamplingMapComponent for SamplingMapComposition {
+    fn dimensions(&self) -> usize {
+        self.dimensions
+    }
+
+    fn output_dimensions(&self) -> usize {
+        self.output_dimensions
+    }
+
+    fn contract(&self) -> SamplingMapContract {
+        self.children.iter().map(|child| child.contract()).fold(
+            SamplingMapContract {
+                support: SamplingSupport::Full,
+                jacobian: SamplingJacobian::ExactForward,
+            },
+            combine_contracts,
+        )
+    }
+
+    fn name(&self) -> &'static str {
+        match self.kind {
+            SamplingCompositionKind::Product => "product",
+            SamplingCompositionKind::Then => "then",
+        }
+    }
+
+    fn forward(&self, coordinates: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.evaluate_forward(coordinates)
+    }
+
+    fn inverse(&self, point: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.evaluate_inverse(point)
+    }
+}
+
+fn combine_contracts(left: SamplingMapContract, right: SamplingMapContract) -> SamplingMapContract {
+    let support = match (left.support, right.support) {
+        (SamplingSupport::Branched, _) | (_, SamplingSupport::Branched) => {
+            SamplingSupport::Branched
+        }
+        (SamplingSupport::Conditional, _) | (_, SamplingSupport::Conditional) => {
+            SamplingSupport::Conditional
+        }
+        _ => SamplingSupport::Full,
+    };
+    let jacobian = match (left.jacobian, right.jacobian) {
+        (SamplingJacobian::ProxyOnly, _) | (_, SamplingJacobian::ProxyOnly) => {
+            SamplingJacobian::ProxyOnly
+        }
+        (SamplingJacobian::ExactImplicit, _) | (_, SamplingJacobian::ExactImplicit) => {
+            SamplingJacobian::ExactImplicit
+        }
+        _ => SamplingJacobian::ExactForward,
+    };
+    SamplingMapContract { support, jacobian }
+}
+
+fn combine_evaluations(evaluations: Vec<SamplingMapEvaluation>) -> SamplingMapEvaluation {
+    let mut coordinates = Vec::new();
+    let mut point = Vec::new();
+    let mut jacobian = 1.0;
+    let mut inverse_jacobian = 1.0;
+    let mut residual = 0.0_f64;
+    let mut support = SamplingSupport::Full;
+    let mut diagnostics = Vec::new();
+    for evaluation in evaluations {
+        coordinates.extend(evaluation.coordinates);
+        point.extend(evaluation.point);
+        jacobian *= evaluation.jacobian;
+        inverse_jacobian *= evaluation.inverse_jacobian;
+        residual = residual.max(evaluation.residual);
+        support = match (support, evaluation.support) {
+            (SamplingSupport::Branched, _) | (_, SamplingSupport::Branched) => {
+                SamplingSupport::Branched
+            }
+            (SamplingSupport::Conditional, _) | (_, SamplingSupport::Conditional) => {
+                SamplingSupport::Conditional
+            }
+            _ => SamplingSupport::Full,
+        };
+        diagnostics.extend(evaluation.diagnostics);
+    }
+    SamplingMapEvaluation {
+        coordinates,
+        point,
+        jacobian,
+        inverse_jacobian,
+        residual,
+        support,
+        diagnostics,
+    }
+}
+
 /// A graph-independent radial map around an energy-surface centre.
 ///
 /// The first unit-cube coordinate is mapped to a non-negative radius and the
@@ -727,6 +998,140 @@ impl SamplingMapKernel {
     }
 }
 
+impl SamplingMapComponent for SamplingMapKernel {
+    fn dimensions(&self) -> usize {
+        self.dimensions()
+    }
+
+    fn output_dimensions(&self) -> usize {
+        self.dimensions()
+    }
+
+    fn contract(&self) -> SamplingMapContract {
+        self.contract()
+    }
+
+    fn name(&self) -> &'static str {
+        "lmb"
+    }
+
+    fn forward(&self, coordinates: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+        let coordinates = coordinates.iter().copied().map(F).collect::<Vec<_>>();
+        let evaluation = SamplingMapKernel::forward(self, &coordinates)?;
+        let point = evaluation
+            .loop_momenta
+            .0
+            .iter()
+            .flat_map(|momentum| [momentum.px.0, momentum.py.0, momentum.pz.0])
+            .collect();
+        Ok(SamplingMapEvaluation {
+            coordinates: evaluation
+                .coordinates
+                .into_iter()
+                .map(|value| value.0)
+                .collect(),
+            point,
+            jacobian: evaluation.jacobian.0,
+            inverse_jacobian: evaluation.inverse_jacobian.0,
+            residual: evaluation.residual.0,
+            support: self.contract().support,
+            diagnostics: Vec::new(),
+        })
+    }
+
+    fn inverse(&self, point: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+        if point.len() != self.output_dimensions() {
+            return Err(eyre!(
+                "lmb sampling-map inverse received output dimension {}, expected {}",
+                point.len(),
+                self.output_dimensions()
+            ));
+        }
+        let loop_momenta = LoopMomenta(
+            point
+                .chunks_exact(3)
+                .map(|components| {
+                    ThreeMomentum::new(F(components[0]), F(components[1]), F(components[2]))
+                })
+                .collect(),
+        );
+        let evaluation = SamplingMapKernel::inverse(self, &loop_momenta)?;
+        let mapped_point = evaluation
+            .loop_momenta
+            .0
+            .iter()
+            .flat_map(|momentum| [momentum.px.0, momentum.py.0, momentum.pz.0])
+            .collect();
+        Ok(SamplingMapEvaluation {
+            coordinates: evaluation
+                .coordinates
+                .into_iter()
+                .map(|value| value.0)
+                .collect(),
+            point: mapped_point,
+            jacobian: evaluation.jacobian.0,
+            inverse_jacobian: evaluation.inverse_jacobian.0,
+            residual: evaluation.residual.0,
+            support: self.contract().support,
+            diagnostics: Vec::new(),
+        })
+    }
+}
+
+impl SamplingMapComponent for SurfaceRadialMap {
+    fn dimensions(&self) -> usize {
+        self.dimension()
+    }
+
+    fn output_dimensions(&self) -> usize {
+        self.dimension()
+    }
+
+    fn contract(&self) -> SamplingMapContract {
+        self.contract()
+    }
+
+    fn name(&self) -> &'static str {
+        "surface"
+    }
+
+    fn forward(&self, coordinates: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+        let coordinates = coordinates.iter().copied().map(F).collect::<Vec<_>>();
+        let evaluation = SurfaceRadialMap::forward(self, &coordinates)?;
+        Ok(SamplingMapEvaluation {
+            coordinates: evaluation
+                .coordinates
+                .into_iter()
+                .map(|value| value.0)
+                .collect(),
+            point: evaluation.point.into_iter().map(|value| value.0).collect(),
+            jacobian: evaluation.jacobian.0,
+            inverse_jacobian: evaluation.inverse_jacobian.0,
+            residual: evaluation.residual.0,
+            support: self.contract().support,
+            diagnostics: Vec::new(),
+        })
+    }
+
+    fn inverse(&self, point: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+        let point_f = point.iter().copied().map(F).collect::<Vec<_>>();
+        let evaluation = SurfaceRadialMap::inverse(self, &point_f)?;
+        Ok(SamplingMapEvaluation {
+            coordinates: evaluation
+                .coordinates
+                .into_iter()
+                .map(|value| value.0)
+                .collect(),
+            point: evaluation.point.into_iter().map(|value| value.0).collect(),
+            jacobian: evaluation.jacobian.0,
+            inverse_jacobian: evaluation.inverse_jacobian.0,
+            residual: evaluation.residual.0,
+            support: self.contract().support,
+            diagnostics: Vec::new(),
+        })
+    }
+}
+
 fn max_coordinate_residual<T: FloatLike>(a: &[F<T>], b: &[F<T>]) -> F<T> {
     a.iter()
         .zip(b)
@@ -970,11 +1375,203 @@ mod tests {
         assert!((point_3.jacobian.0 - expected_3).abs() < 1.0e-12);
     }
 
+    /// Integrate a normalized Gaussian after a complete push-forward map.
+    ///
+    /// This is the small, graph-independent acceptance test used when a map
+    /// replaces the legacy unit-volume fixture: the cube average must include
+    /// the map's exact determinant and converge to one without any process
+    /// integrand machinery.
+    #[test]
+    fn radial_sampling_map_pushes_forward_a_normalized_gaussian() {
+        let map = SurfaceRadialMap::absent(3, vec![0.0; 3], 2.0, 1.0).unwrap();
+        let bins = 32usize;
+        let normalisation = (2.0 * std::f64::consts::PI).powf(-1.5);
+        let mut integral = 0.0;
+        for i in 0..bins {
+            for j in 0..bins {
+                for k in 0..bins {
+                    let coordinates = vec![
+                        F((i as f64 + 0.5) / bins as f64),
+                        F((j as f64 + 0.5) / bins as f64),
+                        F((k as f64 + 0.5) / bins as f64),
+                    ];
+                    let point = map.forward(&coordinates).unwrap();
+                    let radius_squared = point
+                        .point
+                        .iter()
+                        .map(|component| component.0.powi(2))
+                        .sum::<f64>();
+                    integral += normalisation * (-0.5 * radius_squared).exp() * point.jacobian.0;
+                }
+            }
+        }
+        integral /= bins.pow(3) as f64;
+        assert!(
+            (integral - 1.0).abs() < 2.0e-3,
+            "Gaussian integral = {integral}"
+        );
+    }
+
+    #[test]
+    fn ordinary_sampling_map_pushes_forward_a_normalized_gaussian() {
+        let settings = ParameterizationSettings {
+            mode: ParameterizationMode::Spherical,
+            ..Default::default()
+        };
+        let map =
+            SamplingMapKernel::new(SamplingMapDefinition::Lmb(vec![0]), settings, 2.0, 1).unwrap();
+        let bins = 24usize;
+        let normalisation = (2.0 * std::f64::consts::PI).powf(-1.5);
+        let mut integral = 0.0;
+        for i in 0..bins {
+            for j in 0..bins {
+                for k in 0..bins {
+                    let coordinates = vec![
+                        F((i as f64 + 0.5) / bins as f64),
+                        F((j as f64 + 0.5) / bins as f64),
+                        F((k as f64 + 0.5) / bins as f64),
+                    ];
+                    let point = map.forward(&coordinates).unwrap();
+                    let radius_squared = point
+                        .loop_momenta
+                        .0
+                        .iter()
+                        .flat_map(|momentum| [momentum.px.0, momentum.py.0, momentum.pz.0])
+                        .map(|component| component.powi(2))
+                        .sum::<f64>();
+                    integral += normalisation * (-0.5 * radius_squared).exp() * point.jacobian.0;
+                }
+            }
+        }
+        integral /= bins.pow(3) as f64;
+        assert!(
+            (integral - 1.0).abs() < 2.0e-2,
+            "Gaussian integral = {integral}"
+        );
+    }
+
     #[test]
     fn surface_radial_map_rejects_invalid_geometry() {
         assert!(SurfaceRadialMap::new(1, vec![0.0], Some(1.0), 1.0, 1.0).is_err());
         assert!(SurfaceRadialMap::new(3, vec![0.0; 2], Some(1.0), 1.0, 1.0).is_err());
         assert!(SurfaceRadialMap::new(3, vec![0.0; 3], Some(-1.0), 1.0, 1.0).is_err());
         assert!(SurfaceRadialMap::new(3, vec![0.0; 3], Some(1.0), 0.0, 1.0).is_err());
+    }
+
+    #[test]
+    fn product_composition_multiplies_block_jacobians_and_round_trips() {
+        let first = SamplingMapKernel::new(
+            SamplingMapDefinition::Lmb(vec![0]),
+            ParameterizationSettings::default(),
+            42.2,
+            1,
+        )
+        .unwrap();
+        let second = SurfaceRadialMap::absent(2, vec![1.0, -2.0], 2.0, 1.0).unwrap();
+        let first_jacobian = first.forward(&[F(0.2), F(0.4), F(0.7)]).unwrap().jacobian.0;
+        let second_jacobian = second.forward(&[F(0.3), F(0.6)]).unwrap().jacobian.0;
+        let composition = SamplingMapComposition::product(vec![Box::new(first), Box::new(second)])
+            .expect("valid product");
+        let coordinates = [0.2, 0.4, 0.7, 0.3, 0.6];
+        let mapped = composition.forward(&coordinates, &[]).unwrap();
+        assert_eq!(mapped.coordinates.len(), 5);
+        assert_eq!(mapped.point.len(), 5);
+        assert!((mapped.jacobian - first_jacobian * second_jacobian).abs() < 1.0e-10);
+        assert!((mapped.jacobian * mapped.inverse_jacobian - 1.0).abs() < 1.0e-10);
+        assert!(mapped.residual < 1.0e-11);
+        let inverse = composition.inverse(&mapped.point, &[]).unwrap();
+        assert!(inverse.residual < 1.0e-10);
+        assert!(
+            inverse
+                .coordinates
+                .iter()
+                .zip(coordinates)
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-10)
+        );
+    }
+
+    #[derive(Debug)]
+    struct ContextShiftMap;
+
+    impl SamplingMapComponent for ContextShiftMap {
+        fn dimensions(&self) -> usize {
+            1
+        }
+
+        fn output_dimensions(&self) -> usize {
+            1
+        }
+
+        fn contract(&self) -> SamplingMapContract {
+            SamplingMapContract {
+                support: SamplingSupport::Conditional,
+                jacobian: SamplingJacobian::ExactForward,
+            }
+        }
+
+        fn name(&self) -> &'static str {
+            "context_shift"
+        }
+
+        fn forward(&self, coordinates: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+            let shift = context.first().copied().unwrap_or(0.0);
+            let point = coordinates[0] + shift;
+            Ok(SamplingMapEvaluation {
+                coordinates: coordinates.to_vec(),
+                point: vec![point],
+                jacobian: 1.0,
+                inverse_jacobian: 1.0,
+                residual: 0.0,
+                support: self.contract().support,
+                diagnostics: vec![format!("shift={shift}")],
+            })
+        }
+
+        fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+            let shift = context.first().copied().unwrap_or(0.0);
+            let coordinate = point[0] - shift;
+            Ok(SamplingMapEvaluation {
+                coordinates: vec![coordinate],
+                point: point.to_vec(),
+                jacobian: 1.0,
+                inverse_jacobian: 1.0,
+                residual: 0.0,
+                support: self.contract().support,
+                diagnostics: vec![format!("shift={shift}")],
+            })
+        }
+    }
+
+    #[test]
+    fn then_composition_passes_previous_outputs_as_context() {
+        let composition = SamplingMapComposition::then(vec![
+            Box::new(ContextShiftMap),
+            Box::new(ContextShiftMap),
+        ])
+        .expect("valid conditional composition");
+        assert!(composition.is_then());
+        assert_eq!(composition.contract().support, SamplingSupport::Conditional);
+        let mapped = composition.forward(&[0.2, 0.4], &[]).unwrap();
+        assert_eq!(mapped.point, vec![0.2, 0.6]);
+        assert_eq!(mapped.diagnostics, vec!["shift=0", "shift=0.2"]);
+        let inverse = composition.inverse(&mapped.point, &[]).unwrap();
+        assert_eq!(inverse.coordinates, vec![0.2, 0.4]);
+    }
+
+    #[test]
+    fn compositions_report_empty_and_dimension_errors() {
+        assert!(SamplingMapComposition::product(Vec::new()).is_err());
+        let composition = SamplingMapComposition::product(vec![Box::new(ContextShiftMap)])
+            .expect("valid product");
+        let error = composition
+            .forward(&[0.2, 0.3], &[])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("received dimension 2, expected 1"));
+        let error = composition
+            .inverse(&[0.2, 0.3], &[])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("received output dimension 2, expected 1"));
     }
 }
