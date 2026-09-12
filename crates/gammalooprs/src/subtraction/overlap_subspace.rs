@@ -1,5 +1,6 @@
 use crate::GammaLoopContext;
 use crate::cff::esurface::EsurfaceCollection;
+use crate::cff::esurface::EsurfaceID;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingThresholds;
 use crate::cff::esurface::esurface_value_is_strictly_inside;
@@ -28,8 +29,14 @@ use eyre::{Result, eyre};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
 use spenso::algebra::algebraic_traits::IsZero;
+#[cfg(test)]
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use typed_index_collections::TiVec;
+
+#[cfg(test)]
+#[path = "overlap_subspace_tests.rs"]
+mod regression_tests;
 
 #[derive(Debug, Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -46,6 +53,16 @@ pub struct OverlapGroup {
 pub struct OverlapStructure {
     pub overlap_groups: Vec<OverlapGroup>,
     pub existing_esurfaces: ExistingThresholds,
+}
+
+/// Kinematic data for one threshold instance. Different Cutkosky cuts may have different
+/// solved `t*` values and external data even when they share a solve signature.
+#[derive(Debug, Clone)]
+pub(crate) struct OverlapKinematics {
+    pub loop_moms: LoopMomenta<F<f64>>,
+    pub external_momenta: ExternalFourMomenta<F<f64>>,
+    /// Graph-group members can share routing while carrying different propagator masses.
+    pub edge_masses: Option<EdgeVec<F<f64>>>,
 }
 
 impl Display for OverlapStructure {
@@ -98,6 +115,9 @@ impl OverlapStructure {
 struct PropagatorConstraint<'a> {
     mass_pointer: Option<usize>, // pointer to value of unique mass
     signature: &'a LoopExtSignature,
+    subspace: &'a SubspaceData,
+    loop_moms: LoopMomenta<F<f64>>,
+    external_momenta: ExternalFourMomenta<F<f64>>,
 }
 
 impl PropagatorConstraint<'_> {
@@ -158,19 +178,32 @@ fn construct_solver(
         let surface_id = existing_esurfaces[*existing_esurface_id];
 
         let esurface = &overlap_input.thresholds[surface_id];
-        let lmb = overlap_input.subspace.get_lmb(overlap_input.lmbs);
-        let edge_masses = &overlap_input.edge_masses;
+        let threshold_subspace = overlap_input.threshold_subspace(surface_id);
+        let (surface_loop_moms, surface_external_momenta, edge_masses) = overlap_input
+            .surface_kinematics
+            .and_then(|kinematics| kinematics.get(surface_id.0))
+            .map(|kinematics| {
+                (
+                    &kinematics.loop_moms,
+                    &kinematics.external_momenta,
+                    kinematics
+                        .edge_masses
+                        .as_ref()
+                        .unwrap_or(&overlap_input.edge_masses),
+                )
+            })
+            .unwrap_or((loop_moms, external_momenta, &overlap_input.edge_masses));
+        let lmb = threshold_subspace.get_lmb(overlap_input.lmbs);
 
         let mut esurface_constraint_indices: Vec<usize> = Vec::with_capacity(6);
 
-        for edge_id in overlap_input
-            .subspace
-            .contains(&esurface.energies, overlap_input.graph)
-        {
-            if let Some(edge_position) = propagator_constraints
-                .iter()
-                .position(|constraint| *constraint.signature == lmb.edge_signatures[edge_id])
-            {
+        for edge_id in threshold_subspace.contains(&esurface.energies, overlap_input.graph) {
+            if let Some(edge_position) = propagator_constraints.iter().position(|constraint| {
+                overlap_input.surface_kinematics.is_none()
+                    && *constraint.signature == lmb.edge_signatures[edge_id]
+                    && constraint.subspace.solve_signature(overlap_input.lmbs)
+                        == threshold_subspace.solve_signature(overlap_input.lmbs)
+            }) {
                 esurface_constraint_indices.push(edge_position);
             } else {
                 let mass_pointer = if edge_masses[edge_id].is_zero() {
@@ -194,6 +227,9 @@ fn construct_solver(
                 let propagator_constraint = PropagatorConstraint {
                     mass_pointer,
                     signature,
+                    subspace: threshold_subspace,
+                    loop_moms: surface_loop_moms.clone(),
+                    external_momenta: surface_external_momenta.clone(),
                 };
 
                 propagator_constraints.push(propagator_constraint);
@@ -254,20 +290,33 @@ fn construct_solver(
 
         let esurface_id = existing_esurfaces[*existing_esurface_id];
         let esurface = &overlap_input.thresholds[esurface_id];
+        let threshold_subspace = overlap_input.threshold_subspace(esurface_id);
+        let (surface_loop_moms, surface_external_momenta, edge_masses) = overlap_input
+            .surface_kinematics
+            .and_then(|kinematics| kinematics.get(esurface_id.0))
+            .map(|kinematics| {
+                (
+                    &kinematics.loop_moms,
+                    &kinematics.external_momenta,
+                    kinematics
+                        .edge_masses
+                        .as_ref()
+                        .unwrap_or(&overlap_input.edge_masses),
+                )
+            })
+            .unwrap_or((loop_moms, external_momenta, &overlap_input.edge_masses));
 
         let shift_part = esurface.compute_shift_part_from_momenta_in_subspace(
-            loop_moms,
-            external_momenta,
-            overlap_input.subspace,
+            surface_loop_moms,
+            surface_external_momenta,
+            threshold_subspace,
             overlap_input.lmbs,
             overlap_input.graph,
-            &overlap_input.edge_masses,
+            edge_masses,
         );
         b_vector[constraint_index + 1] = -shift_part.0;
         a_matrix[constraint_index + 1][0] = -1.0;
     }
-
-    let spatial_part_of_externals = external_momenta.iter().map(|p| p.spatial).collect();
 
     // propagator constraints
     let mut vertical_offset = esurface_constraints.len() + 1;
@@ -278,20 +327,29 @@ fn construct_solver(
         let spatial_shift = compute_shift_part_subspace(
             &propagator_constraint.signature.internal,
             &propagator_constraint.signature.external,
-            loop_moms,
-            &spatial_part_of_externals,
-            overlap_input.subspace,
+            &propagator_constraint.loop_moms,
+            &propagator_constraint
+                .external_momenta
+                .iter()
+                .map(|p| p.spatial)
+                .collect(),
+            propagator_constraint.subspace,
         );
 
         b_vector[vertical_offset] = spatial_shift.px.0;
         b_vector[vertical_offset + 1] = spatial_shift.py.0;
         b_vector[vertical_offset + 2] = spatial_shift.pz.0;
 
-        for (subspace_loop_index, individual_loop_signature) in overlap_input
-            .subspace
-            .project_loop_signature_filtered(&propagator_constraint.signature.internal)
-            .enumerate()
+        for (subspace_loop_index, loop_index) in
+            overlap_input.subspace.iter_lmb_indices().enumerate()
         {
+            if !propagator_constraint
+                .subspace
+                .contains_loop_index(loop_index)
+            {
+                continue;
+            }
+            let individual_loop_signature = propagator_constraint.signature.internal[loop_index];
             if individual_loop_signature.is_sign() {
                 a_matrix[vertical_offset][loop_momentum_offset + 3 * subspace_loop_index] =
                     -(individual_loop_signature as i8) as f64;
@@ -317,6 +375,17 @@ fn construct_solver(
         .build()
         .unwrap();
 
+    crate::debug_tags!(#subtraction, #threshold, #overlap, #socp;
+        stage = "threshold_socp_input",
+        graph = %overlap_input.graph.name,
+        surfaces = ?esurfaces_to_consider,
+        file.a = ?a_matrix,
+        file.b = ?b_vector,
+        file.q = ?q_vector,
+        file.cones = ?cones,
+        "constructed threshold overlap problem"
+    );
+
     DefaultSolver::new(
         &p_matrix,
         &q_vector,
@@ -335,7 +404,7 @@ pub(crate) fn find_center(
     loop_moms: &LoopMomenta<F<f64>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
-) -> Option<LoopMomenta<F<f64>>> {
+) -> Result<Option<LoopMomenta<F<f64>>>> {
     let mut solver = construct_solver(
         overlap_input,
         esurfaces_to_consider,
@@ -347,61 +416,112 @@ pub(crate) fn find_center(
 
     solver.solve();
 
+    crate::debug_tags!(#subtraction, #threshold, #overlap, #socp;
+        stage = "threshold_socp_result",
+        graph = %overlap_input.graph.name,
+        surfaces = ?esurfaces_to_consider,
+        status = ?solver.solution.status,
+        iterations = solver.solution.iterations,
+        primal_objective = solver.solution.obj_val,
+        dual_objective = solver.solution.obj_val_dual,
+        primal_residual = solver.solution.r_prim,
+        dual_residual = solver.solution.r_dual,
+        file.solution = ?solver.solution,
+        "finished threshold overlap solve"
+    );
+
     let global_loop_number = overlap_input.graph.get_loop_number();
     let esurfaces_to_check = esurfaces_to_consider
         .iter()
         .map(|existing_esurface_id| existing_esurfaces[*existing_esurface_id])
         .collect();
 
-    if solver.solution.status == SolverStatus::Solved {
-        let center = extract_center(
-            global_loop_number,
-            overlap_input.subspace,
-            &solver.solution.x,
-        );
-        check_global_center(
-            overlap_input,
-            &esurfaces_to_check,
-            &center,
-            loop_moms,
-            external_momenta,
-        )
-        .then_some(center)
-    } else if solver.solution.status == SolverStatus::AlmostSolved
-        || solver.solution.status == SolverStatus::InsufficientProgress
-    {
-        // if the solver did not converge, we check if the solution is still valid
-        let center = extract_center(
-            global_loop_number,
-            overlap_input.subspace,
-            &solver.solution.x,
-        );
-
-        let is_valid = check_global_center(
-            overlap_input,
-            &esurfaces_to_check,
-            &center,
-            loop_moms,
-            external_momenta,
-        );
-
-        if is_valid { Some(center) } else { None }
+    // Even if optimization did not converge, a physically valid center certifies overlap.
+    // Conversely, a failed solve must not silently remove an overlap from the catalogue.
+    let center = extract_center(
+        global_loop_number,
+        overlap_input.subspace,
+        &solver.solution.x,
+    );
+    if check_global_center(
+        overlap_input,
+        &esurfaces_to_check,
+        &center,
+        loop_moms,
+        external_momenta,
+    ) {
+        Ok(Some(center))
+    } else if solver.solution.status == SolverStatus::PrimalInfeasible {
+        Ok(None)
     } else {
-        if verbose {
-            println!("{:?}", solver.solution.x);
-        }
-
-        None
+        Err(eyre!(
+            "Threshold SOCP for graph '{}' and E-surfaces {:?} returned {:?} without a strictly interior center: primal objective={}, dual objective={}, primal residual={}, dual residual={}, iterations={}",
+            overlap_input.graph.name,
+            esurfaces_to_check,
+            solver.solution.status,
+            solver.solution.obj_val,
+            solver.solution.obj_val_dual,
+            solver.solution.r_prim,
+            solver.solution.r_dual,
+            solver.solution.iterations,
+        ))
     }
 }
 
 pub(crate) struct OverlapInput<'a> {
     pub graph: &'a Graph,
     pub settings: &'a RuntimeSettings,
+    /// Union of the active coordinates used to represent a common center.
     pub subspace: &'a SubspaceData,
+    /// Optional per-threshold active coordinates. `None` retains the homogeneous legacy path.
+    pub threshold_subspaces: Option<&'a [SubspaceData]>,
     pub lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
     pub thresholds: &'a EsurfaceCollection,
     pub edge_masses: EdgeVec<F<f64>>,
+    /// Optional per-threshold kinematics for a multi-cut solve. If absent, the single sample
+    /// passed to the overlap routine is used for every threshold.
+    pub surface_kinematics: Option<&'a [OverlapKinematics]>,
+}
+
+impl OverlapInput<'_> {
+    fn threshold_subspace(&self, esurface_id: EsurfaceID) -> &SubspaceData {
+        self.threshold_subspaces
+            .map_or(self.subspace, |subspaces| &subspaces[esurface_id.0])
+    }
+
+    fn validate_subspaces(&self) -> Result<()> {
+        let Some(threshold_subspaces) = self.threshold_subspaces else {
+            return Ok(());
+        };
+        if threshold_subspaces.len() != self.thresholds.len() {
+            return Err(eyre!(
+                "Projected threshold overlap has {} subspaces for {} E-surfaces",
+                threshold_subspaces.len(),
+                self.thresholds.len(),
+            ));
+        }
+        let common_parent = self.subspace.parent_lmb_index();
+        for (esurface_index, subspace) in threshold_subspaces.iter().enumerate() {
+            if subspace.parent_lmb_index() != common_parent {
+                return Err(eyre!(
+                    "Projected threshold E-surface instance {} uses parent LMB {}, while its common center uses parent LMB {}",
+                    esurface_index,
+                    usize::from(subspace.parent_lmb_index()),
+                    usize::from(common_parent),
+                ));
+            }
+            if subspace
+                .iter_lmb_indices()
+                .any(|loop_index| !self.subspace.contains_loop_index(loop_index))
+            {
+                return Err(eyre!(
+                    "Projected threshold E-surface instance {} contains coordinates outside the common-center subspace",
+                    esurface_index,
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 pub(crate) fn check_global_center(
@@ -411,22 +531,35 @@ pub(crate) fn check_global_center(
     loop_moms: &LoopMomenta<F<f64>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
 ) -> bool {
-    let mut center_with_fixed_complement = loop_moms.clone();
-    for loop_index in overlap_input.subspace.iter_lmb_indices() {
-        center_with_fixed_complement[loop_index] = center[loop_index];
-    }
-
     existing_esurfaces.iter().all(|esurface_id| {
         let esurface = &overlap_input.thresholds[*esurface_id];
+        let threshold_subspace = overlap_input.threshold_subspace(*esurface_id);
+        let (surface_loop_moms, surface_external_momenta, edge_masses) = overlap_input
+            .surface_kinematics
+            .and_then(|kinematics| kinematics.get(esurface_id.0))
+            .map(|kinematics| {
+                (
+                    &kinematics.loop_moms,
+                    &kinematics.external_momenta,
+                    kinematics
+                        .edge_masses
+                        .as_ref()
+                        .unwrap_or(&overlap_input.edge_masses),
+                )
+            })
+            .unwrap_or((loop_moms, external_momenta, &overlap_input.edge_masses));
+        let mut center_with_fixed_complement = surface_loop_moms.clone();
+        for loop_index in threshold_subspace.iter_lmb_indices() {
+            center_with_fixed_complement[loop_index] = center[loop_index];
+        }
 
-        let lmb = overlap_input.subspace.get_lmb(overlap_input.lmbs);
-        let edge_masses = &overlap_input.edge_masses;
+        let lmb = threshold_subspace.get_lmb(overlap_input.lmbs);
 
         let esurface_val = esurface.compute_from_momenta(
             lmb,
             edge_masses,
             &center_with_fixed_complement,
-            external_momenta,
+            surface_external_momenta,
         );
 
         esurface_value_is_strictly_inside(&esurface_val, &F(overlap_input.settings.kinematics.e_cm))
@@ -445,6 +578,209 @@ pub(crate) fn find_maximal_overlap(
     external_momenta: &ExternalFourMomenta<F<f64>>,
     probe_rotation: &Rotation,
 ) -> Result<OverlapStructure> {
+    if let Some(surface_kinematics) = overlap_input.surface_kinematics
+        && surface_kinematics.len() != overlap_input.thresholds.len()
+    {
+        return Err(eyre!(
+            "per-surface overlap kinematics has {} entries for {} threshold surfaces",
+            surface_kinematics.len(),
+            overlap_input.thresholds.len()
+        ));
+    }
+    overlap_input.validate_subspaces()?;
+    // An empty catalogue has no automatic partitions, but an explicit center still needs
+    // its identity-frame rotation and parent-LMB projection.
+    if existing_esurfaces.is_empty()
+        && overlap_input
+            .settings
+            .subtraction
+            .overlap_settings
+            .force_global_center
+            .is_some()
+    {
+        return find_maximal_overlap_single(
+            overlap_input,
+            existing_esurfaces,
+            loop_moms,
+            external_momenta,
+            probe_rotation,
+        );
+    }
+    let mut partitions: Vec<(SubspaceData, ExistingThresholds)> = Vec::new();
+    for existing_id in existing_esurfaces.iter_enumerated().map(|(id, _)| id) {
+        let surface_id = existing_esurfaces[existing_id];
+        let threshold_subspace = overlap_input.threshold_subspace(surface_id);
+        if let Some((_, members)) = partitions.iter_mut().find(|(representative, _)| {
+            representative.solve_signature(overlap_input.lmbs)
+                == threshold_subspace.solve_signature(overlap_input.lmbs)
+        }) {
+            members.push(surface_id);
+        } else {
+            let mut members = ExistingThresholds::new();
+            members.push(surface_id);
+            partitions.push((threshold_subspace.clone(), members));
+        }
+    }
+
+    let mut combined = OverlapStructure {
+        overlap_groups: Vec::new(),
+        existing_esurfaces: existing_esurfaces.clone(),
+    };
+    let mut original_ids_by_partition = Vec::new();
+    for (_, members) in &partitions {
+        original_ids_by_partition.push(
+            members
+                .iter()
+                .map(|surface_id| {
+                    existing_esurfaces
+                        .iter_enumerated()
+                        .find_map(|(id, candidate)| (candidate == surface_id).then_some(id))
+                        .expect("partition surface must belong to original threshold set")
+                })
+                .collect::<Vec<_>>(),
+        );
+    }
+    for (partition_index, (representative, members)) in partitions.into_iter().enumerate() {
+        let partition_input = OverlapInput {
+            graph: overlap_input.graph,
+            settings: overlap_input.settings,
+            subspace: &representative,
+            threshold_subspaces: None,
+            lmbs: overlap_input.lmbs,
+            thresholds: overlap_input.thresholds,
+            edge_masses: overlap_input.edge_masses.clone(),
+            surface_kinematics: overlap_input.surface_kinematics,
+        };
+        let local = find_maximal_overlap_single(
+            &partition_input,
+            &members,
+            loop_moms,
+            external_momenta,
+            probe_rotation,
+        )?;
+        for mut group in local.overlap_groups {
+            for id in group
+                .existing_esurfaces
+                .iter_mut()
+                .chain(&mut group.complement)
+            {
+                *id = original_ids_by_partition[partition_index][usize::from(*id)];
+            }
+            combined.overlap_groups.push(group);
+        }
+    }
+    Ok(combined)
+}
+
+/// Variant of [`find_maximal_overlap`] that keeps explicitly tagged thresholds in separate
+/// solve problems. Unlabelled thresholds still use the automatic exact-subspace partition.
+#[cfg(test)]
+pub(crate) fn find_maximal_overlap_with_group_ids(
+    overlap_input: &OverlapInput,
+    existing_esurfaces: &ExistingThresholds,
+    group_ids: &[Option<usize>],
+    loop_moms: &LoopMomenta<F<f64>>,
+    external_momenta: &ExternalFourMomenta<F<f64>>,
+    probe_rotation: &Rotation,
+) -> Result<OverlapStructure> {
+    if let Some(surface_kinematics) = overlap_input.surface_kinematics
+        && surface_kinematics.len() != overlap_input.thresholds.len()
+    {
+        return Err(eyre!(
+            "per-surface overlap kinematics has {} entries for {} threshold surfaces",
+            surface_kinematics.len(),
+            overlap_input.thresholds.len()
+        ));
+    }
+    if group_ids.len() < overlap_input.thresholds.len() {
+        return Err(eyre!(
+            "threshold solve-group metadata has {} entries for {} threshold surfaces",
+            group_ids.len(),
+            overlap_input.thresholds.len()
+        ));
+    }
+    overlap_input.validate_subspaces()?;
+    let mut labelled = BTreeMap::<Option<usize>, ExistingThresholds>::new();
+    for existing_id in existing_esurfaces.iter_enumerated().map(|(id, _)| id) {
+        let surface_id = existing_esurfaces[existing_id];
+        let label = group_ids[surface_id.0];
+        labelled.entry(label).or_default().push(surface_id);
+    }
+    for (label, members) in &labelled {
+        let Some(group_id) = label else {
+            continue;
+        };
+        let Some(first_surface_id) = members.first() else {
+            continue;
+        };
+        let first_subspace = overlap_input.threshold_subspace(*first_surface_id);
+        let first_signature = first_subspace.solve_signature(overlap_input.lmbs);
+        let incompatible = members.iter().skip(1).any(|surface_id| {
+            overlap_input
+                .threshold_subspace(*surface_id)
+                .solve_signature(overlap_input.lmbs)
+                != first_signature
+        });
+        if incompatible {
+            let members = members
+                .iter()
+                .map(|surface_id| {
+                    let subspace = overlap_input.threshold_subspace(*surface_id);
+                    format!(
+                        "E-surface instance {}: parent {:?}, selected cycles {:?}",
+                        surface_id.0,
+                        subspace.get_lmb(overlap_input.lmbs).loop_edges,
+                        subspace.solve_signature(overlap_input.lmbs)
+                    )
+                })
+                .join("; ");
+            return Err(eyre!(
+                "explicit threshold group_id={} contains incompatible solve subspaces: {}",
+                group_id,
+                members,
+            ));
+        }
+    }
+    let mut combined = OverlapStructure {
+        overlap_groups: Vec::new(),
+        existing_esurfaces: existing_esurfaces.clone(),
+    };
+    for members in labelled.into_values() {
+        let local = find_maximal_overlap(
+            overlap_input,
+            &members,
+            loop_moms,
+            external_momenta,
+            probe_rotation,
+        )?;
+        for mut group in local.overlap_groups {
+            for id in group
+                .existing_esurfaces
+                .iter_mut()
+                .chain(&mut group.complement)
+            {
+                let surface_id = local.existing_esurfaces[*id];
+                *id = existing_esurfaces
+                    .iter_enumerated()
+                    .find_map(|(original_id, candidate)| {
+                        (candidate == &surface_id).then_some(original_id)
+                    })
+                    .expect("labelled overlap surface must belong to original threshold set");
+            }
+            combined.overlap_groups.push(group);
+        }
+    }
+    Ok(combined)
+}
+
+fn find_maximal_overlap_single(
+    overlap_input: &OverlapInput,
+    existing_esurfaces: &ExistingThresholds,
+    loop_moms: &LoopMomenta<F<f64>>,
+    external_momenta: &ExternalFourMomenta<F<f64>>,
+    probe_rotation: &Rotation,
+) -> Result<OverlapStructure> {
+    overlap_input.validate_subspaces()?;
     let mut res = OverlapStructure {
         overlap_groups: vec![],
         existing_esurfaces: existing_esurfaces.clone(),
@@ -466,7 +802,15 @@ pub(crate) fn find_maximal_overlap(
                 pz: F(coordinates[2]),
             })
             .collect();
-        let rotated_external_spatial = external_momenta
+        let center_externals = existing_esurfaces
+            .first()
+            .and_then(|id| {
+                overlap_input
+                    .surface_kinematics
+                    .map(|kinematics| &kinematics[id.0].external_momenta)
+            })
+            .unwrap_or(external_momenta);
+        let rotated_external_spatial = center_externals
             .iter()
             .map(|momentum| momentum.spatial)
             .collect();
@@ -477,6 +821,38 @@ pub(crate) fn find_maximal_overlap(
             overlap_input.subspace.get_lmb(overlap_input.lmbs),
             &rotated_external_spatial,
         );
+        if let Some(surface_kinematics) = overlap_input.surface_kinematics {
+            for surface_id in existing_esurfaces {
+                let surface_externals = &surface_kinematics[surface_id.0].external_momenta;
+                if surface_externals == center_externals {
+                    continue;
+                }
+                let surface_center = global_center_identity.rotate(probe_rotation).lmb_transform(
+                    &overlap_input.graph.loop_momentum_basis,
+                    overlap_input.subspace.get_lmb(overlap_input.lmbs),
+                    &surface_externals
+                        .iter()
+                        .map(|momentum| momentum.spatial)
+                        .collect(),
+                );
+                if overlap_input
+                    .subspace
+                    .iter_lmb_indices()
+                    .any(|index| surface_center[index] != global_center_probe[index])
+                {
+                    return Err(eyre!(
+                        "forced global threshold center gives incompatible active coordinates for E-surface instance {}: selected edges {:?}, center {}, expected {}",
+                        surface_id.0,
+                        overlap_input
+                            .subspace
+                            .iter_basis_edges(overlap_input.lmbs)
+                            .collect_vec(),
+                        surface_center,
+                        global_center_probe,
+                    ));
+                }
+            }
+        }
         // A subspace center specifies only its active coordinates. The complementary loop
         // coordinates remain fixed at the sampled point throughout center validation, radial
         // solving, and final CT reconstruction. Affine LMB transforms can populate inactive
@@ -568,7 +944,7 @@ pub(crate) fn find_maximal_overlap(
         loop_moms,
         external_momenta,
         false,
-    );
+    )?;
 
     if let Some(center) = option_center {
         let single_group = OverlapGroup {
@@ -587,7 +963,7 @@ pub(crate) fn find_maximal_overlap(
         existing_esurfaces,
         loop_moms,
         external_momenta,
-    );
+    )?;
 
     // if settings.general.debug > 3 {
     //     DEBUG_LOGGER.write("overlap_pairs", &esurface_pairs);
@@ -605,7 +981,7 @@ pub(crate) fn find_maximal_overlap(
                 loop_moms,
                 external_momenta,
                 false,
-            )
+            )?
             .ok_or_else(|| {
                 let esurface = &overlap_input.thresholds[esurface_id];
 
@@ -661,7 +1037,7 @@ pub(crate) fn find_maximal_overlap(
                 loop_moms,
                 external_momenta,
                 false,
-            );
+            )?;
 
             if let Some(center) = option_center {
                 res.overlap_groups.push(OverlapGroup {
@@ -739,7 +1115,7 @@ impl EsurfacePairs {
         existing_esurfaces: &ExistingThresholds,
         loop_moms: &LoopMomenta<F<f64>>,
         external_momenta: &ExternalFourMomenta<F<f64>>,
-    ) -> Self {
+    ) -> Result<Self> {
         let mut res = Self::new_empty(existing_esurfaces.len());
 
         let all_existing_esurfaces = existing_esurfaces
@@ -756,7 +1132,7 @@ impl EsurfacePairs {
                     loop_moms,
                     external_momenta,
                     false,
-                );
+                )?;
 
                 if let Some(center) = center {
                     res.insert((esurface_id_1, esurface_id_2), center);
@@ -766,7 +1142,7 @@ impl EsurfacePairs {
             }
         }
 
-        res
+        Ok(res)
     }
 
     fn has_no_overlap(&self, esurface_id: ExistingEsurfaceId) -> bool {
@@ -780,83 +1156,30 @@ impl EsurfacePairs {
         result: &OverlapStructure,
     ) -> HashSet<Vec<ExistingEsurfaceId>> {
         let mut res = HashSet::default();
-        let existing_esurfaces_not_in_overlap = existing_esurfaces
-            .iter_enumerated()
-            .map(|a| a.0)
-            .filter(|&existing_esurface_id| {
-                !result
-                    .overlap_groups
-                    .iter()
-                    .any(|group| group.existing_esurfaces.contains(&existing_esurface_id))
-            });
-
-        let mut possible_options_from_esurfaces_not_in_overlap = HashSet::default();
-
-        for esurface in existing_esurfaces_not_in_overlap.filter(|existing_esurface_id| {
-            self.has_pair_with[Into::<usize>::into(*existing_esurface_id)].len() >= subset_len - 1
-        }) {
-            for possible_combination in self.has_pair_with[Into::<usize>::into(esurface)]
+        // A maximal overlap can have every pair covered by different larger overlaps.
+        // Only containment of the complete candidate permits skipping its SOCP problem.
+        for (first, _) in existing_esurfaces.iter_enumerated() {
+            for remaining in self.has_pair_with[usize::from(first)]
                 .iter()
+                .copied()
+                .filter(|&id| id > first)
                 .combinations(subset_len - 1)
             {
-                let mut option = vec![esurface];
-                option.extend(possible_combination.iter().copied());
-                let mut is_valid = true;
-
-                'pair_loop: for i in 0..subset_len - 1 {
-                    for j in i + 1..subset_len - 1 {
-                        let pair = (
-                            Into::<ExistingEsurfaceId>::into(*possible_combination[i]),
-                            Into::<ExistingEsurfaceId>::into(*possible_combination[j]),
-                        );
-
-                        if !self.pair_exists(pair) {
-                            is_valid = false;
-                            break 'pair_loop;
-                        }
-                    }
+                if !remaining
+                    .iter()
+                    .tuple_combinations()
+                    .all(|(&left, &right)| self.pair_exists((left, right)))
+                {
+                    continue;
                 }
-
-                if is_valid {
-                    option.sort_unstable();
-                    possible_options_from_esurfaces_not_in_overlap.insert(option);
+                let mut candidate = vec![first];
+                candidate.extend(remaining);
+                candidate.sort_unstable();
+                if !is_subset_of_result(&candidate, result) {
+                    res.insert(candidate);
                 }
             }
         }
-
-        let existing_pairs_not_in_overlap = self.data.keys().filter(|(left, right)| {
-            !is_subset_of_result(&[*left, *right], result)
-                && is_subset_of_result(&[*left], result)
-                && is_subset_of_result(&[*right], result)
-                && self.has_pair_with[Into::<usize>::into(*left)].len() >= subset_len - 1
-                && self.has_pair_with[Into::<usize>::into(*right)].len() >= subset_len - 1
-        });
-
-        let mut possible_options_from_pairs_not_in_overlap = HashSet::default();
-
-        for pair in existing_pairs_not_in_overlap {
-            let possible_additions = existing_esurfaces
-                .iter_enumerated()
-                .map(|a| a.0)
-                .filter(|&id| {
-                    id != pair.0
-                        && id != pair.1
-                        && self.has_pair_with[Into::<usize>::into(pair.0)].contains(&id)
-                        && self.has_pair_with[Into::<usize>::into(pair.1)].contains(&id)
-                })
-                .combinations(subset_len - 2);
-
-            for possible_addition in possible_additions {
-                let mut option = vec![pair.0, pair.1];
-                option.extend(possible_addition.iter().copied());
-                option.sort_unstable();
-                possible_options_from_pairs_not_in_overlap.insert(option);
-            }
-        }
-
-        res.extend(possible_options_from_esurfaces_not_in_overlap);
-        res.extend(possible_options_from_pairs_not_in_overlap);
-
         res
     }
 }
@@ -877,6 +1200,232 @@ mod tests {
     use linnet::half_edge::involution::EdgeIndex;
     use linnet::half_edge::subgraph::{SuBitGraph, SubSetOps};
     use typed_index_collections::ti_vec;
+
+    #[test]
+    fn maximal_overlap_candidates_include_cliques_whose_pairs_are_already_covered() {
+        let existing: ExistingThresholds = (0..9).map(EsurfaceID::from).collect();
+        let center = LoopMomenta::from_iter([ThreeMomentum::new(F(0.0), F(0.0), F(0.0))]);
+        // X,Y,Z have a common region. Two small balls in each pair's exclusive region
+        // produce the larger overlaps XYuv, XZwx, YZyz, while XYZ remains maximal too.
+        let larger = [[0, 1, 3, 4], [0, 2, 5, 6], [1, 2, 7, 8]];
+        let result = OverlapStructure {
+            existing_esurfaces: existing.clone(),
+            overlap_groups: larger
+                .map(|members| OverlapGroup {
+                    existing_esurfaces: members.into_iter().map(ExistingEsurfaceId::from).collect(),
+                    complement: vec![],
+                    center: center.clone(),
+                })
+                .to_vec(),
+        };
+        let mut pairs = EsurfacePairs::new_empty(existing.len());
+        for members in larger {
+            for (left, right) in members
+                .into_iter()
+                .map(ExistingEsurfaceId::from)
+                .tuple_combinations()
+            {
+                if !pairs.pair_exists((left, right)) {
+                    pairs.insert((left, right), center.clone());
+                    pairs.has_pair_with[usize::from(left)].push(right);
+                    pairs.has_pair_with[usize::from(right)].push(left);
+                }
+            }
+        }
+        let central = (0..3).map(ExistingEsurfaceId::from).collect_vec();
+        assert!(
+            central
+                .iter()
+                .tuple_combinations()
+                .all(|(&left, &right)| { is_subset_of_result(&[left, right], &result) })
+        );
+        assert_eq!(
+            pairs.construct_possible_subsets_of_len(&existing, 3, &result),
+            HashSet::from_iter([central]),
+        );
+    }
+
+    #[test]
+    fn overlap_partitions_remap_complements_and_keep_instance_kinematics() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph partitioned_centers {
+            ext [style=invis]
+            edge [num=1 mass=0]
+            node [num=1]
+            ext->a:0 [id=0]
+            a->b [id=1]
+            b->a [id=2]
+            a->b [id=3]
+            b->a [id=4]
+            ext->b:1 [id=5]
+        })
+        .unwrap();
+        let lmbs = ti_vec![graph.loop_momentum_basis.clone()];
+        let subspaces = [LoopIndex(0), LoopIndex(1)].map(|index| {
+            SubspaceData::new_from_parent_basis_edges(
+                &[graph.loop_momentum_basis.loop_edges[index]],
+                &graph.full_filter(),
+                LmbIndex::from(0),
+                &graph,
+                &lmbs,
+            )
+            .unwrap()
+        });
+        let common = SubspaceData::union_in_common_parent(subspaces.iter(), &graph, &lmbs).unwrap();
+        let support = graph
+            .iter_loop_edges()
+            .map(|(_, edge, _)| edge)
+            .find(|edge| !graph.loop_momentum_basis.loop_edges.contains(edge))
+            .unwrap();
+        let external =
+            graph.loop_momentum_basis.ext_edges[crate::momentum::sample::ExternalIndex(0)];
+        let thresholds: EsurfaceCollection = (0..4)
+            .map(|_| Esurface {
+                energies: vec![support],
+                external_shift: vec![(external, -1)],
+                vertex_set: VertexSet::dummy(),
+            })
+            .collect::<Vec<_>>()
+            .into();
+        let threshold_subspaces = [0, 1, 0, 1].map(|index| subspaces[index].clone());
+        let masses = graph.underlying.new_edgevec(|_, _, _| F(0.0));
+        let externals: ExternalFourMomenta<_> = [
+            FourMomentum::from_args(F(1.0), F(0.0), F(0.0), F(0.0)),
+            FourMomentum::from_args(F(-1.0), F(0.0), F(0.0), F(0.0)),
+        ]
+        .into_iter()
+        .collect();
+        let mut kinematics = (0..4)
+            .map(|index| {
+                let mut loop_moms = LoopMomenta::from_iter(
+                    (0..3).map(|_| ThreeMomentum::new(F(0.0), F(0.0), F(0.0))),
+                );
+                loop_moms[LoopIndex(2)].px = F(10.0 * (index + 1) as f64);
+                OverlapKinematics {
+                    loop_moms,
+                    external_momenta: externals.clone(),
+                    edge_masses: None,
+                }
+            })
+            .collect_vec();
+        let mut member_masses = masses.clone();
+        member_masses[support] = F(0.5);
+        kinematics[0].edge_masses = Some(member_masses);
+        let settings = RuntimeSettings::default();
+        let input = OverlapInput {
+            graph: &graph,
+            settings: &settings,
+            subspace: &common,
+            threshold_subspaces: Some(&threshold_subspaces),
+            lmbs: &lmbs,
+            thresholds: &thresholds,
+            edge_masses: masses.clone(),
+            surface_kinematics: Some(&kinematics),
+        };
+        let existing: ExistingThresholds = thresholds.keys().collect();
+        let rotation = Rotation::new(RotationMethod::Identity);
+        let automatic = find_maximal_overlap(
+            &input,
+            &existing,
+            &kinematics[0].loop_moms,
+            &externals,
+            &rotation,
+        )
+        .unwrap();
+        let labelled = find_maximal_overlap_with_group_ids(
+            &input,
+            &existing,
+            &[Some(0), Some(1), Some(0), Some(1)],
+            &kinematics[0].loop_moms,
+            &externals,
+            &rotation,
+        )
+        .unwrap();
+        let conflict = find_maximal_overlap_with_group_ids(
+            &input,
+            &existing,
+            &[Some(0); 4],
+            &kinematics[0].loop_moms,
+            &externals,
+            &rotation,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(conflict.contains("group_id=0"));
+        for member in 0..4 {
+            assert!(conflict.contains(&format!("E-surface instance {member}:")));
+        }
+        for overlap in [&automatic, &labelled] {
+            assert_eq!(overlap.overlap_groups.len(), 4);
+            for group in &overlap.overlap_groups {
+                assert_eq!(group.existing_esurfaces.len(), 1);
+                let member = usize::from(group.existing_esurfaces[0]);
+                assert_eq!(
+                    group.complement,
+                    vec![ExistingEsurfaceId::from((member + 2) % 4)]
+                );
+                assert!(check_global_center(
+                    &input,
+                    &ti_vec![EsurfaceID(member)],
+                    &group.center,
+                    &kinematics[member].loop_moms,
+                    &externals
+                ));
+                assert!(group.center.hyper_radius_squared(None) > F(1.0));
+            }
+        }
+        let first = automatic
+            .overlap_groups
+            .iter()
+            .find(|group| group.existing_esurfaces == vec![ExistingEsurfaceId::from(0)])
+            .unwrap();
+        let mut outside_massive_surface = first.center.clone();
+        outside_massive_surface[LoopIndex(0)].px += F(0.95);
+        assert!(!check_global_center(
+            &input,
+            &ti_vec![EsurfaceID(0)],
+            &outside_massive_surface,
+            &kinematics[0].loop_moms,
+            &externals
+        ));
+
+        let mut forced_settings = settings.clone();
+        forced_settings
+            .subtraction
+            .overlap_settings
+            .force_global_center = Some(
+            first
+                .center
+                .iter()
+                .map(|momentum| [momentum.px.0, momentum.py.0, momentum.pz.0])
+                .collect(),
+        );
+        // Other independent groups may have different external data; they must not participate
+        // in validating this group's configured center.
+        kinematics[1].external_momenta[crate::momentum::sample::ExternalIndex(0)]
+            .temporal
+            .value = F(2.0);
+        let forced_input = OverlapInput {
+            graph: &graph,
+            settings: &forced_settings,
+            subspace: &common,
+            threshold_subspaces: Some(&threshold_subspaces),
+            lmbs: &lmbs,
+            thresholds: &thresholds,
+            edge_masses: masses,
+            surface_kinematics: Some(&kinematics),
+        };
+        assert!(
+            find_maximal_overlap(
+                &forced_input,
+                &ti_vec![EsurfaceID(0)],
+                &kinematics[0].loop_moms,
+                &externals,
+                &rotation
+            )
+            .is_ok()
+        );
+    }
 
     #[test]
     fn global_center_check_preserves_fixed_complement_for_multidimensional_subspace() {
@@ -1046,9 +1595,11 @@ mod tests {
             graph: &graph,
             settings: &settings,
             subspace: &subspace,
+            threshold_subspaces: None,
             lmbs: &all_lmbs,
             thresholds: &thresholds,
             edge_masses: masses,
+            surface_kinematics: None,
         };
 
         let external_momenta = ExternalFourMomenta::from_iter([
@@ -1088,6 +1639,53 @@ mod tests {
             &external_momenta,
         ));
 
+        let full_parent_subspace = SubspaceData::new_with_user_selected_lmb(
+            graph.full_filter(),
+            LmbIndex::from(0),
+            &graph,
+            &all_lmbs,
+        )
+        .unwrap();
+        let common_subspace = SubspaceData::union_in_common_parent(
+            [&subspace, &full_parent_subspace],
+            &graph,
+            &all_lmbs,
+        )
+        .unwrap();
+        // The same supergraph geometry is deliberately presented twice as distinct projected
+        // E-surface instances, each retaining its own fixed complement.
+        let projected_thresholds: crate::cff::esurface::EsurfaceCollection = vec![
+            thresholds[EsurfaceID::from(0)].clone(),
+            thresholds[EsurfaceID::from(0)].clone(),
+        ]
+        .into();
+        let projected_subspaces: TiVec<EsurfaceID, _> =
+            ti_vec![subspace.clone(), full_parent_subspace];
+        let projected_input = OverlapInput {
+            graph: &graph,
+            settings: &settings,
+            subspace: &common_subspace,
+            threshold_subspaces: Some(&projected_subspaces.raw),
+            lmbs: &all_lmbs,
+            thresholds: &projected_thresholds,
+            edge_masses: overlap_input.edge_masses.clone(),
+            surface_kinematics: overlap_input.surface_kinematics,
+        };
+        assert!(!check_global_center(
+            &projected_input,
+            &ti_vec![EsurfaceID::from(0)],
+            &center,
+            &sampled_momenta,
+            &external_momenta,
+        ));
+        assert!(check_global_center(
+            &projected_input,
+            &ti_vec![EsurfaceID::from(1)],
+            &center,
+            &sampled_momenta,
+            &external_momenta,
+        ));
+
         let forced_center_coordinates = vec![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]];
         let identity_frame_center =
             LoopMomenta::from_iter(forced_center_coordinates.iter().map(|coordinates| {
@@ -1111,9 +1709,11 @@ mod tests {
             graph: &graph,
             settings: &forced_settings,
             subspace: &subspace,
+            threshold_subspaces: None,
             lmbs: &all_lmbs,
             thresholds: &thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
+            surface_kinematics: overlap_input.surface_kinematics,
         };
 
         let forced_overlap = find_maximal_overlap(
@@ -1148,9 +1748,11 @@ mod tests {
             graph: &graph,
             settings: &forced_settings,
             subspace: &full_subspace,
+            threshold_subspaces: None,
             lmbs: &alternate_lmbs,
             thresholds: &empty_thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
+            surface_kinematics: overlap_input.surface_kinematics,
         };
         let rotated_external_spatial = external_momenta
             .iter()
@@ -1220,9 +1822,11 @@ mod tests {
             graph: &graph,
             settings: &affine_forced_settings,
             subspace: &proper_alternate_subspace,
+            threshold_subspaces: None,
             lmbs: &alternate_lmbs,
             thresholds: &empty_thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
+            surface_kinematics: overlap_input.surface_kinematics,
         };
         let affine_overlap = find_maximal_overlap(
             &affine_overlap_input,
@@ -1255,9 +1859,11 @@ mod tests {
             graph: &graph,
             settings: &settings,
             subspace: &subspace,
+            threshold_subspaces: None,
             lmbs: &all_lmbs,
             thresholds: &covariant_thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
+            surface_kinematics: overlap_input.surface_kinematics,
         };
         let covariant_loop_momenta = LoopMomenta::from_iter([
             ThreeMomentum::new(F(0.3), F(-0.4), F(0.5)),
@@ -1277,6 +1883,7 @@ mod tests {
             &covariant_externals,
             false,
         )
+        .unwrap()
         .unwrap();
         assert!(check_global_center(
             &covariant_overlap_input,
@@ -1310,6 +1917,7 @@ mod tests {
                 &rotated_externals,
                 false,
             )
+            .unwrap()
             .unwrap();
             let expected_rotated_center = identity_center.rotate(&stability_rotation);
 

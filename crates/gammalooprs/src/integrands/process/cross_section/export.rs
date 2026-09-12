@@ -12,15 +12,25 @@ use super::{
         StandaloneCrossSectionGraphTermArchive, StandaloneCutCFFIndex,
         StandaloneEvaluatorStackArchive, StandaloneGenericEvaluatorArchive,
         StandaloneIndexedEvaluatorStackArchive, StandaloneIndexedGenericEvaluatorArchive,
-        StandaloneIteratedCollectionArchive,
+        StandaloneIteratedCollectionArchive, StandaloneThresholdCountertermMetadataRegistry,
+        StandaloneThresholdMultiplierCollectionArchive, StandaloneThresholdMultiplierEsurface,
+        StandaloneThresholdMultiplierInput, StandaloneThresholdMultiplierLayoutArchive,
+        StandaloneThresholdMultiplierPoint, StandaloneThresholdMultiplierVariantReference,
     },
 };
 use crate::{
     cff::CutCFFIndex,
-    integrands::process::{GenericEvaluator, amplitude::export::ExportAtomTo},
+    integrands::process::{
+        GenericEvaluator,
+        amplitude::export::ExportAtomTo,
+        threshold_multiplier::{
+            ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierInput,
+            ThresholdMultiplierPoint,
+        },
+    },
     processes::{
         IteratedCtCollection, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
-        StandaloneNumericTarget,
+        StandaloneNumericTarget, ThresholdCountertermMetadataRegistry,
         cross_section::{CrossSectionGraph, params_for_derivative_order},
     },
     subtraction::lu_counterterm::LUCounterTermEvaluators,
@@ -177,12 +187,130 @@ where
     })
 }
 
+fn export_threshold_multiplier_point(
+    point: ThresholdMultiplierPoint,
+) -> StandaloneThresholdMultiplierPoint {
+    match point {
+        ThresholdMultiplierPoint::Effective => StandaloneThresholdMultiplierPoint::Effective,
+        ThresholdMultiplierPoint::Star => StandaloneThresholdMultiplierPoint::Star,
+    }
+}
+
+fn export_threshold_multiplier_input(
+    input: &ThresholdMultiplierInput,
+) -> StandaloneThresholdMultiplierInput {
+    match *input {
+        ThresholdMultiplierInput::ModelParameter { index } => {
+            StandaloneThresholdMultiplierInput::ModelParameter { index }
+        }
+        ThresholdMultiplierInput::AdditionalParameter { index } => {
+            StandaloneThresholdMultiplierInput::AdditionalParameter { index }
+        }
+        ThresholdMultiplierInput::ExternalMomentum {
+            position,
+            component,
+        } => StandaloneThresholdMultiplierInput::ExternalMomentum {
+            position,
+            component,
+        },
+        ThresholdMultiplierInput::EdgeMomentum {
+            point,
+            edge,
+            component,
+        } => StandaloneThresholdMultiplierInput::EdgeMomentum {
+            point: export_threshold_multiplier_point(point),
+            edge,
+            component,
+        },
+        ThresholdMultiplierInput::Esurface { point, esurface } => {
+            StandaloneThresholdMultiplierInput::Esurface {
+                point: export_threshold_multiplier_point(point),
+                esurface,
+            }
+        }
+    }
+}
+
+pub(crate) fn export_threshold_multiplier_collection<T: ExportAtomTo>(
+    collection: &ThresholdMultiplierEvaluatorCollection,
+) -> Result<StandaloneThresholdMultiplierCollectionArchive<T>> {
+    collection.validate(
+        collection.left_variants().len(),
+        collection.right_variants().len(),
+    )?;
+    let layout = collection.layout();
+    Ok(StandaloneThresholdMultiplierCollectionArchive {
+        layout: StandaloneThresholdMultiplierLayoutArchive {
+            model_parameter_count: layout.model_parameters().len(),
+            additional_parameters: layout
+                .additional_parameters()
+                .iter()
+                .map(T::export_atom_to)
+                .collect::<Result<Vec<_>>>()?,
+            external_count: layout.external_count(),
+            edges: layout.edges().to_vec(),
+            esurfaces: layout
+                .esurfaces()
+                .iter()
+                .map(|esurface| StandaloneThresholdMultiplierEsurface {
+                    edges: esurface.edges.clone(),
+                    external_shift: esurface.external_shift.clone(),
+                })
+                .collect(),
+            inputs: layout
+                .inputs()
+                .iter()
+                .map(export_threshold_multiplier_input)
+                .collect(),
+            parameters: layout
+                .parameters()
+                .iter()
+                .map(T::export_atom_to)
+                .collect::<Result<Vec<_>>>()?,
+        },
+        evaluators: collection
+            .evaluators()
+            .iter()
+            .map(|evaluator| {
+                Ok(StandaloneGenericEvaluatorArchive {
+                    exprs: vec![T::export_atom_to(evaluator.expression())?],
+                    parameter_override: None,
+                    additional_fn_map_entries: Vec::new(),
+                    dual_shape: None,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?,
+        left_variants: collection
+            .left_variants()
+            .iter()
+            .map(|reference| StandaloneThresholdMultiplierVariantReference {
+                variant_id: reference.variant_id.0,
+                evaluator_id: reference.evaluator_id.map(|id| id.0),
+            })
+            .collect(),
+        right_variants: collection
+            .right_variants()
+            .iter()
+            .map(|reference| StandaloneThresholdMultiplierVariantReference {
+                variant_id: reference.variant_id.0,
+                evaluator_id: reference.evaluator_id.map(|id| id.0),
+            })
+            .collect(),
+    })
+}
+
 fn export_counterterm<T: ExportAtomTo>(
     evaluators: &LUCounterTermEvaluators,
     orientation_start: usize,
     residue_map_id_start: usize,
     mult_offset: usize,
 ) -> Result<StandaloneCountertermArchive<T>> {
+    if let Some(multipliers) = &evaluators.threshold_multipliers {
+        multipliers.validate(
+            evaluators.left_thresholds_evaluator.len(),
+            evaluators.right_thresholds_evaluator.len(),
+        )?;
+    }
     Ok(StandaloneCountertermArchive {
         left_thresholds_evaluator: evaluators
             .left_thresholds_evaluator
@@ -250,6 +378,11 @@ fn export_counterterm<T: ExportAtomTo>(
                 })
             },
         )?,
+        threshold_multipliers: evaluators
+            .threshold_multipliers
+            .as_ref()
+            .map(export_threshold_multiplier_collection)
+            .transpose()?,
         pass_two_evaluator: evaluators
             .residue_from_e_surface_evaluators
             .iter()
@@ -259,6 +392,17 @@ fn export_counterterm<T: ExportAtomTo>(
                 export_generic_evaluator(evaluator, Some(&params))
             })
             .collect::<Result<Vec<_>>>()?,
+    })
+}
+
+fn export_threshold_counterterm_metadata(
+    registry: &ThresholdCountertermMetadataRegistry,
+) -> Result<StandaloneThresholdCountertermMetadataRegistry> {
+    serde_json::from_value(serde_json::to_value(registry)?).with_context(|| {
+        format!(
+            "Failed to convert threshold-counterterm metadata for graph '{}' to the standalone schema",
+            registry.graph_name,
+        )
     })
 }
 
@@ -401,6 +545,12 @@ impl CrossSectionIntegrand {
                         )
                     })
                     .collect::<Result<Vec<_>>>()?;
+                let threshold_counterterm_metadata = term
+                    .counterterm
+                    .metadata_registry
+                    .as_ref()
+                    .map(export_threshold_counterterm_metadata)
+                    .transpose()?;
 
                 Ok(StandaloneCrossSectionGraphTermArchive {
                     graph_name: term.graph.name.clone(),
@@ -409,6 +559,7 @@ impl CrossSectionIntegrand {
                     fn_map_entries,
                     cut_group_integrands,
                     counterterms,
+                    threshold_counterterm_metadata,
                 })
             })
             .collect::<Result<Vec<_>>>()?;

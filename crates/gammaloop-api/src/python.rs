@@ -7,9 +7,17 @@ use gammalooprs::{
     },
     observables::{
         AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
+        GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
         HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
+        ThresholdCountertermComponentOccurrence,
     },
-    processes::{DotExportSettings, ProcessCollection},
+    processes::{
+        DotExportSettings, ProcessCollection, ThresholdCountertermAssociationMetadata,
+        ThresholdCountertermComponentKind, ThresholdCountertermComponentMetadata,
+        ThresholdCountertermEvaluatorMetadata, ThresholdCountertermMetadataRegistry,
+        ThresholdCountertermMultiplierMetadata, ThresholdCountertermOrigin,
+        ThresholdCountertermSide, ThresholdCountertermVariantMetadata,
+    },
     settings::RuntimeSettings,
     utils::tracing::LogLevel,
 };
@@ -25,7 +33,8 @@ use crate::{
     integrand_info::{
         IntegrandActiveThresholdCutInfo, IntegrandCutInfo, IntegrandCutThresholdInfo,
         IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo, IntegrandLoopMomentumBasisInfo,
-        IntegrandOrientationInfo, IntegrandThresholdEsurfaceInfo,
+        IntegrandOrientationInfo, IntegrandThresholdCountertermDirectiveInfo,
+        IntegrandThresholdEsurfaceInfo,
     },
     render_smart_toml,
     session::{display_command, CliSession, CliSessionState},
@@ -190,11 +199,21 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PySampleEvaluationResult>()?;
     m.add_class::<PyEventGroup>()?;
     m.add_class::<PyEvent>()?;
+    m.add_class::<PyThresholdCountertermEventInfo>()?;
+    m.add_class::<PyThresholdCountertermComponentWeight>()?;
+    m.add_class::<PyThresholdCountertermComponentOccurrence>()?;
     m.add_class::<PyFourMomentum>()?;
     m.add_class::<PyCutInfo>()?;
     m.add_class::<PyIntegrandInfo>()?;
     m.add_class::<PyIntegrandGraphGroupInfo>()?;
     m.add_class::<PyIntegrandGraphInfo>()?;
+    m.add_class::<PyThresholdCountertermDirectiveInfo>()?;
+    m.add_class::<PyThresholdCountertermMetadataRegistry>()?;
+    m.add_class::<PyThresholdCountertermVariantMetadata>()?;
+    m.add_class::<PyThresholdCountertermAssociationMetadata>()?;
+    m.add_class::<PyThresholdCountertermMultiplierMetadata>()?;
+    m.add_class::<PyThresholdCountertermEvaluatorMetadata>()?;
+    m.add_class::<PyThresholdCountertermComponentMetadata>()?;
     m.add_class::<PyIntegrandOrientationInfo>()?;
     m.add_class::<PyIntegrandLoopMomentumBasisInfo>()?;
     m.add_class::<PyIntegrandCutInfo>()?;
@@ -215,6 +234,7 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyDiscreteBreakdownEntry>()?;
     m.add_class::<PyDiscreteBreakdown>()?;
     m.add_class::<PyComponentDiscreteBreakdown>()?;
+    m.add_class::<PyAbsoluteIntegrationResult>()?;
     m.add_class::<PySlotIntegrationResult>()?;
     m.add_class::<PyIntegrationResult>()?;
     m.add_class::<PyStabilityResult>()?;
@@ -596,6 +616,103 @@ mod settings_wrapper_tests {
                 .unwrap());
         });
     }
+
+    #[test]
+    fn threshold_counterterm_event_python_view_roundtrips_all_numeric_fields() {
+        let info = GenericThresholdCountertermEventInfo {
+            original: spenso::algebra::complex::Complex::new(
+                gammalooprs::utils::F(2.0),
+                gammalooprs::utils::F(0.25),
+            ),
+            components: vec![GenericThresholdCountertermComponentWeight {
+                component_id: 7,
+                occurrence: ThresholdCountertermComponentOccurrence::LocalUnitarity {
+                    overlap_groups: [1, 3].into_iter().collect(),
+                    left_threshold_order: Some(1),
+                    right_threshold_order: Some(2),
+                    lu_cut_order: Some(3),
+                },
+                multiplier_values: [gammalooprs::utils::F(0.5), gammalooprs::utils::F(0.25)]
+                    .into_iter()
+                    .collect(),
+                effective_multiplier: gammalooprs::utils::F(0.125),
+                bare: Some(spenso::algebra::complex::Complex::new(
+                    gammalooprs::utils::F(8.0),
+                    gammalooprs::utils::F(-2.0),
+                )),
+                weighted: spenso::algebra::complex::Complex::new(
+                    gammalooprs::utils::F(1.0),
+                    gammalooprs::utils::F(-0.25),
+                ),
+                evaluation_skipped: false,
+            }],
+        };
+
+        let roundtrip =
+            threshold_counterterm_event_from_py(&py_threshold_counterterm_event_from_event(&info));
+        assert_eq!(roundtrip.original, info.original);
+        assert_eq!(roundtrip.components[0].component_id, 7);
+        assert_eq!(
+            roundtrip.components[0].multiplier_values,
+            info.components[0].multiplier_values
+        );
+        assert_eq!(roundtrip.components[0].bare, info.components[0].bare);
+        assert_eq!(
+            roundtrip.components[0].weighted,
+            info.components[0].weighted
+        );
+        assert_eq!(roundtrip.total(), info.total());
+    }
+
+    #[test]
+    fn absolute_integration_result_python_view_preserves_bundle() {
+        let result = gammalooprs::settings::runtime::AbsoluteIntegrationResult {
+            integral: gammalooprs::settings::runtime::IntegralEstimate {
+                neval: 17,
+                ..Default::default()
+            },
+            table_results: vec![
+                gammalooprs::settings::runtime::IntegrationTableComponentResult {
+                    component: "|re|".to_string(),
+                    value: gammalooprs::utils::F(3.25),
+                    error: gammalooprs::utils::F(0.5),
+                    ..Default::default()
+                },
+            ],
+            max_weight_info: vec![gammalooprs::settings::runtime::MaxWeightInfoEntry {
+                component: "re".to_string(),
+                sign: "+".to_string(),
+                max_eval: gammalooprs::utils::F(9.0),
+                coordinates: Some("channel=2".to_string()),
+            }],
+            grid_breakdown: gammalooprs::settings::runtime::ComponentDiscreteBreakdown {
+                re: Some(gammalooprs::settings::runtime::DiscreteBreakdown {
+                    axis_label: "channel".to_string(),
+                    entries: vec![gammalooprs::settings::runtime::DiscreteBreakdownEntry {
+                        bin_index: 2,
+                        value: gammalooprs::utils::F(1.75),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+                im: None,
+            },
+        };
+
+        let python_result = py_absolute_integration_result_from_result(result);
+        assert_eq!(python_result.integral.neval, 17);
+        assert_eq!(python_result.table_results[0].component, "|re|");
+        assert_eq!(python_result.table_results[0].value, 3.25);
+        assert_eq!(python_result.max_weight_info[0].sign, "+");
+        assert_eq!(
+            python_result.max_weight_info[0].coordinates.as_deref(),
+            Some("channel=2")
+        );
+        assert_eq!(
+            python_result.grid_breakdown.re.unwrap().entries[0].value,
+            1.75
+        );
+    }
 }
 
 #[pyclass(from_py_object, name = "ComplexValue", get_all)]
@@ -688,6 +805,106 @@ pub struct PyIntegrandGraphInfo {
     pub name: String,
     /// Whether this graph is the representative graph of its group.
     pub is_master: bool,
+    pub threshold_counterterm_directives: Vec<PyThresholdCountertermDirectiveInfo>,
+    pub threshold_counterterms: Option<PyThresholdCountertermMetadataRegistry>,
+}
+
+#[pyclass(from_py_object, name = "ThresholdCountertermDirective", get_all)]
+#[derive(Clone)]
+pub struct PyThresholdCountertermDirectiveInfo {
+    pub cut_edge_ids: Vec<usize>,
+    pub threshold_edge_ids: Vec<usize>,
+    pub name: String,
+    pub implicit_default: bool,
+    pub requested_subspace: Option<Vec<usize>>,
+    pub requested_parent_lmb: Option<Vec<usize>>,
+    pub disabled: bool,
+    pub multiplier: Option<PyThresholdCountertermMultiplierMetadata>,
+}
+
+#[pyclass(
+    from_py_object,
+    name = "ThresholdCountertermAssociationMetadata",
+    get_all
+)]
+#[derive(Clone)]
+pub struct PyThresholdCountertermAssociationMetadata {
+    pub cut_id: Option<usize>,
+    pub cut_edges: Vec<usize>,
+    pub threshold_edges: Vec<usize>,
+    pub esurface_id: usize,
+    pub eligible: bool,
+    pub origin: String,
+}
+
+#[pyclass(
+    from_py_object,
+    name = "ThresholdCountertermMultiplierMetadata",
+    get_all
+)]
+#[derive(Clone)]
+pub struct PyThresholdCountertermMultiplierMetadata {
+    pub expression: String,
+    pub symmetrize: bool,
+    pub opaque_derivatives: bool,
+}
+
+#[pyclass(from_py_object, name = "ThresholdCountertermVariantMetadata", get_all)]
+#[derive(Clone)]
+pub struct PyThresholdCountertermVariantMetadata {
+    pub variant_id: usize,
+    pub name: String,
+    pub group_id: Option<usize>,
+    pub cut_group_id: Option<usize>,
+    pub associations: Vec<PyThresholdCountertermAssociationMetadata>,
+    pub side: String,
+    pub threshold_esurface_ids: Vec<usize>,
+    pub requested_subspace: Option<Vec<usize>>,
+    pub resolved_subspace: Vec<usize>,
+    pub requested_parent_lmb: Option<Vec<usize>>,
+    pub resolved_parent_lmb: Vec<usize>,
+    pub subspace_loop_count: usize,
+    pub multiplier: Option<PyThresholdCountertermMultiplierMetadata>,
+    pub generated: bool,
+    pub active: bool,
+}
+
+#[pyclass(
+    from_py_object,
+    name = "ThresholdCountertermEvaluatorMetadata",
+    get_all
+)]
+#[derive(Clone)]
+pub struct PyThresholdCountertermEvaluatorMetadata {
+    pub evaluator_id: usize,
+    pub cut_group_id: Option<usize>,
+    pub collection_evaluator_id: usize,
+    pub expression: String,
+    pub variant_ids: Vec<usize>,
+}
+
+#[pyclass(
+    from_py_object,
+    name = "ThresholdCountertermComponentMetadata",
+    get_all
+)]
+#[derive(Clone)]
+pub struct PyThresholdCountertermComponentMetadata {
+    pub component_id: usize,
+    pub cut_group_id: Option<usize>,
+    pub kind: String,
+    pub variant_ids: Vec<usize>,
+    pub evaluator_ids: Vec<Option<usize>>,
+    pub sign: i8,
+}
+
+#[pyclass(from_py_object, name = "ThresholdCountertermMetadataRegistry", get_all)]
+#[derive(Clone)]
+pub struct PyThresholdCountertermMetadataRegistry {
+    pub graph_name: String,
+    pub variants: Vec<PyThresholdCountertermVariantMetadata>,
+    pub evaluators: Vec<PyThresholdCountertermEvaluatorMetadata>,
+    pub components: Vec<PyThresholdCountertermComponentMetadata>,
 }
 
 /// Edge-direction signature for one causal-flow orientation.
@@ -845,6 +1062,41 @@ pub struct PyEvent {
     pub weight: PyComplexValue,
     /// Named auxiliary complex weights such as threshold-counterterm contributions.
     pub additional_weights: Vec<PyAdditionalWeight>,
+    pub threshold_counterterms: Option<PyThresholdCountertermEventInfo>,
+}
+
+#[pyclass(
+    from_py_object,
+    name = "ThresholdCountertermComponentOccurrence",
+    get_all
+)]
+#[derive(Clone)]
+pub struct PyThresholdCountertermComponentOccurrence {
+    pub kind: String,
+    pub raised_esurface_id: Option<usize>,
+    pub overlap_groups: Vec<usize>,
+    pub left_threshold_order: Option<usize>,
+    pub right_threshold_order: Option<usize>,
+    pub lu_cut_order: Option<usize>,
+}
+
+#[pyclass(from_py_object, name = "ThresholdCountertermComponentWeight", get_all)]
+#[derive(Clone)]
+pub struct PyThresholdCountertermComponentWeight {
+    pub component_id: usize,
+    pub occurrence: PyThresholdCountertermComponentOccurrence,
+    pub multiplier_values: Vec<f64>,
+    pub effective_multiplier: f64,
+    pub bare: Option<PyComplexValue>,
+    pub weighted: PyComplexValue,
+    pub evaluation_skipped: bool,
+}
+
+#[pyclass(from_py_object, name = "ThresholdCountertermEventInfo", get_all)]
+#[derive(Clone)]
+pub struct PyThresholdCountertermEventInfo {
+    pub original: PyComplexValue,
+    pub components: Vec<PyThresholdCountertermComponentWeight>,
 }
 
 /// Correlated accepted events produced by one graph group for one sample.
@@ -1325,6 +1577,15 @@ pub struct PyComponentDiscreteBreakdown {
     pub im: Option<PyDiscreteBreakdown>,
 }
 
+#[pyclass(from_py_object, name = "AbsoluteIntegrationResult", get_all)]
+#[derive(Clone)]
+pub struct PyAbsoluteIntegrationResult {
+    pub integral: PyIntegralEstimate,
+    pub table_results: Vec<PyIntegrationTableComponentResult>,
+    pub max_weight_info: Vec<PyMaxWeightInfoEntry>,
+    pub grid_breakdown: PyComponentDiscreteBreakdown,
+}
+
 /// Result, diagnostics, and discrete breakdown for one named integration slot.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "SlotIntegrationResult", get_all)]
@@ -1339,6 +1600,7 @@ pub struct PySlotIntegrationResult {
     pub integration_statistics: PyIntegrationStatisticsSnapshot,
     pub max_weight_info: Vec<PyMaxWeightInfoEntry>,
     pub grid_breakdown: PyComponentDiscreteBreakdown,
+    pub absolute: PyAbsoluteIntegrationResult,
 }
 
 /// Collection of independently addressable integration-slot results.
@@ -1775,6 +2037,134 @@ fn py_four_momentum_from_momentum(
     }
 }
 
+fn py_threshold_counterterm_occurrence_from_occurrence(
+    occurrence: &ThresholdCountertermComponentOccurrence,
+) -> PyThresholdCountertermComponentOccurrence {
+    match occurrence {
+        ThresholdCountertermComponentOccurrence::Amplitude {
+            raised_esurface_id,
+            overlap_group,
+        } => PyThresholdCountertermComponentOccurrence {
+            kind: "amplitude".to_string(),
+            raised_esurface_id: Some(*raised_esurface_id),
+            overlap_groups: vec![*overlap_group],
+            left_threshold_order: None,
+            right_threshold_order: None,
+            lu_cut_order: None,
+        },
+        ThresholdCountertermComponentOccurrence::LocalUnitarity {
+            overlap_groups,
+            left_threshold_order,
+            right_threshold_order,
+            lu_cut_order,
+        } => PyThresholdCountertermComponentOccurrence {
+            kind: "local_unitarity".to_string(),
+            raised_esurface_id: None,
+            overlap_groups: overlap_groups.to_vec(),
+            left_threshold_order: *left_threshold_order,
+            right_threshold_order: *right_threshold_order,
+            lu_cut_order: *lu_cut_order,
+        },
+    }
+}
+
+fn threshold_counterterm_occurrence_from_py(
+    occurrence: &PyThresholdCountertermComponentOccurrence,
+) -> ThresholdCountertermComponentOccurrence {
+    match occurrence.kind.as_str() {
+        "amplitude" => ThresholdCountertermComponentOccurrence::Amplitude {
+            raised_esurface_id: occurrence
+                .raised_esurface_id
+                .expect("Python amplitude threshold occurrence must have a raised E-surface ID"),
+            overlap_group: *occurrence
+                .overlap_groups
+                .first()
+                .expect("Python amplitude threshold occurrence must have one overlap group"),
+        },
+        "local_unitarity" => ThresholdCountertermComponentOccurrence::LocalUnitarity {
+            overlap_groups: occurrence.overlap_groups.iter().copied().collect(),
+            left_threshold_order: occurrence.left_threshold_order,
+            right_threshold_order: occurrence.right_threshold_order,
+            lu_cut_order: occurrence.lu_cut_order,
+        },
+        kind => panic!("Unknown Python threshold-counterterm occurrence kind '{kind}'"),
+    }
+}
+
+fn py_threshold_counterterm_component_from_component(
+    component: &GenericThresholdCountertermComponentWeight<f64>,
+) -> PyThresholdCountertermComponentWeight {
+    PyThresholdCountertermComponentWeight {
+        component_id: component.component_id,
+        occurrence: py_threshold_counterterm_occurrence_from_occurrence(&component.occurrence),
+        multiplier_values: component
+            .multiplier_values
+            .iter()
+            .map(|value| value.0)
+            .collect(),
+        effective_multiplier: component.effective_multiplier.0,
+        bare: component.bare.map(py_complex_from_complex),
+        weighted: py_complex_from_complex(component.weighted),
+        evaluation_skipped: component.evaluation_skipped,
+    }
+}
+
+fn threshold_counterterm_component_from_py(
+    component: &PyThresholdCountertermComponentWeight,
+) -> GenericThresholdCountertermComponentWeight<f64> {
+    GenericThresholdCountertermComponentWeight {
+        component_id: component.component_id,
+        occurrence: threshold_counterterm_occurrence_from_py(&component.occurrence),
+        multiplier_values: component
+            .multiplier_values
+            .iter()
+            .copied()
+            .map(gammalooprs::utils::F)
+            .collect(),
+        effective_multiplier: gammalooprs::utils::F(component.effective_multiplier),
+        bare: component.bare.as_ref().map(|value| {
+            spenso::algebra::complex::Complex::new(
+                gammalooprs::utils::F(value.re),
+                gammalooprs::utils::F(value.im),
+            )
+        }),
+        weighted: spenso::algebra::complex::Complex::new(
+            gammalooprs::utils::F(component.weighted.re),
+            gammalooprs::utils::F(component.weighted.im),
+        ),
+        evaluation_skipped: component.evaluation_skipped,
+    }
+}
+
+fn py_threshold_counterterm_event_from_event(
+    info: &GenericThresholdCountertermEventInfo<f64>,
+) -> PyThresholdCountertermEventInfo {
+    PyThresholdCountertermEventInfo {
+        original: py_complex_from_complex(info.original),
+        components: info
+            .components
+            .iter()
+            .map(py_threshold_counterterm_component_from_component)
+            .collect(),
+    }
+}
+
+fn threshold_counterterm_event_from_py(
+    info: &PyThresholdCountertermEventInfo,
+) -> GenericThresholdCountertermEventInfo<f64> {
+    GenericThresholdCountertermEventInfo {
+        original: spenso::algebra::complex::Complex::new(
+            gammalooprs::utils::F(info.original.re),
+            gammalooprs::utils::F(info.original.im),
+        ),
+        components: info
+            .components
+            .iter()
+            .map(threshold_counterterm_component_from_py)
+            .collect(),
+    }
+}
+
 fn additional_weight_key_to_string(key: AdditionalWeightKey) -> String {
     match key {
         AdditionalWeightKey::FullMultiplicativeFactor => "full_multiplicative_factor".to_string(),
@@ -1786,6 +2176,11 @@ fn additional_weight_key_to_string(key: AdditionalWeightKey) -> String {
             esurface_id,
             overlap_group,
         } => format!("threshold_counterterm:{esurface_id}:{overlap_group}"),
+        AdditionalWeightKey::AmplitudeThresholdCountertermVariant {
+            variant_id,
+            esurface_id,
+            overlap_group,
+        } => format!("threshold_counterterm_variant:{variant_id}:{esurface_id}:{overlap_group}"),
     }
 }
 
@@ -1829,6 +2224,11 @@ fn py_event_from_event(event: &Event) -> PyEvent {
         },
         weight: py_complex_from_complex(event.weight),
         additional_weights,
+        threshold_counterterms: event
+            .additional_weights
+            .threshold_counterterms
+            .as_ref()
+            .map(py_threshold_counterterm_event_from_event),
     }
 }
 
@@ -1868,6 +2268,29 @@ fn event_from_py_event(event: &PyEvent) -> Event {
             let key = match weight.key.as_str() {
                 "original" => AdditionalWeightKey::Original,
                 "full_multiplicative_factor" => AdditionalWeightKey::FullMultiplicativeFactor,
+                _ if weight.key.starts_with("threshold_counterterm_variant:") => {
+                    let mut indices = weight
+                        .key
+                        .trim_start_matches("threshold_counterterm_variant:")
+                        .split(':');
+                    AdditionalWeightKey::AmplitudeThresholdCountertermVariant {
+                        variant_id: indices
+                            .next()
+                            .unwrap_or_default()
+                            .parse()
+                            .unwrap_or_default(),
+                        esurface_id: indices
+                            .next()
+                            .unwrap_or_default()
+                            .parse()
+                            .unwrap_or_default(),
+                        overlap_group: indices
+                            .next()
+                            .unwrap_or_default()
+                            .parse()
+                            .unwrap_or_default(),
+                    }
+                }
                 _ => match weight.key.strip_prefix("threshold_counterterm:") {
                     Some(indices) => {
                         let mut indices = indices.split(':');
@@ -1923,6 +2346,10 @@ fn event_from_py_event(event: &PyEvent) -> Event {
         ),
         additional_weights: GenericAdditionalWeightInfo {
             weights: additional_weights,
+            threshold_counterterms: event
+                .threshold_counterterms
+                .as_ref()
+                .map(threshold_counterterm_event_from_py),
         },
         derived_observable_data: Default::default(),
     }
@@ -2169,6 +2596,25 @@ fn py_component_discrete_breakdown_from_breakdown(
     }
 }
 
+fn py_absolute_integration_result_from_result(
+    result: gammalooprs::settings::runtime::AbsoluteIntegrationResult,
+) -> PyAbsoluteIntegrationResult {
+    PyAbsoluteIntegrationResult {
+        integral: py_integral_estimate_from_estimate(result.integral),
+        table_results: result
+            .table_results
+            .into_iter()
+            .map(py_table_component_result_from_result)
+            .collect(),
+        max_weight_info: result
+            .max_weight_info
+            .into_iter()
+            .map(py_max_weight_info_entry_from_entry)
+            .collect(),
+        grid_breakdown: py_component_discrete_breakdown_from_breakdown(result.grid_breakdown),
+    }
+}
+
 fn py_slot_integration_result_from_result(
     result: gammalooprs::settings::runtime::SlotIntegrationResult,
 ) -> PySlotIntegrationResult {
@@ -2192,6 +2638,7 @@ fn py_slot_integration_result_from_result(
             .map(py_max_weight_info_entry_from_entry)
             .collect(),
         grid_breakdown: py_component_discrete_breakdown_from_breakdown(result.grid_breakdown),
+        absolute: py_absolute_integration_result_from_result(result.absolute),
     }
 }
 
@@ -2212,6 +2659,158 @@ fn py_integrand_graph_info_from_info(graph: IntegrandGraphInfo) -> PyIntegrandGr
         graph_id: graph.graph_id,
         name: graph.name,
         is_master: graph.is_master,
+        threshold_counterterm_directives: graph
+            .threshold_counterterm_directives
+            .into_iter()
+            .map(py_threshold_counterterm_directive_from_info)
+            .collect(),
+        threshold_counterterms: graph
+            .threshold_counterterms
+            .map(py_threshold_counterterm_registry_from_metadata),
+    }
+}
+
+fn py_threshold_counterterm_directive_from_info(
+    directive: IntegrandThresholdCountertermDirectiveInfo,
+) -> PyThresholdCountertermDirectiveInfo {
+    PyThresholdCountertermDirectiveInfo {
+        cut_edge_ids: directive.cut_edge_ids,
+        threshold_edge_ids: directive.threshold_edge_ids,
+        name: directive.name,
+        implicit_default: directive.implicit_default,
+        requested_subspace: directive.requested_subspace,
+        requested_parent_lmb: directive.requested_parent_lmb,
+        disabled: directive.disabled,
+        multiplier: directive
+            .multiplier
+            .map(py_threshold_counterterm_multiplier_from_metadata),
+    }
+}
+
+fn threshold_counterterm_side_name(side: ThresholdCountertermSide) -> &'static str {
+    match side {
+        ThresholdCountertermSide::Amplitude => "amplitude",
+        ThresholdCountertermSide::Left => "left",
+        ThresholdCountertermSide::Right => "right",
+    }
+}
+
+fn threshold_counterterm_origin_name(origin: ThresholdCountertermOrigin) -> &'static str {
+    match origin {
+        ThresholdCountertermOrigin::Explicit => "explicit",
+        ThresholdCountertermOrigin::Autogenerated => "autogenerated",
+    }
+}
+
+fn threshold_counterterm_component_kind_name(
+    kind: ThresholdCountertermComponentKind,
+) -> &'static str {
+    match kind {
+        ThresholdCountertermComponentKind::Local => "local",
+        ThresholdCountertermComponentKind::Integrated => "integrated",
+        ThresholdCountertermComponentKind::LocalLocal => "local_local",
+        ThresholdCountertermComponentKind::LocalIntegrated => "local_integrated",
+        ThresholdCountertermComponentKind::IntegratedLocal => "integrated_local",
+        ThresholdCountertermComponentKind::IntegratedIntegrated => "integrated_integrated",
+    }
+}
+
+fn py_threshold_counterterm_association_from_metadata(
+    association: ThresholdCountertermAssociationMetadata,
+) -> PyThresholdCountertermAssociationMetadata {
+    PyThresholdCountertermAssociationMetadata {
+        cut_id: association.cut_id,
+        cut_edges: association.cut_edges,
+        threshold_edges: association.threshold_edges,
+        esurface_id: association.esurface_id,
+        eligible: association.eligible,
+        origin: threshold_counterterm_origin_name(association.origin).to_string(),
+    }
+}
+
+fn py_threshold_counterterm_multiplier_from_metadata(
+    multiplier: ThresholdCountertermMultiplierMetadata,
+) -> PyThresholdCountertermMultiplierMetadata {
+    PyThresholdCountertermMultiplierMetadata {
+        expression: multiplier.expression,
+        symmetrize: multiplier.symmetrize,
+        opaque_derivatives: multiplier.opaque_derivatives,
+    }
+}
+
+fn py_threshold_counterterm_variant_from_metadata(
+    variant: ThresholdCountertermVariantMetadata,
+) -> PyThresholdCountertermVariantMetadata {
+    PyThresholdCountertermVariantMetadata {
+        variant_id: variant.variant_id,
+        name: variant.name,
+        group_id: variant.group_id,
+        cut_group_id: variant.cut_group_id,
+        associations: variant
+            .associations
+            .into_iter()
+            .map(py_threshold_counterterm_association_from_metadata)
+            .collect(),
+        side: threshold_counterterm_side_name(variant.side).to_string(),
+        threshold_esurface_ids: variant.threshold_esurface_ids,
+        requested_subspace: variant.requested_subspace,
+        resolved_subspace: variant.resolved_subspace,
+        requested_parent_lmb: variant.requested_parent_lmb,
+        resolved_parent_lmb: variant.resolved_parent_lmb,
+        subspace_loop_count: variant.subspace_loop_count,
+        multiplier: variant
+            .multiplier
+            .map(py_threshold_counterterm_multiplier_from_metadata),
+        generated: variant.generated,
+        active: variant.active,
+    }
+}
+
+fn py_threshold_counterterm_evaluator_from_metadata(
+    evaluator: ThresholdCountertermEvaluatorMetadata,
+) -> PyThresholdCountertermEvaluatorMetadata {
+    PyThresholdCountertermEvaluatorMetadata {
+        evaluator_id: evaluator.evaluator_id,
+        cut_group_id: evaluator.cut_group_id,
+        collection_evaluator_id: evaluator.collection_evaluator_id,
+        expression: evaluator.expression,
+        variant_ids: evaluator.variant_ids,
+    }
+}
+
+fn py_threshold_counterterm_component_from_metadata(
+    component: ThresholdCountertermComponentMetadata,
+) -> PyThresholdCountertermComponentMetadata {
+    PyThresholdCountertermComponentMetadata {
+        component_id: component.component_id,
+        cut_group_id: component.cut_group_id,
+        kind: threshold_counterterm_component_kind_name(component.kind).to_string(),
+        variant_ids: component.variant_ids,
+        evaluator_ids: component.evaluator_ids,
+        sign: component.sign,
+    }
+}
+
+fn py_threshold_counterterm_registry_from_metadata(
+    registry: ThresholdCountertermMetadataRegistry,
+) -> PyThresholdCountertermMetadataRegistry {
+    PyThresholdCountertermMetadataRegistry {
+        graph_name: registry.graph_name,
+        variants: registry
+            .variants
+            .into_iter()
+            .map(py_threshold_counterterm_variant_from_metadata)
+            .collect(),
+        evaluators: registry
+            .evaluators
+            .into_iter()
+            .map(py_threshold_counterterm_evaluator_from_metadata)
+            .collect(),
+        components: registry
+            .components
+            .into_iter()
+            .map(py_threshold_counterterm_component_from_metadata)
+            .collect(),
     }
 }
 
@@ -2865,7 +3464,9 @@ impl GammaLoopAPI {
         read_only_state=false,
         settings_global_path=None,
         settings_runtime_defaults_path=None,
-        clean_state=false
+        clean_state=false,
+        processes=None,
+        integrands=None
     ))]
     pub fn new_python(
         state_folder: Option<PathBuf>,
@@ -2883,6 +3484,8 @@ impl GammaLoopAPI {
         settings_global_path: Option<PathBuf>,
         settings_runtime_defaults_path: Option<PathBuf>,
         clean_state: bool,
+        processes: Option<Vec<String>>,
+        integrands: Option<Vec<String>>,
     ) -> Result<Self> {
         let LoadedState {
             state,
@@ -2903,6 +3506,8 @@ impl GammaLoopAPI {
             read_only_state,
             settings_global_path,
             settings_runtime_defaults_path,
+            processes,
+            integrands,
         }
         .load()
         .map_err(|e| {
