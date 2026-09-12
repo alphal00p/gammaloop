@@ -2350,7 +2350,41 @@ impl LmbMultiChannelingSetup {
         parameterization_settings: &ParameterizationSettings,
         e_cm: f64,
     ) -> F<T> {
-        let mut numerator = momentum_sample.zero();
+        let scores = self.compute_inverse_jacobian_scores_impl(
+            effective_channels,
+            momentum_sample,
+            parameterization_settings,
+            e_cm,
+        );
+        let numerator = effective_channels
+            .iter()
+            .zip(scores.iter())
+            .filter(|(lmb_index, _)| **lmb_index == selected_lmb)
+            .map(|(_, score)| score.clone())
+            .last()
+            .unwrap_or_else(|| momentum_sample.zero());
+        let denominator = scores
+            .into_iter()
+            .fold(momentum_sample.zero(), |sum, summand| sum + summand);
+
+        if denominator.is_zero() {
+            momentum_sample.zero()
+        } else {
+            numerator / denominator
+        }
+    }
+
+    /// Evaluate the inverse-Jacobian scores used by the legacy LMB partition.
+    /// Keeping this as the single implementation is important: the advanced
+    /// map-density bridge below must agree pointwise with the production LMB
+    /// prefactor, including the two-branch common-radial parameterization.
+    fn compute_inverse_jacobian_scores_impl<T: FloatLike>(
+        &self,
+        effective_channels: &[LmbIndex],
+        momentum_sample: &MomentumSample<T>,
+        parameterization_settings: &ParameterizationSettings,
+        e_cm: f64,
+    ) -> Vec<F<T>> {
         let e_cm = F::<T>::from_f64(e_cm);
 
         if matches!(
@@ -2374,7 +2408,7 @@ impl LmbMultiChannelingSetup {
                 sampling_channels: Default::default(),
             };
             let sampled_branch = momentum_sample.sample.parameterization_branch;
-            let denominator = effective_channels
+            effective_channels
                 .iter()
                 .map(|&lmb_index| {
                     let basis_momenta = self.basis_momenta_for_lmb(lmb_index, momentum_sample);
@@ -2385,52 +2419,103 @@ impl LmbMultiChannelingSetup {
                         e_cm.clone(),
                         &common_radial_settings,
                     );
-
-                    if selected_lmb == lmb_index {
-                        numerator = match sampled_branch {
-                            Some(0) => product_inverse_jacobian.clone(),
-                            Some(1) => common_radial_inverse_jacobian.clone(),
-                            _ => {
-                                product_inverse_jacobian.clone()
-                                    + common_radial_inverse_jacobian.clone()
-                            }
-                        };
+                    match sampled_branch {
+                        Some(0) => product_inverse_jacobian,
+                        Some(1) => common_radial_inverse_jacobian,
+                        _ => product_inverse_jacobian + common_radial_inverse_jacobian,
                     }
-
-                    product_inverse_jacobian + common_radial_inverse_jacobian
                 })
-                .fold(momentum_sample.zero(), |sum, summand| sum + summand);
-
-            return if denominator.is_zero() {
-                momentum_sample.zero()
-            } else {
-                numerator / denominator
-            };
-        }
-
-        let denominator = effective_channels
-            .iter()
-            .map(|&lmb_index| {
-                let basis_momenta = self.basis_momenta_for_lmb(lmb_index, momentum_sample);
-                let (_, inverse_jacobian) = global_inv_parameterize(
-                    &basis_momenta,
-                    e_cm.clone(),
-                    parameterization_settings,
-                );
-
-                if selected_lmb == lmb_index {
-                    numerator = inverse_jacobian.clone();
-                }
-
-                inverse_jacobian
-            })
-            .fold(momentum_sample.zero(), |sum, summand| sum + summand);
-
-        if denominator.is_zero() {
-            momentum_sample.zero()
+                .collect()
         } else {
-            numerator / denominator
+            effective_channels
+                .iter()
+                .map(|&lmb_index| {
+                    let basis_momenta = self.basis_momenta_for_lmb(lmb_index, momentum_sample);
+                    let (_, inverse_jacobian) = global_inv_parameterize(
+                        &basis_momenta,
+                        e_cm.clone(),
+                        parameterization_settings,
+                    );
+                    inverse_jacobian
+                })
+                .collect()
         }
+    }
+
+    /// Build an exact map-density partition for ordinary LMB channels at one
+    /// common raw momentum sample.  This is an opt-in bridge for the advanced
+    /// sampling path; the existing channel-weighting code remains unchanged.
+    ///
+    /// The returned weights are pointwise identical to the legacy
+    /// `LmbChannelWeight::InverseJacobian` prefactors for the selected channel
+    /// set.  A non-positive score is treated as unsupported (rather than being
+    /// silently inserted into a positive partition), and the partition emits
+    /// the standard diagnostics if every selected channel is unsupported.
+    pub fn inverse_jacobian_sampling_partition<T: FloatLike>(
+        &self,
+        momentum_sample: &MomentumSample<T>,
+        graph_name: &str,
+        parameterization_settings: &ParameterizationSettings,
+        e_cm: f64,
+        selected_channels: Option<&[ChannelIndex]>,
+    ) -> Result<SamplingPartition> {
+        let effective_channels = match selected_channels {
+            Some(channel_indices) => channel_indices
+                .iter()
+                .map(|&channel_index| {
+                    self.effective_channel_lmb_id(
+                        channel_index,
+                        graph_name,
+                        parameterization_settings,
+                    )
+                })
+                .collect::<Result<Vec<_>>>()?,
+            None => self.effective_channels(graph_name, parameterization_settings)?,
+        };
+        if effective_channels.is_empty() {
+            return Err(eyre!(
+                "cannot build an LMB sampling partition for graph '{graph_name}': no channels selected"
+            ));
+        }
+
+        let scores = self.compute_inverse_jacobian_scores_impl(
+            &effective_channels,
+            momentum_sample,
+            parameterization_settings,
+            e_cm,
+        );
+        let channels = scores
+            .into_iter()
+            .zip(effective_channels.iter().copied())
+            .enumerate()
+            .map(|(channel_index, (score, lmb_index))| {
+                let value = score.into_ff64().0;
+                SamplingChannelScore::map_density(
+                    format!(
+                        "lmb:{channel_index}:basis={}",
+                        usize::from(lmb_index)
+                    ),
+                    SamplingScoreFunction::from_positive_function(move |_| {
+                        if !value.is_finite() {
+                            Err(eyre!(
+                                "LMB channel {channel_index} (basis {}) returned a non-finite inverse-Jacobian score {value}",
+                                usize::from(lmb_index)
+                            ))
+                        } else if value < 0.0 {
+                            Err(eyre!(
+                                "LMB channel {channel_index} (basis {}) returned a negative inverse-Jacobian score {value}",
+                                usize::from(lmb_index)
+                            ))
+                        } else if value == 0.0 {
+                            Ok(None)
+                        } else {
+                            Ok(Some(value))
+                        }
+                    }),
+                )
+            })
+            .collect::<Vec<_>>();
+        SamplingPartition::new(SamplingPartitionMode::MapDensity, &channels, &[])
     }
 
     fn basis_momenta_for_lmb<T: FloatLike>(
@@ -4783,5 +4868,46 @@ mod tests {
             let difference = (sum - sum.one()).abs();
             assert!(difference <= sum.epsilon() * sum.from_usize(16));
         }
+
+        let partition = setup
+            .inverse_jacobian_sampling_partition(
+                &sample,
+                "G",
+                &parameterization_settings,
+                1.0,
+                None,
+            )
+            .unwrap();
+        let weighting_settings = LmbChannelWeightingSettings {
+            graph_name: "G",
+            model: &model,
+            alpha: &alpha,
+            channel_weight: LmbChannelWeight::InverseJacobian,
+            parameterization_settings: &parameterization_settings,
+            e_cm: 1.0,
+        };
+        for channel_index in [ChannelIndex::from(0), ChannelIndex::from(1)] {
+            let selected_lmb = setup
+                .effective_channel_lmb_id(channel_index, "G", &parameterization_settings)
+                .unwrap();
+            let expected = setup
+                .compute_prefactor_impl(channel_index, selected_lmb, &sample, weighting_settings)
+                .unwrap();
+            let actual = F::<f64>(partition.weight(usize::from(channel_index)).unwrap());
+            let difference = (actual - expected).abs();
+            assert!(difference <= actual.epsilon() * actual.from_usize(16));
+        }
+
+        let selected = [ChannelIndex::from(1)];
+        let single_channel_partition = setup
+            .inverse_jacobian_sampling_partition(
+                &sample,
+                "G",
+                &parameterization_settings,
+                1.0,
+                Some(&selected),
+            )
+            .unwrap();
+        assert_eq!(single_channel_partition.weights, vec![1.0]);
     }
 }
