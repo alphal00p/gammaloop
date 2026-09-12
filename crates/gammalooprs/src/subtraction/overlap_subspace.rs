@@ -34,6 +34,10 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use typed_index_collections::TiVec;
 
+#[cfg(test)]
+#[path = "overlap_subspace_tests.rs"]
+mod regression_tests;
+
 #[derive(Debug, Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct OverlapGroup {
@@ -371,6 +375,17 @@ fn construct_solver(
         .build()
         .unwrap();
 
+    crate::debug_tags!(#subtraction, #threshold, #overlap, #socp;
+        stage = "threshold_socp_input",
+        graph = %overlap_input.graph.name,
+        surfaces = ?esurfaces_to_consider,
+        file.a = ?a_matrix,
+        file.b = ?b_vector,
+        file.q = ?q_vector,
+        file.cones = ?cones,
+        "constructed threshold overlap problem"
+    );
+
     DefaultSolver::new(
         &p_matrix,
         &q_vector,
@@ -389,7 +404,7 @@ pub(crate) fn find_center(
     loop_moms: &LoopMomenta<F<f64>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
-) -> Option<LoopMomenta<F<f64>>> {
+) -> Result<Option<LoopMomenta<F<f64>>>> {
     let mut solver = construct_solver(
         overlap_input,
         esurfaces_to_consider,
@@ -401,51 +416,55 @@ pub(crate) fn find_center(
 
     solver.solve();
 
+    crate::debug_tags!(#subtraction, #threshold, #overlap, #socp;
+        stage = "threshold_socp_result",
+        graph = %overlap_input.graph.name,
+        surfaces = ?esurfaces_to_consider,
+        status = ?solver.solution.status,
+        iterations = solver.solution.iterations,
+        primal_objective = solver.solution.obj_val,
+        dual_objective = solver.solution.obj_val_dual,
+        primal_residual = solver.solution.r_prim,
+        dual_residual = solver.solution.r_dual,
+        file.solution = ?solver.solution,
+        "finished threshold overlap solve"
+    );
+
     let global_loop_number = overlap_input.graph.get_loop_number();
     let esurfaces_to_check = esurfaces_to_consider
         .iter()
         .map(|existing_esurface_id| existing_esurfaces[*existing_esurface_id])
         .collect();
 
-    if solver.solution.status == SolverStatus::Solved {
-        let center = extract_center(
-            global_loop_number,
-            overlap_input.subspace,
-            &solver.solution.x,
-        );
-        check_global_center(
-            overlap_input,
-            &esurfaces_to_check,
-            &center,
-            loop_moms,
-            external_momenta,
-        )
-        .then_some(center)
-    } else if solver.solution.status == SolverStatus::AlmostSolved
-        || solver.solution.status == SolverStatus::InsufficientProgress
-    {
-        // if the solver did not converge, we check if the solution is still valid
-        let center = extract_center(
-            global_loop_number,
-            overlap_input.subspace,
-            &solver.solution.x,
-        );
-
-        let is_valid = check_global_center(
-            overlap_input,
-            &esurfaces_to_check,
-            &center,
-            loop_moms,
-            external_momenta,
-        );
-
-        if is_valid { Some(center) } else { None }
+    // Even if optimization did not converge, a physically valid center certifies overlap.
+    // Conversely, a failed solve must not silently remove an overlap from the catalogue.
+    let center = extract_center(
+        global_loop_number,
+        overlap_input.subspace,
+        &solver.solution.x,
+    );
+    if check_global_center(
+        overlap_input,
+        &esurfaces_to_check,
+        &center,
+        loop_moms,
+        external_momenta,
+    ) {
+        Ok(Some(center))
+    } else if solver.solution.status == SolverStatus::PrimalInfeasible {
+        Ok(None)
     } else {
-        if verbose {
-            println!("{:?}", solver.solution.x);
-        }
-
-        None
+        Err(eyre!(
+            "Threshold SOCP for graph '{}' and E-surfaces {:?} returned {:?} without a strictly interior center: primal objective={}, dual objective={}, primal residual={}, dual residual={}, iterations={}",
+            overlap_input.graph.name,
+            esurfaces_to_check,
+            solver.solution.status,
+            solver.solution.obj_val,
+            solver.solution.obj_val_dual,
+            solver.solution.r_prim,
+            solver.solution.r_dual,
+            solver.solution.iterations,
+        ))
     }
 }
 
@@ -925,7 +944,7 @@ fn find_maximal_overlap_single(
         loop_moms,
         external_momenta,
         false,
-    );
+    )?;
 
     if let Some(center) = option_center {
         let single_group = OverlapGroup {
@@ -944,7 +963,7 @@ fn find_maximal_overlap_single(
         existing_esurfaces,
         loop_moms,
         external_momenta,
-    );
+    )?;
 
     // if settings.general.debug > 3 {
     //     DEBUG_LOGGER.write("overlap_pairs", &esurface_pairs);
@@ -962,7 +981,7 @@ fn find_maximal_overlap_single(
                 loop_moms,
                 external_momenta,
                 false,
-            )
+            )?
             .ok_or_else(|| {
                 let esurface = &overlap_input.thresholds[esurface_id];
 
@@ -1018,7 +1037,7 @@ fn find_maximal_overlap_single(
                 loop_moms,
                 external_momenta,
                 false,
-            );
+            )?;
 
             if let Some(center) = option_center {
                 res.overlap_groups.push(OverlapGroup {
@@ -1096,7 +1115,7 @@ impl EsurfacePairs {
         existing_esurfaces: &ExistingThresholds,
         loop_moms: &LoopMomenta<F<f64>>,
         external_momenta: &ExternalFourMomenta<F<f64>>,
-    ) -> Self {
+    ) -> Result<Self> {
         let mut res = Self::new_empty(existing_esurfaces.len());
 
         let all_existing_esurfaces = existing_esurfaces
@@ -1113,7 +1132,7 @@ impl EsurfacePairs {
                     loop_moms,
                     external_momenta,
                     false,
-                );
+                )?;
 
                 if let Some(center) = center {
                     res.insert((esurface_id_1, esurface_id_2), center);
@@ -1123,7 +1142,7 @@ impl EsurfacePairs {
             }
         }
 
-        res
+        Ok(res)
     }
 
     fn has_no_overlap(&self, esurface_id: ExistingEsurfaceId) -> bool {
@@ -1864,6 +1883,7 @@ mod tests {
             &covariant_externals,
             false,
         )
+        .unwrap()
         .unwrap();
         assert!(check_global_center(
             &covariant_overlap_input,
@@ -1897,6 +1917,7 @@ mod tests {
                 &rotated_externals,
                 false,
             )
+            .unwrap()
             .unwrap();
             let expected_rotated_center = identity_center.rotate(&stability_rotation);
 
