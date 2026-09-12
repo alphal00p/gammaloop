@@ -1,0 +1,16 @@
+[package]
+name = "symbolica-merge-external-constant-repro"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+symbolica = { version = "=2.2.0", default-features = false, features = ["gmp"] }
+
+[patch.crates-io]
+symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f" }
+graphica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f" }
+numerica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f" }
+
+# Keep this independent dependency reproducer outside the GammaLoop workspace.
+[workspace]
