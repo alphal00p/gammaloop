@@ -1,0 +1,26 @@
+diff --git a/src/evaluate/optimize.rs b/src/evaluate/optimize.rs
+index c202ebf..0bba9cb 100644
+--- a/src/evaluate/optimize.rs
++++ b/src/evaluate/optimize.rs
+@@ -279,7 +279,7 @@ impl<T: Default + Clone + Eq + Hash> ExpressionEvaluator<T> {
+         {
+             if let Some(ext) = other
+                 .external_fns
+-                .iter_mut()
++                .iter()
+                 .find(|f| f.constant_index == Some(i))
+             {
+                 let key = Constant::Function(ext.export_name().to_owned());
+@@ -287,8 +287,10 @@ impl<T: Default + Clone + Eq + Hash> ExpressionEvaluator<T> {
+                     let new_i = constants.len();
+                     constants.insert(key.clone(), new_i);
+                     self.stack.push(T::default());
+-                    ext.constant_index = Some(new_i);
+-                    self.external_fns.push(ext.clone());
++                    // Keep source indices intact while scanning the incoming constants.
++                    let mut destination = ext.clone();
++                    destination.constant_index = Some(new_i);
++                    self.external_fns.push(destination);
+                 }
+                 constant_indices.push(self.param_count + constants[&key]);
+             } else {
