@@ -23,6 +23,13 @@ Regenerate saved integrands after changing DOT metadata or generated exact-pi
 coefficients; localization and Euler stability settings apply at runtime to
 loaded states.
 
+[The runtime follow-up](runtime-followup.md) checks the remaining mechanisms
+with 54 A/P stability comparisons, three 30,000-sample pilots on 20 cores,
+and current-binary H/Z and maximum-weight replays. Generic Euler rescues the
+tested nearby A/P points; exact coincidence remains undefined. Adding the
+already generated LMB `[2,10,13,14]` improves the short pilot. A density aligned
+with the threshold normals targets the remaining hard-corner variance problem.
+
 ## Prescription
 
 Use Q=1000 GeV, mt=173 GeV, mh=125 GeV. In generation LMB [3,4,7,10],
@@ -523,10 +530,13 @@ release; its precision flags are reported separately.
 
 For A/P, exact equal radial roots give `is_nan=true` in both normal and Arb
 evaluations of the full sum; they now correctly finish Unstable with no accuracy
-estimate. At eta_P=1e−6 GeV and eta_A/eta_P=1.0001, a normal
+estimate. At eta_P=1e−6 GeV and eta_A/eta_P=1.0001, the historical z-probe
 Quad evaluation passes its rotation check but its imaginary value differs from
-Arb by a factor of 1120. This is a threshold energy offset, not a soft radius.
-The remedy requires a common divided-difference/confluent evaluation preserving
+Arb by a factor of 1120. The current generic Euler probe rejects that Quad
+value and recovers the direct Arb reference, as documented in
+[the runtime follow-up](runtime-followup.md). This is a threshold energy
+offset, not a soft radius. Defining the exact coincident limit requires a
+common divided-difference/confluent evaluation preserving
 Jacobian, damping, multiplier and group factors. More qualifiers do not define
 the missing removable limit; no same-amplitude iterated CT is proposed.
 

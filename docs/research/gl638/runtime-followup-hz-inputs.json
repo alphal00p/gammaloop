@@ -1,0 +1,559 @@
+{
+  "scope": "Twenty executed current-public-binary H/Z confirmations: eight unique raw points with z and Euler forced Arb, plus four normal Euler controls. Three actual mode combinations were run. Two rays over a finite radial window do not establish global angular/tangential bounds or integrability.",
+  "binary_sha256": "029d4ecee30c4e038889ef62725ccfcdbf6e88f5d9e7dbfea08b627d238712a3",
+  "process": "epem_a_tth",
+  "integrand": "NNLO",
+  "graph_id": 0,
+  "generation_lmb_edge_ids": [
+    3,
+    4,
+    7,
+    10
+  ],
+  "coordinate_kind": "Raw spatial momenta [GeV] in the generation LMB; inspect -m --graph-id 0. No parameterization Jacobian or adaptive density.",
+  "orientation_count": 936,
+  "state_physics": "WH/WF threshold metadata, direct3D local UV with orientation localization, integrated UV, six-cut sum; Q=1000 GeV, mt=173 GeV, mh=125 GeV.",
+  "model_command": "set model MT=173 MH=125 WT=0 ymt=173 aS=0.118 aEWM1=132.507 Gf=1.166390e-05 MZ=91.188",
+  "runtime_only_card_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01/assets/schemas/runtime.json\n[default_runtime_settings.general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\n\n[default_runtime_settings.kinematics]\ne_cm = 1000.0\n\n[default_runtime_settings.kinematics.externals]\ntype = \"constant\"\n\n[default_runtime_settings.kinematics.externals.data]\nmomenta = [\n    [\n    500.0,\n    0.0,\n    0.0,\n    500.0,\n],\n    [\n    500.0,\n    0.0,\n    0.0,\n    -500.0,\n],\n]\nhelicities = [\n    \"summed_averaged\",\n    \"summed_averaged\",\n]\n\n[default_runtime_settings.integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 7500\nn_increase = 0\nn_max = 75000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\n\n[default_runtime_settings.stability]\nescalate_if_exact_zero = false\n\n[[default_runtime_settings.stability.rotation_axis]]\ntype = \"z\"\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = 0.9\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[default_runtime_settings.sampling]\ngraphs = \"monte_carlo\"\nlmb_multichanneling = true\nlmb_channels = \"monte_carlo\"\nlmb_channel_weight = \"inverse_jacobian\"\n\n[default_runtime_settings.subtraction]\nesurface_existence_threshold = 0.00000000000001\n\n[default_runtime_settings.h_function]\npower = 3\n\n",
+  "modes": {
+    "z_arb": {
+      "rotation": "z",
+      "precision_mode": "arb",
+      "force_arb": true,
+      "reset_command": "set process -p epem_a_tth -i NNLO defaults",
+      "runtime_override_command": "set process -p epem_a_tth -i NNLO kv general.mu_r=91.188 general.m_uv=91.188 'general.evaluator_method=\"SingleParametric\"' general.enable_cache=false general.generate_events=true general.store_additional_weights_in_event=false 'h_function.function=\"poly_exponential\"' h_function.sigma=1.0 h_function.power=3 subtraction.esurface_existence_threshold=1e-14 subtraction.local_ct_settings.uv_localisation.gaussian_width=1.0 subtraction.local_ct_settings.uv_localisation.dynamic_width=false subtraction.local_ct_settings.uv_localisation.force_uv_dampers_to_one=false stability.check_on_norm=true stability.escalate_if_exact_zero=false 'stability.levels=[{\"precision\":\"Double\",\"required_precision_for_re\":1e-06,\"required_precision_for_im\":1e-06,\"escalate_for_large_weight_threshold\":0.9},{\"precision\":\"Quad\",\"required_precision_for_re\":1e-10,\"required_precision_for_im\":1e-10,\"escalate_for_large_weight_threshold\":-1.0},{\"precision\":\"Arb\",\"required_precision_for_re\":1e-12,\"required_precision_for_im\":1e-12,\"escalate_for_large_weight_threshold\":-1.0}]' subtraction.disable_threshold_subtraction=false subtraction.local_ct_settings.uv_localisation.sliver_width=10.0 subtraction.local_ct_settings.uv_localisation.smooth_sliver=false 'stability.rotation_axis=[{\"type\":\"z\"}]'"
+    },
+    "euler_arb": {
+      "rotation": "euler",
+      "precision_mode": "arb",
+      "force_arb": true,
+      "reset_command": "set process -p epem_a_tth -i NNLO defaults",
+      "runtime_override_command": "set process -p epem_a_tth -i NNLO kv general.mu_r=91.188 general.m_uv=91.188 'general.evaluator_method=\"SingleParametric\"' general.enable_cache=false general.generate_events=true general.store_additional_weights_in_event=false 'h_function.function=\"poly_exponential\"' h_function.sigma=1.0 h_function.power=3 subtraction.esurface_existence_threshold=1e-14 subtraction.local_ct_settings.uv_localisation.gaussian_width=1.0 subtraction.local_ct_settings.uv_localisation.dynamic_width=false subtraction.local_ct_settings.uv_localisation.force_uv_dampers_to_one=false stability.check_on_norm=true stability.escalate_if_exact_zero=false 'stability.levels=[{\"precision\":\"Double\",\"required_precision_for_re\":1e-06,\"required_precision_for_im\":1e-06,\"escalate_for_large_weight_threshold\":0.9},{\"precision\":\"Quad\",\"required_precision_for_re\":1e-10,\"required_precision_for_im\":1e-10,\"escalate_for_large_weight_threshold\":-1.0},{\"precision\":\"Arb\",\"required_precision_for_re\":1e-12,\"required_precision_for_im\":1e-12,\"escalate_for_large_weight_threshold\":-1.0}]' subtraction.disable_threshold_subtraction=false subtraction.local_ct_settings.uv_localisation.sliver_width=10.0 subtraction.local_ct_settings.uv_localisation.smooth_sliver=false 'stability.rotation_axis=[{\"type\":\"euler_angles\",\"alpha\":0.1,\"beta\":0.2,\"gamma\":0.3}]'"
+    },
+    "euler_normal": {
+      "rotation": "euler",
+      "precision_mode": "normal",
+      "force_arb": false,
+      "reset_command": "set process -p epem_a_tth -i NNLO defaults",
+      "runtime_override_command": "set process -p epem_a_tth -i NNLO kv general.mu_r=91.188 general.m_uv=91.188 'general.evaluator_method=\"SingleParametric\"' general.enable_cache=false general.generate_events=true general.store_additional_weights_in_event=false 'h_function.function=\"poly_exponential\"' h_function.sigma=1.0 h_function.power=3 subtraction.esurface_existence_threshold=1e-14 subtraction.local_ct_settings.uv_localisation.gaussian_width=1.0 subtraction.local_ct_settings.uv_localisation.dynamic_width=false subtraction.local_ct_settings.uv_localisation.force_uv_dampers_to_one=false stability.check_on_norm=true stability.escalate_if_exact_zero=false 'stability.levels=[{\"precision\":\"Double\",\"required_precision_for_re\":1e-06,\"required_precision_for_im\":1e-06,\"escalate_for_large_weight_threshold\":0.9},{\"precision\":\"Quad\",\"required_precision_for_re\":1e-10,\"required_precision_for_im\":1e-10,\"escalate_for_large_weight_threshold\":-1.0},{\"precision\":\"Arb\",\"required_precision_for_re\":1e-12,\"required_precision_for_im\":1e-12,\"escalate_for_large_weight_threshold\":-1.0}]' subtraction.disable_threshold_subtraction=false subtraction.local_ct_settings.uv_localisation.sliver_width=10.0 subtraction.local_ct_settings.uv_localisation.smooth_sliver=false 'stability.rotation_axis=[{\"type\":\"euler_angles\",\"alpha\":0.1,\"beta\":0.2,\"gamma\":0.3}]'"
+    }
+  },
+  "points": [
+    {
+      "point_id": 0,
+      "name": "Hplus_Z-1_R0.2",
+      "normal_radius_GeV": 0.2,
+      "normal_angle_radians": -0.20230944060963285,
+      "target_H_GeV": 0.19592102992589475,
+      "target_Z_GeV": -0.15789080906722258,
+      "actual_H_GeV": 0.19592102992595528,
+      "actual_Z_GeV": -0.1578908090672826,
+      "P_GeV": -254.4574745282522,
+      "A_GeV": -92.59224792877694,
+      "parent_momenta_GeV": [
+        [
+          80.33981978786089,
+          -279.30123434169036,
+          156.7346425438874
+        ],
+        [
+          133.937162670028,
+          -72.94792516909871,
+          270.4013540929849
+        ],
+        [
+          153.02426278264537,
+          -373.94525199342525,
+          112.54657098792093
+        ],
+        [
+          263.67571450212097,
+          -95.47931288817918,
+          11.74711974094534
+        ]
+      ],
+      "raw_point_tokens": [
+        "80.33981978786089",
+        "-279.30123434169036",
+        "156.73464254388739",
+        "133.93716267002799",
+        "-72.94792516909871",
+        "270.40135409298489",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ]
+    },
+    {
+      "point_id": 1,
+      "name": "Hplus_Z-1_R0.02",
+      "normal_radius_GeV": 0.02,
+      "normal_angle_radians": -0.20230944060963285,
+      "target_H_GeV": 0.019592102992589473,
+      "target_Z_GeV": -0.015789080906722257,
+      "actual_H_GeV": 0.019592102992646687,
+      "actual_Z_GeV": -0.015789080906642994,
+      "P_GeV": -254.5141593940656,
+      "A_GeV": -92.59224792877694,
+      "parent_momenta_GeV": [
+        [
+          80.07998770978674,
+          -279.38814551363913,
+          156.64528192969667
+        ],
+        [
+          133.67733059195382,
+          -73.03483634104748,
+          270.31199347879414
+        ],
+        [
+          153.02426278264537,
+          -373.94525199342525,
+          112.54657098792093
+        ],
+        [
+          263.67571450212097,
+          -95.47931288817918,
+          11.74711974094534
+        ]
+      ],
+      "raw_point_tokens": [
+        "80.079987709786735",
+        "-279.38814551363913",
+        "156.64528192969667",
+        "133.67733059195382",
+        "-73.03483634104748",
+        "270.31199347879414",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ]
+    },
+    {
+      "point_id": 2,
+      "name": "Hplus_Z-1_R0.002",
+      "normal_radius_GeV": 0.002,
+      "normal_angle_radians": -0.20230944060963285,
+      "target_H_GeV": 0.0019592102992589473,
+      "target_Z_GeV": -0.001578908090672226,
+      "actual_H_GeV": 0.0019592102991623506,
+      "actual_Z_GeV": -0.0015789080907211428,
+      "P_GeV": -254.5198273991482,
+      "A_GeV": -92.59224792877694,
+      "parent_momenta_GeV": [
+        [
+          80.0540033567646,
+          -279.39682637064243,
+          156.63633644789192
+        ],
+        [
+          133.6513462389317,
+          -73.04351719805078,
+          270.3030479969894
+        ],
+        [
+          153.02426278264537,
+          -373.94525199342525,
+          112.54657098792093
+        ],
+        [
+          263.67571450212097,
+          -95.47931288817918,
+          11.74711974094534
+        ]
+      ],
+      "raw_point_tokens": [
+        "80.054003356764596",
+        "-279.39682637064243",
+        "156.63633644789192",
+        "133.65134623893169",
+        "-73.043517198050779",
+        "270.30304799698939",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ]
+    },
+    {
+      "point_id": 3,
+      "name": "Hplus_Z-1_R0.0002",
+      "normal_radius_GeV": 0.0002,
+      "normal_angle_radians": -0.20230944060963285,
+      "target_H_GeV": 0.00019592102992589474,
+      "target_Z_GeV": -0.00015789080906722258,
+      "actual_H_GeV": 0.00019592103001286887,
+      "actual_Z_GeV": -0.00015789080896411178,
+      "P_GeV": -254.52039419484333,
+      "A_GeV": -92.59224792877694,
+      "parent_momenta_GeV": [
+        [
+          80.05140491001245,
+          -279.3976943537321,
+          156.63544180550156
+        ],
+        [
+          133.64874779217956,
+          -73.04438518114046,
+          270.30215335459906
+        ],
+        [
+          153.02426278264537,
+          -373.94525199342525,
+          112.54657098792093
+        ],
+        [
+          263.67571450212097,
+          -95.47931288817918,
+          11.74711974094534
+        ]
+      ],
+      "raw_point_tokens": [
+        "80.051404910012451",
+        "-279.39769435373211",
+        "156.63544180550156",
+        "133.64874779217956",
+        "-73.044385181140456",
+        "270.30215335459906",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ]
+    },
+    {
+      "point_id": 4,
+      "name": "Hplus_Z+1_R0.2",
+      "normal_radius_GeV": 0.2,
+      "normal_angle_radians": 0.20230944060963285,
+      "target_H_GeV": 0.19592102992589475,
+      "target_Z_GeV": 0.15789080906722258,
+      "actual_H_GeV": 0.1959210299258416,
+      "actual_Z_GeV": 0.1578908090671689,
+      "P_GeV": -254.3229050698634,
+      "A_GeV": -92.59224792877694,
+      "parent_momenta_GeV": [
+        [
+          80.09465390012886,
+          -279.4682600662722,
+          156.72243141302712
+        ],
+        [
+          133.69199678229597,
+          -73.11495089368054,
+          270.3891429621246
+        ],
+        [
+          153.02426278264537,
+          -373.94525199342525,
+          112.54657098792093
+        ],
+        [
+          263.67571450212097,
+          -95.47931288817918,
+          11.74711974094534
+        ]
+      ],
+      "raw_point_tokens": [
+        "80.094653900128861",
+        "-279.46826006627219",
+        "156.72243141302712",
+        "133.69199678229597",
+        "-73.114950893680543",
+        "270.38914296212459",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ]
+    },
+    {
+      "point_id": 5,
+      "name": "Hplus_Z+1_R0.02",
+      "normal_radius_GeV": 0.02,
+      "normal_angle_radians": 0.20230944060963285,
+      "target_H_GeV": 0.019592102992589473,
+      "target_Z_GeV": 0.015789080906722257,
+      "actual_H_GeV": 0.019592102992589844,
+      "actual_Z_GeV": 0.015789080906699837,
+      "P_GeV": -254.50070134870032,
+      "A_GeV": -92.59224792877694,
+      "parent_momenta_GeV": [
+        [
+          80.05546925672265,
+          -279.40483881743035,
+          156.64405178584536
+        ],
+        [
+          133.65281213888974,
+          -73.0515296448387,
+          270.31076333494286
+        ],
+        [
+          153.02426278264537,
+          -373.94525199342525,
+          112.54657098792093
+        ],
+        [
+          263.67571450212097,
+          -95.47931288817918,
+          11.74711974094534
+        ]
+      ],
+      "raw_point_tokens": [
+        "80.055469256722645",
+        "-279.40483881743035",
+        "156.64405178584536",
+        "133.65281213888974",
+        "-73.051529644838695",
+        "270.31076333494286",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ]
+    },
+    {
+      "point_id": 6,
+      "name": "Hplus_Z+1_R0.002",
+      "normal_radius_GeV": 0.002,
+      "normal_angle_radians": 0.20230944060963285,
+      "target_H_GeV": 0.0019592102992589473,
+      "target_Z_GeV": 0.001578908090672226,
+      "actual_H_GeV": 0.001959210299219194,
+      "actual_Z_GeV": 0.0015789080906642994,
+      "P_GeV": -254.5184815836161,
+      "A_GeV": -92.59224792877694,
+      "parent_momenta_GeV": [
+        [
+          80.05155149281764,
+          -279.39849560832846,
+          156.63621334319515
+        ],
+        [
+          133.64889437498474,
+          -73.04518643573681,
+          270.30292489229265
+        ],
+        [
+          153.02426278264537,
+          -373.94525199342525,
+          112.54657098792093
+        ],
+        [
+          263.67571450212097,
+          -95.47931288817918,
+          11.74711974094534
+        ]
+      ],
+      "raw_point_tokens": [
+        "80.051551492817637",
+        "-279.39849560832846",
+        "156.63621334319515",
+        "133.64889437498474",
+        "-73.045186435736809",
+        "270.30292489229265",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ]
+    },
+    {
+      "point_id": 7,
+      "name": "Hplus_Z+1_R0.0002",
+      "normal_radius_GeV": 0.0002,
+      "normal_angle_radians": 0.20230944060963285,
+      "target_H_GeV": 0.00019592102992589474,
+      "target_Z_GeV": 0.00015789080906722258,
+      "actual_H_GeV": 0.0001959210298423386,
+      "actual_Z_GeV": 0.0001578908090209552,
+      "P_GeV": -254.52025961318031,
+      "A_GeV": -92.59224792877694,
+      "parent_momenta_GeV": [
+        [
+          80.05115972343137,
+          -279.3978612765737,
+          156.63542949412872
+        ],
+        [
+          133.64850260559848,
+          -73.04455210398203,
+          270.3021410432262
+        ],
+        [
+          153.02426278264537,
+          -373.94525199342525,
+          112.54657098792093
+        ],
+        [
+          263.67571450212097,
+          -95.47931288817918,
+          11.74711974094534
+        ]
+      ],
+      "raw_point_tokens": [
+        "80.051159723431368",
+        "-279.39786127657368",
+        "156.63542949412872",
+        "133.64850260559848",
+        "-73.044552103982028",
+        "270.30214104322619",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "point-00-z-arb",
+      "point_id": 0,
+      "mode": "z_arb",
+      "raw_source_id": "point-00-z-arb.json"
+    },
+    {
+      "case_id": "point-01-z-arb",
+      "point_id": 1,
+      "mode": "z_arb",
+      "raw_source_id": "point-01-z-arb.json"
+    },
+    {
+      "case_id": "point-02-z-arb",
+      "point_id": 2,
+      "mode": "z_arb",
+      "raw_source_id": "point-02-z-arb.json"
+    },
+    {
+      "case_id": "point-03-z-arb",
+      "point_id": 3,
+      "mode": "z_arb",
+      "raw_source_id": "point-03-z-arb.json"
+    },
+    {
+      "case_id": "point-04-z-arb",
+      "point_id": 4,
+      "mode": "z_arb",
+      "raw_source_id": "point-04-z-arb.json"
+    },
+    {
+      "case_id": "point-05-z-arb",
+      "point_id": 5,
+      "mode": "z_arb",
+      "raw_source_id": "point-05-z-arb.json"
+    },
+    {
+      "case_id": "point-06-z-arb",
+      "point_id": 6,
+      "mode": "z_arb",
+      "raw_source_id": "point-06-z-arb.json"
+    },
+    {
+      "case_id": "point-07-z-arb",
+      "point_id": 7,
+      "mode": "z_arb",
+      "raw_source_id": "point-07-z-arb.json"
+    },
+    {
+      "case_id": "point-00-euler-arb",
+      "point_id": 0,
+      "mode": "euler_arb",
+      "raw_source_id": "point-00-euler-arb.json"
+    },
+    {
+      "case_id": "point-01-euler-arb",
+      "point_id": 1,
+      "mode": "euler_arb",
+      "raw_source_id": "point-01-euler-arb.json"
+    },
+    {
+      "case_id": "point-02-euler-arb",
+      "point_id": 2,
+      "mode": "euler_arb",
+      "raw_source_id": "point-02-euler-arb.json"
+    },
+    {
+      "case_id": "point-03-euler-arb",
+      "point_id": 3,
+      "mode": "euler_arb",
+      "raw_source_id": "point-03-euler-arb.json"
+    },
+    {
+      "case_id": "point-04-euler-arb",
+      "point_id": 4,
+      "mode": "euler_arb",
+      "raw_source_id": "point-04-euler-arb.json"
+    },
+    {
+      "case_id": "point-05-euler-arb",
+      "point_id": 5,
+      "mode": "euler_arb",
+      "raw_source_id": "point-05-euler-arb.json"
+    },
+    {
+      "case_id": "point-06-euler-arb",
+      "point_id": 6,
+      "mode": "euler_arb",
+      "raw_source_id": "point-06-euler-arb.json"
+    },
+    {
+      "case_id": "point-07-euler-arb",
+      "point_id": 7,
+      "mode": "euler_arb",
+      "raw_source_id": "point-07-euler-arb.json"
+    },
+    {
+      "case_id": "point-00-euler-normal",
+      "point_id": 0,
+      "mode": "euler_normal",
+      "raw_source_id": "point-00-euler-normal.json"
+    },
+    {
+      "case_id": "point-03-euler-normal",
+      "point_id": 3,
+      "mode": "euler_normal",
+      "raw_source_id": "point-03-euler-normal.json"
+    },
+    {
+      "case_id": "point-04-euler-normal",
+      "point_id": 4,
+      "mode": "euler_normal",
+      "raw_source_id": "point-04-euler-normal.json"
+    },
+    {
+      "case_id": "point-07-euler-normal",
+      "point_id": 7,
+      "mode": "euler_normal",
+      "raw_source_id": "point-07-euler-normal.json"
+    }
+  ],
+  "inspection_protocol": "For each case, reset process runtime from the embedded runtime-only card, apply the named mode override command, then inspect -p epem_a_tth -i NNLO -m --graph-id 0 [-f for arb] --json-output OUTPUT --point followed by raw_point_tokens. Use a compatible read-only state with no save. This JSON uses a dedicated schema and is not directly accepted by existing REPLAY.md.",
+  "provenance": {
+    "authoritative_point_source": "full-explicit/hard-hz-check/points.json",
+    "authoritative_point_sha256": "12fe658c571a60fab016037fad41afa5ec43f566b955357ef98cdb2bfc2110d3",
+    "executed_card_sha256": "971a5129aed476b223f3472b64f9565ae9e5c15228fae49182b7c6d6048caf40",
+    "plan_sha256": "b8ccbdecc7ed6f729c26c92efa0a3eac7106adf0184245146e98d3ce1d52fff4",
+    "execution_sha256": "2e4cd02ddc8f83905611397035ef82cd6e271d1da7eff4381ad2d2b03f90107a",
+    "state_unchanged": true,
+    "execution_seconds": 93.93133241403848
+  }
+}

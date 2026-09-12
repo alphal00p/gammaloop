@@ -1,0 +1,705 @@
+{
+  "schema_version": 1,
+  "orientation_count": 936,
+  "source_state": "/common/dev/gl638_integration_validation/publication/smoke/execution/state",
+  "source_metadata_and_model": {
+    "/common/dev/gl638_integration_validation/publication/smoke/execution/state/global_settings.toml": "f8e182615cfcbc893033249f1c0fb8beb36760a20ded2972e33f0545a199ed14",
+    "/common/dev/gl638_integration_validation/publication/smoke/execution/state/model_parameters.json": "5cf4b422cfe328559dd3cc9322e5e66c264faba54d5d44b4f5772c3a53a43572",
+    "/common/dev/gl638_integration_validation/publication/smoke/execution/state/processes/cross_sections/epem_a_tth/NNLO/GL638.dot": "7fd875ea567fa04e009f20015b14ddaea1f89b3915294858313abc3b062e0942"
+  },
+  "basis_edges": {
+    "1": [
+      6,
+      12,
+      13,
+      14
+    ],
+    "2": [
+      4,
+      12,
+      13,
+      14
+    ],
+    "13": [
+      6,
+      7,
+      13,
+      14
+    ],
+    "14": [
+      4,
+      7,
+      13,
+      14
+    ],
+    "21": [
+      6,
+      10,
+      13,
+      14
+    ],
+    "22": [
+      4,
+      10,
+      13,
+      14
+    ],
+    "84": [
+      2,
+      10,
+      13,
+      14
+    ]
+  },
+  "generation_UV": {
+    "softct": false,
+    "generate_integrated": true,
+    "project_integrated_uv_cts_onto_tensor_integrals": true,
+    "subtract_uv": true,
+    "final_integrand": "ThreeD",
+    "local_uv_cts_from_expanded_4d_integrands": false,
+    "add_marker": false,
+    "keep_marker": true,
+    "inner_products": true,
+    "orchestrator": "hedge_poset",
+    "renormalization_prescription": {
+      "log_divergent": "MUV",
+      "massive_power_divergent": "MUV",
+      "massless_power_divergent": "MUV",
+      "overrides": []
+    },
+    "vakint": {
+      "form_exe_path": "form",
+      "python_exe_path": "python3",
+      "evaluation_methods": [
+        "alphaloop",
+        "matad",
+        "fmft"
+      ],
+      "run_time_decimal_precision": 100,
+      "clean_tmp_dir": true,
+      "normalization": "MSbar",
+      "additional_normalization": "1",
+      "matad": {
+        "expand_masters": true,
+        "susbstitute_masters": true,
+        "substitute_hpls": true,
+        "direct_numerical_substition": true
+      },
+      "alphaloop": {
+        "susbstitute_masters": true
+      },
+      "fmft": {
+        "expand_masters": true,
+        "susbstitute_masters": true
+      },
+      "pysecdec": {
+        "quiet": true,
+        "relative_precision": 1e-07,
+        "min_n_evals": 10000,
+        "max_n_evals": 1000000000000
+      }
+    }
+  },
+  "runs": [
+    {
+      "profile": "baseline6",
+      "binary_sha256": "029d4ecee30c4e038889ef62725ccfcdbf6e88f5d9e7dbfea08b627d238712a3",
+      "runtime_settings_snapshot": {
+        "general": {
+          "m_uv": 91.188,
+          "mu_r": 91.188,
+          "integral_unit": "picobarn"
+        },
+        "kinematics": {
+          "e_cm": 1000.0,
+          "externals": {
+            "type": "constant",
+            "data": {
+              "momenta": [
+                [
+                  500.0,
+                  0.0,
+                  0.0,
+                  500.0
+                ],
+                [
+                  500.0,
+                  0.0,
+                  0.0,
+                  -500.0
+                ]
+              ],
+              "helicities": [
+                "summed_averaged",
+                "summed_averaged"
+              ]
+            }
+          }
+        },
+        "integrator": {
+          "n_bins": 16,
+          "min_samples_for_update": 64,
+          "n_start": 10000,
+          "n_increase": 0,
+          "n_max": 30000,
+          "discrete_dim_learning_rate": 0.25,
+          "continuous_dim_learning_rate": 0.25,
+          "seed": 1337
+        },
+        "stability": {
+          "escalate_if_exact_zero": false,
+          "levels": [
+            {
+              "precision": "Double",
+              "required_precision_for_re": 1e-06,
+              "required_precision_for_im": 1e-06,
+              "escalate_for_large_weight_threshold": 0.9
+            },
+            {
+              "precision": "Quad",
+              "required_precision_for_re": 1e-10,
+              "required_precision_for_im": 1e-10,
+              "escalate_for_large_weight_threshold": -1.0
+            },
+            {
+              "precision": "Arb",
+              "required_precision_for_re": 1e-12,
+              "required_precision_for_im": 1e-12,
+              "escalate_for_large_weight_threshold": -1.0
+            }
+          ]
+        },
+        "sampling": {
+          "graphs": "monte_carlo",
+          "lmb_multichanneling": true,
+          "lmb_channels": "monte_carlo",
+          "lmb_channel_weight": "inverse_jacobian",
+          "b": 0.3,
+          "lmb_basis_ids": {
+            "GL638": [
+              1,
+              2,
+              13,
+              14,
+              21,
+              22
+            ]
+          }
+        },
+        "subtraction": {
+          "esurface_existence_threshold": 1e-14
+        },
+        "h_function": {
+          "power": 3
+        }
+      },
+      "effective_sampling": {
+        "graphs": "monte_carlo",
+        "lmb_multichanneling": true,
+        "lmb_channels": "monte_carlo",
+        "lmb_channel_weight": "inverse_jacobian",
+        "b": 0.3,
+        "orientations": "summed",
+        "coordinate_system": "spherical",
+        "mapping": "linear",
+        "power": 1.0,
+        "lmb_basis_ids": {
+          "GL638": [
+            1,
+            2,
+            13,
+            14,
+            21,
+            22
+          ]
+        }
+      },
+      "elapsed_seconds": 370.5759249549592,
+      "cores": 20,
+      "completed_iterations": 3,
+      "settings_verified": true,
+      "source_state_unchanged": true,
+      "source_snapshot_sha256": {
+        "integration_result_iter_0001.json": "eb2cb86697567d85fcdbd3ad1aecb9217b4fed6584459616c8bfe3cd0c08895f",
+        "integration_result_iter_0003.json": "8f97c3fc4928173394f9131fbdb229171decd4cf2e1e8b13d17b0c71ba42af7c",
+        "integration_result_iter_0002.json": "e8490fbaef9811a1a21a5ca318b0f6da0798fa871c62dcd0c45912632aeb2a0b"
+      },
+      "final_absolute_maxima": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 1.7851356678824255,
+          "coordinates": "graph: 0, LMB channel: 5, xs: [\n6.1968824673905476e-01 5.8085847401221802e-01 4.3407016127355563e-01\n6.9283599950941221e-01 4.9072369455871989e-01 4.6227852695444932e-01\n4.7485887255213621e-01 7.1593169253413402e-01 7.1032133916461671e-01\n3.9494731001297723e-01 3.2223816746290196e-01 4.6649540693548618e-02 ]",
+          "run": "GL638-public-runtime-rescue-baseline6-30k",
+          "slot": "epem_a_tth@NNLO",
+          "iteration": 3,
+          "kind": "absolute",
+          "snapshot": "/common/dev/gl638_integration_validation/runs/GL638-public-runtime-rescue-baseline6-30k/workspace/results/integration_result_iter_0003.json",
+          "discrete_axes": [
+            {
+              "label": "graph",
+              "index": 0
+            },
+            {
+              "label": "LMB channel",
+              "index": 5
+            }
+          ],
+          "xs": [
+            0.6196882467390548,
+            0.580858474012218,
+            0.43407016127355563,
+            0.6928359995094122,
+            0.4907236945587199,
+            0.4622785269544493,
+            0.4748588725521362,
+            0.715931692534134,
+            0.7103213391646167,
+            0.3949473100129772,
+            0.32223816746290196,
+            0.04664954069354862
+          ],
+          "replay_note": "Replays integrand and parameterization Jacobian; original adaptive PDF weight is absent from printed coordinates."
+        },
+        {
+          "component": "im",
+          "sign": "+",
+          "max_eval": 15.136342123624601,
+          "coordinates": "graph: 0, LMB channel: 4, xs: [\n4.4492214751769688e-01 7.5144056411244631e-01 7.4046762246196762e-01\n6.0444565863932953e-01 7.3759548599349534e-01 3.9424694388964865e-01\n3.6800914763542764e-01 4.0579809940616482e-02 1.9807423354481790e-01\n2.1845834505602146e-01 9.0095733884299567e-01 3.5612002043363733e-01 ]",
+          "run": "GL638-public-runtime-rescue-baseline6-30k",
+          "slot": "epem_a_tth@NNLO",
+          "iteration": 3,
+          "kind": "absolute",
+          "snapshot": "/common/dev/gl638_integration_validation/runs/GL638-public-runtime-rescue-baseline6-30k/workspace/results/integration_result_iter_0003.json",
+          "discrete_axes": [
+            {
+              "label": "graph",
+              "index": 0
+            },
+            {
+              "label": "LMB channel",
+              "index": 4
+            }
+          ],
+          "xs": [
+            0.4449221475176969,
+            0.7514405641124463,
+            0.7404676224619676,
+            0.6044456586393295,
+            0.7375954859934953,
+            0.39424694388964865,
+            0.36800914763542764,
+            0.04057980994061648,
+            0.1980742335448179,
+            0.21845834505602146,
+            0.9009573388429957,
+            0.35612002043363733
+          ],
+          "replay_note": "Replays integrand and parameterization Jacobian; original adaptive PDF weight is absent from printed coordinates."
+        }
+      ]
+    },
+    {
+      "profile": "union7",
+      "binary_sha256": "029d4ecee30c4e038889ef62725ccfcdbf6e88f5d9e7dbfea08b627d238712a3",
+      "runtime_settings_snapshot": {
+        "general": {
+          "m_uv": 91.188,
+          "mu_r": 91.188,
+          "integral_unit": "picobarn"
+        },
+        "kinematics": {
+          "e_cm": 1000.0,
+          "externals": {
+            "type": "constant",
+            "data": {
+              "momenta": [
+                [
+                  500.0,
+                  0.0,
+                  0.0,
+                  500.0
+                ],
+                [
+                  500.0,
+                  0.0,
+                  0.0,
+                  -500.0
+                ]
+              ],
+              "helicities": [
+                "summed_averaged",
+                "summed_averaged"
+              ]
+            }
+          }
+        },
+        "integrator": {
+          "n_bins": 16,
+          "min_samples_for_update": 64,
+          "n_start": 10000,
+          "n_increase": 0,
+          "n_max": 30000,
+          "discrete_dim_learning_rate": 0.25,
+          "continuous_dim_learning_rate": 0.25,
+          "seed": 1337
+        },
+        "stability": {
+          "escalate_if_exact_zero": false,
+          "levels": [
+            {
+              "precision": "Double",
+              "required_precision_for_re": 1e-06,
+              "required_precision_for_im": 1e-06,
+              "escalate_for_large_weight_threshold": 0.9
+            },
+            {
+              "precision": "Quad",
+              "required_precision_for_re": 1e-10,
+              "required_precision_for_im": 1e-10,
+              "escalate_for_large_weight_threshold": -1.0
+            },
+            {
+              "precision": "Arb",
+              "required_precision_for_re": 1e-12,
+              "required_precision_for_im": 1e-12,
+              "escalate_for_large_weight_threshold": -1.0
+            }
+          ]
+        },
+        "sampling": {
+          "graphs": "monte_carlo",
+          "lmb_multichanneling": true,
+          "lmb_channels": "monte_carlo",
+          "lmb_channel_weight": "inverse_jacobian",
+          "b": 0.3,
+          "lmb_basis_ids": {
+            "GL638": [
+              1,
+              2,
+              13,
+              14,
+              21,
+              22,
+              84
+            ]
+          }
+        },
+        "subtraction": {
+          "esurface_existence_threshold": 1e-14
+        },
+        "h_function": {
+          "power": 3
+        }
+      },
+      "effective_sampling": {
+        "graphs": "monte_carlo",
+        "lmb_multichanneling": true,
+        "lmb_channels": "monte_carlo",
+        "lmb_channel_weight": "inverse_jacobian",
+        "b": 0.3,
+        "orientations": "summed",
+        "coordinate_system": "spherical",
+        "mapping": "linear",
+        "power": 1.0,
+        "lmb_basis_ids": {
+          "GL638": [
+            1,
+            2,
+            13,
+            14,
+            21,
+            22,
+            84
+          ]
+        }
+      },
+      "elapsed_seconds": 367.6303611280164,
+      "cores": 20,
+      "completed_iterations": 3,
+      "settings_verified": true,
+      "source_state_unchanged": true,
+      "source_snapshot_sha256": {
+        "integration_result_iter_0002.json": "7b1e4c74d74aa562d2bcd6a998b13805965edaa5cadf9bc715e2e052feb0ee64",
+        "integration_result_iter_0003.json": "d0fe13132c2f7033abff779a21d0aba32da5225073be3f409f1ab65e5bc90ff7",
+        "integration_result_iter_0001.json": "784d28a12df1b6bce8ff497e8252329d530ed3f76261de6b428f96cd47ccc3d1"
+      },
+      "final_absolute_maxima": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 0.8727748209207982,
+          "coordinates": "graph: 0, LMB channel: 6, xs: [\n3.4049215792098031e-01 3.3648737020413810e-01 9.0125256766963857e-01\n7.4359930709351862e-01 8.1850430888559000e-01 7.6656680895337725e-02\n3.0477287138974485e-01 3.1218088657032805e-01 2.8042631200832646e-01\n2.2886070707319761e-01 7.2505767570938517e-02 4.1113839389854612e-01 ]",
+          "run": "GL638-public-runtime-rescue-union7-30k",
+          "slot": "epem_a_tth@NNLO",
+          "iteration": 3,
+          "kind": "absolute",
+          "snapshot": "/common/dev/gl638_integration_validation/runs/GL638-public-runtime-rescue-union7-30k/workspace/results/integration_result_iter_0003.json",
+          "discrete_axes": [
+            {
+              "label": "graph",
+              "index": 0
+            },
+            {
+              "label": "LMB channel",
+              "index": 6
+            }
+          ],
+          "xs": [
+            0.3404921579209803,
+            0.3364873702041381,
+            0.9012525676696386,
+            0.7435993070935186,
+            0.81850430888559,
+            0.07665668089533773,
+            0.30477287138974485,
+            0.31218088657032805,
+            0.28042631200832646,
+            0.2288607070731976,
+            0.07250576757093852,
+            0.4111383938985461
+          ],
+          "replay_note": "Replays integrand and parameterization Jacobian; original adaptive PDF weight is absent from printed coordinates."
+        },
+        {
+          "component": "im",
+          "sign": "+",
+          "max_eval": 2.5350480277741965,
+          "coordinates": "graph: 0, LMB channel: 1, xs: [\n3.5112571352925048e-01 4.0665081966719568e-01 9.6061462894962635e-01\n5.1242642291481699e-01 4.2205072010171873e-01 4.8394551767627719e-01\n4.8412083579329346e-01 3.1780826110622523e-01 3.9230693065997269e-01\n2.3766984010669862e-01 3.9780491096219789e-01 6.9069466674461510e-01 ]",
+          "run": "GL638-public-runtime-rescue-union7-30k",
+          "slot": "epem_a_tth@NNLO",
+          "iteration": 3,
+          "kind": "absolute",
+          "snapshot": "/common/dev/gl638_integration_validation/runs/GL638-public-runtime-rescue-union7-30k/workspace/results/integration_result_iter_0003.json",
+          "discrete_axes": [
+            {
+              "label": "graph",
+              "index": 0
+            },
+            {
+              "label": "LMB channel",
+              "index": 1
+            }
+          ],
+          "xs": [
+            0.3511257135292505,
+            0.4066508196671957,
+            0.9606146289496263,
+            0.512426422914817,
+            0.42205072010171873,
+            0.4839455176762772,
+            0.48412083579329346,
+            0.31780826110622523,
+            0.3923069306599727,
+            0.23766984010669862,
+            0.3978049109621979,
+            0.6906946667446151
+          ],
+          "replay_note": "Replays integrand and parameterization Jacobian; original adaptive PDF weight is absent from printed coordinates."
+        }
+      ]
+    },
+    {
+      "profile": "common6",
+      "binary_sha256": "029d4ecee30c4e038889ef62725ccfcdbf6e88f5d9e7dbfea08b627d238712a3",
+      "runtime_settings_snapshot": {
+        "general": {
+          "m_uv": 91.188,
+          "mu_r": 91.188,
+          "integral_unit": "picobarn"
+        },
+        "kinematics": {
+          "e_cm": 1000.0,
+          "externals": {
+            "type": "constant",
+            "data": {
+              "momenta": [
+                [
+                  500.0,
+                  0.0,
+                  0.0,
+                  500.0
+                ],
+                [
+                  500.0,
+                  0.0,
+                  0.0,
+                  -500.0
+                ]
+              ],
+              "helicities": [
+                "summed_averaged",
+                "summed_averaged"
+              ]
+            }
+          }
+        },
+        "integrator": {
+          "n_bins": 16,
+          "min_samples_for_update": 64,
+          "n_start": 10000,
+          "n_increase": 0,
+          "n_max": 30000,
+          "discrete_dim_learning_rate": 0.25,
+          "continuous_dim_learning_rate": 0.25,
+          "seed": 1337
+        },
+        "stability": {
+          "escalate_if_exact_zero": false,
+          "levels": [
+            {
+              "precision": "Double",
+              "required_precision_for_re": 1e-06,
+              "required_precision_for_im": 1e-06,
+              "escalate_for_large_weight_threshold": 0.9
+            },
+            {
+              "precision": "Quad",
+              "required_precision_for_re": 1e-10,
+              "required_precision_for_im": 1e-10,
+              "escalate_for_large_weight_threshold": -1.0
+            },
+            {
+              "precision": "Arb",
+              "required_precision_for_re": 1e-12,
+              "required_precision_for_im": 1e-12,
+              "escalate_for_large_weight_threshold": -1.0
+            }
+          ]
+        },
+        "sampling": {
+          "graphs": "monte_carlo",
+          "lmb_multichanneling": true,
+          "lmb_channels": "monte_carlo",
+          "lmb_channel_weight": "inverse_jacobian",
+          "coordinate_system": "spherical_common_radial",
+          "b": 0.3,
+          "lmb_basis_ids": {
+            "GL638": [
+              1,
+              2,
+              13,
+              14,
+              21,
+              22
+            ]
+          }
+        },
+        "subtraction": {
+          "esurface_existence_threshold": 1e-14
+        },
+        "h_function": {
+          "power": 3
+        }
+      },
+      "effective_sampling": {
+        "graphs": "monte_carlo",
+        "lmb_multichanneling": true,
+        "lmb_channels": "monte_carlo",
+        "lmb_channel_weight": "inverse_jacobian",
+        "b": 0.3,
+        "orientations": "summed",
+        "coordinate_system": "spherical_common_radial",
+        "mapping": "linear",
+        "power": 1.0,
+        "lmb_basis_ids": {
+          "GL638": [
+            1,
+            2,
+            13,
+            14,
+            21,
+            22
+          ]
+        }
+      },
+      "elapsed_seconds": 389.61048834898975,
+      "cores": 20,
+      "completed_iterations": 3,
+      "settings_verified": true,
+      "source_state_unchanged": true,
+      "source_snapshot_sha256": {
+        "integration_result_iter_0002.json": "c2ab4b87c79edffdb53ab78b73240dab33a79870cbcc33f4895023dd7f95cfa7",
+        "integration_result_iter_0003.json": "4986e32b89b7290072c5883ce57c9252ab34a893cbcd2f94c565b68055fe907e",
+        "integration_result_iter_0001.json": "f5213dff8291345eab3ba64ff6c7aefcbe22bd0d1f752626e32fc27328ef8b8d"
+      },
+      "final_absolute_maxima": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 1.7733918049033086,
+          "coordinates": "graph: 0, LMB channel: 0, xs: [\n6.6884195272898139e-01 2.5944957461647278e-01 6.4952003242487955e-01\n6.9572275681265106e-01 5.0545589409899361e-01 1.0219732693233730e-02\n3.0609562516070687e-01 8.9477337152351288e-02 3.1521109377629597e-01\n6.8624872507113277e-01 4.5404829276465053e-01 5.0202910287666025e-01 ]",
+          "run": "GL638-public-runtime-rescue-common6-30k",
+          "slot": "epem_a_tth@NNLO",
+          "iteration": 3,
+          "kind": "absolute",
+          "snapshot": "/common/dev/gl638_integration_validation/runs/GL638-public-runtime-rescue-common6-30k/workspace/results/integration_result_iter_0003.json",
+          "discrete_axes": [
+            {
+              "label": "graph",
+              "index": 0
+            },
+            {
+              "label": "LMB channel",
+              "index": 0
+            }
+          ],
+          "xs": [
+            0.6688419527289814,
+            0.2594495746164728,
+            0.6495200324248795,
+            0.695722756812651,
+            0.5054558940989936,
+            0.01021973269323373,
+            0.3060956251607069,
+            0.08947733715235129,
+            0.31521109377629597,
+            0.6862487250711328,
+            0.45404829276465053,
+            0.5020291028766602
+          ],
+          "replay_note": "Replays integrand and parameterization Jacobian; original adaptive PDF weight is absent from printed coordinates."
+        },
+        {
+          "component": "im",
+          "sign": "+",
+          "max_eval": 3.2274039505944345,
+          "coordinates": "graph: 0, LMB channel: 0, xs: [\n6.6884195272898139e-01 2.5944957461647278e-01 6.4952003242487955e-01\n6.9572275681265106e-01 5.0545589409899361e-01 1.0219732693233730e-02\n3.0609562516070687e-01 8.9477337152351288e-02 3.1521109377629597e-01\n6.8624872507113277e-01 4.5404829276465053e-01 5.0202910287666025e-01 ]",
+          "run": "GL638-public-runtime-rescue-common6-30k",
+          "slot": "epem_a_tth@NNLO",
+          "iteration": 3,
+          "kind": "absolute",
+          "snapshot": "/common/dev/gl638_integration_validation/runs/GL638-public-runtime-rescue-common6-30k/workspace/results/integration_result_iter_0003.json",
+          "discrete_axes": [
+            {
+              "label": "graph",
+              "index": 0
+            },
+            {
+              "label": "LMB channel",
+              "index": 0
+            }
+          ],
+          "xs": [
+            0.6688419527289814,
+            0.2594495746164728,
+            0.6495200324248795,
+            0.695722756812651,
+            0.5054558940989936,
+            0.01021973269323373,
+            0.3060956251607069,
+            0.08947733715235129,
+            0.31521109377629597,
+            0.6862487250711328,
+            0.45404829276465053,
+            0.5020291028766602
+          ],
+          "replay_note": "Replays integrand and parameterization Jacobian; original adaptive PDF weight is absent from printed coordinates."
+        }
+      ]
+    }
+  ],
+  "runtime_default_note": "Serialized snapshots omit default-valued controls. Euler(.1,.2,.3), spherical, linear, summed orientations, real training and standard local/integrated threshold profiles are the omitted defaults. Exact effective sampling fields are also retained.",
+  "interpretation": "Nominal finite-budget errors and timing proxies only. Same seed is not a paired physical sample after changing maps or adaptive channels. These runs cannot certify finite variance or convergence. Unstable and NaN counts remain visible; no sample is removed or replaced here."
+}

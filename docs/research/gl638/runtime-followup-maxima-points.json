@@ -1,0 +1,537 @@
+{
+  "coordinate_kind": "Original 12-dimensional unit-cube samples, not spatial momenta; do not use inspect -m.",
+  "binary_sha256": "029d4ecee30c4e038889ef62725ccfcdbf6e88f5d9e7dbfea08b627d238712a3",
+  "orientation_count": 936,
+  "generation_uv": {
+    "softct": false,
+    "generate_integrated": true,
+    "project_integrated_uv_cts_onto_tensor_integrals": true,
+    "subtract_uv": true,
+    "final_integrand": "ThreeD",
+    "local_uv_cts_from_expanded_4d_integrands": false,
+    "add_marker": false,
+    "keep_marker": true,
+    "inner_products": true,
+    "orchestrator": "hedge_poset",
+    "renormalization_prescription": {
+      "log_divergent": "MUV",
+      "massive_power_divergent": "MUV",
+      "massless_power_divergent": "MUV",
+      "overrides": []
+    },
+    "vakint": {
+      "form_exe_path": "form",
+      "python_exe_path": "python3",
+      "evaluation_methods": [
+        "alphaloop",
+        "matad",
+        "fmft"
+      ],
+      "run_time_decimal_precision": 100,
+      "clean_tmp_dir": true,
+      "normalization": "MSbar",
+      "additional_normalization": "1",
+      "matad": {
+        "expand_masters": true,
+        "susbstitute_masters": true,
+        "substitute_hpls": true,
+        "direct_numerical_substition": true
+      },
+      "alphaloop": {
+        "susbstitute_masters": true
+      },
+      "fmft": {
+        "expand_masters": true,
+        "susbstitute_masters": true
+      },
+      "pysecdec": {
+        "quiet": true,
+        "relative_precision": 1e-07,
+        "min_n_evals": 10000,
+        "max_n_evals": 1000000000000
+      }
+    }
+  },
+  "process": "epem_a_tth",
+  "integrand": "NNLO",
+  "model_command": "set model MT=173 MH=125 WT=0 ymt=173 aS=0.118 aEWM1=132.507 Gf=1.166390e-05 MZ=91.188",
+  "baseline_runtime_only_card_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/d957817a7c5096399ce0f1636dd29d09c8902298/assets/schemas/runtime.json\n[default_runtime_settings.general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\n\n[default_runtime_settings.kinematics]\ne_cm = 1000.0\n\n[default_runtime_settings.kinematics.externals]\ntype = \"constant\"\n\n[default_runtime_settings.kinematics.externals.data]\nmomenta = [\n    [\n    500.0,\n    0.0,\n    0.0,\n    500.0,\n],\n    [\n    500.0,\n    0.0,\n    0.0,\n    -500.0,\n],\n]\nhelicities = [\n    \"summed_averaged\",\n    \"summed_averaged\",\n]\n\n[default_runtime_settings.integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 10000\nn_increase = 0\nn_max = 30000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\n\n[default_runtime_settings.stability]\nescalate_if_exact_zero = false\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = 0.9\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[default_runtime_settings.sampling]\ngraphs = \"monte_carlo\"\nlmb_multichanneling = true\nlmb_channels = \"monte_carlo\"\nlmb_channel_weight = \"inverse_jacobian\"\nb = 0.3\n\n[default_runtime_settings.sampling.lmb_basis_ids]\nGL638 = [\n    1,\n    2,\n    13,\n    14,\n    21,\n    22,\n]\n\n[default_runtime_settings.subtraction]\nesurface_existence_threshold = 0.00000000000001\n\n[default_runtime_settings.h_function]\npower = 3\n",
+  "profile_sampling": {
+    "baseline6": {
+      "graphs": "monte_carlo",
+      "lmb_multichanneling": true,
+      "lmb_channels": "monte_carlo",
+      "lmb_channel_weight": "inverse_jacobian",
+      "b": 0.3,
+      "orientations": "summed",
+      "coordinate_system": "spherical",
+      "mapping": "linear",
+      "power": 1.0,
+      "lmb_basis_ids": {
+        "GL638": [
+          1,
+          2,
+          13,
+          14,
+          21,
+          22
+        ]
+      }
+    },
+    "union7": {
+      "graphs": "monte_carlo",
+      "lmb_multichanneling": true,
+      "lmb_channels": "monte_carlo",
+      "lmb_channel_weight": "inverse_jacobian",
+      "b": 0.3,
+      "orientations": "summed",
+      "coordinate_system": "spherical",
+      "mapping": "linear",
+      "power": 1.0,
+      "lmb_basis_ids": {
+        "GL638": [
+          1,
+          2,
+          13,
+          14,
+          21,
+          22,
+          84
+        ]
+      }
+    },
+    "common6": {
+      "graphs": "monte_carlo",
+      "lmb_multichanneling": true,
+      "lmb_channels": "monte_carlo",
+      "lmb_channel_weight": "inverse_jacobian",
+      "b": 0.3,
+      "orientations": "summed",
+      "coordinate_system": "spherical_common_radial",
+      "mapping": "linear",
+      "power": 1.0,
+      "lmb_basis_ids": {
+        "GL638": [
+          1,
+          2,
+          13,
+          14,
+          21,
+          22
+        ]
+      }
+    }
+  },
+  "reset_protocol": "Before every normal/Arb case, replace the complete process runtime from the baseline session defaults, then explicitly set the full selected sampling object with omitted defaults normalized. Actual saved non-sampling settings are identical across all three profiles.",
+  "diagnostic_overrides": {
+    "general.generate_events": true,
+    "general.store_additional_weights_in_event": false,
+    "stability.recording.record_rotated_results": true,
+    "stability.recording.record_all_stability_levels": true
+  },
+  "points": [
+    {
+      "sample_name": "baseline6-re",
+      "profile": "baseline6",
+      "maximum_components": [
+        "re"
+      ],
+      "continuous_tokens": [
+        "6.1968824673905476e-01",
+        "5.8085847401221802e-01",
+        "4.3407016127355563e-01",
+        "6.9283599950941221e-01",
+        "4.9072369455871989e-01",
+        "4.6227852695444932e-01",
+        "4.7485887255213621e-01",
+        "7.1593169253413402e-01",
+        "7.1032133916461671e-01",
+        "3.9494731001297723e-01",
+        "3.2223816746290196e-01",
+        "4.6649540693548618e-02"
+      ],
+      "xs": [
+        0.6196882467390548,
+        0.580858474012218,
+        0.43407016127355563,
+        0.6928359995094122,
+        0.4907236945587199,
+        0.4622785269544493,
+        0.4748588725521362,
+        0.715931692534134,
+        0.7103213391646167,
+        0.3949473100129772,
+        0.32223816746290196,
+        0.04664954069354862
+      ],
+      "discrete_dimensions": [
+        0,
+        5
+      ],
+      "generated_basis_id": 22,
+      "generated_basis_edges": [
+        4,
+        10,
+        13,
+        14
+      ],
+      "coordinate_system": "spherical",
+      "historical_maxima": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 1.7851356678824255,
+          "coordinates": "graph: 0, LMB channel: 5, xs: [\n6.1968824673905476e-01 5.8085847401221802e-01 4.3407016127355563e-01\n6.9283599950941221e-01 4.9072369455871989e-01 4.6227852695444932e-01\n4.7485887255213621e-01 7.1593169253413402e-01 7.1032133916461671e-01\n3.9494731001297723e-01 3.2223816746290196e-01 4.6649540693548618e-02 ]"
+        }
+      ],
+      "inspect_arguments": [
+        "inspect",
+        "-p",
+        "epem_a_tth",
+        "-i",
+        "NNLO",
+        "--discrete-dim",
+        "0",
+        "5",
+        "--point",
+        "6.1968824673905476e-01",
+        "5.8085847401221802e-01",
+        "4.3407016127355563e-01",
+        "6.9283599950941221e-01",
+        "4.9072369455871989e-01",
+        "4.6227852695444932e-01",
+        "4.7485887255213621e-01",
+        "7.1593169253413402e-01",
+        "7.1032133916461671e-01",
+        "3.9494731001297723e-01",
+        "3.2223816746290196e-01",
+        "4.6649540693548618e-02"
+      ],
+      "snapshot": "/common/dev/gl638_integration_validation/runs/GL638-public-runtime-rescue-baseline6-30k/workspace/results/integration_result_iter_0003.json"
+    },
+    {
+      "sample_name": "baseline6-im",
+      "profile": "baseline6",
+      "maximum_components": [
+        "im"
+      ],
+      "continuous_tokens": [
+        "4.4492214751769688e-01",
+        "7.5144056411244631e-01",
+        "7.4046762246196762e-01",
+        "6.0444565863932953e-01",
+        "7.3759548599349534e-01",
+        "3.9424694388964865e-01",
+        "3.6800914763542764e-01",
+        "4.0579809940616482e-02",
+        "1.9807423354481790e-01",
+        "2.1845834505602146e-01",
+        "9.0095733884299567e-01",
+        "3.5612002043363733e-01"
+      ],
+      "xs": [
+        0.4449221475176969,
+        0.7514405641124463,
+        0.7404676224619676,
+        0.6044456586393295,
+        0.7375954859934953,
+        0.39424694388964865,
+        0.36800914763542764,
+        0.04057980994061648,
+        0.1980742335448179,
+        0.21845834505602146,
+        0.9009573388429957,
+        0.35612002043363733
+      ],
+      "discrete_dimensions": [
+        0,
+        4
+      ],
+      "generated_basis_id": 21,
+      "generated_basis_edges": [
+        6,
+        10,
+        13,
+        14
+      ],
+      "coordinate_system": "spherical",
+      "historical_maxima": [
+        {
+          "component": "im",
+          "sign": "+",
+          "max_eval": 15.136342123624601,
+          "coordinates": "graph: 0, LMB channel: 4, xs: [\n4.4492214751769688e-01 7.5144056411244631e-01 7.4046762246196762e-01\n6.0444565863932953e-01 7.3759548599349534e-01 3.9424694388964865e-01\n3.6800914763542764e-01 4.0579809940616482e-02 1.9807423354481790e-01\n2.1845834505602146e-01 9.0095733884299567e-01 3.5612002043363733e-01 ]"
+        }
+      ],
+      "inspect_arguments": [
+        "inspect",
+        "-p",
+        "epem_a_tth",
+        "-i",
+        "NNLO",
+        "--discrete-dim",
+        "0",
+        "4",
+        "--point",
+        "4.4492214751769688e-01",
+        "7.5144056411244631e-01",
+        "7.4046762246196762e-01",
+        "6.0444565863932953e-01",
+        "7.3759548599349534e-01",
+        "3.9424694388964865e-01",
+        "3.6800914763542764e-01",
+        "4.0579809940616482e-02",
+        "1.9807423354481790e-01",
+        "2.1845834505602146e-01",
+        "9.0095733884299567e-01",
+        "3.5612002043363733e-01"
+      ],
+      "snapshot": "/common/dev/gl638_integration_validation/runs/GL638-public-runtime-rescue-baseline6-30k/workspace/results/integration_result_iter_0003.json"
+    },
+    {
+      "sample_name": "union7-re",
+      "profile": "union7",
+      "maximum_components": [
+        "re"
+      ],
+      "continuous_tokens": [
+        "3.4049215792098031e-01",
+        "3.3648737020413810e-01",
+        "9.0125256766963857e-01",
+        "7.4359930709351862e-01",
+        "8.1850430888559000e-01",
+        "7.6656680895337725e-02",
+        "3.0477287138974485e-01",
+        "3.1218088657032805e-01",
+        "2.8042631200832646e-01",
+        "2.2886070707319761e-01",
+        "7.2505767570938517e-02",
+        "4.1113839389854612e-01"
+      ],
+      "xs": [
+        0.3404921579209803,
+        0.3364873702041381,
+        0.9012525676696386,
+        0.7435993070935186,
+        0.81850430888559,
+        0.07665668089533773,
+        0.30477287138974485,
+        0.31218088657032805,
+        0.28042631200832646,
+        0.2288607070731976,
+        0.07250576757093852,
+        0.4111383938985461
+      ],
+      "discrete_dimensions": [
+        0,
+        6
+      ],
+      "generated_basis_id": 84,
+      "generated_basis_edges": [
+        2,
+        10,
+        13,
+        14
+      ],
+      "coordinate_system": "spherical",
+      "historical_maxima": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 0.8727748209207982,
+          "coordinates": "graph: 0, LMB channel: 6, xs: [\n3.4049215792098031e-01 3.3648737020413810e-01 9.0125256766963857e-01\n7.4359930709351862e-01 8.1850430888559000e-01 7.6656680895337725e-02\n3.0477287138974485e-01 3.1218088657032805e-01 2.8042631200832646e-01\n2.2886070707319761e-01 7.2505767570938517e-02 4.1113839389854612e-01 ]"
+        }
+      ],
+      "inspect_arguments": [
+        "inspect",
+        "-p",
+        "epem_a_tth",
+        "-i",
+        "NNLO",
+        "--discrete-dim",
+        "0",
+        "6",
+        "--point",
+        "3.4049215792098031e-01",
+        "3.3648737020413810e-01",
+        "9.0125256766963857e-01",
+        "7.4359930709351862e-01",
+        "8.1850430888559000e-01",
+        "7.6656680895337725e-02",
+        "3.0477287138974485e-01",
+        "3.1218088657032805e-01",
+        "2.8042631200832646e-01",
+        "2.2886070707319761e-01",
+        "7.2505767570938517e-02",
+        "4.1113839389854612e-01"
+      ],
+      "snapshot": "/common/dev/gl638_integration_validation/runs/GL638-public-runtime-rescue-union7-30k/workspace/results/integration_result_iter_0003.json"
+    },
+    {
+      "sample_name": "union7-im",
+      "profile": "union7",
+      "maximum_components": [
+        "im"
+      ],
+      "continuous_tokens": [
+        "3.5112571352925048e-01",
+        "4.0665081966719568e-01",
+        "9.6061462894962635e-01",
+        "5.1242642291481699e-01",
+        "4.2205072010171873e-01",
+        "4.8394551767627719e-01",
+        "4.8412083579329346e-01",
+        "3.1780826110622523e-01",
+        "3.9230693065997269e-01",
+        "2.3766984010669862e-01",
+        "3.9780491096219789e-01",
+        "6.9069466674461510e-01"
+      ],
+      "xs": [
+        0.3511257135292505,
+        0.4066508196671957,
+        0.9606146289496263,
+        0.512426422914817,
+        0.42205072010171873,
+        0.4839455176762772,
+        0.48412083579329346,
+        0.31780826110622523,
+        0.3923069306599727,
+        0.23766984010669862,
+        0.3978049109621979,
+        0.6906946667446151
+      ],
+      "discrete_dimensions": [
+        0,
+        1
+      ],
+      "generated_basis_id": 2,
+      "generated_basis_edges": [
+        4,
+        12,
+        13,
+        14
+      ],
+      "coordinate_system": "spherical",
+      "historical_maxima": [
+        {
+          "component": "im",
+          "sign": "+",
+          "max_eval": 2.5350480277741965,
+          "coordinates": "graph: 0, LMB channel: 1, xs: [\n3.5112571352925048e-01 4.0665081966719568e-01 9.6061462894962635e-01\n5.1242642291481699e-01 4.2205072010171873e-01 4.8394551767627719e-01\n4.8412083579329346e-01 3.1780826110622523e-01 3.9230693065997269e-01\n2.3766984010669862e-01 3.9780491096219789e-01 6.9069466674461510e-01 ]"
+        }
+      ],
+      "inspect_arguments": [
+        "inspect",
+        "-p",
+        "epem_a_tth",
+        "-i",
+        "NNLO",
+        "--discrete-dim",
+        "0",
+        "1",
+        "--point",
+        "3.5112571352925048e-01",
+        "4.0665081966719568e-01",
+        "9.6061462894962635e-01",
+        "5.1242642291481699e-01",
+        "4.2205072010171873e-01",
+        "4.8394551767627719e-01",
+        "4.8412083579329346e-01",
+        "3.1780826110622523e-01",
+        "3.9230693065997269e-01",
+        "2.3766984010669862e-01",
+        "3.9780491096219789e-01",
+        "6.9069466674461510e-01"
+      ],
+      "snapshot": "/common/dev/gl638_integration_validation/runs/GL638-public-runtime-rescue-union7-30k/workspace/results/integration_result_iter_0003.json"
+    },
+    {
+      "sample_name": "common6-re",
+      "profile": "common6",
+      "maximum_components": [
+        "re",
+        "im"
+      ],
+      "continuous_tokens": [
+        "6.6884195272898139e-01",
+        "2.5944957461647278e-01",
+        "6.4952003242487955e-01",
+        "6.9572275681265106e-01",
+        "5.0545589409899361e-01",
+        "1.0219732693233730e-02",
+        "3.0609562516070687e-01",
+        "8.9477337152351288e-02",
+        "3.1521109377629597e-01",
+        "6.8624872507113277e-01",
+        "4.5404829276465053e-01",
+        "5.0202910287666025e-01"
+      ],
+      "xs": [
+        0.6688419527289814,
+        0.2594495746164728,
+        0.6495200324248795,
+        0.695722756812651,
+        0.5054558940989936,
+        0.01021973269323373,
+        0.3060956251607069,
+        0.08947733715235129,
+        0.31521109377629597,
+        0.6862487250711328,
+        0.45404829276465053,
+        0.5020291028766602
+      ],
+      "discrete_dimensions": [
+        0,
+        0
+      ],
+      "generated_basis_id": 1,
+      "generated_basis_edges": [
+        6,
+        12,
+        13,
+        14
+      ],
+      "coordinate_system": "spherical_common_radial",
+      "historical_maxima": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 1.7733918049033086,
+          "coordinates": "graph: 0, LMB channel: 0, xs: [\n6.6884195272898139e-01 2.5944957461647278e-01 6.4952003242487955e-01\n6.9572275681265106e-01 5.0545589409899361e-01 1.0219732693233730e-02\n3.0609562516070687e-01 8.9477337152351288e-02 3.1521109377629597e-01\n6.8624872507113277e-01 4.5404829276465053e-01 5.0202910287666025e-01 ]"
+        },
+        {
+          "component": "im",
+          "sign": "+",
+          "max_eval": 3.2274039505944345,
+          "coordinates": "graph: 0, LMB channel: 0, xs: [\n6.6884195272898139e-01 2.5944957461647278e-01 6.4952003242487955e-01\n6.9572275681265106e-01 5.0545589409899361e-01 1.0219732693233730e-02\n3.0609562516070687e-01 8.9477337152351288e-02 3.1521109377629597e-01\n6.8624872507113277e-01 4.5404829276465053e-01 5.0202910287666025e-01 ]"
+        }
+      ],
+      "inspect_arguments": [
+        "inspect",
+        "-p",
+        "epem_a_tth",
+        "-i",
+        "NNLO",
+        "--discrete-dim",
+        "0",
+        "0",
+        "--point",
+        "6.6884195272898139e-01",
+        "2.5944957461647278e-01",
+        "6.4952003242487955e-01",
+        "6.9572275681265106e-01",
+        "5.0545589409899361e-01",
+        "1.0219732693233730e-02",
+        "3.0609562516070687e-01",
+        "8.9477337152351288e-02",
+        "3.1521109377629597e-01",
+        "6.8624872507113277e-01",
+        "4.5404829276465053e-01",
+        "5.0202910287666025e-01"
+      ],
+      "snapshot": "/common/dev/gl638_integration_validation/runs/GL638-public-runtime-rescue-common6-30k/workspace/results/integration_result_iter_0003.json"
+    }
+  ],
+  "scope": "These are the actual final absolute-Re/Im extrema of three 30k pilots, replayed with their exact saved cube coordinates and local channel under actual runtime settings. Values include the selected LMB partition and the recorded parameterization Jacobian; the historical adaptive density/probability factors are not reconstructed, so returned I*J is not asserted equal to the old MC maximum weight. Five finite stable samples agreeing with forced Arb do not prove global accuracy, finite variance, or identify each maximum as an H/Z corner."
+}

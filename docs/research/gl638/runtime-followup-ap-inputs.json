@@ -1,0 +1,534 @@
+{
+  "description": "Inputs for runtime-followup-ap-values.csv: 54 completed inspections; no result filtering or replacement.",
+  "provenance": {
+    "runtime_card_source": "replay-points.json:runtime_card_toml",
+    "runtime_card_sha256": "d566a7b45ecdaf3201557e376e0134effc6e63bca685c00a8e3bc5f3e989b4c3",
+    "portable_source_sha256": "b546a79e6ab913fd30a6e41888d542a2abd4f6cb69654a163b2d38614e2511fc",
+    "binary_sha256": "029d4ecee30c4e038889ef62725ccfcdbf6e88f5d9e7dbfea08b627d238712a3",
+    "symbolica_public_pin": "a277a8dadbaae5a8d6605f2f381991a601e1f345",
+    "source_state_manifest_sha256": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8"
+  },
+  "parent_lmb": [
+    3,
+    4,
+    7,
+    10
+  ],
+  "momentum_units": "GeV, before each cut's LU rescaling",
+  "runtime_card_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01/assets/schemas/runtime.json\n[default_runtime_settings.general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\n\n[default_runtime_settings.kinematics]\ne_cm = 1000.0\n\n[default_runtime_settings.kinematics.externals]\ntype = \"constant\"\n\n[default_runtime_settings.kinematics.externals.data]\nmomenta = [\n    [\n    500.0,\n    0.0,\n    0.0,\n    500.0,\n],\n    [\n    500.0,\n    0.0,\n    0.0,\n    -500.0,\n],\n]\nhelicities = [\n    \"summed_averaged\",\n    \"summed_averaged\",\n]\n\n[default_runtime_settings.integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 7500\nn_increase = 0\nn_max = 75000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\n\n[default_runtime_settings.stability]\nescalate_if_exact_zero = false\n\n[[default_runtime_settings.stability.rotation_axis]]\ntype = \"z\"\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = 0.9\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[default_runtime_settings.sampling]\ngraphs = \"monte_carlo\"\nlmb_multichanneling = true\nlmb_channels = \"monte_carlo\"\nlmb_channel_weight = \"inverse_jacobian\"\n\n[default_runtime_settings.subtraction]\nesurface_existence_threshold = 0.00000000000001\n\n[default_runtime_settings.h_function]\npower = 3\n",
+  "model_command": "set model MT=173 MH=125 WT=0 ymt=173 aS=0.118 aEWM1=132.507 Gf=1.166390e-05 MZ=91.188",
+  "reset_command": "set process -p epem_a_tth -i NNLO defaults",
+  "base_runtime_overrides": {
+    "general.mu_r": 91.188,
+    "general.m_uv": 91.188,
+    "general.evaluator_method": "SingleParametric",
+    "general.enable_cache": false,
+    "general.generate_events": true,
+    "general.store_additional_weights_in_event": false,
+    "h_function.function": "poly_exponential",
+    "h_function.sigma": 1.0,
+    "h_function.power": 3,
+    "subtraction.esurface_existence_threshold": 1e-14,
+    "subtraction.local_ct_settings.uv_localisation.gaussian_width": 1.0,
+    "subtraction.local_ct_settings.uv_localisation.dynamic_width": false,
+    "subtraction.local_ct_settings.uv_localisation.force_uv_dampers_to_one": false,
+    "stability.check_on_norm": true,
+    "stability.escalate_if_exact_zero": false,
+    "stability.levels": [
+      {
+        "precision": "Double",
+        "required_precision_for_re": 1e-06,
+        "required_precision_for_im": 1e-06,
+        "escalate_for_large_weight_threshold": 0.9
+      },
+      {
+        "precision": "Quad",
+        "required_precision_for_re": 1e-10,
+        "required_precision_for_im": 1e-10,
+        "escalate_for_large_weight_threshold": -1.0
+      },
+      {
+        "precision": "Arb",
+        "required_precision_for_re": 1e-12,
+        "required_precision_for_im": 1e-12,
+        "escalate_for_large_weight_threshold": -1.0
+      }
+    ],
+    "subtraction.disable_threshold_subtraction": false,
+    "subtraction.local_ct_settings.uv_localisation.sliver_width": 10.0,
+    "subtraction.local_ct_settings.uv_localisation.smooth_sliver": false,
+    "stability.loop_momenta_norm_escalation_factor": -1.0,
+    "stability.recording": {
+      "record_all_stability_levels": true,
+      "record_rotated_results": true,
+      "record_loop_momenta_escalation": true
+    },
+    "stability.rotation_axis": [
+      {
+        "type": "euler_angles",
+        "alpha": 0.1,
+        "beta": 0.2,
+        "gamma": 0.3
+      }
+    ]
+  },
+  "runtime_modes": {
+    "z_norm": {
+      "runtime_overrides": {
+        "stability.rotation_axis": [
+          {
+            "type": "z"
+          }
+        ]
+      },
+      "force_arb": false
+    },
+    "z_components": {
+      "runtime_overrides": {
+        "stability.check_on_norm": false,
+        "stability.rotation_axis": [
+          {
+            "type": "z"
+          }
+        ]
+      },
+      "force_arb": false
+    },
+    "euler_norm": {
+      "runtime_overrides": {},
+      "force_arb": false
+    },
+    "euler_components": {
+      "runtime_overrides": {
+        "stability.check_on_norm": false
+      },
+      "force_arb": false
+    },
+    "euler3_norm": {
+      "runtime_overrides": {
+        "stability.rotation_axis": [
+          {
+            "type": "euler_angles",
+            "alpha": 0.1,
+            "beta": 0.2,
+            "gamma": 0.3
+          },
+          {
+            "type": "euler_angles",
+            "alpha": 0.37,
+            "beta": -0.29,
+            "gamma": 0.53
+          },
+          {
+            "type": "euler_angles",
+            "alpha": -0.41,
+            "beta": 0.23,
+            "gamma": -0.17
+          }
+        ]
+      },
+      "force_arb": false
+    },
+    "euler3_components": {
+      "runtime_overrides": {
+        "stability.check_on_norm": false,
+        "stability.rotation_axis": [
+          {
+            "type": "euler_angles",
+            "alpha": 0.1,
+            "beta": 0.2,
+            "gamma": 0.3
+          },
+          {
+            "type": "euler_angles",
+            "alpha": 0.37,
+            "beta": -0.29,
+            "gamma": 0.53
+          },
+          {
+            "type": "euler_angles",
+            "alpha": -0.41,
+            "beta": 0.23,
+            "gamma": -0.17
+          }
+        ]
+      },
+      "force_arb": false
+    },
+    "z_strict_quad": {
+      "runtime_overrides": {
+        "stability.levels": [
+          {
+            "precision": "Double",
+            "required_precision_for_re": 1e-06,
+            "required_precision_for_im": 1e-06,
+            "escalate_for_large_weight_threshold": 0.9
+          },
+          {
+            "precision": "Quad",
+            "required_precision_for_re": 1e-20,
+            "required_precision_for_im": 1e-20,
+            "escalate_for_large_weight_threshold": -1.0
+          },
+          {
+            "precision": "Arb",
+            "required_precision_for_re": 1e-12,
+            "required_precision_for_im": 1e-12,
+            "escalate_for_large_weight_threshold": -1.0
+          }
+        ],
+        "stability.rotation_axis": [
+          {
+            "type": "z"
+          }
+        ]
+      },
+      "force_arb": false
+    },
+    "euler_strict_quad": {
+      "runtime_overrides": {
+        "stability.levels": [
+          {
+            "precision": "Double",
+            "required_precision_for_re": 1e-06,
+            "required_precision_for_im": 1e-06,
+            "escalate_for_large_weight_threshold": 0.9
+          },
+          {
+            "precision": "Quad",
+            "required_precision_for_re": 1e-20,
+            "required_precision_for_im": 1e-20,
+            "escalate_for_large_weight_threshold": -1.0
+          },
+          {
+            "precision": "Arb",
+            "required_precision_for_re": 1e-12,
+            "required_precision_for_im": 1e-12,
+            "escalate_for_large_weight_threshold": -1.0
+          }
+        ]
+      },
+      "force_arb": false
+    },
+    "euler_double_arb": {
+      "runtime_overrides": {
+        "stability.levels": [
+          {
+            "precision": "Double",
+            "required_precision_for_re": 1e-06,
+            "required_precision_for_im": 1e-06,
+            "escalate_for_large_weight_threshold": 0.9
+          },
+          {
+            "precision": "Arb",
+            "required_precision_for_re": 1e-12,
+            "required_precision_for_im": 1e-12,
+            "escalate_for_large_weight_threshold": -1.0
+          }
+        ]
+      },
+      "force_arb": false
+    },
+    "quad_euler_norm": {
+      "runtime_overrides": {
+        "stability.levels": [
+          {
+            "precision": "Quad",
+            "required_precision_for_re": 1e-10,
+            "required_precision_for_im": 1e-10,
+            "escalate_for_large_weight_threshold": -1.0
+          }
+        ]
+      },
+      "force_arb": false
+    },
+    "quad_euler_components": {
+      "runtime_overrides": {
+        "stability.check_on_norm": false,
+        "stability.levels": [
+          {
+            "precision": "Quad",
+            "required_precision_for_re": 1e-10,
+            "required_precision_for_im": 1e-10,
+            "escalate_for_large_weight_threshold": -1.0
+          }
+        ]
+      },
+      "force_arb": false
+    },
+    "arb_z": {
+      "runtime_overrides": {
+        "stability.levels": [
+          {
+            "precision": "Arb",
+            "required_precision_for_re": 1e-12,
+            "required_precision_for_im": 1e-12,
+            "escalate_for_large_weight_threshold": -1.0
+          }
+        ],
+        "stability.rotation_axis": [
+          {
+            "type": "z"
+          }
+        ]
+      },
+      "force_arb": true
+    },
+    "arb_euler": {
+      "runtime_overrides": {
+        "stability.levels": [
+          {
+            "precision": "Arb",
+            "required_precision_for_re": 1e-12,
+            "required_precision_for_im": 1e-12,
+            "escalate_for_large_weight_threshold": -1.0
+          }
+        ]
+      },
+      "force_arb": true
+    },
+    "arb_euler_components": {
+      "runtime_overrides": {
+        "stability.check_on_norm": false,
+        "stability.levels": [
+          {
+            "precision": "Arb",
+            "required_precision_for_re": 1e-12,
+            "required_precision_for_im": 1e-12,
+            "escalate_for_large_weight_threshold": -1.0
+          }
+        ]
+      },
+      "force_arb": true
+    },
+    "arb_euler3_components": {
+      "runtime_overrides": {
+        "stability.check_on_norm": false,
+        "stability.levels": [
+          {
+            "precision": "Arb",
+            "required_precision_for_re": 1e-12,
+            "required_precision_for_im": 1e-12,
+            "escalate_for_large_weight_threshold": -1.0
+          }
+        ],
+        "stability.rotation_axis": [
+          {
+            "type": "euler_angles",
+            "alpha": 0.1,
+            "beta": 0.2,
+            "gamma": 0.3
+          },
+          {
+            "type": "euler_angles",
+            "alpha": 0.37,
+            "beta": -0.29,
+            "gamma": 0.53
+          },
+          {
+            "type": "euler_angles",
+            "alpha": -0.41,
+            "beta": 0.23,
+            "gamma": -0.17
+          }
+        ]
+      },
+      "force_arb": true
+    },
+    "euler_exact_zero_escalation": {
+      "runtime_overrides": {
+        "stability.escalate_if_exact_zero": true
+      },
+      "force_arb": false
+    },
+    "euler_norm_trigger_quad": {
+      "runtime_overrides": {
+        "stability.loop_momenta_norm_escalation_factor": 1.0
+      },
+      "force_arb": false
+    },
+    "euler_norm_trigger_arb": {
+      "runtime_overrides": {
+        "stability.levels": [
+          {
+            "precision": "Double",
+            "required_precision_for_re": 1e-06,
+            "required_precision_for_im": 1e-06,
+            "escalate_for_large_weight_threshold": 0.9
+          },
+          {
+            "precision": "Arb",
+            "required_precision_for_re": 1e-12,
+            "required_precision_for_im": 1e-12,
+            "escalate_for_large_weight_threshold": -1.0
+          }
+        ],
+        "stability.loop_momenta_norm_escalation_factor": 1.0
+      },
+      "force_arb": false
+    }
+  },
+  "points": {
+    "ap_nearby": {
+      "parent_momenta_GeV": [
+        [
+          -250.7537212371647,
+          -125.37686061858236,
+          376.13058185574704
+        ],
+        [
+          -466.93384770226885,
+          -17.2867973860303,
+          570.6926956743407
+        ],
+        [
+          376.13058185578984,
+          -125.37686061859662,
+          250.75372123719325
+        ],
+        [
+          108.09006323255205,
+          172.9441011720833,
+          0.0
+        ]
+      ],
+      "eta_P_target_GeV": 1e-06,
+      "eta_A_over_eta_P_target": 1.0001
+    },
+    "ap_equal": {
+      "parent_momenta_GeV": [
+        [
+          -251.03855708408048,
+          -125.51927854204024,
+          376.5578356261207
+        ],
+        [
+          -467.21868354918456,
+          -17.429215309488185,
+          571.1199494447144
+        ],
+        [
+          376.5578356261207,
+          -125.51927854204024,
+          251.03855708408048
+        ],
+        [
+          108.09006323255205,
+          172.9441011720833,
+          0.0
+        ]
+      ],
+      "eta_P_target_GeV": 1.0,
+      "eta_A_over_eta_P_target": 1.0
+    },
+    "off_gap_01": {
+      "parent_momenta_GeV": [
+        [
+          -251.03855708408048,
+          -125.51927854204024,
+          376.5578356261207
+        ],
+        [
+          -467.21868354918456,
+          -17.429215309488185,
+          571.1199494447144
+        ],
+        [
+          376.55787834864134,
+          -125.51929278288046,
+          251.0385855657609
+        ],
+        [
+          108.09006323255205,
+          172.9441011720833,
+          0.0
+        ]
+      ],
+      "eta_P_target_GeV": 1.0,
+      "eta_A_over_eta_P_target": 1.0001
+    },
+    "off_gap_05": {
+      "parent_momenta_GeV": [
+        [
+          -250.7565695051677,
+          -125.37828475258385,
+          376.13485425775156
+        ],
+        [
+          -466.9366959702718,
+          -17.288221520031797,
+          570.6969680763452
+        ],
+        [
+          376.1348546850341,
+          -125.37828489501138,
+          250.75656979002275
+        ],
+        [
+          108.09006323255205,
+          172.9441011720833,
+          0.0
+        ]
+      ],
+      "eta_P_target_GeV": 0.01,
+      "eta_A_over_eta_P_target": 1.0001
+    },
+    "off_gap_09": {
+      "parent_momenta_GeV": [
+        [
+          -250.75374943785698,
+          -125.37687471892849,
+          376.1306241567855
+        ],
+        [
+          -466.93387590296106,
+          -17.286811486376436,
+          570.6927379753793
+        ],
+        [
+          376.13062416105834,
+          -125.37687472035279,
+          250.75374944070558
+        ],
+        [
+          108.09006323255205,
+          172.9441011720833,
+          0.0
+        ]
+      ],
+      "eta_P_target_GeV": 0.0001,
+      "eta_A_over_eta_P_target": 1.0001
+    }
+  },
+  "batches": {
+    "AP48": {
+      "seconds": 158.00124225299805,
+      "source_state_unchanged": true
+    },
+    "AP6_components": {
+      "seconds": 59.52865174401086,
+      "source_state_unchanged": true
+    }
+  },
+  "runtime_command_prefix": [
+    "set",
+    "process",
+    "-p",
+    "epem_a_tth",
+    "-i",
+    "NNLO",
+    "kv"
+  ],
+  "inspect_command_prefix": [
+    "inspect",
+    "-p",
+    "epem_a_tth",
+    "-i",
+    "NNLO",
+    "-m",
+    "--graph-id",
+    "0"
+  ],
+  "command_construction": "Load runtime_card_toml once with --read-only-state --no-save-state. Apply model_command. Before each row apply reset_command, then merge base_runtime_overrides with runtime_modes[mode].runtime_overrides and set each key to compact JSON. Inspect parent_momenta_GeV flattened in stored order, formatted through .17g then Decimal fixed notation; add -f iff force_arb. Use --json-output point--mode.json. Full reset before every case is required.",
+  "scope": "Targets are historical threshold energy offsets, not measured native radial-root gaps or soft radii. Norm checking returns primary, componentwise checking returns a rotation average, while cut events remain primary. All arithmetic uses the pinned binary's compiled1000-bit Arb type; tolerances do not change its bit count. The exact coincidence has no defined reference in the separate-residue representation."
+}
