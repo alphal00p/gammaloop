@@ -53,6 +53,7 @@ pub fn nested_dot_expression() -> Atom {
 
 pub fn run_schoonschip(expr: Atom, settings: &SchoonschipSettings) -> Atom {
     expr.schoonschip_with_net::<false, AbstractIndex>(settings)
+        .expect("benchmark expression should be a valid tensor network")
 }
 
 pub fn assert_benchmark_outputs_match() {
@@ -238,14 +239,17 @@ fn bare_vertex_fixture(vertex_count: usize) -> BareVertexFixture {
             *out = input
                 .expand()
                 .replace(parse!("d(muw1_,k1_)*d(muw1_,k2_)"))
-                .level_range((0, Some(0)))
+                .min_level(0)
+                .max_level(Some(0))
                 .repeat()
                 .with(parse!("d(k1_,k2_)"))
                 .replace(parse!("d(muw1_,k1_)^2"))
-                .level_range((0, Some(0)))
+                .min_level(0)
+                .max_level(Some(0))
                 .with(parse!("d(k1_,k1_)"))
                 .replace(parse!("d(muw1_,muw1_)"))
-                .level_range((0, Some(0)))
+                .min_level(0)
+                .max_level(Some(0))
                 .with(4);
             Ok(())
         }))],
@@ -267,7 +271,8 @@ pub fn network_vertex_substitution(fixture: NetworkVertexFixture) -> Atom {
             .replace(parse!(format!(
                 "vx({vertex_id}, k1_, k2_, k3_, mu1_, mu2_, mu3_)"
             )))
-            .level_range((0, Some(0)))
+            .min_level(0)
+            .max_level(Some(0))
             .rhs_cache_size(1000)
             .with_map(move |matches| {
                 gluon_rule
@@ -286,14 +291,16 @@ pub fn bare_vertex_substitution(mut fixture: BareVertexFixture) -> Atom {
             .replace(parse!(format!(
                 "vx({vertex_id}, k1_, k2_, k3_, mu1_, mu2_, mu3_)"
             )))
-            .level_range((0, Some(0)))
+            .min_level(0)
+            .max_level(Some(0))
             .rhs_cache_size(1000)
             .with(&fixture.rhs_subs);
         fixture.input = fixture.input.expand();
         fixture.input = fixture
             .input
             .replace(parse!("d(muw1_, k1_)*vx_(x___,muw1_,y___)"))
-            .level_range((0, Some(0)))
+            .min_level(0)
+            .max_level(Some(0))
             .repeat()
             .with(parse!("vx(x___,k1_,y___)"));
     }
@@ -331,11 +338,13 @@ pub fn network_schoonschip_substituted_with_order(
     expr: Atom,
     order: SchoonschipContractionOrder,
 ) -> Atom {
-    let mut result = expr.schoonschip_with_net::<false, AbstractIndex>(
-        &SchoonschipSettings::partial()
-            .with_expanded_contracted_sums()
-            .with_contraction_order(order),
-    );
+    let mut result = expr
+        .schoonschip_with_net::<false, AbstractIndex>(
+            &SchoonschipSettings::partial()
+                .with_expanded_contracted_sums()
+                .with_contraction_order(order),
+        )
+        .expect("benchmark expression should be a valid tensor network");
 
     let needs_cleanup = matches!(
         order,
@@ -350,7 +359,9 @@ pub fn network_schoonschip_substituted_with_order(
             .with_expanded_contracted_sums()
             .with_contraction_order(SchoonschipContractionOrder::SmallestDegree);
         for _ in 0..4 {
-            let next = result.schoonschip_with_net::<false, AbstractIndex>(&cleanup_settings);
+            let next = result
+                .schoonschip_with_net::<false, AbstractIndex>(&cleanup_settings)
+                .expect("benchmark cleanup should produce a valid tensor network");
             if next == result {
                 break;
             }

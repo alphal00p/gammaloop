@@ -16,10 +16,12 @@ macro_rules! id {
 /// With one argument, this builds a chain factor using the placeholder indices
 /// `in` and `out`; use this form only as a factor inside `chain!` or `trace!`.
 /// With three arguments, this builds the ordinary gamma tensor with explicit
-/// spinor endpoints and a Lorentz slot.
+/// spinor endpoints and a Lorentz slot in storage order:
+/// `(spinor-in, spinor-out, Lorentz)`.
 ///
 /// Arguments are converted through `spenso::shadowing::IntoAtom`, so they
-/// can be typed slots, atoms, or atom views.
+/// can be typed slots, atoms, or atom views. The explicit form checks their
+/// representation heads and rejects anything other than this B, B, M order.
 ///
 /// # Examples
 ///
@@ -29,12 +31,12 @@ macro_rules! id {
 ///
 /// let factor = gamma!(slot!(mink4, mu));
 /// let chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);
-/// let default_tensor = gamma!(mu, a, b);
+/// let default_tensor = gamma!(a, b, mu);
 /// let indexed_tensor = gamma!(1, 2, 3);
-/// let pattern_tensor = gamma!(RS.a__, RS.b__, RS.c__);
-/// let pattern_tensor_with_slots = gamma!(RS.a__, [RS.d_, RS.i_], [RS.d_, RS.j_]);
-/// let mixed_tensor = gamma!(mu, slot!(bis_d, a), 1);
-/// let explicit_tensor = gamma!(slot!(mink_d, mu), slot!(bis_d, a), slot!(bis_d, b));
+/// let pattern_tensor = gamma!(RS.b__, RS.c__, RS.a__);
+/// let pattern_tensor_with_slots = gamma!([RS.d_, RS.i_], [RS.d_, RS.j_], RS.a__);
+/// let mixed_tensor = gamma!(slot!(bis_d, a), 1, mu);
+/// let explicit_tensor = gamma!(slot!(bis_d, a), slot!(bis_d, b), slot!(mink_d, mu));
 /// ```
 #[macro_export]
 macro_rules! gamma {
@@ -45,93 +47,99 @@ macro_rules! gamma {
             .add_arg(spenso::shadowing::IntoAtom::into_atom($mu))
             .finish()
     };
-    ($base:ident . $mu:ident, $($rest:tt)*) => {
+    ($base:ident . $i:ident, $($rest:tt)*) => {
         $crate::gamma!(@tensor spenso::structure::representation::RepName::to_symbolic(
-            &spenso::structure::representation::Minkowski {},
-            [$base.$mu],
-        ); $($rest)*)
-    };
-    ($mu:ident, $($rest:tt)*) => {{
-        let mink = spenso::structure::representation::RepName::new_rep(
-            &spenso::structure::representation::Minkowski {},
-            4,
-        );
-        $crate::gamma!(@tensor spenso::slot!(mink, $mu); $($rest)*)
-    }};
-    ($mu:literal, $($rest:tt)*) => {{
-        let mink = spenso::structure::representation::RepName::new_rep(
-            &spenso::structure::representation::Minkowski {},
-            4,
-        );
-        $crate::gamma!(@tensor spenso::slot!(mink, $mu); $($rest)*)
-    }};
-    ($mu:expr, $($rest:tt)*) => {
-        $crate::gamma!(@tensor $mu; $($rest)*)
-    };
-    (@tensor $mu:expr; [$($i:expr),+ $(,)?], $($rest:tt)*) => {
-        $crate::gamma!(@tensor2 $mu, spenso::structure::representation::RepName::to_symbolic(
-            &$crate::representations::Bispinor {},
-            [$($i),+],
-        ); $($rest)*)
-    };
-    (@tensor $mu:expr; $base:ident . $i:ident, $($rest:tt)*) => {
-        $crate::gamma!(@tensor2 $mu, spenso::structure::representation::RepName::to_symbolic(
             &$crate::representations::Bispinor {},
             [$base.$i],
         ); $($rest)*)
     };
-    (@tensor $mu:expr; $i:ident, $($rest:tt)*) => {{
+    ($i:ident, $($rest:tt)*) => {{
         let bis = spenso::structure::representation::RepName::new_rep(
             &$crate::representations::Bispinor {},
             4,
         );
-        $crate::gamma!(@tensor2 $mu, spenso::slot!(bis, $i); $($rest)*)
+        $crate::gamma!(@tensor spenso::slot!(bis, $i); $($rest)*)
     }};
-    (@tensor $mu:expr; $i:literal, $($rest:tt)*) => {{
+    ($i:literal, $($rest:tt)*) => {{
         let bis = spenso::structure::representation::RepName::new_rep(
             &$crate::representations::Bispinor {},
             4,
         );
-        $crate::gamma!(@tensor2 $mu, spenso::slot!(bis, $i); $($rest)*)
+        $crate::gamma!(@tensor spenso::slot!(bis, $i); $($rest)*)
     }};
-    (@tensor $mu:expr; $i:expr, $($rest:tt)*) => {
-        $crate::gamma!(@tensor2 $mu, $i; $($rest)*)
+    ([$($i:expr),+ $(,)?], $($rest:tt)*) => {
+        $crate::gamma!(@tensor spenso::structure::representation::RepName::to_symbolic(
+            &$crate::representations::Bispinor {},
+            [$($i),+],
+        ); $($rest)*)
     };
-    (@tensor2 $mu:expr, $i:expr; [$($j:expr),+ $(,)?]) => {
-        $crate::gamma!(@tensor_done $mu, $i, spenso::structure::representation::RepName::to_symbolic(
+    ($i:expr, $($rest:tt)*) => {
+        $crate::gamma!(@tensor $i; $($rest)*)
+    };
+    (@tensor $i:expr; [$($j:expr),+ $(,)?], $($rest:tt)*) => {
+        $crate::gamma!(@tensor2 $i, spenso::structure::representation::RepName::to_symbolic(
             &$crate::representations::Bispinor {},
             [$($j),+],
-        ))
+        ); $($rest)*)
     };
-    (@tensor2 $mu:expr, $i:expr; $base:ident . $j:ident) => {
-        $crate::gamma!(@tensor_done $mu, $i, spenso::structure::representation::RepName::to_symbolic(
+    (@tensor $i:expr; $base:ident . $j:ident, $($rest:tt)*) => {
+        $crate::gamma!(@tensor2 $i, spenso::structure::representation::RepName::to_symbolic(
             &$crate::representations::Bispinor {},
             [$base.$j],
+        ); $($rest)*)
+    };
+    (@tensor $i:expr; $j:ident, $($rest:tt)*) => {{
+        let bis = spenso::structure::representation::RepName::new_rep(
+            &$crate::representations::Bispinor {},
+            4,
+        );
+        $crate::gamma!(@tensor2 $i, spenso::slot!(bis, $j); $($rest)*)
+    }};
+    (@tensor $i:expr; $j:literal, $($rest:tt)*) => {{
+        let bis = spenso::structure::representation::RepName::new_rep(
+            &$crate::representations::Bispinor {},
+            4,
+        );
+        $crate::gamma!(@tensor2 $i, spenso::slot!(bis, $j); $($rest)*)
+    }};
+    (@tensor $i:expr; $j:expr, $($rest:tt)*) => {
+        $crate::gamma!(@tensor2 $i, $j; $($rest)*)
+    };
+    (@tensor2 $i:expr, $j:expr; [$($mu:expr),+ $(,)?]) => {
+        $crate::gamma!(@tensor_done $i, $j, spenso::structure::representation::RepName::to_symbolic(
+            &spenso::structure::representation::Minkowski {},
+            [$($mu),+],
         ))
     };
-    (@tensor2 $mu:expr, $i:expr; $j:ident) => {{
-        let bis = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::Bispinor {},
-            4,
-        );
-        $crate::gamma!(@tensor_done $mu, $i, spenso::slot!(bis, $j))
-    }};
-    (@tensor2 $mu:expr, $i:expr; $j:literal) => {{
-        let bis = spenso::structure::representation::RepName::new_rep(
-            &$crate::representations::Bispinor {},
-            4,
-        );
-        $crate::gamma!(@tensor_done $mu, $i, spenso::slot!(bis, $j))
-    }};
-    (@tensor2 $mu:expr, $i:expr; $j:expr) => {
-        $crate::gamma!(@tensor_done $mu, $i, $j)
+    (@tensor2 $i:expr, $j:expr; $base:ident . $mu:ident) => {
+        $crate::gamma!(@tensor_done $i, $j, spenso::structure::representation::RepName::to_symbolic(
+            &spenso::structure::representation::Minkowski {},
+            [$base.$mu],
+        ))
     };
-    (@tensor_done $mu:expr, $i:expr, $j:expr) => {
-        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma)
-            .add_arg(spenso::shadowing::IntoAtom::into_atom($i))
-            .add_arg(spenso::shadowing::IntoAtom::into_atom($j))
-            .add_arg(spenso::shadowing::IntoAtom::into_atom($mu))
-            .finish()
+    (@tensor2 $i:expr, $j:expr; $mu:ident) => {{
+        let mink = spenso::structure::representation::RepName::new_rep(
+            &spenso::structure::representation::Minkowski {},
+            4,
+        );
+        $crate::gamma!(@tensor_done $i, $j, spenso::slot!(mink, $mu))
+    }};
+    (@tensor2 $i:expr, $j:expr; $mu:literal) => {{
+        let mink = spenso::structure::representation::RepName::new_rep(
+            &spenso::structure::representation::Minkowski {},
+            4,
+        );
+        $crate::gamma!(@tensor_done $i, $j, spenso::slot!(mink, $mu))
+    }};
+    (@tensor2 $i:expr, $j:expr; $mu:expr) => {
+        $crate::gamma!(@tensor_done $i, $j, $mu)
+    };
+    (@tensor_done $i:expr, $j:expr, $mu:expr) => {
+        $crate::dirac::gamma_tensor(
+            spenso::shadowing::IntoAtom::into_atom($i),
+            spenso::shadowing::IntoAtom::into_atom($j),
+            spenso::shadowing::IntoAtom::into_atom($mu),
+        )
     };
 }
 

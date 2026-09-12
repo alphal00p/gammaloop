@@ -171,7 +171,8 @@ impl<'b, R, Phantom> ReplaceBuilderGeneric<'b, R, Phantom> {
         }
         .non_greedy_wildcards(self.settings.non_greedy_wildcards.clone())
         .allow_new_wildcards_on_rhs(self.settings.allow_new_wildcards_on_rhs)
-        .level_range(self.settings.level_range)
+        .min_level(self.settings.level_range.0)
+        .max_level(self.settings.level_range.1)
         .level_is_tree_depth(self.settings.level_is_tree_depth)
         .rhs_cache_size(self.settings.rhs_cache_size)
     }
@@ -640,7 +641,8 @@ impl<T: Clone + PartialEq, S: TensorStructure + Clone + PartialEq> ReplaceWithBu
                 }
                 .non_greedy_wildcards(replacement.settings.non_greedy_wildcards.clone())
                 .allow_new_wildcards_on_rhs(replacement.settings.allow_new_wildcards_on_rhs)
-                .level_range(replacement.settings.level_range)
+                .min_level(replacement.settings.level_range.0)
+                .max_level(replacement.settings.level_range.1)
                 .level_is_tree_depth(replacement.settings.level_is_tree_depth)
                 .rhs_cache_size(replacement.settings.rhs_cache_size);
                 *a = builder.with(with_borrowed);
@@ -669,7 +671,8 @@ impl<T: Clone + PartialEq, S: TensorStructure + Clone + PartialEq> ReplaceWithBu
                 }
                 .non_greedy_wildcards(replacement.settings.non_greedy_wildcards.clone())
                 .allow_new_wildcards_on_rhs(replacement.settings.allow_new_wildcards_on_rhs)
-                .level_range(replacement.settings.level_range)
+                .min_level(replacement.settings.level_range.0)
+                .max_level(replacement.settings.level_range.1)
                 .level_is_tree_depth(replacement.settings.level_is_tree_depth)
                 .rhs_cache_size(replacement.settings.rhs_cache_size);
                 *a = builder.with_map(dyn_clone::clone_box(&rhs));
@@ -701,7 +704,8 @@ impl<T: Clone + PartialEq, S: TensorStructure + Clone + PartialEq> ReplaceWithBu
                 }
                 .non_greedy_wildcards(replacement.settings.non_greedy_wildcards.clone())
                 .allow_new_wildcards_on_rhs(replacement.settings.allow_new_wildcards_on_rhs)
-                .level_range(replacement.settings.level_range)
+                .min_level(replacement.settings.level_range.0)
+                .max_level(replacement.settings.level_range.1)
                 .level_is_tree_depth(replacement.settings.level_is_tree_depth)
                 .rhs_cache_size(replacement.settings.rhs_cache_size);
                 builder.with(with_borrowed)
@@ -731,7 +735,8 @@ impl<T: Clone + PartialEq, S: TensorStructure + Clone + PartialEq> ReplaceWithBu
                 }
                 .non_greedy_wildcards(replacement.settings.non_greedy_wildcards.clone())
                 .allow_new_wildcards_on_rhs(replacement.settings.allow_new_wildcards_on_rhs)
-                .level_range(replacement.settings.level_range)
+                .min_level(replacement.settings.level_range.0)
+                .max_level(replacement.settings.level_range.1)
                 .level_is_tree_depth(replacement.settings.level_is_tree_depth)
                 .rhs_cache_size(replacement.settings.rhs_cache_size);
                 builder.with_map(dyn_clone::clone_box(&rhs))
@@ -828,7 +833,8 @@ impl<S: StorageTensor<Data = Atom> + Clone + PartialEq> ReplaceWithBuilder for S
             }
             .non_greedy_wildcards(replacement.settings.non_greedy_wildcards.clone())
             .allow_new_wildcards_on_rhs(replacement.settings.allow_new_wildcards_on_rhs)
-            .level_range(replacement.settings.level_range)
+            .min_level(replacement.settings.level_range.0)
+            .max_level(replacement.settings.level_range.1)
             .level_is_tree_depth(replacement.settings.level_is_tree_depth)
             .rhs_cache_size(replacement.settings.rhs_cache_size);
             *a = builder.with(with_borrowed);
@@ -855,7 +861,8 @@ impl<S: StorageTensor<Data = Atom> + Clone + PartialEq> ReplaceWithBuilder for S
             }
             .non_greedy_wildcards(replacement.settings.non_greedy_wildcards.clone())
             .allow_new_wildcards_on_rhs(replacement.settings.allow_new_wildcards_on_rhs)
-            .level_range(replacement.settings.level_range)
+            .min_level(replacement.settings.level_range.0)
+            .max_level(replacement.settings.level_range.1)
             .level_is_tree_depth(replacement.settings.level_is_tree_depth)
             .rhs_cache_size(replacement.settings.rhs_cache_size);
             *a = builder.with_map(dyn_clone::clone_box(&rhs));
@@ -885,7 +892,8 @@ impl<S: StorageTensor<Data = Atom> + Clone + PartialEq> ReplaceWithBuilder for S
             }
             .non_greedy_wildcards(replacement.settings.non_greedy_wildcards.clone())
             .allow_new_wildcards_on_rhs(replacement.settings.allow_new_wildcards_on_rhs)
-            .level_range(replacement.settings.level_range)
+            .min_level(replacement.settings.level_range.0)
+            .max_level(replacement.settings.level_range.1)
             .level_is_tree_depth(replacement.settings.level_is_tree_depth)
             .rhs_cache_size(replacement.settings.rhs_cache_size);
             builder.with(with_borrowed)
@@ -912,7 +920,8 @@ impl<S: StorageTensor<Data = Atom> + Clone + PartialEq> ReplaceWithBuilder for S
             }
             .non_greedy_wildcards(replacement.settings.non_greedy_wildcards.clone())
             .allow_new_wildcards_on_rhs(replacement.settings.allow_new_wildcards_on_rhs)
-            .level_range(replacement.settings.level_range)
+            .min_level(replacement.settings.level_range.0)
+            .max_level(replacement.settings.level_range.1)
             .level_is_tree_depth(replacement.settings.level_is_tree_depth)
             .rhs_cache_size(replacement.settings.rhs_cache_size);
             builder.with_map(dyn_clone::clone_box(&rhs))
@@ -1330,14 +1339,6 @@ impl<S: TensorStructure> DenseTensor<Atom, S> {
         <Atom as AtomCore>::nsolve_system::<N, Atom>(&self.data, vars, init, prec, max_iterations)
     }
 
-    /// Solve a system that is linear in `vars`, if possible.
-    /// Each expression in `system` is understood to yield 0.
-    pub fn solve_linear_system<E: PositiveExponent, T: AtomCore>(
-        &self,
-        vars: &[T],
-    ) -> Result<Vec<Atom>, SolveError> {
-        <Atom as AtomCore>::solve_linear_system::<E, Atom, T>(&self.data, vars)
-    }
     /// Convert a system of linear equations to a matrix representation, returning the matrix
     /// and the right-hand side.
     #[allow(clippy::type_complexity)]

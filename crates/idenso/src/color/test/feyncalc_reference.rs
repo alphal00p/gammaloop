@@ -7,7 +7,7 @@ use symbolica::function;
 // https://github.com/FeynCalc/feyncalc/blob/027e6a741fe62a21e6d979f9d555bd2736029108/Tests/SUN/SUNSimplify.test
 //
 // FeynCalc normally substitutes TR=1/2 and can rewrite SUNN in terms of CA/CF.
-// These tests keep idenso's symbolic TR, Nc, and NA conventions visible.
+// These tests keep idenso's symbolic TR, Nc, and dA conventions visible.
 // The rest of SUNSimplify.test mostly exercises explicit SUND tensors, full
 // Fierz products of two open chains, or SUNNToCACF-specific presentation rules.
 
@@ -15,18 +15,27 @@ fn fundamental_delta(left: impl IntoAtom, right: impl IntoAtom) -> Atom {
     function!(ETS.metric, left.into_atom(), right.into_atom())
 }
 
+fn su_n_representations() -> (Atom, Atom) {
+    let fundamental_dimension = Atom::var(CS.nc);
+    let adjoint_dimension = fundamental_dimension.clone().pow(Atom::num(2)) - Atom::num(1);
+    (
+        ColorFundamental {}.to_symbolic([fundamental_dimension]),
+        ColorAdjoint {}.to_symbolic([adjoint_dimension]),
+    )
+}
+
 macro_rules! t {
     ($r:ident, $a:tt) => {
-        color_t!(slot!($r.coad_na, $a))
+        color_t!(slot!($r.coad_da, $a))
     };
 }
 
 macro_rules! f {
     ($r:ident, $a:tt, $b:tt, $c:tt) => {
         color_f!(
-            slot!($r.coad_na, $a),
-            slot!($r.coad_na, $b),
-            slot!($r.coad_na, $c),
+            slot!($r.coad_da, $a),
+            slot!($r.coad_da, $b),
+            slot!($r.coad_da, $c),
         )
     };
 }
@@ -57,8 +66,15 @@ macro_rules! sdf {
 fn sun_simplify_sunn_to_cacf_rewrites_sunn_squared_minus_one() {
     test_initialize();
     let expr = parse_lit!(Nc ^ 2 - 1, default_namespace = "spenso");
+    let (fundamental_rep, adjoint_rep) = su_n_representations();
 
-    assert_snapshot!(expr.to_color_casimir().to_bare_ordered_string(), @"2*CA*CF");
+    let rewritten = expr.to_color_casimir_with(
+        fundamental_rep.as_view(),
+        adjoint_rep.as_view(),
+        ColorCasimirSettings::default().with_fundamental_index_normalization(),
+    );
+    let expected = Atom::num(2) * color_cas!(2, adjoint_rep) * color_cas!(2, fundamental_rep);
+    assert_eq!(rewritten.expand(), expected.expand());
 }
 
 #[test]
@@ -72,11 +88,17 @@ fn sun_simplify_sunn_to_cacf_rewrites_structure_square_dimension() {
         ) ^ 2,
         default_namespace = "spenso"
     );
+    let (fundamental_rep, adjoint_rep) = su_n_representations();
 
-    assert_snapshot!(expr
-        .simplify_color()
-        .to_color_casimir()
-        .to_bare_ordered_string(), @"2*CA*CF*cas(2,coad(2*CA*CF))");
+    let rewritten = expr.simplify_color().to_color_casimir_with(
+        fundamental_rep.as_view(),
+        adjoint_rep.as_view(),
+        ColorCasimirSettings::default().with_fundamental_index_normalization(),
+    );
+    let expected = Atom::num(2)
+        * color_cas!(2, adjoint_rep.clone()).pow(Atom::num(2))
+        * color_cas!(2, fundamental_rep);
+    assert_eq!(rewritten.expand(), expected.expand());
 }
 
 #[test]
@@ -85,7 +107,7 @@ fn sun_simplify_id2_open_chain_separated_casimir() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, a, b, a);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(NA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,b),in,out))+cas(2,cof(Nc))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,b),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))+cas(2,cof(Nc))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))");
 }
 
 #[test]
@@ -94,7 +116,7 @@ fn sun_simplify_id3_structure_loop_to_adjoint_delta() {
     let r = TestReps::new();
     let expr = f!(r, a, c, d) * f!(r, b, c, d);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(NA))*g(coad(NA,a),coad(NA,b))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(dA))*g(coad(dA,a),coad(dA,b))");
 }
 
 #[test]
@@ -103,7 +125,7 @@ fn sun_simplify_id4_structure_times_open_chain_contracts() {
     let r = TestReps::new();
     let expr = f!(r, a, b, c) * sun_tf!(r, i, j, b, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(NA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,a),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))");
 }
 
 #[test]
@@ -112,7 +134,7 @@ fn sun_simplify_id7_cyclic_structure_times_open_chain_contracts() {
     let r = TestReps::new();
     let expr = f!(r, c, a, b) * sun_tf!(r, i, j, b, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(NA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,a),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))");
 }
 
 #[test]
@@ -130,7 +152,7 @@ fn sun_simplify_id17_delta_renames_open_chain_endpoint() {
     let r = TestReps::new();
     let expr = sdf!(r, b, a) * sun_tf!(r, a, d, i) * sun_tf!(r, d, c, j);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"chain(cof(Nc,b),dind(cof(Nc,c)),t(coad(NA,i),in,out),t(coad(NA,j),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"chain(cof(Nc,b),dind(cof(Nc,c)),t(coad(dA,i),in,out),t(coad(dA,j),in,out))");
 }
 
 #[test]
@@ -140,7 +162,7 @@ fn sun_simplify_id18_delta_closes_doubled_two_generator_chain() {
     let line = sun_tf!(r, a, d, i) * sun_tf!(r, d, b, j);
     let expr = sdf!(r, b, a) * (line.clone() + line);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"2*g(coad(NA,i),coad(NA,j))*idx(2,cof(Nc))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"2*g(coad(dA,i),coad(dA,j))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -149,7 +171,7 @@ fn sun_simplify_id21_adjacent_open_chains_join() {
     let r = TestReps::new();
     let expr = sun_tf!(r, a, d, i) * sun_tf!(r, d, c, j);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"chain(cof(Nc,a),dind(cof(Nc,c)),t(coad(NA,i),in,out),t(coad(NA,j),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"chain(cof(Nc,a),dind(cof(Nc,c)),t(coad(dA,i),in,out),t(coad(dA,j),in,out))");
 }
 
 #[test]
@@ -158,7 +180,7 @@ fn sun_simplify_id27_structure_square_keeps_idenso_dimensions() {
     let r = TestReps::new();
     let expr = f!(r, a, b, c).pow(Atom::num(2));
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"NA*cas(2,coad(NA))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(dA))*dA");
 }
 
 #[test]
@@ -167,7 +189,7 @@ fn sun_simplify_id30_three_generator_trace_terminal() {
     let r = TestReps::new();
     let expr = sun_trace!(r, i, j, k);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*f(coad(NA,i),coad(NA,j),coad(NA,k))*idx(2,cof(Nc))+trace(cof(Nc),sym(t(coad(NA,i),in,out),t(coad(NA,j),in,out),t(coad(NA,k),in,out)))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*f(coad(dA,i),coad(dA,j),coad(dA,k))*idx(2,cof(Nc))+trace(cof(Nc),sym(t(coad(dA,i),in,out),t(coad(dA,j),in,out),t(coad(dA,k),in,out)))");
 }
 
 #[test]
@@ -176,7 +198,7 @@ fn sun_simplify_id41_nested_adjacent_open_chain_casimirs() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, b, a, a, b, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"(cas(2,cof(Nc)))^2*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,c),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"(cas(2,cof(Nc)))^2*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,c),in,out))");
 }
 
 #[test]
@@ -194,7 +216,7 @@ fn sun_simplify_id45_open_chain_separated_casimir() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, a, b, a);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(NA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,b),in,out))+cas(2,cof(Nc))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,b),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))+cas(2,cof(Nc))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))");
 }
 
 #[test]
@@ -221,7 +243,7 @@ fn sun_simplify_id52_repeated_trace_pair() {
     let r = TestReps::new();
     let expr = sun_trace!(r, i1, i2, i1, i2);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*NA*cas(2,coad(NA))*idx(2,cof(Nc))+NA*cas(2,cof(Nc))*idx(2,cof(Nc))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*dA*idx(2,cof(Nc))+cas(2,cof(Nc))*dA*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -230,7 +252,7 @@ fn sun_simplify_id55_adjacent_casimir_inside_open_chain() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, b, a, a, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,cof(Nc))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,b),in,out),t(coad(NA,c),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,cof(Nc))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out),t(coad(dA,c),in,out))");
 }
 
 #[test]
@@ -239,7 +261,7 @@ fn sun_simplify_id56_explicit_i_times_structure_chain() {
     let r = TestReps::new();
     let expr = Atom::i() * f!(r, b, jj, c) * sun_tf!(r, i, j, jj, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(NA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,b),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))");
 }
 
 #[test]
@@ -248,7 +270,7 @@ fn sun_simplify_id66_trace_adjacent_pairs() {
     let r = TestReps::new();
     let expr = sun_trace!(r, a, a, b, b);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"NA*cas(2,cof(Nc))*idx(2,cof(Nc))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,cof(Nc))*dA*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -257,5 +279,5 @@ fn sun_simplify_id75_structure_times_two_generator_open_chain() {
     let r = TestReps::new();
     let expr = f!(r, a, b, c) * sun_tf!(r, i, j, b, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(NA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,a),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))");
 }

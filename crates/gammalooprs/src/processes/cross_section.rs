@@ -3325,7 +3325,8 @@ pub(crate) fn build_derivative_structure_atom(
         .unwrap()
         .to_atom()
         .replace(function!(GS.eta, GS.rescale_star))
-        .level_range((0, Some(0)))
+        .min_level(0)
+        .max_level(Some(0))
         .with(0);
 
     let mut expression_to_derive = function!(f, GS.rescale)

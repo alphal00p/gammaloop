@@ -1,43 +1,50 @@
 use idenso::{color::CS, representations::initialize};
 use spenso::{
     algebra::complex::Complex,
-    structure::abstract_index::AbstractIndex,
+    structure::{Canonicalized, abstract_index::AbstractIndex},
     tensors::data::{GetTensorData, SparseTensor},
 };
 use spenso_hep_lib::{su3_generator_data, su3_structure_f_data};
 
-fn color_t()
--> SparseTensor<Complex<f64>, spenso::network::library::symbolic::ExplicitKey<AbstractIndex>> {
+fn color_t() -> Canonicalized<
+    SparseTensor<Complex<f64>, spenso::network::library::symbolic::ExplicitKey<AbstractIndex>>,
+> {
     initialize();
     su3_generator_data(CS.t_strct::<AbstractIndex>(3, 8))
 }
 
-fn color_f() -> SparseTensor<f64, spenso::network::library::symbolic::ExplicitKey<AbstractIndex>> {
+fn color_f()
+-> Canonicalized<SparseTensor<f64, spenso::network::library::symbolic::ExplicitKey<AbstractIndex>>>
+{
     initialize();
     su3_structure_f_data(CS.f_strct::<AbstractIndex>(8))
 }
 
 fn t_component(
-    tensor: &SparseTensor<
-        Complex<f64>,
-        spenso::network::library::symbolic::ExplicitKey<AbstractIndex>,
+    tensor: &Canonicalized<
+        SparseTensor<Complex<f64>, spenso::network::library::symbolic::ExplicitKey<AbstractIndex>>,
     >,
     a: usize,
     i: usize,
     j: usize,
 ) -> Complex<f64> {
+    let storage_indices = tensor.layout().logical_to_canonical(&[a, i, j]);
     tensor
-        .get_owned([a, i, j])
+        .canonical()
+        .get_owned(storage_indices)
         .unwrap_or_else(|_| Complex::new(0., 0.))
 }
 
 fn f_component(
-    tensor: &SparseTensor<f64, spenso::network::library::symbolic::ExplicitKey<AbstractIndex>>,
+    tensor: &Canonicalized<
+        SparseTensor<f64, spenso::network::library::symbolic::ExplicitKey<AbstractIndex>>,
+    >,
     a: usize,
     b: usize,
     c: usize,
 ) -> f64 {
-    tensor.get_owned([a, b, c]).unwrap_or(0.)
+    let storage_indices = tensor.layout().logical_to_canonical(&[a, b, c]);
+    tensor.canonical().get_owned(storage_indices).unwrap_or(0.)
 }
 
 fn assert_complex_close(actual: Complex<f64>, expected: Complex<f64>) {

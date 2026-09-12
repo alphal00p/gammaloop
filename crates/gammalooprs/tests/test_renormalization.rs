@@ -720,6 +720,7 @@ mod failing {
             .map_terms_single_core(|term| {
                 term.cook_indices()
                     .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                    .expect("test expression should canonicalize")
             })
             .collect_factors()
             .to_dots();

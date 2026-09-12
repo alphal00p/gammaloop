@@ -374,7 +374,7 @@ mod tests {
     };
     use spenso::{
         network::parsing::{ParseSettings, ShadowedStructure, StructureFromAtom},
-        structure::{TensorStructure, permuted::Perm},
+        structure::TensorStructure,
     };
     use symbolica::{
         atom::{Atom, AtomCore},
@@ -447,13 +447,11 @@ mod tests {
 
         match structure {
             Ok(s) => {
-                let pexpr = s
-                    .clone()
-                    .map_structure(|a| SymbolicTensor::from_named(&a).unwrap())
-                    .permute_inds()
+                let pexpr = SymbolicTensor::from_canonicalized(&s)
+                    .unwrap()
                     .expression
                     .simplify_metrics();
-                assert_eq!(s.structure.order(), 8);
+                assert_eq!(s.canonical().order(), 8);
                 assert_eq!(
                     expr,
                     pexpr,

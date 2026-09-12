@@ -42,6 +42,7 @@ integration_workspace_*
 gammaloop_state_integration_workspace/
 result/
 /result
+/tydenso/target/
 examples/amplitude_computation/GL_*
 gammaloop_state/
 # Keep the modern qq_aaa example while ignoring its legacy cards, backup DOT, and local outputs.
@@ -285,3 +286,6 @@ log.glog/
 output.svg
 crates/gammaloop-api/test_path.toml
 .codex
+
+# Marimo editor session state
+__marimo__/

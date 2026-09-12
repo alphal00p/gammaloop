@@ -11,7 +11,7 @@ use spenso::{
         parsing::ParseSettings,
     },
     structure::{
-        PermutedStructure,
+        Canonicalized, TensorDataLayout,
         representation::{Euclidean, LibraryRep, Minkowski, RepName},
     },
     tensors::{
@@ -54,12 +54,20 @@ fn ensure_test_initialized() {
 
 fn insert_explicit_complex_tensor(
     lib: &mut TestTensorLibrary,
-    key: PermutedStructure<ExplicitKey<Aind>>,
+    key: Canonicalized<ExplicitKey<Aind>>,
     data: Vec<ComplexF64>,
 ) {
-    let tensor: MixedTensor<F<f64>, _> =
-        DenseTensor::from_data(data, key.structure).unwrap().into();
-    lib.insert_explicit(PermutedStructure::identity(tensor));
+    let layout = TensorDataLayout::from_canonicalized(&key)
+        .expect("test tensor dimensions must be concrete");
+    let storage_data = layout
+        .reorder_to_storage(data)
+        .expect("test tensor data must match its logical shape");
+    let tensor: Canonicalized<MixedTensor<F<f64>, _>> = key.map_canonical(|structure| {
+        DenseTensor::from_storage_data(storage_data, structure)
+            .unwrap()
+            .into()
+    });
+    lib.insert_explicit(tensor);
 }
 
 fn insert_rank_one_tensor(
@@ -80,10 +88,8 @@ fn insert_identity_tensor(
     name: symbolica::atom::Symbol,
     rep: LibraryRep,
 ) {
-    let key = ExplicitKey::from_iter([rep.new_rep(4), rep.new_rep(4)], name, None).structure;
-    lib.insert_explicit(PermutedStructure::identity(TestTensorLibrary::identity(
-        key,
-    )));
+    let key = ExplicitKey::from_iter([rep.new_rep(4), rep.new_rep(4)], name, None);
+    lib.insert_explicit(key.map_canonical(TestTensorLibrary::identity));
 }
 
 fn insert_spinor_tensor(

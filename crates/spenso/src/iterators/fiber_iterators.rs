@@ -388,7 +388,7 @@ impl<'a, S: TensorStructure + 'a, I: IteratesAlongFibers<<S::Slot as IsAbstractS
 mod tests {
 
     use crate::structure::{
-        OrderedStructure, PermutedStructure,
+        Canonicalized, OrderedStructure,
         representation::{Euclidean, RepName},
     };
 
@@ -397,13 +397,13 @@ mod tests {
     #[test]
     fn weaved_iterator() {
         let strct: DenseTensor<u32, OrderedStructure<Euclidean>> = DenseTensor::zero(
-            PermutedStructure::from_iter([
+            Canonicalized::from_iter([
                 Euclidean {}.new_slot(4, 1),
                 Euclidean {}.new_slot(4, 2),
                 Euclidean {}.new_slot(4, 3),
                 Euclidean {}.new_slot(4, 4),
             ])
-            .structure,
+            .into_canonical(),
         );
 
         let fiber_spec = [true, false, true, false];

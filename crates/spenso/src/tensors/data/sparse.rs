@@ -1,11 +1,13 @@
 use crate::algebra::algebraic_traits::RefZero;
 use crate::structure::dimension::Dimension;
-use crate::structure::permuted::PermuteTensor;
 use crate::structure::representation::{RepName, Representation};
 #[cfg(feature = "shadowing")]
 use crate::structure::slot::ParseableAind;
 use crate::structure::slot::{AbsInd, IsAbstractSlot, Slot};
-use crate::structure::{IndexLess, PermutedStructure, StructureError};
+use crate::structure::{
+    ApplyPendingIndexPermutation, IndexLess, PendingIndexPermutation, Reindexed, StructureError,
+    TensorIdentity,
+};
 use crate::{
     algebra::algebraic_traits::IsZero,
     algebra::upgrading_arithmetic::{TryFromUpgrade, TrySmallestUpgrade},
@@ -71,14 +73,12 @@ impl<T: RefZero, S: TensorStructure> SparseTensor<T, S> {
     }
 }
 
-impl<Aind: AbsInd, T: Clone, S: Clone + Into<IndexLess<R, Aind>>, R: RepName<Dual = R>>
-    PermuteTensor for SparseTensor<T, S>
+impl<Aind: AbsInd, T: Clone, S, R: RepName<Dual = R>> TensorIdentity for SparseTensor<T, S>
 where
-    S: TensorStructure<Slot = Slot<R, Aind>> + PermuteTensor<IdSlot = Slot<R, Aind>, Id = S>,
+    S: TensorStructure<Slot = Slot<R, Aind>> + TensorIdentity<IdSlot = Slot<R, Aind>, Id = S>,
 {
     type Id = SparseTensor<T, S>;
     type IdSlot = (T, Slot<R, Aind>);
-    type Permuted = SparseTensor<T, S>;
 
     fn id(i: Self::IdSlot, j: Self::IdSlot) -> Self::Id {
         let (zero, i) = i;
@@ -94,27 +94,35 @@ where
             structure: s,
         }
     }
+}
 
-    fn permute_inds(self, permutation: &linnet::permutation::Permutation) -> Self::Permuted {
-        let mut permuteds: IndexLess<R, Aind> = self.structure.clone().into();
-        permutation.apply_slice_in_place(&mut permuteds.structure);
+impl<Aind: AbsInd, T: Clone, S: Clone + Into<IndexLess<R, Aind>>, R: RepName<Dual = R>>
+    ApplyPendingIndexPermutation for SparseTensor<T, S>
+where
+    S: TensorStructure<Slot = Slot<R, Aind>>,
+{
+    type Output = Self;
 
-        let mut permuted = self.clone();
-        for (i, d) in self.iter_expanded() {
-            permuted
-                .set_flat(
-                    permuteds
-                        .flat_index(i.apply_permutation(permutation))
-                        .unwrap(),
-                    d.clone(),
-                )
-                .unwrap();
+    fn apply_pending_index_permutation(self, pending: &PendingIndexPermutation) -> Self::Output {
+        let target: IndexLess<R, Aind> = self.structure.clone().into();
+        let mut source = target.clone();
+        source.structure = pending.apply_slice_inverse(&source.structure);
+
+        let elements = self
+            .elements
+            .into_iter()
+            .map(|(flat, value)| {
+                let source_index = source.expanded_index(flat).unwrap();
+                let target_index = source_index.apply_permutation(pending.permutation());
+                (target.flat_index(target_index).unwrap(), value)
+            })
+            .collect();
+
+        SparseTensor {
+            elements,
+            zero: self.zero,
+            structure: self.structure,
         }
-        permuted
-    }
-
-    fn permute_reps(self, _rep_perm: &linnet::permutation::Permutation) -> Self::Permuted {
-        todo!()
     }
 }
 
@@ -126,20 +134,16 @@ where
     type Indexed = SparseTensor<T, S::Indexed>;
     type Slot = S::Slot;
 
-    fn reindex(
+    fn reindex_storage(
         self,
         indices: &[<Self::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::Indexed>, StructureError> {
-        let res = self.structure.reindex(indices)?;
-
-        Ok(PermutedStructure {
-            structure: SparseTensor {
+    ) -> Result<Reindexed<Self::Indexed>, StructureError> {
+        self.structure.reindex_storage(indices).map(|reindexed| {
+            reindexed.map_target(|structure| SparseTensor {
                 zero: self.zero,
-                structure: res.structure,
+                structure,
                 elements: self.elements,
-            },
-            rep_permutation: res.rep_permutation,
-            index_permutation: res.index_permutation,
+            })
         })
     }
 
@@ -733,8 +737,8 @@ where
         Ok(())
     }
 
-    /// Generates a new sparse tensor from the given data and structure
-    pub fn from_data(
+    /// Builds a sparse tensor from coordinates ordered like its storage structure.
+    pub fn from_storage_data(
         data: impl IntoIterator<Item = (Vec<ConcreteIndex>, T)>,
         structure: I,
         zero: T,
@@ -871,5 +875,48 @@ impl<S: TensorStructure + Clone, T> StorageTensor for SparseTensor<T, S> {
 
     fn map_data_mut(&mut self, f: impl FnMut(&mut T)) {
         self.elements.values_mut().for_each(f);
+    }
+}
+
+#[cfg(test)]
+mod pending_index_tests {
+    use std::collections::HashMap;
+
+    use super::SparseTensor;
+    use crate::structure::{
+        TensorStructure,
+        abstract_index::AbstractIndex,
+        concrete_index::FlatIndex,
+        ordered::OrderedStructure,
+        representation::{Euclidean, RepName},
+    };
+
+    #[test]
+    fn applying_a_pending_index_permutation_rebuilds_sparse_keys() {
+        let structure = OrderedStructure::new(vec![
+            Euclidean {}.new_slot(2, AbstractIndex::Normal(0)),
+            Euclidean {}.new_slot(2, AbstractIndex::Normal(1)),
+            Euclidean {}.new_slot(2, AbstractIndex::Normal(2)),
+        ])
+        .into_canonical();
+        let tensor = SparseTensor {
+            elements: HashMap::from([(FlatIndex::from(1), 7), (FlatIndex::from(6), 11)]),
+            zero: 0,
+            structure,
+        };
+
+        let reordered = tensor
+            .reindex_storage(&[
+                AbstractIndex::Normal(2),
+                AbstractIndex::Normal(0),
+                AbstractIndex::Normal(1),
+            ])
+            .unwrap()
+            .apply();
+
+        assert_eq!(
+            reordered.elements,
+            HashMap::from([(FlatIndex::from(2), 7), (FlatIndex::from(5), 11)])
+        );
     }
 }

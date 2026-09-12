@@ -30,8 +30,7 @@ use symbolica::{
     function,
     id::Replacement,
     parse, parse_lit,
-    poly::series::Series,
-    solve::SolveError,
+    poly::{PolyVariable, series::Series},
 };
 use symbolica_utils::ReplaceBuilderExt;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
@@ -176,7 +175,7 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
         log.expr = simplified,
         "After gamma simplification"
     );
-    let schoonschipped = simplified.schoonschip_net::<Aind>();
+    let schoonschipped = simplified.schoonschip_net::<Aind>()?;
     debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
         log.expr = schoonschipped,
         "After Schoonschip net"
@@ -496,9 +495,9 @@ pub(crate) fn to_vakint_integrand<
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
     let mut integrand_vakint = integrand
-        .undo_schoonschip::<Aind>()
-        .undo_chain::<Aind>()
-        .undo_trace::<Aind>();
+        .undo_schoonschip::<Aind>()?
+        .undo_chain::<Aind>()?
+        .undo_trace::<Aind>()?;
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_undo_shorthands",
         reduced = %reduced_label,
@@ -1046,21 +1045,34 @@ impl VakintMomentumSolution {
             });
         }
 
-        match Atom::solve_linear_system::<u8, _, _>(system, variables) {
-            Ok(solution) => Ok(Self::from_solution(
-                &solution,
-                variables,
-                add_additional_args,
-            )),
-            Err(SolveError::Underdetermined {
-                partial_solution, ..
-            }) => Ok(Self::from_solution(
-                &partial_solution,
-                variables,
-                add_additional_args,
-            )),
-            Err(source) => Err(eyre!("{source}")),
-        }
+        let solutions = Atom::solve(system)
+            .wrt_with_exponent::<u8, _>(variables)
+            .map_err(|source| eyre!("{source}"))?;
+        let [solution] = solutions.iter().as_slice() else {
+            return Err(eyre!(
+                "expected one Vakint momentum solution, got {} branches",
+                solutions.len()
+            ));
+        };
+        let solution = variables
+            .iter()
+            .map(|variable| {
+                let polynomial_variable =
+                    PolyVariable::try_from(variable.clone()).map_err(|source| eyre!("{source}"))?;
+                if solution.free_variables().contains(&polynomial_variable) {
+                    Ok(variable.clone())
+                } else {
+                    solution.get(&polynomial_variable).cloned().ok_or_else(|| {
+                        eyre!("Vakint momentum solution has no value for {polynomial_variable}")
+                    })
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Self::from_solution(
+            &solution,
+            variables,
+            add_additional_args,
+        ))
     }
 
     fn from_solution(

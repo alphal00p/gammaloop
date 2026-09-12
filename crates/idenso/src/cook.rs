@@ -383,6 +383,14 @@ impl CookSettings {
         self.output_tags.explicit_tags()
     }
 
+    /// Whether selected input tags are preserved on cooked output symbols.
+    pub fn preserves_tags(&self) -> bool {
+        matches!(
+            self.output_tags,
+            CookOutputTags::PreserveTags | CookOutputTags::ExplicitAndPreserve(_)
+        )
+    }
+
     /// Cook function-like subexpressions according to these settings.
     pub fn cook(&self, view: AtomView<'_>) -> Atom {
         self.try_cook(view)

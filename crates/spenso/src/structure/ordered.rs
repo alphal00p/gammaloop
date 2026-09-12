@@ -25,11 +25,11 @@ use eyre::Result;
 use symbolica::atom::{Atom, FunctionBuilder, Symbol};
 
 use super::{
-    MergeInfo, NamedStructure, PermutedStructure, ScalarStructure, SmartShadowStructure,
-    StructureContract, StructureError, TensorStructure,
+    CanonicalLayout, Canonicalized, MergeInfo, NamedStructure, PendingIndexPermutation, Reindexed,
+    ScalarStructure, SmartShadowStructure, StructureContract, StructureError, TensorIdentity,
+    TensorStructure,
     abstract_index::AbstractIndex,
     dimension::Dimension,
-    permuted::PermuteTensor,
     representation::{LibraryRep, RepName, Representation},
     slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, Slot},
 };
@@ -68,90 +68,25 @@ impl<R: PartialEq + RepName, Aind: PartialEq> PartialEq for OrderedStructure<R, 
 }
 impl<R: Eq + RepName, Aind: Eq> Eq for OrderedStructure<R, Aind> {}
 
-impl<R: RepName<Dual = R>, Aind: AbsInd + DummyAind> PermuteTensor for OrderedStructure<R, Aind> {
+impl<R: RepName, Aind> super::ApplyPendingIndexPermutation for OrderedStructure<R, Aind> {
+    type Output = Self;
+
+    fn apply_pending_index_permutation(self, _pending: &PendingIndexPermutation) -> Self::Output {
+        // The former structure-level path printed original and dummy slots while
+        // building identity bridges. Target metadata is now already canonical;
+        // payload-specific implementations own any bridge construction.
+        // Representation-order changes remain input-boundary history in CanonicalLayout.
+        self
+    }
+}
+
+impl<R: RepName<Dual = R>, Aind: AbsInd + DummyAind> TensorIdentity for OrderedStructure<R, Aind> {
     type Id = Self;
-    type Permuted = (
-        OrderedStructure<LibraryRep, Aind>,
-        Vec<OrderedStructure<LibraryRep, Aind>>,
-    );
     type IdSlot = Slot<R, Aind>;
-
-    fn permute_inds(self, permutation: &Permutation) -> Self::Permuted {
-        let mut dummy_structure = Vec::new();
-        let mut ids = Vec::new();
-
-        if permutation.is_identity() {
-            return (
-                OrderedStructure {
-                    structure: self.structure.into_iter().map(|s| s.to_lib()).collect(),
-                    dual_start: self.dual_start,
-                    base_start: self.base_start,
-                },
-                ids,
-            );
-        }
-        // println!("{}", permutation);
-        for s in permutation.iter_slice(&self.structure) {
-            let d = s.to_dummy_ind();
-            let ogs = s.to_lib();
-            // println!("{ogs}");
-            // println!("{d}");
-            dummy_structure.push(d);
-            ids.push(OrderedStructure::id(d.dual(), ogs));
-        }
-        let strct = OrderedStructure::new(dummy_structure);
-        debug_assert!(
-            strct.index_permutation.is_identity(),
-            "should be identity but is: {}",
-            strct.index_permutation
-        );
-
-        (strct.structure, ids)
-    }
-
-    fn permute_reps(self, rep_perm: &Permutation) -> Self::Permuted {
-        let mut dummy_structure = Vec::new();
-        let mut og_reps = Vec::new();
-        let mut ids = Vec::new();
-
-        if rep_perm.is_identity() {
-            return (
-                OrderedStructure {
-                    structure: self.structure.into_iter().map(|s| s.to_lib()).collect(),
-                    dual_start: self.dual_start,
-                    base_start: self.base_start,
-                },
-                ids,
-            );
-        }
-        // println!("{rep_perm}");
-        for s in rep_perm.iter_slice(&self.structure) {
-            og_reps.push(s.rep.to_lib());
-            let d = s.to_dummy_rep().to_dummy_ind();
-            // println!("{d}");
-            dummy_structure.push(d);
-        }
-
-        for (i, s) in rep_perm.iter_slice(&self.structure).enumerate() {
-            let d = dummy_structure[i];
-            let new_slot = og_reps[i].slot(s.aind);
-            // println!("{new_slot}");
-            // println!("{d}");
-            ids.push(OrderedStructure::id(d.dual(), new_slot));
-        }
-        let strct = OrderedStructure::new(dummy_structure);
-        if !strct.index_permutation.is_identity() {
-            panic!(
-                "should be identity but is: {} for {}",
-                strct.index_permutation, strct.structure
-            );
-        }
-        (strct.structure, ids)
-    }
 
     fn id(i: Slot<R, Aind>, j: Slot<R, Aind>) -> Self::Id {
         if i.dim() == j.dim() {
-            OrderedStructure::new(vec![i, j]).structure
+            OrderedStructure::new(vec![i, j]).into_canonical()
         } else {
             panic!("Not same dimension for ID")
         }
@@ -165,7 +100,7 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> TensorStructure for OrderedStructure<R,
     //
     // fn id(i: Self::Slot, j: Self::Slot) -> Self::Indexed {
     //     if i.dim() == j.dim() {
-    //         OrderedStructure::new(vec![i, j]).structure
+    //         OrderedStructure::new(vec![i, j]).into_canonical()
     //     } else {
     //         panic!("Not same dimension for ID")
     //     }
@@ -175,7 +110,7 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> TensorStructure for OrderedStructure<R,
         self.base_start >= self.structure.len()
     }
 
-    fn reindex(self, indices: &[Aind]) -> Result<PermutedStructure<Self::Indexed>, StructureError> {
+    fn reindex_storage(self, indices: &[Aind]) -> Result<Reindexed<Self::Indexed>, StructureError> {
         if self.structure.len() != indices.len() {
             return Err(StructureError::WrongNumberOfArguments(
                 self.structure.len(),
@@ -183,18 +118,31 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> TensorStructure for OrderedStructure<R,
             ));
         }
 
-        Ok(self
+        let source = self.structure.clone();
+        let canonicalized = self
             .into_iter()
             .zip(indices)
             .map(|(s, index)| s.reindex(*index))
-            .collect())
+            .collect::<Canonicalized<Self>>();
+        let (target, layout) = canonicalized.into_parts();
+        if !layout.representation_permutation().is_identity() {
+            return Err(StructureError::InvalidIndexPermutation(
+                "reindexing changed representation order".to_string(),
+            ));
+        }
+        let pending = PendingIndexPermutation::checked(
+            &source,
+            &target.structure,
+            layout.index_permutation().clone(),
+        )?;
+        Ok(Reindexed::from_parts(target, pending))
     }
 
     fn dual(self) -> Self {
         self.into_iter()
             .map(|s| s.dual())
-            .collect::<PermutedStructure<_>>()
-            .structure
+            .collect::<Canonicalized<_>>()
+            .into_canonical()
     }
     fn external_reps_iter(
         &self,
@@ -309,41 +257,40 @@ impl<R: RepName, Aind: AbsInd> OrderedStructure<R, Aind> {
 
     // pub fn from_iter<S: RepName, T: IntoIterator<Item = Slot<S, Aind>>>(
     //     iter: T,
-    // ) -> PermutedStructure<Self>
+    // ) -> Canonicalized<Self>
     // where
     //     R: From<S>,
     // {
     //     let structure: Vec<Slot<R, Aind>> = iter.into_iter().map(|a| a.cast()).collect();
-    //     PermutedStructure::from(structure)
+    //     Canonicalized::from(structure)
     // }
 }
 
 impl<S: RepName, R: From<S> + RepName, Aind: AbsInd> FromIterator<Slot<S, Aind>>
-    for PermutedStructure<OrderedStructure<R, Aind>>
+    for Canonicalized<OrderedStructure<R, Aind>>
 {
     fn from_iter<T: IntoIterator<Item = Slot<S, Aind>>>(iter: T) -> Self {
         let structure: Vec<Slot<R, Aind>> = iter.into_iter().map(|a| a.cast()).collect();
-        PermutedStructure::from(structure)
+        Canonicalized::from(structure)
     }
 }
 
 impl<R: RepName, Aind: AbsInd> From<Vec<Slot<R, Aind>>>
-    for PermutedStructure<OrderedStructure<R, Aind>>
+    for Canonicalized<OrderedStructure<R, Aind>>
 {
     fn from(mut structure: Vec<Slot<R, Aind>>) -> Self {
         let rep_permutation = Permutation::sort_by_key(&structure, |a| a.rep);
         rep_permutation.apply_slice_in_place(&mut structure);
 
         if structure.is_empty() {
-            return PermutedStructure {
-                structure: OrderedStructure {
+            return Canonicalized::from_parts(
+                OrderedStructure {
                     structure,
                     base_start: usize::MAX,
                     dual_start: usize::MAX,
                 },
-                rep_permutation,
-                index_permutation: Permutation::id(0),
-            };
+                CanonicalLayout::from_permutations(rep_permutation, Permutation::id(0)),
+            );
         }
 
         let mut base_start =
@@ -376,15 +323,14 @@ impl<R: RepName, Aind: AbsInd> From<Vec<Slot<R, Aind>>>
         let index_permutation = Permutation::sort(&structure);
         index_permutation.apply_slice_in_place(&mut structure);
 
-        PermutedStructure {
-            structure: OrderedStructure {
+        Canonicalized::from_parts(
+            OrderedStructure {
                 structure,
                 base_start,
                 dual_start,
             },
-            rep_permutation,
-            index_permutation,
-        }
+            CanonicalLayout::from_permutations(rep_permutation, index_permutation),
+        )
     }
 }
 
@@ -415,8 +361,8 @@ impl<'a, R: RepName, Aind> IntoIterator for &'a mut OrderedStructure<R, Aind> {
 impl<R: RepName, Aind: AbsInd> OrderedStructure<R, Aind> {
     /// Creates a new ordered structure from this unsorted list of slots.
     /// Returns a tuple struct of a the permutation that was used to sort the vector as well as the ordered structure itself
-    pub fn new(structure: Vec<Slot<R, Aind>>) -> PermutedStructure<Self> {
-        PermutedStructure::from(structure)
+    pub fn new(structure: Vec<Slot<R, Aind>>) -> Canonicalized<Self> {
+        Canonicalized::from(structure)
     }
 
     pub fn to_named<N, A>(self, name: N, args: Option<A>) -> NamedStructure<N, A, R, Aind> {
@@ -938,7 +884,7 @@ pub mod test {
     use linnet::half_edge::subgraph::SubSetLike;
 
     use crate::structure::{
-        MergeInfo, PermutedStructure, StructureContract, TensorStructure,
+        Canonicalized, MergeInfo, StructureContract, TensorStructure,
         representation::{Euclidean, LibraryRep, Lorentz, Minkowski, RepName},
         slot::{DualSlotTo, IsAbstractSlot},
     };
@@ -947,16 +893,16 @@ pub mod test {
 
     #[test]
     fn merge_dual() {
-        let a: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+        let a: OrderedStructure<LibraryRep> = Canonicalized::from_iter([
             Lorentz {}.new_slot(3, 2).to_lib().dual(),
             Lorentz {}.new_slot(3, 4).to_lib(),
         ])
-        .structure;
-        let b: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+        .into_canonical();
+        let b: OrderedStructure<LibraryRep> = Canonicalized::from_iter([
             Lorentz {}.new_slot(3, 3).to_lib().dual(),
             Lorentz {}.new_slot(3, 1).to_lib(),
         ])
-        .structure;
+        .into_canonical();
 
         if let MergeInfo::Interleaved(filter) = a.merge(&b).unwrap().3 {
             assert_eq!(filter.n_included(), a.order());
@@ -975,20 +921,20 @@ pub mod test {
 
     #[test]
     fn orderedmerge() {
-        let a: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+        let a: OrderedStructure<LibraryRep> = Canonicalized::from_iter([
             Lorentz {}.new_slot(3, 2).to_lib(),
             Minkowski {}.new_slot(4, 2).to_lib(),
             Lorentz {}.new_slot(7, 1).to_lib(),
             Euclidean {}.new_slot(4, 2).to_lib(),
             Euclidean {}.new_slot(2, 3).to_lib(),
         ])
-        .structure;
-        let b: OrderedStructure<LibraryRep> = PermutedStructure::from_iter([
+        .into_canonical();
+        let b: OrderedStructure<LibraryRep> = Canonicalized::from_iter([
             Euclidean {}.new_slot(4, 2).to_lib(),
             Minkowski {}.new_slot(4, 11).to_lib(),
             Lorentz {}.new_slot(7, 1).dual().to_lib(),
         ])
-        .structure;
+        .into_canonical();
 
         println!("{:?}", a);
         assert_eq!(a.n_base(), 2);
@@ -1000,13 +946,45 @@ pub mod test {
     #[test]
     fn orderedmerge_euc() {
         let a: OrderedStructure<Euclidean> =
-            PermutedStructure::from_iter([Euclidean {}.new_slot(4, 2)]).structure;
+            Canonicalized::from_iter([Euclidean {}.new_slot(4, 2)]).into_canonical();
         let b: OrderedStructure<Euclidean> =
-            PermutedStructure::from_iter([Euclidean {}.new_slot(4, 2)]).structure;
+            Canonicalized::from_iter([Euclidean {}.new_slot(4, 2)]).into_canonical();
 
         println!("{:?}", a);
         println!("{:?}", b);
         println!("{}", a.merge(&b).unwrap().0);
         println!("{}", b.merge(&a).unwrap().0);
+    }
+
+    #[cfg(feature = "shadowing")]
+    #[test]
+    fn canonicalized_symbolic_output_uses_logical_slot_order_and_delegates_name() {
+        use symbolica::{
+            atom::{Atom, FunctionBuilder},
+            symbol,
+        };
+
+        use crate::structure::{HasName, NamedStructure, ToSymbolic};
+
+        let logical_slots = [
+            Minkowski {}.new_slot(2, 0).to_lib(),
+            Euclidean {}.new_slot(3, 1).to_lib(),
+        ];
+        let slot_atoms = logical_slots.map(|slot| slot.to_atom());
+        let name = symbol!("canonicalized_symbolic_output_test");
+        let expected = FunctionBuilder::new(name).add_args(&slot_atoms).finish();
+
+        let ordered: Canonicalized<OrderedStructure<LibraryRep>> =
+            logical_slots.into_iter().collect();
+        assert_eq!(ordered.to_symbolic_with(name, &[], None), expected);
+
+        let mut named =
+            NamedStructure::<_, Vec<Atom>, LibraryRep>::from_iter(logical_slots, name, None);
+        assert_eq!(named.name(), Some(name));
+        assert_eq!(named.to_symbolic(None), Some(expected));
+
+        let renamed = symbol!("canonicalized_symbolic_output_renamed_test");
+        named.set_name(renamed);
+        assert_eq!(named.name(), Some(renamed));
     }
 }

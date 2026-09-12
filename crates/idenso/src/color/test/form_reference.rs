@@ -7,16 +7,16 @@ use symbolica::{function, symbol};
 macro_rules! fco {
     ($r:ident, $a:tt, $b:tt, $c:tt) => {
         color_f!(
-            slot!($r.coad_na, $a),
-            slot!($r.coad_na, $b),
-            slot!($r.coad_na, $c),
+            slot!($r.coad_da, $a),
+            slot!($r.coad_da, $b),
+            slot!($r.coad_da, $c),
         )
     };
 }
 
 macro_rules! tco {
     ($r:ident, $a:tt) => {
-        color_t!(slot!($r.coad_na, $a))
+        color_t!(slot!($r.coad_da, $a))
     };
 }
 
@@ -75,7 +75,7 @@ fn chain_one_generator_trace_vanishes() {
     let expr = chain!(
         slot!(r.cof_nc, i),
         slot!(r.cof_nc.dual(), i),
-        color_t!(slot!(r.coad_na, a)),
+        color_t!(slot!(r.coad_da, a)),
     );
 
     assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"0");
@@ -88,11 +88,11 @@ fn chain_two_generator_trace_normalizes() {
     let expr = chain!(
         slot!(r.cof_nc, i),
         slot!(r.cof_nc.dual(), i),
-        color_t!(slot!(r.coad_na, a)),
-        color_t!(slot!(r.coad_na, b)),
+        color_t!(slot!(r.coad_da, a)),
+        color_t!(slot!(r.coad_da, b)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"g(coad(NA,a),coad(NA,b))*idx(2,cof(Nc))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"g(coad(dA,a),coad(dA,b))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -102,12 +102,12 @@ fn three_generator_trace_terminal() {
     let expr = chain!(
         slot!(r.cof_nc, i),
         slot!(r.cof_nc.dual(), i),
-        color_t!(slot!(r.coad_na, a)),
-        color_t!(slot!(r.coad_na, b)),
-        color_t!(slot!(r.coad_na, c)),
+        color_t!(slot!(r.coad_da, a)),
+        color_t!(slot!(r.coad_da, b)),
+        color_t!(slot!(r.coad_da, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*f(coad(NA,a),coad(NA,b),coad(NA,c))*idx(2,cof(Nc))+trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,c),in,out)))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out)))");
 }
 
 #[test]
@@ -117,8 +117,8 @@ fn adjacent_generator_casimir_chain() {
     let expr = chain!(
         slot!(r.cof_nc, i),
         slot!(r.cof_nc.dual(), k),
-        color_t!(slot!(r.coad_na, a)),
-        color_t!(slot!(r.coad_na, a)),
+        color_t!(slot!(r.coad_da, a)),
+        color_t!(slot!(r.coad_da, a)),
     );
 
     assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,cof(Nc))*g(cof(Nc,i),dind(cof(Nc,k)))");
@@ -130,24 +130,24 @@ fn separated_generator_casimir_trace() {
     let r = TestReps::new();
     let expr = trace!(
         &r.cof_nc,
-        color_t!(slot!(r.coad_na, a)),
-        color_t!(slot!(r.coad_na, b)),
-        color_t!(slot!(r.coad_na, a)),
-        color_t!(slot!(r.coad_na, c)),
+        color_t!(slot!(r.coad_da, a)),
+        color_t!(slot!(r.coad_da, b)),
+        color_t!(slot!(r.coad_da, a)),
+        color_t!(slot!(r.coad_da, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(NA))*g(coad(NA,b),coad(NA,c))*idx(2,cof(Nc))+cas(2,cof(Nc))*g(coad(NA,b),coad(NA,c))*idx(2,cof(Nc))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*g(coad(dA,b),coad(dA,c))*idx(2,cof(Nc))+cas(2,cof(Nc))*g(coad(dA,b),coad(dA,c))*idx(2,cof(Nc))");
 }
 
 #[test]
 fn two_f_loop_contracts_to_ca_metric() {
     test_initialize();
     let expr = parse_lit!(
-        f(coad(NA, a), coad(NA, c), coad(NA, x)) * f(coad(NA, b), coad(NA, c), coad(NA, x)),
+        f(coad(dA, a), coad(dA, c), coad(dA, x)) * f(coad(dA, b), coad(dA, c), coad(dA, x)),
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(NA))*g(coad(NA,a),coad(NA,b))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(dA))*g(coad(dA,a),coad(dA,b))");
 }
 
 #[test]
@@ -201,13 +201,13 @@ fn metric_contraction_only_replaces_the_immediate_slot() {
 fn three_f_loop_contracts_to_ca_f() {
     test_initialize();
     let expr = parse_lit!(
-        f(coad(NA, a), coad(NA, b), coad(NA, e))
-            * f(coad(NA, b), coad(NA, c), coad(NA, f_))
-            * f(coad(NA, c), coad(NA, a), coad(NA, g_)),
+        f(coad(dA, a), coad(dA, b), coad(dA, e))
+            * f(coad(dA, b), coad(dA, c), coad(dA, f_))
+            * f(coad(dA, c), coad(dA, a), coad(dA, g_)),
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1/2*cas(2,coad(NA))*f(coad(NA,e),coad(NA,f_),coad(NA,g_))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1/2*cas(2,coad(dA))*f(coad(dA,e),coad(dA,f_),coad(dA,g_))");
 }
 
 #[test]
@@ -322,6 +322,7 @@ fn color_simplification_does_not_canonicalize_lorentz_tensors() {
     assert!(
         odd_lorentz
             .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
             .is_zero()
     );
 }
@@ -337,6 +338,7 @@ fn two_f_even_automorphism_survives_canonicalization() {
     assert!(
         !contraction
             .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
             .is_zero()
     );
 }
@@ -387,28 +389,28 @@ fn mixed_trace_structure_contraction() {
     let r = TestReps::new();
     let expr = trace!(
         &r.cof_nc,
-        color_t!(slot!(r.coad_na, a)),
-        color_t!(slot!(r.coad_na, b)),
-        color_t!(slot!(r.coad_na, d)),
+        color_t!(slot!(r.coad_da, a)),
+        color_t!(slot!(r.coad_da, b)),
+        color_t!(slot!(r.coad_da, d)),
     ) * color_f!(
-        slot!(r.coad_na, a),
-        slot!(r.coad_na, b),
-        slot!(r.coad_na, c),
+        slot!(r.coad_da, a),
+        slot!(r.coad_da, b),
+        slot!(r.coad_da, c),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(NA))*g(coad(NA,c),coad(NA,d))*idx(2,cof(Nc))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(dA))*g(coad(dA,c),coad(dA,d))*idx(2,cof(Nc))");
 }
 
 #[test]
 fn symmetric_invariant_d33_partial_contraction() {
     test_initialize();
     let expr = parse_lit!(
-        d(sym_x, coad(NA, a), coad(NA, b), coad(NA, c))
-            * d(sym_y, coad(NA, a), coad(NA, b), coad(NA, d_)),
+        d(sym_x, coad(dA, a), coad(dA, b), coad(dA, c))
+            * d(sym_y, coad(dA, a), coad(dA, b), coad(dA, d_)),
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"NA^(-1)*g(coad(NA,c),coad(NA,d_))*gram(3,sym_x,sym_y)");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"dA^(-1)*g(coad(dA,c),coad(dA,d_))*gram(3,sym_x,sym_y)");
 }
 
 #[test]
@@ -417,13 +419,13 @@ fn four_generator_trace_terminal() {
     let r = TestReps::new();
     let expr = trace!(
         &r.cof_nc,
-        color_t!(slot!(r.coad_na, a)),
-        color_t!(slot!(r.coad_na, b)),
-        color_t!(slot!(r.coad_na, c)),
-        color_t!(slot!(r.coad_na, d)),
+        color_t!(slot!(r.coad_da, a)),
+        color_t!(slot!(r.coad_da, b)),
+        color_t!(slot!(r.coad_da, c)),
+        color_t!(slot!(r.coad_da, d)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*f(coad(NA,a),coad(NA,c),coad(NA,x))*f(coad(NA,b),coad(NA,d),coad(NA,x))*idx(2,cof(Nc))+1/3*f(coad(NA,a),coad(NA,d),coad(NA,x))*f(coad(NA,b),coad(NA,c),coad(NA,x))*idx(2,cof(Nc))+1𝑖/2*f(coad(NA,a),coad(NA,b),coad(NA,x))*trace(cof(Nc),sym(t(coad(NA,c),in,out),t(coad(NA,d),in,out),t(coad(NA,x),in,out)))+1𝑖/2*f(coad(NA,c),coad(NA,d),coad(NA,x))*trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,x),in,out)))+trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,c),in,out),t(coad(NA,d),in,out)))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*f(coad(dA,a),coad(dA,c),coad(dA,x))*f(coad(dA,b),coad(dA,d),coad(dA,x))*idx(2,cof(Nc))+1/3*f(coad(dA,a),coad(dA,d),coad(dA,x))*f(coad(dA,b),coad(dA,c),coad(dA,x))*idx(2,cof(Nc))+1𝑖/2*f(coad(dA,a),coad(dA,b),coad(dA,x))*trace(cof(Nc),sym(t(coad(dA,c),in,out),t(coad(dA,d),in,out),t(coad(dA,x),in,out)))+1𝑖/2*f(coad(dA,c),coad(dA,d),coad(dA,x))*trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,x),in,out)))+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out),t(coad(dA,d),in,out)))");
 }
 
 // FORM's repository includes a valgrind-oriented size-5 port of color.h's
@@ -516,7 +518,7 @@ fn form_github_color_tloop_q10_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_q10(&r);
 
-    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"trace(cof(Nc),cyclic(t(coad(NA,j1),in,out),t(coad(NA,j2),in,out),t(coad(NA,j3),in,out),t(coad(NA,j4),in,out),t(coad(NA,j5),in,out),t(coad(NA,j1),in,out),t(coad(NA,j2),in,out),t(coad(NA,j3),in,out),t(coad(NA,j4),in,out),t(coad(NA,j5),in,out)))");
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"trace(cof(Nc),cyclic(t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out),t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out)))");
 }
 
 #[test]
@@ -526,7 +528,7 @@ fn form_github_color_tloop_g10_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_g10(&r);
 
-    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"f(coad(NA,i1),coad(NA,i10),coad(NA,j5))*f(coad(NA,i1),coad(NA,i2),coad(NA,j1))*f(coad(NA,i10),coad(NA,i9),coad(NA,j4))*f(coad(NA,i2),coad(NA,i3),coad(NA,j2))*f(coad(NA,i3),coad(NA,i4),coad(NA,j3))*f(coad(NA,i4),coad(NA,i5),coad(NA,j4))*f(coad(NA,i5),coad(NA,i6),coad(NA,j5))*f(coad(NA,i6),coad(NA,i7),coad(NA,j1))*f(coad(NA,i7),coad(NA,i8),coad(NA,j2))*f(coad(NA,i8),coad(NA,i9),coad(NA,j3))");
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"f(coad(dA,i1),coad(dA,i10),coad(dA,j5))*f(coad(dA,i1),coad(dA,i2),coad(dA,j1))*f(coad(dA,i10),coad(dA,i9),coad(dA,j4))*f(coad(dA,i2),coad(dA,i3),coad(dA,j2))*f(coad(dA,i3),coad(dA,i4),coad(dA,j3))*f(coad(dA,i4),coad(dA,i5),coad(dA,j4))*f(coad(dA,i5),coad(dA,i6),coad(dA,j5))*f(coad(dA,i6),coad(dA,i7),coad(dA,j1))*f(coad(dA,i7),coad(dA,i8),coad(dA,j2))*f(coad(dA,i8),coad(dA,i9),coad(dA,j3))");
 }
 
 #[test]
@@ -536,7 +538,7 @@ fn form_github_color_tloop_qq5_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_qq5(&r);
 
-    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"(trace(cof(Nc),cyclic(t(coad(NA,j1),in,out),t(coad(NA,j2),in,out),t(coad(NA,j3),in,out),t(coad(NA,j4),in,out),t(coad(NA,j5),in,out))))^2");
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"(trace(cof(Nc),cyclic(t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out))))^2");
 }
 
 #[test]
@@ -546,7 +548,7 @@ fn form_github_color_tloop_qg5_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_qg5(&r);
 
-    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"-1*f(coad(NA,j1),coad(NA,k1),coad(NA,k2))*f(coad(NA,j2),coad(NA,k2),coad(NA,k3))*f(coad(NA,j3),coad(NA,k3),coad(NA,k4))*f(coad(NA,j4),coad(NA,k4),coad(NA,k5))*f(coad(NA,j5),coad(NA,k1),coad(NA,k5))*trace(cof(Nc),cyclic(t(coad(NA,j1),in,out),t(coad(NA,j2),in,out),t(coad(NA,j3),in,out),t(coad(NA,j4),in,out),t(coad(NA,j5),in,out)))");
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"-1*f(coad(dA,j1),coad(dA,k1),coad(dA,k2))*f(coad(dA,j2),coad(dA,k2),coad(dA,k3))*f(coad(dA,j3),coad(dA,k3),coad(dA,k4))*f(coad(dA,j4),coad(dA,k4),coad(dA,k5))*f(coad(dA,j5),coad(dA,k1),coad(dA,k5))*trace(cof(Nc),cyclic(t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out)))");
 }
 
 #[test]
@@ -556,7 +558,7 @@ fn form_github_color_tloop_gg5_size_5() {
     let r = TestReps::new();
     let expr = form_color_tloop_gg5(&r);
 
-    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"f(coad(NA,i1),coad(NA,i2),coad(NA,j1))*f(coad(NA,i1),coad(NA,i5),coad(NA,j5))*f(coad(NA,i2),coad(NA,i3),coad(NA,j2))*f(coad(NA,i3),coad(NA,i4),coad(NA,j3))*f(coad(NA,i4),coad(NA,i5),coad(NA,j4))*f(coad(NA,j1),coad(NA,k1),coad(NA,k2))*f(coad(NA,j2),coad(NA,k2),coad(NA,k3))*f(coad(NA,j3),coad(NA,k3),coad(NA,k4))*f(coad(NA,j4),coad(NA,k4),coad(NA,k5))*f(coad(NA,j5),coad(NA,k1),coad(NA,k5))");
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"f(coad(dA,i1),coad(dA,i2),coad(dA,j1))*f(coad(dA,i1),coad(dA,i5),coad(dA,j5))*f(coad(dA,i2),coad(dA,i3),coad(dA,j2))*f(coad(dA,i3),coad(dA,i4),coad(dA,j3))*f(coad(dA,i4),coad(dA,i5),coad(dA,j4))*f(coad(dA,j1),coad(dA,k1),coad(dA,k2))*f(coad(dA,j2),coad(dA,k2),coad(dA,k3))*f(coad(dA,j3),coad(dA,k3),coad(dA,k4))*f(coad(dA,j4),coad(dA,k4),coad(dA,k5))*f(coad(dA,j5),coad(dA,k1),coad(dA,k5))");
 }
 
 #[test]
@@ -564,13 +566,13 @@ fn form_github_color_tloop_gg5_size_5() {
 fn simpli_contracts_projected_f_pair() {
     test_initialize();
     let expr = parse_lit!(
-        f(coad(NA, x), coad(NA, a), coad(NA, c))
-            * f(coad(NA, x), coad(NA, b), coad(NA, c))
+        f(coad(dA, x), coad(dA, a), coad(dA, c))
+            * f(coad(dA, x), coad(dA, b), coad(dA, c))
             * invariant_environment(a, b),
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"CA*g(coad(NA,a),coad(NA,b))*invariant_environment(a,b)");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"CA*g(coad(dA,a),coad(dA,b))*invariant_environment(a,b)");
 }
 
 #[test]
@@ -578,9 +580,9 @@ fn simpli_contracts_projected_f_pair() {
 fn tloop_qloop_size_3() {
     test_initialize();
     let result =
-        parse_lit!(NA * TR * CF ^ 2 - 3 / 2 * NA * TR * CA * CF + 1 / 2 * NA * TR * CA ^ 2);
+        parse_lit!(dA * TR * CF ^ 2 - 3 / 2 * dA * TR * CA * CF + 1 / 2 * dA * TR * CA ^ 2);
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"-3/2*CA*CF*NA*TR+1/2*CA^2*NA*TR+CF^2*NA*TR");
+    assert_snapshot!(result.to_bare_ordered_string(), @"-3/2*CA*CF*dA*TR+1/2*CA^2*dA*TR+CF^2*dA*TR");
 }
 
 #[test]
@@ -596,27 +598,27 @@ fn tloop_gloop_size_3() {
 #[ignore = "pending color.tar.gz tloop qqloop size 3 family"]
 fn tloop_qqloop_size_3() {
     test_initialize();
-    let result = parse_lit!(-1 / 4 * NA * TR ^ 2 * CA + d33(R1, R2));
+    let result = parse_lit!(-1 / 4 * dA * TR ^ 2 * CA + d33(R1, R2));
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"-1/4*CA*NA*TR^2+d33(R1,R2)");
+    assert_snapshot!(result.to_bare_ordered_string(), @"-1/4*CA*dA*TR^2+d33(R1,R2)");
 }
 
 #[test]
 #[ignore = "pending color.tar.gz tloop qgloop size 3 family"]
 fn tloop_qgloop_size_3() {
     test_initialize();
-    let result = parse_lit!(1𝑖 / 4 * NA * TR * CA ^ 2);
+    let result = parse_lit!(1𝑖 / 4 * dA * TR * CA ^ 2);
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"1𝑖/4*CA^2*NA*TR");
+    assert_snapshot!(result.to_bare_ordered_string(), @"1𝑖/4*CA^2*dA*TR");
 }
 
 #[test]
 #[ignore = "pending color.tar.gz tloop ggloop size 3 family"]
 fn tloop_ggloop_size_3() {
     test_initialize();
-    let result = parse_lit!(1 / 4 * NA * CA ^ 3);
+    let result = parse_lit!(1 / 4 * dA * CA ^ 3);
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"1/4*CA^3*NA");
+    assert_snapshot!(result.to_bare_ordered_string(), @"1/4*CA^3*dA");
 }
 
 #[test]
@@ -624,10 +626,10 @@ fn tloop_ggloop_size_3() {
 fn tloop_g14() {
     test_initialize();
     let result = parse_lit!(
-        1 / 648 * NA * CA ^ 7 - 8 / 15 * d444(A1, A2, A3) * CA + 16 / 9 * d644(A1, A2, A3)
+        1 / 648 * dA * CA ^ 7 - 8 / 15 * d444(A1, A2, A3) * CA + 16 / 9 * d644(A1, A2, A3)
     );
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"-8/15*CA*d444(A1,A2,A3)+1/648*CA^7*NA+16/9*d644(A1,A2,A3)");
+    assert_snapshot!(result.to_bare_ordered_string(), @"-8/15*CA*d444(A1,A2,A3)+1/648*CA^7*dA+16/9*d644(A1,A2,A3)");
 }
 
 #[test]
@@ -635,19 +637,19 @@ fn tloop_g14() {
 fn tloop_fiveq() {
     test_initialize();
     let result = parse_lit!(
-        1 / 192 * NA * TR
+        1 / 192 * dA * TR
             ^ 5 * CA
             ^ 3 + 1 / 4 * d33(R1, R2) * TR
             ^ 3 * CA
-            ^ 2 + 5 / 48 * d33(R1, R2) * d33(R3, R4) * NA
-            ^ -1 * TR * CA + 5 / 48 * d33(R1, R3) * d33(R2, R4) * NA
-            ^ -1 * TR * CA + 1 / 8 * d33(R1, R4) * d33(R2, R3) * NA
+            ^ 2 + 5 / 48 * d33(R1, R2) * d33(R3, R4) * dA
+            ^ -1 * TR * CA + 5 / 48 * d33(R1, R3) * d33(R2, R4) * dA
+            ^ -1 * TR * CA + 1 / 8 * d33(R1, R4) * d33(R2, R3) * dA
             ^ -1 * TR * CA + 1 / 16 * d44(R1, A1) * TR
             ^ 4 + 3 / 8 * d433(R3, R1, R2) * TR
             ^ 2 * CA + 1 / 2 * d3333(R1, R2, R3, R4) * TR * CA + d43333a(R5, R2, R1, R4, R3)
     );
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"1/16*TR^4*d44(R1,A1)+1/192*CA^3*NA*TR^5+1/2*CA*TR*d3333(R1,R2,R3,R4)+1/4*CA^2*TR^3*d33(R1,R2)+1/8*CA*NA^(-1)*TR*d33(R1,R4)*d33(R2,R3)+3/8*CA*TR^2*d433(R3,R1,R2)+5/48*CA*NA^(-1)*TR*d33(R1,R2)*d33(R3,R4)+5/48*CA*NA^(-1)*TR*d33(R1,R3)*d33(R2,R4)+d43333a(R5,R2,R1,R4,R3)");
+    assert_snapshot!(result.to_bare_ordered_string(), @"1/16*TR^4*d44(R1,A1)+1/192*CA^3*dA*TR^5+1/2*CA*TR*d3333(R1,R2,R3,R4)+1/4*CA^2*TR^3*d33(R1,R2)+1/8*CA*dA^(-1)*TR*d33(R1,R4)*d33(R2,R3)+3/8*CA*TR^2*d433(R3,R1,R2)+5/48*CA*dA^(-1)*TR*d33(R1,R2)*d33(R3,R4)+5/48*CA*dA^(-1)*TR*d33(R1,R3)*d33(R2,R4)+d43333a(R5,R2,R1,R4,R3)");
 }
 
 #[test]

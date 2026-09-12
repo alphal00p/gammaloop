@@ -29,9 +29,17 @@ platforms = [
 workspace-members = [
     "clinnet",
     "idenso",
+    # These reusable crates expose a mutually exclusive `wasm` feature for
+    # Tydenso's nested workspace. Their normal native feature sets are still
+    # reached through GammaLoop consumers, but treating the crates themselves
+    # as Hakari roots would combine both arithmetic backends in the hack.
+    "linnet",
     "linnest",
     "linnet-py",
+    "spenso",
+    "spenso-macros",
     "spynso3",
+    "symbolica-utils",
     "vakint",
 ]
 third-party = [

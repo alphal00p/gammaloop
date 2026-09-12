@@ -10,10 +10,6 @@ use symbolica::atom::Atom;
 
 use super::{color::CS, dirac::AGS, rep_symbols::RS, shorthands::metric::MS};
 
-#[cfg(feature = "python")]
-use pyo3::pyfunction;
-#[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::gen_stub_pyfunction;
 #[rustfmt::skip]
 #[derive(SimpleRepresentation)]
 #[derive(
@@ -124,11 +120,6 @@ pub struct Bispinor {}
 #[representation(name = "coad", self_dual)] // Specify the dual name
 pub struct ColorAdjoint {}
 
-#[cfg_attr(
-    feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.spenso")
-)]
-#[cfg_attr(feature = "python", pyfunction)]
 pub fn initialize() {
     let _ = AIND_SYMBOLS.dind;
     let _ = Minkowski {}.to_symbolic([Atom::Zero]);

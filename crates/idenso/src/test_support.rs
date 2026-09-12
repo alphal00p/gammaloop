@@ -15,7 +15,7 @@ pub(crate) struct TestReps {
     pub bis4: Representation<Bispinor>,
     pub bis_d: Representation<Bispinor>,
     pub cof_nc: Representation<ColorFundamental>,
-    pub coad_na: Representation<ColorAdjoint>,
+    pub coad_da: Representation<ColorAdjoint>,
 }
 
 // Generate TestSymbols with all alphabet characters and some multi-character symbols
@@ -55,7 +55,7 @@ impl TestReps {
             bis4: Bispinor {}.new_rep(4),
             bis_d: Bispinor {}.new_rep(s!(d)),
             cof_nc: ColorFundamental {}.new_rep(s!(Nc)),
-            coad_na: ColorAdjoint {}.new_rep(s!(NA)),
+            coad_da: ColorAdjoint {}.new_rep(s!(dA)),
         }
     }
 

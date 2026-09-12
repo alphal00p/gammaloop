@@ -21,6 +21,12 @@ See the [wiki](https://wiki.alphaloop.ch/) for command syntax and usage notes.
 Process-generation syntax is documented here: [gammaLoop/ProcessGeneration](https://wiki.alphaloop.ch/en/gammaLoop/ProcessGeneration).
 Implemented architecture notes live in [docs/architecture/architecture-current.md](docs/architecture/architecture-current.md).
 
+The repository also owns [Tydenso](tydenso/README.md), the Typst interface to
+Spenso and Idenso. Its independent Wasm workspace and package assets live under
+`tydenso/`. The [Spenso Python guide](crates/spynso3/README.md#display) documents
+the matching configurable Typst, HTML, SVG, and notebook display API, including
+the optional `gammaloop[typst-display]` renderer.
+
 ## Quick start
 
 GammaLoop is driven from a stateful CLI. A run card can initialize a state, execute commands, and leave behind a reusable working directory that can be resumed later.

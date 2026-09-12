@@ -4,7 +4,7 @@ use crate::{
     algebra::complex::{Complex, RealOrComplex},
     network::StructureLessDisplay,
     structure::{
-        HasStructure, PermutedStructure, SlotIndex, StructureError, TensorStructure,
+        Canonicalized, HasStructure, Reindexed, SlotIndex, StructureError, TensorStructure,
         concrete_index::ConcreteIndex, dimension::Dimension, representation::Representation,
         slot::IsAbstractSlot,
     },
@@ -63,7 +63,7 @@ pub trait Library<S> {
 
     fn key_for_structure(
         &self,
-        structure: &PermutedStructure<S>,
+        structure: &Canonicalized<S>,
     ) -> Result<Self::Key, LibraryError<Self::Key>>
     where
         S: TensorStructure;
@@ -119,14 +119,14 @@ impl Display for DummyKey {
 
 impl<K: Display + Clone, V: Clone, S> Library<S> for DummyLibrary<V, K> {
     type Key = K;
-    type Value = PermutedStructure<DummyLibraryTensor<V>>;
+    type Value = Canonicalized<DummyLibraryTensor<V>>;
     fn get<'a>(&'a self, key: &Self::Key) -> Result<Cow<'a, Self::Value>, LibraryError<Self::Key>> {
         Err(LibraryError::NotFound(key.clone()))
     }
 
     fn key_for_structure(
         &self,
-        _structure: &PermutedStructure<S>,
+        _structure: &Canonicalized<S>,
     ) -> Result<Self::Key, LibraryError<Self::Key>>
     where
         S: TensorStructure,
@@ -159,10 +159,10 @@ impl<T: TensorStructure> TensorStructure for DummyLibraryTensor<T> {
     fn is_fully_self_dual(&self) -> bool {
         false
     }
-    fn reindex(
+    fn reindex_storage(
         self,
         _indices: &[<Self::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::Indexed>, StructureError> {
+    ) -> Result<Reindexed<Self::Indexed>, StructureError> {
         unimplemented!()
     }
     fn dual(self) -> Self {
@@ -291,7 +291,7 @@ impl<T: HasStructure + TensorStructure> LibraryTensor for DummyLibraryTensor<T> 
     fn with_indices(
         &self,
         _indices: &[<<<Self::WithIndices as HasStructure>::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::WithIndices>, StructureError> {
+    ) -> Result<Reindexed<Self::WithIndices>, StructureError> {
         unimplemented!()
     }
 }
@@ -312,7 +312,7 @@ pub trait LibraryTensor: HasStructure + Sized + TensorStructure {
     fn with_indices(
         &self,
         indices: &[<<<Self::WithIndices as HasStructure>::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::WithIndices>, StructureError>;
+    ) -> Result<Reindexed<Self::WithIndices>, StructureError>;
 }
 
 impl<D: Clone, S: TensorStructure + Clone> LibraryTensor for DataTensor<D, S> {
@@ -324,7 +324,9 @@ impl<D: Clone, S: TensorStructure + Clone> LibraryTensor for DataTensor<D, S> {
     }
 
     fn from_dense(key: S, data: Vec<Self::Data>) -> Result<Self> {
-        Ok(DataTensor::Dense(DenseTensor::from_data(data, key)?))
+        Ok(DataTensor::Dense(DenseTensor::from_storage_data(
+            data, key,
+        )?))
     }
 
     fn from_sparse(
@@ -332,7 +334,7 @@ impl<D: Clone, S: TensorStructure + Clone> LibraryTensor for DataTensor<D, S> {
         data: impl IntoIterator<Item = (Vec<ConcreteIndex>, Self::Data)>,
         zero: Self::Data,
     ) -> Result<Self> {
-        Ok(DataTensor::Sparse(SparseTensor::from_data(
+        Ok(DataTensor::Sparse(SparseTensor::from_storage_data(
             data, key, zero,
         )?))
     }
@@ -340,9 +342,9 @@ impl<D: Clone, S: TensorStructure + Clone> LibraryTensor for DataTensor<D, S> {
     fn with_indices(
         &self,
         indices: &[<<<Self::WithIndices as HasStructure>::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::WithIndices>, StructureError> {
-        self.clone().reindex(indices)
-        // let new_structure = self.structure().clone().reindex(indices)?;
+    ) -> Result<Reindexed<Self::WithIndices>, StructureError> {
+        self.clone().reindex_storage(indices)
+        // let new_structure = self.structure().clone().reindex_storage(indices)?;
 
         // Ok(match self {
         //     DataTensor::Dense(d) => DataTensor::Dense(DenseTensor {
@@ -394,16 +396,12 @@ impl<D: Clone + Default, S: TensorStructure + Clone> LibraryTensor for RealOrCom
     fn with_indices(
         &self,
         indices: &[<<<Self::WithIndices as HasStructure>::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::WithIndices>, StructureError> {
+    ) -> Result<Reindexed<Self::WithIndices>, StructureError> {
         match self {
             RealOrComplexTensor::Real(real_tensor) => {
                 let new_real_tensor =
                     <DataTensor<D, S> as LibraryTensor>::with_indices(real_tensor, indices)?;
-                Ok(PermutedStructure {
-                    structure: RealOrComplexTensor::Real(new_real_tensor.structure),
-                    rep_permutation: new_real_tensor.rep_permutation,
-                    index_permutation: new_real_tensor.index_permutation,
-                })
+                Ok(new_real_tensor.map_target(RealOrComplexTensor::Real))
             }
             RealOrComplexTensor::Complex(complex_tensor) => {
                 let new_complex_tensor =
@@ -411,11 +409,7 @@ impl<D: Clone + Default, S: TensorStructure + Clone> LibraryTensor for RealOrCom
                         complex_tensor,
                         indices,
                     )?;
-                Ok(PermutedStructure {
-                    structure: RealOrComplexTensor::Complex(new_complex_tensor.structure),
-                    index_permutation: new_complex_tensor.index_permutation,
-                    rep_permutation: new_complex_tensor.rep_permutation,
-                })
+                Ok(new_complex_tensor.map_target(RealOrComplexTensor::Complex))
             }
         }
     }

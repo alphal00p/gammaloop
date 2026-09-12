@@ -3253,34 +3253,43 @@ fn create_grid_for_graph<G: GraphTerm>(
                     .map(|_| Some(continuous_grid.clone()))
                     .collect();
 
-                Grid::Discrete(DiscreteGrid::new(
-                    continuous_grids,
-                    F(integrator_settings.max_prob_ratio),
-                    integrator_settings.train_on_avg,
-                ))
+                Grid::Discrete(
+                    DiscreteGrid::new(
+                        continuous_grids,
+                        F(integrator_settings.max_prob_ratio),
+                        integrator_settings.train_on_avg,
+                    )
+                    .expect("orientation sampling requires at least one orientation"),
+                )
             } else {
                 continuous_grid
             }
         }
         DiscreteGraphSamplingType::DiscreteMultiChanneling(multichanneling_settings) => {
             let continuous_grid = create_default_continous_grid(graph_term, integrator_settings);
-            let lmb_channel_grid = Grid::Discrete(DiscreteGrid::new(
-                (0..graph_term
-                    .get_num_channels(&multichanneling_settings.parameterization_settings))
-                    .map(|_| Some(continuous_grid.clone()))
-                    .collect_vec(),
-                F(integrator_settings.max_prob_ratio),
-                integrator_settings.train_on_avg,
-            ));
-
-            if settings.sample_orientations {
-                Grid::Discrete(DiscreteGrid::new(
-                    (0..graph_term.get_num_orientations())
-                        .map(|_| Some(lmb_channel_grid.clone()))
-                        .collect(),
+            let lmb_channel_grid = Grid::Discrete(
+                DiscreteGrid::new(
+                    (0..graph_term
+                        .get_num_channels(&multichanneling_settings.parameterization_settings))
+                        .map(|_| Some(continuous_grid.clone()))
+                        .collect_vec(),
                     F(integrator_settings.max_prob_ratio),
                     integrator_settings.train_on_avg,
-                ))
+                )
+                .expect("discrete multichanneling requires at least one LMB channel"),
+            );
+
+            if settings.sample_orientations {
+                Grid::Discrete(
+                    DiscreteGrid::new(
+                        (0..graph_term.get_num_orientations())
+                            .map(|_| Some(lmb_channel_grid.clone()))
+                            .collect(),
+                        F(integrator_settings.max_prob_ratio),
+                        integrator_settings.train_on_avg,
+                    )
+                    .expect("orientation sampling requires at least one orientation"),
+                )
             } else {
                 lmb_channel_grid
             }
@@ -3293,24 +3302,30 @@ fn create_grid_for_graph<G: GraphTerm>(
                 Some(graph_term.get_graph().iter_loop_edges().count()),
             );
 
-            let continious_grid = Grid::Continuous(ContinuousGrid::new(
-                dimension,
-                integrator_settings.n_bins,
-                integrator_settings.min_samples_for_update,
-                integrator_settings.bin_number_evolution.clone(),
-                integrator_settings.train_on_avg,
-            ));
+            let continious_grid = Grid::Continuous(
+                ContinuousGrid::new(
+                    dimension,
+                    integrator_settings.n_bins,
+                    integrator_settings.min_samples_for_update,
+                    integrator_settings.bin_number_evolution.clone(),
+                    integrator_settings.train_on_avg,
+                )
+                .expect("tropical sampling requires valid continuous-grid settings"),
+            );
 
             if settings.sample_orientations {
                 let continuous_grids = (0..graph_term.get_num_orientations())
                     .map(|_| Some(continious_grid.clone()))
                     .collect();
 
-                Grid::Discrete(DiscreteGrid::new(
-                    continuous_grids,
-                    F(integrator_settings.max_prob_ratio),
-                    integrator_settings.train_on_avg,
-                ))
+                Grid::Discrete(
+                    DiscreteGrid::new(
+                        continuous_grids,
+                        F(integrator_settings.max_prob_ratio),
+                        integrator_settings.train_on_avg,
+                    )
+                    .expect("orientation sampling requires at least one orientation"),
+                )
             } else {
                 continious_grid
             }
@@ -3322,34 +3337,43 @@ fn create_default_continous_grid<G: GraphTerm>(
     graph_term: &G,
     integrator_settings: &IntegratorSettings,
 ) -> Grid<F<f64>> {
-    Grid::Continuous(ContinuousGrid::new(
-        graph_term.get_graph().get_loop_number() * 3,
-        integrator_settings.n_bins,
-        integrator_settings.min_samples_for_update,
-        integrator_settings.bin_number_evolution.clone(),
-        integrator_settings.train_on_avg,
-    ))
+    Grid::Continuous(
+        ContinuousGrid::new(
+            graph_term.get_graph().get_loop_number() * 3,
+            integrator_settings.n_bins,
+            integrator_settings.min_samples_for_update,
+            integrator_settings.bin_number_evolution.clone(),
+            integrator_settings.train_on_avg,
+        )
+        .expect("graph integration requires valid continuous-grid settings"),
+    )
 }
 
 fn create_grid<I: ProcessIntegrandImpl>(integrand: &I) -> Grid<F<f64>> {
     let settings = integrand.get_settings();
     match &settings.sampling {
-        SamplingSettings::Default(_) => Grid::Continuous(ContinuousGrid::new(
-            get_global_dimension_if_exists(integrand).unwrap(),
-            settings.integrator.n_bins,
-            settings.integrator.min_samples_for_update,
-            settings.integrator.bin_number_evolution.clone(),
-            settings.integrator.train_on_avg,
-        )),
-        SamplingSettings::MultiChanneling(_) => Grid::Continuous(ContinuousGrid::new(
-            get_global_dimension_if_exists(integrand).unwrap(),
-            settings.integrator.n_bins,
-            settings.integrator.min_samples_for_update,
-            settings.integrator.bin_number_evolution.clone(),
-            settings.integrator.train_on_avg,
-        )),
-        SamplingSettings::DiscreteGraphs(discrete_graph_sampling_settings) => {
-            Grid::Discrete(DiscreteGrid::new(
+        SamplingSettings::Default(_) => Grid::Continuous(
+            ContinuousGrid::new(
+                get_global_dimension_if_exists(integrand).unwrap(),
+                settings.integrator.n_bins,
+                settings.integrator.min_samples_for_update,
+                settings.integrator.bin_number_evolution.clone(),
+                settings.integrator.train_on_avg,
+            )
+            .expect("process integration requires valid continuous-grid settings"),
+        ),
+        SamplingSettings::MultiChanneling(_) => Grid::Continuous(
+            ContinuousGrid::new(
+                get_global_dimension_if_exists(integrand).unwrap(),
+                settings.integrator.n_bins,
+                settings.integrator.min_samples_for_update,
+                settings.integrator.bin_number_evolution.clone(),
+                settings.integrator.train_on_avg,
+            )
+            .expect("multichannel integration requires valid continuous-grid settings"),
+        ),
+        SamplingSettings::DiscreteGraphs(discrete_graph_sampling_settings) => Grid::Discrete(
+            DiscreteGrid::new(
                 integrand
                     .get_group_masters()
                     .map(|term| {
@@ -3362,8 +3386,9 @@ fn create_grid<I: ProcessIntegrandImpl>(integrand: &I) -> Grid<F<f64>> {
                     .collect(),
                 F(settings.integrator.max_prob_ratio),
                 settings.integrator.train_on_avg,
-            ))
-        }
+            )
+            .expect("discrete graph sampling requires at least one graph group"),
+        ),
     }
 }
 

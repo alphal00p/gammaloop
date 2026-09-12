@@ -64,11 +64,11 @@ fn dirac_simplify_id4_slash_sandwich() {
     let p = p!(r.mink4);
     let q = q!(r.mink4);
     let expr = Atom::var(s!(m))
-        * gamma!(p.clone(), slot!(r.bis4, i), slot!(r.bis4, a))
-        * gamma!(p.clone(), slot!(r.bis4, a), slot!(r.bis4, j))
-        - gamma!(p.clone(), slot!(r.bis4, i), slot!(r.bis4, a))
-            * gamma!(q.clone(), slot!(r.bis4, a), slot!(r.bis4, b))
-            * gamma!(p.clone(), slot!(r.bis4, b), slot!(r.bis4, j));
+        * gamma!(slot!(r.bis4, i), slot!(r.bis4, a), p.clone())
+        * gamma!(slot!(r.bis4, a), slot!(r.bis4, j), p.clone())
+        - gamma!(slot!(r.bis4, i), slot!(r.bis4, a), p.clone())
+            * gamma!(slot!(r.bis4, a), slot!(r.bis4, b), q.clone())
+            * gamma!(slot!(r.bis4, b), slot!(r.bis4, j), p.clone());
 
     assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*g(p(mink(4)),q(mink(4)))+chain(bis(4,i),bis(4,j),gamma(in,out,q(mink(4))))*g(p(mink(4)),p(mink(4)))+g(bis(4,i),bis(4,j))*g(p(mink(4)),p(mink(4)))*m");
 }
@@ -94,7 +94,7 @@ fn dirac_simplify_id23_trace_evaluation_can_stay_disabled() {
         gamma!(slot!(r.mink4, a)),
         gamma!(slot!(r.mink4, b)),
         gamma!(slot!(r.mink4, a))
-    ) + gamma!(a, 1, 2) * gamma!(a, 2, 3);
+    ) + gamma!(1, 2, a) * gamma!(2, 3, a);
 
     assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,3))+trace(bis(4),cyclic(gamma(in,out,mink(4,a)),gamma(in,out,mink(4,a)),gamma(in,out,mink(4,b))))");
 }
@@ -182,13 +182,13 @@ fn dirac_simplify_id40_repeated_gamma_and_two_trace() {
     let r = test_initialize();
     let p = p!(&r.mink4);
     let open = Atom::var(s!(c1))
-        * gamma!(mu, slot!(r.bis4, i), slot!(r.bis4, a))
-        * gamma!(p.clone(), slot!(r.bis4, a), slot!(r.bis4, b))
-        * gamma!(mu, slot!(r.bis4, b), slot!(r.bis4, j))
+        * gamma!(slot!(r.bis4, i), slot!(r.bis4, a), mu)
+        * gamma!(slot!(r.bis4, a), slot!(r.bis4, b), p.clone())
+        * gamma!(slot!(r.bis4, b), slot!(r.bis4, j), mu)
         + Atom::var(s!(c1))
             * Atom::var(s!(m))
-            * gamma!(mu, slot!(r.bis4, i), slot!(r.bis4, a))
-            * gamma!(mu, slot!(r.bis4, a), slot!(r.bis4, j));
+            * gamma!(slot!(r.bis4, i), slot!(r.bis4, a), mu)
+            * gamma!(slot!(r.bis4, a), slot!(r.bis4, j), mu);
     let tr = Atom::var(s!(c2))
         * trace!(
             r.bis4.to_symbolic([]),
@@ -226,15 +226,15 @@ fn dirac_simplify_id46_d_dim_repeated_gamma_slash_sum() {
     let r = test_initialize();
     let p = p!(&r.mink_d);
     let q = q!(&r.mink_d);
-    let expr = gamma!(slot!(r.mink_d, mu), slot!(r.bis_d, i), slot!(r.bis_d, a))
-        * gamma!(p.clone(), slot!(r.bis_d, a), slot!(r.bis_d, b))
-        * gamma!(slot!(r.mink_d, mu), slot!(r.bis_d, b), slot!(r.bis_d, j))
-        + gamma!(slot!(r.mink_d, mu), slot!(r.bis_d, i), slot!(r.bis_d, a))
-            * gamma!(q.clone(), slot!(r.bis_d, a), slot!(r.bis_d, b))
-            * gamma!(slot!(r.mink_d, mu), slot!(r.bis_d, b), slot!(r.bis_d, j))
+    let expr = gamma!(slot!(r.bis_d, i), slot!(r.bis_d, a), slot!(r.mink_d, mu))
+        * gamma!(slot!(r.bis_d, a), slot!(r.bis_d, b), p.clone())
+        * gamma!(slot!(r.bis_d, b), slot!(r.bis_d, j), slot!(r.mink_d, mu))
+        + gamma!(slot!(r.bis_d, i), slot!(r.bis_d, a), slot!(r.mink_d, mu))
+            * gamma!(slot!(r.bis_d, a), slot!(r.bis_d, b), q.clone())
+            * gamma!(slot!(r.bis_d, b), slot!(r.bis_d, j), slot!(r.mink_d, mu))
         + Atom::var(s!(m))
-            * gamma!(slot!(r.mink_d, mu), slot!(r.bis_d, i), slot!(r.bis_d, a))
-            * gamma!(slot!(r.mink_d, mu), slot!(r.bis_d, a), slot!(r.bis_d, j));
+            * gamma!(slot!(r.bis_d, i), slot!(r.bis_d, a), slot!(r.mink_d, mu))
+            * gamma!(slot!(r.bis_d, a), slot!(r.bis_d, j), slot!(r.mink_d, mu));
 
     assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-1*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*d+-1*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*d+2*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))+2*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))+d*g(bis(d,i),bis(d,j))*m");
 }

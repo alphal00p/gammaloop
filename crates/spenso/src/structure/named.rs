@@ -1,14 +1,14 @@
-use linnet::{half_edge::subgraph::subset::SubSet, permutation::Permutation};
+use linnet::half_edge::subgraph::subset::SubSet;
 use tabled::{builder::Builder, settings::Style};
 
 use super::{
-    HasName, MergeInfo, OrderedStructure, PermutedStructure, ScalarStructure, StructureContract,
-    StructureError, TensorStructure,
+    ApplyPendingIndexPermutation, Canonicalized, HasName, MergeInfo, OrderedStructure,
+    PendingIndexPermutation, Reindexed, ScalarStructure, StructureContract, StructureError,
+    TensorIdentity, TensorStructure,
     abstract_index::AbstractIndex,
     dimension::Dimension,
-    permuted::PermuteTensor,
     representation::{LibraryRep, RepName, Representation},
-    slot::{AbsInd, DummyAind, IsAbstractSlot, Slot},
+    slot::{AbsInd, IsAbstractSlot, Slot},
 };
 
 use delegate::delegate;
@@ -48,7 +48,7 @@ pub type AtomStructure<R, A> = NamedStructure<SerializableSymbol, Vec<Atom>, R, 
 
 impl<Name, Args, R: RepName, Aind: AbsInd> NamedStructure<Name, Args, R, Aind> {
     #[must_use]
-    pub fn from_iter<I, T>(iter: T, name: Name, args: Option<Args>) -> PermutedStructure<Self>
+    pub fn from_iter<I, T>(iter: T, name: Name, args: Option<Args>) -> Canonicalized<Self>
     where
         R: From<I>,
         I: RepName,
@@ -56,8 +56,8 @@ impl<Name, Args, R: RepName, Aind: AbsInd> NamedStructure<Name, Args, R, Aind> {
     {
         iter.into_iter()
             .map(|a| a.cast())
-            .collect::<PermutedStructure<_>>()
-            .map_structure(move |structure| Self {
+            .collect::<Canonicalized<_>>()
+            .map_canonical(move |structure| Self {
                 structure,
                 global_name: Some(name),
                 additional_args: args,
@@ -120,15 +120,11 @@ impl IdentityName for String {
     }
 }
 
-impl<N: IdentityName, A, R: RepName<Dual = R>, Aind: AbsInd + DummyAind> PermuteTensor
+impl<N: IdentityName, A, R: RepName<Dual = R>, Aind: AbsInd + super::slot::DummyAind> TensorIdentity
     for NamedStructure<N, A, R, Aind>
 {
     type Id = Self;
     type IdSlot = Slot<R, Aind>;
-    type Permuted = (
-        NamedStructure<N, A, LibraryRep, Aind>,
-        Vec<NamedStructure<N, A, LibraryRep, Aind>>,
-    );
 
     fn id(i: Self::IdSlot, j: Self::IdSlot) -> Self::Id {
         Self {
@@ -137,74 +133,13 @@ impl<N: IdentityName, A, R: RepName<Dual = R>, Aind: AbsInd + DummyAind> Permute
             additional_args: None,
         }
     }
+}
 
-    fn permute_inds(self, permutation: &Permutation) -> Self::Permuted {
-        let mut dummy_structure = Vec::new();
-        let mut ids = Vec::new();
+impl<N, A, R: RepName, Aind> ApplyPendingIndexPermutation for NamedStructure<N, A, R, Aind> {
+    type Output = Self;
 
-        for s in permutation.iter_slice_inv(&self.structure.structure) {
-            let d = s.to_dummy_rep();
-            let ogs = s.to_lib();
-            dummy_structure.push(d);
-            ids.push(NamedStructure::id(d, ogs));
-        }
-        let strct = OrderedStructure::new(dummy_structure);
-        if !strct.index_permutation.is_identity() {
-            panic!("should be identity")
-        }
-
-        (
-            NamedStructure {
-                global_name: self.global_name,
-                additional_args: self.additional_args,
-                structure: strct.structure,
-            },
-            ids,
-        )
-    }
-
-    fn permute_reps(self, rep_perm: &Permutation) -> Self::Permuted {
-        let mut dummy_structure = Vec::new();
-        let mut og_reps = Vec::new();
-        let mut ids = Vec::new();
-
-        if rep_perm.is_identity() {
-            return (
-                NamedStructure {
-                    global_name: self.global_name,
-                    additional_args: self.additional_args,
-                    structure: PermutedStructure::from_iter(
-                        self.structure.into_iter().map(|s| s.to_lib()),
-                    )
-                    .structure,
-                },
-                vec![],
-            );
-        }
-        for s in rep_perm.iter_slice(&self.structure.structure) {
-            og_reps.push(s.rep.to_lib());
-            let d = s.to_dummy_rep();
-            dummy_structure.push(d);
-        }
-
-        for (i, s) in rep_perm.iter_slice(&self.structure.structure).enumerate() {
-            let d = dummy_structure[i];
-            let new_slot = og_reps[i].slot(s.aind);
-
-            ids.push(NamedStructure::id(d, new_slot));
-        }
-        let strct = OrderedStructure::new(dummy_structure);
-        if !strct.index_permutation.is_identity() {
-            panic!("should be identity")
-        }
-        (
-            NamedStructure {
-                global_name: self.global_name,
-                additional_args: self.additional_args,
-                structure: strct.structure,
-            },
-            ids,
-        )
+    fn apply_pending_index_permutation(self, _pending: &PendingIndexPermutation) -> Self::Output {
+        self
     }
 }
 
@@ -225,17 +160,13 @@ impl<N, A, R: RepName<Dual = R>, Aind: AbsInd> TensorStructure for NamedStructur
     //     }
     // }
 
-    fn reindex(self, indices: &[Aind]) -> Result<PermutedStructure<Self::Indexed>, StructureError> {
-        let res = self.structure.reindex(indices)?;
-
-        Ok(PermutedStructure {
-            rep_permutation: res.rep_permutation,
-            structure: Self {
+    fn reindex_storage(self, indices: &[Aind]) -> Result<Reindexed<Self::Indexed>, StructureError> {
+        self.structure.reindex_storage(indices).map(|reindexed| {
+            reindexed.map_target(|structure| Self {
                 global_name: self.global_name,
                 additional_args: self.additional_args,
-                structure: res.structure,
-            },
-            index_permutation: res.index_permutation,
+                structure,
+            })
         })
     }
 

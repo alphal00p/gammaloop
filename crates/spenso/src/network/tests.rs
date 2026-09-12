@@ -9,6 +9,16 @@ fn display() {
     println!("{a}")
 }
 
+#[test]
+fn display_labels_match_network_errors() {
+    let invalid_dot = TensorNetworkError::<i8, DummyKey>::InvalidDotFunction("dot(p)".to_owned());
+    let invalid_power =
+        TensorNetworkError::<i8, DummyKey>::NonSelfDualTensorPower("T^2".to_owned());
+
+    assert_eq!(invalid_dot.to_string(), "Invalid dot function: dot(p)");
+    assert_eq!(invalid_power.to_string(), "Non self-dual tensor power: T^2");
+}
+
 #[cfg(feature = "shadowing")]
 #[test]
 fn scalar_alias_refs_resolve_to_original_atom() {
@@ -67,7 +77,7 @@ fn auto_serializes_unlicensed_symbolic_fast_tensor_sum() {
     assert!(!symbolica_rayon_enabled());
 
     let structure: OrderedStructure<Euclidean> =
-        OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure;
+        OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).into_canonical();
     let tensor = |first: Atom, second: Atom| {
         ParamTensor::composite(DataTensor::Sparse(SparseTensor {
             elements: HashMap::from([(FlatIndex::from(0), first), (FlatIndex::from(1), second)]),
@@ -170,9 +180,9 @@ fn executed_scaled_tensors_add_distinct_tensors() {
         );
     }
 
-    let structure = OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure;
-    let a = DenseTensor::from_data(vec![1.0, 2.0], structure.clone()).unwrap();
-    let b = DenseTensor::from_data(vec![3.0, 4.0], structure).unwrap();
+    let structure = OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).into_canonical();
+    let a = DenseTensor::from_storage_data(vec![1.0, 2.0], structure.clone()).unwrap();
+    let b = DenseTensor::from_storage_data(vec![3.0, 4.0], structure).unwrap();
     let lib = Lib::new();
     let fn_lib = FnLib::new();
 

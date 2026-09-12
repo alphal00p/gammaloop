@@ -527,7 +527,6 @@ fn scalar_constants() -> HashMap<Atom, Complex64> {
     insert_scalar(&mut constants, CS.cf, 4. / 3.);
     insert_scalar(&mut constants, CS.tr, 0.5);
     insert_scalar(&mut constants, CS.nc, 3.);
-    insert_scalar(&mut constants, CS.na, 8.);
     insert_scalar_aliases(&mut constants, "m", 5.);
     insert_scalar_aliases(&mut constants, "c1", 7.);
     insert_scalar_aliases(&mut constants, "c2", 11.);

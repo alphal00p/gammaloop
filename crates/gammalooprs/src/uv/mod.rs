@@ -31,7 +31,7 @@ pub(crate) fn spenso_lor(
     dim: impl Into<Dimension>,
 ) -> ShadowedStructure<Aind> {
     let mink = Minkowski {}.new_slot(dim, ind);
-    NamedStructure::from_iter([mink], GS.emr_mom, Some(vec![Atom::num(tag)])).structure
+    NamedStructure::from_iter([mink], GS.emr_mom, Some(vec![Atom::num(tag)])).into_canonical()
 }
 
 pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dimension>) -> Atom {

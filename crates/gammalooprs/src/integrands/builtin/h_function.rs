@@ -118,13 +118,16 @@ impl HasIntegrand for HFunctionTestIntegrand {
         "HFunctionTestIntegrand".to_string()
     }
     fn create_grid(&self) -> Grid<F<f64>> {
-        Grid::Continuous(ContinuousGrid::new(
-            self.n_dim,
-            self.settings.integrator.n_bins,
-            self.settings.integrator.min_samples_for_update,
-            self.settings.integrator.bin_number_evolution.clone(),
-            self.settings.integrator.train_on_avg,
-        ))
+        Grid::Continuous(
+            ContinuousGrid::new(
+                self.n_dim,
+                self.settings.integrator.n_bins,
+                self.settings.integrator.min_samples_for_update,
+                self.settings.integrator.bin_number_evolution.clone(),
+                self.settings.integrator.train_on_avg,
+            )
+            .expect("H-function integration requires valid continuous-grid settings"),
+        )
     }
 
     fn get_n_dim(&self) -> usize {

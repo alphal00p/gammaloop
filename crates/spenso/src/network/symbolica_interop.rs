@@ -1,7 +1,15 @@
-use std::{borrow::Cow, fmt::Display, path::Path, sync::Arc};
+use std::{borrow::Cow, fmt::Display, sync::Arc};
+
+#[cfg(feature = "native-code-generation")]
+use std::path::Path;
 
 use ahash::{AHashMap, AHashSet, HashMap};
+#[cfg(feature = "native-code-generation")]
 use eyre::eyre;
+#[cfg(feature = "native-code-generation")]
+use symbolica::evaluate::{
+    CompileOptions, CompiledCode, CompiledNumber, ExportNumber, ExportSettings, ExportedCode,
+};
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, Indeterminate, KeyLookup, Symbol},
     coefficient::ConvertToRing,
@@ -10,13 +18,12 @@ use symbolica::{
         factorized_rational_polynomial::{
             FactorizedRationalPolynomial, FromNumeratorAndFactorizedDenominator,
         },
-        float::{Complex as SymComplex, FixedPrecision, FloatLike, Real, SingleFloat},
+        float::{Complex as SymComplex, FixedPrecision, Real, SingleFloat},
         rational::Rational,
         rational_polynomial::{FromNumeratorAndDenominator, RationalPolynomial},
     },
     evaluate::{
-        CompileOptions, CompiledCode, CompiledNumber, EvalTree, EvaluationDomain, EvaluationError,
-        ExportNumber, ExportSettings, ExportedCode, ExpressionEvaluator, FunctionMap,
+        EvalTree, EvaluationDomain, EvaluationError, ExpressionEvaluator, FunctionMap,
         OptimizationSettings,
     },
     id::{BorrowReplacement, Context, Pattern},
@@ -32,11 +39,16 @@ use symbolica::{
     utils::{BorrowedOrOwned, Settable},
 };
 
+#[cfg(feature = "native-code-generation")]
+use symbolica::domains::float::FloatLike;
+
+#[cfg(feature = "native-code-generation")]
 use crate::{
-    algebra::{
-        complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
-        upgrading_arithmetic::TrySmallestUpgrade,
-    },
+    algebra::complex::symbolica_traits::CompiledComplexEvaluatorSpenso,
+    tensors::parametric::CompiledEvalTensor,
+};
+use crate::{
+    algebra::{complex::Complex, upgrading_arithmetic::TrySmallestUpgrade},
     iterators::IteratableTensor,
     shadowing::{ShadowMapping, Shadowable},
     structure::{
@@ -47,16 +59,17 @@ use crate::{
         complex::RealOrComplexTensor,
         data::DataTensor,
         parametric::{
-            AtomViewOrConcrete, CompiledEvalTensor, EvalTensor, EvalTreeTensor, MixedTensor,
-            ParamTensor,
+            AtomViewOrConcrete, EvalTensor, EvalTreeTensor, MixedTensor, ParamTensor,
             atomcore::{ReplaceBuilderGeneric, TensorAtomMaps, TensorAtomOps},
         },
     },
 };
 use symbolica_utils::{IntoArgs, IntoSymbol, PatternReplacement};
 
+#[cfg(feature = "native-code-generation")]
+use super::TensorNetworkError;
 use super::{
-    ExecutionResult, Network, TensorNetworkError,
+    ExecutionResult, Network,
     store::{NetworkStore, TensorScalarStore, TensorScalarStoreMapping},
 };
 
@@ -749,6 +762,7 @@ impl<
 > Network<Store, K, FK, Aind>
 {
     #[allow(clippy::type_complexity, clippy::result_large_err)]
+    #[cfg(feature = "native-code-generation")]
     pub fn export_cpp<F: CompiledNumber>(
         &self,
         path: impl AsRef<Path>,
@@ -777,6 +791,7 @@ impl<
     }
 }
 
+#[cfg(feature = "native-code-generation")]
 impl<
     F: CompiledNumber,
     Store: TensorScalarStore<Tensor = EvalTensor<ExportedCode<F>, S>, Scalar = ExportedCode<F>>,
@@ -837,6 +852,7 @@ impl<
     }
 }
 
+#[cfg(feature = "native-code-generation")]
 impl<S: TensorStructure, K: Clone, FK: Clone, Aind: AbsInd>
     Evaluate<
         NetworkStore<CompiledEvalTensor<S>, CompiledComplexEvaluatorSpenso>,

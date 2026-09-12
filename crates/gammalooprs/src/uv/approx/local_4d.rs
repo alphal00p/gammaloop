@@ -294,7 +294,7 @@ fn t<S: super::ForestNodeLike>(
         log.expr = simplified,
         "After gamma simplification"
     );
-    let schoonschipped = simplified.schoonschip_net::<Aind>();
+    let schoonschipped = simplified.schoonschip_net::<Aind>()?;
     debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
         log.expr = schoonschipped,
         "After Schoonschip net"

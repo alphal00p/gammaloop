@@ -221,14 +221,12 @@
       <a href="../../crates/idenso/src/schoonschip/with_settings.rs">with_settings.rs</a>.
       <code>schoonschip_with_net</code> calls the symbolic-network
       implementation. <code>schoonschip_net</code> is a convenience wrapper: it
-      runs the default network pass and then runs the pattern pass as a final
-      local cleanup.
+      runs the network pass with the default settings.
     </p>
 
     <div class="box">
-      <pre><code>fn schoonschip_net&lt;Aind: AbsInd + DummyAind + ParseableAind + 'static&gt;(&amp;self) -&gt; Atom {
+      <pre><code>fn schoonschip_net&lt;Aind: AbsInd + DummyAind + ParseableAind + 'static&gt;(&amp;self) -&gt; Result&lt;Atom, NetworkToolingError&gt; {
     self.schoonschip_with_net::&lt;false, Aind&gt;(&amp;SchoonschipSettings::default_network())
-        .schoonschip()
 }</code></pre>
     </div>
 

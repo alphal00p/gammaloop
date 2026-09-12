@@ -5,7 +5,7 @@ use ahash::HashMapExt;
 use ahash::HashSet;
 use idenso::IndexTooling;
 use idenso::dirac::AGS;
-use idenso::shorthands::metric::PermuteWithMetric;
+use idenso::tensor::SymbolicTensor;
 use insta::assert_snapshot;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeData;
@@ -14,7 +14,7 @@ use linnet::half_edge::involution::Orientation;
 use spenso::network::library::LibraryTensor;
 use spenso::network::library::symbolic::ExplicitKey;
 use spenso::network::library::symbolic::TensorLibrary;
-use spenso::structure::PermutedStructure;
+use spenso::structure::Canonicalized;
 use spenso::structure::representation::Minkowski;
 use spenso::structure::representation::RepName;
 use spenso::tensors::data::DataTensor;
@@ -70,29 +70,37 @@ fn manual_lib<C: Into<Coefficient>>(
     let mut weyl = TensorLibrary::new();
     weyl.update_ids();
 
-    let gamma_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
-        gamma_data_weyl(AGS.gamma_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-            .map_data(|a| a.re + Atom::i() * a.im),
-    )));
-    // println!("permutation{}", gamma_key.rep_permutation);
+    let gamma_key = gamma_data_weyl(AGS.gamma_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+        .map_canonical(|tensor| {
+            ParamTensor::composite(DataTensor::Sparse(
+                tensor.map_data(|a| a.re + Atom::i() * a.im),
+            ))
+        });
+    // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma_key);
 
-    let gamma5_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
-        gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-            .map_data(|a| a.re + Atom::i() * a.im),
-    )));
+    let gamma5_key = gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+        .map_canonical(|tensor| {
+            ParamTensor::composite(DataTensor::Sparse(
+                tensor.map_data(|a| a.re + Atom::i() * a.im),
+            ))
+        });
     weyl.insert_explicit(gamma5_key);
 
-    let projm_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
-        proj_m_data_weyl(AGS.projm_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-            .map_data(|a| a.re + Atom::i() * a.im),
-    )));
+    let projm_key = proj_m_data_weyl(AGS.projm_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+        .map_canonical(|tensor| {
+            ParamTensor::composite(DataTensor::Sparse(
+                tensor.map_data(|a| a.re + Atom::i() * a.im),
+            ))
+        });
     weyl.insert_explicit(projm_key);
 
-    let projp_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
-        proj_p_data_weyl(AGS.projp_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-            .map_data(|a| a.re + Atom::i() * a.im),
-    )));
+    let projp_key = proj_p_data_weyl(AGS.projp_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+        .map_canonical(|tensor| {
+            ParamTensor::composite(DataTensor::Sparse(
+                tensor.map_data(|a| a.re + Atom::i() * a.im),
+            ))
+        });
     weyl.insert_explicit(projp_key);
 
     let mut lib = weyl; //hep_lib(F(1.), F(0.));
@@ -103,12 +111,15 @@ fn manual_lib<C: Into<Coefficient>>(
             Some(vec![Atom::num(i)]),
         );
 
-        debug!("lib_loop:{}", key.clone().permute_with_metric());
-        let key =
-            ParamTensor::from_dense(key.structure, v.into_iter().map(|n| Atom::num(n)).collect())
-                .unwrap();
+        debug!(
+            "lib_loop:{}",
+            SymbolicTensor::from_canonicalized(&key).unwrap()
+        );
+        let key = key.map_canonical(|structure| {
+            ParamTensor::from_dense(structure, v.into_iter().map(Atom::num).collect()).unwrap()
+        });
 
-        lib.insert_explicit(PermutedStructure::identity(key));
+        lib.insert_explicit(key);
     }
 
     for (i, (pdg, pol, ext_mom)) in pol_v.into_iter().enumerate() {
@@ -119,29 +130,37 @@ fn manual_lib<C: Into<Coefficient>>(
             additional_args.clone(),
         );
 
-        debug!("lib_ext:{}", key.clone().permute_with_metric());
+        debug!(
+            "lib_ext:{}",
+            SymbolicTensor::from_canonicalized(&key).unwrap()
+        );
 
-        let key =
-            ParamTensor::from_dense(key.structure, ext_mom.into_iter().map(Atom::num).collect())
-                .unwrap();
+        let key = key.map_canonical(|structure| {
+            ParamTensor::from_dense(structure, ext_mom.into_iter().map(Atom::num).collect())
+                .unwrap()
+        });
 
-        lib.insert_explicit(PermutedStructure::identity(key));
+        lib.insert_explicit(key);
 
         let p = model.get_particle_from_pdg(pdg);
 
         let structure = p.spin_reps();
         let global_name = EdgeData::new(p, Orientation::Default).pol_symbol(Flow::Sink);
-        let key = PermutedStructure::identity(ExplicitKey {
+        let key = Canonicalized::identity(ExplicitKey {
             structure,
             global_name,
             additional_args,
         });
 
-        debug!("lib_pol:{}", key.clone().permute_with_metric());
-        let key = ParamTensor::from_dense(key.structure, pol.into_iter().map(Atom::num).collect())
-            .unwrap();
+        debug!(
+            "lib_pol:{}",
+            SymbolicTensor::from_canonicalized(&key).unwrap()
+        );
+        let key = key.map_canonical(|structure| {
+            ParamTensor::from_dense(structure, pol.into_iter().map(Atom::num).collect()).unwrap()
+        });
 
-        lib.insert_explicit(PermutedStructure::identity(key));
+        lib.insert_explicit(key);
     }
 
     for (i, (pdg, pol)) in pol_out.into_iter().enumerate() {
@@ -152,16 +171,20 @@ fn manual_lib<C: Into<Coefficient>>(
         let structure = p.spin_reps();
         let global_name = EdgeData::new(p, Orientation::Default).pol_symbol(Flow::Source);
 
-        let key = PermutedStructure::identity(ExplicitKey {
+        let key = Canonicalized::identity(ExplicitKey {
             structure,
             global_name,
             additional_args,
         });
-        debug!("lib_pol:{}", key.clone().permute_with_metric());
-        let key = ParamTensor::from_dense(key.structure, pol.into_iter().map(Atom::num).collect())
-            .unwrap();
+        debug!(
+            "lib_pol:{}",
+            SymbolicTensor::from_canonicalized(&key).unwrap()
+        );
+        let key = key.map_canonical(|structure| {
+            ParamTensor::from_dense(structure, pol.into_iter().map(Atom::num).collect()).unwrap()
+        });
 
-        lib.insert_explicit(PermutedStructure::identity(key));
+        lib.insert_explicit(key);
     }
     lib
 }
@@ -309,15 +332,23 @@ fn gl_11_vs_gl_12() {
     println!("color_simplified_11 {}", numerator_color_simplified_11);
     println!(
         "color_simplified_12_can {}",
-        numerator_color_simplified_12.canonize(Aind::Dummy)
+        numerator_color_simplified_12
+            .canonize(Aind::Dummy)
+            .expect("test expression should canonicalize")
     );
     println!(
         "color_simplified_11_can {}",
-        numerator_color_simplified_11.canonize(Aind::Dummy)
+        numerator_color_simplified_11
+            .canonize(Aind::Dummy)
+            .expect("test expression should canonicalize")
     );
 
-    let r = (numerator_color_simplified_11.canonize(Aind::Dummy)
-        / &numerator_color_simplified_12.canonize(Aind::Dummy))
+    let r = (numerator_color_simplified_11
+        .canonize(Aind::Dummy)
+        .expect("test expression should canonicalize")
+        / &numerator_color_simplified_12
+            .canonize(Aind::Dummy)
+            .expect("test expression should canonicalize"))
         .expand();
 
     println!("ratio:{r}");

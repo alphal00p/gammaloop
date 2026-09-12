@@ -40,6 +40,33 @@ pub struct SpensoPrintSettings {
     pub symbol_scripts: bool,
 }
 
+/// Output syntax selected by Symbolica's print mode.
+///
+/// Spenso presentation settings (for example whether dimensions are shown) are
+/// deliberately kept separate from the backend syntax.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpensoPrintBackend {
+    Plain,
+    Latex,
+    Typst,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResolvedSpensoPrintSettings {
+    pub presentation: SpensoPrintSettings,
+    pub backend: SpensoPrintBackend,
+}
+
+impl ResolvedSpensoPrintSettings {
+    /// Delimit a multi-token superscript or subscript for the active backend.
+    pub fn script_delimiters(self) -> (char, char) {
+        match self.backend {
+            SpensoPrintBackend::Latex => ('{', '}'),
+            SpensoPrintBackend::Plain | SpensoPrintBackend::Typst => ('(', ')'),
+        }
+    }
+}
+
 impl From<SpensoPrintSettings> for HashMap<String, PrintUserData> {
     fn from(settings: SpensoPrintSettings) -> Self {
         HashMap::from_iter([(
@@ -78,6 +105,31 @@ impl SpensoPrintSettings {
             | ((self.with_dim as usize) << 2)
             | ((self.symbol_scripts as usize) << 3)
             | ((self.index_subscripts as usize) << 4)
+    }
+
+    /// Resolve Spenso presentation and backend syntax from Symbolica options.
+    ///
+    /// Typst automatically enables Spenso's semantic printers, allowing an
+    /// ordinary Symbolica expression containing tensor atoms to render without
+    /// callers knowing about Spenso's private custom-print flag.
+    pub fn resolve(options: &PrintOptions) -> Option<ResolvedSpensoPrintSettings> {
+        let presentation = match options.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(encoded)) => Self::from_usize(*encoded as usize),
+            _ if options.mode.is_typst() => Self::typst(),
+            _ => return None,
+        };
+        let backend = if options.mode.is_typst() {
+            SpensoPrintBackend::Typst
+        } else if options.mode.is_latex() {
+            SpensoPrintBackend::Latex
+        } else {
+            SpensoPrintBackend::Plain
+        };
+
+        Some(ResolvedSpensoPrintSettings {
+            presentation,
+            backend,
+        })
     }
 
     pub fn typst() -> Self {
@@ -412,8 +464,8 @@ impl IntoSymbol for std::string::String {
 
 #[cfg(test)]
 mod tests {
-    use super::SpensoPrintSettings;
-    use symbolica::printer::PrintUserData;
+    use super::{SpensoPrintBackend, SpensoPrintSettings};
+    use symbolica::printer::{PrintOptions, PrintUserData};
 
     #[test]
     fn typst_options_use_typst_mode() {
@@ -431,5 +483,22 @@ mod tests {
             SpensoPrintSettings::from(usize::try_from(*encoded).unwrap()),
             SpensoPrintSettings::typst()
         );
+    }
+
+    #[test]
+    fn native_typst_mode_automatically_enables_spenso_printing() {
+        let resolved = SpensoPrintSettings::resolve(&PrintOptions::typst()).unwrap();
+
+        assert_eq!(resolved.backend, SpensoPrintBackend::Typst);
+        assert_eq!(resolved.presentation, SpensoPrintSettings::typst());
+    }
+
+    #[test]
+    fn backend_does_not_come_from_presentation_bits() {
+        let resolved =
+            SpensoPrintSettings::resolve(&SpensoPrintSettings::typst().nice_symbolica()).unwrap();
+
+        assert_eq!(resolved.backend, SpensoPrintBackend::Plain);
+        assert_eq!(resolved.presentation, SpensoPrintSettings::typst());
     }
 }

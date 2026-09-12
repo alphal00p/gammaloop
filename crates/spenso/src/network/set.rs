@@ -6,8 +6,8 @@ use crate::{
         algebraic_traits::{One, Zero},
     },
     structure::{
-        PermutedStructure,
-        permuted::PermuteTensor,
+        Canonicalized,
+        permuted::ApplyPendingIndexPermutation,
         slot::{AbsInd, IsAbstractSlot},
     },
 };
@@ -20,6 +20,10 @@ use std::{
 #[cfg(feature = "shadowing")]
 use eyre::eyre;
 
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+use symbolica::evaluate::{
+    CompileOptions, CompiledCode, CompiledNumber, ExportNumber, ExportSettings, ExportedCode,
+};
 #[cfg(feature = "shadowing")]
 use symbolica::{
     atom::{Atom, AtomView},
@@ -29,14 +33,16 @@ use symbolica::{
         rational::Rational,
     },
     evaluate::{
-        CompileOptions, CompiledCode, CompiledNumber, EvalTree, EvaluationDomain, ExportNumber,
-        ExportSettings, ExportedCode, ExpressionEvaluator, FunctionMap, OptimizationSettings,
+        EvalTree, EvaluationDomain, ExpressionEvaluator, FunctionMap, OptimizationSettings,
     },
 };
 
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+use crate::algebra::complex::Complex;
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+use crate::algebra::complex::symbolica_traits::CompiledComplexEvaluatorSpenso;
 #[cfg(feature = "shadowing")]
 use crate::{
-    algebra::complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
     tensors::data::{DataIterator, DenseTensor, SetTensorData, SparseTensor},
     tensors::parametric::ParamTensor,
 };
@@ -106,7 +112,7 @@ pub type EvalTreeTensorNetworkSet<T, S, K, FK, Aind, Str> =
 pub type EvalTensorNetworkSet<T, S, K, FK, Aind, Str> =
     SharedTensorNetworkSet<ExpressionEvaluator<T>, S, K, FK, Aind, Str>;
 
-#[cfg(feature = "shadowing")]
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
 pub type CompiledTensorNetworkSet<S, K, FK, Aind, Str> =
     SharedTensorNetworkSet<CompiledComplexEvaluatorSpenso, S, K, FK, Aind, Str>;
 
@@ -140,7 +146,7 @@ impl<
     pub fn result(
         &self,
     ) -> Result<
-        Vec<ExecutionResult<TensorOrScalarOrKey<&T, &S, &PermutedStructure<K>, Aind>>>,
+        Vec<ExecutionResult<TensorOrScalarOrKey<&T, &S, &Canonicalized<K>, Aind>>>,
         TensorNetworkError<K, FK>,
     >
     where
@@ -150,7 +156,7 @@ impl<
     }
 
     #[allow(clippy::type_complexity, clippy::result_large_err)]
-    pub fn result_tensor<'a, LT, L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>>(
+    pub fn result_tensor<'a, LT, L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>>(
         &'a self,
         lib: &L,
     ) -> Result<Vec<ExecutionResult<Cow<'a, T>>>, TensorNetworkError<K, FK>>
@@ -166,7 +172,7 @@ impl<
         S: Clone + Into<T::Scalar>,
         T::Scalar: One + Zero,
         LT: TensorStructure<Indexed = T> + Clone + LibraryTensor<WithIndices = T>,
-        T: PermuteTensor<Permuted = T>,
+        T: ApplyPendingIndexPermutation<Output = T>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -263,8 +269,11 @@ impl<
                                 atoms.push(a);
                             }
                             DataTensor::Dense(
-                                DenseTensor::from_data(Vec::from_iter(oldid..tensor_id), structure)
-                                    .expect("Failed to create DenseTensor"),
+                                DenseTensor::from_storage_data(
+                                    Vec::from_iter(oldid..tensor_id),
+                                    structure,
+                                )
+                                .expect("Failed to create DenseTensor"),
                             )
                         }
                         DataTensor::Sparse(s) => {
@@ -386,7 +395,9 @@ impl<
                             for (_, &a) in d.flat_iter() {
                                 t_data.push(data[a].clone());
                             }
-                            DataTensor::Dense(DenseTensor::from_data(t_data, structure).unwrap())
+                            DataTensor::Dense(
+                                DenseTensor::from_storage_data(t_data, structure).unwrap(),
+                            )
                         }
                         DataTensor::Sparse(s) => {
                             let mut t = SparseTensor::empty(structure, T::new_zero());
@@ -443,7 +454,9 @@ impl<
                             for (_, &a) in d.flat_iter() {
                                 t_data.push(data[a].clone());
                             }
-                            DataTensor::Dense(DenseTensor::from_data(t_data, structure).unwrap())
+                            DataTensor::Dense(
+                                DenseTensor::from_storage_data(t_data, structure).unwrap(),
+                            )
                         }
                         DataTensor::Sparse(s) => {
                             let mut t = SparseTensor::empty(structure, T::new_zero());
@@ -468,6 +481,7 @@ impl<
     /// evaluation instructions. This often gives better performance than
     /// the `O3` optimization level and results in very fast compilation.
     #[allow(clippy::type_complexity)]
+    #[cfg(feature = "native-code-generation")]
     pub fn export_cpp<F: CompiledNumber>(
         &self,
         path: impl AsRef<std::path::Path>,
@@ -485,7 +499,7 @@ impl<
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
 impl<F: CompiledNumber, S: TensorStructure + Clone, K: Clone, FK: Clone, Aind: AbsInd>
     SharedTensorNetworkSet<ExportedCode<F>, S, K, FK, Aind>
 {
@@ -502,7 +516,7 @@ impl<F: CompiledNumber, S: TensorStructure + Clone, K: Clone, FK: Clone, Aind: A
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
 impl<F: CompiledNumber, S: TensorStructure + Clone, K: Clone, FK: Clone, Aind: AbsInd>
     SharedTensorNetworkSet<CompiledCode<F>, S, K, FK, Aind>
 {
@@ -515,7 +529,7 @@ impl<F: CompiledNumber, S: TensorStructure + Clone, K: Clone, FK: Clone, Aind: A
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
 impl<
     S: TensorStructure + Clone,
     K: Clone,
@@ -557,7 +571,9 @@ impl<
                             for (_, &a) in d.flat_iter() {
                                 t_data.push(data[a]);
                             }
-                            DataTensor::Dense(DenseTensor::from_data(t_data, structure).unwrap())
+                            DataTensor::Dense(
+                                DenseTensor::from_storage_data(t_data, structure).unwrap(),
+                            )
                         }
                         DataTensor::Sparse(s) => {
                             let mut t = SparseTensor::empty(structure, Complex::new_zero());

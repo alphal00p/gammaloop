@@ -1,16 +1,16 @@
-use linnet::{half_edge::subgraph::subset::SubSet, permutation::Permutation};
+use linnet::half_edge::subgraph::subset::SubSet;
 
 use delegate::delegate;
 
 use super::{
-    HasName, MergeInfo, NamedStructure, OrderedStructure, PermutedStructure, ScalarStructure,
-    StructureContract, StructureError, TensorStructure, TracksCount,
+    ApplyPendingIndexPermutation, Canonicalized, HasName, MergeInfo, NamedStructure,
+    OrderedStructure, PendingIndexPermutation, Reindexed, ScalarStructure, StructureContract,
+    StructureError, TensorIdentity, TensorStructure, TracksCount,
     abstract_index::AbstractIndex,
     dimension::Dimension,
     named::IdentityName,
-    permuted::PermuteTensor,
     representation::{LibraryRep, RepName, Representation},
-    slot::{AbsInd, DummyAind, IsAbstractSlot, Slot},
+    slot::{AbsInd, IsAbstractSlot, Slot},
 };
 use eyre::Result;
 
@@ -57,29 +57,18 @@ impl<Name, Args, R: RepName, Aind: AbsInd> SmartShadowStructure<Name, Args, R, A
 
     /// Constructs a new [`SmartShadow`] from a list of tuples of indices and dimension (assumes they are all euclidean), along with a name
     #[must_use]
-    pub fn from_iter<I, T>(
-        iter: T,
-        name: Option<Name>,
-        args: Option<Args>,
-    ) -> PermutedStructure<Self>
+    pub fn from_iter<I, T>(iter: T, name: Option<Name>, args: Option<Args>) -> Canonicalized<Self>
     where
         I: Into<Slot<R, Aind>>,
         T: IntoIterator<Item = I>,
     {
-        let res = iter
-            .into_iter()
-            .map(I::into)
-            .collect::<PermutedStructure<_>>();
-        PermutedStructure {
-            structure: Self {
-                structure: res.structure,
-                global_name: name,
-                additional_args: args,
-                contractions: 0,
-            },
-            rep_permutation: res.rep_permutation,
-            index_permutation: res.index_permutation,
-        }
+        let res = iter.into_iter().map(I::into).collect::<Canonicalized<_>>();
+        res.map_canonical(|structure| Self {
+            structure,
+            global_name: name,
+            additional_args: args,
+            contractions: 0,
+        })
     }
 }
 
@@ -133,15 +122,11 @@ impl<N, A, R: RepName, Aind: AbsInd> ScalarStructure for SmartShadowStructure<N,
     }
 }
 
-impl<N: IdentityName, A, R: RepName<Dual = R>, Aind: AbsInd + DummyAind> PermuteTensor
+impl<N: IdentityName, A, R: RepName<Dual = R>, Aind: AbsInd + super::slot::DummyAind> TensorIdentity
     for SmartShadowStructure<N, A, R, Aind>
 {
     type Id = Self;
     type IdSlot = Slot<R, Aind>;
-    type Permuted = (
-        SmartShadowStructure<N, A, LibraryRep, Aind>,
-        Vec<SmartShadowStructure<N, A, LibraryRep, Aind>>,
-    );
 
     fn id(i: Self::IdSlot, j: Self::IdSlot) -> Self::Id {
         Self {
@@ -151,77 +136,15 @@ impl<N: IdentityName, A, R: RepName<Dual = R>, Aind: AbsInd + DummyAind> Permute
             additional_args: None,
         }
     }
+}
 
-    fn permute_inds(self, permutation: &Permutation) -> Self::Permuted {
-        let mut dummy_structure = Vec::new();
-        let mut ids = Vec::new();
+impl<N, A, R: RepName, Aind: AbsInd> ApplyPendingIndexPermutation
+    for SmartShadowStructure<N, A, R, Aind>
+{
+    type Output = Self;
 
-        for s in permutation.iter_slice_inv(&self.structure.structure) {
-            let d = s.to_dummy_rep();
-            let ogs = s.to_lib();
-            dummy_structure.push(d);
-            ids.push(SmartShadowStructure::id(d, ogs));
-        }
-        let strct = OrderedStructure::new(dummy_structure);
-        if !strct.index_permutation.is_identity() {
-            panic!("should be identity")
-        }
-
-        (
-            SmartShadowStructure {
-                contractions: self.contractions,
-                global_name: self.global_name,
-                additional_args: self.additional_args,
-                structure: strct.structure,
-            },
-            ids,
-        )
-    }
-
-    fn permute_reps(self, rep_perm: &Permutation) -> Self::Permuted {
-        let mut dummy_structure = Vec::new();
-        let mut og_reps = Vec::new();
-        let mut ids = Vec::new();
-
-        if rep_perm.is_identity() {
-            return (
-                SmartShadowStructure {
-                    contractions: self.contractions,
-                    global_name: self.global_name,
-                    additional_args: self.additional_args,
-                    structure: PermutedStructure::from_iter(
-                        self.structure.into_iter().map(|s| s.to_lib()),
-                    )
-                    .structure,
-                },
-                vec![],
-            );
-        }
-        for s in rep_perm.iter_slice(&self.structure.structure) {
-            og_reps.push(s.rep.to_lib());
-            let d = s.to_dummy_rep();
-            dummy_structure.push(d);
-        }
-
-        for (i, s) in rep_perm.iter_slice(&self.structure.structure).enumerate() {
-            let d = dummy_structure[i];
-            let new_slot = og_reps[i].slot(s.aind);
-
-            ids.push(SmartShadowStructure::id(d, new_slot));
-        }
-        let strct = OrderedStructure::new(dummy_structure);
-        if !strct.index_permutation.is_identity() {
-            panic!("should be identity")
-        }
-        (
-            SmartShadowStructure {
-                contractions: self.contractions,
-                global_name: self.global_name,
-                additional_args: self.additional_args,
-                structure: strct.structure,
-            },
-            ids,
-        )
+    fn apply_pending_index_permutation(self, _pending: &PendingIndexPermutation) -> Self::Output {
+        self
     }
 }
 
@@ -229,21 +152,17 @@ impl<N, A, R: RepName<Dual = R>> TensorStructure for SmartShadowStructure<N, A, 
     type Slot = Slot<R>;
     type Indexed = Self;
 
-    fn reindex(
+    fn reindex_storage(
         self,
         indices: &[AbstractIndex],
-    ) -> Result<PermutedStructure<Self::Indexed>, StructureError> {
-        let res = self.structure.reindex(indices)?;
-
-        Ok(PermutedStructure {
-            structure: Self {
+    ) -> Result<Reindexed<Self::Indexed>, StructureError> {
+        self.structure.reindex_storage(indices).map(|reindexed| {
+            reindexed.map_target(|structure| Self {
                 contractions: self.contractions,
                 global_name: self.global_name,
                 additional_args: self.additional_args,
-                structure: res.structure,
-            },
-            rep_permutation: res.rep_permutation,
-            index_permutation: res.index_permutation,
+                structure,
+            })
         })
     }
     // type R = PhysicalReps;

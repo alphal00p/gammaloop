@@ -114,7 +114,7 @@ fn parse_scalar() {
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
 
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 #[test]
@@ -180,7 +180,7 @@ fn parse_pow() {
         .unwrap();
 
     println!("{}", net.snapshot_dot());
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 #[test]
@@ -213,7 +213,7 @@ fn parse_ratio() {
     }
     "#);
 
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 #[test]
@@ -234,14 +234,14 @@ fn parse_div() {
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_snapshot!(net.simple_execute::<()>().to_bare_ordered_string(), @"(parse_div_b(mink(4,1)))^(-6)*(parse_div_d(mink(4,1)))^(-6)*a*c");
+    assert_snapshot!(net.simple_execute::<()>().unwrap().to_bare_ordered_string(), @"(parse_div_b(mink(4,1)))^(-6)*(parse_div_d(mink(4,1)))^(-6)*a*c");
 
     let expr = parse_lit!(st(Q(1, mink(4, 1)) * Q(2, mink(4, 1))) ^ -1);
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
     println!("{}", net.snapshot_dot());
-    assert_snapshot!(net.simple_execute::<()>().to_bare_ordered_string(), @"(st(Q(1,mink(4,1))*Q(2,mink(4,1))))^(-1)");
+    assert_snapshot!(net.simple_execute::<()>().unwrap().to_bare_ordered_string(), @"(st(Q(1,mink(4,1))*Q(2,mink(4,1))))^(-1)");
 }
 
 #[test]
@@ -258,7 +258,7 @@ fn parse_scalar_tensor() {
         .unwrap();
 
     println!("{}", net.dot_pretty());
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 #[test]
@@ -350,7 +350,7 @@ fn parse_val() {
       8:42:s	-> 10:46:s	 [id=28 dir=none  color="red:blue;0.5" label="mink4|edge_6_1"];
     }
     "#);
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
     println!("{}", expr.printer(PrintOptions::typst()))
 }
 
@@ -502,7 +502,7 @@ fn parse_scalar_expr() {
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 #[test]
@@ -546,7 +546,7 @@ fn parse_dot_delta_sum_executes_back_to_atom_without_concretization() {
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
 
-    let out = net.simple_execute::<()>();
+    let out = net.simple_execute::<()>().unwrap();
 
     assert_snapshot!(out.to_bare_ordered_string(), @"(1+Q3(4,mink(4,d_1000000))*s*δ(cind(0),mink(4,d_1000000)))*-1+(Q(0,mink(4,e)))^2*t");
 }
@@ -563,7 +563,6 @@ fn parse_tensor_expr() {
         symbol!("T"),
         None,
     )
-    .structure
     .to_symbolic(None)
     .unwrap();
 
@@ -576,7 +575,6 @@ fn parse_tensor_expr() {
         symbol!("TT"),
         None,
     )
-    .structure
     .to_symbolic(None)
     .unwrap();
 
@@ -589,7 +587,6 @@ fn parse_tensor_expr() {
         symbol!("TTT"),
         None,
     )
-    .structure
     .to_symbolic(None)
     .unwrap();
 
@@ -598,7 +595,6 @@ fn parse_tensor_expr() {
         symbol!("L"),
         None,
     )
-    .structure
     .to_symbolic(None)
     .unwrap();
 
@@ -607,7 +603,6 @@ fn parse_tensor_expr() {
         symbol!("P"),
         None,
     )
-    .structure
     .to_symbolic(None)
     .unwrap();
 
@@ -616,7 +611,7 @@ fn parse_tensor_expr() {
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 // -G^2*(-g(mink(4,5),mink(4,6))*Q(2,mink(4,7))+g(mink(4,5),mink(4,6))*Q(3,mink(4,7))+g(mink(4,5),mink(4,7))*Q(2,mink(4,6))+g(mink(4,5),mink(4,7))*Q(4,mink(4,6))-g(mink(4,6),mink(4,7))*Q(3,mink(4,5))-g(mink(4,6),mink(4,7))*Q(4,mink(4,5)))*id(mink(4,2),mink(4,5))*id(mink(4,3),mink(4,6))*id(euc(4,0),euc(4,5))*id(euc(4,1),euc(4,4))*g(mink(4,4),mink(4,7))*vbar(1,euc(4,1))*u(0,euc(4,0))*ebar(2,mink(4,2))*ebar(3,mink(4,3))*gamma(mink(4,4),euc(4,5),euc(4,4))
@@ -631,7 +626,7 @@ fn parse_big_tensors() {
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 #[test]
@@ -697,7 +692,7 @@ fn equal_duals() {
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 #[test]
@@ -740,7 +735,7 @@ fn gammaloop_six_photon() {
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 #[test]
@@ -753,7 +748,7 @@ fn parse_neg_tensors() {
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 #[test]
@@ -768,7 +763,7 @@ fn many_sums() {
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 #[test]
@@ -790,7 +785,7 @@ fn contract_problem() {
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 #[test]
@@ -850,7 +845,7 @@ fn parse_problem() {
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 #[test]
 // #[should_panic]
@@ -1034,7 +1029,7 @@ fn gammaloop_input() {
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 #[test]
 fn wrapping() {

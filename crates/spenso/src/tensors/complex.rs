@@ -3,9 +3,9 @@ use std::fmt::{Debug, Display};
 use crate::{
     iterators::IteratorEnum,
     structure::{
-        IndexLess, PermutedStructure, SlotIndex,
+        ApplyPendingIndexPermutation, IndexLess, PendingIndexPermutation, Reindexed, SlotIndex,
+        TensorIdentity,
         concrete_index::ConcreteIndex,
-        permuted::PermuteTensor,
         representation::RepName,
         slot::{AbsInd, Slot},
     },
@@ -390,33 +390,32 @@ where
     }
 }
 
-impl<T: Clone, Aind: AbsInd, S: Clone + Into<IndexLess<R, Aind>>, R: RepName<Dual = R>>
-    PermuteTensor for RealOrComplexTensor<T, S>
+impl<T: Clone, Aind: AbsInd, S, R: RepName<Dual = R>> TensorIdentity for RealOrComplexTensor<T, S>
 where
-    S: TensorStructure<Slot = Slot<R, Aind>> + PermuteTensor<IdSlot = Slot<R, Aind>, Id = S>,
+    S: TensorStructure<Slot = Slot<R, Aind>> + TensorIdentity<IdSlot = Slot<R, Aind>, Id = S>,
 {
     type Id = RealOrComplexTensor<T, S>;
     type IdSlot = (T, Slot<R, Aind>);
-    type Permuted = RealOrComplexTensor<T, S>;
 
     fn id(i: Self::IdSlot, j: Self::IdSlot) -> Self::Id {
         RealOrComplexTensor::Real(DataTensor::id(i, j))
     }
+}
 
-    fn permute_inds(self, permutation: &linnet::permutation::Permutation) -> Self::Permuted {
+impl<T: Clone, Aind: AbsInd, S: Clone + Into<IndexLess<R, Aind>>, R: RepName<Dual = R>>
+    ApplyPendingIndexPermutation for RealOrComplexTensor<T, S>
+where
+    S: TensorStructure<Slot = Slot<R, Aind>>,
+{
+    type Output = Self;
+
+    fn apply_pending_index_permutation(self, pending: &PendingIndexPermutation) -> Self::Output {
         match self {
-            RealOrComplexTensor::Real(d) => RealOrComplexTensor::Real(d.permute_inds(permutation)),
-            RealOrComplexTensor::Complex(s) => {
-                RealOrComplexTensor::Complex(s.permute_inds(permutation))
+            RealOrComplexTensor::Real(d) => {
+                RealOrComplexTensor::Real(d.apply_pending_index_permutation(pending))
             }
-        }
-    }
-
-    fn permute_reps(self, rep_perm: &linnet::permutation::Permutation) -> Self::Permuted {
-        match self {
-            RealOrComplexTensor::Real(d) => RealOrComplexTensor::Real(d.permute_reps(rep_perm)),
             RealOrComplexTensor::Complex(s) => {
-                RealOrComplexTensor::Complex(s.permute_reps(rep_perm))
+                RealOrComplexTensor::Complex(s.apply_pending_index_permutation(pending))
             }
         }
     }
@@ -430,28 +429,18 @@ where
     type Indexed = RealOrComplexTensor<T, S::Indexed>;
     type Slot = S::Slot;
 
-    fn reindex(
+    fn reindex_storage(
         self,
         indices: &[<Self::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::Indexed>, StructureError> {
-        Ok(match self {
-            RealOrComplexTensor::Complex(d) => {
-                let res = d.reindex(indices)?;
-                PermutedStructure {
-                    structure: RealOrComplexTensor::Complex(res.structure),
-                    rep_permutation: res.rep_permutation,
-                    index_permutation: res.index_permutation,
-                }
-            }
-            RealOrComplexTensor::Real(d) => {
-                let res = d.reindex(indices)?;
-                PermutedStructure {
-                    structure: RealOrComplexTensor::Real(res.structure),
-                    rep_permutation: res.rep_permutation,
-                    index_permutation: res.index_permutation,
-                }
-            }
-        })
+    ) -> Result<Reindexed<Self::Indexed>, StructureError> {
+        match self {
+            RealOrComplexTensor::Complex(d) => d
+                .reindex_storage(indices)
+                .map(|reindexed| reindexed.map_target(RealOrComplexTensor::Complex)),
+            RealOrComplexTensor::Real(d) => d
+                .reindex_storage(indices)
+                .map(|reindexed| reindexed.map_target(RealOrComplexTensor::Real)),
+        }
     }
 
     fn dual(self) -> Self {

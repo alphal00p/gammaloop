@@ -7,7 +7,7 @@ use spenso::{
     iterators::IteratableTensor,
     network::parsing::ShadowedStructure,
     shadowing::Concretize,
-    structure::{PermutedStructure, TensorStructure},
+    structure::{Canonicalized, TensorStructure},
     tensors::parametric::ParamTensor,
 };
 use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
@@ -113,10 +113,8 @@ where
                 continue;
             };
 
-            let concrete: ParamTensor<_> = pol
-                .structure
-                .to_shell()
-                .concretize(Some(pol.index_permutation));
+            let (structure, layout) = pol.into_parts();
+            let concrete: ParamTensor<_> = structure.to_shell().concretize_logical(&layout);
 
             for (_, i) in concrete.iter_flat() {
                 pols.push(i.to_owned());
@@ -153,7 +151,7 @@ pub trait ReversibleEdge {
         add_args: &'a [T],
         hedge_data: &H,
         flow: Flow,
-    ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
+    ) -> Option<Canonicalized<ShadowedStructure<Aind>>>
     where
         &'a T: Into<AtomOrView<'a>>,
         H: HedgePolarizationData;
@@ -215,7 +213,7 @@ impl ReversibleEdge for EdgeData<&Edge> {
         add_args: &'a [T],
         hedge_data: &H,
         flow: Flow,
-    ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
+    ) -> Option<Canonicalized<ShadowedStructure<Aind>>>
     where
         &'a T: Into<AtomOrView<'a>>,
         H: HedgePolarizationData,
@@ -296,7 +294,7 @@ impl ReversibleEdge for EdgeData<&ParseEdge> {
         add_args: &'a [T],
         hedge_data: &H,
         flow: Flow,
-    ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
+    ) -> Option<Canonicalized<ShadowedStructure<Aind>>>
     where
         &'a T: Into<AtomOrView<'a>>,
         H: HedgePolarizationData,
@@ -358,7 +356,7 @@ impl ReversibleEdge for EdgeData<(usize, isize)> {
         add_args: &'a [T],
         hedge_data: &H,
         flow: Flow,
-    ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
+    ) -> Option<Canonicalized<ShadowedStructure<Aind>>>
     where
         &'a T: Into<AtomOrView<'a>>,
         H: HedgePolarizationData,
@@ -420,7 +418,7 @@ impl ReversibleEdge for EdgeData<ArcParticle> {
         add_args: &'a [T],
         hedge_data: &H,
         flow: Flow,
-    ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
+    ) -> Option<Canonicalized<ShadowedStructure<Aind>>>
     where
         &'a T: Into<AtomOrView<'a>>,
         H: HedgePolarizationData,

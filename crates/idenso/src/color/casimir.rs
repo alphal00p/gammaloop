@@ -8,88 +8,144 @@ use super::{CS, ColorCasimirSettings};
 
 pub(super) fn color_casimir_basis_impl(
     expression: AtomView<'_>,
+    fundamental_rep: AtomView<'_>,
+    adjoint_rep: AtomView<'_>,
     settings: ColorCasimirSettings,
 ) -> Atom {
-    ColorCasimirRewriter { settings }.run(expression)
+    let Some(rewriter) = ColorCasimirRewriter::new(fundamental_rep, adjoint_rep, settings) else {
+        return expression.to_owned();
+    };
+    rewriter.run(expression)
 }
 
 struct ColorCasimirRewriter {
     settings: ColorCasimirSettings,
+    fundamental_rep: Atom,
+    adjoint_rep: Atom,
+    fundamental_dimension: Atom,
+    adjoint_dimension: Atom,
 }
 
 impl ColorCasimirRewriter {
+    fn new(
+        fundamental_rep: AtomView<'_>,
+        adjoint_rep: AtomView<'_>,
+        settings: ColorCasimirSettings,
+    ) -> Option<Self> {
+        let fundamental_dimension =
+            Self::representation_dimension(fundamental_rep, CS.fundamental_rep)?;
+        let adjoint_dimension = Self::representation_dimension(adjoint_rep, CS.adjoint_rep)?;
+        Some(Self {
+            settings,
+            fundamental_rep: fundamental_rep.to_owned(),
+            adjoint_rep: adjoint_rep.to_owned(),
+            fundamental_dimension,
+            adjoint_dimension,
+        })
+    }
+
     fn run(&self, expression: AtomView<'_>) -> Atom {
         expression
             .to_owned()
             .replace_map(|arg, _context, out| {
                 if let Some(replacement) = self.rewrite_node(arg) {
                     **out = replacement;
+                    return;
+                }
+                // Function arguments may carry tensor-interface or occurrence metadata.
+                // Treat the function as an atomic coefficient and only rewrite an exact
+                // invariant function matched above.
+                if matches!(arg, AtomView::Fun(_)) {
+                    **out = arg.to_owned();
                 }
             })
             .collect_tensors()
     }
 
     fn rewrite_node(&self, arg: AtomView<'_>) -> Option<Atom> {
-        match arg {
-            AtomView::Var(var) => self.rewrite_symbol(var.get_symbol()),
-            AtomView::Pow(pow) => {
-                let (base, exponent) = pow.get_base_exp();
-                self.rewrite_symbol_power(base, exponent)
-            }
-            _ => None,
-        }
-    }
-
-    fn rewrite_symbol(&self, sym: Symbol) -> Option<Atom> {
-        if self.settings.rewrite_na && Self::is_na_symbol(sym) {
-            return Some(Self::adjoint_dimension_in_casimirs());
-        }
-        if self.settings.rewrite_nc && Self::is_nc_symbol(sym) {
-            return Some(Atom::var(CS.ca));
-        }
-        if self.settings.substitute_tr && Self::is_tr_symbol(sym) {
+        if self.settings.substitute_fundamental_index && arg == self.fundamental_index().as_view() {
             return Some(Atom::num(1) / Atom::num(2));
         }
-        None
-    }
 
-    fn rewrite_symbol_power(&self, base: AtomView<'_>, exponent: AtomView<'_>) -> Option<Atom> {
+        if Self::is_symbolic_dimension(&self.adjoint_dimension)
+            && arg == self.adjoint_dimension.as_view()
+        {
+            return Some(self.adjoint_dimension_in_casimirs());
+        }
+        if self.settings.rewrite_fundamental_dimension
+            && Self::is_symbolic_dimension(&self.fundamental_dimension)
+            && arg == self.fundamental_dimension.as_view()
+        {
+            return Some(self.adjoint_casimir());
+        }
+
+        let AtomView::Pow(power) = arg else {
+            return None;
+        };
+        let (base, exponent) = power.get_base_exp();
         let exponent = Self::integer_exponent(exponent)?;
-        if self.settings.rewrite_na && Self::is_symbol_var(base, Self::is_na_symbol) {
+        if Self::is_symbolic_dimension(&self.adjoint_dimension)
+            && base == self.adjoint_dimension.as_view()
+        {
             return Some(Self::atom_integral_power(
-                Self::adjoint_dimension_in_casimirs(),
+                self.adjoint_dimension_in_casimirs(),
                 exponent,
             ));
         }
-        if self.settings.rewrite_nc && Self::is_symbol_var(base, Self::is_nc_symbol) {
-            return Some(Self::nc_power_in_casimir_basis(exponent));
+        if self.settings.rewrite_fundamental_dimension
+            && Self::is_symbolic_dimension(&self.fundamental_dimension)
+            && base == self.fundamental_dimension.as_view()
+        {
+            return Some(Self::atom_integral_power(self.adjoint_casimir(), exponent));
         }
         None
     }
 
-    fn nc_power_in_casimir_basis(exponent: i64) -> Atom {
-        if exponent == 0 {
-            return Atom::num(1);
-        }
-        if exponent < 0 {
-            return Self::atom_integral_power(
-                Atom::var(CS.ca) - Atom::num(2) * Atom::var(CS.cf),
-                -exponent,
-            );
-        }
-
-        let nc_squared = Self::adjoint_dimension_in_casimirs() + Atom::num(1);
-        let even_part = Self::atom_integral_power(nc_squared, exponent / 2);
-        if exponent % 2 == 0 {
-            even_part
+    /// Uses `d_A T_F = d_F C_F`, with the optional SU(N) conventions
+    /// applied while constructing the replacement so the pass is idempotent.
+    fn adjoint_dimension_in_casimirs(&self) -> Atom {
+        let fundamental_dimension = if self.settings.rewrite_fundamental_dimension
+            && Self::is_symbolic_dimension(&self.fundamental_dimension)
+        {
+            self.adjoint_casimir()
         } else {
-            Atom::var(CS.ca) * even_part
+            self.fundamental_dimension.clone()
+        };
+        fundamental_dimension * self.fundamental_casimir() / self.normalized_fundamental_index()
+    }
+
+    fn fundamental_casimir(&self) -> Atom {
+        CS.cas(Atom::num(2), self.fundamental_rep.clone())
+    }
+
+    fn adjoint_casimir(&self) -> Atom {
+        CS.cas(Atom::num(2), self.adjoint_rep.clone())
+    }
+
+    fn fundamental_index(&self) -> Atom {
+        CS.idx(Atom::num(2), self.fundamental_rep.clone())
+    }
+
+    fn normalized_fundamental_index(&self) -> Atom {
+        if self.settings.substitute_fundamental_index {
+            Atom::num(1) / Atom::num(2)
+        } else {
+            self.fundamental_index()
         }
     }
 
-    /// Uses `CA = Nc` and `2 CA CF = Nc^2 - 1`.
-    fn adjoint_dimension_in_casimirs() -> Atom {
-        Atom::num(2) * Atom::var(CS.ca) * Atom::var(CS.cf)
+    fn representation_dimension(rep: AtomView<'_>, symbol: Symbol) -> Option<Atom> {
+        let AtomView::Fun(function) = rep else {
+            return None;
+        };
+        if function.get_symbol() != symbol || function.get_nargs() != 1 {
+            return None;
+        }
+        function.iter().next().map(|dimension| dimension.to_owned())
+    }
+
+    fn is_symbolic_dimension(dimension: &Atom) -> bool {
+        !matches!(dimension.as_view(), AtomView::Num(_))
     }
 
     fn atom_integral_power(base: Atom, exponent: i64) -> Atom {
@@ -108,22 +164,6 @@ impl ColorCasimirRewriter {
             return None;
         };
         Some(value)
-    }
-
-    fn is_symbol_var(arg: AtomView<'_>, predicate: fn(Symbol) -> bool) -> bool {
-        matches!(arg, AtomView::Var(var) if predicate(var.get_symbol()))
-    }
-
-    fn is_nc_symbol(sym: Symbol) -> bool {
-        sym.get_stripped_name() == "Nc"
-    }
-
-    fn is_na_symbol(sym: Symbol) -> bool {
-        sym.get_stripped_name() == "NA"
-    }
-
-    fn is_tr_symbol(sym: Symbol) -> bool {
-        sym.get_stripped_name() == "TR"
     }
 }
 
@@ -179,9 +219,6 @@ impl CofDimensionInvariantRewriter {
         }
         if symbol == CS.cf {
             return Some(Self::fundamental_quadratic_casimir(Atom::var(CS.nc)));
-        }
-        if symbol == CS.na {
-            return Some(Atom::var(CS.nc).pow(Atom::num(2)) - Atom::num(1));
         }
         None
     }
@@ -276,10 +313,6 @@ impl CofDimensionInvariantRewriter {
     }
 
     fn fundamental_dimension_from_adjoint_dimension(dimension: AtomView<'_>) -> Option<Atom> {
-        if Self::is_symbol(dimension, CS.na) {
-            return Some(Atom::var(CS.nc));
-        }
-
         let default_adjoint_dimension = Atom::var(CS.nc).pow(Atom::num(2)) - Atom::num(1);
         if dimension == default_adjoint_dimension.as_view() {
             return Some(Atom::var(CS.nc));
@@ -330,10 +363,6 @@ impl CofDimensionInvariantRewriter {
             return None;
         };
         Some(value)
-    }
-
-    fn is_symbol(expr: AtomView<'_>, symbol: Symbol) -> bool {
-        matches!(expr, AtomView::Var(var) if var.get_symbol() == symbol)
     }
 
     fn atom_integral_power(base: Atom, exponent: i64) -> Atom {

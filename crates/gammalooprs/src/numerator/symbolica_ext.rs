@@ -223,7 +223,8 @@ mod tests {
                 .color_simplify()
                 .get_single_atom()
                 .unwrap()
-                .canonize(Aind::Dummy);
+                .canonize(Aind::Dummy)
+                .expect("test expression should canonicalize");
 
             println!("numerator_color_simplified:{numerator_color_simplified}");
             println!("numerator:{}", numerator.state.expr);
@@ -432,8 +433,12 @@ mod tests {
 
         println!("ratio:{}", &a / &b);
 
-        let ac = a.canonize(Aind::Dummy);
-        let bc = b.canonize(Aind::Dummy);
+        let ac = a
+            .canonize(Aind::Dummy)
+            .expect("test expression should canonicalize");
+        let bc = b
+            .canonize(Aind::Dummy)
+            .expect("test expression should canonicalize");
         println!("ac:{}", ac);
         println!("bc:{}", bc);
         println!("ratio canonized:{}", ac / bc);

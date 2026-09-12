@@ -3708,7 +3708,7 @@ mod tests {
     }
 
     fn make_integration_state() -> IntegrationState {
-        let sampling_grid = Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false));
+        let sampling_grid = Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false).unwrap());
         let mut state = IntegrationState::new_from_settings(
             SamplingCorrelationMode::Correlated,
             vec![SamplingSlotState::new(sampling_grid, Vec::new())],
@@ -3832,12 +3832,15 @@ mod tests {
 
     fn make_discrete_integration_state() -> IntegrationState {
         let make_continuous_grid =
-            || Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false));
-        let sampling_grid = Grid::Discrete(DiscreteGrid::new(
-            vec![Some(make_continuous_grid()), Some(make_continuous_grid())],
-            F(10.0),
-            false,
-        ));
+            || Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false).unwrap());
+        let sampling_grid = Grid::Discrete(
+            DiscreteGrid::new(
+                vec![Some(make_continuous_grid()), Some(make_continuous_grid())],
+                F(10.0),
+                false,
+            )
+            .unwrap(),
+        );
         let mut state = IntegrationState::new_from_settings(
             SamplingCorrelationMode::Correlated,
             vec![SamplingSlotState::new(
@@ -4095,7 +4098,7 @@ mod tests {
         let mut state = IntegrationState::new_from_settings(
             SamplingCorrelationMode::Correlated,
             vec![SamplingSlotState::new(
-                Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false)),
+                Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false).unwrap()),
                 Vec::new(),
             )],
             vec![SlotMeta {
@@ -4359,13 +4362,16 @@ mod tests {
 
     #[test]
     fn explicit_single_graph_subset_monitors_the_root_graph_axis() {
-        let grid = Grid::Discrete(DiscreteGrid::new(
-            vec![Some(Grid::Continuous(ContinuousGrid::new(
-                1, 64, 100, None, false,
-            )))],
-            F(10.0),
-            false,
-        ));
+        let grid = Grid::Discrete(
+            DiscreteGrid::new(
+                vec![Some(Grid::Continuous(
+                    ContinuousGrid::new(1, 64, 100, None, false).unwrap(),
+                ))],
+                F(10.0),
+                false,
+            )
+            .unwrap(),
+        );
         let labels = vec!["graph".to_string()];
 
         assert!(monitored_discrete_layout(&grid, &labels, false).is_none());
@@ -5740,7 +5746,7 @@ fn test_threading() {
 
     let mut rng = MonteCarloRng::new(42, 0);
 
-    let mut grid = Grid::<f64>::Continuous(ContinuousGrid::new(1, 64, 100, None, false));
+    let mut grid = Grid::<f64>::Continuous(ContinuousGrid::new(1, 64, 100, None, false).unwrap());
 
     for _i_iter in 0..n_iter {
         let mut multiplice_accs = vec![StatisticsAccumulator::<f64>::new(); samples_per_sample];

@@ -42,57 +42,51 @@ impl StructureLessDisplay for Vec<Atom> {
 //     }
 // }
 
-// impl<Aind: AbsInd + DummyAind + ParseableAind> PermuteTensor for SymbolicTensor<Aind> {
+// impl<Aind: AbsInd + DummyAind + ParseableAind> TensorIdentity for SymbolicTensor<Aind> {
 //     type Id = SymbolicTensor<Aind>;
 //     type IdSlot = LibrarySlot<Aind>;
-//     type Permuted = SymbolicTensor<Aind>;
 
 //     fn id(i: Self::IdSlot, j: Self::IdSlot) -> Self::Id {
 //         Self::from_named(&NamedStructure::<Symbol, (), LibraryRep, Aind>::id(i, j)).unwrap()
 //     }
+// }
 
-//     fn permute_inds(mut self, permutation: &linnet::permutation::Permutation) -> Self::Permuted {
-//         let (new_structure, idstructures) = self.structure.clone().permute_inds(permutation);
+// impl<Aind: AbsInd + DummyAind + ParseableAind> ApplyPendingIndexPermutation
+//     for SymbolicTensor<Aind>
+// {
+//     type Output = SymbolicTensor<Aind>;
+
+//     fn apply_pending_index_permutation(
+//         mut self,
+//         pending: &PendingIndexPermutation,
+//     ) -> Self::Output {
+//         if pending.is_identity() {
+//             return self;
+//         }
+
+//         let target_slots = self.structure.external_structure();
+//         let mut dummy_structure = Vec::with_capacity(target_slots.len());
+//         let mut ids = Atom::one();
+//         for slot in pending.apply_slice_inverse(&target_slots) {
+//             let dummy = slot.to_dummy_ind();
+//             dummy_structure.push(dummy);
+//             ids *= Self::id(dummy.dual(), slot.to_lib()).expression;
+//         }
+
+//         let new_structure = Canonicalized::<OrderedStructure<LibraryRep, Aind>>::from_iter(
+//             dummy_structure,
+//         )
+//         .into_canonical();
 
 //         for (o, n) in self
 //             .structure
-//             .structure
-//             .iter()
-//             .zip(new_structure.structure.iter())
+//             .external_structure_iter()
+//             .zip(new_structure.external_structure_iter())
 //         {
 //             self.expression = self.expression.replace(o.to_atom()).with(n.to_atom());
 //         }
 
-//         let mut ids = Atom::one();
-//         for s in idstructures.iter() {
-//             let o = s.external_structure();
-//             ids *= Self::id(o[0], o[1]).expression;
-//         }
 //         self.expression *= ids;
-
-//         self
-//     }
-
-//     fn permute_reps(mut self, rep_perm: &linnet::permutation::Permutation) -> Self::Permuted {
-//         let (new_structure, idstructures) = self.structure.clone().permute_reps(rep_perm);
-
-//         for (o, n) in self
-//             .structure
-//             .structure
-//             .iter()
-//             .zip(new_structure.structure.iter())
-//         {
-//             self.expression = self.expression.replace(o.to_atom()).with(n.to_atom());
-//         }
-
-//         let mut ids = Atom::one();
-//         for s in idstructures.iter() {
-//             let o = s.external_structure();
-//             ids *= Self::id(o[0], o[1]).expression;
-//         }
-
-//         self.expression *= ids;
-
 //         self
 //     }
 // }
@@ -102,16 +96,20 @@ impl StructureLessDisplay for Vec<Atom> {
 //     type Indexed = SymbolicTensor<Aind>;
 //     type Slot = LibrarySlot<Aind>;
 
-//     fn reindex(self, indices: &[Aind]) -> Result<PermutedStructure<Self::Indexed>, StructureError> {
-//         let res = self.structure.reindex(indices)?;
-//         Ok(PermutedStructure {
-//             structure: Self {
-//                 structure: res.structure,
-//                 expression: self.expression,
-//             },
-//             rep_permutation: res.rep_permutation,
-//             index_permutation: res.index_permutation,
-//         })
+//     fn reindex_storage(
+//         self,
+//         indices: &[Aind],
+//     ) -> Result<Reindexed<Self::Indexed>, StructureError> {
+//         let Self {
+//             structure,
+//             expression,
+//         } = self;
+//         Ok(structure
+//             .reindex_storage(indices)?
+//             .map_target(|structure| Self {
+//                 structure,
+//                 expression,
+//             }))
 //     }
 
 //     fn dual(self) -> Self {
@@ -231,26 +229,35 @@ impl StructureLessDisplay for Vec<Atom> {
 //         N::Name: IntoSymbol + Clone,
 //         N::Args: IntoArgs,
 //     {
-//         let permuted_structure = PermutedStructure::from(structure.external_structure());
+//         let canonicalized = Canonicalized::from(structure.external_structure());
 //         Some(SymbolicTensor {
-//             expression: structure.to_symbolic(Some(permuted_structure.index_permutation))?,
-//             structure: permuted_structure.structure,
+//             expression: structure.to_symbolic(None)?,
+//             structure: canonicalized.into_canonical(),
 //         })
 //     }
 
-//     pub fn from_permuted<N>(structure: &PermutedStructure<N>) -> Option<Self>
+//     pub fn from_canonicalized<N>(structure: &Canonicalized<N>) -> Option<Self>
 //     where
 //         N: ToSymbolic + HasName + TensorStructure<Slot = LibrarySlot<Aind>>,
 //         N::Name: IntoSymbol + Clone,
 //         N::Args: IntoArgs,
 //     {
-//         let permuted_structure = PermutedStructure::from(structure.structure.external_structure());
+//         let canonical = structure.canonical();
+//         let canonicalized = Canonicalized::from(canonical.external_structure());
+//         let slots = structure
+//             .layout()
+//             .canonical_to_logical(&canonical.external_structure())
+//             .into_iter()
+//             .map(|slot| slot.to_atom())
+//             .collect::<Vec<_>>();
+//         let args = canonical.args().map(|args| args.args()).unwrap_or_default();
 
 //         Some(SymbolicTensor {
-//             expression: structure
-//                 .structure
-//                 .to_symbolic(Some(structure.index_permutation.clone()))?,
-//             structure: permuted_structure.structure,
+//             expression: FunctionBuilder::new(canonical.name()?.ref_into_symbol())
+//                 .add_args(&args)
+//                 .add_args(&slots)
+//                 .finish(),
+//             structure: canonicalized.into_canonical(),
 //         })
 //     }
 
@@ -421,8 +428,8 @@ impl StructureLessDisplay for Vec<Atom> {
 //         let _ = ETS.metric;
 //         let expr = parse!("g(mink(4,6),mink(4,7))");
 
-//         let structure = SymbolicTensor::from_permuted(
-//             &PermutedStructure::<ShadowedStructure<AbstractIndex>>::try_from(expr).unwrap(),
+//         let structure = SymbolicTensor::from_canonicalized(
+//             &Canonicalized::<ShadowedStructure<AbstractIndex>>::try_from(expr).unwrap(),
 //         )
 //         .unwrap();
 

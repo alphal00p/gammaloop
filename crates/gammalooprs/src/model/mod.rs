@@ -18,7 +18,7 @@ use rand::{Rng, SeedableRng};
 use serde::de::DeserializeOwned;
 #[cfg(test)]
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
-use spenso::structure::{IndexLess, PermutedStructure};
+use spenso::structure::{Canonicalized, IndexLess, TensorDataLayout};
 use symbolica_utils::{PrintSettingsExt, Replaces};
 use tabled::settings::Modify;
 use tabled::{
@@ -571,29 +571,38 @@ impl VertexRule {
 
         let color_structure: ParamTensor<OrderedStructure<Euclidean, Aind>> =
             ParamTensor::composite(DataTensor::Dense(
-                DenseTensor::from_data(
+                DenseTensor::from_storage_data(
                     color_structure,
-                    PermutedStructure::from_iter([i]).structure,
+                    Canonicalized::from_iter([i]).into_canonical(),
                 )
                 .unwrap(),
             ));
 
         let spin_structure: ParamTensor<OrderedStructure<Euclidean, Aind>> =
             ParamTensor::composite(DataTensor::Dense(
-                DenseTensor::from_data(spin_structure, PermutedStructure::from_iter([j]).structure)
-                    .unwrap(),
+                DenseTensor::from_storage_data(
+                    spin_structure,
+                    Canonicalized::from_iter([j]).into_canonical(),
+                )
+                .unwrap(),
             ));
 
+        let coupling_structure = Canonicalized::from_iter([i, j]);
+        let coupling_layout = TensorDataLayout::from_canonicalized(&coupling_structure)
+            .expect("vertex coupling dimensions are concrete");
         let mut couplings: ParamTensor<OrderedStructure<Euclidean, Aind>> =
             ParamTensor::composite(DataTensor::Sparse(SparseTensor::empty(
-                PermutedStructure::from_iter([i, j]).structure,
+                coupling_structure.into_canonical(),
                 Atom::Zero,
             )));
 
         for (i, row) in self.couplings.iter().enumerate() {
             for (j, col) in row.iter().enumerate() {
                 if let Some(atom) = col {
-                    couplings.set(&[i, j], atom.0.into()).unwrap();
+                    let storage_indices = coupling_layout
+                        .logical_expanded_to_storage_expanded(&[i, j])
+                        .expect("vertex coupling coordinates match their dimensions");
+                    couplings.set(&storage_indices, atom.0.into()).unwrap();
                 }
             }
         }
@@ -1167,7 +1176,7 @@ pub struct EdgeSlots<LorRep: RepName> {
 
 impl From<EdgeSlots<Minkowski>> for OrderedStructure {
     fn from(value: EdgeSlots<Minkowski>) -> Self {
-        PermutedStructure::<OrderedStructure>::from(
+        Canonicalized::<OrderedStructure>::from(
             value
                 .lorentz
                 .into_iter()
@@ -1176,7 +1185,7 @@ impl From<EdgeSlots<Minkowski>> for OrderedStructure {
                 .chain(value.color)
                 .collect_vec(),
         )
-        .structure
+        .into_canonical()
     }
 }
 
@@ -1200,7 +1209,7 @@ impl<LorRep: BaseRepName> Display for EdgeSlots<LorRep> {
 
 impl From<EdgeSlots<Lorentz>> for OrderedStructure {
     fn from(value: EdgeSlots<Lorentz>) -> Self {
-        PermutedStructure::<OrderedStructure>::from(
+        Canonicalized::<OrderedStructure>::from(
             value
                 .lorentz
                 .into_iter()
@@ -1209,7 +1218,7 @@ impl From<EdgeSlots<Lorentz>> for OrderedStructure {
                 .chain(value.color)
                 .collect_vec(),
         )
-        .structure
+        .into_canonical()
     }
 }
 
@@ -1227,7 +1236,7 @@ impl Particle {
     }
 
     pub(crate) fn spin_reps(&self) -> IndexLess<LibraryRep, Aind> {
-        PermutedStructure::<IndexLess<LibraryRep, Aind>>::from_iter(match self.spin {
+        Canonicalized::<IndexLess<LibraryRep, Aind>>::from_iter(match self.spin {
             -1..=1 => vec![],
             a => {
                 if a > 0 {
@@ -1241,7 +1250,7 @@ impl Particle {
                 }
             }
         })
-        .structure
+        .into_canonical()
     }
 
     pub(crate) fn is_massive(&self) -> bool {
@@ -1337,7 +1346,7 @@ impl Particle {
                 _ => vec![],
             },
         };
-        PermutedStructure::<IndexLess>::from_iter(reps).structure
+        Canonicalized::<IndexLess>::from_iter(reps).into_canonical()
     }
 
     pub(crate) fn from_serializable_particle(particle: &SerializableParticle) -> Particle {
