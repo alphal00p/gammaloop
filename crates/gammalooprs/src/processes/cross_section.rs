@@ -2234,13 +2234,7 @@ impl CrossSectionGraph {
         };
         let params = Self::single_th_prefactor_helper_params(order, is_on_right);
 
-        let mut fn_map = FunctionMap::new();
-        fn_map
-            .add_aliases([(
-                GS.pi.into(),
-                Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
-            )])
-            .unwrap();
+        let fn_map = FunctionMap::new();
 
         let evaluator = GenericEvaluator::new_from_raw_params(
             atoms,

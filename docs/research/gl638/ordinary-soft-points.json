@@ -1,0 +1,904 @@
+{
+  "description": "Authoritative frozen raw momenta and executed protocol for the matched CT-off/default-metadata/WH-WF ordinary-soft comparison; no uniform angular or hierarchical integrability claim.",
+  "point_units": "GeV, generation LMB [3,4,7,10], before each individual physical cut LU rescaling",
+  "lambda_definition": "Positive spatial momentum radius in GeV BEFORE each cut's LU rescaling; single soft |q_i|=lambda, double soft sqrt(|q13|\u00b2+|q14|\u00b2)=lambda with equal radii. The sign labels opposite fixed angular rays. Physical cut i has radius tau_i(lambda)*lambda; finite nonzero tau leaves asymptotic powers unchanged.",
+  "generation_lmb": [
+    3,
+    4,
+    7,
+    10
+  ],
+  "model_parameters": {
+    "MT": 173.0,
+    "MH": 125.0,
+    "WT": 0.0,
+    "ymt": 173.0,
+    "aS": 0.118,
+    "aEWM1": 132.507,
+    "Gf": 1.16639e-05,
+    "MZ": 91.188
+  },
+  "generation": {
+    "orientations": 936,
+    "direct_3D_local_UV": true,
+    "orientation_localization": true,
+    "integrated_UV": true,
+    "explicit_orientation_sum": true,
+    "threshold_tolerance": 1e-14,
+    "default_state_change": "Delete exactly the threshold_counterterms attribute and its terminating semicolon; all other bytes including comments remain unchanged",
+    "removed_attribute_byte_span": [
+      1832,
+      20848
+    ],
+    "removed_attribute_sha256": "2d11ccabf845135df22c669da61a6e2a3449ab208aec4a22c952460c9f26c75c"
+  },
+  "profiles": {
+    "ct-off": {
+      "state": "default",
+      "disable_threshold_subtraction": true,
+      "precision_modes": [
+        "normal",
+        "arb"
+      ]
+    },
+    "default": {
+      "state": "default",
+      "disable_threshold_subtraction": false,
+      "precision_modes": [
+        "normal",
+        "arb"
+      ]
+    },
+    "candidate": {
+      "state": "candidate",
+      "disable_threshold_subtraction": false,
+      "precision_modes": [
+        "normal",
+        "arb"
+      ]
+    },
+    "candidate-off": {
+      "state": "candidate",
+      "disable_threshold_subtraction": true,
+      "precision_modes": [
+        "arb"
+      ]
+    }
+  },
+  "runtime_card_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/49d3cc84aa2c5d81506b2a5e82cc5bfeafab0e01/assets/schemas/runtime.json\n[default_runtime_settings.general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\n\n[default_runtime_settings.kinematics]\ne_cm = 1000.0\n\n[default_runtime_settings.kinematics.externals]\ntype = \"constant\"\n\n[default_runtime_settings.kinematics.externals.data]\nmomenta = [\n    [\n    500.0,\n    0.0,\n    0.0,\n    500.0,\n],\n    [\n    500.0,\n    0.0,\n    0.0,\n    -500.0,\n],\n]\nhelicities = [\n    \"summed_averaged\",\n    \"summed_averaged\",\n]\n\n[default_runtime_settings.integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 7500\nn_increase = 0\nn_max = 75000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\n\n[default_runtime_settings.stability]\nescalate_if_exact_zero = false\n\n[[default_runtime_settings.stability.rotation_axis]]\ntype = \"z\"\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = 0.9\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[default_runtime_settings.stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[default_runtime_settings.sampling]\ngraphs = \"monte_carlo\"\nlmb_multichanneling = true\nlmb_channels = \"monte_carlo\"\nlmb_channel_weight = \"inverse_jacobian\"\n\n[default_runtime_settings.subtraction]\nesurface_existence_threshold = 0.00000000000001\n\n[default_runtime_settings.h_function]\npower = 3\n",
+  "model_command": "set model MT=173 MH=125 WT=0 ymt=173 aS=0.118 aEWM1=132.507 Gf=1.166390e-05 MZ=91.188",
+  "common_runtime_commands": [
+    "set process -p epem_a_tth -i NNLO defaults",
+    "set process -p epem_a_tth -i NNLO kv general.mu_r=91.188 general.m_uv=91.188 'general.evaluator_method=\"SingleParametric\"' general.enable_cache=false general.generate_events=true general.store_additional_weights_in_event=false 'h_function.function=\"poly_exponential\"' h_function.sigma=1.0 h_function.power=3 subtraction.esurface_existence_threshold=1e-14 subtraction.local_ct_settings.uv_localisation.gaussian_width=1.0 subtraction.local_ct_settings.uv_localisation.dynamic_width=false subtraction.local_ct_settings.uv_localisation.force_uv_dampers_to_one=false stability.check_on_norm=true stability.escalate_if_exact_zero=false 'stability.levels=[{\"precision\":\"Double\",\"required_precision_for_re\":1e-06,\"required_precision_for_im\":1e-06,\"escalate_for_large_weight_threshold\":0.9},{\"precision\":\"Quad\",\"required_precision_for_re\":1e-10,\"required_precision_for_im\":1e-10,\"escalate_for_large_weight_threshold\":-1.0},{\"precision\":\"Arb\",\"required_precision_for_re\":1e-12,\"required_precision_for_im\":1e-12,\"escalate_for_large_weight_threshold\":-1.0}]' subtraction.disable_threshold_subtraction=false subtraction.local_ct_settings.uv_localisation.sliver_width=10.0 subtraction.local_ct_settings.uv_localisation.smooth_sliver=false 'stability.rotation_axis=[{\"type\":\"euler_angles\",\"alpha\":0.1,\"beta\":0.2,\"gamma\":0.3}]' 'stability.recording={\"record_rotated_results\":true,\"record_all_stability_levels\":true}'"
+  ],
+  "per_case_protocol": [
+    "Load the corresponding separately generated state read-only with a temporary card containing only runtime_card_toml, and apply model_command.",
+    "Before every point run both common_runtime_commands; then set subtraction.disable_threshold_subtraction to the profile value.",
+    "Evaluate inspect -p epem_a_tth -i NNLO -m --graph-id 0 --json-output OUTPUT --point MOMENTA; add -f only for precision_mode=arb. Flatten parent_momenta_GeV in row order using roundtrip-safe fixed decimal tokens.",
+    "No orientation selector, LMB channel partition or parameterization Jacobian is applied; all six cuts and 936 orientations contribute. The radial measure is reported separately."
+  ],
+  "provenance": {
+    "binary_sha256": "57ccd168da44ad2b75b1e1b998b0680a8ccf8fc406ce3deb775356fa3567845a",
+    "symbolica_commit": "a277a8dadbaae5a8d6605f2f381991a601e1f345",
+    "symbolica_clean": true,
+    "execution_git_head": "c86090ac778b68c9a6b30368c899d7cabdaed79e",
+    "compiled_source_inputs_sha256": "bed8342e3adf7dbf15bb019ae48586332a25355e81d3689887f21c3843770e91",
+    "frozen_points_sha256": "309da4ae9a718891951688aec21e17af648d36ba6c43c289d85a9fe852c16a4f",
+    "plan_sha256": "12add01992aa312882907688fda8041d9ca481dba234a6c2d5cb38a6162ea5aa",
+    "runner_sha256": "1d6965414907b163c2ee947cc44891ecfc96303efbdf4bb60f286c929fdfd2e2",
+    "execution_manifest_sha256": "6ae3f19450d751a5c4ded05d50df42ead60b0fdbe9960e370543ce275a7f7059",
+    "analysis_sha256": "86227ee378a3dbee9acb8af4e7b9cbc45c1c62d678c38f247f1dca69d67b05e6",
+    "input_sha256": {
+      "epem_a_tth_NNLO_test_GL638.toml": "ab14fb4767e723a737dbca58de438df9e06e22a364c1cec0484951888ff665fe",
+      "GL638.dot": "1354c6d854ea66a6298eb1ac9eaad31c3bf8744f0033e83b6e510d0f64602279",
+      "GL638-no-metadata.dot": "8fbe3f2bd8b0a12a16dd9403893c9004d8de15f05557e3f9007760318d7249f9",
+      "sm.json": "e2d605720392666345939f283b54b0527ddf68890898136f73d27dd976900ed1",
+      "restrict_default.json": "9d357d17c254595dbf612b66d6b531c982eefb71432835360bbfd8b21dcf454b"
+    },
+    "local_archive": "/common/dev/gl638_integration_validation/twenty-core/default-metadata-soft",
+    "source_results_relative_to": "execution/",
+    "status": "All 168 actual outputs finite and finally Stable; these flags are heuristic, not certified componentwise accuracy."
+  },
+  "points": [
+    {
+      "id": 0,
+      "name": "ordinary_q13_sign-1_lambda1",
+      "family": "q13",
+      "sign": -1,
+      "lambda_GeV": 1.0,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        13
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          202.0,
+          10.0,
+          -55.0
+        ],
+        [
+          37.42857142857143,
+          126.85714285714286,
+          -108.71428571428571
+        ]
+      ]
+    },
+    {
+      "id": 1,
+      "name": "ordinary_q13_sign-1_lambda0.1",
+      "family": "q13",
+      "sign": -1,
+      "lambda_GeV": 0.1,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        13
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          202.0,
+          10.0,
+          -55.0
+        ],
+        [
+          37.042857142857144,
+          126.08571428571429,
+          -108.97142857142858
+        ]
+      ]
+    },
+    {
+      "id": 2,
+      "name": "ordinary_q13_sign-1_lambda0.01",
+      "family": "q13",
+      "sign": -1,
+      "lambda_GeV": 0.01,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        13
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          202.0,
+          10.0,
+          -55.0
+        ],
+        [
+          37.004285714285714,
+          126.00857142857143,
+          -108.99714285714286
+        ]
+      ]
+    },
+    {
+      "id": 3,
+      "name": "ordinary_q13_sign-1_lambda0.001",
+      "family": "q13",
+      "sign": -1,
+      "lambda_GeV": 0.001,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        13
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          202.0,
+          10.0,
+          -55.0
+        ],
+        [
+          37.00042857142857,
+          126.00085714285714,
+          -108.99971428571429
+        ]
+      ]
+    },
+    {
+      "id": 4,
+      "name": "ordinary_q13_sign+1_lambda1",
+      "family": "q13",
+      "sign": 1,
+      "lambda_GeV": 1.0,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        13
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          202.0,
+          10.0,
+          -55.0
+        ],
+        [
+          36.57142857142857,
+          125.14285714285714,
+          -109.28571428571429
+        ]
+      ]
+    },
+    {
+      "id": 5,
+      "name": "ordinary_q13_sign+1_lambda0.1",
+      "family": "q13",
+      "sign": 1,
+      "lambda_GeV": 0.1,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        13
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          202.0,
+          10.0,
+          -55.0
+        ],
+        [
+          36.957142857142856,
+          125.91428571428571,
+          -109.02857142857142
+        ]
+      ]
+    },
+    {
+      "id": 6,
+      "name": "ordinary_q13_sign+1_lambda0.01",
+      "family": "q13",
+      "sign": 1,
+      "lambda_GeV": 0.01,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        13
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          202.0,
+          10.0,
+          -55.0
+        ],
+        [
+          36.995714285714286,
+          125.99142857142857,
+          -109.00285714285714
+        ]
+      ]
+    },
+    {
+      "id": 7,
+      "name": "ordinary_q13_sign+1_lambda0.001",
+      "family": "q13",
+      "sign": 1,
+      "lambda_GeV": 0.001,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        13
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          202.0,
+          10.0,
+          -55.0
+        ],
+        [
+          36.99957142857143,
+          125.99914285714286,
+          -109.00028571428571
+        ]
+      ]
+    },
+    {
+      "id": 8,
+      "name": "ordinary_q14_sign-1_lambda1",
+      "family": "q14",
+      "sign": -1,
+      "lambda_GeV": 1.0,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          36.714285714285715,
+          126.42857142857143,
+          -109.85714285714286
+        ],
+        [
+          -36.0,
+          325.0,
+          -275.0
+        ]
+      ]
+    },
+    {
+      "id": 9,
+      "name": "ordinary_q14_sign-1_lambda0.1",
+      "family": "q14",
+      "sign": -1,
+      "lambda_GeV": 0.1,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          36.97142857142857,
+          126.04285714285714,
+          -109.08571428571429
+        ],
+        [
+          -36.0,
+          325.0,
+          -275.0
+        ]
+      ]
+    },
+    {
+      "id": 10,
+      "name": "ordinary_q14_sign-1_lambda0.01",
+      "family": "q14",
+      "sign": -1,
+      "lambda_GeV": 0.01,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          36.997142857142855,
+          126.00428571428571,
+          -109.00857142857143
+        ],
+        [
+          -36.0,
+          325.0,
+          -275.0
+        ]
+      ]
+    },
+    {
+      "id": 11,
+      "name": "ordinary_q14_sign-1_lambda0.001",
+      "family": "q14",
+      "sign": -1,
+      "lambda_GeV": 0.001,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          36.99971428571428,
+          126.00042857142857,
+          -109.00085714285714
+        ],
+        [
+          -36.0,
+          325.0,
+          -275.0
+        ]
+      ]
+    },
+    {
+      "id": 12,
+      "name": "ordinary_q14_sign+1_lambda1",
+      "family": "q14",
+      "sign": 1,
+      "lambda_GeV": 1.0,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          37.285714285714285,
+          125.57142857142857,
+          -108.14285714285714
+        ],
+        [
+          -36.0,
+          325.0,
+          -275.0
+        ]
+      ]
+    },
+    {
+      "id": 13,
+      "name": "ordinary_q14_sign+1_lambda0.1",
+      "family": "q14",
+      "sign": 1,
+      "lambda_GeV": 0.1,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          37.02857142857143,
+          125.95714285714286,
+          -108.91428571428571
+        ],
+        [
+          -36.0,
+          325.0,
+          -275.0
+        ]
+      ]
+    },
+    {
+      "id": 14,
+      "name": "ordinary_q14_sign+1_lambda0.01",
+      "family": "q14",
+      "sign": 1,
+      "lambda_GeV": 0.01,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          37.002857142857145,
+          125.99571428571429,
+          -108.99142857142857
+        ],
+        [
+          -36.0,
+          325.0,
+          -275.0
+        ]
+      ]
+    },
+    {
+      "id": 15,
+      "name": "ordinary_q14_sign+1_lambda0.001",
+      "family": "q14",
+      "sign": 1,
+      "lambda_GeV": 0.001,
+      "radial_measure_power": 2,
+      "soft_edges": [
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          37.00028571428572,
+          125.99957142857143,
+          -108.99914285714286
+        ],
+        [
+          -36.0,
+          325.0,
+          -275.0
+        ]
+      ]
+    },
+    {
+      "id": 16,
+      "name": "ordinary_both_sign-1_lambda1",
+      "family": "both",
+      "sign": -1,
+      "lambda_GeV": 1.0,
+      "radial_measure_power": 5,
+      "soft_edges": [
+        13,
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          36.79796949108956,
+          126.30304576336566,
+          -109.60609152673133
+        ],
+        [
+          37.30304576336567,
+          126.60609152673133,
+          -108.79796949108956
+        ]
+      ]
+    },
+    {
+      "id": 17,
+      "name": "ordinary_both_sign-1_lambda0.1",
+      "family": "both",
+      "sign": -1,
+      "lambda_GeV": 0.1,
+      "radial_measure_power": 5,
+      "soft_edges": [
+        13,
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          36.97979694910896,
+          126.03030457633656,
+          -109.06060915267314
+        ],
+        [
+          37.03030457633657,
+          126.06060915267314,
+          -108.97979694910896
+        ]
+      ]
+    },
+    {
+      "id": 18,
+      "name": "ordinary_both_sign-1_lambda0.01",
+      "family": "both",
+      "sign": -1,
+      "lambda_GeV": 0.01,
+      "radial_measure_power": 5,
+      "soft_edges": [
+        13,
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          36.997979694910896,
+          126.00303045763366,
+          -109.00606091526731
+        ],
+        [
+          37.003030457633656,
+          126.00606091526731,
+          -108.9979796949109
+        ]
+      ]
+    },
+    {
+      "id": 19,
+      "name": "ordinary_both_sign-1_lambda0.001",
+      "family": "both",
+      "sign": -1,
+      "lambda_GeV": 0.001,
+      "radial_measure_power": 5,
+      "soft_edges": [
+        13,
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          36.99979796949109,
+          126.00030304576336,
+          -109.00060609152673
+        ],
+        [
+          37.00030304576337,
+          126.00060609152673,
+          -108.99979796949108
+        ]
+      ]
+    },
+    {
+      "id": 20,
+      "name": "ordinary_both_sign+1_lambda1",
+      "family": "both",
+      "sign": 1,
+      "lambda_GeV": 1.0,
+      "radial_measure_power": 5,
+      "soft_edges": [
+        13,
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          37.20203050891044,
+          125.69695423663434,
+          -108.39390847326867
+        ],
+        [
+          36.69695423663433,
+          125.39390847326867,
+          -109.20203050891044
+        ]
+      ]
+    },
+    {
+      "id": 21,
+      "name": "ordinary_both_sign+1_lambda0.1",
+      "family": "both",
+      "sign": 1,
+      "lambda_GeV": 0.1,
+      "radial_measure_power": 5,
+      "soft_edges": [
+        13,
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          37.02020305089104,
+          125.96969542366344,
+          -108.93939084732686
+        ],
+        [
+          36.96969542366343,
+          125.93939084732686,
+          -109.02020305089104
+        ]
+      ]
+    },
+    {
+      "id": 22,
+      "name": "ordinary_both_sign+1_lambda0.01",
+      "family": "both",
+      "sign": 1,
+      "lambda_GeV": 0.01,
+      "radial_measure_power": 5,
+      "soft_edges": [
+        13,
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          37.002020305089104,
+          125.99696954236634,
+          -108.99393908473269
+        ],
+        [
+          36.996969542366344,
+          125.99393908473269,
+          -109.0020203050891
+        ]
+      ]
+    },
+    {
+      "id": 23,
+      "name": "ordinary_both_sign+1_lambda0.001",
+      "family": "both",
+      "sign": 1,
+      "lambda_GeV": 0.001,
+      "radial_measure_power": 5,
+      "soft_edges": [
+        13,
+        14
+      ],
+      "parent_momenta_GeV": [
+        [
+          37.0,
+          126.0,
+          -109.0
+        ],
+        [
+          -91.0,
+          64.0,
+          83.0
+        ],
+        [
+          37.00020203050891,
+          125.99969695423664,
+          -108.99939390847327
+        ],
+        [
+          36.99969695423663,
+          125.99939390847327,
+          -109.00020203050892
+        ]
+      ]
+    }
+  ]
+}

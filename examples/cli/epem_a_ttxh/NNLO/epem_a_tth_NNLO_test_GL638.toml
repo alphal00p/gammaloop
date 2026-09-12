@@ -3,64 +3,48 @@
 # The process specification on the graph import selects the tth@NNLO process
 # cuts, while the DOT supplies the explicit threshold-counterterm metadata.
 # Run the complete workflow with
-# `... card.toml run all`; every generation/integration knob can be overridden
+# `... card.toml run all`; named generation/integration knobs can be overridden
 # with `-D name=value`, for example `run integrate -D n_start=10000`.
 
-[cli_settings]
+# Higgs-aware metadata: full-UV generation passes for all 936 orientations.
+# Exact coincident radial roots remain an evaluation limitation. The measured
+# hard H/Z corner also prevents a finite-variance claim for the current sampler;
+# see IR_SAFE_THRESHOL_UPDATE.md. Absolute-integral errors are diagnostic here.
+# From the repository root: gammaloop THIS_CARD run all
+# Selected orientation: gammaloop -s NEW_STATE THIS_CARD run generate_o0
+# Steering: run pilot -D mapping=power -D radial_power=2 -D workspace=NEW_WORKSPACE
+# Generation defaults to ALL orientations and clears any earlier restriction.
+# The explicit full sum avoids repeated per-orientation evaluator calls.
+# Use -D explicit_sum=false to retain individual-orientation diagnostics;
+# generate_o0..o3 set this automatically. A custom orientation_pattern needs it too.
+# Keep separate states for all/o0/o1/o2/o3. Compilation or sum changes need regeneration.
+# Integration presets default to 5 cores and <=10 iterations; use
+# -D integration_cores=20 for longer runs and -D training_phase=imag to train Im.
+# Try -D radial_scale=0.3: the 300k-sample comparison reduced nominal Re/Im
+# errors by about 30%; this finite-run improvement does not certify variance.
+# If overriding n_start or n_max, keep n_max <= 10*n_start; use the validation
+# runner for enforced caps.
+# Symmetric local-CT localization: -D ct_gaussian_width=0.1 or
+# -D ct_sliver_width=0.1. Widths multiply Q, or r-star with ct_dynamic_width=true.
+# Add -D ct_smooth_sliver=true for a smooth compact boundary. A narrow hard
+# sliver can spoil soft cancellation across cuts near its boundary.
+# These controls leave the integrated-CT normalization unchanged.
+# h_sigma and h_power below steer the LU rescaling profile, independently of
+# the local threshold-CT Gaussian and sliver settings.
+# Use -D stability_check_on_norm=false to check Re and Im separately; norm
+# agreement alone need not resolve a small component beside a much larger one.
+# Generic Euler probes avoid exact coordinate permutations that can preserve
+# cancellation errors. Steer their angles with stability_alpha/beta/gamma.
+# Existing workspaces resume. Explicit reset: -D restart=--restart.
+# The dashboard's `a` key shows absolute Re/Im integrals; per-iteration JSON
+# retains these estimates, precision statistics and replayable maximum points.
 
 [cli_settings.state]
 folder = "./examples/cli/epem_a_ttxh/NNLO/gammaloop_state_GL638"
-name = "epem_a_ttxh_NNLO_test_GL638"
+name = "epem_a_tth_NNLO_GL638"
 
-[[command_blocks]]
-name = "generate_diagrams"
-commands = [
-  "import model sm-default.json",
-  "remove processes",
-  "import graphs ./examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]' -p epem_a_tth -i NNLO -o",
-  "save dot",
-]
-
-[[command_blocks]]
-name = "generate_integrands"
-commands = [
-  "set global kv global.n_cores.generate=$(generate_cores:10)",
-  "generate existing -p epem_a_tth -i NNLO",
-  "save state -o",
-]
-
-[[command_blocks]]
-name = "generate"
-commands = ["run generate_diagrams", "run generate_integrands"]
-
-[default_runtime_settings.kinematics]
-e_cm = 1000.0
-
-[default_runtime_settings.kinematics.externals]
-type = "constant"
-
-[default_runtime_settings.kinematics.externals.data]
-momenta = [
-  [500.0, 0.0, 0.0, 500.0],
-  [500.0, 0.0, 0.0, -500.0],
-]
-helicities = ["summed_averaged", "summed_averaged"]
-
-[default_runtime_settings.general]
-evaluator_method = "SingleParametric"
-enable_cache = false
-debug_cache = false
-generate_events = false
-store_additional_weights_in_event = false
-integral_unit = "picobarn"
-mu_r = 91.188
-m_uv = 91.188
-
-[default_runtime_settings.integrator.observables_output]
-format = ["hwu", "json"]
-
-[cli_settings.global.generation.orientation_pattern]
-pat = "(+,+,+,+,-,-,-,+,-,0,+,0,+,-,+)"
+[cli_settings.global.generation]
+explicit_orientation_sum_only = true
 
 [cli_settings.global.generation.evaluator]
 do_algebra = false
@@ -70,134 +54,170 @@ compile = false
 summed = false
 summed_function_map = false
 
-[cli_settings.global.generation.threshold_subtraction]
-enable_thresholds = true
-check_esurface_at_generation = true
-esurface_existence_threshold = 1.0e-7
-skip_thresholds_that_are_cuts = true
-
-[default_runtime_settings.subtraction]
-esurface_existence_threshold = 1.0e-7
-disable_threshold_subtraction = false
-
 [cli_settings.global.generation.compile]
 compilation_mode = "assembly"
 optimization_level = "O3"
-fast_math = true
-unsafe_math = true
-custom = []
+fast_math = false
+unsafe_math = false
 
 [cli_settings.global.generation.uv]
 softct = false
 inner_products = true
-generate_integrated = true
 subtract_uv = true
+generate_integrated = true
+local_uv_cts_from_expanded_4d_integrands = false
 
-[cli_settings.global.n_cores]
-feyngen = 10
-generate = 10
-compile = 10
-integrate = 10
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = true
+esurface_existence_threshold = 1.0e-14
+skip_thresholds_that_are_cuts = true
 
-[cli_settings.global.generation.tropical_subgraph_table]
-panic_on_fail = true
-disable_tropical_generation = false
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+externals = { type = "constant", data = { momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]], helicities = ["summed_averaged", "summed_averaged"] } }
 
-[[default_runtime_settings.stability.rotation_axis]]
-type = "z"
-
-[[default_runtime_settings.stability.levels]]
-precision = "Double"
-required_precision_for_re = 0.0000000001
-required_precision_for_im = 0.0000000001
-escalate_for_large_weight_threshold = 0.9
-
-[[default_runtime_settings.stability.levels]]
-precision = "Quad"
-required_precision_for_re = 0.00001
-required_precision_for_im = 0.00001
-escalate_for_large_weight_threshold = -1.0
-
-[[default_runtime_settings.stability.levels]]
-precision = "Arb"
-required_precision_for_re = 0.00001
-required_precision_for_im = 0.00001
-escalate_for_large_weight_threshold = -1.0
-
-[[command_blocks]]
-name = "integrate"
-commands = [
-  "run set_model_parameters",
-  "set process -p epem_a_tth kv integrator.discrete_dim_learning_rate=$(discrete_dim_learning_rate:0.0)",
-  "set process -p epem_a_tth kv integrator.continuous_dim_learning_rate=$(continuous_dim_learning_rate:0.25)",
-  "set process -p epem_a_tth kv integrator.n_bins=$(n_bins:16)",
-  """set process -p epem_a_tth string '
-    [sampling]
-    graphs = "monte_carlo"
-    orientations = "summed"
-    lmb_multichanneling = true
-    lmb_channel_weight = "ose"
-    lmb_channels = "summed"
-    '""",
-  """set process -p epem_a_tth string '
-    [h_function]
-    function = "poly_exponential"
-    sigma = $(h_sigma:1.0)
-    power = $(h_power:3)
-    '""",
-  """set process -p epem_a_tth string '
-    [[stability.rotation_axis]]
-    type = "x"
-    [[stability.rotation_axis]]
-    type = "y"
-
-    [[stability.levels]]
-    precision = "Double"
-    required_precision_for_re = 1.0e-5
-    required_precision_for_im = 1.0e-5
-    escalate_for_large_weight_threshold = 0.99
-
-    [[stability.levels]]
-    precision = "Quad"
-    required_precision_for_re = 1.0e-8
-    required_precision_for_im = 1.0e-8
-    escalate_for_large_weight_threshold = -1.0
-    '""",
-  "remove processes -p epem_a_tth -i NNLO_m_uv_up",
-  "duplicate integrand -p epem_a_tth -i NNLO --output_process_name epem_a_tth --output_integrand_name NNLO_m_uv_up",
-  """set process -p epem_a_tth -i NNLO kv
-    integrator.n_increase=$(n_increase:0)
-    integrator.n_start=$(n_start:100000)
-    integrator.n_max=$(n_max:10000000000)
-    integrator.seed=$(seed:1337)
-    general.m_uv=$(m_uv_reference:91.188)
-    """,
-  "set process -p epem_a_tth -i NNLO_m_uv_up kv general.m_uv=$(m_uv_shifted:1459.008)",
-  """integrate -p epem_a_tth -i NNLO -p epem_a_tth -i NNLO_m_uv_up --n-cores $(integration_cores:3)
-    --renderer ratatui
-    --batch-size $(batch_size:1000)
-    --show-phase both
-    --show-max-weight-info
-    --show-top-discrete-grid
-    --show-discrete-contributions-sum
-    --write-results-for-each-iteration
-    --restart
-    """,
-]
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+integral_unit = "picobarn"
+enable_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+renormalization_localization_scale = 1000.0
 
 [[command_blocks]]
 name = "set_model_parameters"
+commands = ["set model MT=173 MH=125 WT=0 ymt=173 aS=0.118 aEWM1=132.507 Gf=1.166390e-05 MZ=91.188"]
+
+[[command_blocks]]
+name = "configure_generation"
+commands = ["""set global kv
+  global.generation.explicit_orientation_sum_only=$(explicit_sum:true)
+  global.generation.orientation_pattern.pat='$(orientation_pattern:null)'
+  global.generation.evaluator.compile=$(compile:false)
+  global.generation.threshold_subtraction.esurface_existence_threshold=$(generation_threshold_tolerance:1e-14)
+  global.n_cores.generate=$(generate_cores:4) global.n_cores.compile=$(generate_cores:4)
+"""]
+
+# One runtime block supplies generation defaults and resets loaded integrands
+# before integration. All thresholds sharing a group retain their common
+# overlap/center treatment; LMB sampling controls below are independent of it.
+[[command_blocks]]
+name = "configure_runtime"
+commands = ["""set default-runtime string '
+  [general]
+  mu_r = $(mu_r:91.188)
+  m_uv = $(m_uv:91.188)
+  [subtraction]
+  disable_threshold_subtraction = $(disable_threshold_subtraction:false)
+  esurface_existence_threshold = $(threshold_tolerance:1e-14)
+  [subtraction.local_ct_settings.uv_localisation]
+  gaussian_width = $(ct_gaussian_width:1.0)
+  sliver_width = $(ct_sliver_width:10.0)
+  smooth_sliver = $(ct_smooth_sliver:false)
+  dynamic_width = $(ct_dynamic_width:false)
+  force_uv_dampers_to_one = false
+  [sampling]
+  graphs = "monte_carlo"
+  orientations = "summed"
+  lmb_multichanneling = true
+  lmb_channels = "$(lmb_channels:monte_carlo)"
+  lmb_channel_weight = "$(lmb_channel_weight:inverse_jacobian)"
+  coordinate_system = "spherical"
+  mapping = "$(mapping:linear)"
+  b = $(radial_scale:1.0)
+  power = $(radial_power:1.0)
+  [h_function]
+  function = "poly_exponential"
+  sigma = $(h_sigma:1.0)
+  power = $(h_power:3)
+  [integrator]
+  integrated_phase = "$(training_phase:real)"
+  n_start = $(n_start:1000)
+  n_increase = 0
+  n_max = $(n_max:3000)
+  seed = $(seed:1337)
+  n_bins = $(n_bins:16)
+  min_samples_for_update = $(min_samples_for_update:64)
+  continuous_dim_learning_rate = $(continuous_learning_rate:0.25)
+  discrete_dim_learning_rate = $(discrete_learning_rate:0.25)
+  train_on_avg = false
+  [integrator.observables_output]
+  format = ["json"]
+  [stability]
+  check_on_norm = $(stability_check_on_norm:true)
+  rotation_axis = [{ type = "euler_angles", alpha = $(stability_alpha:0.1), beta = $(stability_beta:0.2), gamma = $(stability_gamma:0.3) }]
+  levels = [
+    { precision = "Double", required_precision_for_re = $(double_precision:1e-6), required_precision_for_im = $(double_precision:1e-6), escalate_for_large_weight_threshold = 0.9 },
+    { precision = "Quad", required_precision_for_re = $(quad_precision:1e-10), required_precision_for_im = $(quad_precision:1e-10), escalate_for_large_weight_threshold = -1.0 },
+    { precision = "Arb", required_precision_for_re = $(arb_precision:1e-12), required_precision_for_im = $(arb_precision:1e-12), escalate_for_large_weight_threshold = -1.0 },
+  ]
+'"""]
+
+[[command_blocks]]
+name = "generate_diagrams"
 commands = [
-  "set model MT=173.0",
-  "set model MH=125.0",
-  "set model WT=0.0",
-  "set model ymt=173.0",
-  "set model aS=0.118",
-  "set model aEWM1=132.507",
-  "set model Gf=1.166390e-05",
-  "set model MZ=91.188",
+  "import model sm-default.json",
+  "run set_model_parameters configure_runtime",
+  "import graphs $(graph_path:./examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot) --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]' -p epem_a_tth -i NNLO -o",
+  "save dot",
 ]
 
 [[command_blocks]]
+name = "generate_integrands"
+commands = [
+  "run configure_generation",
+  "generate existing -p epem_a_tth -i NNLO",
+  "save state -o",
+  "display integrand -p epem_a_tth -i NNLO --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "generate"
+commands = ["run generate_diagrams generate_integrands"]
+
+[[command_blocks]]
+name = "generate_o0"
+commands = ["run generate -D explicit_sum=false -D 'orientation_pattern=(+,+,+,+,-,-,-,+,-,0,+,0,+,-,+)'"]
+
+[[command_blocks]]
+name = "generate_o1"
+commands = ["run generate -D explicit_sum=false -D 'orientation_pattern=(+,+,+,-,-,-,-,+,-,0,+,0,+,-,-)'"]
+
+[[command_blocks]]
+name = "generate_o2"
+commands = ["run generate -D explicit_sum=false -D 'orientation_pattern=(+,+,+,-,-,-,-,+,-,0,+,0,+,+,+)'"]
+
+[[command_blocks]]
+name = "generate_o3"
+commands = ["run generate -D explicit_sum=false -D 'orientation_pattern=(+,+,+,-,-,-,-,+,-,0,+,0,+,+,-)'"]
+
+[[command_blocks]]
+name = "integrate_common"
+commands = [
+  "run set_model_parameters configure_runtime",
+  "set process -p epem_a_tth -i NNLO defaults",
+  """integrate -p epem_a_tth -i NNLO --n-cores $(integration_cores:5)
+    --workspace-path $(workspace:./GL638_integration_workspace)
+    --renderer $(renderer:ratatui) --show-phase both
+    --show-max-weight-info --show-max-weight-info-for-discrete-bins
+    --show-top-discrete-grid --show-discrete-contributions-sum
+    --write-results-for-each-iteration --batch-timing 2 $(restart:)
+  """,
+]
+
+[[command_blocks]]
+name = "pilot"
+commands = ["run integrate_common -D n_start=$(n_start:1000) -D n_max=$(n_max:3000)"]
+
+[[command_blocks]]
+name = "integrate"
+commands = ["run integrate_common -D n_start=$(n_start:7500) -D n_max=$(n_max:75000)"]
+
+[[command_blocks]]
+name = "check_settings"
+commands = ["run configure_generation configure_runtime", "display settings global", "display settings default-runtime"]
+
+[[command_blocks]]
 name = "all"
-commands = ["run generate", "run integrate"]
+commands = ["run generate pilot"]
