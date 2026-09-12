@@ -1,8 +1,12 @@
 //! Numerical contracts for the production complex evaluator paths.
 //!
-//! These tests intentionally expose upstream numerical failures. Runtime arguments
-//! prevent constant folding from replacing the backend under test. MPC supplies
-//! an independent oracle; agreement between GammaLoop backends alone is insufficient.
+//! These tests intentionally expose numerical failures in upstream functions and
+//! composed derivative expressions. Runtime arguments prevent constant folding
+//! from replacing the backend under test. MPC supplies an independent oracle;
+//! agreement between GammaLoop backends alone is insufficient.
+//! ArbPrec keeps a fixed working precision, unlike Symbolica's precision-tracking
+//! Float. Derivative accuracy is reported separately: cancellation in a composed
+//! expression can lose significant bits even when its built-in functions are accurate.
 use std::collections::BTreeMap;
 
 use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -217,7 +221,7 @@ fn to_mpc<T: FloatLike>(value: Complex<F<T>>) -> Mpc {
 struct Checks {
     precision: u32,
     checked: usize,
-    failures: BTreeMap<String, (usize, String)>,
+    failures: BTreeMap<(bool, String), (usize, String)>,
 }
 
 impl Checks {
@@ -241,26 +245,32 @@ impl Checks {
             } else {
                 Float::with_val(REFERENCE_PRECISION, 1) << (rug::float::exp_min() - 1)
             };
-            let tolerance = (expected.clone().abs() >> (self.precision - 8)) + minimum.clone() * 2;
-            let valid = if expected.is_nan() {
-                actual.is_nan()
+            let error = Float::with_val(REFERENCE_PRECISION, actual - &expected);
+            let mut tolerance =
+                (expected.clone().abs() >> (self.precision - 8)) + minimum.clone() * 2;
+            let (valid, reason) = if expected.is_nan() {
+                (actual.is_nan(), "expected NaN")
             } else if expected.is_infinite() {
-                actual.is_infinite() && actual.is_sign_negative() == expected.is_sign_negative()
+                (
+                    actual.is_infinite()
+                        && actual.is_sign_negative() == expected.is_sign_negative(),
+                    "expected signed infinity",
+                )
             } else if !actual.is_finite() {
-                false
+                (false, "unexpected nonfinite result")
             } else if actual.is_zero() && !expected.is_zero() {
                 // A small absolute tolerance must never hide a representable tail.
-                expected.clone().abs() <= minimum / 2
+                tolerance = minimum / 2;
+                (expected.clone().abs() <= tolerance, "premature zero")
             } else {
-                Float::with_val(REFERENCE_PRECISION, actual - &expected).abs() <= tolerance
+                (error.clone().abs() <= tolerance, "component accuracy")
             };
             if !valid {
                 self.record(
                     regime,
                     index,
                     format!(
-                        "z={input:.8e}, {component}: got {actual:.16e}, expected {expected:.16e}, error={:.3e}",
-                        Float::with_val(REFERENCE_PRECISION, actual - &expected),
+                        "z={input:.8e}, {component}: got {actual:.16e}, expected {expected:.16e}, error={error:.3e}, tolerance={tolerance:.3e}; {reason}",
                     ),
                 );
             }
@@ -268,16 +278,35 @@ impl Checks {
     }
 
     fn record(&mut self, regime: &str, index: usize, detail: String) {
-        let key = format!("{regime}: {} d{}", FUNCTIONS[index / 3], index % 3);
+        let key = (
+            !index.is_multiple_of(3),
+            format!("{regime}: {} d{}", FUNCTIONS[index / 3], index % 3),
+        );
         let entry = self.failures.entry(key).or_insert((0, detail));
         entry.0 += 1;
     }
 
     fn finish(self, backend: &str) {
-        let report = self
-            .failures
-            .iter()
-            .map(|(key, (count, example))| format!("{key}: {count} failures; first {example}"))
+        let sections = [
+            (false, "Built-in function failures"),
+            (
+                true,
+                "Symbolic derivative failures (composed expressions; cancellation may reduce accuracy)",
+            ),
+        ];
+        let report = sections
+            .into_iter()
+            .filter_map(|(derivative, title)| {
+                let rows = self
+                    .failures
+                    .iter()
+                    .filter(|((is_derivative, _), _)| *is_derivative == derivative)
+                    .map(|((_, key), (count, example))| {
+                        format!("{key}: {count} failures; first {example}")
+                    })
+                    .collect::<Vec<_>>();
+                (!rows.is_empty()).then(|| format!("{title}:\n{}", rows.join("\n")))
+            })
             .collect::<Vec<_>>()
             .join("\n");
         assert!(
