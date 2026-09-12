@@ -50,6 +50,7 @@ pub mod gammaloop_sample;
 pub mod ir;
 pub mod sampling_maps;
 pub mod sampling_reference;
+pub mod sampling_selection;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, settings::RuntimeSettings,
     settings::runtime::DiscreteGraphSamplingSettings, settings::runtime::DiscreteGraphSamplingType,
@@ -67,9 +68,16 @@ pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
 pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
 pub use sampling_maps::{
-    SamplingJacobian, SamplingMapContract, SamplingMapDefinition, SamplingSupport,
+    SamplingJacobian, SamplingMapContract, SamplingMapDefinition, SamplingMapKernel,
+    SamplingMapPoint, SamplingSupport,
 };
 pub use sampling_reference::GaussianReferenceFunction;
+pub use sampling_selection::{
+    ResolvedNamedSamplingChannel, ResolvedSamplingChannelSelection, SamplingChannelPreset,
+    SamplingChannelSelector, SamplingSelectionError, explicitly_selected_graphs,
+    graph_channel_definitions, resolve_sampling_channel_selection,
+    resolve_sampling_channel_selection_replacing_default,
+};
 
 pub mod threshold_multiplier;
 
