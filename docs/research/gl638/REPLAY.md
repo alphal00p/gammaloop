@@ -23,8 +23,11 @@ unchanged. All 17 finite cases retain bit-identical numerical payloads and
 precision flags. Both exact A/P cases now finish Arb **Unstable** with no
 accuracy estimate; their null cut-1 weights, `is_nan=true` and sanitized zero
 totals are unchanged. Normal evaluation retains its finite intermediate Quad
-rotation error of 0.0624291. The coincident-root failure and nearby-A/P false
-acceptance remain. The JSON's historical observations are preserved, including
+rotation error of 0.0624291. The coincident-root failure and historical z-probe
+nearby-A/P false acceptance remain. The current generic Euler probe rescues the
+nearby point through Arb; [the runtime follow-up](runtime-followup.md) records
+that comparison and additional componentwise controls. The JSON's historical
+observations are preserved, including
 the old incorrect Stable labels; they are not the expected current labels for
 the two nonfinite cases.
 

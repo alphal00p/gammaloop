@@ -1,0 +1,239 @@
+{
+  "binary_sha256": "029d4ecee30c4e038889ef62725ccfcdbf6e88f5d9e7dbfea08b627d238712a3",
+  "orientation_count": 936,
+  "files": [
+    {
+      "name": "baseline6",
+      "file": "runtime-followup-baseline6.toml",
+      "sha256": "2e351e077ff6396c70cb85516efd971c04ca223ceddbaff64bfff83cb4101a29",
+      "input_runtime_sha256": "f93ffc321f53991164f8f457ca4ba5c1aa1c6f9676da4daf179c4521d24eb57c",
+      "runtime_semantically_identical_to_tested_input": true,
+      "local_channels": [
+        {
+          "local_channel": 0,
+          "generated_basis_id": 1,
+          "edges": [
+            6,
+            12,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 1,
+          "generated_basis_id": 2,
+          "edges": [
+            4,
+            12,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 2,
+          "generated_basis_id": 13,
+          "edges": [
+            6,
+            7,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 3,
+          "generated_basis_id": 14,
+          "edges": [
+            4,
+            7,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 4,
+          "generated_basis_id": 21,
+          "edges": [
+            6,
+            10,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 5,
+          "generated_basis_id": 22,
+          "edges": [
+            4,
+            10,
+            13,
+            14
+          ]
+        }
+      ]
+    },
+    {
+      "name": "union7",
+      "file": "runtime-followup-union7.toml",
+      "sha256": "44879cdc69b877a0c9eb7e82af29b04069eb6c17260ac08ca13e714313db09c3",
+      "input_runtime_sha256": "5bb0ae589b26cc7099ad05af04f6ac6de68733aeee30af460fbfabd811eec0aa",
+      "runtime_semantically_identical_to_tested_input": true,
+      "local_channels": [
+        {
+          "local_channel": 0,
+          "generated_basis_id": 1,
+          "edges": [
+            6,
+            12,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 1,
+          "generated_basis_id": 2,
+          "edges": [
+            4,
+            12,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 2,
+          "generated_basis_id": 13,
+          "edges": [
+            6,
+            7,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 3,
+          "generated_basis_id": 14,
+          "edges": [
+            4,
+            7,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 4,
+          "generated_basis_id": 21,
+          "edges": [
+            6,
+            10,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 5,
+          "generated_basis_id": 22,
+          "edges": [
+            4,
+            10,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 6,
+          "generated_basis_id": 84,
+          "edges": [
+            2,
+            10,
+            13,
+            14
+          ]
+        }
+      ]
+    },
+    {
+      "name": "common6",
+      "file": "runtime-followup-common6.toml",
+      "sha256": "6cd29df4e77229999f8e917a4f1fb97cb78cfd4e09d37fd72f2dfd5c57c02328",
+      "input_runtime_sha256": "ac075edc104b30c9279661647efff0f5ca7f48844851f0dc460cfb0c6b5ecc89",
+      "runtime_semantically_identical_to_tested_input": true,
+      "local_channels": [
+        {
+          "local_channel": 0,
+          "generated_basis_id": 1,
+          "edges": [
+            6,
+            12,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 1,
+          "generated_basis_id": 2,
+          "edges": [
+            4,
+            12,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 2,
+          "generated_basis_id": 13,
+          "edges": [
+            6,
+            7,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 3,
+          "generated_basis_id": 14,
+          "edges": [
+            4,
+            7,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 4,
+          "generated_basis_id": 21,
+          "edges": [
+            6,
+            10,
+            13,
+            14
+          ]
+        },
+        {
+          "local_channel": 5,
+          "generated_basis_id": 22,
+          "edges": [
+            4,
+            10,
+            13,
+            14
+          ]
+        }
+      ]
+    }
+  ],
+  "input_sha256": {
+    "/common/dev/gl638_integration_validation/publication/smoke/execution/state/global_settings.toml": "f8e182615cfcbc893033249f1c0fb8beb36760a20ded2972e33f0545a199ed14",
+    "/common/dev/gl638_integration_validation/publication/smoke/execution/state/model_parameters.json": "5cf4b422cfe328559dd3cc9322e5e66c264faba54d5d44b4f5772c3a53a43572",
+    "/common/dev/gl638_integration_validation/publication/smoke/execution/state/processes/cross_sections/epem_a_tth/NNLO/GL638.dot": "7fd875ea567fa04e009f20015b14ddaea1f89b3915294858313abc3b062e0942"
+  },
+  "note": "TOMLs preserve every explicit tested runtime setting; only formatting/comments change. Integration commands must use a new workspace and20 workers. Full source state remains unchanged.",
+  "research_data_sha256": {
+    "runtime-followup-ap-inputs.json": "dd99fe25965d4342c7d62517eb18da68c3253d0fcda13d82af1c118456c5fe09",
+    "runtime-followup-ap-values.csv": "06c85a03ec337cd99a65225c5dfb47e781199791868ff6a6d7f3a7ee469a17d9",
+    "runtime-followup-hz-inputs.json": "a6f6ad5a78d9eb5b7647f104fbe897bcee34e86e4796abe73910bba3a57492d1",
+    "runtime-followup-hz-values.csv": "7683e989e9c863190b8de51fa7f44d539e901a7385ecc166c0bdfefe1446ba82",
+    "runtime-followup-maxima-points.json": "4728071a29de4696532ccba574b3e3cb7156040b8e00ee4bb7a9a5ddf965b637",
+    "runtime-followup-maxima-values.csv": "e3e790c2853f4a809b4b0263e2a625f8c71ef10e3ea518d48f2e223e576f4e92",
+    "runtime-followup-pilot-provenance.json": "545e9b78269c375efa3256bbb08ee4602672d311d97383a0ce24b8b388eac7d3",
+    "runtime-followup-pilots.csv": "9c4c2c0dbe37cd2e5461cfb4ac4072f7d523c78d4b0811bc1e0274b9f74b71f1"
+  }
+}

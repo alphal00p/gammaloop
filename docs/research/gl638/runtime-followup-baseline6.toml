@@ -1,0 +1,91 @@
+# GL638 baseline6: explicit runtime used in the completed 30k pilot.
+# Load after the main card runtime reset; integrate into a fresh workspace.
+# Public binary SHA256: 029d4ecee30c4e038889ef62725ccfcdbf6e88f5d9e7dbfea08b627d238712a3
+
+
+[general]
+m_uv = 91.188
+mu_r = 91.188
+integral_unit = "picobarn"
+generate_events = false
+store_additional_weights_in_event = false
+
+[kinematics]
+e_cm = 1000.0
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]
+helicities = ["summed_averaged", "summed_averaged"]
+
+[integrator]
+n_bins = 16
+min_samples_for_update = 64
+n_start = 10000
+n_increase = 0
+n_max = 30000
+discrete_dim_learning_rate = 0.25
+continuous_dim_learning_rate = 0.25
+seed = 1337
+integrated_phase = "real"
+train_on_avg = false
+
+[stability]
+escalate_if_exact_zero = false
+check_on_norm = true
+
+[[stability.rotation_axis]]
+type = "euler_angles"
+alpha = 0.1
+beta = 0.2
+gamma = 0.3
+
+[[stability.levels]]
+precision = "Double"
+required_precision_for_re = 1e-06
+required_precision_for_im = 1e-06
+escalate_for_large_weight_threshold = 0.9
+
+[[stability.levels]]
+precision = "Quad"
+required_precision_for_re = 1e-10
+required_precision_for_im = 1e-10
+escalate_for_large_weight_threshold = -1.0
+
+[[stability.levels]]
+precision = "Arb"
+required_precision_for_re = 1e-12
+required_precision_for_im = 1e-12
+escalate_for_large_weight_threshold = -1.0
+
+[sampling]
+graphs = "monte_carlo"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_channel_weight = "inverse_jacobian"
+b = 0.3
+orientations = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+power = 1.0
+
+[sampling.lmb_basis_ids]
+GL638 = [1, 2, 13, 14, 21, 22]
+
+[subtraction]
+esurface_existence_threshold = 1e-14
+disable_threshold_subtraction = false
+
+[subtraction.local_ct_settings]
+
+[subtraction.local_ct_settings.uv_localisation]
+gaussian_width = 1.0
+sliver_width = 10.0
+smooth_sliver = false
+dynamic_width = false
+force_uv_dampers_to_one = false
+
+[h_function]
+power = 3
