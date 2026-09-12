@@ -3732,8 +3732,11 @@ pub(crate) fn global_parameterize<T: FloatLike>(
                         let cos_theta = -&one + zero.from_i64(2) * xi;
                         jac *= zero.from_i64(2);
                         let sin_theta = (&one - cos_theta.square()).sqrt();
-                        if i > 0 {
-                            jac *= sin_theta.pow(i as u64);
+                        // Uniform cos(theta_i) leaves the angular factor
+                        // sin(theta_i)^(D-3-i) for this Cartesian ordering.
+                        let angular_power = x.len() - 3 - i;
+                        if angular_power > 0 {
+                            jac *= sin_theta.pow(angular_power as u64);
                         }
                         cos_thetas.push(cos_theta);
                         sin_thetas.push(sin_theta);
@@ -4009,8 +4012,9 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
             for (i, x) in cartesian_xs[..cartesian_xs.len() - 2].iter().enumerate() {
                 xs.push(F::<T>::from_f64(0.5) * (&one + x / k_r_sq.sqrt()));
                 inv_jac /= F::<T>::from_f64(2.);
-                if i > 0 {
-                    inv_jac /= (&one - (x * x / &k_r_sq)).sqrt().powi(i as i32);
+                let angular_power = cartesian_xs.len() - 3 - i;
+                if angular_power > 0 {
+                    inv_jac /= (&one - (x * x / &k_r_sq)).sqrt().pow(angular_power as u64);
                 }
                 k_r_sq -= x * x;
             }

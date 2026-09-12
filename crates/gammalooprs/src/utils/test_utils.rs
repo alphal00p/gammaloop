@@ -8,7 +8,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
 };
 use momtrop::assert_approx_eq;
-use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::{algebra::complex::Complex, structure::abstract_index::AIND_SYMBOLS};
 use symbolica::{
     atom::{AtomCore, AtomView},
     parse_lit,
@@ -17,7 +17,7 @@ use symbolica::{
 use crate::{
     momentum::ThreeMomentum,
     settings::runtime::{ParameterizationMapping, ParameterizationMode, ParameterizationSettings},
-    utils::{F, GS, global_inv_parameterize, global_parameterize},
+    utils::{F, GS, determinant, global_inv_parameterize, global_parameterize},
 };
 
 pub fn output_dir() -> PathBuf {
@@ -115,6 +115,68 @@ fn test_inv_param() {
 
     let prod = jac_1 * jac_2;
     assert_approx_eq(&prod, &F(1.0), &F(1.0e-14));
+}
+
+#[test]
+fn test_hyperspherical_jacobian_and_inverse() {
+    let cube = [
+        0.27, 0.63, 0.41, 0.38, 0.19, 0.72, 0.44, 0.53, 0.26, 0.68, 0.32, 0.57,
+    ]
+    .map(F);
+    let e_cm = F(42.2);
+    let step = F(1.0e-6);
+    // The existing determinant workspace supports D=12 with higher_loops.
+    for dimension in [3, 6, 9, 12]
+        .into_iter()
+        .filter(|dimension| *dimension <= crate::MAX_LOOP * 3)
+    {
+        let x = &cube[..dimension];
+        for mapping in [
+            ParameterizationMapping::Linear,
+            ParameterizationMapping::Log,
+            ParameterizationMapping::Power,
+        ] {
+            let settings = ParameterizationSettings {
+                mode: ParameterizationMode::HyperSpherical,
+                mapping,
+                b: 0.3,
+                power: 1.7,
+                ..Default::default()
+            };
+            let (momenta, jacobian) = global_parameterize(x, e_cm, &settings);
+            // Forward/inverse agreement alone misses a shared Jacobian error.
+            // Differentiate the actual Cartesian map independently instead.
+            let mut derivatives = vec![Complex::new(F(0.0), F(0.0)); dimension * dimension];
+            for column in 0..dimension {
+                let mut low = x.to_vec();
+                let mut high = x.to_vec();
+                low[column] -= step;
+                high[column] += step;
+                let low = global_parameterize(&low, e_cm, &settings).0;
+                let high = global_parameterize(&high, e_cm, &settings).0;
+                for (row, (high, low)) in high
+                    .into_iter()
+                    .flatten()
+                    .zip(low.into_iter().flatten())
+                    .enumerate()
+                {
+                    derivatives[row * dimension + column].re = (high - low) / (F(2.0) * step);
+                }
+            }
+            let numeric_jacobian = determinant(&derivatives, dimension).re.abs();
+            assert_approx_eq(&(numeric_jacobian / jacobian), &F(1.0), &F(1.0e-8));
+
+            let momenta = momenta
+                .into_iter()
+                .map(|p| ThreeMomentum::new(p[0], p[1], p[2]))
+                .collect_vec();
+            let (roundtrip, inverse_jacobian) = global_inv_parameterize(&momenta, e_cm, &settings);
+            for (expected, actual) in x.iter().zip(roundtrip.iter()) {
+                assert_approx_eq(expected, actual, &F(1.0e-13));
+            }
+            assert_approx_eq(&(jacobian * inverse_jacobian), &F(1.0), &F(1.0e-12));
+        }
+    }
 }
 
 #[test]
