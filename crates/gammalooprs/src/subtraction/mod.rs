@@ -103,7 +103,9 @@ fn evaluate_integrated_ct_normalisation<T: FloatLike>(
         IntegratedCounterTermRange::Infinite {
             h_function_settings,
         } => {
-            let h = utils::h(&(radius_star / radius), None, None, h_function_settings);
+            // The helper's inverse radial measure leaves dr, so this density must
+            // integrate to one in r: dr / r_star = d(r / r_star).
+            let h = utils::h(&(radius / radius_star), None, None, h_function_settings);
             h * (radius_star).inv()
         }
         IntegratedCounterTermRange::Compact {} => {
@@ -123,7 +125,7 @@ fn evaluate_integrated_ct_normalisation_dual<T: FloatLike>(
             h_function_settings,
         } => {
             let h = utils::h_dual(
-                &(radius_star.clone() / radius.clone()),
+                &(radius.clone() / radius_star.clone()),
                 None,
                 None,
                 h_function_settings,
@@ -397,7 +399,94 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::hyperdual_utils::new_from_values;
+    use crate::{
+        settings::runtime::{HFunction, HFunctionSettings},
+        utils::hyperdual_utils::new_from_values,
+    };
+
+    #[test]
+    fn integrated_ct_profiles_preserve_the_radial_residue() {
+        for (function, power) in [
+            (HFunction::Exponential, None),
+            (HFunction::PolyExponential, None),
+            (HFunction::PolyExponential, Some(4)),
+            (HFunction::PolyExponential, Some(16)),
+        ] {
+            for sigma in [0.5, 2.0] {
+                let settings = IntegratedCounterTermSettings {
+                    range: IntegratedCounterTermRange::Infinite {
+                        h_function_settings: HFunctionSettings {
+                            function: function.clone(),
+                            sigma,
+                            power,
+                            ..Default::default()
+                        },
+                    },
+                };
+                for radius_star in [0.3, 3.0] {
+                    // The generated helper cancels r^(3L-1) from the measure.
+                    // Both normalized profiles have negligible tails after 8 sigma.
+                    let step = 8.0 * sigma * radius_star / 2048.0;
+                    let integral: f64 = (0..2048)
+                        .map(|i| {
+                            evaluate_integrated_ct_normalisation(
+                                &F((i as f64 + 0.5) * step),
+                                &F(radius_star),
+                                &F(1.0),
+                                &settings,
+                            )
+                            .0
+                        })
+                        .sum::<f64>()
+                        * step;
+                    assert!(
+                        (integral - 1.0).abs() < 2.0e-12,
+                        "{function:?}, power={power:?}, sigma={sigma}, r_star={radius_star}: {integral}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn integrated_ct_profile_dual_matches_normalized_density_derivatives() {
+        let sigma = 0.6_f64;
+        let radius_star = 1.7_f64;
+        let settings = IntegratedCounterTermSettings {
+            range: IntegratedCounterTermRange::Infinite {
+                h_function_settings: HFunctionSettings {
+                    function: HFunction::Exponential,
+                    sigma,
+                    ..Default::default()
+                },
+            },
+        };
+        let shape = HyperDual::new(simple_n_deriv_shape(2));
+        let dual_star = new_from_values(&shape, &[F(radius_star), F(1.0), F(0.0)]);
+        for radius in [0.2_f64, 1.4, 4.0] {
+            let dual_radius = new_from_values(&shape, &[F(radius), F(0.0), F(0.0)]);
+            let actual = evaluate_integrated_ct_normalisation_dual(
+                &dual_radius,
+                &dual_star,
+                &F(1.0),
+                &settings,
+            );
+            // Analytic half-Gaussian density and its first two r_star derivatives.
+            let x = radius / (sigma * radius_star);
+            let density =
+                2.0 * (-x * x).exp() / (std::f64::consts::PI.sqrt() * sigma * radius_star);
+            let log_derivative = (2.0 * x * x - 1.0) / radius_star;
+            let second_log_derivative = (1.0 - 6.0 * x * x) / radius_star.powi(2);
+            let expected = [
+                density,
+                density * log_derivative,
+                density * (log_derivative.powi(2) + second_log_derivative) / 2.0,
+            ];
+            for (actual, expected) in actual.values.iter().zip(expected) {
+                assert!((actual.0 - expected).abs() < 2.0e-13 * expected.abs().max(1.0));
+            }
+        }
+    }
 
     #[test]
     fn uv_damper_can_be_forced_to_one() {
