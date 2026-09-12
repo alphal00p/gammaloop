@@ -51,6 +51,13 @@ partitions and samples the complete already-subtracted physical integrand.
   Agents work in bounded slices, do not commit or push, and independently
   review one another's code, tests and numerical claims. Consult the portable
   research documents whenever a geometry or estimator choice is uncertain.
+  This is a deliberately hard, cross-cutting task: the root agent should act
+  primarily as an orchestrator, delegate implementation, audit, testing and
+  research slices to multiple agents, and repeatedly re-read the existing
+  research (especially `SOPER_AND_SAMPLING_API.md`, `REPORT.md`,
+  `API_AND_GENERICITY_ADDENDUM.md` and `SOPER_ANGULAR_REVIEW.md`) before
+  settling interfaces or numerical claims. Extend that research when the
+  implementation exposes a case not covered by those documents.
 * Preserve the untracked user directory `TMP_TO_IGNORE/`.
 * Commits and push authentication must use the verified repository-local
   identity `ValentinHirschi <valentin.hirschi@gmail.com>`. The verified remote
