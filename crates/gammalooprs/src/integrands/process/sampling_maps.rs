@@ -272,6 +272,281 @@ pub struct SamplingMapPoint<T: FloatLike> {
     pub residual: F<T>,
 }
 
+/// A graph-independent radial map around an energy-surface centre.
+///
+/// The first unit-cube coordinate is mapped to a non-negative radius and the
+/// remaining coordinates are uniform hyperspherical angles.  When a regular
+/// surface radius is supplied, the radial interval is split at that radius;
+/// this keeps the threshold at a deterministic coordinate while retaining
+/// full support for all of `R^dimension`.  An absent surface (`None`) uses the
+/// same compactification with the threshold radius set to zero.  The map is
+/// deliberately independent of graph topology: process code supplies the
+/// centre and the classified radius after its kinematics preparation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SurfaceRadialMap {
+    dimension: usize,
+    center: Vec<f64>,
+    threshold_radius: Option<f64>,
+    beta: f64,
+    power: f64,
+}
+
+/// Values returned by [`SurfaceRadialMap::forward`] and `inverse`.
+#[derive(Clone, Debug)]
+pub struct SurfaceRadialPoint<T: FloatLike> {
+    pub coordinates: Vec<F<T>>,
+    pub point: Vec<F<T>>,
+    pub radius: F<T>,
+    /// Exact positive determinant of the forward map in the unit cube frame.
+    pub jacobian: F<T>,
+    /// Its reciprocal (where the determinant is non-zero).
+    pub inverse_jacobian: F<T>,
+    /// Infinity norm of the independent coordinate/point round trip residual.
+    pub residual: F<T>,
+}
+
+impl SurfaceRadialMap {
+    /// Construct a radial map in `dimension >= 2` dimensions.
+    ///
+    /// `threshold_radius = Some(r*)` places the surface at `r*`; `None` is the
+    /// full-support absent-fibre fallback. `beta` is a positive compactification
+    /// scale and `power` controls the endpoint concentration.
+    pub fn new(
+        dimension: usize,
+        center: Vec<f64>,
+        threshold_radius: Option<f64>,
+        beta: f64,
+        power: f64,
+    ) -> Result<Self> {
+        if dimension < 2 {
+            return Err(eyre!("surface radial map requires dimension at least two"));
+        }
+        if center.len() != dimension {
+            return Err(eyre!(
+                "surface radial-map centre has dimension {}, expected {dimension}",
+                center.len()
+            ));
+        }
+        if center.iter().any(|component| !component.is_finite()) {
+            return Err(eyre!("surface radial-map centre must be finite"));
+        }
+        if threshold_radius.is_some_and(|radius| !radius.is_finite() || radius < 0.0) {
+            return Err(eyre!(
+                "surface radial-map threshold radius must be finite and non-negative"
+            ));
+        }
+        if !beta.is_finite() || beta <= 0.0 {
+            return Err(eyre!(
+                "surface radial-map compactification scale beta must be positive and finite"
+            ));
+        }
+        if !power.is_finite() || power <= 0.0 {
+            return Err(eyre!(
+                "surface radial-map radial power must be positive and finite"
+            ));
+        }
+        Ok(Self {
+            dimension,
+            center,
+            threshold_radius,
+            beta,
+            power,
+        })
+    }
+
+    /// Construct the absent-fibre full-support fallback directly.
+    pub fn absent(dimension: usize, center: Vec<f64>, beta: f64, power: f64) -> Result<Self> {
+        Self::new(dimension, center, None, beta, power)
+    }
+
+    pub fn dimension(&self) -> usize {
+        self.dimension
+    }
+
+    pub fn center(&self) -> &[f64] {
+        &self.center
+    }
+
+    pub fn threshold_radius(&self) -> Option<f64> {
+        self.threshold_radius
+    }
+
+    pub fn beta(&self) -> f64 {
+        self.beta
+    }
+
+    pub fn power(&self) -> f64 {
+        self.power
+    }
+
+    pub fn contract(&self) -> SamplingMapContract {
+        SamplingMapContract {
+            support: SamplingSupport::Full,
+            jacobian: SamplingJacobian::ExactForward,
+        }
+    }
+
+    /// Map a unit-cube point to a point around the surface centre.
+    pub fn forward<T: FloatLike>(&self, coordinates: &[F<T>]) -> Result<SurfaceRadialPoint<T>> {
+        self.validate_coordinates(coordinates)?;
+        let (radius, radial_jacobian) = self.radius_from_coordinate(&coordinates[0]);
+        let one = radius.one();
+        let two = radius.from_i64(2);
+        let phi = radius.TAU() * &coordinates[1];
+        let mut direction = vec![radius.zero(); self.dimension];
+        let mut angular_jacobian = radius.TAU();
+        let mut base = radius.clone();
+        for (i, coordinate) in coordinates[2..].iter().enumerate() {
+            let cos_theta = -&one + &two * coordinate;
+            let sin_theta = (&one - cos_theta.square()).sqrt();
+            angular_jacobian *= &two;
+            // Coordinates are uniform in cos(theta), so this exponent is one
+            // lower than for the theta parameterisation.
+            let angular_power = self.dimension - 3 - i;
+            if angular_power > 0 {
+                angular_jacobian *= sin_theta.powi(angular_power as i32);
+            }
+            direction[i] = &base * &cos_theta;
+            base *= sin_theta;
+        }
+        direction[self.dimension - 2] = &base * F(phi.0.cos());
+        direction[self.dimension - 1] = &base * F(phi.0.sin());
+
+        let mut point = Vec::with_capacity(self.dimension);
+        for (component, centre) in direction.iter().zip(&self.center) {
+            point.push(component + F::from_f64(*centre));
+        }
+        let jacobian =
+            radial_jacobian * angular_jacobian * radius.powi((self.dimension - 1) as i32);
+        let inverse_jacobian = jacobian.clone().inv();
+        Ok(SurfaceRadialPoint {
+            coordinates: coordinates.to_vec(),
+            point,
+            radius,
+            jacobian,
+            inverse_jacobian,
+            residual: F::from_f64(0.0),
+        })
+    }
+
+    /// Invert a point in the map's full-support domain.
+    pub fn inverse<T: FloatLike>(&self, point: &[F<T>]) -> Result<SurfaceRadialPoint<T>> {
+        if point.len() != self.dimension {
+            return Err(eyre!(
+                "surface radial-map inverse received dimension {}, expected {}",
+                point.len(),
+                self.dimension
+            ));
+        }
+        let mut displacement = Vec::with_capacity(self.dimension);
+        for (component, centre) in point.iter().zip(&self.center) {
+            displacement.push(component - F::from_f64(*centre));
+        }
+        let mut radius_squared = displacement[0].square();
+        for component in &displacement[1..] {
+            radius_squared += component.square();
+        }
+        let radius = radius_squared.sqrt();
+        let zero = radius.zero();
+        if radius == zero {
+            return Err(eyre!(
+                "surface radial-map inverse is undefined at its centre"
+            ));
+        }
+        let (radial_coordinate, _) = self.coordinate_from_radius(&radius);
+        let one = radius.one();
+        let two = radius.from_i64(2);
+        let mut coordinates = vec![zero.clone(); self.dimension];
+        let mut base = radius.clone();
+        for i in 0..self.dimension - 2 {
+            let cos_theta = &displacement[i] / &base;
+            coordinates[2 + i] = (&one + &cos_theta) / &two;
+            base *= (&one - cos_theta.square()).sqrt();
+        }
+        let mut phi = F(displacement[self.dimension - 1]
+            .0
+            .atan2(&displacement[self.dimension - 2].0));
+        if phi < zero {
+            phi += radius.TAU();
+        }
+        coordinates[0] = radial_coordinate;
+        coordinates[1] = phi / radius.TAU();
+        let mapped = self.forward(&coordinates)?;
+        let residual = max_coordinate_residual(point, &mapped.point);
+        Ok(SurfaceRadialPoint {
+            coordinates,
+            point: point.to_vec(),
+            radius,
+            jacobian: mapped.jacobian,
+            inverse_jacobian: mapped.inverse_jacobian,
+            residual,
+        })
+    }
+
+    fn validate_coordinates<T: FloatLike>(&self, coordinates: &[F<T>]) -> Result<()> {
+        if coordinates.len() != self.dimension {
+            return Err(eyre!(
+                "surface radial-map forward received dimension {}, expected {}",
+                coordinates.len(),
+                self.dimension
+            ));
+        }
+        let zero = coordinates[0].zero();
+        let one = zero.one();
+        if coordinates
+            .iter()
+            .any(|coordinate| coordinate.is_nan() || coordinate <= &zero || coordinate >= &one)
+        {
+            return Err(eyre!(
+                "surface radial-map coordinates must be finite and strictly inside the unit cube"
+            ));
+        }
+        Ok(())
+    }
+
+    fn split_coordinate<T: FloatLike>(&self) -> (F<T>, F<T>, F<T>) {
+        let threshold = F::<T>::from_f64(self.threshold_radius.unwrap_or(0.0));
+        let beta = F::<T>::from_f64(self.beta);
+        let split = &threshold / (&threshold + &beta);
+        (split, threshold, beta)
+    }
+
+    fn radius_from_coordinate<T: FloatLike>(&self, coordinate: &F<T>) -> (F<T>, F<T>) {
+        let one = coordinate.one();
+        let power = F::<T>::from_f64(self.power);
+        let (split, threshold, beta) = self.split_coordinate();
+        if split > coordinate.zero() && coordinate < &split {
+            let fraction = coordinate / &split;
+            let radius = &threshold * fraction.powf(&power);
+            let jacobian = &threshold * &power * fraction.powf(&(&power - &one)) / &split;
+            (radius, jacobian)
+        } else {
+            let odds = (coordinate - &split) / (&one - coordinate);
+            let radius = &threshold + &beta * odds.powf(&power);
+            let jacobian =
+                &beta * &power * odds.powf(&(&power - &one)) / (&one - coordinate).square();
+            (radius, jacobian)
+        }
+    }
+
+    fn coordinate_from_radius<T: FloatLike>(&self, radius: &F<T>) -> (F<T>, F<T>) {
+        let one = radius.one();
+        let power = F::<T>::from_f64(self.power);
+        let (split, threshold, beta) = self.split_coordinate();
+        if split > radius.zero() && radius < &threshold {
+            let fraction = radius / &threshold;
+            let coordinate = &split * fraction.powf(&(&one / &power));
+            let (_, jacobian) = self.radius_from_coordinate(&coordinate);
+            (coordinate, jacobian)
+        } else {
+            let z = ((radius - &threshold) / &beta).powf(&(&one / &power));
+            let coordinate = (&z + &split) / (&one + &z);
+            let (_, jacobian) = self.radius_from_coordinate(&coordinate);
+            (coordinate, jacobian)
+        }
+    }
+}
+
 impl SamplingMapKernel {
     /// Construct a kernel for one ordinary global map.
     ///
@@ -637,5 +912,69 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn surface_radial_map_round_trips_on_both_sides_of_regular_surface() {
+        let map = SurfaceRadialMap::new(3, vec![1.0, -2.0, 0.5], Some(4.0), 2.0, 1.0)
+            .expect("valid radial map");
+        assert_eq!(map.contract().support, SamplingSupport::Full);
+        for coordinates in [
+            vec![F(0.11), F(0.23), F(0.37)],
+            vec![F(0.63), F(0.41), F(0.79)],
+            vec![F(0.93), F(0.71), F(0.19)],
+        ] {
+            let forward = map.forward(&coordinates).expect("forward map");
+            assert!(forward.jacobian.0.is_finite() && forward.jacobian > F(0.0));
+            let inverse = map.inverse(&forward.point).expect("inverse map");
+            assert!(inverse.residual < F(1.0e-11));
+            assert!(
+                inverse
+                    .coordinates
+                    .iter()
+                    .zip(&coordinates)
+                    .all(|(actual, expected)| (actual - expected).abs() < F(1.0e-11))
+            );
+            assert!((forward.jacobian * forward.inverse_jacobian - F(1.0)).abs() < F(1.0e-11));
+        }
+    }
+
+    #[test]
+    fn absent_surface_fallback_has_full_radial_support() {
+        let map = SurfaceRadialMap::absent(4, vec![0.0; 4], 3.0, 1.7).expect("valid fallback");
+        assert_eq!(map.threshold_radius(), None);
+        for coordinates in [
+            vec![F(0.05), F(0.17), F(0.29), F(0.41)],
+            vec![F(0.95), F(0.61), F(0.73), F(0.83)],
+        ] {
+            let forward = map.forward(&coordinates).expect("forward map");
+            assert!(forward.radius > F(0.0));
+            let inverse = map.inverse(&forward.point).expect("inverse map");
+            assert!(inverse.residual < F(1.0e-10));
+        }
+    }
+
+    #[test]
+    fn surface_radial_map_uses_correct_sphere_measure_in_two_and_three_dimensions() {
+        let map_2 = SurfaceRadialMap::absent(2, vec![0.0; 2], 2.0, 1.0).unwrap();
+        let point_2 = map_2.forward(&[F(0.4), F(0.25)]).unwrap();
+        // r = beta*u/(1-u), dr/du = beta/(1-u)^2 for the absent fallback.
+        let radius_2 = 2.0 * 0.4 / 0.6;
+        let radial_jacobian_2 = 2.0 / 0.6_f64.powi(2);
+        let expected_2 = radial_jacobian_2 * 2.0 * std::f64::consts::PI * radius_2;
+        assert!((point_2.jacobian.0 - expected_2).abs() < 1.0e-12);
+
+        let map_3 = SurfaceRadialMap::absent(3, vec![0.0; 3], 2.0, 1.0).unwrap();
+        let point_3 = map_3.forward(&[F(0.4), F(0.25), F(0.7)]).unwrap();
+        let expected_3 = radial_jacobian_2 * 4.0 * std::f64::consts::PI * radius_2.powi(2);
+        assert!((point_3.jacobian.0 - expected_3).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn surface_radial_map_rejects_invalid_geometry() {
+        assert!(SurfaceRadialMap::new(1, vec![0.0], Some(1.0), 1.0, 1.0).is_err());
+        assert!(SurfaceRadialMap::new(3, vec![0.0; 2], Some(1.0), 1.0, 1.0).is_err());
+        assert!(SurfaceRadialMap::new(3, vec![0.0; 3], Some(-1.0), 1.0, 1.0).is_err());
+        assert!(SurfaceRadialMap::new(3, vec![0.0; 3], Some(1.0), 0.0, 1.0).is_err());
     }
 }
