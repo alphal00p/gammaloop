@@ -64,6 +64,8 @@ use color_eyre::Result;
 pub mod evaluators;
 pub use evaluators::ActiveF64Backend;
 pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
+pub mod sampling_evaluator;
+pub use sampling_evaluator::{SamplingDualValue, SamplingExpressionEvaluator};
 
 pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
@@ -73,8 +75,9 @@ pub use sampling_maps::{
 };
 pub use sampling_reference::GaussianReferenceFunction;
 pub use sampling_selection::{
-    ResolvedNamedSamplingChannel, ResolvedSamplingChannelSelection, SamplingChannelPreset,
-    SamplingChannelSelector, SamplingSelectionError, explicitly_selected_graphs,
+    ResolvedNamedSamplingChannel, ResolvedSamplingChannelSelection, SamplingCatalogueEntry,
+    SamplingChannelCatalogue, SamplingChannelPreset, SamplingChannelSelector,
+    SamplingSelectionError, build_sampling_channel_catalogue, explicitly_selected_graphs,
     graph_channel_definitions, resolve_sampling_channel_selection,
     resolve_sampling_channel_selection_replacing_default,
 };
@@ -1996,6 +1999,37 @@ impl<'a, T: FloatLike> Clone for LmbChannelWeightingSettings<'a, T> {
 }
 
 impl LmbMultiChannelingSetup {
+    /// Expand an already graph-resolved advanced selection for inspection and
+    /// future map construction. This deliberately does not alter the existing
+    /// LMB sampling path; callers should resolve with the actual graph name
+    /// before invoking this method (the setup may be shared by a graph group).
+    pub fn sampling_channel_catalogue(
+        &self,
+        resolved: &ResolvedSamplingChannelSelection,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<SamplingChannelCatalogue> {
+        let all_lmbs = self
+            .all_bases
+            .iter_enumerated()
+            .map(|(basis_id, basis)| {
+                (
+                    usize::from(basis_id),
+                    basis.loop_edges.iter().map(|edge| edge.0).collect(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let optimized_lmbs = self
+            .effective_channels(&self.graph.name, parameterization_settings)?
+            .into_iter()
+            .map(usize::from)
+            .collect::<Vec<_>>();
+        Ok(build_sampling_channel_catalogue(
+            resolved,
+            &all_lmbs,
+            &optimized_lmbs,
+        ))
+    }
+
     fn validate_lmb_basis_id(&self, basis_id: usize, graph_name: &str) -> Result<LmbIndex> {
         if basis_id >= self.all_bases.len() {
             return Err(eyre!(

@@ -110,6 +110,132 @@ pub struct ResolvedSamplingChannelSelection {
     pub named_channels: Vec<ResolvedNamedSamplingChannel>,
 }
 
+/// One entry in the graph-local sampling catalogue.  The catalogue is only
+/// an inspection/resolution product at this stage; ordinary LMB sampling keeps
+/// using `LmbMultiChannelingSetup` unchanged.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SamplingCatalogueEntry {
+    Lmb {
+        basis_id: usize,
+        edges: Vec<usize>,
+        preset: SamplingChannelPreset,
+    },
+    Named(ResolvedNamedSamplingChannel),
+}
+
+/// Graph-scoped, deterministically ordered channel catalogue.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SamplingChannelCatalogue {
+    pub graph_name: String,
+    pub selectors: Vec<SamplingChannelSelector>,
+    pub entries: Vec<SamplingCatalogueEntry>,
+}
+
+impl SamplingChannelCatalogue {
+    pub fn lmb_entries(&self) -> impl Iterator<Item = (usize, &[usize])> {
+        self.entries.iter().filter_map(|entry| match entry {
+            SamplingCatalogueEntry::Lmb {
+                basis_id, edges, ..
+            } => Some((*basis_id, edges.as_slice())),
+            SamplingCatalogueEntry::Named(_) => None,
+        })
+    }
+
+    pub fn named_entries(&self) -> impl Iterator<Item = &ResolvedNamedSamplingChannel> {
+        self.entries.iter().filter_map(|entry| match entry {
+            SamplingCatalogueEntry::Named(channel) => Some(channel),
+            SamplingCatalogueEntry::Lmb { .. } => None,
+        })
+    }
+
+    /// Human-readable inspection rows, stable across runs and suitable for
+    /// CLI/API diagnostics.
+    pub fn inspection_rows(&self) -> Vec<String> {
+        self.entries
+            .iter()
+            .enumerate()
+            .map(|(index, entry)| match entry {
+                SamplingCatalogueEntry::Lmb {
+                    basis_id,
+                    edges,
+                    preset,
+                } => format!(
+                    "{index}: lmb basis={basis_id} edges={edges:?} source={}",
+                    preset.as_str()
+                ),
+                SamplingCatalogueEntry::Named(channel) => format!(
+                    "{index}: {} around={} parent_lmb={:?} on_cut={:?}",
+                    channel.name,
+                    channel.definition.around,
+                    channel.definition.parent_lmb,
+                    channel.definition.on_cut
+                ),
+            })
+            .collect()
+    }
+}
+
+/// Expand a resolved graph selection against the generated LMB catalogue.
+/// Entries are deduplicated by their resolved identity while preserving the
+/// first selector's order.  A surface preset includes the optimized LMB
+/// fallback so that a surface-aware selection remains defined where a surface
+/// is absent; numerical use of these entries is implemented by the process
+/// sampler in a later phase.
+pub fn build_sampling_channel_catalogue(
+    resolved: &ResolvedSamplingChannelSelection,
+    all_lmbs: &[(usize, Vec<usize>)],
+    optimized_lmbs: &[usize],
+) -> SamplingChannelCatalogue {
+    let mut entries = Vec::new();
+    for selector in &resolved.selectors {
+        let Some(preset) = selector.preset() else {
+            if let SamplingChannelSelector::Named(name) = selector {
+                if let Some(channel) = resolved.named(name) {
+                    let entry = SamplingCatalogueEntry::Named(channel.clone());
+                    if !entries.contains(&entry) {
+                        entries.push(entry);
+                    }
+                }
+            }
+            continue;
+        };
+        let basis_ids: Vec<usize> = match preset {
+            SamplingChannelPreset::Lmb => all_lmbs.iter().map(|(id, _)| *id).collect(),
+            SamplingChannelPreset::OptimizedLmb | SamplingChannelPreset::Surfaces => {
+                optimized_lmbs.to_vec()
+            }
+        };
+        for basis_id in basis_ids {
+            let Some((_, edges)) = all_lmbs.iter().find(|(id, _)| *id == basis_id) else {
+                continue;
+            };
+            let entry = SamplingCatalogueEntry::Lmb {
+                basis_id,
+                edges: edges.clone(),
+                preset,
+            };
+            let duplicate = entries.iter().any(|existing| {
+                matches!(
+                    existing,
+                    SamplingCatalogueEntry::Lmb {
+                        basis_id: existing_basis,
+                        edges: existing_edges,
+                        ..
+                    } if *existing_basis == basis_id && existing_edges == edges
+                )
+            });
+            if !duplicate {
+                entries.push(entry);
+            }
+        }
+    }
+    SamplingChannelCatalogue {
+        graph_name: resolved.graph_name.clone(),
+        selectors: resolved.selectors.clone(),
+        entries,
+    }
+}
+
 impl ResolvedSamplingChannelSelection {
     pub fn has_preset(&self, preset: SamplingChannelPreset) -> bool {
         self.selectors
@@ -391,5 +517,36 @@ mod tests {
             SamplingChannelSelector::parse("auto:not_a_mode").unwrap_err(),
             SamplingSelectionError::UnknownPreset("auto:not_a_mode".into())
         );
+    }
+
+    #[test]
+    fn catalogue_expands_presets_and_keeps_named_diagnostics() {
+        let mut selection = SamplingChannelSelection {
+            default_channel_selection: vec!["auto:optimized_lmb".into(), "surface_hz".into()],
+            ..Default::default()
+        };
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("surface_hz".into(), definition("surface(2,4)"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2]), (1, vec![2, 4])], &[1]);
+        assert_eq!(catalogue.entries.len(), 2);
+        assert_eq!(catalogue.lmb_entries().next(), Some((1, &[2, 4][..])));
+        assert_eq!(catalogue.named_entries().next().unwrap().name, "surface_hz");
+        assert!(catalogue.inspection_rows()[0].contains("basis=1"));
+        assert!(catalogue.inspection_rows()[1].contains("parent_lmb=[1, 2]"));
+    }
+
+    #[test]
+    fn surface_preset_has_optimized_lmb_fallback() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:surfaces".into(), "auto:lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![2])], &[0, 1]);
+        assert_eq!(catalogue.lmb_entries().count(), 2);
     }
 }
