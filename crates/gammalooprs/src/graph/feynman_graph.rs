@@ -16,7 +16,7 @@ use spenso::{
 };
 // use petgraph::Direction::Outgoing;
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, Indeterminate},
     function,
     id::Replacement,
     transcendental::{coth, csch, sech, tanh},
@@ -277,7 +277,15 @@ where
                         beta.pow(2) * csch().call_args([&arg]).pow(2) * coth().call_args([arg])
                             / Atom::num(4),
                     ),
-                    (_, _) => None,
+                    (_, _) => {
+                        let energy = Indeterminate::try_from(ose_atom_from_index(edge)).unwrap();
+                        let mut body =
+                            self.explicit_thermal_distribution_atom(edge, 2, thermal_sign, limit)?;
+                        for _ in 2..derivative_order {
+                            body = body.derivative(&energy).expand();
+                        }
+                        Some(body)
+                    }
                 }
             }
             ThermalDistributionLimit::ZeroTemperature => {
@@ -1116,7 +1124,7 @@ mod tests {
                 .iter_edge_ids()
                 .find(|&edge| graph[edge].is_fermion() == fermion)
                 .unwrap();
-            let bodies = [0, 1, 2].map(|order| {
+            let bodies = [0, 1, 2, 3, 4, 5, 6].map(|order| {
                 graph
                     .explicit_thermal_distribution_atom(
                         edge,
@@ -1162,7 +1170,7 @@ mod tests {
             let chemical_potential = graph[edge].chemical_potential_atom();
             let has_mu = chemical_potential.as_ref().is_some_and(|mu| !mu.is_zero());
             assert_eq!(has_mu, fermion);
-            for order in 0..=2 {
+            for order in 0..=4 {
                 let mut expression = graph
                     .explicit_thermal_distribution_atom(
                         edge,
@@ -1253,6 +1261,22 @@ mod tests {
                                         -squared * hyperbolic
                                     } else {
                                         squared * hyperbolic
+                                    }
+                                }
+                                3 => {
+                                    if fermion {
+                                        2.0 * squared * hyperbolic.powi(2) - squared.powi(2)
+                                    } else {
+                                        -2.0 * squared * hyperbolic.powi(2) - squared.powi(2)
+                                    }
+                                }
+                                4 => {
+                                    if fermion {
+                                        -4.0 * squared * hyperbolic.powi(3)
+                                            + 8.0 * squared.powi(2) * hyperbolic
+                                    } else {
+                                        4.0 * squared * hyperbolic.powi(3)
+                                            + 8.0 * squared.powi(2) * hyperbolic
                                     }
                                 }
                                 _ => unreachable!(),

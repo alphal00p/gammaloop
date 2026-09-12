@@ -202,8 +202,6 @@ pub trait ParamBuilderGraph {
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
 
-const MAX_THERMAL_DISTRIBUTION_DERIVATIVE_ORDER: usize = 2;
-
 macro_rules! define_gamma_loop_pairs {
     ($($vis:vis $field:ident),+ $(,)?) => {
         #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
@@ -1319,37 +1317,46 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         let thermal_sign = symbol!("thermal_sign");
-        for e in graph.iter_edge_ids() {
-            if lmb.edge_signatures[e]
-                .internal
-                .iter()
-                .any(|sign| sign.is_sign())
-            {
-                for limit in [
-                    ThermalDistributionLimit::Default,
-                    ThermalDistributionLimit::ZeroTemperature,
-                ] {
-                    let temperature_flag = limit.temperature_flag();
-                    for derivative_order in 0..=MAX_THERMAL_DISTRIBUTION_DERIVATIVE_ORDER {
-                        if let Some(body) = graph.explicit_thermal_distribution_atom(
-                            e,
-                            derivative_order,
-                            Atom::var(thermal_sign),
-                            limit,
-                        ) {
-                            new.add_tagged_function::<Symbol>(
-                                GS.thermal_distribution,
-                                vec![
-                                    Atom::num(e.0 as i64),
-                                    Atom::num(derivative_order as i64),
-                                    temperature_flag.clone(),
-                                ],
-                                format!("N{e}_{derivative_order}_{temperature_flag}"),
-                                vec![thermal_sign],
-                                body,
-                            )
-                            .unwrap();
-                        }
+        let thermal_edges = graph
+            .iter_edge_ids()
+            .filter(|&edge| {
+                lmb.edge_signatures[edge]
+                    .internal
+                    .iter()
+                    .any(|sign| sign.is_sign())
+            })
+            .collect_vec();
+        // A thermal cycle with n loop-dependent edges produces order n - 1.
+        let max_thermal_derivative_order = thermal_edges.len().saturating_sub(1).max(2);
+        for e in thermal_edges {
+            for limit in [
+                ThermalDistributionLimit::Default,
+                ThermalDistributionLimit::ZeroTemperature,
+            ] {
+                let temperature_flag = limit.temperature_flag();
+                let max_derivative_order = match limit {
+                    ThermalDistributionLimit::Default => max_thermal_derivative_order,
+                    _ => 2,
+                };
+                for derivative_order in 0..=max_derivative_order {
+                    if let Some(body) = graph.explicit_thermal_distribution_atom(
+                        e,
+                        derivative_order,
+                        Atom::var(thermal_sign),
+                        limit,
+                    ) {
+                        new.add_tagged_function::<Symbol>(
+                            GS.thermal_distribution,
+                            vec![
+                                Atom::num(e.0 as i64),
+                                Atom::num(derivative_order as i64),
+                                temperature_flag.clone(),
+                            ],
+                            format!("N{e}_{derivative_order}_{temperature_flag}"),
+                            vec![thermal_sign],
+                            body,
+                        )
+                        .unwrap();
                     }
                 }
             }
@@ -1884,7 +1891,8 @@ mod tests {
         graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
         momentum::sample::{BareMomentumSample, LoopMomenta},
-        utils::PrecisionUpgradable,
+        utils::{PrecisionUpgradable, load_generic_model},
+        uv::uv_graph::UVE,
     };
 
     #[test]
@@ -1918,6 +1926,59 @@ mod tests {
 
         param_builder.initialize_duals(4);
         assert_eq!(param_builder.values.len(), 4);
+    }
+
+    #[test]
+    fn thermal_function_map_supports_higher_derivatives() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        for particle in ["d", "g"] {
+            let graph: Graph = format!(
+                r#"digraph thermal_cycle {{
+                    node [num=1]; edge [num=1 particle="{particle}"];
+                    A -> B; B -> C; C -> D; D -> E; E -> A;
+                }}"#
+            )
+            .into_graph(&model)
+            .unwrap();
+            let edge = EdgeIndex(0);
+            let mut params = vec![
+                GS.ose(edge),
+                GS.inverse_temperature.to_atom(),
+                GS.sign(edge),
+            ];
+            let mut input = vec![1.0, 2.0, 1.0];
+            if let Some(mu) = graph[edge]
+                .chemical_potential_atom()
+                .filter(|mu| !mu.is_zero())
+            {
+                params.push(mu);
+                input.push(0.0);
+            }
+            for order in [3, 4] {
+                let expressions = [
+                    GS.thermal_distribution(0, order, 1, 1),
+                    graph
+                        .explicit_thermal_distribution_atom(
+                            edge,
+                            order as usize,
+                            Atom::one(),
+                            ThermalDistributionLimit::Default,
+                        )
+                        .unwrap(),
+                ];
+                let [registered, explicit] = expressions.map(|expression| {
+                    expression
+                        .evaluator(&params)
+                        .function_map(graph.param_builder.fn_map.clone())
+                        .build()
+                        .unwrap()
+                        .map_coeff(&|coefficient| coefficient.re.to_f64())
+                        .evaluate_single(&input)
+                });
+                assert!((registered - explicit).abs() < 1e-13);
+            }
+        }
     }
 
     #[test]
