@@ -71,7 +71,7 @@ pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
 pub use sampling_maps::{
     SamplingJacobian, SamplingMapContract, SamplingMapDefinition, SamplingMapKernel,
-    SamplingMapPoint, SamplingSupport,
+    SamplingMapPoint, SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
 };
 pub use sampling_reference::{
     GaussianReferenceFunction, ReferenceSampleEvaluation, ReferenceSamplingReport,
