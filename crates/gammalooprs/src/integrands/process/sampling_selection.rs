@@ -1039,7 +1039,10 @@ fn resolve_selection(
     let graph_selectors = selection.channel_selection.get(graph_name);
     let raw_selectors = if replace_default {
         graph_selectors
-            .map_or(selection.default_channel_selection.as_slice(), Vec::as_slice)
+            .map_or(
+                selection.default_channel_selection.as_slice(),
+                Vec::as_slice,
+            )
             .iter()
             .collect::<Vec<_>>()
     } else {
