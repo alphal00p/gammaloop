@@ -622,7 +622,7 @@ impl AmplitudeGraphTerm {
                 tropical_sampler: graph.derived_data.tropical_sampler.clone(),
                 graph: graph.graph.clone(),
                 multi_channeling_setup: LmbMultiChannelingSetup {
-                    channels: TiVec::new(),
+                    lmb_basis_ids: TiVec::new(),
                     graph: graph.graph.clone(), // will be overwritten later,
                     all_bases: TiVec::new(),
                 }, // to be taken from froup master

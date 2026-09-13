@@ -2577,7 +2577,7 @@ impl CrossSectionGraph {
             channels.len()
         );
         Ok(LmbMultiChannelingSetup {
-            channels,
+            lmb_basis_ids: channels,
             graph: self.graph.clone(),
             all_bases: lmbs.clone(),
         })

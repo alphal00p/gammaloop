@@ -1351,7 +1351,7 @@ impl CrossSectionGraphTerm {
                     .clone(),
                 cut_threshold_associations: graph.derived_data.cut_threshold_associations.clone(),
                 multi_channeling_setup: LmbMultiChannelingSetup {
-                    channels: TiVec::new(),
+                    lmb_basis_ids: TiVec::new(),
                     graph: graph.graph.clone(), // will be overwritten later,
                     all_bases: TiVec::new(),
                 },
