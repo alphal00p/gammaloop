@@ -53,12 +53,18 @@ pub mod sampling_partition;
 pub mod sampling_reference;
 pub mod sampling_selection;
 use crate::{
-    DependentMomentaConstructor, GammaLoopContext, settings::RuntimeSettings,
-    settings::runtime::DiscreteGraphSamplingSettings, settings::runtime::DiscreteGraphSamplingType,
-    settings::runtime::IntegratorSettings, settings::runtime::LmbChannelWeight,
-    settings::runtime::ParameterizationMode, settings::runtime::ParameterizationSettings,
-    settings::runtime::Precision, settings::runtime::SamplingSettings,
-    settings::runtime::StabilityLevelSetting, settings::runtime::StabilitySettings,
+    DependentMomentaConstructor, GammaLoopContext,
+    settings::RuntimeSettings,
+    settings::runtime::DiscreteGraphSamplingSettings,
+    settings::runtime::DiscreteGraphSamplingType,
+    settings::runtime::IntegratorSettings,
+    settings::runtime::LmbChannelWeight,
+    settings::runtime::ParameterizationMode,
+    settings::runtime::ParameterizationSettings,
+    settings::runtime::Precision,
+    settings::runtime::StabilityLevelSetting,
+    settings::runtime::StabilitySettings,
+    settings::runtime::{SamplingChannelWeight, SamplingSettings},
 };
 use color_eyre::Result;
 
@@ -2174,6 +2180,14 @@ impl LmbMultiChannelingSetup {
         resolved: &ResolvedSamplingChannelSelection,
         context: &SamplingChannelCompileContext,
     ) -> Result<SamplingChannelBridge> {
+        if matches!(
+            context.parameterization_settings.sampling_channels.weight,
+            SamplingChannelWeight::SingularityProxy
+        ) {
+            return Err(eyre!(
+                "sampling channel bridge requires an exact map-density weight; singularity_proxy is not implemented for compiled maps"
+            ));
+        }
         let channels = self.compile_sampling_channels(resolved, context)?;
         SamplingChannelBridge::new(channels).map_err(Into::into)
     }
@@ -2185,6 +2199,14 @@ impl LmbMultiChannelingSetup {
         context: &SamplingChannelCompileContext,
         external_momenta: &[[f64; 4]],
     ) -> Result<SamplingChannelBridge> {
+        if matches!(
+            context.parameterization_settings.sampling_channels.weight,
+            SamplingChannelWeight::SingularityProxy
+        ) {
+            return Err(eyre!(
+                "sampling channel bridge requires an exact map-density weight; singularity_proxy is not implemented for compiled maps"
+            ));
+        }
         let channels =
             self.compile_sampling_channels_with_external(resolved, context, external_momenta)?;
         SamplingChannelBridge::new(channels).map_err(Into::into)
