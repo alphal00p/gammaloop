@@ -463,6 +463,44 @@ mod settings_wrapper_tests {
     }
 
     #[test]
+    fn runtime_settings_wrapper_exposes_canonical_sampling_names() {
+        use gammalooprs::settings::runtime::{
+            MultiChannelingSettings, SamplingChannelWeight, SamplingSettings,
+        };
+
+        Python::initialize();
+
+        let mut settings = RuntimeSettings::default();
+        let mut multi_channeling = MultiChannelingSettings::default();
+        multi_channeling
+            .parameterization_settings
+            .sampling_channels
+            .weight = SamplingChannelWeight::SingularityProxy;
+        settings.sampling = SamplingSettings::MultiChanneling(multi_channeling);
+
+        let wrapped =
+            PySettingsValue::from_settings(&settings, "runtime settings", "runtime_settings")
+                .unwrap();
+        Python::attach(|py| {
+            let sampling = wrapped.get(py, "sampling").unwrap();
+            assert!(sampling
+                .getattr("sampling_multichanneling")
+                .unwrap()
+                .extract::<bool>()
+                .unwrap());
+            assert_eq!(
+                sampling
+                    .getattr("sampling_channel_weight")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "singularity_proxy"
+            );
+            assert!(sampling.getattr("lmb_multichanneling").is_err());
+        });
+    }
+
+    #[test]
     fn threshold_counterterm_event_python_view_roundtrips_all_numeric_fields() {
         let info = GenericThresholdCountertermEventInfo {
             original: spenso::algebra::complex::Complex::new(
