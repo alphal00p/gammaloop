@@ -31,7 +31,7 @@ use crate::{
     cff::surface::SurfaceCache,
     define_index,
     feyngen::diagram_generator::evaluate_overall_factor,
-    integrands::process::{ChannelIndex, LmbMultiChannelingSetup, ParamBuilder},
+    integrands::process::{LmbMultiChannelingSetup, ParamBuilder, SamplingChannelId},
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
     processes::DotExportSettings,
@@ -269,7 +269,7 @@ impl Graph {
         lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         override_lmb_heuristics: bool,
         fallback: LmbChannelFallback,
-    ) -> TiVec<ChannelIndex, LmbIndex> {
+    ) -> TiVec<SamplingChannelId, LmbIndex> {
         if override_lmb_heuristics {
             return lmbs
                 .iter_enumerated()
@@ -324,7 +324,7 @@ impl Graph {
         &self,
         lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         fallback: LmbChannelFallback,
-    ) -> TiVec<ChannelIndex, LmbIndex> {
+    ) -> TiVec<SamplingChannelId, LmbIndex> {
         let fallback_index = match fallback {
             LmbChannelFallback::CurrentGraphBasis => lmbs
                 .iter_enumerated()

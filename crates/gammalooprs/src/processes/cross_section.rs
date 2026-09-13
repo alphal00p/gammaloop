@@ -2586,7 +2586,7 @@ impl CrossSectionGraph {
     fn select_cross_section_lmb_channel_indices(
         &self,
         lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
-    ) -> Result<TiVec<crate::integrands::process::ChannelIndex, LmbIndex>> {
+    ) -> Result<TiVec<crate::integrands::process::SamplingChannelId, LmbIndex>> {
         if self.cuts.is_empty() {
             return Ok(self.graph.select_amplitude_lmb_channel_indices(
                 lmbs,

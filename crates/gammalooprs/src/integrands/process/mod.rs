@@ -25,7 +25,6 @@ use crate::utils::{
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::owo_colors::OwoColorize;
 use colored::Colorize;
-use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
 use eyre::{Context, eyre};
 use gammaloop_sample::{DiscreteGraphSample, GammaLoopSample, parameterize};
@@ -1995,10 +1994,14 @@ impl<T: FloatLike> PreciseStabilityLevelResult<T> {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, From, Into, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize,
-)]
-pub struct ChannelIndex(usize);
+/// Compatibility alias for the canonical advanced sampling channel id.
+///
+/// Runtime code should use [`SamplingChannelId`] directly.  Keeping this alias
+/// for now lets the graph evaluator migrate in small slices while ensuring
+/// that there is only one channel-id type and one indexing domain.  It can be
+/// removed once the legacy LMB sampler has been migrated to the compiled
+/// sampling catalogue.
+pub type ChannelIndex = SamplingChannelId;
 
 type LmbChannelSamples<T> = TiVec<ChannelIndex, (MomentumSample<T>, F<T>)>;
 
