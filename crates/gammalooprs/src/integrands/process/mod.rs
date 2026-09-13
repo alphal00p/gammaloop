@@ -80,10 +80,11 @@ pub use sampling_context::{
     PreparedCutSamplingContext, PreparedSamplingSurface, PreparedSurfaceStatus, SamplingCutSide,
 };
 pub use sampling_maps::{
-    ImplicitSurfaceRadialEvaluator, ImplicitSurfaceRadialMap, SamplingJacobian,
-    SamplingMapAcceptanceReport, SamplingMapAffine, SamplingMapComponent, SamplingMapComposition,
-    SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding, SamplingMapEvaluation,
-    SamplingMapKernel, SamplingMapPoint, SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
+    ImplicitSurfaceRadialContextEvaluator, ImplicitSurfaceRadialEvaluator,
+    ImplicitSurfaceRadialMap, SamplingJacobian, SamplingMapAcceptanceReport, SamplingMapAffine,
+    SamplingMapComponent, SamplingMapComposition, SamplingMapContract, SamplingMapDefinition,
+    SamplingMapEmbedding, SamplingMapEvaluation, SamplingMapKernel, SamplingMapPoint,
+    SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
 };
 pub use sampling_partition::{
     SamplingChannelScore, SamplingPartition, SamplingPartitionMode, SamplingScoreEvaluator,
