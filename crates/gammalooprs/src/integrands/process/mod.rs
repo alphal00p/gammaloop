@@ -947,11 +947,12 @@ impl ProcessIntegrand {
         coordinates: &[Vec<f64>],
         reference: &GaussianReferenceFunction,
     ) -> Result<ReferenceSamplingReport> {
-        let sample_weight = if coordinates.is_empty() {
-            0.0
-        } else {
-            1.0 / coordinates.len() as f64
-        };
+        if coordinates.is_empty() {
+            return Err(eyre!(
+                "reference acceptance coordinate batch needs at least one sample"
+            ));
+        }
+        let sample_weight = 1.0 / coordinates.len() as f64;
         let samples = coordinates
             .iter()
             .enumerate()
