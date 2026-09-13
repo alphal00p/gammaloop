@@ -50,20 +50,20 @@ For LU, the target `E(tstar(k) k)` is not automatically a positive-energy convex
 
 ## Recommended compact runtime schema
 
-Keep the current ordinary LMB list and coordinate controls. Add optional named channels, whose names are distinct from threshold `group_id` values. The example retains current `lmb_multichanneling`/`lmb_channels` spelling to show the integration point; a final schema should rename their expanded responsibility to one generic `channel_mode = "monte_carlo" | "summed"` field, and replace `lmb_channel_weight` with generic `channel_partition`, rather than leave two competing switches or silently conflicting weighting settings. This naming migration does not require a second sampler architecture. Example for the useful GL638 H target:
+Keep the current ordinary LMB list and coordinate controls. Add optional named channels, whose names are distinct from threshold `group_id` values. The canonical runtime names are `sampling_multichanneling`, `sampling_channels`, and `sampling_channel_weight`; the old `lmb_*` spellings remain input aliases for existing cards. This naming migration does not require a second sampler architecture. Example for the useful GL638 H target:
 
 ```toml
 [sampling]
 # Existing ordinary channels remain the coverage component.
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "monte_carlo"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
 lmb_basis_ids = { GL638 = [1, 2, 13, 14, 21, 22, 84] }
 coordinate_system = "spherical"
 
 # PROPOSED fields follow.
-channel_partition = "map_density"
+sampling_channel_weight = "map_density"
 
 [sampling.channels.GL638.H_shell]
 parent_lmb = [3, 6, 7, 10]
