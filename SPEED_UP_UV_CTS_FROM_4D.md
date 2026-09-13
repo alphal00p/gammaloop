@@ -1437,3 +1437,108 @@ If a gate fails, use the measurements to continue the generic implementation, in
   analytic renormalization one in 0.401 s. These certify the previous additive
   preprocessing revision, not yet this batched graph transformation. The
   complete scalar/physical matrix and repeated performance gates remain open.
+
+- The batched finite-boundary milestone is committed and pushed as
+  `ee23541cef755a8ca932e44cda22d507efd9be3e`, with ValentinHirschi as
+  author and committer. CLI15 check passes in 9.153 s and build in 214.360 s.
+  The clean-source immutable CLI has SHA-256
+  `192e54fe3eb9a419ec1adfd5094c40cadeeeacb5c079f63da92bbb796b4fa4ad`,
+  1,576,124,376 bytes. Counter15 links in 22.431 s with unchanged dependency
+  hashes and reproduces every known GL00 evaluator count without changing
+  saved-state hashes. Its SHA-256 is
+  `030b667aabaa924f369551b880a1005f9c8f5c140ff81e204d4e2a839c8c279a`,
+  1,574,466,232 bytes. Both are in `diagnostic_batched_boundary_scopes`.
+- To establish a current representation reference, CLI15 runs GL262 erased
+  3D first, then direct 4D, with the same 2,400 s cap and 30 GiB guard for
+  each fresh process. Erased 3D starts at 08:09:02.017811 UTC. Its root takes
+  19.918 s, a DOD1 node 127.555 s and the raw overall DOD0 node 96.318 s.
+  This is still a partial diagnostic; no total generation or runtime ratio
+  is inferred. It overlaps the following integration build, recorded explicitly.
+- Integration check72 passes in 9.49 s and build10 in 4m36s. Four frozen
+  executables from clean `ee23541ce` are bound by
+  `validation_candidate_ee235/final_build_manifest.json`; the exact fourteen
+  boundary acceptances are queued after the erased-3D run under the common
+  lock. The scalar/physical matrix and final repeated timing gates are pending.
+- The scalar-suite audit also distinguishes orchestrators: its 166 three-route
+  cases use the default HedgePoset implementation. The selected physical
+  route tests use Compare, while the focused core test
+  `scalars_integrated_cts_compare_legacy_and_hedge_poset` exercises both for
+  integrated counterterms. This does not claim the entire scalar matrix has
+  been repeated under both orchestrators.
+
+- A separate six-second, 19 Hz user-CPU sample of CLI15 erased 3D, during
+  nested DOD1 forest-node assembly after its Taylor output, records 102 samples
+  with none lost. All sampled stacks pass through final integrand color
+  simplification; 93.14% pass through DotNormalizer, including 48.04% in repeated
+  redundant-metric replacement and 44.12% in the asymmetric-vector replacement
+  traversal. These inclusive percentages overlap and are not whole-run shares.
+  `perf_nested_assembly_manifest.json` binds the worker, binary and artifacts.
+  This identifies another shared normalization cost for review; the pending
+  direct-4D run must establish whether it needs further refinement. No metric
+  normalization rule or numerical expectation has been changed.
+
+- The selective evaluator-input capture filter is validated against the existing
+  production parser and static callsite gate with six controls. Only ordinary
+  profile fields and the normalized-input dump are evaluated; UV dumps, network
+  DOT, trace and missing-term events remain unevaluated. The extra direct card
+  has SHA-256 `853dfcc627bf5646cb1f3a09d75b8b90170d0779f7bb51c1be4e7c2dc441443c`.
+  The minimal card is preserved. A capture run is diagnostic only and cannot
+  certify dispatch overhead or final timing gates.
+- CLI15 erased 3D completes the DOD2 bubble in 169.318 s, another DOD0 node
+  in 141.971 s, the next DOD0 node in 213.334 s and the nested DOD1 node
+  in 483.142 s. Seven of ten nodes are complete at 08:29:54.473 UTC. These
+  remain partial, profiled measurements; complete generation is still pending.
+- The shared metric-normalization review preserves existing stage order. In
+  particular, metric-power normalization precedes metric tracing; exchanging
+  their order can change g(i,i)^2 from D to D^2 under the current conventions.
+  A possible narrow improvement is conservative structural gating of the
+  unchanged root-level replacement rules, retaining all stages and the
+  redundant-metric fixed point. No replacement rule has been changed yet.
+
+
+### 2026-09-13 — Structural guards for metric normalization
+
+- The two profiled DotNormalizer stages now use the existing top-down
+  replace_map traversal, conservative symbol-tag guards and their unchanged
+  replacement rules restricted to the current tree node. The asymmetric-vector
+  guard scans all direct arguments rather than assuming a final slot: symmetric
+  function heads can reorder arguments. The redundant-metric guard admits both
+  representation tags and dind wrappers without requiring registered reps or
+  imposing additional arities. False-positive eligibility is harmless because
+  the original matcher still decides the replacement.
+- The redundant stage retains the existing repeat_map fixed point. Vector
+  powers, metric powers and traces retain their original separate passes and
+  order, including the original negative-power filters. There is no new AST,
+  cache, helper type, graph-specific condition or rule simplification. All
+  existing meaningful comments are retained; stale extraction wording in the
+  evaluator and boundary test is updated to describe current preparation.
+- A new exact differential test restores the original unrestricted replacement
+  settings as a test-only oracle. It covers 455 wrapped cases, including nested
+  vectors, bare rank1 fallback, dual slots, unregistered tagged representations,
+  symmetric and Linear heads, unequal dimensions and integer/symbolic/rational
+  powers. Explicit metric-trace ordering and negative-odd-power checks plus a
+  large factorized coefficient witness preserve the relevant invariants without
+  expanding graph numerators.
+- Formatting and check73 pass (8.84 s). Nextest29 and clippy13 are running.
+  CLI15 erased 3D and its queued fourteen boundary checks continue against
+  their immutable ee23541ce binaries; the new normalization code is not mixed
+  into those runs. No final performance gate is claimed yet.
+
+- Nextest29 builds in 2m27s and passes all 427 selected Idenso, CFF generation,
+  UV, energy-degree and evaluator-preprocessing tests in 46.411 s, including
+  the 455-case exact differential oracle and the existing 62-row exhaustive
+  allocation reference. Clippy13 passes in 2m45s including its build-lock wait,
+  with the same three existing tuple-complexity warnings. No expectations or
+  tolerances needed correction. Formatting and whitespace checks pass.
+- An independent read-only benchmark-harness audit confirms the default
+  27-generation, 54-point-row and fifteen-gate arithmetic, actual duration and
+  sample-count reconstruction, priming and uncertainty handling. A narrow
+  per-stage resume check is being added to the existing replay owner so an
+  unrelated successful receipt cannot be reused with a different command,
+  card or provenance. Final runs still require the full population, verified
+  assertions-enabled build and fresh unprofiled output directories.
+- The unlaunched CLI15 direct cards are preserved as prepared, not run. The
+  next direct diagnostic will use the normalization revision after its frozen
+  CLI/counter are ready; erased 3D will then be remeasured at that revision.
+  No ratio will mix CLI15 and the following binary. The current erased run
+  and its queued snapshot-specific boundary checks continue unchanged.

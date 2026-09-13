@@ -625,8 +625,8 @@ impl EvaluatorStack {
             "Evaluator atom before network parsing"
         );
         // Each existing top-level summand is an independent scalar contraction.
-        // Keeping its network local avoids repeatedly scanning unrelated terms
-        // during boundary extraction. Products, powers and nested sums retain
+        // Keeping its network local avoids scanning unrelated terms during
+        // finite component preparation. Products, powers and nested sums retain
         // their grouping; the resulting scalars are reunited before optimization.
         let terms = if let AtomView::Add(sum) = network_input.as_view() {
             sum.iter().collect::<Vec<_>>()

@@ -617,7 +617,7 @@ fn ready_sum_boundary_closure_matches_coordinates_across_execution_strategies() 
     };
     // Each native arm is a product with four exposed indices. Its matrix factors
     // stay intact while the four external vectors close it. Reversed written
-    // matrix indices exercise slot permutations during extraction and rejoining.
+    // matrix indices exercise slot permutations while closing tensor boundaries.
     let left = tensor(&[2, 1], 1).n_mul([tensor(&[3, 4], 2)]);
     let right = tensor(&[1, 2], 3).n_mul([tensor(&[4, 3], 4)]);
     let sum = left.n_add([right]);

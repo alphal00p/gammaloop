@@ -427,6 +427,15 @@ projected local4D are summed representations and reject that request.
 
 ### 3.3 Tensor-network contraction order
 
+Generic metric normalization retains its ordered vector, redundant-metric,
+vector-power, metric-power and trace passes. The first two passes traverse the
+factorized expression from the root downward and use conservative symbol-tag
+checks before applying their unchanged rules at the current node. Ordinary
+momentum components and scalar dots avoid unnecessary wildcard matching. A
+matched replacement keeps the original descendant-skipping behavior, and the
+redundant-metric pass still runs to a fixed point. In particular, metric-power
+normalization continues to precede tracing.
+
 Evaluator construction normalizes its factorized input once, then parses each
 existing top-level summand into an independent Spenso network. This bounds
 network preparation to the current summand. Products, powers and nested sums
