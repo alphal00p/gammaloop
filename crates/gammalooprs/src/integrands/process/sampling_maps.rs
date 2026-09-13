@@ -379,7 +379,12 @@ impl SamplingMapAcceptanceReport {
             square_sum += weight * weight;
         }
         if report.finite_sample_count > 0 {
-            let count = report.finite_sample_count as f64;
+            // The cube average is over every requested sample.  Dividing by
+            // only the finite subset would silently renormalize a map with
+            // failed branches and could make an incomplete channel appear
+            // normalized.  Non-finite samples therefore contribute zero to
+            // this diagnostic while `finite_sample_count` exposes the loss.
+            let count = report.sample_count as f64;
             report.normalization /= count;
             report.normalization_stderr =
                 ((square_sum / count - report.normalization.powi(2)).max(0.0) / count).sqrt();
