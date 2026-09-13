@@ -1471,7 +1471,7 @@ impl CrossSectionGraphTerm {
                     .sampling
                     .get_parameterization_settings()
                     .expect("LMB channel event metadata requires a parameterization.");
-                self.multi_channeling_setup.effective_channel_edge_ids(
+                self.multi_channeling_setup.sampling_channel_edge_ids(
                     channel_id,
                     &self.multi_channeling_setup.graph.name,
                     &parameterization_settings,
@@ -1685,7 +1685,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             parameterization_settings,
         )? {
             Ok(Some(format_sampling_channel_label(
-                &self.multi_channeling_setup.effective_channel_edge_ids(
+                &self.multi_channeling_setup.sampling_channel_edge_ids(
                     channel_id,
                     &self.multi_channeling_setup.graph.name,
                     parameterization_settings,
@@ -1843,7 +1843,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     .sampling
                     .get_parameterization_settings()
                     .expect("LMB multichanneling requires a parameterization.");
-                let lmb_index = self.multi_channeling_setup.effective_channel_lmb_id(
+                let lmb_index = self.multi_channeling_setup.sampling_channel_lmb_basis_id(
                     *channel_id,
                     &self.multi_channeling_setup.graph.name,
                     &parameterization_settings,
@@ -2050,7 +2050,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         parameterization_settings: &parameterization_settings,
                         e_cm: context.settings.kinematics.e_cm,
                     };
-                    let selected_lmb = self.multi_channeling_setup.effective_channel_lmb_id(
+                    let selected_lmb = self.multi_channeling_setup.sampling_channel_lmb_basis_id(
                         *channel_index,
                         &self.multi_channeling_setup.graph.name,
                         &parameterization_settings,

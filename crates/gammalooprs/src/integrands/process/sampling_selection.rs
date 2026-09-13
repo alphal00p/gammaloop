@@ -3602,6 +3602,52 @@ mod tests {
     }
 
     #[test]
+    fn physical_cut_maps_reject_partially_supplied_runtime_identity() {
+        // Supplying the host-side graph/cut fields alone must not make a
+        // physical map look ready.  The solved LU point, including t*, must
+        // arrive atomically as PreparedCutSamplingContext so a stale cut
+        // cannot be used to compile a phase-space/left/right channel.
+        for (name, around) in [
+            ("phase_space", "phase_space(cut(4,7))"),
+            ("left", "left(lmb(1,2))"),
+            ("right", "right(lmb(1,2))"),
+        ] {
+            let mut selection = SamplingChannelSelection::default();
+            selection.default_channel_selection = vec![name.to_owned()];
+            selection
+                .channel_definitions
+                .entry("G".into())
+                .or_default()
+                .insert(name.to_owned(), definition(around));
+            let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+            let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+            let mut context = SamplingChannelCompileContext::new(
+                "G",
+                vec![1, 2],
+                ParameterizationSettings::default(),
+                100.0,
+                2,
+            );
+            context.graph_id = Some(17);
+            context.cut_id = Some(3);
+            context.orientation = Some(2);
+            context.side = Some(if name == "right" {
+                SamplingCutSide::Right
+            } else {
+                SamplingCutSide::Left
+            });
+
+            assert!(matches!(
+                catalogue.compile(&context),
+                Err(SamplingChannelCompileError::MissingPreparedCutContext {
+                    channel,
+                    ..
+                }) if channel == name
+            ));
+        }
+    }
+
+    #[test]
     fn prepared_cut_context_populates_and_validates_host_metadata() {
         let mut selection = SamplingChannelSelection::default();
         selection.default_channel_selection = vec!["cut_chart".into()];

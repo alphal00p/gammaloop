@@ -2470,45 +2470,45 @@ impl LmbMultiChannelingSetup {
         }
     }
 
-    pub fn effective_channel_lmb_id(
+    /// Resolve a canonical sampling channel to its generated LMB basis.
+    ///
+    /// This strict accessor is intentionally named in terms of the canonical
+    /// sampling catalogue.  It is only valid for channels whose map is an LMB;
+    /// graph-aware channels must be evaluated through the sampling bridge.
+    pub fn sampling_channel_lmb_basis_id(
         &self,
-        channel_index: SamplingChannelId,
+        channel_id: SamplingChannelId,
         graph_name: &str,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<LmbIndex> {
-        // Resolve the ID directly in the canonical catalogue. Filtering the
-        // catalogue to a second, positional LMB list would make channel IDs
-        // drift as soon as a surface or named channel is inserted before an
-        // LMB entry. Legacy LMB-only callers still get a clear diagnostic for
-        // graph-aware channels through `sampling_channel_lmb_id`.
-        self.sampling_channel_lmb_id(
-            channel_index,
-            graph_name,
-            parameterization_settings,
-        )?
-        .ok_or_else(|| {
-            eyre!(
-                "Sampling channel {} for graph '{}' is graph-aware and has no generated LMB basis; use the canonical sampling bridge for this channel.",
-                channel_index.index(), graph_name
-            )
-        })
+        self.sampling_channel_lmb_id(channel_id, graph_name, parameterization_settings)?
+            .ok_or_else(|| {
+                eyre!(
+                    "Sampling channel {} for graph '{}' is graph-aware and has no generated LMB basis; use the canonical sampling bridge for this channel.",
+                    channel_id.index(), graph_name
+                )
+            })
     }
 
-    pub fn effective_channel_edge_ids(
+    pub fn sampling_channel_edge_ids(
         &self,
         channel_index: SamplingChannelId,
         graph_name: &str,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<SmallVec<[usize; 4]>> {
-        Ok(self.all_bases[self.effective_channel_lmb_id(
-            channel_index,
-            graph_name,
-            parameterization_settings,
-        )?]
-        .loop_edges
-        .iter()
-        .map(|edge_id| edge_id.0)
-        .collect())
+        let lmb_index = self
+            .sampling_channel_lmb_id(channel_index, graph_name, parameterization_settings)?
+            .ok_or_else(|| {
+                eyre!(
+                    "Sampling channel {} for graph '{}' is graph-aware and has no generated LMB basis; use the canonical sampling bridge for this channel.",
+                    channel_index.index(), graph_name
+                )
+            })?;
+        Ok(self.all_bases[lmb_index]
+            .loop_edges
+            .iter()
+            .map(|edge_id| edge_id.0)
+            .collect())
     }
 
     pub fn selected_lmb_basis_id(
@@ -2685,7 +2685,7 @@ impl LmbMultiChannelingSetup {
         loop_mom_cache_id: usize,
         weighting_settings: LmbChannelWeightingSettings<'_, T>,
     ) -> Result<(MomentumSample<T>, F<T>)> {
-        let lmb_index = self.effective_channel_lmb_id(
+        let lmb_index = self.sampling_channel_lmb_basis_id(
             channel_index,
             weighting_settings.graph_name,
             weighting_settings.parameterization_settings,
@@ -5442,7 +5442,7 @@ mod tests {
     }
 
     #[test]
-    fn effective_lmb_basis_ids_use_graph_override_or_optimized_channels() {
+    fn sampling_channel_basis_ids_use_graph_override_or_optimized_channels() {
         test_initialise().unwrap();
         static GRAPH: OnceLock<Graph> = OnceLock::new();
         let graph = GRAPH
@@ -5528,7 +5528,7 @@ mod tests {
         );
         assert_eq!(
             setup
-                .effective_channel_lmb_id(
+                .sampling_channel_lmb_basis_id(
                     SamplingChannelId::from(0),
                     &setup.graph.name,
                     &override_settings,
@@ -5538,7 +5538,7 @@ mod tests {
         );
         assert_eq!(
             setup
-                .effective_channel_edge_ids(
+                .sampling_channel_edge_ids(
                     SamplingChannelId::from(0),
                     &setup.graph.name,
                     &override_settings,
@@ -5587,7 +5587,7 @@ mod tests {
         );
         assert!(
             setup
-                .effective_channel_lmb_id(
+                .sampling_channel_lmb_basis_id(
                     SamplingChannelId::from(0),
                     &setup.graph.name,
                     &mixed_settings,
@@ -5674,7 +5674,11 @@ mod tests {
                 .into_iter()
                 .map(|channel_index| {
                     let selected_lmb = setup
-                        .effective_channel_lmb_id(channel_index, "G", &parameterization_settings)
+                        .sampling_channel_lmb_basis_id(
+                            channel_index,
+                            "G",
+                            &parameterization_settings,
+                        )
                         .unwrap();
                     setup
                         .compute_prefactor_impl(
@@ -5710,7 +5714,7 @@ mod tests {
         };
         for channel_index in [SamplingChannelId::from(0), SamplingChannelId::from(1)] {
             let selected_lmb = setup
-                .effective_channel_lmb_id(channel_index, "G", &parameterization_settings)
+                .sampling_channel_lmb_basis_id(channel_index, "G", &parameterization_settings)
                 .unwrap();
             let expected = setup
                 .compute_prefactor_impl(channel_index, selected_lmb, &sample, weighting_settings)
