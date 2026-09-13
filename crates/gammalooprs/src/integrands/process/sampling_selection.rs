@@ -730,7 +730,20 @@ fn compile_surface_map(
         error: error.to_string(),
     })?;
     if edges.len() == context.n_loop_momenta {
-        return Ok(CompiledSamplingMap::Surface(surface));
+        if edges == context.parent_lmb {
+            return Ok(CompiledSamplingMap::Surface(surface));
+        }
+        let output_indices = edges
+            .iter()
+            .map(|edge| parent_positions[edge])
+            .flat_map(|position| [3 * position, 3 * position + 1, 3 * position + 2])
+            .collect();
+        return SamplingMapEmbedding::product(vec![Box::new(surface)], output_indices)
+            .map(CompiledSamplingMap::Embedded)
+            .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+                channel: channel.to_owned(),
+                error: error.to_string(),
+            });
     }
 
     let complement = context
