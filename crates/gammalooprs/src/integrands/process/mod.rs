@@ -2196,7 +2196,7 @@ impl LmbMultiChannelingSetup {
                 }
                 SamplingCatalogueEntry::Surface { .. } | SamplingCatalogueEntry::Named(_) => {
                     return Err(eyre!(
-                        "sampling selection for graph '{graph_name}' contains a non-LMB channel, but the legacy runtime driver has not yet been migrated to evaluate compiled maps; select only auto:lmb/auto:optimized_lmb until the canonical map driver is active"
+                        "LMB-only weighting was requested for graph '{graph_name}', but its canonical sampling catalogue contains a graph-aware channel; use the advanced discrete sampling route for this selection"
                     ));
                 }
             }
