@@ -2242,7 +2242,7 @@ impl CrossSectionGraph {
             &fn_map,
             vec![],
             optimization_settings,
-            dual_shape,
+            dual_shape.map(|shape| (shape, Vec::new())),
             evaluator_settings,
         )?
         .into_eager_only();
@@ -2297,7 +2297,7 @@ impl CrossSectionGraph {
             &fn_map,
             vec![],
             optimization_settings,
-            dual_shape,
+            dual_shape.map(|shape| (shape, Vec::new())),
             evaluator_settings,
         )?
         .into_eager_only();

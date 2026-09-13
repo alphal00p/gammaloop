@@ -531,8 +531,14 @@ are corrected and covered in Double, Quad and Arb, including mixed derivatives
 and a shifted native parent. Generated raised-component and conditional-cut
 regressions pass. The complete sampling/physical cut, center and alpha handoff
 and stable star branches remain unimplemented. The six simple GL638 cuts do
-not dispatch the higher-order IFT; the new zeroth-order parameterization still
-requires the planned physical replay.
+not dispatch the higher-order IFT. The subsequent
+[all-936-orientation native replay](docs/research/advanced_sampling/GL638_X4_ALPHA_REPLAY.md)
+passes at the saved hard H/Z point (ordinary stack and forced Arb) and
+soft control (Arb), retaining all six event identities and precision choices.
+The hard-point Double total changes by `6.71e-10` relative; native Arb agreement
+is below `1e-288` for both points. This supports unchanged tested physics, not
+an accuracy or sampling-efficiency gain. All eleven differential regressions
+also pass after this projection change.
 
 The bounded direct-H allocation is complete using frozen optimized `f2f64fb17`:
 reference gates, physical H/Z and soft replays, then optimized LMB, direct-H
@@ -559,6 +565,17 @@ exact primitive is graph-agnostic but accepts a specified energy-equation class;
 other pairs remain explicit binding errors until the generic implicit rank-two
 component is implemented under the same AST and catalogue. A compact chart
 requires full-support ordinary coverage and deterministic normalized fallback.
+
+The active-Jacobian prerequisite now passes 71 native/eager/map/partition
+checks and the saved-state acceptance fixture, including loaded amplitude and
+conditional-cut maps, ordinary integration and exact workspace resume.
+It uses the existing compiled dual program and determinant owner with
+ordered active columns. Static identity-zero seed information prevents unused
+prepared-parameter singular derivatives from poisoning those columns; the
+`u+sqrt(m)` test at `m=0` gives active derivative one in Double, Quad and Arb.
+Requested singular derivatives and structurally active singular intermediates
+remain typed failures. This is not a general removable-singularity solver and
+does not yet implement compact support or the joint component.
 
 In parallel, the subtraction owner has separated representative overlap
 kinematics from the raised derivative packets, using the existing sample and

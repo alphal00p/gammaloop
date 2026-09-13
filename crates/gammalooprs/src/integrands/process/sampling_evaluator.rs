@@ -45,7 +45,8 @@ pub struct SamplingDualValue<T: FloatLike = f64> {
 pub struct SamplingJacobianEvaluation<T: FloatLike = f64> {
     /// Expression values in the order supplied to the evaluator.
     pub values: Vec<T>,
-    /// `derivatives[output][parameter]` from Symbolica's first-order duals.
+    /// Rows are outputs; columns follow the requested active-parameter order
+    /// (the full parameter order when no subset was supplied).
     pub derivatives: Vec<Vec<T>>,
     /// Signed determinant of `derivatives`.
     pub determinant: T,
@@ -92,14 +93,24 @@ impl SamplingExpressionEvaluator {
         if parameters.is_empty() {
             return Err(eyre!("sampling evaluator requires at least one parameter"));
         }
-        let dual_shape = with_derivatives.then(|| first_derivative_shape(parameters.len()));
+        let dual_config = with_derivatives.then(|| {
+            let count = parameters.len();
+            let zero_components = (0..count)
+                .flat_map(|parameter| {
+                    (0..count)
+                        .filter(move |&derivative| derivative != parameter)
+                        .map(move |derivative| (parameter, derivative + 1))
+                })
+                .collect();
+            (first_derivative_shape(count), zero_components)
+        });
         let evaluator = GenericEvaluator::new_from_raw_params(
             expressions.clone(),
             &parameters,
             &FunctionMap::new(),
             Vec::new(),
             OptimizationSettings::default(),
-            dual_shape,
+            dual_config,
             &EvaluatorSettings::default(),
         )?;
         Ok(Self {
@@ -294,23 +305,48 @@ impl SamplingExpressionEvaluator {
             .collect()
     }
 
-    /// Evaluate a real square map and its exact Symbolica dual Jacobian.
+    /// Evaluate a real map and its exact Symbolica dual Jacobian with respect
+    /// to the ordered active parameters. `None` selects every parameter.
     ///
     /// This is the common boundary used by map kernels: the expression tree
     /// is compiled once during warmup, while coordinates are supplied at
     /// runtime.  A non-real output is rejected rather than silently projected
     /// onto its real part, since doing so would invalidate the advertised
-    /// volume Jacobian.
+    /// volume Jacobian. Parameters outside the selected columns are held fixed;
+    /// their values can still change the map and its active Jacobian. This uses
+    /// the same compiled full dual program with statically zero identity-seed
+    /// components to supply the requested columns. Prepared-only singular
+    /// derivatives do not contaminate active columns. Singular intermediates
+    /// that depend on active parameters must still have finite derivatives;
+    /// this is not an algebraic extension through their removable singularities.
     pub fn evaluate_with_real_jacobian<T: FloatLike>(
         &mut self,
         parameters: &[T],
+        active_parameters: Option<&[usize]>,
     ) -> Result<SamplingJacobianEvaluation<T>> {
-        if self.output_count != self.parameter_count {
+        let active_parameters = active_parameters.map_or_else(
+            || (0..self.parameter_count).collect::<Vec<_>>(),
+            <[usize]>::to_vec,
+        );
+        if self.output_count != active_parameters.len() {
             return Err(eyre!(
-                "sampling Jacobian requires a square map ({} outputs, {} parameters)",
+                "sampling Jacobian requires a square map ({} outputs, {} active parameters)",
                 self.output_count,
-                self.parameter_count
+                active_parameters.len()
             ));
+        }
+        for (column, &parameter) in active_parameters.iter().enumerate() {
+            if parameter >= self.parameter_count {
+                return Err(eyre!(
+                    "sampling Jacobian parameter index {parameter} is out of range for {} parameters",
+                    self.parameter_count
+                ));
+            }
+            if active_parameters[..column].contains(&parameter) {
+                return Err(eyre!(
+                    "sampling Jacobian active parameters must be unique; index {parameter} is repeated"
+                ));
+            }
         }
         let dual_values = self.evaluate_with_derivatives(parameters)?;
         let mut values = Vec::with_capacity(dual_values.len());
@@ -322,13 +358,11 @@ impl SamplingExpressionEvaluator {
                 output_index,
                 None,
             )?);
-            let row = value
-                .derivatives
-                .into_iter()
-                .enumerate()
-                .map(|(parameter_index, derivative)| {
+            let row = active_parameters
+                .iter()
+                .map(|&parameter_index| {
                     Self::real_component(
-                        derivative,
+                        value.derivatives[parameter_index].clone(),
                         "derivative",
                         output_index,
                         Some(parameter_index),
@@ -613,11 +647,138 @@ mod tests {
             true,
         )
         .unwrap();
-        let jacobian = evaluator.evaluate_with_real_jacobian(&[2.0, 3.0]).unwrap();
+        let jacobian = evaluator
+            .evaluate_with_real_jacobian(&[2.0, 3.0], None)
+            .unwrap();
         assert_eq!(jacobian.values, vec![8.0, 7.0]);
         assert_eq!(jacobian.derivatives, vec![vec![4.0, 2.0], vec![4.0, 1.0]]);
         assert_eq!(jacobian.determinant, -4.0);
         assert_eq!(jacobian.absolute_determinant(), 4.0);
+    }
+
+    #[test]
+    fn real_jacobian_holds_prepared_parameters_fixed_in_native_precision() {
+        test_initialise().unwrap();
+        // Interleave prepared scale/shear with the two active cube coordinates.
+        // The active determinant is s + s^2*h - h^2; differentiating prepared
+        // parameters instead produces a different matrix and volume factor.
+        let mut evaluator = SamplingExpressionEvaluator::new(
+            [
+                try_parse!("sampling_active::s*sampling_active::u + sampling_active::h*sampling_active::v").unwrap(),
+                try_parse!("sampling_active::h*sampling_active::u + (1+sampling_active::s*sampling_active::h)*sampling_active::v").unwrap(),
+            ],
+            ["sampling_active::s", "sampling_active::u", "sampling_active::h", "sampling_active::v"]
+                .map(|name| try_parse!(name).unwrap()),
+            true,
+        ).unwrap();
+        let parameters = [2.0, 0.25, 3.0, 0.5];
+        let evaluated = evaluator
+            .evaluate_with_real_jacobian(&parameters, Some(&[1, 3]))
+            .unwrap();
+        assert_eq!(evaluated.values, vec![2.0, 4.25]);
+        assert_eq!(evaluated.derivatives, vec![vec![2.0, 3.0], vec![3.0, 7.0]]);
+        assert!((evaluated.determinant - 5.0).abs() < 1.0e-13);
+        let reversed = evaluator
+            .evaluate_with_real_jacobian(&parameters, Some(&[3, 1]))
+            .unwrap();
+        assert_eq!(reversed.values, evaluated.values);
+        assert_eq!(reversed.derivatives, vec![vec![3.0, 2.0], vec![7.0, 3.0]]);
+        assert!((reversed.determinant + 5.0).abs() < 1.0e-13);
+        let changed = evaluator
+            .evaluate_with_real_jacobian(&[5.0, 0.25, 2.0, 0.5], Some(&[1, 3]))
+            .unwrap();
+        assert_eq!(changed.values, vec![2.25, 6.0]);
+        assert!((changed.determinant - 51.0).abs() < 1.0e-12);
+        for (columns, message) in [
+            (&[1, 1][..], "unique"),
+            (&[1, 4][..], "out of range"),
+            (&[1][..], "square map"),
+        ] {
+            assert!(
+                evaluator
+                    .evaluate_with_real_jacobian(&parameters, Some(columns))
+                    .unwrap_err()
+                    .to_string()
+                    .contains(message)
+            );
+        }
+
+        fn check<T: FloatLike>(evaluator: &mut SamplingExpressionEvaluator) {
+            let one = F::<T>::default().one();
+            let s = one.from_usize(2) + &one / one.from_usize(10).powi(25);
+            let h = one.from_usize(3);
+            let u = &one / one.from_usize(4);
+            let v = &one / one.from_usize(2);
+            let expected = &s + s.square() * &h - h.square();
+            let evaluated = evaluator
+                .evaluate_with_real_jacobian(
+                    &[s.0.clone(), u.0.clone(), h.0.clone(), v.0.clone()],
+                    Some(&[1, 3]),
+                )
+                .unwrap();
+            let tolerance = one.epsilon() * one.from_usize(2048);
+            assert!((F(evaluated.values[0].clone()) - (&s * &u + &h * &v)).abs() < tolerance);
+            assert!(
+                (F(evaluated.values[1].clone()) - (&h * &u + (&one + &s * &h) * &v)).abs()
+                    < tolerance
+            );
+            let determinant = F(evaluated.determinant);
+            assert!((&determinant - expected).abs() < tolerance);
+            assert!(determinant > one.from_usize(5));
+        }
+        check::<crate::utils::QuadFloat>(&mut evaluator);
+        check::<crate::utils::ArbPrec>(&mut evaluator);
+    }
+
+    #[test]
+    fn real_jacobian_keeps_singular_prepared_subexpressions_out_of_active_columns() {
+        test_initialise().unwrap();
+        let parameters = [parse!("sampling_fixed::u"), parse!("sampling_fixed::m")];
+        let mut prepared = SamplingExpressionEvaluator::new(
+            [parse!("sampling_fixed::u + sqrt(sampling_fixed::m)")],
+            parameters.clone(),
+            true,
+        )
+        .unwrap();
+        let mut mixed = SamplingExpressionEvaluator::new(
+            [parse!(
+                "sampling_fixed::u + sqrt(sampling_fixed::m*sampling_fixed::u)"
+            )],
+            parameters,
+            true,
+        )
+        .unwrap();
+
+        fn check<T: FloatLike>(
+            prepared: &mut SamplingExpressionEvaluator,
+            mixed: &mut SamplingExpressionEvaluator,
+        ) {
+            let one = F::<T>::default().one();
+            let u = &one / one.from_usize(2);
+            let point = [u.0.clone(), one.zero().0];
+            let evaluated = prepared
+                .evaluate_with_real_jacobian(&point, Some(&[0]))
+                .unwrap();
+            assert_eq!(evaluated.values, vec![u.0.clone()]);
+            assert_eq!(evaluated.derivatives, vec![vec![one.0.clone()]]);
+            assert_eq!(evaluated.determinant, one.0);
+            // The m derivative remains singular when it is actually requested.
+            let error = prepared
+                .evaluate_with_real_jacobian(&point, Some(&[1]))
+                .unwrap_err();
+            assert!(error.downcast_ref::<SamplingEvaluationError>().is_some());
+
+            // Static seed information does not solve removable singularities
+            // whose intermediate argument still depends on an active input.
+            assert_eq!(mixed.evaluate(&point).unwrap()[0].re, u);
+            let error = mixed
+                .evaluate_with_real_jacobian(&point, Some(&[0]))
+                .unwrap_err();
+            assert!(error.downcast_ref::<SamplingEvaluationError>().is_some());
+        }
+        check::<f64>(&mut prepared, &mut mixed);
+        check::<crate::utils::QuadFloat>(&mut prepared, &mut mixed);
+        check::<crate::utils::ArbPrec>(&mut prepared, &mut mixed);
     }
 
     #[test]
@@ -628,7 +789,7 @@ mod tests {
         let mut nonsquare =
             SamplingExpressionEvaluator::new([x.clone()], [x.clone(), y], true).unwrap();
         let error = nonsquare
-            .evaluate_with_real_jacobian(&[1.0, 2.0])
+            .evaluate_with_real_jacobian(&[1.0, 2.0], None)
             .unwrap_err();
         assert!(error.to_string().contains("square map"));
 
@@ -641,7 +802,7 @@ mod tests {
         )
         .unwrap();
         let error = complex
-            .evaluate_with_real_jacobian(&[1.0, 2.0])
+            .evaluate_with_real_jacobian(&[1.0, 2.0], None)
             .unwrap_err();
         assert!(error.to_string().contains("imaginary part"));
     }
@@ -669,7 +830,7 @@ mod tests {
         )
         .unwrap();
         let error = evaluator
-            .evaluate_with_real_jacobian(&[1.0, 1.0])
+            .evaluate_with_real_jacobian(&[1.0, 1.0], None)
             .unwrap_err();
         assert!(error.downcast_ref::<SamplingEvaluationError>().is_some());
 
@@ -677,7 +838,7 @@ mod tests {
         // exponent range cannot represent these coefficients either.
         let quad_one = F::<crate::utils::QuadFloat>::default().one().0;
         let error = evaluator
-            .evaluate_with_real_jacobian(&[quad_one, quad_one])
+            .evaluate_with_real_jacobian(&[quad_one, quad_one], None)
             .unwrap_err();
         assert!(error.downcast_ref::<SamplingEvaluationError>().is_some());
 
@@ -688,7 +849,7 @@ mod tests {
             let tolerance = one.epsilon() * one.from_usize(2048);
             // Reuse the same compiled program after its f64 failure.
             let evaluated = evaluator
-                .evaluate_with_real_jacobian(&[one.0.clone(), one.0.clone()])
+                .evaluate_with_real_jacobian(&[one.0.clone(), one.0.clone()], None)
                 .unwrap();
             assert!((F(evaluated.values[0].clone()) / &large - &one).abs() < tolerance);
             assert!((F(evaluated.values[1].clone()) / &small - &one).abs() < tolerance);
