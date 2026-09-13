@@ -304,6 +304,252 @@ pub trait SamplingMapComponent: std::fmt::Debug + Send + Sync {
     fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation>;
 }
 
+/// An exact affine change of coordinates between two equal-dimensional frames.
+///
+/// The matrix is stored row-major and the map is `point = matrix * coordinates
+/// + translation`.  This is the graph-independent numerical owner for routing
+/// a selected LMB into a parent frame; graph code supplies the matrix and
+/// translation after resolving the relevant edge signatures and external data.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SamplingMapAffine {
+    matrix: Vec<f64>,
+    inverse_matrix: Vec<f64>,
+    translation: Vec<f64>,
+    dimension: usize,
+    determinant: f64,
+}
+
+impl SamplingMapAffine {
+    /// Construct an affine map from a square matrix and translation vector.
+    ///
+    /// Partial pivoting is used while constructing the inverse.  Singular and
+    /// numerically rank-deficient matrices are rejected before a map can enter
+    /// a sampling composition, since they have no valid push-forward density.
+    pub fn new(matrix: Vec<Vec<f64>>, translation: Vec<f64>) -> Result<Self> {
+        let dimension = matrix.len();
+        if dimension == 0 {
+            return Err(eyre!("affine sampling map requires a non-empty matrix"));
+        }
+        if translation.len() != dimension {
+            return Err(eyre!(
+                "affine sampling map translation has dimension {}, expected {}",
+                translation.len(),
+                dimension
+            ));
+        }
+        if translation.iter().any(|value| !value.is_finite()) {
+            return Err(eyre!(
+                "affine sampling map translation must contain only finite values"
+            ));
+        }
+        if matrix.iter().any(|row| row.len() != dimension) {
+            return Err(eyre!(
+                "affine sampling map matrix must be square ({} rows of length {})",
+                dimension,
+                dimension
+            ));
+        }
+        if matrix.iter().flatten().any(|value| !value.is_finite()) {
+            return Err(eyre!(
+                "affine sampling map matrix must contain only finite values"
+            ));
+        }
+
+        let mut augmented = vec![vec![0.0; 2 * dimension]; dimension];
+        let mut scale = 0.0_f64;
+        for (row_index, row) in matrix.iter().enumerate() {
+            for (column_index, value) in row.iter().copied().enumerate() {
+                augmented[row_index][column_index] = value;
+                scale = scale.max(value.abs());
+            }
+            augmented[row_index][dimension + row_index] = 1.0;
+        }
+        if scale == 0.0 {
+            return Err(eyre!("affine sampling map matrix is singular"));
+        }
+        let pivot_tolerance = scale * f64::EPSILON * dimension as f64 * 32.0;
+        let mut determinant = 1.0;
+        let mut row_sign = 1.0;
+        for pivot_column in 0..dimension {
+            let (pivot_row, pivot_abs) = (pivot_column..dimension)
+                .map(|row| (row, augmented[row][pivot_column].abs()))
+                .max_by(|(_, left), (_, right)| left.total_cmp(right))
+                .expect("non-empty pivot range");
+            if pivot_abs <= pivot_tolerance || !pivot_abs.is_finite() {
+                return Err(eyre!(
+                    "affine sampling map matrix is singular or rank-deficient at pivot {} (|pivot| = {}, tolerance = {})",
+                    pivot_column,
+                    pivot_abs,
+                    pivot_tolerance
+                ));
+            }
+            if pivot_row != pivot_column {
+                augmented.swap(pivot_row, pivot_column);
+                row_sign = -row_sign;
+            }
+            let pivot = augmented[pivot_column][pivot_column];
+            determinant *= pivot;
+            let inverse_pivot = 1.0 / pivot;
+            for value in &mut augmented[pivot_column] {
+                *value *= inverse_pivot;
+            }
+            for row in 0..dimension {
+                if row == pivot_column {
+                    continue;
+                }
+                let factor = augmented[row][pivot_column];
+                if factor == 0.0 {
+                    continue;
+                }
+                for column in 0..2 * dimension {
+                    augmented[row][column] -= factor * augmented[pivot_column][column];
+                }
+            }
+        }
+        determinant *= row_sign;
+        if !determinant.is_finite() || determinant == 0.0 {
+            return Err(eyre!(
+                "affine sampling map determinant is not finite and non-zero: {determinant}"
+            ));
+        }
+        let inverse_matrix = augmented
+            .into_iter()
+            .flat_map(|row| row.into_iter().skip(dimension))
+            .collect::<Vec<_>>();
+        let determinant = determinant.abs();
+        if !determinant.is_finite() || determinant <= 0.0 {
+            return Err(eyre!(
+                "affine sampling map Jacobian is not finite and positive: {determinant}"
+            ));
+        }
+        Ok(Self {
+            matrix: matrix.into_iter().flatten().collect(),
+            inverse_matrix,
+            translation,
+            dimension,
+            determinant,
+        })
+    }
+
+    pub fn dimension(&self) -> usize {
+        self.dimension
+    }
+
+    pub fn determinant(&self) -> f64 {
+        self.determinant
+    }
+
+    pub fn matrix(&self) -> &[f64] {
+        &self.matrix
+    }
+
+    pub fn inverse_matrix(&self) -> &[f64] {
+        &self.inverse_matrix
+    }
+
+    pub fn translation(&self) -> &[f64] {
+        &self.translation
+    }
+
+    fn apply(&self, matrix: &[f64], input: &[f64], translation: &[f64]) -> Vec<f64> {
+        (0..self.dimension)
+            .map(|row| {
+                translation[row]
+                    + matrix[row * self.dimension..(row + 1) * self.dimension]
+                        .iter()
+                        .zip(input)
+                        .map(|(coefficient, value)| coefficient * value)
+                        .sum::<f64>()
+            })
+            .collect()
+    }
+
+    fn validate_dimension(&self, values: &[f64], role: &str) -> Result<()> {
+        if values.len() != self.dimension {
+            return Err(eyre!(
+                "affine sampling map {role} has dimension {}, expected {}",
+                values.len(),
+                self.dimension
+            ));
+        }
+        if values.iter().any(|value| !value.is_finite()) {
+            return Err(eyre!(
+                "affine sampling map {role} must contain only finite values"
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl SamplingMapComponent for SamplingMapAffine {
+    fn dimensions(&self) -> usize {
+        self.dimension
+    }
+
+    fn output_dimensions(&self) -> usize {
+        self.dimension
+    }
+
+    fn contract(&self) -> SamplingMapContract {
+        SamplingMapContract {
+            support: SamplingSupport::Full,
+            jacobian: SamplingJacobian::ExactForward,
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        "affine"
+    }
+
+    fn forward(&self, coordinates: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.validate_dimension(coordinates, "input")?;
+        let point = self.apply(&self.matrix, coordinates, &self.translation);
+        let translated = point
+            .iter()
+            .zip(&self.translation)
+            .map(|(value, shift)| value - shift)
+            .collect::<Vec<_>>();
+        let recovered = self.apply(
+            &self.inverse_matrix,
+            &translated,
+            &vec![0.0; self.dimension],
+        );
+        Ok(SamplingMapEvaluation {
+            coordinates: coordinates.to_vec(),
+            point,
+            jacobian: self.determinant,
+            inverse_jacobian: 1.0 / self.determinant,
+            residual: max_coordinate_residual_f64(coordinates, &recovered),
+            support: SamplingSupport::Full,
+            diagnostics: vec![format!("affine dimension={}", self.dimension)],
+        })
+    }
+
+    fn inverse(&self, point: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.validate_dimension(point, "point")?;
+        let translated = point
+            .iter()
+            .zip(&self.translation)
+            .map(|(value, shift)| value - shift)
+            .collect::<Vec<_>>();
+        let coordinates = self.apply(
+            &self.inverse_matrix,
+            &translated,
+            &vec![0.0; self.dimension],
+        );
+        let recovered = self.apply(&self.matrix, &coordinates, &self.translation);
+        Ok(SamplingMapEvaluation {
+            coordinates,
+            point: point.to_vec(),
+            jacobian: self.determinant,
+            inverse_jacobian: 1.0 / self.determinant,
+            residual: max_coordinate_residual_f64(&recovered, point),
+            support: SamplingSupport::Full,
+            diagnostics: vec![format!("affine dimension={}", self.dimension)],
+        })
+    }
+}
+
 /// Report from integrating a normalized Gaussian through one sampling map.
 ///
 /// This is intentionally independent of a process integrand. It exercises the
@@ -1387,6 +1633,13 @@ fn max_coordinate_residual<T: FloatLike>(a: &[F<T>], b: &[F<T>]) -> F<T> {
         .unwrap_or_else(|| F::<T>::from_f64(0.0))
 }
 
+fn max_coordinate_residual_f64(a: &[f64], b: &[f64]) -> f64 {
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, f64::max)
+}
+
 fn max_momentum_residual<T: FloatLike>(a: &[ThreeMomentum<F<T>>], b: &[[F<T>; 3]]) -> F<T> {
     a.iter()
         .zip(b)
@@ -1418,6 +1671,37 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn affine_map_round_trips_with_translation_and_exact_determinant() {
+        let map = SamplingMapAffine::new(vec![vec![2.0, 1.0], vec![1.0, 3.0]], vec![0.5, -1.0])
+            .expect("invertible affine map");
+        assert_eq!(map.dimension(), 2);
+        assert!((map.determinant() - 5.0).abs() < 1.0e-14);
+        assert_eq!(map.contract().support, SamplingSupport::Full);
+        assert_eq!(map.contract().jacobian, SamplingJacobian::ExactForward);
+
+        let forward = map.forward(&[0.2, -0.4], &[]).unwrap();
+        assert!(forward.residual < 1.0e-14, "{}", forward.residual);
+        assert!((forward.jacobian - 5.0).abs() < 1.0e-14);
+        assert!((forward.inverse_jacobian - 0.2).abs() < 1.0e-14);
+
+        let inverse = map.inverse(&forward.point, &[]).unwrap();
+        assert!(inverse.residual < 1.0e-14, "{}", inverse.residual);
+        for (actual, expected) in inverse.coordinates.iter().zip([0.2, -0.4]) {
+            assert!((actual - expected).abs() < 1.0e-14);
+        }
+    }
+
+    #[test]
+    fn affine_map_rejects_malformed_and_singular_matrices() {
+        assert!(SamplingMapAffine::new(vec![], vec![]).is_err());
+        assert!(SamplingMapAffine::new(vec![vec![1.0, 0.0]], vec![0.0]).is_err());
+        assert!(SamplingMapAffine::new(vec![vec![1.0, 0.0], vec![0.0, 1.0]], vec![0.0]).is_err());
+        assert!(
+            SamplingMapAffine::new(vec![vec![1.0, 2.0], vec![2.0, 4.0]], vec![0.0, 0.0],).is_err()
+        );
+    }
 
     #[test]
     fn parses_nested_definition_and_round_trips() {
