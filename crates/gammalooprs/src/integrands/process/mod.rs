@@ -78,7 +78,8 @@ pub use sampling_evaluator::{SamplingDualValue, SamplingExpressionEvaluator};
 pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
 pub use sampling_context::{
-    PreparedCutSamplingContext, PreparedSamplingSurface, PreparedSurfaceStatus, SamplingCutSide,
+    PreparedCrossSectionMapEvaluation, PreparedCutSamplingContext, PreparedSamplingSurface,
+    PreparedSurfaceStatus, SamplingCutSide,
 };
 pub use sampling_maps::{
     ImplicitSurfaceCenterEvaluator, ImplicitSurfaceRadialContextEvaluator,
