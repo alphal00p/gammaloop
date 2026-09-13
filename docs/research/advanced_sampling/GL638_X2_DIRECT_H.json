@@ -1,0 +1,869 @@
+{
+  "schema": "GL638 direct-H sampling acceptance, version1",
+  "source_commit": "f2f64fb17",
+  "status": "selected-orientation and full936-production-catalogue reference/native geometry passed; physical936 evaluation remains separate",
+  "scope": "Sampling estimator only. Reference substitution does not evaluate physical amplitudes/cut-counterterm sum. H/Z are independent binary64 oracle values, not direct native Esurface outputs.",
+  "channel": {
+    "graph": "GL638",
+    "name": "direct_H",
+    "around": "then(complement(6,7,10),block(lmb(3),at_cut(cut(2,6,10),surface(2,4,12))))",
+    "parent_lmb": [
+      3,
+      6,
+      7,
+      10
+    ],
+    "subspace_lmb": [
+      3
+    ],
+    "on_cut": [
+      1
+    ],
+    "partition": "map_density",
+    "power": 2.0,
+    "ecm_GeV": 1000.0,
+    "b": 0.3
+  },
+  "source_and_binary_provenance": {
+    "started_utc": "2026-09-13T18:40:26.185755+00:00",
+    "source_commit": "f2f64fb17dd5dab588eca298dc61f1100fa4962d",
+    "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "driver_binary_sha256": "76f64bd6bcdd538bab6d9f7bb359b4d89ae7f4daf42da52af0a429b8fc4c94fc",
+    "driver_source_sha256": "38ee1406add54498cfba6649e985c7c974bf96739213e8f1f362d706df741b47",
+    "library_hashes": "aef68542b5b28cead9571274fae4744ce6650c21f4cebd8cfe7975b4ddbc7c88  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libgammaloop_api.rlib\n98f88437f7b474977202a9a5ef775155860d6acc752d6d601fe0e081367fa8e5  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libgammalooprs-f8d2e69e9c98f363.rlib\n8c79e78a14b35ff96341c76253edc886e478fac0c9e982626f0fea79f4ee9c1e  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libfigment-928a82f04f093fab.rlib\n25782971400679920fbbab8e9ac5704eef7c540c142385896229048a31c90ca3  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libtoml-3d67d1f27a884f50.rlib\n8f71b311138f8b0c34c1f5a47c40a759c4e84e1f6d059f45fd90eba464fe629c  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libcolor_eyre-0e266bf87653fca1.rlib\nd6cd5a2763582bed8719a7f1271aab1585d1eb8ed34a06f4024a2d32765d19c8  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libserde_json-cc2a74ccd07dd083.rlib\nd5ecaf2a932e93d830a7b95ccecb80620273f0eb565e2faac4d0aadabddc2070  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libsymbolica-697ea125b5739515.rlib\n",
+    "raw_input_definition": "Archived binary64 tokens parsed once then promoted with T::from_f64_exact_binary; all derived map arithmetic rebuilt natively",
+    "argv": [
+      "/tmp/gl638-x2-direct-h/reference_driver",
+      "/common/dev/gl638_checkpoint_06d470409/o0/state",
+      "/tmp/gl638-x2-direct-h/direct_h.toml",
+      "/tmp/gl638-x2-direct-h/rays.json",
+      "32768",
+      "/tmp/gl638-x2-direct-h/o0_p2_32768",
+      "1"
+    ],
+    "scope": "normalized reference and map geometry; no physical orientation amplitudes or variance experiment",
+    "finished_utc": "2026-09-13T18:40:49.821697+00:00",
+    "elapsed_seconds": 21.933654408087023,
+    "exit_code": 0
+  },
+  "initial8192_reference": {
+    "elapsed_seconds": 7.457297757,
+    "expected_raw_second_moment": 1085600.0,
+    "finite_points": 8192,
+    "normalization": 0.9986635795241671,
+    "normalization_dispersion": 0.14124036351088365,
+    "passed": true,
+    "points": 8192,
+    "raw_second_moment": 1129609.2801050334,
+    "scope": "one visible orientation, one graph, one channel; complete normalized reference estimator",
+    "second_moment_dispersion": 175434.0572667775
+  },
+  "reference32768": {
+    "dispersion_note": "Per-draw standard-error arithmetic on deterministic Halton values; not randomized-QMC uncertainty",
+    "elapsed_seconds": 21.461403355,
+    "expected_raw_second_moment": 1085600.0,
+    "finite_points": 32768,
+    "normalization": 1.0103222630989417,
+    "normalization_dispersion": 0.09902191684644564,
+    "orientation_count": 1,
+    "passed": true,
+    "points": 32768,
+    "raw_second_moment": 1047956.7702165579,
+    "scope": "all visible orientations summed, one graph, one channel; complete normalized reference estimator",
+    "second_moment_dispersion": 105315.97747899262
+  },
+  "all936_reference": {
+    "status": "passed",
+    "report": {
+      "dispersion_note": "Per-draw standard-error arithmetic on deterministic Halton values; not randomized-QMC uncertainty",
+      "elapsed_seconds": 48.169266776,
+      "expected_raw_second_moment": 1085600.0,
+      "exposed_orientation_selector_count": 1,
+      "finite_points": 32768,
+      "normalization": 1.0103222630989417,
+      "normalization_dispersion": 0.09902191684644564,
+      "passed": true,
+      "points": 32768,
+      "production_orientation_count": 936,
+      "raw_second_moment": 1047956.7702165579,
+      "scope": "all visible orientations summed, one graph, one channel; complete normalized reference estimator",
+      "second_moment_dispersion": 105315.97747899262
+    },
+    "orientation_proof": {
+      "production_key_count": 936,
+      "unique_key_count": 936,
+      "exposed_orientation_selector_count": 1,
+      "exact_orientation_vector_set_equality": true,
+      "orientation_vector_encoding": "production key O[...] uses +=1,-=-1,x=0, compared as a set to generation orientations.json",
+      "sorted_production_keys_sha256": "b1ebce0056d184e32094506a557ab78a8caa594b9d58955cd8388a928f28d340",
+      "sorted_orientation_vectors_sha256": "83fdf9875eb5f3592f2754a7bb152a417100b5d854d82a9ae3c43c8eb5ccfbc5",
+      "archived_orientations_json_sha256": "aafa034000e1b5b38e7c0d8b22c3cf58fe8cd72aa9cb9eaec54e07ec2dc502e0"
+    },
+    "full12D_finite_differences": [
+      {
+        "analytic_map_J": 3.7545074795238516e+31,
+        "determinant": 3.7545074740423363e+31,
+        "max_cut_to_active_derivative": 476.2838665712365,
+        "relative_error": 1.4599824682548501e-09,
+        "step": 1e-05
+      },
+      {
+        "analytic_map_J": 3.7545074795238516e+31,
+        "determinant": 3.754507478975006e+31,
+        "max_cut_to_active_derivative": 476.283866412075,
+        "relative_error": 1.4618306565239436e-10,
+        "step": 2e-06
+      }
+    ],
+    "native_ray_counts": {
+      "f64": {
+        "points": 8,
+        "successes": 8,
+        "maximum_roundtrip_residual_GeV": 2.8421709430404007e-13
+      },
+      "quad": {
+        "points": 8,
+        "successes": 8,
+        "maximum_roundtrip_residual_GeV": 5.038849032099213e-29
+      },
+      "arb": {
+        "points": 8,
+        "successes": 8,
+        "maximum_roundtrip_residual_GeV": 1.7918661475261802e-298
+      }
+    },
+    "provenance": {
+      "started_utc": "2026-09-13T19:00:46.228662+00:00",
+      "source_commit": "f2f64fb17dd5dab588eca298dc61f1100fa4962d",
+      "source_files_sha256": {
+        "gl638_x2_direct_h_driver.rs": "9563eb57958d48b00d2459dd15bf14d72b7cde209ec4ecb9aca257bced27fa71",
+        "compile_gl638_x2_direct_h.sh": "05098eef61cb78a7848c9f0ade293ef5ead60dcce5c9e0898c90377f99277fc5",
+        "gl638_x2_direct_h.toml": "dae9a6a8fd5d60ff9a9f47da3f6866e20ea8f53437ddae45b8f7129f29de37dc",
+        "GL638_X2_DIRECT_H.json": "cf356fe5b730d6d4800ebc3d199a2878640e6200682f515361ce248680cda5e3"
+      },
+      "build_manifest": {
+        "status": "complete",
+        "source_worktree": "/common/dev/gammaloop_advanced_sampling_x2",
+        "source_commit": "f2f64fb17dd5dab588eca298dc61f1100fa4962d",
+        "source_tracked_status_before": "",
+        "cache_seed": "cp -a --reflink=auto of X1 target; distinct inodes; no hardlinks",
+        "target_directory": "/common/dev/gammaloop_advanced_sampling_x2/target",
+        "command": [
+          "cargo",
+          "build",
+          "--profile",
+          "dev-optim",
+          "--locked",
+          "-p",
+          "gammaloop-api",
+          "--bin",
+          "gammaloop",
+          "--features",
+          "ufo_support"
+        ],
+        "jobs": 2,
+        "source_environment": "/tmp/gammaloop-rebase-dev-env.sh",
+        "profile": "dev-optim: core/API opt2, dependencies opt3, no fatLTO",
+        "selected_build_environment": {
+          "RUSTFLAGS": "-C linker=/nix/store/vdaz6sk455r8sbpi7wzaf9vlz5i9yyvx-gcc-wrapper-15.2.0/bin/gcc",
+          "CARGO_ENCODED_RUSTFLAGS": null,
+          "CARGO_TARGET_DIR": "/common/dev/gammaloop_advanced_sampling_x2/target",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "x1_source_commit": "3f9b1a28473f313d6242a556ada2e8dbcd6f6477",
+        "x1_tracked_status_before": "",
+        "x1_binary_sha256_before": "f700ee575153067ccc77894ea776a96f139105812a15014d094dd67ba7db6d61",
+        "binary": "/common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/gammaloop",
+        "build_log": "/tmp/gl638-x2-build/build.log",
+        "started_utc": "2026-09-13T18:42:19.912387+00:00",
+        "returncode": 0,
+        "elapsed_seconds": 932.0206227939343,
+        "finished_utc": "2026-09-13T18:57:51.933308+00:00",
+        "source_tracked_status_after": "",
+        "x1_tracked_status_after": "",
+        "x1_binary_sha256_after": "f700ee575153067ccc77894ea776a96f139105812a15014d094dd67ba7db6d61",
+        "build_log_sha256": "ec9f340954d00b1c7c7f80150432b3ff66ccbf95b1a0107c1c036d889e2d5fde",
+        "frozen_x1_unchanged": true,
+        "binary_sha256": "a37b5b27e1fde706e585be9f9c5e10894152cb02aab962ef13ff2dd751f0ee8f",
+        "matching_libraries": {
+          "gammalooprs": {
+            "path": "/common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libgammalooprs-0618db2a28011153.rlib",
+            "sha256": "745a2617f84a940eae4538b1f1d8e87cad86e7746538d70efdd75e51f4f28d8b",
+            "size_bytes": 1408924756,
+            "mtime_utc": "2026-09-13T18:53:14.787467+00:00"
+          },
+          "gammaloop_api": {
+            "path": "/common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libgammaloop_api.rlib",
+            "sha256": "feddab73b6cdf2922024bd3b26caee343240431eb66a03ab672768bf8d4392fa",
+            "size_bytes": 719005260,
+            "mtime_utc": "2026-09-13T18:57:26.857967+00:00"
+          }
+        },
+        "cli_version_smoke": "gammaLoop 0.1.0"
+      },
+      "scope": "exact shipped portable driver against optimized current libraries; full936 production catalogue normalized-reference+geometry, no physical amplitude evaluation",
+      "compile_exit_code": 0,
+      "library_hashes": "feddab73b6cdf2922024bd3b26caee343240431eb66a03ab672768bf8d4392fa  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libgammaloop_api.rlib\n745a2617f84a940eae4538b1f1d8e87cad86e7746538d70efdd75e51f4f28d8b  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libgammalooprs-0618db2a28011153.rlib\n44fa838627b5d56bba6565fdb26d92318780d54ef2d0ecd6143d6d9bcbecee40  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libfigment-3ebdff869cec9c6f.rlib\ndb08e7081763ada7f71952a30055aea701b5831a03558745c1710538e6e0f41a  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libtoml-653cd84a2ec19d53.rlib\n4a0cc480fdae0ad65cabb3ca24e88f1bc71fb0d465033938350de2fc396ebf67  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libcolor_eyre-821e98309b993482.rlib\nd06d9ecadc44cc5b3685780ccd3ff846ef0a6a4f0b8e864722cb7c4d330bade1  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libserde_json-8d5a1b6683fc5257.rlib\n83fd479e41348a401df43e5dc31ebc8f9e21e68c0fa5d3496421df40655b3506  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libsymbolica-65681f143f1779a6.rlib\n",
+      "binary_sha256": "4275c7ea04daa749dced5f74fcedb985dca0f0c674ad97b4bc7b8f391d8e43f5",
+      "argv": [
+        "/tmp/gl638-x2-direct-h/optimized-validation/gl638_x2_direct_h_driver",
+        "/common/dev/gl638_checkpoint_06d470409/all/state",
+        "/tmp/gl638-x2-direct-h/optimized-validation/gl638_x2_direct_h.toml",
+        "/tmp/gl638-x2-direct-h/optimized-validation/GL638_X2_DIRECT_H.json",
+        "32768",
+        "/tmp/gl638-x2-direct-h/optimized-validation/all",
+        "936"
+      ],
+      "run_exit_code": 0,
+      "elapsed_seconds": 19.06297494203318,
+      "finished_utc": "2026-09-13T19:02:41.961604+00:00",
+      "runtime_LD_LIBRARY_PATH": "/nix/store/jxyrvv4gbpnp3ap5iy7wxwl1sg4x2x88-python3-3.14.6/lib:/nix/store/pbdy5h9sjs92a37gq9sspg2797q4j4fa-python3-3.13.14/lib:/nix/store/sy8ark85hgjhhcr1ycgarf5w7ajw8jcc-gmp-with-cxx-6.3.0/lib:/nix/store/bdvnvbidl34l6pvng6587m6axbzwz9hi-mpfr-4.2.2/lib:/nix/store/gkjpfak7vas8591waav9lgzqgmzbmd43-libmpc-1.4.1/lib:/nix/store/1p2gjq4x396yj65rig8fyzhrdza0psd6-openssl-3.6.3/lib:/nix/store/8lahnh9pn3lrrnhax5nk7ibvjcbjmnkm-gcc-15.2.0-lib/lib",
+      "rerun_started_utc": "2026-09-13T19:01:53.190871+00:00",
+      "reference_run_elapsed_seconds": 48.77071274595801
+    },
+    "reference_estimates_identical_to_o0_at_same_cubes": true
+  },
+  "generation_parent": [
+    3,
+    4,
+    7,
+    10
+  ],
+  "cut_esurface_registry": [
+    {
+      "energy_edges": [
+        2,
+        6,
+        12,
+        13
+      ],
+      "external_shift": "[(EdgeIndex(0), -1), (EdgeIndex(1), -1)]",
+      "id": 0
+    },
+    {
+      "energy_edges": [
+        2,
+        6,
+        10
+      ],
+      "external_shift": "[(EdgeIndex(0), -1), (EdgeIndex(1), -1)]",
+      "id": 1
+    },
+    {
+      "energy_edges": [
+        2,
+        6,
+        7,
+        13,
+        14
+      ],
+      "external_shift": "[(EdgeIndex(0), -1), (EdgeIndex(1), -1)]",
+      "id": 2
+    },
+    {
+      "energy_edges": [
+        2,
+        4,
+        12
+      ],
+      "external_shift": "[(EdgeIndex(0), -1), (EdgeIndex(1), -1)]",
+      "id": 3
+    },
+    {
+      "energy_edges": [
+        2,
+        4,
+        10,
+        13
+      ],
+      "external_shift": "[(EdgeIndex(0), -1), (EdgeIndex(1), -1)]",
+      "id": 4
+    },
+    {
+      "energy_edges": [
+        2,
+        4,
+        7,
+        14
+      ],
+      "external_shift": "[(EdgeIndex(0), -1), (EdgeIndex(1), -1)]",
+      "id": 5
+    }
+  ],
+  "selected_orientation_keys": [
+    "O[++++---+-x+x+-+]|L[i[2:1]e[]m[0]c[0],i[3:1]e[]m[0]c[0],i[5:-1]e[0:1,1:1]m[0]c[0],i[7:1]e[]m[0]c[0]]|E[i[]e[0:1]m[0]c[0],i[]e[1:1]m[0]c[0],i[2:1]e[]m[0]c[0],i[3:1]e[]m[0]c[0],i[4:-1]e[]m[0]c[0],i[5:-1]e[]m[0]c[0],i[6:-1]e[]m[0]c[0],i[7:1]e[]m[0]c[0],i[8:-1]e[]m[0]c[0],i[]e[0:-1,1:-1]m[0]c[0],i[10:1]e[]m[0]c[0],i[]e[0:1,1:1]m[0]c[0],i[12:1]e[]m[0]c[0],i[13:-1]e[]m[0]c[0],i[14:1]e[]m[0]c[0]]"
+  ],
+  "forward_oracle": {
+    "H": -2.848815577821597,
+    "Z": -2.51123454168885,
+    "analytic_root": 165.03952031925567,
+    "cut_residual": 0.0,
+    "predicted_radius": 162.39857492083064,
+    "prepared_center": [
+      -74.60303322411345,
+      -148.71018517795346,
+      84.7136377316365
+    ],
+    "prepared_radius": 162.39857492083064,
+    "radius_relative_error": 0.0,
+    "tau": 1.5238663715896252
+  },
+  "full12D_finite_differences": [
+    {
+      "analytic_map_J": 3.7545074795238516e+31,
+      "determinant": 3.7545074740423363e+31,
+      "max_cut_to_active_derivative": 476.2838665712365,
+      "relative_error": 1.4599824682548501e-09,
+      "step": 1e-05
+    },
+    {
+      "analytic_map_J": 3.7545074795238516e+31,
+      "determinant": 3.754507478975006e+31,
+      "max_cut_to_active_derivative": 476.283866412075,
+      "relative_error": 1.4618306565239436e-10,
+      "step": 2e-06
+    }
+  ],
+  "density_exponents": [
+    {
+      "direction": "Hplus_Z-1",
+      "density_convention": "q(R) proportional to R^(-beta)",
+      "beta_last_decade": 0.5011902570265433
+    },
+    {
+      "direction": "Hplus_Z+1",
+      "density_convention": "q(R) proportional to R^(-beta)",
+      "beta_last_decade": 0.5011903181638555
+    }
+  ],
+  "points": [
+    {
+      "name": "Hplus_Z-1_R0.2",
+      "normal_radius_GeV": 0.2,
+      "H_GeV": 0.19592102992595528,
+      "Z_GeV": -0.1578908090672826,
+      "raw_point_tokens": [
+        "80.33981978786089",
+        "-279.30123434169036",
+        "156.73464254388739",
+        "133.93716267002799",
+        "-72.94792516909871",
+        "270.40135409298489",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ],
+      "native_inverse": {
+        "f64": {
+          "success": true,
+          "density_GeV_to_minus12": 3.661070925789015e-36,
+          "roundtrip_residual_GeV": 2.8421709430404007e-13
+        },
+        "quad": {
+          "success": true,
+          "density_GeV_to_minus12": 3.661070925788251e-36,
+          "roundtrip_residual_GeV": 5.038849032099213e-29
+        },
+        "arb": {
+          "success": true,
+          "density_GeV_to_minus12": 3.661070925788251e-36,
+          "roundtrip_residual_GeV": 1.7918661475261802e-298
+        }
+      }
+    },
+    {
+      "name": "Hplus_Z-1_R0.02",
+      "normal_radius_GeV": 0.02,
+      "H_GeV": 0.019592102992646687,
+      "Z_GeV": -0.015789080906642994,
+      "raw_point_tokens": [
+        "80.079987709786735",
+        "-279.38814551363913",
+        "156.64528192969667",
+        "133.67733059195382",
+        "-73.03483634104748",
+        "270.31199347879414",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ],
+      "native_inverse": {
+        "f64": {
+          "success": true,
+          "density_GeV_to_minus12": 1.1902518791541308e-35,
+          "roundtrip_residual_GeV": 2.8421709430404007e-13
+        },
+        "quad": {
+          "success": true,
+          "density_GeV_to_minus12": 1.1902518791511151e-35,
+          "roundtrip_residual_GeV": 5.038849032099213e-29
+        },
+        "arb": {
+          "success": true,
+          "density_GeV_to_minus12": 1.1902518791511151e-35,
+          "roundtrip_residual_GeV": 1.7918661475261802e-298
+        }
+      }
+    },
+    {
+      "name": "Hplus_Z-1_R0.002",
+      "normal_radius_GeV": 0.002,
+      "H_GeV": 0.0019592102991623506,
+      "Z_GeV": -0.0015789080907211428,
+      "raw_point_tokens": [
+        "80.054003356764596",
+        "-279.39682637064243",
+        "156.63633644789192",
+        "133.65134623893169",
+        "-73.043517198050779",
+        "270.30304799698939",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ],
+      "native_inverse": {
+        "f64": {
+          "success": true,
+          "density_GeV_to_minus12": 3.7967540295637453e-35,
+          "roundtrip_residual_GeV": 2.8421709430404007e-13
+        },
+        "quad": {
+          "success": true,
+          "density_GeV_to_minus12": 3.7967540297098183e-35,
+          "roundtrip_residual_GeV": 5.038849032099213e-29
+        },
+        "arb": {
+          "success": true,
+          "density_GeV_to_minus12": 3.7967540297098183e-35,
+          "roundtrip_residual_GeV": 1.7918661475261802e-298
+        }
+      }
+    },
+    {
+      "name": "Hplus_Z-1_R0.0002",
+      "normal_radius_GeV": 0.0002,
+      "H_GeV": 0.00019592103001286887,
+      "Z_GeV": -0.00015789080896411178,
+      "raw_point_tokens": [
+        "80.051404910012451",
+        "-279.39769435373211",
+        "156.63544180550156",
+        "133.64874779217956",
+        "-73.044385181140456",
+        "270.30215335459906",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ],
+      "native_inverse": {
+        "f64": {
+          "success": true,
+          "density_GeV_to_minus12": 1.2039341112330597e-34,
+          "roundtrip_residual_GeV": 2.8421709430404007e-13
+        },
+        "quad": {
+          "success": true,
+          "density_GeV_to_minus12": 1.2039341113231332e-34,
+          "roundtrip_residual_GeV": 5.038849032099213e-29
+        },
+        "arb": {
+          "success": true,
+          "density_GeV_to_minus12": 1.2039341113231332e-34,
+          "roundtrip_residual_GeV": 1.7918661475261802e-298
+        }
+      }
+    },
+    {
+      "name": "Hplus_Z+1_R0.2",
+      "normal_radius_GeV": 0.2,
+      "H_GeV": 0.1959210299258416,
+      "Z_GeV": 0.1578908090671689,
+      "raw_point_tokens": [
+        "80.094653900128861",
+        "-279.46826006627219",
+        "156.72243141302712",
+        "133.69199678229597",
+        "-73.114950893680543",
+        "270.38914296212459",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ],
+      "native_inverse": {
+        "f64": {
+          "success": true,
+          "density_GeV_to_minus12": 3.661014213203971e-36,
+          "roundtrip_residual_GeV": 2.8421709430404007e-13
+        },
+        "quad": {
+          "success": true,
+          "density_GeV_to_minus12": 3.661014213204418e-36,
+          "roundtrip_residual_GeV": 5.038849032099213e-29
+        },
+        "arb": {
+          "success": true,
+          "density_GeV_to_minus12": 3.661014213204418e-36,
+          "roundtrip_residual_GeV": 1.7918661475261802e-298
+        }
+      }
+    },
+    {
+      "name": "Hplus_Z+1_R0.02",
+      "normal_radius_GeV": 0.02,
+      "H_GeV": 0.019592102992589844,
+      "Z_GeV": 0.015789080906699837,
+      "raw_point_tokens": [
+        "80.055469256722645",
+        "-279.40483881743035",
+        "156.64405178584536",
+        "133.65281213888974",
+        "-73.051529644838695",
+        "270.31076333494286",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ],
+      "native_inverse": {
+        "f64": {
+          "success": true,
+          "density_GeV_to_minus12": 1.1902500242196197e-35,
+          "roundtrip_residual_GeV": 2.8421709430404007e-13
+        },
+        "quad": {
+          "success": true,
+          "density_GeV_to_minus12": 1.1902500242153577e-35,
+          "roundtrip_residual_GeV": 5.038849032099213e-29
+        },
+        "arb": {
+          "success": true,
+          "density_GeV_to_minus12": 1.1902500242153577e-35,
+          "roundtrip_residual_GeV": 1.7918661475261802e-298
+        }
+      }
+    },
+    {
+      "name": "Hplus_Z+1_R0.002",
+      "normal_radius_GeV": 0.002,
+      "H_GeV": 0.001959210299219194,
+      "Z_GeV": 0.0015789080906642994,
+      "raw_point_tokens": [
+        "80.051551492817637",
+        "-279.39849560832846",
+        "156.63621334319515",
+        "133.64889437498474",
+        "-73.045186435736809",
+        "270.30292489229265",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ],
+      "native_inverse": {
+        "f64": {
+          "success": true,
+          "density_GeV_to_minus12": 3.79675343738072e-35,
+          "roundtrip_residual_GeV": 2.8421709430404007e-13
+        },
+        "quad": {
+          "success": true,
+          "density_GeV_to_minus12": 3.7967534374088734e-35,
+          "roundtrip_residual_GeV": 5.038849032099213e-29
+        },
+        "arb": {
+          "success": true,
+          "density_GeV_to_minus12": 3.7967534374088734e-35,
+          "roundtrip_residual_GeV": 1.7918661475261802e-298
+        }
+      }
+    },
+    {
+      "name": "Hplus_Z+1_R0.0002",
+      "normal_radius_GeV": 0.0002,
+      "H_GeV": 0.0001959210298423386,
+      "Z_GeV": 0.0001578908090209552,
+      "raw_point_tokens": [
+        "80.051159723431368",
+        "-279.39786127657368",
+        "156.63542949412872",
+        "133.64850260559848",
+        "-73.044552103982028",
+        "270.30214104322619",
+        "153.02426278264537",
+        "-373.94525199342525",
+        "112.54657098792093",
+        "263.67571450212097",
+        "-95.47931288817918",
+        "11.74711974094534"
+      ],
+      "native_inverse": {
+        "f64": {
+          "success": true,
+          "density_GeV_to_minus12": 1.2039340928269648e-34,
+          "roundtrip_residual_GeV": 2.8421709430404007e-13
+        },
+        "quad": {
+          "success": true,
+          "density_GeV_to_minus12": 1.2039340929895337e-34,
+          "roundtrip_residual_GeV": 5.038849032099213e-29
+        },
+        "arb": {
+          "success": true,
+          "density_GeV_to_minus12": 1.2039340929895337e-34,
+          "roundtrip_residual_GeV": 1.7918661475261802e-298
+        }
+      }
+    }
+  ],
+  "raw_input_definition": "Original archived binary64 coordinates promoted with T::from_f64_exact_binary; derived maps rebuilt in native precision. Final reported densities are rounded to binary64 for compactness.",
+  "determinant_driver_hashes": "f4544e2757388898ad942ff5c5a5ccbe7a88ecab625b55ceb205310603ffb8bd  determinant_driver.rs\n5c200cb7c18fddb011197e4bd7f98df9e89e0b3e51b3f704da8c877eda974f18  determinant_driver\n",
+  "input_hashes": {
+    "default_runtime_settings.toml": "c233c8791f3745ea736f3643dec6366dd67d8ca561e57356f789dbd272c28eb9",
+    "drawings/templates/crates/kurvst/typst/kurvst.wasm": "50619c0dbe6ec78538f9e8a8587b5b8ad33d464672dec974c2c53ab93f7ebd15",
+    "drawings/templates/crates/kurvst/typst/src/impl.typ": "0feab4012862ea5020e4bc833861f333d0f68ea2fc3b5420af5709edeaaf10d8",
+    "drawings/templates/crates/kurvst/typst/src/lib.typ": "90fd7952020cb3162f95acb47389e1dafc0516d03d085fa780b084904e9ad636",
+    "drawings/templates/crates/kurvst/typst/typst.toml": "0d7eec512c399c0beeee8402393b32e489856fbdeb30945feff0ed298dd8bbbd",
+    "drawings/templates/crates/linnest/typst/linnest.wasm": "655d6c2f3dbdac1d6c8ead2113d0cb576a026e3b9e1bc66b7a6c41439e16cd9d",
+    "drawings/templates/crates/linnest/typst/src/curve.typ": "4350dfbe4a8e825396e4f476731b9862935d87fb6630c24425350f4071b9e590",
+    "drawings/templates/crates/linnest/typst/src/draw.typ": "7029235345346572dcf7dcd26cf947c9516efdd9828a183d8613b60c6ad8e22f",
+    "drawings/templates/crates/linnest/typst/src/graph.typ": "3b332b75f3212458ef4815010f5ff645c762d09a1fd9798c9637636590f0f392",
+    "drawings/templates/crates/linnest/typst/src/impl/draw.typ": "0acb9d50e9f6ac24dbe5b3c9727e3ec4c65843d4dbce57ba5c4f973a0b75f682",
+    "drawings/templates/crates/linnest/typst/src/impl/graph.typ": "1dc82dd0099c0810036992a378042a33f5c162fd919d08d79cf218b8716c08dd",
+    "drawings/templates/crates/linnest/typst/src/impl/physics-edge-style.typ": "1e13992babc10e7310fe24bfe0e4f4f67c5ea51afaf08b413418f4d88d269965",
+    "drawings/templates/crates/linnest/typst/src/layout.typ": "3c06a8413a62fe124c0731fcb6e0ad354051214d055a682520df5c4186d8301c",
+    "drawings/templates/crates/linnest/typst/src/lib.typ": "85d9ce54cad4251140acdea0a153a737b465d346b9668665f53c1db2fa6eb200",
+    "drawings/templates/crates/linnest/typst/src/physics-edge-style.typ": "854530edde9152b8adb01cf8e097c4107f0277ac175f6e47c37df97ada735cd7",
+    "drawings/templates/crates/linnest/typst/src/subgraph.typ": "d318d5e98e902e06f412cd8a1f45ebc6f6c8218a7c4063bf3582333616122c53",
+    "drawings/templates/crates/linnest/typst/typst.toml": "899f5436fa4211c3e98fe022a7968623782a5648980ade9d0c8c0e6cf6ecdfa0",
+    "drawings/templates/edge-style.typ": "0e961db4de2d939cc0bee8fc59fe82850e220cb96a1fe4d7e938bbbd7e9e0789",
+    "drawings/templates/figure.typ": "4ab1913e6476ef9f49b4a4bdc07d44589124e5030168fb853963990d7b164672",
+    "drawings/templates/grid.typ": "a2aea8505809f39564ff2d0ebb1a1c9ac9ee3b46b211d57c72e32c1f1f0ca11d",
+    "drawings/templates/layout.typ": "069a852cd32f4cb519cbd6eebcc94338ca23e561ad59cee454c89a769ea3568e",
+    "global_settings.toml": "d69891a142886ce79cff08a4129caf08c7c1ed41c251edc99e3506355000b5d7",
+    "justfile": "49ce845fc918f10f5e41e7d3e13bf8ac862707fdd7144db1221167375556d65c",
+    "model.json": "73bd6a7f4ed3c2a6f5ef35520fd39152483e77d947852ca9d02e913c0296395a",
+    "model_parameters.json": "5cf4b422cfe328559dd3cc9322e5e66c264faba54d5d44b4f5772c3a53a43572",
+    "processes/cross_sections/epem_a_tth/NNLO/GL638.dot": "7fd875ea567fa04e009f20015b14ddaea1f89b3915294858313abc3b062e0942",
+    "processes/cross_sections/epem_a_tth/NNLO/cs.bin": "5781c6877e46370c2898e5e5f90e9b1b7032d95966ed19e24779593b670231fc",
+    "processes/cross_sections/epem_a_tth/NNLO/generation_summary.json": "e593105bfc39829b18d2112e458d39ecb8e3434f180d6fbfe3e22960f766223a",
+    "processes/cross_sections/epem_a_tth/NNLO/integrand/integrand.bin": "536b4898ac78277a1ff41365fea722004de9ba307cb0eda98effb714fc379af8",
+    "processes/cross_sections/epem_a_tth/NNLO/integrand/settings.toml": "cdb28893b036e54f3a36b5ce18c1b58caa3ecc92525a2a9794153ee39ed4f022",
+    "processes/cross_sections/epem_a_tth/def.bin": "0fffb787dcb4198728500a56df9c62f3d625766f3e928e012b9685a3a5a974a3",
+    "processes/cross_sections/epem_a_tth/settings_history.toml": "f5643ec4156cb1972b6e7bb34d50bcfc783ff0dc423c3c56b2c1088dbc506746",
+    "run.toml": "e874689cffe889735e8454bdb77bb7748b7fda091a46a6d9a3fac0b7e160eeab",
+    "state_manifest.toml": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8",
+    "symbolica_state.bin": "97273c2c464f5ba121745892ae689e6df21bb70281e3e18bf705880d992654f3"
+  },
+  "original_metadata_sha256": "1354c6d854ea66a6298eb1ac9eaad31c3bf8744f0033e83b6e510d0f64602279",
+  "limits": [
+    "Halton dispersion uses the IID standard-error formula on deterministic values; it is not a confidence interval.",
+    "Native direct calls verify each precision, not source-to-stack precision rescue.",
+    "No bounded-weight or physical variance improvement claim.",
+    "Direct H does not cover affine-star images.",
+    "All936 physical cut/CT evaluations remain a separate required gate."
+  ],
+  "portable_artifact_sha256": {
+    "gl638_x2_direct_h_driver.rs": "9563eb57958d48b00d2459dd15bf14d72b7cde209ec4ecb9aca257bced27fa71",
+    "gl638_x2_direct_h.toml": "dae9a6a8fd5d60ff9a9f47da3f6866e20ea8f53437ddae45b8f7129f29de37dc",
+    "compile_gl638_x2_direct_h.sh": "05098eef61cb78a7848c9f0ade293ef5ead60dcce5c9e0898c90377f99277fc5"
+  },
+  "portable_reproduction_validation": {
+    "source_files_sha256": {
+      "gl638_x2_direct_h_driver.rs": "9563eb57958d48b00d2459dd15bf14d72b7cde209ec4ecb9aca257bced27fa71",
+      "compile_gl638_x2_direct_h.sh": "05098eef61cb78a7848c9f0ade293ef5ead60dcce5c9e0898c90377f99277fc5",
+      "gl638_x2_direct_h.toml": "dae9a6a8fd5d60ff9a9f47da3f6866e20ea8f53437ddae45b8f7129f29de37dc",
+      "GL638_X2_DIRECT_H.json": "1f934ff847efbbf0da1a73f0cc5af82189a017b0f09ba69f12014cab311f4fe4"
+    },
+    "scope": "exact shipped portable driver; geometry-only selected-orientation validation",
+    "compile_exit_code": 0,
+    "argv": [
+      "/tmp/gl638-x2-direct-h/portable-validation/gl638_x2_direct_h_driver",
+      "/common/dev/gl638_checkpoint_06d470409/o0/state",
+      "/tmp/gl638-x2-direct-h/portable-validation/gl638_x2_direct_h.toml",
+      "/tmp/gl638-x2-direct-h/portable-validation/GL638_X2_DIRECT_H.json",
+      "0",
+      "/tmp/gl638-x2-direct-h/portable-validation/o0",
+      "1"
+    ],
+    "run_exit_code": 0,
+    "elapsed_seconds": 11.85272027598694,
+    "binary_sha256": "6b654481daab131bd76b6a82763557770d420693eeb13b769fcb7c1bbfe4f356",
+    "library_hashes": "aef68542b5b28cead9571274fae4744ce6650c21f4cebd8cfe7975b4ddbc7c88  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libgammaloop_api.rlib\n98f88437f7b474977202a9a5ef775155860d6acc752d6d601fe0e081367fa8e5  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libgammalooprs-f8d2e69e9c98f363.rlib\n8c79e78a14b35ff96341c76253edc886e478fac0c9e982626f0fea79f4ee9c1e  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libfigment-928a82f04f093fab.rlib\n25782971400679920fbbab8e9ac5704eef7c540c142385896229048a31c90ca3  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libtoml-3d67d1f27a884f50.rlib\n8f71b311138f8b0c34c1f5a47c40a759c4e84e1f6d059f45fd90eba464fe629c  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libcolor_eyre-0e266bf87653fca1.rlib\nd6cd5a2763582bed8719a7f1271aab1585d1eb8ed34a06f4024a2d32765d19c8  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libserde_json-cc2a74ccd07dd083.rlib\nd5ecaf2a932e93d830a7b95ccecb80620273f0eb565e2faac4d0aadabddc2070  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libsymbolica-697ea125b5739515.rlib\n"
+  },
+  "all936_initial_debug_stop": {
+    "status": "loaded_and_warmed_then_stopped_before_reference_by_driver_inventory_assertion",
+    "reason": "get_num_orientations returns1 for explicit_orientation_sum_only; production-key count must be checked separately. Scratch driver corrected; no production bug identified.",
+    "elapsed_seconds": 527.1849197510164,
+    "reference_points_evaluated": 0,
+    "rerun": "pending with corrected driver and optimized paired libraries",
+    "provenance": {
+      "started_utc": "2026-09-13T18:40:49.822105+00:00",
+      "source_commit": "f2f64fb17dd5dab588eca298dc61f1100fa4962d",
+      "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "driver_binary_sha256": "76f64bd6bcdd538bab6d9f7bb359b4d89ae7f4daf42da52af0a429b8fc4c94fc",
+      "driver_source_sha256": "38ee1406add54498cfba6649e985c7c974bf96739213e8f1f362d706df741b47",
+      "library_hashes": "aef68542b5b28cead9571274fae4744ce6650c21f4cebd8cfe7975b4ddbc7c88  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libgammaloop_api.rlib\n98f88437f7b474977202a9a5ef775155860d6acc752d6d601fe0e081367fa8e5  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libgammalooprs-f8d2e69e9c98f363.rlib\n8c79e78a14b35ff96341c76253edc886e478fac0c9e982626f0fea79f4ee9c1e  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libfigment-928a82f04f093fab.rlib\n25782971400679920fbbab8e9ac5704eef7c540c142385896229048a31c90ca3  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libtoml-3d67d1f27a884f50.rlib\n8f71b311138f8b0c34c1f5a47c40a759c4e84e1f6d059f45fd90eba464fe629c  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libcolor_eyre-0e266bf87653fca1.rlib\nd6cd5a2763582bed8719a7f1271aab1585d1eb8ed34a06f4024a2d32765d19c8  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libserde_json-cc2a74ccd07dd083.rlib\nd5ecaf2a932e93d830a7b95ccecb80620273f0eb565e2faac4d0aadabddc2070  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libsymbolica-697ea125b5739515.rlib\n",
+      "raw_input_definition": "Archived binary64 tokens parsed once then promoted with T::from_f64_exact_binary; all derived map arithmetic rebuilt natively",
+      "argv": [
+        "/tmp/gl638-x2-direct-h/reference_driver",
+        "/common/dev/gl638_checkpoint_06d470409/all/state",
+        "/tmp/gl638-x2-direct-h/direct_h.toml",
+        "/tmp/gl638-x2-direct-h/rays.json",
+        "32768",
+        "/tmp/gl638-x2-direct-h/all_p2_32768",
+        "936"
+      ],
+      "scope": "normalized reference and map geometry; no physical orientation amplitudes or variance experiment",
+      "finished_utc": "2026-09-13T18:49:38.704671+00:00",
+      "elapsed_seconds": 527.1849197510164,
+      "exit_code": 1
+    },
+    "input_state_files_sha256": {
+      "default_runtime_settings.toml": "c233c8791f3745ea736f3643dec6366dd67d8ca561e57356f789dbd272c28eb9",
+      "drawings/templates/crates/kurvst/typst/kurvst.wasm": "50619c0dbe6ec78538f9e8a8587b5b8ad33d464672dec974c2c53ab93f7ebd15",
+      "drawings/templates/crates/kurvst/typst/src/impl.typ": "0feab4012862ea5020e4bc833861f333d0f68ea2fc3b5420af5709edeaaf10d8",
+      "drawings/templates/crates/kurvst/typst/src/lib.typ": "90fd7952020cb3162f95acb47389e1dafc0516d03d085fa780b084904e9ad636",
+      "drawings/templates/crates/kurvst/typst/typst.toml": "0d7eec512c399c0beeee8402393b32e489856fbdeb30945feff0ed298dd8bbbd",
+      "drawings/templates/crates/linnest/typst/linnest.wasm": "655d6c2f3dbdac1d6c8ead2113d0cb576a026e3b9e1bc66b7a6c41439e16cd9d",
+      "drawings/templates/crates/linnest/typst/src/curve.typ": "4350dfbe4a8e825396e4f476731b9862935d87fb6630c24425350f4071b9e590",
+      "drawings/templates/crates/linnest/typst/src/draw.typ": "7029235345346572dcf7dcd26cf947c9516efdd9828a183d8613b60c6ad8e22f",
+      "drawings/templates/crates/linnest/typst/src/graph.typ": "3b332b75f3212458ef4815010f5ff645c762d09a1fd9798c9637636590f0f392",
+      "drawings/templates/crates/linnest/typst/src/impl/draw.typ": "0acb9d50e9f6ac24dbe5b3c9727e3ec4c65843d4dbce57ba5c4f973a0b75f682",
+      "drawings/templates/crates/linnest/typst/src/impl/graph.typ": "1dc82dd0099c0810036992a378042a33f5c162fd919d08d79cf218b8716c08dd",
+      "drawings/templates/crates/linnest/typst/src/impl/physics-edge-style.typ": "1e13992babc10e7310fe24bfe0e4f4f67c5ea51afaf08b413418f4d88d269965",
+      "drawings/templates/crates/linnest/typst/src/layout.typ": "3c06a8413a62fe124c0731fcb6e0ad354051214d055a682520df5c4186d8301c",
+      "drawings/templates/crates/linnest/typst/src/lib.typ": "85d9ce54cad4251140acdea0a153a737b465d346b9668665f53c1db2fa6eb200",
+      "drawings/templates/crates/linnest/typst/src/physics-edge-style.typ": "854530edde9152b8adb01cf8e097c4107f0277ac175f6e47c37df97ada735cd7",
+      "drawings/templates/crates/linnest/typst/src/subgraph.typ": "d318d5e98e902e06f412cd8a1f45ebc6f6c8218a7c4063bf3582333616122c53",
+      "drawings/templates/crates/linnest/typst/typst.toml": "899f5436fa4211c3e98fe022a7968623782a5648980ade9d0c8c0e6cf6ecdfa0",
+      "drawings/templates/edge-style.typ": "0e961db4de2d939cc0bee8fc59fe82850e220cb96a1fe4d7e938bbbd7e9e0789",
+      "drawings/templates/figure.typ": "4ab1913e6476ef9f49b4a4bdc07d44589124e5030168fb853963990d7b164672",
+      "drawings/templates/grid.typ": "a2aea8505809f39564ff2d0ebb1a1c9ac9ee3b46b211d57c72e32c1f1f0ca11d",
+      "drawings/templates/layout.typ": "069a852cd32f4cb519cbd6eebcc94338ca23e561ad59cee454c89a769ea3568e",
+      "global_settings.toml": "95f980a1be61490c716972f0ce6abbc681b99f1308fb675b6e07e64d8cef5a94",
+      "justfile": "49ce845fc918f10f5e41e7d3e13bf8ac862707fdd7144db1221167375556d65c",
+      "model.json": "73bd6a7f4ed3c2a6f5ef35520fd39152483e77d947852ca9d02e913c0296395a",
+      "model_parameters.json": "5cf4b422cfe328559dd3cc9322e5e66c264faba54d5d44b4f5772c3a53a43572",
+      "processes/cross_sections/epem_a_tth/NNLO/GL638.dot": "7fd875ea567fa04e009f20015b14ddaea1f89b3915294858313abc3b062e0942",
+      "processes/cross_sections/epem_a_tth/NNLO/cs.bin": "a843eba496ea639d171b1fa5a14284103dd2e6604ca3ccad320014ede23aeda2",
+      "processes/cross_sections/epem_a_tth/NNLO/generation_summary.json": "66396569b2ebd19988b3a22a55f3f711803478eb254dbd86a58718843fe1a370",
+      "processes/cross_sections/epem_a_tth/NNLO/integrand/integrand.bin": "a33d3408acb7a2c5b553bd9fb9669061169f23272b9745009d02a28f65d92c7c",
+      "processes/cross_sections/epem_a_tth/NNLO/integrand/settings.toml": "cdb28893b036e54f3a36b5ce18c1b58caa3ecc92525a2a9794153ee39ed4f022",
+      "processes/cross_sections/epem_a_tth/def.bin": "0fffb787dcb4198728500a56df9c62f3d625766f3e928e012b9685a3a5a974a3",
+      "processes/cross_sections/epem_a_tth/settings_history.toml": "cb94f2b51e2ab3b7b586268284dc6076bcc370fc1055956439d7782733104163",
+      "run.toml": "e874689cffe889735e8454bdb77bb7748b7fda091a46a6d9a3fac0b7e160eeab",
+      "state_manifest.toml": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8",
+      "symbolica_state.bin": "202e160c0e5942aed0ee3679d05d558860cdabe88d24e9b8136405d94a179a6a"
+    }
+  },
+  "runtime_loader_setup_failure": {
+    "status": "resolved_before_state_load",
+    "cause": "ufo_support linked Python3.14 while old shell snapshot runtime library path listed3.13",
+    "resolution": "prepend matching active Python sysconfig LIBDIR to LD_LIBRARY_PATH, no rebuild or source change",
+    "provenance": {
+      "started_utc": "2026-09-13T19:00:46.228662+00:00",
+      "source_commit": "f2f64fb17dd5dab588eca298dc61f1100fa4962d",
+      "source_files_sha256": {
+        "gl638_x2_direct_h_driver.rs": "9563eb57958d48b00d2459dd15bf14d72b7cde209ec4ecb9aca257bced27fa71",
+        "compile_gl638_x2_direct_h.sh": "05098eef61cb78a7848c9f0ade293ef5ead60dcce5c9e0898c90377f99277fc5",
+        "gl638_x2_direct_h.toml": "dae9a6a8fd5d60ff9a9f47da3f6866e20ea8f53437ddae45b8f7129f29de37dc",
+        "GL638_X2_DIRECT_H.json": "cf356fe5b730d6d4800ebc3d199a2878640e6200682f515361ce248680cda5e3"
+      },
+      "build_manifest": {
+        "status": "complete",
+        "source_worktree": "/common/dev/gammaloop_advanced_sampling_x2",
+        "source_commit": "f2f64fb17dd5dab588eca298dc61f1100fa4962d",
+        "source_tracked_status_before": "",
+        "cache_seed": "cp -a --reflink=auto of X1 target; distinct inodes; no hardlinks",
+        "target_directory": "/common/dev/gammaloop_advanced_sampling_x2/target",
+        "command": [
+          "cargo",
+          "build",
+          "--profile",
+          "dev-optim",
+          "--locked",
+          "-p",
+          "gammaloop-api",
+          "--bin",
+          "gammaloop",
+          "--features",
+          "ufo_support"
+        ],
+        "jobs": 2,
+        "source_environment": "/tmp/gammaloop-rebase-dev-env.sh",
+        "profile": "dev-optim: core/API opt2, dependencies opt3, no fatLTO",
+        "selected_build_environment": {
+          "RUSTFLAGS": "-C linker=/nix/store/vdaz6sk455r8sbpi7wzaf9vlz5i9yyvx-gcc-wrapper-15.2.0/bin/gcc",
+          "CARGO_ENCODED_RUSTFLAGS": null,
+          "CARGO_TARGET_DIR": "/common/dev/gammaloop_advanced_sampling_x2/target",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "x1_source_commit": "3f9b1a28473f313d6242a556ada2e8dbcd6f6477",
+        "x1_tracked_status_before": "",
+        "x1_binary_sha256_before": "f700ee575153067ccc77894ea776a96f139105812a15014d094dd67ba7db6d61",
+        "binary": "/common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/gammaloop",
+        "build_log": "/tmp/gl638-x2-build/build.log",
+        "started_utc": "2026-09-13T18:42:19.912387+00:00",
+        "returncode": 0,
+        "elapsed_seconds": 932.0206227939343,
+        "finished_utc": "2026-09-13T18:57:51.933308+00:00",
+        "source_tracked_status_after": "",
+        "x1_tracked_status_after": "",
+        "x1_binary_sha256_after": "f700ee575153067ccc77894ea776a96f139105812a15014d094dd67ba7db6d61",
+        "build_log_sha256": "ec9f340954d00b1c7c7f80150432b3ff66ccbf95b1a0107c1c036d889e2d5fde",
+        "frozen_x1_unchanged": true,
+        "binary_sha256": "a37b5b27e1fde706e585be9f9c5e10894152cb02aab962ef13ff2dd751f0ee8f",
+        "matching_libraries": {
+          "gammalooprs": {
+            "path": "/common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libgammalooprs-0618db2a28011153.rlib",
+            "sha256": "745a2617f84a940eae4538b1f1d8e87cad86e7746538d70efdd75e51f4f28d8b",
+            "size_bytes": 1408924756,
+            "mtime_utc": "2026-09-13T18:53:14.787467+00:00"
+          },
+          "gammaloop_api": {
+            "path": "/common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libgammaloop_api.rlib",
+            "sha256": "feddab73b6cdf2922024bd3b26caee343240431eb66a03ab672768bf8d4392fa",
+            "size_bytes": 719005260,
+            "mtime_utc": "2026-09-13T18:57:26.857967+00:00"
+          }
+        },
+        "cli_version_smoke": "gammaLoop 0.1.0"
+      },
+      "scope": "exact shipped portable driver against optimized current libraries; full936 production catalogue normalized-reference+geometry, no physical amplitude evaluation",
+      "compile_exit_code": 0,
+      "library_hashes": "feddab73b6cdf2922024bd3b26caee343240431eb66a03ab672768bf8d4392fa  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libgammaloop_api.rlib\n745a2617f84a940eae4538b1f1d8e87cad86e7746538d70efdd75e51f4f28d8b  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libgammalooprs-0618db2a28011153.rlib\n44fa838627b5d56bba6565fdb26d92318780d54ef2d0ecd6143d6d9bcbecee40  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libfigment-3ebdff869cec9c6f.rlib\ndb08e7081763ada7f71952a30055aea701b5831a03558745c1710538e6e0f41a  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libtoml-653cd84a2ec19d53.rlib\n4a0cc480fdae0ad65cabb3ca24e88f1bc71fb0d465033938350de2fc396ebf67  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libcolor_eyre-821e98309b993482.rlib\nd06d9ecadc44cc5b3685780ccd3ff846ef0a6a4f0b8e864722cb7c4d330bade1  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libserde_json-8d5a1b6683fc5257.rlib\n83fd479e41348a401df43e5dc31ebc8f9e21e68c0fa5d3496421df40655b3506  /common/dev/gammaloop_advanced_sampling_x2/target/dev-optim/deps/libsymbolica-65681f143f1779a6.rlib\n",
+      "binary_sha256": "4275c7ea04daa749dced5f74fcedb985dca0f0c674ad97b4bc7b8f391d8e43f5",
+      "argv": [
+        "/tmp/gl638-x2-direct-h/optimized-validation/gl638_x2_direct_h_driver",
+        "/common/dev/gl638_checkpoint_06d470409/all/state",
+        "/tmp/gl638-x2-direct-h/optimized-validation/gl638_x2_direct_h.toml",
+        "/tmp/gl638-x2-direct-h/optimized-validation/GL638_X2_DIRECT_H.json",
+        "32768",
+        "/tmp/gl638-x2-direct-h/optimized-validation/all",
+        "936"
+      ],
+      "run_exit_code": 127,
+      "elapsed_seconds": 19.06297494203318,
+      "finished_utc": "2026-09-13T19:01:05.291996+00:00"
+    }
+  }
+}

@@ -40,6 +40,9 @@ The focused agent studies preserve independent reasoning and review:
   migration and original-source rescue required before strong-focus long runs.
 - [CROSS_SECTION_DELIVERY_PATH.md](CROSS_SECTION_DELIVERY_PATH.md): conditional
   host/block proposal, parallel cut-h/side/star work and early GL638 milestones.
+- [AFFINE_STAR_IMPLEMENTATION_AUDIT.md](AFFINE_STAR_IMPLEMENTATION_AUDIT.md):
+  unimplemented X4 dependency certificate, shared physical centers/projection
+  scale, canonical center branches and minimum validation gates.
 - [PINCHED_COLLINEAR_SAMPLING.md](PINCHED_COLLINEAR_SAMPLING.md): future light-cone
   and prolate charts, normalized transverse enhancement, soft endpoints and
   architectural requirements for cut-dependent pinched geometry.
@@ -69,6 +72,7 @@ The small records included here are:
 | [AMPLITUDE_X1_KITE_MATRIX.md](AMPLITUDE_X1_KITE_MATRIX.md), [data](AMPLITUDE_X1_KITE_MATRIX.json) | All-18-orientation normalized-reference and three-seed physical comparison; mixed channels improve the real-component pilot, surface alone worsens it |
 | [AMPLITUDE_X1_DOUBLE_BOX_MATRIX.md](AMPLITUDE_X1_DOUBLE_BOX_MATRIX.md), [data](AMPLITUDE_X1_DOUBLE_BOX_MATRIX.json) | All-98-orientation reference and three-seed physical comparison; gains depend on the selected complex component |
 | [GL638_X1_PILOT.md](GL638_X1_PILOT.md), [data](GL638_X1_PILOT.json) | All-936-orientation, full-UV, 20-core matched radial pilot; no consistent three-seed LU-h gain |
+| [GL638_X2_DIRECT_H.md](GL638_X2_DIRECT_H.md), [data](GL638_X2_DIRECT_H.json) | Actual selected/full936-catalogue conditional-H reference, native inverse rays and full12D determinant; physical comparisons remain separate |
 
 The frozen inputs and equations preserve the numerical setup without requiring
 the original machine. They are not executable acceptance tests. The original
