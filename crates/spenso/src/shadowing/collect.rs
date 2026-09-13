@@ -7,10 +7,8 @@ use crate::{
     shadowing::static_symbols::W_,
     structure::representation::LibraryRep,
 };
-use ::symbolica_utils::ReplaceBuilderExt;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
-    function,
     id::Context,
     symbol,
     utils::Settable,
@@ -221,12 +219,14 @@ impl<const N: usize> TensorCollectFilter<N> {
             return matches!(args.as_slice(), [AtomView::Fun(arg)] if Self::function_contains_rep(*arg, reps));
         }
 
-        for a in fun.iter() {
-            for r in reps {
-                if a.replace(function!(r.symbol(), W_.a__)).matches() {
-                    return true;
-                }
-            }
+        // Match rep(a__) against the whole argument, as matches() does through
+        // partial(false). Only the recognized shorthand branches below recurse.
+        if fun.iter().any(|arg| {
+            matches!(arg, AtomView::Fun(inner)
+                if inner.get_nargs() > 0
+                    && reps.iter().any(|rep| inner.get_symbol() == rep.symbol()))
+        }) {
+            return true;
         }
 
         if symbol == SPENSO_TAG.chain {

@@ -12,7 +12,7 @@ use linnet::{
         builder::HedgeGraphBuilder,
         involution::{EdgeData, Flow, Hedge},
         nodestore::NodeStorageOps,
-        subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
+        subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
         tree::SimpleTraversalTree,
     },
     permutation::Permutation,
@@ -1094,8 +1094,13 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
 
             #[cfg(debug_assertions)]
             {
-                debug_assert!(subgraph.empty_intersection(&used));
-                used.union_with(&subgraph);
+                for hedge in std::iter::once(nid)
+                    .chain(children.iter().copied())
+                    .flat_map(|node| self.graph.iter_crown_in(&subgraph, node))
+                {
+                    debug_assert!(!used.includes(&hedge));
+                    used.add(hedge);
+                }
             }
 
             ready.push(NetworkOperation {
@@ -1146,8 +1151,13 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
 
             #[cfg(debug_assertions)]
             {
-                debug_assert!(subgraph.empty_intersection(&used));
-                used.union_with(&subgraph);
+                for hedge in std::iter::once(nid)
+                    .chain(children.iter().copied())
+                    .flat_map(|node| self.graph.iter_crown_in(&subgraph, node))
+                {
+                    debug_assert!(!used.includes(&hedge));
+                    used.add(hedge);
+                }
             }
 
             ready.push(NetworkOperationRef {
@@ -1190,9 +1200,14 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 let _span = profile::span(Timer::ExecuteReadySubgraph);
                 self.operation_subgraph_ignoring(nid, &children, hidden)
             };
+            let operation_hedges = || {
+                std::iter::once(nid)
+                    .chain(children.iter().copied())
+                    .flat_map(|node| self.graph.iter_crown_in(&subgraph, node))
+            };
             let overlaps_used = {
                 let _span = profile::span(Timer::ExecuteReadyIntersection);
-                !subgraph.empty_intersection(&used)
+                operation_hedges().any(|hedge| used.includes(&hedge))
             };
             if overlaps_used {
                 continue;
@@ -1200,7 +1215,9 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
 
             {
                 let _span = profile::span(Timer::ExecuteReadyUnion);
-                used.union_with(&subgraph);
+                for hedge in operation_hedges() {
+                    used.add(hedge);
+                }
             }
             ready.push(NetworkOperationRef {
                 graph: self,
@@ -2929,6 +2946,96 @@ pub mod test {
                     .iter()
                     .all(|child| matches!(&expr.graph[*child], NetworkNode::Leaf(_)))
             );
+        }
+    }
+
+    #[test]
+    fn sparse_ready_batches_match_dense_conflict_filter_with_hidden_edges() {
+        let tensor_a = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(1),
+        );
+        let tensor_b = NetworkGraph::<i8>::tensor(
+            &PermutedStructure::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .structure,
+            NetworkLeaf::LocalTensor(2),
+        );
+        let mut expr = (tensor_a + tensor_b) * (NetworkGraph::scalar(2) + NetworkGraph::scalar(3));
+        expr.merge_ops();
+        expr.cache_expr_tree_roots();
+
+        let tree = expr.expr_tree().cast::<ChildVecStore<()>>();
+        let root = expr.graph.node_id(expr.head());
+        let child = tree.iter_children(root, &expr.graph).next().unwrap();
+        let expression_hedge = tree.root_hedge(child);
+        let slot_hedge = expr
+            .graph
+            .iter_hedges()
+            .map(|(hedge, _)| hedge)
+            .find(|hedge| expr.graph[[hedge]].is_slot() && expr.graph.inv(*hedge) != *hedge)
+            .unwrap();
+
+        for hidden_hedges in [
+            vec![],
+            vec![expression_hedge],
+            vec![expression_hedge, expr.graph.inv(expression_hedge)],
+            vec![slot_hedge],
+            vec![slot_hedge, expr.graph.inv(slot_hedge)],
+        ] {
+            let mut graph = expr.clone();
+            let mut hidden: SuBitGraph = graph.graph.empty_subgraph();
+            for hedge in hidden_hedges {
+                hidden.add(hedge);
+            }
+            graph.cache_expr_tree_roots_ignoring(&hidden);
+
+            // Retain the dense intersection/union admission rule as an oracle
+            // for complete operation payloads and their traversal order.
+            let mut used: SuBitGraph = graph.graph.empty_subgraph();
+            let mut expected = Vec::new();
+            for node in graph.cached_expr_preorder_nodes_ignoring(&hidden) {
+                let Some((op, children)) = graph.ready_operation_parts_ignoring(node, &hidden)
+                else {
+                    continue;
+                };
+                let subgraph = graph.operation_subgraph_ignoring(node, &children, &hidden);
+                if !subgraph.empty_intersection(&used) {
+                    continue;
+                }
+                used.union_with(&subgraph);
+                expected.push((node, op.clone(), children, subgraph));
+            }
+            assert!(!expected.is_empty());
+            if hidden.is_empty() {
+                assert_eq!(expected.len(), 2);
+            }
+
+            for operations in [
+                graph.ready_operations_from_tree_ignoring(&hidden),
+                graph
+                    .ready_operation_tree_refs_ignoring(&hidden)
+                    .iter()
+                    .map(super::NetworkOperation::from)
+                    .collect(),
+                graph
+                    .ready_operation_refs_ignoring(&hidden)
+                    .iter()
+                    .map(super::NetworkOperation::from)
+                    .collect(),
+            ] {
+                let actual = operations
+                    .into_iter()
+                    .map(|op| (op.op_node, op.op, op.children, op.subgraph))
+                    .collect::<Vec<_>>();
+                assert_eq!(actual, expected);
+            }
         }
     }
 

@@ -269,3 +269,153 @@ If a gate fails, use the measurements to continue the generic implementation, in
 - Exact pre-generation lift certification, detailed timing records, full
   acceptance coverage and all final performance gates remain in progress. No
   optimized generation/runtime ratio is established by this milestone.
+
+### 2026-09-13 — cache integration and first physical diagnostic
+
+- Pushed implementation milestone `b8396f3a3080d196a947879eb877a2d842d871ef`
+  with the requested ValentinHirschi author/committer identity. Preserved its
+  debug-assertion-enabled optimized CLI as an immutable diagnostic snapshot:
+  SHA256 `73cfeefe68eec92571a84c55cc95d81e0efb01d39d1c1bb0ec52b4dd9a184424`.
+- The milestone's focused nextest run passed 207 of 213 tests. Remaining failures
+  exposed numeric-sign normalization at exact certificates, a square-root
+  routing dialect difference, and new-test representation assumptions. The user
+  subsequently authorized routine test corrections without further approval;
+  physical expectations and tolerances remain unchanged.
+- Numeric-only distribution (`expand_num`) resolves the independently reduced
+  nested-sign certificate reproducer while preserving products and powers of
+  graph numerators. The production certificates now apply it only after the
+  structural equality fast path. These changes await the next test build.
+- Canonical sectors, owned source analysis, and immutable numerator templates
+  now share the 48 MiB/4,096-context preparation LRU. Source hits bypass borrowed
+  adapter construction, and tests exercise cold, warm, disabled and evicted
+  execution. Integration and validation are underway.
+- The immutable milestone GL00 direct-4D diagnostic completed local projection,
+  then failed in shared tensor preprocessing with the original
+  `lazy tensor sum mixed with scalar sum terms` error. Outer elapsed time was
+  446.419 s; sampled VmHWM peaked at 13,262,540,800 bytes (12.35 GiB). This was a
+  profiling run concurrent with the pending original GL262 baseline, and is
+  neither a successful generation nor an acceptance timing.
+- Its five-second profile attributed 88.97% of inclusive samples to tensor
+  network graph flattening/deletion, predominantly conversions between Linnet
+  parent-pointer and child-vector stores. A separate generic rank-zero lazy
+  tensor addition fix is being implemented because the same valid sum is
+  accepted or rejected depending on operand order.
+- All final physical generation/runtime ratios, the full scalar acceptance
+  matrix, dispatch-overhead gate, clippy and final documentation remain open.
+
+- The next coordinated run passed 296/299 tests across gammalooprs, Spenso and
+  Linnet. All cache-retention, native-row selection, signed-allocation and tree
+  swap/deletion checks passed. The three remaining failures are being reduced:
+  a nested certificate with opposite additive bases under an integer square,
+  a factorized contour equality assertion, and a new higher-rank rejection
+  test that initially failed at graph construction before reaching the adder.
+- Replaced the profiled Linnet whole-store swap conversions with local pointer
+  relabeling. Exhaustive tests cover 720 six-node forests, fresh and serial swaps,
+  and all 512 deletion subsets of a nine-node forest against ChildVecStore.
+  A separate three-pass generic diagnostic measured 100k-node leaf/bounded-degree
+  swaps at 261/567 ns versus 2.54/3.40 ms previously (about 9,710x/5,993x).
+  A high-degree root control improved about 1.61x. Exact final storage matched
+  in every case. These are isolated-operation results, not generation ratios;
+  receipts and raw passes are under `linnet_swap_benchmark/results_b839_dirty_r2`.
+- The nested certificate now normalizes the sign of additive bases under integer
+  powers using a bottom-up rewrite. Fractional powers keep their original
+  branch-sensitive form. The reduced reproducer is exact and idempotent without
+  distributing numerator products or powers; full regression validation remains.
+
+### 2026-09-13 — successful GL00 diagnostic after shared-library fixes
+
+- The immutable cache/Spenso/Linnet diagnostic CLI (SHA256
+  `895e2ea230ebc6fbc0e04f468c226a87709b11a63ed09e264165e6819c528517`)
+  successfully generated the physical GL00 direct-4D evaluator. Reported
+  generation time was 547.850254805 s: expression construction 113.456882143 s,
+  Spenso preprocessing 226.860166267 s, Symbolica evaluator construction
+  207.533206395 s, and compilation 0 s. One evaluator was saved. The generation
+  report recorded 16,986,910,720 peak RAM bytes; the outer process receipt
+  recorded 550.035878733 s and a sampled RSS peak of 17,278,410,752 bytes.
+- This was a diagnostic run concurrent with unit compilation and the original
+  GL262 localized-3D baseline, with three five-second profiling windows. It is
+  not a final acceptance timing or a final optimized/baseline ratio. State,
+  reports, receipts and profiles are preserved in
+  `tests/artifacts/aa_aa_uv_slowdown/diagnostic_cache_shared/GL00_4d_direct_r1`.
+- The sampled stages changed from color simplification (84.74% inclusive,
+  including representation matching and coefficient zero tests), to network
+  ready-batch planning (94.80%, predominantly graph-sized bitsets), then
+  Symbolica Horner construction (73.55%). These nested percentages describe
+  separate brief windows, not additive whole-run stage costs. The original
+  scalar/lazy-tensor failure was passed successfully. Saved-state runtime,
+  pointwise comparison and operation-count diagnostics are being collected;
+  the final repeated physical benchmark gates remain open.
+
+- Saved-state GL00 diagnostics completed with the same immutable CLI for both
+  the new direct-4D evaluator and the original erased-3D evaluator. Both state
+  formats loaded successfully, including the existing operation counter. Each
+  runtime had one priming pass and three timed passes of 20 batches, serialized
+  under the shared benchmark lock. Median full-integrand/evaluator times were
+  1,276.553880/1,228.862211 microseconds for direct 4D (8,873 samples), versus
+  96.786247/79.184658 microseconds for the saved erased-3D baseline (29,263
+  samples). This leaves diagnostic gaps of 13.19x/15.52x; these are not final
+  acceptance ratios and do not meet the intended runtime performance gate.
+- Direct-4D evaluator counts were 246,394 instructions, 144,004 multiplications,
+  166,502 additions, 36 inversions and 19 function calls. The erased-3D program
+  had 26,557 instructions, 19,092 multiplications, 14,057 additions, 35 inversions
+  and 18 function calls. Their full complex integrands agreed at the base and
+  100x-scaled spatial point to relative differences 7.4643e-15 and 3.1068e-15.
+  Integrated and threshold CTs remained disabled. Exact raw values, timing
+  receipts, operation counts and comparison metadata are in
+  `diagnostic_cache_shared/saved_runtime_summary.json` and
+  `saved_runtime_comparison.json`; the original baseline state was read-only.
+
+### 2026-09-13 — exact affine certificates and profiling refinements
+
+- The next focused snapshot passed 297/300 tests; all retained-cache, CFF
+  allocation, Spenso network and Linnet tree checks passed. The remaining
+  failures isolated two exact source-frame boundaries and a new test's raw
+  contour convention. The expected physical numerator and contour were kept.
+- Positive denominator wrappers whose completed hard carrier has no surviving
+  pole now retain an exact whole-block affine-rewrite witness. The existing
+  planned factor admits joint fixed dependencies only for that certified
+  wrapper; physical/soft restrictions and rejection of unwitnessed mixed blocks
+  remain. Coverage passes the actual canonical projection for completed hard
+  roles 0/1/3 and checks that soft role 2 remains unchanged.
+- The occurrence-diagonal certificate now compares fixed external four-vectors
+  in the same formal spatial/temporal frame as the reconstructed affine shift.
+  Only the projector action on a proven affine energy sum is linearized;
+  numerator products, powers and opaque blocks stay factorized. The pinched
+  contour oracle now uses the existing componentwise VariantLocal-to-contour
+  convention instead of applying the generalized core sign a second time.
+- Profile-guided shared changes replace representation wildcard construction
+  with the existing direct Atom visitor and graph-wide scheduler bitset scans
+  with the existing crown iterator. The representation scan has an exact legacy
+  matcher oracle, including zero-argument functions, nested wrappers and power
+  exponents. Scheduler traversal, admission, payloads and debug assertions are
+  preserved; its dense-filter oracle is being added.
+- Formatting and cargo check passed for core, Spenso, Linnet and integration
+  tests with debug assertions enabled. The expanded focused nextest build is
+  running. Performance gates, broad scalar/physical acceptance and clippy are
+  still incomplete; the GL00 runtime diagnostic above explicitly fails the
+  intended performance threshold.
+
+- The expanded focused suites progressed through 321/323 and 322/324 passing
+  checks. The original nested physical reconstruction now passes, along with
+  positive affine blocks and the dense scheduler oracle. New regression checks
+  exposed two further normalization assumptions: signed numerical extraction
+  can need another bottom-up pass, and tagged linear function construction can
+  yield a sum instead of a function. The former now stops at structural equality;
+  the latter fixture compares every resulting function against the unchanged
+  legacy predicate. These final corrections await the next focused run.
+- The representation predicate's exact contract is whole-argument matching:
+  the old `ReplaceBuilderExt::matches` uses `partial(false)`. Production now
+  checks immediate argument heads/arity directly and retains only the existing
+  explicit chain/trace/broadcast recursion. The legacy oracle rejected the
+  initial overly recursive visitor; no expected behavior was relaxed.
+- Component state grouping now repeats after summing numerators, because that
+  sum can create a new identical numerator key. Each useful pass strictly
+  decreases the state count; no rational or numerator expansion is introduced.
+- The saved GL00 graph expressions localize the remaining size discrepancy:
+  the common original term has matching structure, while two 4D UV terms are
+  gamma-free and contain 26,290 metric calls; their erased-3D counterparts retain
+  1,746 gamma calls and no metric calls. Both routes share the final mapping and
+  dot-expansion operations. Local 4D's earlier Taylor stage unconditionally
+  simplifies traces/Schoonschip, duplicating the integrated path's existing
+  analytic preparation. Deferring that duplicate local spin algebra is the
+  next generic experiment; success and unchanged row counts are not assumed.

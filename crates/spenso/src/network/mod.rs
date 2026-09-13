@@ -2503,6 +2503,81 @@ impl<T: Display> Display for ExecutionResult<T> {
     }
 }
 
+impl<K, Aind> NetworkLeaf<K, Aind> {
+    /// Scalar-valued lazy leaves retain their scales and do not require tensor
+    /// materialization. A leaf with open indices has no scalar interpretation.
+    fn result_scalar<'a, T, S>(
+        &self,
+        get_tensor: impl Fn(usize) -> &'a T,
+        get_scalar: impl Fn(graph::ScalarRef) -> &'a S,
+    ) -> Option<ExecutionResult<Cow<'a, S>>>
+    where
+        T: Clone + HasStructure + 'a,
+        T::Scalar: Into<S>,
+        S: Clone
+            + Ref
+            + for<'b> AddAssign<<S as Ref>::Ref<'b>>
+            + for<'b> MulAssign<<S as Ref>::Ref<'b>>
+            + 'a,
+    {
+        let tensor_scalar = |tensor: usize| -> Option<S> {
+            let tensor = get_tensor(tensor);
+            tensor.scalar_ref()?;
+            tensor.clone().scalar().map(Into::into)
+        };
+
+        let scaled_tensor_scalar = |term: &ScaledTensorRef| -> Option<S> {
+            let mut scalar: S = tensor_scalar(term.tensor)?;
+            if let Some(factor) = term.scale {
+                scalar *= get_scalar(factor).refer();
+            }
+            Some(scalar)
+        };
+
+        let tensor_sum_scalar = |indices: &[usize]| -> Option<ExecutionResult<Cow<'a, S>>> {
+            let mut iter = indices.iter();
+            let Some(first) = iter.next() else {
+                return Some(ExecutionResult::Zero);
+            };
+            let mut accumulator = tensor_scalar(*first)?;
+            for tensor in iter {
+                let term_scalar = tensor_scalar(*tensor)?;
+                accumulator += term_scalar.refer();
+            }
+            Some(ExecutionResult::Val(Cow::Owned(accumulator)))
+        };
+
+        let scaled_tensor_sum_scalar =
+            |terms: &[ScaledTensorRef]| -> Option<ExecutionResult<Cow<'a, S>>> {
+                let mut iter = terms.iter();
+                let Some(first) = iter.next() else {
+                    return Some(ExecutionResult::Zero);
+                };
+                let mut accumulator = scaled_tensor_scalar(first)?;
+                for term in iter {
+                    let term_scalar = scaled_tensor_scalar(term)?;
+                    accumulator += term_scalar.refer();
+                }
+                Some(ExecutionResult::Val(Cow::Owned(accumulator)))
+            };
+
+        match self {
+            NetworkLeaf::Scalar(index) => {
+                Some(ExecutionResult::Val(Cow::Borrowed(get_scalar(*index))))
+            }
+            NetworkLeaf::LocalTensor(index) => {
+                Some(ExecutionResult::Val(Cow::Owned(tensor_scalar(*index)?)))
+            }
+            NetworkLeaf::TensorSum(indices) => tensor_sum_scalar(indices),
+            NetworkLeaf::ScaledTensor(term) => Some(ExecutionResult::Val(Cow::Owned(
+                scaled_tensor_scalar(term)?,
+            ))),
+            NetworkLeaf::ScaledTensorSum(terms) => scaled_tensor_sum_scalar(terms),
+            NetworkLeaf::LibraryKey { .. } => None,
+        }
+    }
+}
+
 impl<
     T: TensorStructure,
     S,
@@ -2712,66 +2787,14 @@ where
             + for<'b> AddAssign<<S as Ref>::Ref<'b>>
             + for<'b> MulAssign<<S as Ref>::Ref<'b>>,
     {
-        let tensor_scalar = |tensor: usize| -> Result<S, TensorNetworkError<K, FK>> {
-            self.store
-                .get_tensor(tensor)
-                .clone()
-                .scalar()
-                .ok_or(TensorNetworkError::NoScalar)
-                .map(Into::into)
-        };
-
-        let scaled_tensor_scalar =
-            |term: &ScaledTensorRef| -> Result<S, TensorNetworkError<K, FK>> {
-                let mut scalar: S = tensor_scalar(term.tensor)?;
-                if let Some(factor) = term.scale {
-                    scalar *= self.store.get_scalar_ref(factor).refer();
-                }
-                Ok(scalar)
-            };
-
-        let tensor_sum_scalar =
-            |indices: &[usize]| -> Result<ExecutionResult<Cow<'a, S>>, TensorNetworkError<K, FK>> {
-                let mut iter = indices.iter();
-                let Some(first) = iter.next() else {
-                    return Ok(ExecutionResult::Zero);
-                };
-                let mut accumulator = tensor_scalar(*first)?;
-                for tensor in iter {
-                    let term_scalar = tensor_scalar(*tensor)?;
-                    accumulator += term_scalar.refer();
-                }
-                Ok(ExecutionResult::Val(Cow::Owned(accumulator)))
-            };
-
-        let scaled_tensor_sum_scalar = |terms: &[ScaledTensorRef]| -> Result<
-            ExecutionResult<Cow<'a, S>>,
-            TensorNetworkError<K, FK>,
-        > {
-            let mut iter = terms.iter();
-            let Some(first) = iter.next() else {
-                return Ok(ExecutionResult::Zero);
-            };
-            let mut accumulator = scaled_tensor_scalar(first)?;
-            for term in iter {
-                let term_scalar = scaled_tensor_scalar(term)?;
-                accumulator += term_scalar.refer();
-            }
-            Ok(ExecutionResult::Val(Cow::Owned(accumulator)))
-        };
-
         let (node, _, _) = self.graph.result()?;
         if let NetworkNode::Leaf(leaf) = node {
-            match leaf {
-                NetworkLeaf::TensorSum(indices) => return tensor_sum_scalar(indices),
-                NetworkLeaf::ScaledTensor(term) => {
-                    return Ok(ExecutionResult::Val(Cow::Owned(scaled_tensor_scalar(
-                        term,
-                    )?)));
-                }
-                NetworkLeaf::ScaledTensorSum(terms) => return scaled_tensor_sum_scalar(terms),
-                _ => {}
-            }
+            return leaf
+                .result_scalar(
+                    |tensor| self.store.get_tensor(tensor),
+                    |scalar| self.store.get_scalar_ref(scalar),
+                )
+                .ok_or(TensorNetworkError::NoScalar);
         }
 
         Ok(match self.result()? {
@@ -3424,16 +3447,28 @@ fn try_balanced_scalar_sum<K, Aind, Store>(
 ) -> Option<NetworkLeaf<K, Aind>>
 where
     Store: NetworkStoreAccess,
-    Store::Scalar: Clone + Ref + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>,
+    Store::Tensor: Clone + HasStructure,
+    <Store::Tensor as HasStructure>::Scalar: Into<Store::Scalar>,
+    Store::Scalar: Clone
+        + Ref
+        + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>
+        + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>,
 {
     let mut terms = Vec::with_capacity(targets.len());
     for (_, leaf) in targets {
-        let NetworkLeaf::Scalar(index) = leaf else {
-            return None;
-        };
-        terms.push(store.scalar_ref(*index).clone());
+        match leaf.result_scalar(
+            |tensor| store.tensor(tensor),
+            |scalar| store.scalar_ref(scalar),
+        )? {
+            ExecutionResult::Val(value) => terms.push(value.into_owned()),
+            ExecutionResult::Zero => {}
+            ExecutionResult::One => unreachable!("leaf conversion does not produce implicit one"),
+        }
     }
 
+    if terms.is_empty() {
+        return None;
+    }
     let result = balanced_ref_sum(terms, sum_start);
     Some(NetworkLeaf::Scalar(store.push_scalar(result).into()))
 }

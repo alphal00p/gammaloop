@@ -1,7 +1,9 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     hash::Hash,
     mem::{size_of, size_of_val},
+    sync::Arc,
+    time::{Duration, Instant},
 };
 
 use crate::utils::GS;
@@ -13,15 +15,21 @@ use crate::{
             HybridSurfaceID, LinearEnergyExpr, LinearSurface, LinearSurfaceID, LinearSurfaceKind,
         },
     },
-    graph::{FeynmanGraph, Graph, GraphThreeDSource},
+    graph::{
+        ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator, Graph, GraphThreeDSource,
+        LoopMomentumBasis,
+    },
     numerator::energy_degree::EnergyPowerAssignmentPlan,
     settings::global::{GenerationSettings, UniformNumeratorSamplingScale},
-    uv::approx::local_4d::CanonicalUvDenominatorClass,
+    uv::approx::local_4d::{CanonicalUvDenominatorClass, CanonicalUvSector, FourDSector},
 };
 use ahash::{AHashMap, HashSet};
 use color_eyre::Result;
 use itertools::Itertools;
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::{
+    involution::{EdgeIndex, Hedge},
+    subgraph::{SuBitGraph, SubSetLike},
+};
 use linnet::num_traits::SignOrZero;
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::domains::rational::Rational;
@@ -71,6 +79,8 @@ pub(crate) struct GenerationCache<K, V> {
     pub(crate) hits: usize,
     pub(crate) misses: usize,
     pub(crate) evictions: usize,
+    // Callers include key construction and accounting, excluding value work.
+    pub(crate) cache_time: Duration,
 }
 
 struct GenerationCacheEntry<V> {
@@ -91,6 +101,7 @@ impl<K: Clone + Eq + Hash, V> GenerationCache<K, V> {
             hits: 0,
             misses: 0,
             evictions: 0,
+            cache_time: Duration::ZERO,
         }
     }
 
@@ -151,9 +162,11 @@ impl<K: Clone + Eq + Hash, V> GenerationCache<K, V> {
     }
 
     pub(crate) fn clear(&mut self) {
+        let started = Instant::now();
         self.entries.clear();
         self.recency.clear();
         self.retained_bytes = 0;
+        self.cache_time += started.elapsed();
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -253,6 +266,15 @@ impl Default for ExactCffGenerationCache {
 }
 
 impl ExactCffGenerationCache {
+    pub(crate) fn statistics(&self) -> (usize, usize, usize, usize) {
+        (
+            self.entries.hits,
+            self.entries.misses,
+            self.entries.evictions,
+            self.entries.retained_bytes(),
+        )
+    }
+
     pub(crate) fn len(&self) -> usize {
         self.entries
             .entries
@@ -435,23 +457,135 @@ impl ExactCffGenerationCache {
     }
 }
 
-struct ExactCffGenerationPreparation {
+/// These disjoint identities share one preparation budget and LRU order.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) enum PreparationKey {
+    Canonical(Arc<FourDSector>),
+    Source(Arc<ExactCffPreparationKey>),
+    Numerator(super::ExactNumeratorTemplateKey),
+}
+
+pub(crate) enum PreparationValue {
+    Canonical(Arc<CanonicalUvSector>),
+    Source(Arc<ExactCffGenerationPreparation>),
+    Numerator(Arc<super::PlannedExactSourceNumerator>),
+}
+
+#[derive(PartialEq, Eq, Hash)]
+pub(crate) struct ExactCffPreparationKey {
+    pub(super) denominators: Vec<FourDDenominator>,
+    pub(super) uv_edges: Vec<EdgeIndex>,
+    pub(super) boundary_hedges: Vec<Hedge>,
+    pub(super) coordinates: Option<(LoopMomentumBasis, ExactUvSubLmbFrame)>,
+    pub(super) classes: Vec<CanonicalUvDenominatorClass>,
+    pub(super) numerator: Atom,
+    pub(super) options: Generate3DExpressionOptions,
+}
+
+impl ExactCffPreparationKey {
+    pub(super) fn accounted_bytes(&self) -> usize {
+        size_of::<Self>()
+            + self.denominators.capacity() * size_of::<FourDDenominator>()
+            + self
+                .denominators
+                .iter()
+                .map(FourDDenominator::accounted_bytes)
+                .sum::<usize>()
+            + self.uv_edges.capacity() * size_of::<EdgeIndex>()
+            + self.boundary_hedges.capacity() * size_of::<Hedge>()
+            + self
+                .coordinates
+                .as_ref()
+                .map_or(0, |(lmb, _)| lmb.accounted_bytes())
+            + self.classes.capacity() * size_of::<CanonicalUvDenominatorClass>()
+            + self
+                .classes
+                .iter()
+                .map(CanonicalUvDenominatorClass::accounted_bytes)
+                .sum::<usize>()
+            + self.numerator.as_view().get_byte_size()
+            + self
+                .options
+                .energy_degree_bounds
+                .as_ref()
+                .map_or(0, ExactCffGenerationCache::vector_bytes)
+            + ExactCffGenerationCache::vector_bytes(
+                &self.options.preserve_internal_edges_as_four_d_denominators,
+            )
+    }
+}
+
+pub(crate) struct ExactCffGenerationPreparation {
     parsed: ParsedGraph,
     energy_edges: EnergyEdgeIndexMap,
     source_options: Generate3DExpressionOptions,
-    exact_source_energy_mapper: crate::graph::three_d_source::ExactSourceEnergyMapper,
-    energy_assignment_plans: Vec<EnergyPowerAssignmentPlan>,
+    exact_source_energy_mapper: Arc<crate::graph::three_d_source::ExactSourceEnergyMapper>,
+    energy_assignment_plans: Vec<Arc<EnergyPowerAssignmentPlan>>,
     physical_energy_degree_bounds: Vec<(usize, usize)>,
+    pub(super) physical_energy_edges: EnergyEdgeIndexMap,
+    pub(super) physical_cut_support_edges: BTreeMap<usize, Vec<EdgeIndex>>,
+    pub(super) physical_surface_edges: BTreeSet<usize>,
+    pub(super) inverse_energy_product: Atom,
+    pub(super) active_loop_count: usize,
+    pub(super) contract_subgraph: SuBitGraph,
+}
+
+impl ThreeDGraphSource for ExactCffGenerationPreparation {
+    fn to_three_d_parsed_graph(&self) -> three_dimensional_reps::graph_io::Result<ParsedGraph> {
+        Ok(self.parsed.clone())
+    }
+
+    fn energy_edge_index_map(&self, _: &ParsedGraph) -> Option<EnergyEdgeIndexMap> {
+        Some(self.energy_edges.clone())
+    }
+}
+
+impl ExactCffGenerationPreparation {
+    pub(super) fn accounted_bytes(&self) -> Result<usize> {
+        // Charge every Arc payload reachable from this entry independently.
+        // Another preparation may retain the same payload after this is evicted.
+        Ok(size_of::<Self>()
+            + 128
+            + ExactCffGenerationKey {
+                topology: self.parsed.clone(),
+                internal_energy_edges: self.energy_edges.internal.clone(),
+                external_energy_edges: self.energy_edges.external.clone(),
+                orientation_edge_count: self.energy_edges.orientation_edge_count,
+                options: self.source_options.clone(),
+            }
+            .accounted_bytes()
+            + self.exact_source_energy_mapper.accounted_bytes()?
+            + self.energy_assignment_plans.capacity() * size_of::<Arc<EnergyPowerAssignmentPlan>>()
+            + self
+                .energy_assignment_plans
+                .iter()
+                .map(|plan| 32 + plan.accounted_bytes())
+                .sum::<usize>()
+            + self.physical_energy_degree_bounds.capacity() * size_of::<(usize, usize)>()
+            + (self.physical_energy_edges.internal.len()
+                + self.physical_energy_edges.external.len())
+                * 64
+            + self
+                .physical_cut_support_edges
+                .values()
+                .map(|edges| 64 + edges.capacity() * size_of::<EdgeIndex>())
+                .sum::<usize>()
+            + self.physical_surface_edges.len() * 48
+            + self.inverse_energy_product.as_view().get_byte_size()
+            + self.contract_subgraph.size().div_ceil(8)
+            + 32)
+    }
 }
 
 impl Graph {
-    fn prepare_3d_expression_for_4d_term(
+    pub(crate) fn prepare_3d_expression_for_4d_term(
         &self,
         source: &GraphThreeDSource<'_>,
         options: &Generate3DExpressionOptions,
         analysis_numerator: &Atom,
         classes: &[CanonicalUvDenominatorClass],
     ) -> Result<ExactCffGenerationPreparation> {
+        let preparation_started = Instant::now();
         let source_options = options.clone();
         let initial_state_cut_edges = self
             .iter_edges_of(&self.initial_state_cut)
@@ -490,7 +624,9 @@ impl Graph {
         // This report lives in the physical parent's namespace. Canonical
         // classes are expanded only for degree reporting, never for dispatch;
         // remote component classes carry no energy of this source.
-        let prepared_numerator = source.prepare_affine_numerator(analysis_numerator)?;
+        let degree_analysis_started = Instant::now();
+        let (prepared_numerator, fixed_affine_blocks) =
+            source.prepare_affine_numerator(analysis_numerator)?;
         let analysis_numerator = &prepared_numerator;
         let physical_report_numerator = analysis_numerator.replace_map(|view, _, output| {
             if let AtomView::Fun(denominator) = view
@@ -532,9 +668,11 @@ impl Graph {
             .map_err(|error| {
                 eyre::eyre!("could not analyze numerator in physical EMR energy variables: {error}")
             })?;
+        let degree_analysis_ms = degree_analysis_started.elapsed().as_secs_f64() * 1000.0;
         // Parse first so a malformed exact rational source returns its
         // structural error instead of being hidden behind the mapper's
         // optional convenience API.
+        let source_mapping_started = Instant::now();
         let parsed = source.to_three_d_parsed_graph()?;
         let energy_edges = source
             .energy_edge_index_map(&parsed)
@@ -545,7 +683,7 @@ impl Graph {
         // use serial copies; canonical UV classes use their certified pools.
         // Analyze all physical active edges first so unused, unrelated
         // candidate groups cannot reject a constant numerator.
-        let candidates = exact_source_energy_mapper
+        let mut candidates = exact_source_energy_mapper
             .equivalent_energy_candidates(
                 physical_energy_degree_bounds
                     .iter()
@@ -557,11 +695,14 @@ impl Graph {
                     self.name,
                 )
             })?;
+        candidates.fixed_affine_blocks = fixed_affine_blocks;
+        let source_mapping_ms = source_mapping_started.elapsed().as_secs_f64() * 1000.0;
         // Each immutable factor-local plan owns both its exact bounds and the
         // later numerator substitutions. This keeps the numerator factorized
         // and prevents generation from understating the expression actually
         // sampled in a residue or contact sector. Rank proposes a bounded set
         // of plans; the real source map count chooses between them below.
+        let allocation_started = Instant::now();
         let energy_assignment_plans = self
             .plan_numerator_energy_assignment_proposals_in_atom_excluding(
                 analysis_numerator,
@@ -574,6 +715,7 @@ impl Graph {
                     self.name,
                 )
             })?;
+        let allocation_ms = allocation_started.elapsed().as_secs_f64() * 1000.0;
         debug!(
             graph = %self.name,
             physical_energy_degree_bounds = ?physical_energy_degree_bounds,
@@ -581,37 +723,59 @@ impl Graph {
             candidate_bounds = ?energy_assignment_plans.iter().map(|plan| plan.energy_degree_bounds()).collect::<Vec<_>>(),
             "planned factorized exact-CFF numerator energy assignment proposals"
         );
-        Ok(ExactCffGenerationPreparation {
+        let preparation = ExactCffGenerationPreparation {
+            parsed,
+            energy_edges,
+            source_options,
+            exact_source_energy_mapper: Arc::new(exact_source_energy_mapper),
+            energy_assignment_plans: energy_assignment_plans.into_iter().map(Arc::new).collect(),
+            physical_energy_degree_bounds,
+            physical_energy_edges: source
+                .physical_energy_edge_index_map()
+                .expect("exact source has a physical energy projection"),
+            physical_cut_support_edges: source
+                .physical_cut_support_edge_index_map()
+                .expect("exact source has a cut-support projection"),
+            physical_surface_edges: source.physical_surface_energy_edges(),
+            inverse_energy_product: source
+                .exact_inverse_energy_product()
+                .expect("exact source has an inverse energy product"),
+            active_loop_count: source.active_loop_count(),
+            contract_subgraph: source.contract_subgraph(),
+        };
+        crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #profile;
+            stage = "exact_cff_preparation",
+            graph = %self.name,
+            elapsed_ms = preparation_started.elapsed().as_secs_f64() * 1000.0,
+            degree_analysis_ms,
+            source_mapping_ms,
+            allocation_ms,
+            proposal_count = preparation.energy_assignment_plans.len(),
+            "Prepared factorized energy assignments and certified source mapping"
+        );
+        Ok(preparation)
+    }
+
+    pub(crate) fn generate_3d_expression_for_4d_term(
+        &self,
+        preparation: &ExactCffGenerationPreparation,
+        mut cache: Option<&mut ExactCffGenerationCache>,
+    ) -> Result<(
+        GeneratedThreeDExpression,
+        Arc<crate::graph::three_d_source::ExactSourceEnergyMapper>,
+        Arc<EnergyPowerAssignmentPlan>,
+        CffEnergyDegreeBoundReport,
+    )> {
+        let ExactCffGenerationPreparation {
             parsed,
             energy_edges,
             source_options,
             exact_source_energy_mapper,
             energy_assignment_plans,
             physical_energy_degree_bounds,
-        })
-    }
-
-    pub(crate) fn generate_3d_expression_for_4d_term(
-        &self,
-        source: &GraphThreeDSource<'_>,
-        options: &Generate3DExpressionOptions,
-        analysis_numerator: &Atom,
-        mut cache: Option<&mut ExactCffGenerationCache>,
-        classes: &[CanonicalUvDenominatorClass],
-    ) -> Result<(
-        GeneratedThreeDExpression,
-        crate::graph::three_d_source::ExactSourceEnergyMapper,
-        EnergyPowerAssignmentPlan,
-        CffEnergyDegreeBoundReport,
-    )> {
-        let ExactCffGenerationPreparation {
-            parsed,
-            energy_edges,
-            mut source_options,
-            exact_source_energy_mapper,
-            energy_assignment_plans,
-            physical_energy_degree_bounds,
-        } = self.prepare_3d_expression_for_4d_term(source, options, analysis_numerator, classes)?;
+            ..
+        } = preparation;
+        let mut source_options = source_options.clone();
         let selection_started = std::time::Instant::now();
         let mut certificate_time = std::time::Duration::ZERO;
         let mut native_times = BTreeMap::new();
@@ -622,7 +786,7 @@ impl Graph {
                 file.parsed_source = ?parsed,
                 "Generating exact CFF at its term-local capacity"
             );
-            three_dimensional_reps::generate_3d_expression(source, source_options).map_err(
+            three_dimensional_reps::generate_3d_expression(preparation, source_options).map_err(
                 |error| {
                     eyre::eyre!(
                         "generalized CFF expression generation failed for exact 4D source in graph `{}` with physical EMR bounds {:?} and term-local exact-occurrence bounds {:?}: {error}\n{}",
@@ -637,10 +801,10 @@ impl Graph {
         let mut selected: Option<(
             usize,
             Vec<usize>,
-            EnergyPowerAssignmentPlan,
+            Arc<EnergyPowerAssignmentPlan>,
             Option<GeneratedThreeDExpression>,
         )> = None;
-        let mut pending = VecDeque::from(energy_assignment_plans);
+        let mut pending = VecDeque::from(energy_assignment_plans.clone());
         let mut seen_bounds = Vec::new();
         let mut challenged = false;
         loop {
@@ -649,7 +813,7 @@ impl Graph {
                 if let Some((_, _, best, _)) = &selected
                     && let Some(challenger) = best.placement_challenger(&seen_bounds)?
                 {
-                    pending.push_back(challenger);
+                    pending.push_back(Arc::new(challenger));
                 }
             }
             let Some(plan) = pending.pop_front() else {
@@ -777,12 +941,12 @@ impl Graph {
         );
         let energy_degree_bound_report = CffEnergyDegreeBoundReport {
             source_kind: CffEnergyBoundSourceKind::ExactFourD,
-            physical_parent_bounds: physical_energy_degree_bounds,
+            physical_parent_bounds: physical_energy_degree_bounds.clone(),
             assigned_cff_source_bounds: energy_assignment_plan.energy_degree_bounds().to_vec(),
         };
         Ok((
             generated,
-            exact_source_energy_mapper,
+            Arc::clone(exact_source_energy_mapper),
             energy_assignment_plan,
             energy_degree_bound_report,
         ))
@@ -1876,13 +2040,10 @@ mod tests {
         for numerator in numerators.iter().cycle().take(2 * numerators.len()) {
             let mut values = Vec::new();
             for generation_cache in [Some(&mut cache), None] {
-                let (generated, mapper, plan, _) = graph.generate_3d_expression_for_4d_term(
-                    &source,
-                    &options,
-                    numerator,
-                    generation_cache,
-                    &[],
-                )?;
+                let preparation =
+                    graph.prepare_3d_expression_for_4d_term(&source, &options, numerator, &[])?;
+                let (generated, mapper, plan, _) =
+                    graph.generate_3d_expression_for_4d_term(&preparation, generation_cache)?;
                 let surfaces = generated.expression.surfaces.get_all_replacements_gs(&[]);
                 let mut value = Atom::Zero;
                 for orientation in &generated.expression.orientations {
@@ -2079,12 +2240,11 @@ mod tests {
                     cache.record_count(key, 0);
                 }
                 let generation_calls_before = cache.native_generations;
+                let preparation =
+                    graph.prepare_3d_expression_for_4d_term(&source, &options, &numerator, &[])?;
                 let (generated, mapper, plan, _) = graph.generate_3d_expression_for_4d_term(
-                    &source,
-                    &options,
-                    &numerator,
+                    &preparation,
                     (phase != "uncached").then_some(&mut cache),
-                    &[],
                 )?;
                 if phase == "cached" {
                     assert_eq!(

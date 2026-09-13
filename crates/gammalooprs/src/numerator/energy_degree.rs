@@ -143,6 +143,9 @@ impl EnergyCandidateFamily {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct EquivalentEnergyCandidates {
     by_family: BTreeMap<EnergyCandidateFamily, Vec<usize>>,
+    // Exact complete wrappers rewritten by the source's certified affine lift.
+    // Only these may jointly reference several fixed base occurrences.
+    pub(crate) fixed_affine_blocks: BTreeSet<Atom>,
 }
 
 impl EquivalentEnergyCandidates {
@@ -234,7 +237,10 @@ impl EquivalentEnergyCandidates {
             by_family.insert(EnergyCandidateFamily::DenominatorDerived(edge), candidates);
         }
 
-        Ok(Self { by_family })
+        Ok(Self {
+            by_family,
+            fixed_affine_blocks: BTreeSet::new(),
+        })
     }
 
     /// Build production candidate sets from one retained source occurrence and
@@ -321,7 +327,9 @@ impl EnergyPowerAssignmentPlan {
         let collapsed = self
             .map_factors(|factor, _| Ok::<_, std::convert::Infallible>(factor.clone()))
             .unwrap();
-        if collapsed != *original && collapsed.collect_factors() != original.collect_factors() {
+        if collapsed != *original
+            && collapsed.expand_num().collect_factors() != original.expand_num().collect_factors()
+        {
             return Err(EnergyPowerAnalysisError::InvalidAssignmentCertificate {
                 detail: "factorized assignment does not collapse to its analyzed numerator".into(),
             });
@@ -1206,7 +1214,12 @@ impl EnergyPowerAnalyzer {
         let started = std::time::Instant::now();
         let expected_degrees = self.analyze_reference_atom(expression)?;
         let mut next_factor_id = 0;
-        let planned = self.plan_view(expression.as_view(), &mut next_factor_id, true)?;
+        let planned = self.plan_view(
+            expression.as_view(),
+            &mut next_factor_id,
+            true,
+            &candidates.fixed_affine_blocks,
+        )?;
         debug_assert_eq!(planned.degrees()?, expected_degrees);
         let family_degrees = planned.family_degrees()?;
         for (family, degree) in family_degrees.iter() {
@@ -1285,16 +1298,21 @@ impl EnergyPowerAnalyzer {
         expression: AtomView<'_>,
         next_factor_id: &mut usize,
         compress_powers: bool,
+        fixed_affine_blocks: &BTreeSet<Atom>,
     ) -> Result<PlannedEnergyExpression, EnergyPowerAnalysisError> {
         match expression {
             AtomView::Add(add) => Ok(PlannedEnergyExpression::Add(
                 add.iter()
-                    .map(|term| self.plan_view(term, next_factor_id, compress_powers))
+                    .map(|term| {
+                        self.plan_view(term, next_factor_id, compress_powers, fixed_affine_blocks)
+                    })
                     .collect::<Result<Vec<_>, _>>()?,
             )),
             AtomView::Mul(mul) => Ok(PlannedEnergyExpression::Mul(
                 mul.iter()
-                    .map(|factor| self.plan_view(factor, next_factor_id, compress_powers))
+                    .map(|factor| {
+                        self.plan_view(factor, next_factor_id, compress_powers, fixed_affine_blocks)
+                    })
                     .collect::<Result<Vec<_>, _>>()?,
             )),
             AtomView::Pow(power) => {
@@ -1330,14 +1348,26 @@ impl EnergyPowerAnalyzer {
                 }
                 if compress_powers {
                     return Ok(PlannedEnergyExpression::Repeat {
-                        base: Box::new(self.plan_view(base, next_factor_id, true)?),
+                        base: Box::new(self.plan_view(
+                            base,
+                            next_factor_id,
+                            true,
+                            fixed_affine_blocks,
+                        )?),
                         exponent: usize::try_from(exponent)
                             .map_err(|_| EnergyPowerAnalysisError::EnergyDegreeOverflow)?,
                     });
                 }
                 Ok(PlannedEnergyExpression::Mul(
                     (0..exponent)
-                        .map(|_| self.plan_view(base, next_factor_id, compress_powers))
+                        .map(|_| {
+                            self.plan_view(
+                                base,
+                                next_factor_id,
+                                compress_powers,
+                                fixed_affine_blocks,
+                            )
+                        })
                         .collect::<Result<Vec<_>, _>>()?,
                 ))
             }
@@ -1382,7 +1412,13 @@ impl EnergyPowerAnalyzer {
                 if let Some(error) = family_error {
                     return Err(error);
                 }
-                if value_families.len() > 1 {
+                let fixed_affine = fixed_affine_blocks.contains(&expression);
+                if (!fixed_affine && value_families.len() > 1)
+                    || (fixed_affine
+                        && value_families
+                            .iter()
+                            .any(|family| !matches!(family, EnergyCandidateFamily::Fixed(_))))
+                {
                     return Err(
                         EnergyPowerAnalysisError::MixedPositiveDenominatorProvenance {
                             expression: expression.log_print(None),
@@ -1390,10 +1426,9 @@ impl EnergyPowerAnalyzer {
                         },
                     );
                 }
-                let value_family = value_families.into_iter().next();
                 let mut families = BTreeMap::new();
                 for (dependent, _) in degrees.iter() {
-                    if dependent != owner {
+                    if !fixed_affine && dependent != owner {
                         return Err(EnergyPowerAnalysisError::NonlocalPositiveDenominator {
                             expression: expression.log_print(None),
                             owner: diagnostic_owner,
@@ -1403,11 +1438,13 @@ impl EnergyPowerAnalyzer {
                             },
                         });
                     }
-                    let family = value_family.ok_or_else(|| {
-                        EnergyPowerAnalysisError::InvalidEmrEdgeArgument {
+                    let family = value_families
+                        .iter()
+                        .copied()
+                        .find(|family| family.reference() == dependent)
+                        .ok_or_else(|| EnergyPowerAnalysisError::InvalidEmrEdgeArgument {
                             argument: expression.log_print(None),
-                        }
-                    })?;
+                        })?;
                     families.insert(dependent, family);
                 }
                 let id = *next_factor_id;
@@ -1417,7 +1454,9 @@ impl EnergyPowerAnalyzer {
                 // and spatial/mass pieces one occurrence frame without
                 // expanding the wrapper. Separate wrappers may still be
                 // load-balanced over serial copies of the same line, and the
-                // mapper restores each selected routing sign.
+                // mapper restores each selected routing sign. A source-certified
+                // affine block stays equally opaque: its several fixed base
+                // occurrences jointly supply its complete polynomial.
                 Ok(PlannedEnergyExpression::Factor {
                     id,
                     expression,
@@ -1437,7 +1476,14 @@ impl EnergyPowerAnalyzer {
                     symbol: function.get_symbol(),
                     arguments: function
                         .iter()
-                        .map(|argument| self.plan_view(argument, next_factor_id, compress_powers))
+                        .map(|argument| {
+                            self.plan_view(
+                                argument,
+                                next_factor_id,
+                                compress_powers,
+                                fixed_affine_blocks,
+                            )
+                        })
                         .collect::<Result<Vec<_>, _>>()?,
                 })
             }
@@ -1878,6 +1924,7 @@ impl Graph {
             numerator.as_view(),
             &mut 0,
             false,
+            &BTreeSet::new(),
         )?;
         let mut proposals = planned.soft_momentum_assignments(&alternatives)?;
         proposals.sort_by_cached_key(|(degrees, assignments)| {
@@ -2847,7 +2894,7 @@ mod tests {
                     **output = q.clone();
                 }
             });
-            assert!((collapsed - expression).collect_factors().is_zero());
+            assert_eq!(collapsed.collect_factors(), expression.collect_factors());
         }
     }
 

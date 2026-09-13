@@ -83,7 +83,7 @@ pub(crate) struct CanonicalUvSector {
     pub(crate) frozen_lmbs: Vec<LoopMomentumBasis>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct CanonicalUvDenominatorClass {
     pub(crate) id: UvDenominatorClassId,
     pub(crate) component: usize,
@@ -122,6 +122,18 @@ struct UvDenominatorClassKey {
 }
 
 impl CanonicalUvDenominatorClass {
+    pub(crate) fn accounted_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + [&self.momentum, &self.mass_squared, &self.full_expr]
+                .into_iter()
+                .map(|atom| atom.as_view().get_byte_size())
+                .sum::<usize>()
+            + (self.signature.loop_signature.capacity()
+                + self.signature.external_signature.capacity())
+                * std::mem::size_of::<i32>()
+            + self.members.len() * 48
+    }
+
     pub(crate) fn momentum(signature: &MomentumSignature, lmb: &LoopMomentumBasis) -> Atom {
         signature
             .loop_signature
@@ -211,6 +223,29 @@ impl CanonicalUvDenominatorClass {
 }
 
 impl FourDSector {
+    pub(crate) fn accounted_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + self.atom.as_view().get_byte_size()
+            + self.active_components.capacity()
+                * std::mem::size_of::<(SuBitGraph, SuBitGraph, LoopMomentumBasis)>()
+            + self
+                .active_components
+                .iter()
+                .map(|(owners, scope, lmb)| {
+                    owners.size().div_ceil(8)
+                        + scope.size().div_ceil(8)
+                        + 64
+                        + lmb.accounted_bytes()
+                })
+                .sum::<usize>()
+            + self.frozen_lmbs.capacity() * std::mem::size_of::<LoopMomentumBasis>()
+            + self
+                .frozen_lmbs
+                .iter()
+                .map(LoopMomentumBasis::accounted_bytes)
+                .sum::<usize>()
+    }
+
     pub(crate) fn new(
         atom: Atom,
         active_components: Vec<(SuBitGraph, SuBitGraph, LoopMomentumBasis)>,
@@ -342,9 +377,11 @@ impl FourDSector {
             let projected_neutral = canonical.neutral_numerator(&term.numerator, graph)?;
             // A signed linear momentum can acquire a factored minus sign at
             // this boundary. Normalize each operand independently only when
-            // their structural forms differ; never distribute graph numerators.
+            // their structural forms differ. Distribute numeric coefficients
+            // only; products and powers of graph numerators remain factorized.
             if projected_neutral != neutral
-                && projected_neutral.collect_factors() != neutral.collect_factors()
+                && projected_neutral.expand_num().collect_factors()
+                    != neutral.expand_num().collect_factors()
             {
                 crate::debug_tags!(#generation, #uv, #local, #four_d, #trace;
                     file.source_numerator = %neutral,
@@ -362,7 +399,8 @@ impl FourDSector {
             let projected_neutral = canonical.neutral_numerator(&term.numerator, graph)?;
             let neutral = canonical.neutral_numerator(&term.source_numerator, graph)?;
             if projected_neutral != neutral
-                && projected_neutral.collect_factors() != neutral.collect_factors()
+                && projected_neutral.expand_num().collect_factors()
+                    != neutral.expand_num().collect_factors()
             {
                 return Err(eyre!(
                     "merged canonical UV numerator does not reproduce its source bucket"
@@ -374,6 +412,52 @@ impl FourDSector {
 }
 
 impl CanonicalUvSector {
+    pub(crate) fn accounted_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + self.terms.capacity() * std::mem::size_of::<CanonicalUvTerm>()
+            + self
+                .terms
+                .iter()
+                .map(|term| {
+                    term.numerator.as_view().get_byte_size()
+                        + term.source_numerator.as_view().get_byte_size()
+                        + term.powers.len() * 64
+                        + term.source_witness.capacity() * std::mem::size_of::<FourDDenominator>()
+                        + term
+                            .source_witness
+                            .iter()
+                            .map(FourDDenominator::accounted_bytes)
+                            .sum::<usize>()
+                        + term.source_classes.capacity()
+                            * std::mem::size_of::<Option<(UvDenominatorClassId, i32)>>()
+                })
+                .sum::<usize>()
+            + self.classes.capacity() * std::mem::size_of::<CanonicalUvDenominatorClass>()
+            + self
+                .classes
+                .iter()
+                .map(CanonicalUvDenominatorClass::accounted_bytes)
+                .sum::<usize>()
+            + self.active_components.capacity()
+                * std::mem::size_of::<(SuBitGraph, SuBitGraph, LoopMomentumBasis)>()
+            + self
+                .active_components
+                .iter()
+                .map(|(owners, scope, lmb)| {
+                    owners.size().div_ceil(8)
+                        + scope.size().div_ceil(8)
+                        + 64
+                        + lmb.accounted_bytes()
+                })
+                .sum::<usize>()
+            + self.frozen_lmbs.capacity() * std::mem::size_of::<LoopMomentumBasis>()
+            + self
+                .frozen_lmbs
+                .iter()
+                .map(LoopMomentumBasis::accounted_bytes)
+                .sum::<usize>()
+    }
+
     pub(crate) fn class(&self, id: UvDenominatorClassId) -> &CanonicalUvDenominatorClass {
         &self.classes[id.0]
     }
@@ -473,6 +557,45 @@ impl CanonicalUvSector {
                 full_expr
             };
         });
+        // Signed frame changes can leave opposite additive factors, including
+        // bases of integer powers. Choose one literal base without expanding
+        // numerator products or powers. Power bases are handled at the power
+        // node so fractional powers retain their branch-sensitive original form.
+        let mut result = result;
+        loop {
+            let normalized = result.replace_map_bottom_up(|view, context, output| {
+                if matches!(view, AtomView::Add(_))
+                    && context.parent_type != Some(symbolica::atom::AtomType::Pow)
+                {
+                    let base = view.to_owned().expand_num();
+                    let opposite = (-&base).expand_num();
+                    **output = if opposite < base { -opposite } else { base };
+                    return;
+                }
+                let AtomView::Pow(power) = view else {
+                    return;
+                };
+                let Ok(exponent) = i64::try_from(power.get_exp()) else {
+                    return;
+                };
+                if !matches!(power.get_base(), AtomView::Add(_)) {
+                    return;
+                }
+                let base = power.get_base().to_owned().expand_num();
+                let opposite = (-&base).expand_num();
+                if opposite < base {
+                    **output =
+                        Atom::num(if exponent % 2 == 0 { 1 } else { -1 }) * opposite.pow(exponent);
+                }
+            });
+            // An extracted sign can expose numerical content to its parent on
+            // the next pass. Stop at structural equality, retaining products
+            // and compressed powers throughout normalization.
+            if normalized == result {
+                break;
+            }
+            result = normalized;
+        }
         match error {
             Some(error) => Err(error),
             None => Ok(result),
@@ -1918,10 +2041,11 @@ mod tests {
             -source_sign
         };
         assert_eq!(
-            term.numerator,
-            Atom::num(2 * expected_sign) * canonical_q
+            term.numerator.expand_num(),
+            (Atom::num(2 * expected_sign) * canonical_q
                 + Atom::num(2) * soft
-                + Atom::num(2) * physical
+                + Atom::num(2) * physical)
+                .expand_num()
         );
 
         let unequal = FourDSector::new(
@@ -1973,7 +2097,7 @@ mod tests {
         assert_eq!(canonical.classes.len(), 1);
         assert_eq!(canonical.terms.len(), 1);
         assert_eq!(canonical.terms[0].source_witness.len(), 2);
-        let expected = Atom::num(-2)
+        let expected = Atom::num(2)
             * function!(
                 GS.emr_mom,
                 GS.uv_class_ref(UvDenominatorClassId(0)),
@@ -1981,6 +2105,29 @@ mod tests {
             )
             * opaque;
         assert_eq!(canonical.terms[0].numerator, expected);
+        let base = Atom::var(symbol!("signed_multiloop::a")) - symbol!("signed_multiloop::b");
+        let factor =
+            (Atom::var(symbol!("signed_multiloop::c")) + symbol!("signed_multiloop::d")).pow(5);
+        let left = Atom::num(2) * &factor * &base + Atom::num(3) * &factor;
+        let right = -Atom::num(2) * &factor * (-&base).expand_num() + Atom::num(3) * &factor;
+        let normalized = canonical.neutral_numerator(&left, &graph)?;
+        assert_eq!(normalized, canonical.neutral_numerator(&right, &graph)?);
+        assert_eq!(
+            normalized,
+            canonical.neutral_numerator(&normalized, &graph)?
+        );
+        for exponent in [-3_i64, 2, 3, 500_000] {
+            let first = canonical.neutral_numerator(&base.pow(exponent), &graph)?;
+            let opposite = Atom::num(if exponent % 2 == 0 { 1 } else { -1 })
+                * (-&base).expand_num().pow(exponent);
+            assert_eq!(first, canonical.neutral_numerator(&opposite, &graph)?);
+            assert_eq!(first, canonical.neutral_numerator(&first, &graph)?);
+        }
+        let fractional = base.pow(Atom::num(1) / Atom::num(2));
+        assert_eq!(
+            fractional,
+            canonical.neutral_numerator(&fractional, &graph)?
+        );
         Ok(())
     }
 
@@ -3135,12 +3282,11 @@ mod tests {
             })
             .collect::<Result<Vec<_>, _>>()?;
         for (source, term) in sources.iter().zip(&terms) {
+            let preparation =
+                graph.prepare_3d_expression_for_4d_term(source, &options, &term.numerator, &[])?;
             graph.generate_3d_expression_for_4d_term(
-                source,
-                &options,
-                &term.numerator,
+                &preparation,
                 Some(&mut context.generation_cache),
-                &[],
             )?;
         }
         // Undotted and dotted sources have different occurrence counts;

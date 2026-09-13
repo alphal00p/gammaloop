@@ -130,6 +130,107 @@ fn collect_rep_only_wraps_matching_representations() {
 }
 
 #[test]
+fn representation_collection_scan_matches_pattern_oracle() {
+    use crate::{
+        broadcast_symbol,
+        shadowing::{collect::TensorCollectFilter, static_symbols::W_},
+        structure::representation::Euclidean,
+    };
+    use symbolica::{
+        atom::{FunctionBuilder, representation::FunView},
+        function,
+    };
+    use symbolica_utils::ReplaceBuilderExt;
+
+    // Retain the original matcher as an independent oracle for the direct scan,
+    // including guards that apply only at the outer function boundary.
+    fn pattern_matches(fun: FunView<'_>, reps: &[LibraryRep]) -> bool {
+        let symbol = fun.get_symbol();
+        if symbol == SPENSO_TAG.pure_scalar || symbol == SPENSO_TAG.bracket {
+            return false;
+        }
+        if symbol.has_tag(&SPENSO_TAG.broadcast) {
+            let args = fun.iter().collect::<Vec<_>>();
+            return matches!(args.as_slice(), [AtomView::Fun(arg)] if pattern_matches(*arg, reps));
+        }
+        for arg in fun.iter() {
+            for rep in reps {
+                if arg.replace(function!(rep.symbol(), W_.a__)).matches() {
+                    return true;
+                }
+            }
+        }
+        if symbol == SPENSO_TAG.chain {
+            return fun
+                .iter()
+                .skip(2)
+                .any(|arg| matches!(arg, AtomView::Fun(arg) if pattern_matches(arg, reps)));
+        }
+        if symbol == SPENSO_TAG.trace {
+            return fun
+                .iter()
+                .skip(1)
+                .any(|arg| matches!(arg, AtomView::Fun(arg) if pattern_matches(arg, reps)));
+        }
+        false
+    }
+
+    let mink = LibraryRep::from(Minkowski {});
+    let euc = LibraryRep::from(Euclidean {});
+    let (outer, nested, x) = symbol!("scan_outer", "scan_nested", "scan_x");
+    let mink_arg = function!(mink.symbol(), 4);
+    let payloads = [
+        Atom::num(1),
+        Atom::var(mink.symbol()),
+        FunctionBuilder::new(mink.symbol()).finish(),
+        mink_arg.clone(),
+        function!(mink.symbol(), 4, Atom::var(x)),
+        function!(euc.symbol(), 3),
+        function!(nested, mink_arg.clone()),
+        function!(SPENSO_TAG.pure_scalar, mink_arg.clone()),
+        function!(SPENSO_TAG.bracket, mink_arg.clone()),
+        mink_arg.clone().pow(2),
+        mink_arg.clone().pow(-1),
+        Atom::var(x).pow(mink_arg.clone()),
+        mink_arg.clone() + Atom::var(x),
+        mink_arg * Atom::var(x),
+    ];
+    let heads = [
+        outer,
+        SPENSO_TAG.pure_scalar,
+        SPENSO_TAG.bracket,
+        broadcast_symbol!(scan_broadcast),
+        SPENSO_TAG.chain,
+        SPENSO_TAG.trace,
+    ];
+    for head in heads {
+        for payload in &payloads {
+            for arity in 0..=3 {
+                let mut builder = FunctionBuilder::new(head);
+                for _ in 0..arity {
+                    builder = builder.add_arg(payload);
+                }
+                let expression = builder.finish();
+                // Linear heads may normalize to sums or scalar factors. Check
+                // every resulting function, including the normalized branches.
+                expression.visitor(&mut |atom| {
+                    if let AtomView::Fun(fun) = atom {
+                        for reps in [&[][..], &[mink][..], &[euc][..], &[mink, euc][..]] {
+                            assert_eq!(
+                                TensorCollectFilter::<0>::function_contains_rep(fun, reps),
+                                pattern_matches(fun, reps),
+                                "representation scan differs for {atom} in {expression} and {reps:?}",
+                            );
+                        }
+                    }
+                    true
+                });
+            }
+        }
+    }
+}
+
+#[test]
 fn expand_rep_with_map_visits_expanded_collect_wrappers() {
     let (a, b, mapped_tensor) = symbol!("a", "b", "mapped_tensor");
     let expr = (Atom::var(a) + Atom::var(b)) * p!(mink!(4));

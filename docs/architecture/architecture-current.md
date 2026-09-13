@@ -202,11 +202,14 @@ established capacities.
 
 One nonserialized `Local4dProjectionContext` spans each graph's complete UV
 computation in both forest orchestrators. Its deterministic LRU caches retain
-immutable numerator templates (48 MiB, 4,096 entries), winning CFF payloads and
+canonical sectors, owned source analysis and immutable numerator templates
+together (48 MiB, 4,096 entries), winning CFF payloads and
 contender counts (64 MiB, 4,096 keys), and component-local mapped subtrees
 (16 MiB, 16,384 entries). Owned keys, containers and symbolic payloads are charged;
 oversized entries bypass retention. These are retained-payload limits, not RSS
 limits. Clearing or evicting entries changes computation cost only.
+Source preparation owns its parsed incidence and signed namespace maps, so a
+warm hit skips reconstruction without retaining a borrowed graph adapter.
 
 `PlannedExactSourceNumerator` owns the assignment, prepared expression and exact
 signed mapping context behind an immutable `Arc`. A cache miss prepares the same
@@ -217,6 +220,14 @@ tuple. Constants are reused unchanged. Zero contact samples and the order of
 inactive-energy elimination are preserved. Mutable row caches live outside the
 immutable template and are cleared after each component wave. No graph-specific
 tables, global caches or serialized caches are involved.
+
+Preparation certifies the occurrence diagonal in a formal spatial/temporal
+frame, including fixed external four-vectors. Its only distribution is the
+finite projector action on an affine energy sum; numerator products and powers
+remain intact. A positive denominator block with a pinched hard carrier keeps
+its whole polynomial and an exact source-owned affine-rewrite witness. Only
+that witness permits joint fixed dependencies in the existing planned factor;
+uncertified mixed ownership and soft provenance keep their original rules.
 
 The full reconstruction invariant, sign argument for `D(Q)=D(-Q)`, and worked
 fixtures are documented in

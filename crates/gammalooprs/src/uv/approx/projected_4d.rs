@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     ops::Neg,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -11,7 +12,10 @@ use symbolica::atom::Atom;
 use three_dimensional_reps::CffGenerationContext;
 
 use crate::{
-    cff::CutCFFIndex,
+    cff::{
+        CutCFFIndex,
+        generation::{PreparationKey, PreparationValue},
+    },
     debug_tags,
     graph::{ExactUvSubLmbFrame, Graph, cuts::CutSet},
     numerator::energy_degree::{EnergyPowerAnalyzer, EnergyPowerCapMap},
@@ -20,7 +24,7 @@ use crate::{
         UVgenerationSettings,
         approx::{
             local_3d::Localizer,
-            local_4d::{CanonicalUvSector, Local4dCts},
+            local_4d::{CanonicalUvSector, FourDSector, Local4dCts},
         },
     },
 };
@@ -83,13 +87,13 @@ impl Neg for Projected4dCts {
 /// Independent contours share reusable source payloads, never coefficients.
 pub(crate) struct Local4dProjectionContext {
     pub(crate) generation_cache: crate::cff::generation::ExactCffGenerationCache,
-    pub(crate) numerator_templates: crate::cff::generation::GenerationCache<
-        crate::cff::ExactNumeratorTemplateKey,
-        std::sync::Arc<crate::cff::PlannedExactSourceNumerator>,
-    >,
+    pub(crate) preparations:
+        crate::cff::generation::GenerationCache<PreparationKey, PreparationValue>,
     pub(crate) numerator_rows:
         crate::cff::generation::GenerationCache<crate::cff::ExactNumeratorRowKey, Atom>,
     pub(crate) numerator_template_builds: usize,
+    pub(crate) canonical_preparation_builds: usize,
+    pub(crate) source_preparation_builds: usize,
     pub(crate) projected_component_requests: usize,
 }
 
@@ -97,14 +101,46 @@ impl Default for Local4dProjectionContext {
     fn default() -> Self {
         Self {
             generation_cache: Default::default(),
-            numerator_templates: crate::cff::generation::GenerationCache::new(
-                48 * 1024 * 1024,
-                4096,
-            ),
+            preparations: crate::cff::generation::GenerationCache::new(48 * 1024 * 1024, 4096),
             numerator_rows: crate::cff::generation::GenerationCache::new(16 * 1024 * 1024, 16384),
             numerator_template_builds: 0,
+            canonical_preparation_builds: 0,
+            source_preparation_builds: 0,
             projected_component_requests: 0,
         }
+    }
+}
+
+impl Local4dProjectionContext {
+    fn canonical_projection(
+        &mut self,
+        sector: FourDSector,
+        graph: &Graph,
+    ) -> Result<Arc<CanonicalUvSector>> {
+        let started = Instant::now();
+        let key = PreparationKey::Canonical(Arc::new(sector));
+        if let Some(PreparationValue::Canonical(sector)) = self.preparations.get(&key) {
+            let sector = Arc::clone(sector);
+            drop(key);
+            self.preparations.cache_time += started.elapsed();
+            return Ok(sector);
+        }
+        let PreparationKey::Canonical(raw) = &key else {
+            unreachable!()
+        };
+        let projection_started = Instant::now();
+        let sector = Arc::new(raw.canonical_projection(graph)?);
+        let projection_time = projection_started.elapsed();
+        let bytes = raw.accounted_bytes()
+            + sector.accounted_bytes()
+            + 2 * std::mem::size_of::<PreparationKey>()
+            + std::mem::size_of::<PreparationValue>()
+            + 128;
+        self.canonical_preparation_builds += 1;
+        self.preparations
+            .insert(key, PreparationValue::Canonical(Arc::clone(&sector)), bytes);
+        self.preparations.cache_time += started.elapsed().saturating_sub(projection_time);
+        Ok(sector)
     }
 }
 
@@ -352,20 +388,29 @@ impl Localizer<'_> {
                 // Combine numerator keys first: carrier-first grouping would
                 // turn repeated identical N into different multiples of N and
                 // conceal reuse at the next independent component.
-                let mut by_numerator = BTreeMap::<Atom, Atom>::new();
-                for (carrier, numerator) in std::mem::take(states) {
-                    *by_numerator.entry(numerator).or_insert(Atom::Zero) += carrier;
-                }
-                let mut by_carrier = BTreeMap::<Atom, Atom>::new();
-                for (numerator, carrier) in by_numerator {
-                    if !carrier.is_zero() {
-                        *by_carrier.entry(carrier).or_insert(Atom::Zero) += numerator;
+                loop {
+                    let previous_count = states.len();
+                    let mut by_numerator = BTreeMap::<Atom, Atom>::new();
+                    for (carrier, numerator) in std::mem::take(states) {
+                        *by_numerator.entry(numerator).or_insert(Atom::Zero) += carrier;
+                    }
+                    let mut by_carrier = BTreeMap::<Atom, Atom>::new();
+                    for (numerator, carrier) in by_numerator {
+                        if !carrier.is_zero() {
+                            *by_carrier.entry(carrier).or_insert(Atom::Zero) += numerator;
+                        }
+                    }
+                    *states = by_carrier
+                        .into_iter()
+                        .filter(|(_, numerator)| !numerator.is_zero())
+                        .collect();
+                    // Summing numerators can create an equality which the
+                    // first pass could not see. Every further useful pass
+                    // strictly decreases the number of states.
+                    if states.len() == previous_count {
+                        break;
                     }
                 }
-                *states = by_carrier
-                    .into_iter()
-                    .filter(|(_, numerator)| !numerator.is_zero())
-                    .collect();
             }
 
             composition_time += composition_started.elapsed();
@@ -385,10 +430,10 @@ impl Localizer<'_> {
             debug_tags!(#generation, #uv, #local, #four_d, #cff, #summary;
                 component,
                 cached_exact_cff_expressions = context.generation_cache.len(),
-                cached_numerator_templates = context.numerator_templates.len(),
+                cached_preparations = context.preparations.len(),
                 numerator_template_builds = context.numerator_template_builds,
                 numerator_row_cache_hits = context.numerator_rows.hits,
-                numerator_template_bytes = context.numerator_templates.retained_bytes(),
+                preparation_bytes = context.preparations.retained_bytes(),
                 "Cached exact CFF expressions by topology and capacity in one local-4D component wave"
             );
         }
@@ -460,13 +505,16 @@ impl Projected4dApproximation<'_> {
         );
         for sector in sectors {
             let normalization_started = Instant::now();
-            let sector = sector.canonical_projection(self.graph)?;
+            let cache_time_before = context.preparations.cache_time;
+            let sector = context.canonical_projection(sector, self.graph)?;
+            let cache_time = context.preparations.cache_time - cache_time_before;
             debug_tags!(#generation, #uv, #local, #four_d, #profile;
                 stage = "canonical_normalization",
                 buckets = sector.terms.len(),
                 denominator_classes = sector.classes.len(),
                 components = sector.active_components.len(),
                 elapsed_ms = normalization_started.elapsed().as_secs_f64() * 1000.0,
+                cache_work_ms = cache_time.as_secs_f64() * 1000.0,
                 "Certified canonical factorized UV algebra"
             );
             let frozen_localizer = sector.frozen_lmbs.iter().fold(Atom::one(), |product, lmb| {
@@ -482,16 +530,31 @@ impl Projected4dApproximation<'_> {
             });
         }
 
+        let (cff_hits, cff_misses, cff_evictions, retained_cff_bytes) =
+            context.generation_cache.statistics();
         debug_tags!(#generation, #uv, #local, #four_d, #profile;
             stage = "local_projection_total",
             graph = %self.graph.name,
             elapsed_ms = projection_started.elapsed().as_secs_f64() * 1000.0,
             component_requests = context.projected_component_requests,
             template_builds = context.numerator_template_builds,
-            template_hits = context.numerator_templates.hits,
-            template_misses = context.numerator_templates.misses,
-            template_evictions = context.numerator_templates.evictions,
-            retained_template_bytes = context.numerator_templates.retained_bytes(),
+            canonical_preparation_builds = context.canonical_preparation_builds,
+            source_preparation_builds = context.source_preparation_builds,
+            preparation_hits = context.preparations.hits,
+            preparation_misses = context.preparations.misses,
+            preparation_evictions = context.preparations.evictions,
+            retained_preparation_bytes = context.preparations.retained_bytes(),
+            preparation_cache_ms = context.preparations.cache_time.as_secs_f64() * 1000.0,
+            cff_hits,
+            cff_misses,
+            cff_evictions,
+            retained_cff_bytes,
+            native_generations = context.generation_cache.native_generations,
+            row_hits = context.numerator_rows.hits,
+            row_misses = context.numerator_rows.misses,
+            row_evictions = context.numerator_rows.evictions,
+            retained_row_bytes = context.numerator_rows.retained_bytes(),
+            row_cache_ms = context.numerator_rows.cache_time.as_secs_f64() * 1000.0,
             "Completed local four-dimensional UV projection"
         );
         Ok(Projected4dCts::new(active_sectors))
@@ -515,6 +578,94 @@ mod tests {
         subgraph::{InternalSubGraph, SubSetOps},
     };
     use symbolica::atom::{AtomCore, FunctionBuilder};
+
+    #[test]
+    fn canonical_source_and_template_preparation_share_retention_invariant_budget() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph preparation_retention {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let mut coefficient = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one();
+        for edge in [EdgeIndex(0), EdgeIndex(1)] {
+            let momentum = FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish();
+            let polynomial = (1..=3).fold(
+                GS.emr_mom(edge, GS.cind(0)).pow(2) - Atom::one(),
+                |polynomial, index| polynomial - GS.emr_mom(edge, GS.cind(index)).pow(2),
+            );
+            coefficient *= GS
+                .den(usize::from(edge), momentum, Atom::one(), polynomial)
+                .pow(-2);
+        }
+        let full = graph.full_filter();
+        let raw = FourDSector::new(
+            coefficient,
+            vec![(full.clone(), full, graph.loop_momentum_basis.clone())],
+            Vec::new(),
+        );
+        let cutset = CutSet::empty(graph.n_hedges());
+        let pattern = OrientationPattern::default();
+        let production = Default::default();
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, false),
+        );
+        let mut context = Local4dProjectionContext::default();
+        let mut expected = None;
+        for phase in ["cold", "warm", "disabled", "evicted", "evicted_again"] {
+            if phase == "disabled" {
+                context.preparations = crate::cff::generation::GenerationCache::new(0, 0);
+            } else if phase == "evicted" {
+                context.preparations =
+                    crate::cff::generation::GenerationCache::new(48 * 1024 * 1024, 1);
+            }
+            let before = (
+                context.canonical_preparation_builds,
+                context.source_preparation_builds,
+                context.numerator_template_builds,
+                context.generation_cache.native_generations,
+            );
+            let sector = context.canonical_projection(raw.clone(), &graph)?;
+            let coefficient = localizer
+                .project_factorized_taylor_sector(&mut graph, &sector, &mut context)?
+                .collect_factors();
+            assert_eq!(
+                expected.get_or_insert_with(|| coefficient.clone()),
+                &coefficient,
+                "{phase}"
+            );
+            assert!(context.preparations.retained_bytes() <= 48 * 1024 * 1024);
+            if phase == "warm" {
+                assert_eq!(
+                    before,
+                    (
+                        context.canonical_preparation_builds,
+                        context.source_preparation_builds,
+                        context.numerator_template_builds,
+                        context.generation_cache.native_generations,
+                    )
+                );
+                assert_eq!(context.preparations.len(), 3);
+            } else {
+                assert_eq!(context.canonical_preparation_builds, before.0 + 1);
+                assert_eq!(context.source_preparation_builds, before.1 + 1);
+                assert_eq!(context.numerator_template_builds, before.2 + 1);
+            }
+            if phase == "disabled" {
+                assert_eq!(context.preparations.len(), 0);
+                assert_eq!(context.preparations.retained_bytes(), 0);
+            } else if phase.starts_with("evicted") {
+                assert_eq!(context.preparations.len(), 1);
+                assert!(context.preparations.evictions >= 2);
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn nested_banana_quotient_powered_component_has_the_analytic_one_energy_sign() -> Result<()> {

@@ -223,6 +223,102 @@ fn executed_scaled_tensors_add_distinct_tensors() {
     assert_eq!(result.data, vec![11.0, 16.0]);
 }
 
+#[test]
+fn lazy_scalar_tensors_add_scalars_in_either_order() {
+    use super::{
+        ExecutionResult, Network, NetworkGraph, NetworkLeaf, NodeIndex, ScaledTensorRef,
+        Sequential, SmallestDegree,
+        library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+        store::{NetworkStore, TensorScalarStore},
+        try_balanced_scalar_sum,
+    };
+    use crate::{
+        structure::{
+            OrderedStructure, ScalarTensor,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    type LibTensor = DummyLibraryTensor<Tensor>;
+    type Lib = DummyLibrary<Tensor, DummyKey>;
+    type FnLib = ErroringLibrary<DummyKey>;
+    let lib = Lib::new();
+    let fn_lib = FnLib::new();
+
+    for open_index in [false, true] {
+        let mut lazy = Net::from_tensor(if open_index {
+            let structure = OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure;
+            DenseTensor::from_data(vec![3.0, 5.0], structure).unwrap()
+        } else {
+            Tensor::new_scalar(3.0)
+        });
+        lazy.store.add_tensor(if open_index {
+            lazy.store.tensors[0].clone()
+        } else {
+            Tensor::new_scalar(5.0)
+        });
+        let negative = lazy.store.add_scalar(-2.0);
+        let positive = lazy.store.add_scalar(4.0);
+        for (leaf, expected) in [
+            (NetworkLeaf::TensorSum(vec![0, 1]), 8.0),
+            (
+                NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled(0, negative)),
+                -6.0,
+            ),
+            (
+                NetworkLeaf::ScaledTensorSum(vec![
+                    ScaledTensorRef::scaled(0, negative),
+                    ScaledTensorRef::scaled(1, positive),
+                ]),
+                14.0,
+            ),
+        ] {
+            // These are the lazy leaves produced by contraction. Keep them
+            // lazy at the next sum boundary, where operand order used to
+            // decide whether a valid scalar-valued tensor was accepted.
+            lazy.graph = NetworkGraph::tensor(&lazy.store.tensors[0], leaf.clone());
+            if !open_index {
+                let ExecutionResult::Val(actual) = lazy.result_scalar().unwrap() else {
+                    panic!("expected scalar-valued lazy tensor");
+                };
+                assert_eq!(*actual, expected);
+            }
+            for scalar_first in [false, true] {
+                if open_index {
+                    // A well-formed network rejects incompatible free indices
+                    // before execution. Exercise the scalar dispatch boundary
+                    // directly, including its no-partial-store-write guarantee.
+                    let mut store = lazy.store.clone();
+                    let scalar = NetworkLeaf::Scalar(store.add_scalar(7.0).into());
+                    let mut targets = [(NodeIndex(0), &scalar), (NodeIndex(1), &leaf)];
+                    if !scalar_first {
+                        targets.reverse();
+                    }
+                    let counts = (store.tensors.len(), store.scalar.len());
+                    assert!(try_balanced_scalar_sum(&mut store, &targets, None).is_none());
+                    assert_eq!((store.tensors.len(), store.scalar.len()), counts);
+                    continue;
+                }
+                let scalar = Net::from_scalar(7.0);
+                let mut sum = if scalar_first {
+                    scalar + lazy.clone()
+                } else {
+                    lazy.clone() + scalar
+                };
+                sum.execute::<Sequential, SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+                    .unwrap();
+                let ExecutionResult::Val(actual) = sum.result_scalar().unwrap() else {
+                    panic!("expected scalar sum");
+                };
+                assert_eq!(*actual, expected + 7.0);
+            }
+        }
+    }
+}
+
 #[cfg(feature = "shadowing")]
 #[test]
 fn large_scaled_tensor_sum_preserves_results_across_strategies() {
