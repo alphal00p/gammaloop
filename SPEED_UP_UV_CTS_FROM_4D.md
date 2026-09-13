@@ -984,3 +984,42 @@ If a gate fails, use the measurements to continue the generic implementation, in
   Dirac payload when collecting the unrelated color representation. Existing
   snapshots and zero checks pass unchanged. Clippy6 succeeds in 21.88 s with
   the same three type-complexity warnings.
+
+### 2026-09-13 — Complete-forest diagnostic and final validation preparation
+
+- Milestone `eef89f3d22ecf285d59da6bd4cd108143d0d8b31` is committed and
+  pushed as ValentinHirschi. An independent read-only review found no actionable
+  defect in the scalar-invariant, coefficient-protection and chain-collection
+  changes; this review does not replace the pending integration checks.
+- CLI10 completes the previously obstructed DOD2 node in 94.634396 s, with
+  71.499 ms in local projection. Its later DOD1 node completes in 309.192255 s,
+  with 215.432 ms in local projection. A 106-sample transition profile has no
+  collector or statistical-zero-test frames. A subsequent DOD0 term completes
+  in 231.875341 s; its 123-sample profile attributes 79.67% to ordinary
+  Schoonschip normalization, including 71.54% in dot normalization. Both
+  profiles report zero lost samples. These are diagnostic stage measurements,
+  not complete generation times or performance acceptance results.
+- After six of eight terms completed and the seventh was progressing, the
+  diagnostic's total allowance was extended explicitly from 1,200 to 2,400 s.
+  The original limit and extension receipts remain part of the run record.
+  Evaluator construction, pointwise evaluation and actual production forest
+  export remain pending; no successful GL262 ratio is inferred.
+- Check49 and integration build5 pass. Four immutable, assertion-enabled
+  `dev-optim` test executables from clean revision `eef89f3d2` are frozen in
+  `validation_candidate_eef89`, with exact binary sizes/hashes, compiler and
+  lockfile identity in `final_build_manifest.json`. The complete harness
+  dry-run selects 184 checks in six groups. No execution result is claimed by
+  this build or dry-run. The verbatim plan prefix still has SHA-256
+  `5c3ce40e19a807015e346df66904d6e770a7bb7ead1128c3e15437578851428c`.
+- The physical harness now clears six inherited Spenso diagnostic/override
+  variables and all three logging overrides; cards determine final logging.
+  The correctness harness also clears the sparse-shadow override. Median gates
+  are unchanged, but runtime repetition is additionally required when the
+  envelope of all accepted pass means plus/minus twice their reported SEMs
+  crosses 1.15. This is a conservative repeat trigger, not a confidence
+  interval. Eleven synthetic controls, 27-card preparation, Ruff and syntax
+  checks pass; results and exact policy are in `physical_protocol_validation`.
+- Seven frozen-binary boundary checks (four UV composition, two API
+  cut/threshold and one analytic renormalization check) are queued under the
+  same measurement lock, behind CLI10. The full scalar and physical matrix
+  and final repeated generation/runtime gates remain outstanding.
