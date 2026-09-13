@@ -419,8 +419,11 @@ impl CrossSectionIntegrand {
         Ok(compile_times)
     }
 
-    pub(crate) fn invalidate_event_processing_runtime(&mut self) {
+    pub(crate) fn invalidate_runtime_caches(&mut self) {
         self.event_processing_runtime.invalidate();
+        for term in &mut self.data.graph_terms {
+            term.multi_channeling_setup.sampling_bridge.invalidate();
+        }
     }
 }
 
@@ -470,6 +473,7 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
     }
 
     fn warm_up(&mut self, model: &Model) -> Result<()> {
+        self.invalidate_runtime_caches();
         if self.data.symmetrize_left_right_states {
             warn!(
                 "This integrand was generated with symmetrize_left_right_states=true, which assumes CP symmetry. Complex couplings or model updates can invalidate that assumption; verifying it at the current parameter point is the user's responsibility"
@@ -505,7 +509,7 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
                 &histogram_process_info_for_integrand(self)?,
             )?,
         );
-        Ok(())
+        self.warm_up_sampling()
     }
 
     fn uses_explicit_orientation_sum_only(&self) -> bool {
@@ -1352,6 +1356,7 @@ impl CrossSectionGraphTerm {
                     .clone(),
                 cut_threshold_associations: graph.derived_data.cut_threshold_associations.clone(),
                 multi_channeling_setup: LmbMultiChannelingSetup {
+                    sampling_bridge: Default::default(),
                     lmb_basis_ids: TiVec::new(),
                     graph: graph.graph.clone(), // will be overwritten later,
                     all_bases: TiVec::new(),
@@ -1592,6 +1597,10 @@ impl GraphTerm for CrossSectionGraphTerm {
         &self.multi_channeling_setup
     }
 
+    fn sampling_setup_mut(&mut self) -> &mut LmbMultiChannelingSetup {
+        &mut self.multi_channeling_setup
+    }
+
     fn get_mut_param_builder(&mut self) -> &mut ParamBuilder<f64> {
         &mut self.param_builder
     }
@@ -1790,6 +1799,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     }
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
+        self.multi_channeling_setup.sampling_bridge.invalidate();
         self.graph.validate_real_masses(model)?;
         self.estimated_scale = Some(
             self.graph

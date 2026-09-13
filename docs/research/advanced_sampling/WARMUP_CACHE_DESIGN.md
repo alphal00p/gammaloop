@@ -1,7 +1,10 @@
 # Sampling bridge compilation during warmup
 
-Status: implementation proposal, audited against the shared tree on 2026-09-13.
-This note changes no production behavior and makes no performance claim.
+Status: ownership design audited on 2026-09-13; the following implementation
+retains the f64 bridge in the existing setup cache and removes per-draw
+construction. All 154 library sampling tests, both saved-state/summed API tests,
+core/API test checking and clippy pass. No throughput
+or physical variance improvement is claimed before measurement.
 It extends [the implementation plan](../../../ADVANCED_SAMPLING_PLAN.md) and
 the [amplitude benchmark study](AMPLITUDE_BENCHMARK_CANDIDATES.md).
 
@@ -55,8 +58,9 @@ from the same bridge. UI/grid inspection may retain explicit metadata resolution
 Only modes that actually use bridges need a runtime bridge; do not accidentally
 activate unsupported map definitions in unrelated sampling modes.
 
-Prefer `RuntimeCache<SamplingChannelBridge>` on each graph over an `Arc` around
-the entire bridge. The hot path borrows it; the summed loop can finish an owned
+The graph's existing `LmbMultiChannelingSetup` owns
+`RuntimeCache<SamplingChannelBridge>`, instead of an `Arc` around the entire
+bridge. The hot path borrows it; the summed loop can finish an owned
 forward-map result before mutably evaluating the graph. No per-draw bridge clone
 is necessary. Existing immutable geometry callbacks may continue sharing `Arc`s.
 
@@ -73,9 +77,10 @@ is necessary. Existing immutable geometry callbacks may continue sharing `Arc`s.
 4. Publish the bridges only after all construction succeeds. No graph should
    retain a new bridge while another retains an old one after an error.
 
-Extend the existing mutable-settings invalidation boundary, currently named
-`invalidate_event_processing_runtime`, rather than inventing a parallel settings
-owner. `ProcessIntegrand::get_mut_settings` must invalidate sampling caches before
+The existing mutable-settings invalidation boundary was expanded and renamed
+from `invalidate_event_processing_runtime` to `invalidate_runtime_caches`,
+retaining one settings owner. `ProcessIntegrand::get_mut_settings` invalidates
+sampling caches before
 returning its mutable reference. Graph filtering/replacement, routing changes,
 and model changes require the same warmup lifecycle. Public direct Rust mutation
 must be followed by warmup; untracked field mutation cannot safely coexist with
@@ -117,15 +122,14 @@ compiled programs and reload requires warmup. One bridge per graph is sufficient
 for the presently supported orientation-independent maps; do not construct
 hundreds of identical bridges for a graph's orientation catalogue.
 
-`SamplingScoreFunction::Clone` currently shares its opaque callback `Arc`.
-Symbolica-expression callbacks capture an `Arc<Mutex<SamplingExpressionEvaluator>>`,
-so merely cloning the bridge still shares one mutable evaluator buffer among
-workers. This is correct but may serialize proxy scoring. Preserve a concrete
-compiled-expression variant inside the existing score owner so worker cloning
-can clone the already compiled evaluator into a fresh local mutex. Immutable
-Rust callbacks may remain shared. Do not reparse/recompile per worker or introduce
-another evaluator engine. Verify the underlying evaluator's clone semantics;
-separate mutable buffers while sharing immutable program storage where supported.
+The original `SamplingScoreFunction::Clone` shared its opaque callback `Arc`,
+including an `Arc<Mutex<SamplingExpressionEvaluator>>` for Symbolica scores.
+Worker clones therefore shared mutable evaluator buffers. The score owner now
+retains a concrete compiled-expression variant whose clone copies the existing
+evaluator into a fresh local mutex. Immutable Rust callbacks remain shared.
+The partition borrows map/proxy evaluators at each point; it must not clone
+their new worker-local buffers per draw. No reparse, recompilation or second
+evaluator engine is introduced by worker cloning.
 
 ## Future conditional maps
 

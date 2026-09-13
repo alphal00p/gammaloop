@@ -347,20 +347,6 @@ impl<T: FloatLike> DeferredCrossSectionSample<T> {
     }
 }
 
-/// Whether the selected runtime mode explicitly sums the canonical channels.
-/// Both top-level and discrete graph sampling use the same summed estimator;
-/// keeping the predicate central also guards cut-dependent maps in both forms.
-fn is_summed_multichanneling(settings: &SamplingSettings) -> bool {
-    match settings {
-        SamplingSettings::MultiChanneling(_) => true,
-        SamplingSettings::DiscreteGraphs(settings) => matches!(
-            &settings.sampling_type,
-            DiscreteGraphSamplingType::MultiChanneling(_)
-        ),
-        SamplingSettings::Default(_) => false,
-    }
-}
-
 impl<T: FloatLike> DiscreteGraphSample<T> {
     #[allow(dead_code)]
     pub(crate) fn zero(&self) -> F<T> {
@@ -630,30 +616,25 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
     let loop_mom_cache_id = integrand.loop_cache_id();
     let external_mom_cache_id = integrand.external_cache_id();
     let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
-    let parameterization_settings = settings.sampling.get_parameterization_settings();
-    if let Some(parameterization_settings) = parameterization_settings.as_ref()
-        && matches!(
-            &settings.sampling,
-            SamplingSettings::MultiChanneling(_) | SamplingSettings::DiscreteGraphs(_)
-        )
-    {
-        // Resolve the canonical catalogue before decoding discrete indices.
+    if settings.sampling.uses_sampling_channels() {
+        // Validate the warmed canonical catalogue before decoding discrete indices.
         // This turns unsupported named/surface channels into a diagnostic
         // instead of silently treating an invalid catalogue as an empty axis.
         for group_id in 0..integrand.get_group_structure().len() {
             let graph = integrand.get_master_graph(GroupId(group_id));
-            graph.sampling_channel_ids(parameterization_settings)?;
-            if is_summed_multichanneling(&settings.sampling) {
-                for channel_id in graph.sampling_channel_ids(parameterization_settings)? {
-                    if graph.sampling_channel_requires_deferred_cut_context(
-                        channel_id,
-                        parameterization_settings,
-                    )? {
-                        return Err(eyre!(
-                            "sampling channel {} requires solved LU/t* context before mapping",
-                            channel_id.index()
-                        ));
-                    }
+            for (id, channel) in graph
+                .sampling_setup()
+                .sampling_bridge()?
+                .channels()
+                .iter()
+                .enumerate()
+            {
+                if super::sampling_selection::sampling_map_requires_deferred_cut_context(
+                    &channel.definition,
+                ) {
+                    return Err(eyre!(
+                        "sampling channel {id} requires solved LU/t* context before mapping"
+                    ));
                 }
             }
         }
@@ -664,15 +645,14 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
         integrand.get_group_structure().len(),
         |group_id| Some(integrand.get_master_graph(group_id).get_num_orientations()),
         |group_id| {
-            parameterization_settings
-                .as_ref()
-                .map(|settings| {
-                    integrand
-                        .get_master_graph(group_id)
-                        .sampling_channel_ids(settings)
-                        .map(|channel_ids| channel_ids.len())
-                })
-                .transpose()
+            Ok(Some(
+                integrand
+                    .get_master_graph(group_id)
+                    .sampling_setup()
+                    .sampling_bridge()?
+                    .channels()
+                    .len(),
+            ))
         },
     )?;
 
@@ -809,37 +789,15 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                         sample: DiscreteGraphSample::Tropical(default_sample),
                     })
                 }
-                DiscreteGraphSamplingType::SamplingMultiChanneling(multichanneling_settings) => {
+                DiscreteGraphSamplingType::SamplingMultiChanneling(_) => {
                     let channel_id = channel_id.ok_or_else(|| {
                         eyre!(
                             "Internal error: missing channel selection for discrete multi-channeling."
                         )
                     })?;
 
-                    let parameterization_settings =
-                        &multichanneling_settings.parameterization_settings;
                     let graph = integrand.get_master_graph(group_id);
-                    let externals = settings
-                        .kinematics
-                        .externals
-                        .get_dependent_externals::<f64>(dependent_momenta_constructor)?;
-                    let external_momenta = externals
-                        .iter()
-                        .map(|momentum| {
-                            [
-                                momentum.temporal.value.0,
-                                momentum.spatial.px.0,
-                                momentum.spatial.py.0,
-                                momentum.spatial.pz.0,
-                            ]
-                        })
-                        .collect::<Vec<_>>();
-                    let bridge = graph.compile_sampling_bridge(
-                        parameterization_settings,
-                        settings.kinematics.e_cm,
-                        &external_momenta,
-                        orientation_id,
-                    )?;
+                    let bridge = graph.sampling_setup().sampling_bridge()?;
                     let coordinates = xs.iter().map(|x| x.clone().into_ff64().0).collect_vec();
                     let mapped = bridge.forward(channel_id, &coordinates)?;
                     let mut sample =
@@ -925,7 +883,6 @@ mod tests {
     use crate::utils::F;
     use crate::{DependentMomentaConstructor, settings::runtime::kinematic::Externals};
 
-    use super::is_summed_multichanneling;
     use super::{DiscreteGraphSample, SamplingChannelId, unwrap_sample};
     use crate::settings::runtime::{
         DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, MultiChannelingSettings,
@@ -933,29 +890,31 @@ mod tests {
     };
 
     #[test]
-    fn summed_multichanneling_guard_covers_top_level_and_graph_modes() {
-        assert!(is_summed_multichanneling(
-            &SamplingSettings::MultiChanneling(MultiChannelingSettings::default(),)
-        ));
-        assert!(is_summed_multichanneling(
-            &SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
-                sampling_type: DiscreteGraphSamplingType::MultiChanneling(
-                    MultiChannelingSettings::default(),
-                ),
-                ..Default::default()
-            },)
-        ));
-        assert!(!is_summed_multichanneling(
-            &SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
-                sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(
-                    MultiChannelingSettings::default(),
-                ),
-                ..Default::default()
-            },)
-        ));
-        assert!(!is_summed_multichanneling(&SamplingSettings::Default(
-            ParameterizationSettings::default(),
-        )));
+    fn sampling_channel_guard_covers_summed_and_monte_carlo_modes() {
+        assert!(
+            SamplingSettings::MultiChanneling(MultiChannelingSettings::default())
+                .uses_sampling_channels()
+        );
+        for sampling_type in [
+            DiscreteGraphSamplingType::MultiChanneling(MultiChannelingSettings::default()),
+            DiscreteGraphSamplingType::SamplingMultiChanneling(MultiChannelingSettings::default()),
+        ] {
+            assert!(
+                SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                    sampling_type,
+                    ..Default::default()
+                })
+                .uses_sampling_channels()
+            );
+        }
+        assert!(
+            !SamplingSettings::Default(ParameterizationSettings::default())
+                .uses_sampling_channels()
+        );
+        assert!(
+            !SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings::default())
+                .uses_sampling_channels()
+        );
     }
 
     #[test]

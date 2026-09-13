@@ -86,8 +86,7 @@ pub use sampling_maps::{
     SamplingMapKernel, SamplingMapPoint, SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
 };
 pub use sampling_partition::{
-    SamplingChannelScore, SamplingPartition, SamplingPartitionMode, SamplingScoreEvaluator,
-    SamplingScoreFunction,
+    SamplingChannelScore, SamplingPartition, SamplingPartitionMode, SamplingScoreFunction,
 };
 pub use sampling_reference::{
     GaussianReferenceFunction, ReferenceMoments, ReferenceSampleEvaluation, ReferenceSamplingReport,
@@ -423,7 +422,7 @@ impl ProcessIntegrand {
     }
 
     pub fn warm_up(&mut self, model: &Model) -> Result<()> {
-        let settings = self.get_settings();
+        let settings = self.get_mut_settings();
         if matches!(
             &settings.sampling,
             SamplingSettings::DiscreteGraphs(settings) if settings.sample_orientations
@@ -522,14 +521,16 @@ impl ProcessIntegrand {
         }
     }
 
+    /// Invalidate runtime caches before exposing mutable settings. Call
+    /// `warm_up` again before evaluating samples through sampling channels.
     pub fn get_mut_settings(&mut self) -> &mut RuntimeSettings {
         match self {
             ProcessIntegrand::Amplitude(integrand) => {
-                integrand.invalidate_event_processing_runtime();
+                integrand.invalidate_runtime_caches();
                 &mut integrand.settings
             }
             ProcessIntegrand::CrossSection(integrand) => {
-                integrand.invalidate_event_processing_runtime();
+                integrand.invalidate_runtime_caches();
                 &mut integrand.settings
             }
         }
@@ -2133,9 +2134,21 @@ pub struct LmbMultiChannelingSetup {
     /// Canonical group-master graph used to resolve group-level channel overrides.
     pub graph: Graph,
     pub all_bases: TiVec<LmbIndex, LoopMomentumBasis>,
+    pub(crate) sampling_bridge: RuntimeCache<SamplingChannelBridge>,
 }
 
 impl LmbMultiChannelingSetup {
+    /// Borrow the bridge compiled from the last successful process warmup.
+    /// Explicit constructors remain fresh and never populate this runtime cache.
+    pub fn sampling_bridge(&self) -> Result<&SamplingChannelBridge> {
+        self.sampling_bridge.as_ref().ok_or_else(|| {
+            eyre!(
+                "sampling bridge for graph '{}' is not initialized; call warm_up after loading or changing runtime settings, model parameters, or graph routing",
+                self.graph.name
+            )
+        })
+    }
+
     /// Expand a graph-resolved selection into the canonical catalogue used by
     /// inspection and map construction. Resolve with the actual graph name
     /// before invoking this method (the setup may be shared by a graph group).
@@ -2692,6 +2705,59 @@ pub trait ProcessIntegrandImpl {
     type G: GraphTerm;
 
     fn warm_up(&mut self, model: &Model) -> Result<()>;
+
+    /// Compile fixed graph geometry after process warmup has prepared masses
+    /// and improved externals. Publish only when every bridge is valid; radial
+    /// roots and conditional cut contexts remain point-dependent runtime data.
+    fn warm_up_sampling(&mut self) -> Result<()> {
+        for graph in self.get_terms_mut() {
+            graph.sampling_setup_mut().sampling_bridge.invalidate();
+        }
+        let settings = self.get_settings();
+        if !settings.sampling.uses_sampling_channels() {
+            return Ok(());
+        }
+        let parameterization = settings
+            .sampling
+            .get_parameterization_settings()
+            .expect("sampling channels require a parameterization");
+        let externals = settings
+            .kinematics
+            .externals
+            .get_dependent_externals::<f64>(self.get_dependent_momenta_constructor())?;
+        let external_momenta = externals
+            .iter()
+            .map(|momentum| {
+                [
+                    momentum.temporal.value.0,
+                    momentum.spatial.px.0,
+                    momentum.spatial.py.0,
+                    momentum.spatial.pz.0,
+                ]
+            })
+            .collect_vec();
+        let bridges = (0..self.graph_count())
+            .map(|id| {
+                self.get_graph(id).compile_sampling_bridge(
+                    &parameterization,
+                    settings.kinematics.e_cm,
+                    &external_momenta,
+                    None,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for (graph, bridge) in self.get_terms_mut().zip(bridges) {
+            crate::debug_tags!(#sampling;
+                stage = "sampling_bridge_warmup",
+                graph = %graph.name(),
+                channels = bridge.channels().len(),
+                "prepared graph sampling bridge"
+            );
+            graph.sampling_setup_mut().sampling_bridge.set(bridge);
+        }
+        Ok(())
+    }
+
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation>;
 
     fn increment_loop_cache_id(&mut self, val: usize);
@@ -3022,6 +3088,7 @@ pub trait GraphTerm {
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()>;
     fn get_graph(&self) -> &Graph;
     fn sampling_setup(&self) -> &LmbMultiChannelingSetup;
+    fn sampling_setup_mut(&mut self) -> &mut LmbMultiChannelingSetup;
     fn get_num_orientations(&self) -> usize;
     fn production_orientation_keys(&self) -> &[String];
     fn selected_production_orientation_keys(&self) -> Vec<&str>;
@@ -3102,18 +3169,27 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     sampling_channel: Option<SamplingChannelId>,
     lmb_basis_id: Option<LmbIndex>,
 ) -> Result<GraphEvaluationResult<T>> {
-    if let Some(channel) = sampling_channel
-        && let Some(parameterization_settings) =
-            context.settings.sampling.get_parameterization_settings()
-        && integrand
-            .get_graph(graph_id)
-            .sampling_channel_requires_deferred_cut_context(channel, &parameterization_settings)?
-    {
-        return Err(eyre!(
-            "sampling channel {} for graph '{}' requires a deferred physical-cut context (solved LU/t* and unit-cube coordinates); the cross-section evaluator boundary cannot evaluate it from a pre-mapped sample",
-            channel.index(),
-            integrand.get_graph(graph_id).name(),
-        ));
+    if let Some(channel_id) = sampling_channel {
+        let graph = integrand.get_graph(graph_id);
+        let channel = graph
+            .sampling_setup()
+            .sampling_bridge()?
+            .channels()
+            .get(channel_id.index())
+            .ok_or_else(|| {
+                eyre!(
+                    "sampling channel {} is out of range for graph '{}'",
+                    channel_id.index(),
+                    graph.name()
+                )
+            })?;
+        if sampling_selection::sampling_map_requires_deferred_cut_context(&channel.definition) {
+            return Err(eyre!(
+                "sampling channel {} for graph '{}' requires a deferred physical-cut context (solved LU/t* and unit-cube coordinates); the cross-section evaluator boundary cannot evaluate it from a pre-mapped sample",
+                channel_id.index(),
+                graph.name(),
+            ));
+        }
     }
     // Default sampling starts in a selected LMB. Both targets must see the
     // same graph-parent point, after the existing affine reinterpretation.
@@ -3266,14 +3342,12 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                 sampling_coordinates,
                 sample,
             } => {
-                let parameterization_settings = context
-                    .settings
-                    .sampling
-                    .get_parameterization_settings()
-                    .expect("sampling multichanneling requires a parameterization");
-                let channel_ids = integrand
+                let channel_count = integrand
                     .get_graph(graph_id)
-                    .sampling_channel_ids(&parameterization_settings)?;
+                    .sampling_setup()
+                    .sampling_bridge()?
+                    .channels()
+                    .len();
                 let coordinates = sampling_coordinates
                     .as_ref()
                     .ok_or_else(|| {
@@ -3282,37 +3356,17 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     .iter()
                     .map(|coordinate| coordinate.clone().into_ff64().0)
                     .collect_vec();
-                let externals = context
-                    .settings
-                    .kinematics
-                    .externals
-                    .get_dependent_externals::<f64>(
-                        integrand.get_dependent_momenta_constructor(),
-                    )?;
-                let external_momenta = externals
-                    .iter()
-                    .map(|momentum| {
-                        [
-                            momentum.temporal.value.0,
-                            momentum.spatial.px.0,
-                            momentum.spatial.py.0,
-                            momentum.spatial.pz.0,
-                        ]
-                    })
-                    .collect_vec();
-                let bridge = integrand.get_graph(graph_id).compile_sampling_bridge(
-                    &parameterization_settings,
-                    context.settings.kinematics.e_cm,
-                    &external_momenta,
-                    sample.sample.orientation,
-                )?;
-                channel_ids.into_iter().try_fold(
+                (0..channel_count).map(SamplingChannelId::from).try_fold(
                     // Summed channels contribute J_c(x) w_c(T_c(x)) f(T_c(x)).
                     // Channel Monte Carlo supplies its inverse selection probability
                     // separately; an explicit sum has no channel-count multiplier.
                     GraphEvaluationResult::zero(zero.clone()),
                     |mut sum, channel_id| {
-                        let mapped = bridge.forward(channel_id, &coordinates)?;
+                        let mapped = integrand
+                            .get_graph(graph_id)
+                            .sampling_setup()
+                            .sampling_bridge()?
+                            .forward(channel_id, &coordinates)?;
                         let partition_weight =
                             mapped.partition.weight(channel_id.index()).ok_or_else(|| {
                                 eyre!("sampling partition has no channel {}", channel_id.index())
@@ -4161,39 +4215,14 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                     }
                     DiscreteGraphSample::Tropical(sample)
                 }
-                DiscreteGraphSamplingType::SamplingMultiChanneling(multichanneling_settings) => {
+                DiscreteGraphSamplingType::SamplingMultiChanneling(_) => {
                     let channel_id = input.channel_id.ok_or_else(|| {
                         eyre!(
                             "Momentum-space evaluation for discrete multichanneling requires selecting a channel."
                         )
                     })?;
-                    let parameterization_settings =
-                        &multichanneling_settings.parameterization_settings;
                     let graph = integrand.get_master_graph(group_id);
-                    let externals = integrand
-                        .get_settings()
-                        .kinematics
-                        .externals
-                        .get_dependent_externals::<f64>(
-                            integrand.get_dependent_momenta_constructor(),
-                        )?;
-                    let external_momenta = externals
-                        .iter()
-                        .map(|momentum| {
-                            [
-                                momentum.temporal.value.0,
-                                momentum.spatial.px.0,
-                                momentum.spatial.py.0,
-                                momentum.spatial.pz.0,
-                            ]
-                        })
-                        .collect::<Vec<_>>();
-                    let bridge = graph.compile_sampling_bridge(
-                        parameterization_settings,
-                        integrand.get_settings().kinematics.e_cm,
-                        &external_momenta,
-                        input.orientation,
-                    )?;
+                    let bridge = graph.sampling_setup().sampling_bridge()?;
                     let mapped = bridge.inverse(
                         channel_id,
                         &input
@@ -5166,6 +5195,7 @@ mod tests {
         };
         let all_bases = vec![lmb(0), lmb(1), lmb(2)].into();
         let setup = LmbMultiChannelingSetup {
+            sampling_bridge: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(2), LmbIndex::from(0)].into(),
             graph,
             all_bases,
@@ -5359,6 +5389,7 @@ mod tests {
         assert!(all_bases.len() >= 2);
         graph.loop_momentum_basis = all_bases[LmbIndex::from(0)].clone();
         let setup = LmbMultiChannelingSetup {
+            sampling_bridge: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(0), LmbIndex::from(1)].into(),
             graph: graph.clone(),
             all_bases,
@@ -5498,6 +5529,7 @@ mod tests {
             .map(|edge| edge.0)
             .collect::<Vec<_>>();
         let setup = LmbMultiChannelingSetup {
+            sampling_bridge: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(0)].into(),
             graph: graph.clone(),
             all_bases,

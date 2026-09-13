@@ -57,6 +57,8 @@ impl SamplingJacobianEvaluation {
 /// The eager program is always retained.  If `with_derivatives` is requested,
 /// Symbolica's hyper-dual evaluator is built from the very same expression
 /// tree, yielding exact first partials suitable for a forward-map Jacobian.
+/// Cloning copies the already compiled programs and their mutable buffers;
+/// it does not run expression optimization or compilation again.
 #[derive(Clone)]
 pub struct SamplingExpressionEvaluator {
     evaluator: GenericEvaluator,

@@ -625,6 +625,7 @@ impl AmplitudeGraphTerm {
                 tropical_sampler: graph.derived_data.tropical_sampler.clone(),
                 graph: graph.graph.clone(),
                 multi_channeling_setup: LmbMultiChannelingSetup {
+                    sampling_bridge: Default::default(),
                     lmb_basis_ids: TiVec::new(),
                     graph: graph.graph.clone(), // will be overwritten later,
                     all_bases: TiVec::new(),
@@ -969,6 +970,7 @@ impl GraphTerm for AmplitudeGraphTerm {
           err
     )]
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
+        self.multi_channeling_setup.sampling_bridge.invalidate();
         if self.explicit_orientation_sum_only {
             self.orientation_filter = SubSet::full(self.orientations.len());
         } else {
@@ -1125,6 +1127,10 @@ impl GraphTerm for AmplitudeGraphTerm {
 
     fn sampling_setup(&self) -> &LmbMultiChannelingSetup {
         &self.multi_channeling_setup
+    }
+
+    fn sampling_setup_mut(&mut self) -> &mut LmbMultiChannelingSetup {
+        &mut self.multi_channeling_setup
     }
 
     fn selected_lmb_basis_id(
@@ -1996,8 +2002,11 @@ impl AmplitudeIntegrand {
         })
     }
 
-    pub(crate) fn invalidate_event_processing_runtime(&mut self) {
+    pub(crate) fn invalidate_runtime_caches(&mut self) {
         self.event_processing_runtime.invalidate();
+        for term in &mut self.data.graph_terms {
+            term.multi_channeling_setup.sampling_bridge.invalidate();
+        }
     }
 
     pub(crate) fn get_existing_esurfaces(
@@ -2342,6 +2351,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
           )
     )]
     fn warm_up(&mut self, model: &Model) -> Result<()> {
+        self.invalidate_runtime_caches();
         validate_process_runtime_settings(&self.settings, self.data.explicit_orientation_sum_only)?;
 
         self.data.rotations = Some(
@@ -2726,7 +2736,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
             )?,
         );
 
-        Ok(())
+        self.warm_up_sampling()
     }
 
     fn uses_explicit_orientation_sum_only(&self) -> bool {
@@ -3120,6 +3130,132 @@ parent_lmb = [4,6]
         amplitude.build_integrand(&model, "sampling_kite", &global, (&settings).into(), &pool)?;
         let integrand = amplitude.integrand.as_mut().unwrap();
         integrand.warm_up(&model)?;
+        // Exercise the warmed production owner on a clone, leaving the fresh
+        // construction/geometry checks below independent of runtime caching.
+        {
+            use crate::{
+                integrands::process::GaussianReferenceFunction,
+                momentum::ExternalMomenta,
+                settings::runtime::{SamplingSettings, kinematic::Externals},
+                utils::QuadFloat,
+            };
+            let mut runtime = integrand.clone();
+            let reference = GaussianReferenceFunction::new(2.0, vec![0.0; 6])?;
+            let point = Sample::Continuous(
+                F(1.0),
+                vec![F(0.19), F(0.27), F(0.61), F(0.39), F(0.72), F(0.58)],
+            );
+            let ProcessIntegrand::Amplitude(amplitude) = &runtime else {
+                unreachable!()
+            };
+            let setup = &amplitude.data.graph_terms[0].multi_channeling_setup;
+            let address = setup.sampling_bridge()? as *const _ as usize;
+            let original = setup
+                .sampling_bridge()?
+                .forward(SamplingChannelId(0), &[0.19, 0.27, 0.61, 0.39, 0.72, 0.58])?;
+            let first = runtime.evaluate_reference_sample_detailed(&point, &reference)?;
+            for _ in 0..3 {
+                let repeated = runtime.evaluate_reference_sample_detailed(&point, &reference)?;
+                assert_eq!(
+                    repeated.evaluation.integrand_result,
+                    first.evaluation.integrand_result
+                );
+                let ProcessIntegrand::Amplitude(amplitude) = &runtime else {
+                    unreachable!()
+                };
+                assert_eq!(
+                    amplitude.data.graph_terms[0]
+                        .multi_channeling_setup
+                        .sampling_bridge()? as *const _ as usize,
+                    address
+                );
+            }
+            // In-place external edits keep e_cm fixed and must replace both
+            // improved numeric caches before the next bridge captures them.
+            let Externals::Constant { momenta, .. } =
+                &mut runtime.get_mut_settings().kinematics.externals;
+            momenta[0] = ExternalMomenta::Independent([26.0_f64.sqrt(), 0.0, 0.0, 1.0].map(F));
+            assert!(
+                runtime
+                    .evaluate_reference_sample_detailed(&point, &reference)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("call warm_up")
+            );
+            runtime.warm_up(&model)?;
+            let ProcessIntegrand::Amplitude(amplitude) = &runtime else {
+                unreachable!()
+            };
+            let constructor =
+                DependentMomentaConstructor::Amplitude(&amplitude.data.external_signature);
+            let external = amplitude
+                .settings
+                .kinematics
+                .externals
+                .get_dependent_externals::<f64>(constructor)?;
+            let external_quad = amplitude
+                .settings
+                .kinematics
+                .externals
+                .get_dependent_externals::<QuadFloat>(constructor)?;
+            assert!((external[ExternalIndex(0)].spatial.pz.0 - 1.0).abs() < 1.0e-12);
+            assert!(
+                (external_quad[ExternalIndex(0)]
+                    .spatial
+                    .pz
+                    .clone()
+                    .into_ff64()
+                    .0
+                    - 1.0)
+                    .abs()
+                    < 1.0e-12
+            );
+            let moved = amplitude.data.graph_terms[0]
+                .multi_channeling_setup
+                .sampling_bridge()?
+                .forward(SamplingChannelId(0), &[0.19, 0.27, 0.61, 0.39, 0.72, 0.58])?;
+            assert_ne!(original.raw_coordinates, moved.raw_coordinates);
+            // The public shared warmup helper also clears a previous bridge
+            // when called directly and a replacement cannot be compiled.
+            let ProcessIntegrand::Amplitude(amplitude) = &mut runtime else {
+                unreachable!()
+            };
+            let masses = amplitude.data.graph_terms[0].real_mass_vec.take();
+            assert!(amplitude.warm_up_sampling().is_err());
+            assert!(
+                amplitude.data.graph_terms[0]
+                    .multi_channeling_setup
+                    .sampling_bridge()
+                    .is_err()
+            );
+            amplitude.data.graph_terms[0].real_mass_vec = masses;
+            amplitude.warm_up_sampling()?;
+            // A failed warmup cannot keep the previous geometry usable.
+            let SamplingSettings::MultiChanneling(channels) =
+                &mut runtime.get_mut_settings().sampling
+            else {
+                unreachable!()
+            };
+            channels
+                .parameterization_settings
+                .sampling_channels
+                .default_channel_selection = vec!["missing_channel".to_string()];
+            assert!(runtime.warm_up(&model).is_err());
+            assert!(
+                runtime
+                    .evaluate_reference_sample_detailed(&point, &reference)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("call warm_up")
+            );
+            *runtime.get_mut_settings() = settings.clone();
+            runtime.warm_up(&model)?;
+            let restored = runtime.evaluate_reference_sample_detailed(&point, &reference)?;
+            assert_eq!(
+                restored.evaluation.integrand_result,
+                first.evaluation.integrand_result
+            );
+        }
         let ProcessIntegrand::Amplitude(integrand) = integrand else {
             unreachable!("generated an amplitude")
         };
@@ -3131,6 +3267,19 @@ parent_lmb = [4,6]
         for external in [[5.0, 0.0, 0.0, 0.0], [26.0_f64.sqrt(), 0.0, 0.0, 1.0]] {
             let externals = [external; 2];
             let bridge = term.compile_sampling_bridge(&parameterization, 5.0, &externals, None)?;
+            let cached = term
+                .multi_channeling_setup
+                .sampling_bridge()?
+                .forward(SamplingChannelId(0), &coordinates)?;
+            let fresh = bridge.forward(SamplingChannelId(0), &coordinates)?;
+            if external[3] == 0.0 {
+                assert_eq!(cached.raw_coordinates, fresh.raw_coordinates);
+                assert_eq!(cached.map.jacobian, fresh.map.jacobian);
+            } else {
+                assert_ne!(cached.raw_coordinates, fresh.raw_coordinates);
+                assert_eq!(cached.raw_coordinates, rest_point);
+            }
+
             assert_eq!(
                 bridge
                     .channels()

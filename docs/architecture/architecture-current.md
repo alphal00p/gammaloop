@@ -484,6 +484,14 @@ frame and evaluate the partition at that raw point. Summed evaluation applies
 retains its selected factor and separate grid probability. Stability rotations
 act on the resulting mapped point and external frame together.
 
+The existing graph sampling setup retains a nonserialized bridge cache. Process
+warmup constructs it transactionally after numeric masses/externals are ready;
+mutable settings invalidate it and evaluation then requires warmup. Fresh bridge
+construction remains separate for inspection with explicit inputs. Workers clone
+compiled eager score buffers into separate mutexes, while each point borrows
+its maps and scores without cloning programs. External improvement clears old
+numeric caches before rebuilding from directly edited inputs.
+
 Standalone `phase_space(cut(...))` maps use the real graph's cut equation,
 warmup masses and fixed external data through the shared implicit radial kernel.
 They retain the auxiliary raw radial variable. Conditional cut/left/right maps
@@ -502,6 +510,11 @@ The amplitude host distinguishes existence from the implicit kernel's rootless
 branch and rejects existing surfaces with an unsuitable zero center. The kernel
 certifies residuals and rejects unrepresentable inverse points without clipping.
 Generic geometry preparation still needs suitable interior-center selection.
+The shared radial profile focuses on both signed distances to the threshold
+with a common analytic inverse. Native kernel tests cover Quad and arbitrary
+precision, but the component/bridge boundary still computes in f64; rounded
+threshold-seam errors do not yet trigger native map rescue. This remains a gate
+before long strongly focused sampling runs.
 
 Physical and Gaussian-reference targets share graph traversal and default-LMB
 routing. Summed reference evaluation aggregates values and raw-frame moments

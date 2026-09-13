@@ -86,16 +86,37 @@ normalization/moments, fully subtracted kite summed/MC agreement, and an
 independent default-LMB raw-frame check. Formatting, core/API test checking and
 clippy pass; warnings introduced in this slice were addressed.
 
-The current surface profile concentrates near the threshold only from outside:
-its inner branch powers the radius instead of the distance to the threshold.
-Correct that before claiming two-sided singularity control or running the
-physical variance comparisons; exact Jacobian accounting alone does not certify
-the intended importance density.
+The surface profile now concentrates near the threshold from both sides: its
+inner branch powers the distance to the threshold, using a stable native
+power-complement evaluation and the same inverse owner as the implicit map.
+Nine focused gates pass, including signed-normal scaling, native tiny/subnormal
+coordinates, six-dimensional determinants, Gaussian moments and physical kite/
+cut charts. This verifies the map law; it does not yet establish physical
+variance improvement or remove the precision boundary below.
 
-The current driver still compiles the bridge while mapping a sample. Reuse the
-existing `RuntimeCache`/warmup ownership to retain compiled map programs before
-performance comparisons; this interim behavior is not the requested warmup-only
-compilation contract. Runtime cut roots and conditional complements remain
+Strong focusing also exposes a production precision boundary: the component/
+bridge API still maps in f64 before constructing a higher-precision momentum
+sample. A radius rounded onto the threshold must raise a precision error,
+never discard a finite band or return a zero contribution. Connect such errors
+to native map/foreign-density recomputation in the existing stability stack
+before long integrations. For `R=3`, `beta=2`, an independent half-ULP estimate
+of the combined radial-coordinate band is about `9.38e-9` at power 2 and
+`4.44e-6` at power 3; arithmetic cancellation can enlarge it. Native kernel
+tests alone do not establish production map rescue. Structural map errors must
+still fail immediately rather than being mistaken for numerical instability.
+The owner-by-owner migration, root-localization versus density-accuracy criteria,
+and original-source rescue gates are specified in
+[SAMPLING_PRECISION_RESCUE.md](docs/research/advanced_sampling/SAMPLING_PRECISION_RESCUE.md).
+
+The driver now retains the bridge in the existing `RuntimeCache`/warmup owner
+and borrows its catalogue on the hot path. Settings mutation invalidates it;
+warmup publishes the complete set transactionally after improved external data
+are ready. Worker clones own their mutable eager score buffers, and partition
+evaluation borrows those buffers without cloning them per draw. The milestone
+passes all 154 library sampling tests, both saved-state/summed API regressions,
+core/API test checking and clippy; no warnings remain on changed lines. Physical
+variance and throughput measurements remain open.
+Runtime cut roots and conditional complements remain
 evaluator inputs, not reasons to rebuild a Symbolica program for each point.
 The audited ownership and invalidation design is recorded in
 [WARMUP_CACHE_DESIGN.md](docs/research/advanced_sampling/WARMUP_CACHE_DESIGN.md).
@@ -262,6 +283,110 @@ catalogue's stable position, never an independently generated LMB index.
 Each milestone must pass focused tests, `cargo fmt`, `cargo check` and the
 repository's applicable lint/test gates before it is merged into the branch.
 
+### Coordinated amplitude and cross-section execution
+
+The milestones above describe capabilities, not a requirement to finish every
+amplitude feature before working on cross sections. Following the 13 September
+plan review, use the execution order below. Native precision, conditional
+subspaces, interior centers, partitions and the acceptance driver are shared
+work. Their gates must include real amplitude **and** real cut geometry.
+Amplitude benchmarks provide inexpensive independent checks; the completion
+target remains a measured GL638 improvement with the full physical calculation.
+
+| Work | Concrete deliverable and acceptance | Parallel work / stopping point |
+| --- | --- | --- |
+| Shared numerical foundation | Finish the warmed catalogue/two-sided-profile milestone, then native component, eager, inverse-density and original-source rescue. A selected point that fails in Double must recover in Quad/Arb on both a physical kite surface and a physical cut, without changing IDs or dropping contributions. | Three bounded source slices: maps/bridge; eager/partition; physical bindings/stability. Agree types before editing. This is the immediate shared dependency, not an amplitude-only project. |
+| First amplitude measurements | Saved-state kite at rest/boost and massive double box at rest: physical surfaces, independent determinants, inverses, Gaussian moments, summed/MC equality, then a bounded variance matrix. | Run alongside LU h-profile implementation once native mapping passes. Stop adding amplitude topologies after these two; six photons and extra boost families remain optional. |
+| Cut radial profile | Implement the generic `lu_h` profile on the already connected standalone cut chart, with normalized broad coverage, actual forward/inverse density, simple/raised-residue checks and saved-state acceptance. | Does not wait for all side maps, joint normals, stars or automatic discovery. Run an early GL638 radial pilot; label any gain as radial optimization, not a cure of the H/Z shape singularity. |
+| Shared conditional fibers | Resolve active signed cycles, sampled complements and an interior center; support deterministic Existing/Absent/Pinched branches and all foreign inverse contexts. Generalize beyond one surface child. | Validate the same owner with kite/box proper subspaces and with a cheap cross section. This unlocks amplitude products and cut-preserving side maps together. |
+| Physical cut and sides | Connect actual production prepared-sampling handoff; prepare each host's native `t*`, cut momenta and external data before its dependent blocks. Deliver cut plus one side, then both sides, with dimensional/rank checks and cut preservation. | The cross-section owner works while the amplitude owner runs its bounded measurements. Shared maps and context contracts are audited across the two tracks. No complete amplitude feature catalogue is a prerequisite. |
+| GL638 direct and projected targets | Resolve direct H on cut 1 even though H is not a generated cut-1 threshold CT. Add the certified A-star affine pullback using the actual native variant/overlap center. Then add a generic rank-two joint chart for H/Z in one p block and its certified star pullbacks. | Replay hard rays and old extrema as each target becomes available. One-normal channels can establish local finite variance but do not imply bounded leading maxima. U-star and rank-changing/tangent cases retain separate diagnostics. |
+| Automatic selection and final comparison | Share discovery, rank/support checks, canonicalization, soft coverage and optional frozen pilot tuning between amplitudes and cross sections. Finish user-facing acceptance, runtime settings/CLI/Python migration and legacy retirement. | Automatic mode follows demonstrated manual channels; manual GL638 pilots begin earlier. Final full-UV/all-orientation experiments compare explicit and automatic selections against current optimized-LMB baselines. |
+
+The root maintains an evidence ledger in this plan and the research notes:
+implemented, tested, measured and remaining are separate statuses. Every source
+slice names one owner and one independent auditor; agents do not simultaneously
+edit shared interfaces. After the common native interface lands, allocate one
+agent to cross-section host/profile work, one to the bounded amplitude tests and
+variance runs, and one to shared conditional/joint-map implementation and audit.
+Reassign the amplitude slot to GL638 replay, integration and performance analysis
+once its agreed matrix is recorded. Do not keep expanding amplitude examples
+while cross-section production connections remain missing.
+The detailed cross-section owners, host/block syntax and delivery gates are in
+[CROSS_SECTION_DELIVERY_PATH.md](docs/research/advanced_sampling/CROSS_SECTION_DELIVERY_PATH.md).
+Direct-H pilots begin after one host-bound conditional block works; they do not
+wait for both-side composition or the joint/star infrastructure.
+
+Production and diagnostic map preparation must use the same dependency graph.
+The current typed prepared-cut records are constructed only in tests: wiring
+them into actual sampling is an explicit deliverable, not already completed
+conditional-cut support. A host cut context must exist independently of an
+optional Left/Right designation; a target can be another energy surface evaluated
+on that host. Resolve geometry from graph energy equations, not exclusively from
+the threshold-CT registry. Before this slice, settle one explicit host/frame
+selector and per-child block description in the existing Symbolica-parsed model.
+Current `on_cut` numbers are CutIds, not edge sets; never silently reinterpret
+them. A `cut(...)` expression identifies physical edges and is resolved against
+the loaded graph. No sampling selector restricts the physical cut sum.
+
+Use at least three independent seeds for the first bounded amplitude matrix:
+`auto:optimized_lmb`, `auto:lmb`, a nonduplicated full-rank surface selection,
+and its mixture with optimized LMBs. Compare equal evaluations first, then equal
+wall time for the baseline and the most promising valid candidate. Include
+surface-only channels only when their declared full support is sufficient.
+At rest the kite and box C/D pairs coincide numerically, so use one representative
+for performance; retain duplicates as a separate partition correctness check.
+This is an explicit benchmark selection, not automatic identity deduplication
+based on accidental numerical equality. Distinct canonical targets remain.
+Hold all 18 kite / 98 box orientations and the fully subtracted integrand fixed.
+Report neutral or worse variance honestly and move on; amplitude success means
+correct generic sampling plus measured impact, not a required gain for every
+already smooth subtraction.
+The independent box routing and actual same-orientation intersection witness
+are recorded in
+[DOUBLE_BOX_GEOMETRY_CHECK.md](docs/research/advanced_sampling/DOUBLE_BOX_GEOMETRY_CHECK.md).
+
+Keep GL638 measurements on the critical path rather than postponing all of them
+until automatic channel construction is finished:
+
+1. Refresh the frozen baseline provenance and current-binary soft, H/Z, nearby
+   A/P and maximum-weight replays while implementation proceeds. Reuse the
+   compatible full state read-only; regenerate only if a real format/generated
+   data change requires it. Use
+   [the replay inputs](docs/research/gl638/REPLAY.md),
+   [the runtime follow-up](docs/research/gl638/runtime-followup.md),
+   [the direct/star geometry](docs/research/advanced_sampling/gl638.md) and
+   [the two-normal derivation](docs/research/advanced_sampling/TWO_NORMAL_PROPOSAL.md).
+2. At each usable channel milestone run a small paired pilot of the **complete**
+   calculation: baseline versus cut-h, direct H, A-star H, joint H/Z, and their
+   supported unions. First verify reference acceptance and frozen-point physics;
+   then compare estimates, absolute moments, second moments, maxima and runtime.
+   Representative rays diagnose local powers, not global integration improvement.
+   A statistically paired difference requires common cube draws and frozen grids;
+   independently adapting runs are matched-budget comparisons, not paired draws.
+3. Run longer comparisons on 20 cores only after those gates, with fixed physical
+   settings, separate warmup/training/production budgets, independent seeds and
+   both equal-evaluation and equal-wall-time results. Record map/root/inverse and
+   physical-evaluation costs, rescue/invalid counts and complete extrema inputs.
+   Replay and decompose maxima to choose the next useful channel instead of
+   adding channels without evidence. Wait economically while jobs run.
+4. Final evidence retains six cuts, all 936 orientations, direct 3D local UV,
+   integrated UV, WH/WF metadata and ordinary soft/UV coverage. Require compatible
+   physical estimates and a reproducible improvement in useful error per wall
+   time and/or the previously diagnosed large-weight tail; state exactly which
+   improves. The separate exact A/P confluent-evaluation issue is not cured by
+   sampling. An early radial/local gain is not final completion, and failed or
+   unchanged comparisons remain part of the report.
+
+The shared acceptance driver is a deliverable for both tracks: expose the
+existing process reference overlay through the ordinary loaded-state integration
+workflow so grids, probabilities, clones, resume and statistics are exercised.
+Do not build separate amplitude and cross-section benchmark integrators.
+Anisotropic/cross-loop and heavy-tail reference probes extend this same owner.
+Generic joint charts and automatic discovery also require witnesses from both
+tracks; graph-specific formulas may be recognized geometric specializations,
+never dispatches on a name such as GL638.
+
 ## 2. Public API, defaults and migration
 
 ### Runtime names and selection
@@ -279,8 +404,9 @@ channel_selection = { GL638 = ["auto:surfaces", "hard_intersection"] }
 
 `lmb_multichanneling` becomes `sampling_multichanneling`, `lmb_channels`
 becomes `sampling_channels`, and `lmb_channel_weight` becomes
-`sampling_channel_weight`. The latter controls summed versus Monte Carlo
-execution only; channel identity is selected by the separate lists.
+`sampling_channel_weight`. `sampling_channels` controls summed versus Monte
+Carlo execution; `sampling_channel_weight` selects the partition density.
+Channel identity is selected by the separate lists.
 
 With multichanneling disabled, ordinary sampling follows the existing route.
 When it is enabled without a selection, `auto:optimized_lmb` is used. An
@@ -322,10 +448,16 @@ regular-expression mini-parser:
 ```toml
 [sampling.channel_definitions.GL638.HZ]
 around = "intersect(surface(2,4,12), surface(3,10,13))"
-subspace_lmb = [3, 10]
+subspace_lmb = [3]
 parent_lmb = [3, 6, 7, 10]
-on_cut = [2,6,10]
+on_cut = [1] # Current CutId filter; physical host edges are cut(2,6,10).
 ```
+
+This is the proposed joint geometry in one three-dimensional p block; H and Z
+are two scalar normals there. The current `on_cut` filter alone does not prepare
+that physical host. Its explicit host/frame binding and the joint-map compiler
+remain implementation work; the runtime must continue to reject this example
+until those contracts are satisfied.
 
 Supported function heads are `lmb`, `surface`, `cut`, `soft`, `collinear`,
 `complement`, `product`, `intersect`, `then`, `phase_space`, `left` and `right`.
