@@ -18,6 +18,7 @@ use crate::{
             graph_to_group_id_for_group_structure,
             param_builder::LUParams,
             prepare_buffered_event,
+            sampling_context::SamplingMapContext,
             sampling_maps::{
                 ImplicitSurfaceRadialMap, SamplingEvaluationError, SamplingMapAffine,
                 SamplingMapComponent, SamplingMapComposition, SamplingMapEmbedding,
@@ -2065,7 +2066,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                             {
                                 native[3 * index.0..3 * index.0 + 3].clone_from_slice(values);
                             }
-                            let master = frame.forward(&native, &[])?.point;
+                            let master = frame
+                                .forward(&native, &mut SamplingMapContext::detached(&[]))?
+                                .point;
                             let loops = LoopMomenta::from_iter(master.chunks_exact(3).map(|v| {
                                 ThreeMomentum::new(
                                     F(v[0].clone()),

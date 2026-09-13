@@ -15,10 +15,13 @@ use itertools::Itertools;
 use momtrop::vector::Vector;
 use symbolica::numerical_integration::Sample;
 
-use super::{ProcessIntegrandImpl, SamplingChannelId, resolve_discrete_selection_for_sampling};
+use super::{
+    ProcessIntegrandImpl, SamplingChannelId, SamplingChannelRuntimeContexts,
+    resolve_discrete_selection_for_sampling, sampling_context::SamplingProposalPolicies,
+};
 
 // discrete dimensions, continious dimensions
-fn unwrap_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> (Vec<usize>, Vec<F<T>>) {
+pub(crate) fn unwrap_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> (Vec<usize>, Vec<F<T>>) {
     let discrete_dimensions = Vec::new();
     unwrap_sample_impl(discrete_dimensions, sample)
 }
@@ -526,6 +529,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
     sample_point: &Sample<F<f64>>,
     integrand: &mut I,
+    policies: &mut SamplingProposalPolicies,
 ) -> Result<GammaLoopSample<T>> {
     integrand.prepare_sampling_precision::<T>()?;
     let (discrete_indices, xs) = unwrap_sample(sample_point);
@@ -534,9 +538,9 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
     let external_mom_cache_id = integrand.external_cache_id();
     let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
     // Validate the warmed canonical catalogue before decoding discrete indices.
-    // Each complete triangular map prepares any required cut/LU data internally;
-    // its retained canonical ID, original cube and mapped parent point therefore
-    // need no separate handoff or Jacobian-producing runtime path.
+    // Each complete triangular map prepares its cut/LU data internally. The
+    // original-draw policy owner retains discrete choices across native replay;
+    // numerical map data and Jacobians are rebuilt at the requested precision.
     let (group_id, orientation_id, channel_id) = resolve_discrete_selection_for_sampling(
         &settings.sampling,
         &discrete_indices,
@@ -697,7 +701,17 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                     let graph = integrand.get_master_graph(group_id);
                     let bridge = graph.sampling_setup().sampling_bridge::<T>()?;
                     let coordinates = xs.iter().map(|x| x.0.clone()).collect_vec();
-                    let mapped = bridge.forward(channel_id, &coordinates)?;
+                    let mut contexts = SamplingChannelRuntimeContexts::for_draw(
+                        bridge.channels().len(),
+                        integrand.get_group(group_id).master(),
+                        channel_id,
+                        policies,
+                    );
+                    let mapped = bridge.forward_with_runtime_contexts(
+                        channel_id,
+                        &coordinates,
+                        &mut contexts,
+                    )?;
                     // The mapped point and physical sample use the same native precision.
                     let mut sample = mapped.to_momentum_sample(SamplingMomentumSampleContext {
                         loop_mom_cache_id,
@@ -926,10 +940,19 @@ mod tests {
 
     #[test]
     fn sampling_map_rejects_non_unit_original_coordinates() {
-        use crate::integrands::process::{SamplingMapComponent, SurfaceRadialMap};
+        use crate::integrands::process::{
+            SamplingMapComponent, SurfaceRadialMap, sampling_context::SamplingMapContext,
+        };
         let map = SurfaceRadialMap::new(3, vec![0.0; 3], None, 1.0, 1.0).unwrap();
         for coordinates in [[0.2, 1.2, 0.3], [0.2, f64::NAN, 0.3]] {
-            assert!(SamplingMapComponent::forward(&map, &coordinates, &[]).is_err());
+            assert!(
+                SamplingMapComponent::forward(
+                    &map,
+                    &coordinates,
+                    &mut SamplingMapContext::detached(&[]),
+                )
+                .is_err()
+            );
         }
     }
 

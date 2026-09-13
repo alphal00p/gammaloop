@@ -18,6 +18,7 @@ use color_eyre::eyre::{Result, WrapErr, eyre};
 use serde::{Deserialize, Serialize};
 use symbolica::{atom::Atom, symbol, try_parse};
 
+use super::sampling_context::{SamplingMapContext, SamplingProposalKey, SamplingProposalPolicies};
 use super::sampling_maps::{SamplingEvaluationError, combine_contracts};
 use super::{
     ImplicitSurfaceRadialMap, SamplingExpressionEvaluator, SamplingMapAffine, SamplingMapComponent,
@@ -853,25 +854,25 @@ impl<T: FloatLike> CompiledSamplingMap<T> {
     }
 
     pub fn forward(&self, coordinates: &[T]) -> Result<SamplingMapEvaluation<T>> {
-        self.forward_with_context(coordinates, &[])
+        self.forward_with_context(coordinates, &mut SamplingMapContext::detached(&[]))
     }
 
     pub fn forward_with_context(
         &self,
         coordinates: &[T],
-        context: &[T],
+        context: &mut SamplingMapContext<'_, T>,
     ) -> Result<SamplingMapEvaluation<T>> {
         <Self as SamplingMapComponent<T>>::forward(self, coordinates, context)
     }
 
     pub fn inverse(&self, point: &[T]) -> Result<Option<SamplingMapEvaluation<T>>> {
-        self.inverse_with_context(point, &[])
+        self.inverse_with_context(point, &mut SamplingMapContext::detached(&[]))
     }
 
     pub fn inverse_with_context(
         &self,
         point: &[T],
-        context: &[T],
+        context: &mut SamplingMapContext<'_, T>,
     ) -> Result<Option<SamplingMapEvaluation<T>>> {
         <Self as SamplingMapComponent<T>>::inverse(self, point, context)
     }
@@ -901,7 +902,11 @@ impl<T: FloatLike> SamplingMapComponent<T> for CompiledSamplingMap<T> {
         }
     }
 
-    fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn forward(
+        &self,
+        coordinates: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<SamplingMapEvaluation<T>> {
         match self {
             Self::Lmb(map) => SamplingMapComponent::forward(map, coordinates, context),
             Self::Surface(map) => SamplingMapComponent::forward(map, coordinates, context),
@@ -909,10 +914,17 @@ impl<T: FloatLike> SamplingMapComponent<T> for CompiledSamplingMap<T> {
             Self::Joint(map) => SamplingMapComponent::forward(map, coordinates, context),
             Self::Embedded(map) => SamplingMapComponent::forward(map, coordinates, context),
             Self::Affine { map, frame } => {
-                let lmb_evaluation =
-                    SamplingMapComponent::forward(map.as_ref(), coordinates, context)?;
-                let frame_evaluation =
-                    SamplingMapComponent::forward(frame, &lmb_evaluation.point, context)?;
+                let previous = context.previous;
+                let lmb_evaluation = SamplingMapComponent::forward(
+                    map.as_ref(),
+                    coordinates,
+                    &mut context.reborrow(previous, Some(0)),
+                )?;
+                let frame_evaluation = SamplingMapComponent::forward(
+                    frame,
+                    &lmb_evaluation.point,
+                    &mut context.reborrow(previous, Some(1)),
+                )?;
                 SamplingMapEvaluation {
                     coordinates: lmb_evaluation.coordinates,
                     point: frame_evaluation.point,
@@ -935,7 +947,11 @@ impl<T: FloatLike> SamplingMapComponent<T> for CompiledSamplingMap<T> {
         }
     }
 
-    fn inverse(&self, point: &[T], context: &[T]) -> Result<Option<SamplingMapEvaluation<T>>> {
+    fn inverse(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
         match self {
             Self::Lmb(map) => SamplingMapComponent::inverse(map, point, context),
             Self::Surface(map) => SamplingMapComponent::inverse(map, point, context),
@@ -943,11 +959,12 @@ impl<T: FloatLike> SamplingMapComponent<T> for CompiledSamplingMap<T> {
             Self::Joint(map) => SamplingMapComponent::inverse(map, point, context),
             Self::Embedded(map) => SamplingMapComponent::inverse(map, point, context),
             Self::Affine { map, frame } => {
-                let frame_evaluation = frame.inverse(point, context)?;
+                let previous = context.previous;
+                let frame_evaluation = frame.inverse(point, previous)?;
                 let Some(lmb_evaluation) = SamplingMapComponent::inverse(
                     map.as_ref(),
                     &frame_evaluation.coordinates,
-                    context,
+                    &mut context.reborrow(previous, Some(0)),
                 )?
                 else {
                     return Ok(None);
@@ -1033,16 +1050,40 @@ pub struct SamplingChannelBridge<T: FloatLike = f64> {
 /// inverse-density score in a common partition.  Contexts are indexed by the
 /// canonical catalogue position; they are never compacted into a second
 /// channel list.  An absent context means the ordinary empty context and is
-/// valid for maps which do not depend on earlier blocks.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct SamplingChannelRuntimeContexts<T: FloatLike = f64> {
+/// valid for maps which do not depend on earlier blocks. Production also borrows
+/// the sole original-draw policy owner; detached numerical fixtures opt out
+/// explicitly, without installing a mutable cache on a warmed bridge.
+#[derive(Debug)]
+pub struct SamplingChannelRuntimeContexts<'a, T: FloatLike = f64> {
     contexts: Vec<Option<Vec<T>>>,
+    policies: Option<&'a mut SamplingProposalPolicies>,
+    graph_id: usize,
+    generating_channel: SamplingChannelId,
 }
 
-impl<T: FloatLike> SamplingChannelRuntimeContexts<T> {
+impl<'a, T: FloatLike> SamplingChannelRuntimeContexts<'a, T> {
+    /// Detached represented-geometry evaluation, without production decisions.
     pub fn new(channel_count: usize) -> Self {
         Self {
             contexts: vec![None; channel_count],
+            policies: None,
+            graph_id: 0,
+            generating_channel: SamplingChannelId(0),
+        }
+    }
+
+    /// Bind one generating row to collecting or sealed original-draw records.
+    pub(crate) fn for_draw(
+        channel_count: usize,
+        graph_id: usize,
+        generating_channel: SamplingChannelId,
+        policies: &'a mut SamplingProposalPolicies,
+    ) -> Self {
+        Self {
+            contexts: vec![None; channel_count],
+            policies: Some(policies),
+            graph_id,
+            generating_channel,
         }
     }
 
@@ -1068,8 +1109,12 @@ impl<T: FloatLike> SamplingChannelRuntimeContexts<T> {
         Ok(())
     }
 
-    fn get(&self, channel_id: SamplingChannelId) -> Result<&[T]> {
-        self.contexts
+    pub(crate) fn for_channel(
+        &mut self,
+        channel_id: SamplingChannelId,
+    ) -> Result<SamplingMapContext<'_, T>> {
+        let previous = self
+            .contexts
             .get(channel_id.0)
             .ok_or_else(|| {
                 eyre!(
@@ -1078,7 +1123,17 @@ impl<T: FloatLike> SamplingChannelRuntimeContexts<T> {
                     self.contexts.len()
                 )
             })
-            .map(|context| context.as_deref().unwrap_or(&[]))
+            .map(|context| context.as_deref().unwrap_or(&[]))?;
+        Ok(SamplingMapContext {
+            previous,
+            policies: self.policies.as_deref_mut(),
+            key: SamplingProposalKey {
+                graph_id: self.graph_id,
+                generating_channel: self.generating_channel,
+                target_channel: channel_id,
+                block_path: Vec::new(),
+            },
+        })
     }
 }
 
@@ -1581,7 +1636,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
     pub fn partition(&self, raw_coordinates: &[T]) -> Result<SamplingPartition<T>> {
         self.partition_with_contexts(
             raw_coordinates,
-            &SamplingChannelRuntimeContexts::new(self.channels.len()),
+            &mut SamplingChannelRuntimeContexts::new(self.channels.len()),
         )
     }
 
@@ -1592,7 +1647,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
     pub fn partition_with_contexts(
         &self,
         raw_coordinates: &[T],
-        contexts: &SamplingChannelRuntimeContexts<T>,
+        contexts: &mut SamplingChannelRuntimeContexts<'_, T>,
     ) -> Result<SamplingPartition<T>> {
         if raw_coordinates.len() != self.dimensions {
             return Err(color_eyre::eyre::eyre!(
@@ -1611,19 +1666,26 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
         SamplingPartition::from_log_scores(
             self.partition_mode,
             raw_coordinates,
-            self.channels.iter().enumerate().map(|(index, channel)| {
-                let score = move || match self.partition_mode {
+            self.channels.iter().map(|channel| channel.name.as_str()),
+            |index| {
+                let channel = &self.channels[index];
+                let mut context = contexts.for_channel(SamplingChannelId(index))?;
+                match self.partition_mode {
                     SamplingPartitionMode::MapDensity => {
-                        let context = contexts.get(SamplingChannelId::from(index))?;
-                        let Some(evaluation) = channel.map.inverse_with_context(raw_coordinates, context)? else {
+                        let Some(evaluation) =
+                            channel.inverse_with_context(raw_coordinates, &mut context)?
+                        else {
                             return Ok(None);
                         };
                         let density = F(evaluation.inverse_jacobian);
                         if !density.0.is_finite() || density <= density.zero() {
                             return Err(SamplingEvaluationError::Unrepresentable {
                                 operation: "inverse map density",
-                                detail: format!("supported density is not finite and positive: {density}"),
-                            }.into());
+                                detail: format!(
+                                    "supported density is not finite and positive: {density}"
+                                ),
+                            }
+                            .into());
                         }
                         Ok(Some(density.ln().0))
                     }
@@ -1638,18 +1700,16 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                         // point with no preimage. Full maps keep the cheap proxy
                         // path; each restricted inverse uses its own context.
                         if channel.contract().support == SamplingSupport::Restricted
-                            && channel.map.inverse_with_context(
-                                raw_coordinates,
-                                contexts.get(SamplingChannelId::from(index))?,
-                            )?.is_none()
+                            && channel
+                                .inverse_with_context(raw_coordinates, &mut context)?
+                                .is_none()
                         {
                             return Ok(None);
                         }
                         proxy.evaluate(raw_coordinates)
                     }
-                };
-                (channel.name.as_str(), score)
-            }),
+                }
+            },
         )
     }
 
@@ -1671,14 +1731,14 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
     ) -> Result<SamplingChannelBridgeEvaluation<T>> {
         let mut contexts = SamplingChannelRuntimeContexts::new(self.channels.len());
         contexts.set(channel_id, context.to_vec())?;
-        self.forward_with_runtime_contexts(channel_id, coordinates, &contexts)
+        self.forward_with_runtime_contexts(channel_id, coordinates, &mut contexts)
     }
 
     pub fn forward_with_runtime_contexts(
         &self,
         channel_id: SamplingChannelId,
         coordinates: &[T],
-        contexts: &SamplingChannelRuntimeContexts<T>,
+        contexts: &mut SamplingChannelRuntimeContexts<'_, T>,
     ) -> Result<SamplingChannelBridgeEvaluation<T>> {
         let channel_index = channel_id.0;
         let channel =
@@ -1687,7 +1747,8 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
                     channel: channel_id,
                 })?;
-        let map = channel.forward_with_context(coordinates, contexts.get(channel_id)?)?;
+        let map =
+            channel.forward_with_context(coordinates, &mut contexts.for_channel(channel_id)?)?;
         if map.point.len() != self.dimensions {
             return Err(SamplingChannelBridgeError::DimensionMismatch {
                 channel: channel.name.clone(),
@@ -1713,8 +1774,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                 })?),
             SamplingPartitionMode::SingularityProxy => {
                 let inverse = channel
-                    .map
-                    .inverse_with_context(&map.point, contexts.get(channel_id)?)?
+                    .inverse_with_context(&map.point, &mut contexts.for_channel(channel_id)?)?
                     .ok_or_else(|| SamplingEvaluationError::UncertainGeometry {
                         detail: format!(
                             "forward point is outside selected channel '{}' inverse support",
@@ -1785,14 +1845,14 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
     ) -> Result<Option<SamplingChannelBridgeEvaluation<T>>> {
         let mut contexts = SamplingChannelRuntimeContexts::new(self.channels.len());
         contexts.set(channel_id, context.to_vec())?;
-        self.inverse_with_runtime_contexts(channel_id, raw_coordinates, &contexts)
+        self.inverse_with_runtime_contexts(channel_id, raw_coordinates, &mut contexts)
     }
 
     pub fn inverse_with_runtime_contexts(
         &self,
         channel_id: SamplingChannelId,
         raw_coordinates: &[T],
-        contexts: &SamplingChannelRuntimeContexts<T>,
+        contexts: &mut SamplingChannelRuntimeContexts<'_, T>,
     ) -> Result<Option<SamplingChannelBridgeEvaluation<T>>> {
         let channel_index = channel_id.0;
         let channel =
@@ -1801,7 +1861,8 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
                     channel: channel_id,
                 })?;
-        let Some(map) = channel.inverse_with_context(raw_coordinates, contexts.get(channel_id)?)?
+        let Some(map) = channel
+            .inverse_with_context(raw_coordinates, &mut contexts.for_channel(channel_id)?)?
         else {
             return Ok(None);
         };
@@ -1826,27 +1887,41 @@ impl<T: FloatLike> CompiledSamplingChannel<T> {
     }
 
     pub fn forward(&self, coordinates: &[T]) -> Result<SamplingMapEvaluation<T>> {
-        self.forward_with_context(coordinates, &[])
+        self.forward_with_context(coordinates, &mut SamplingMapContext::detached(&[]))
     }
 
     pub fn forward_with_context(
         &self,
         coordinates: &[T],
-        context: &[T],
+        context: &mut SamplingMapContext<'_, T>,
     ) -> Result<SamplingMapEvaluation<T>> {
-        self.map.forward_with_context(coordinates, context)
+        self.map
+            .forward_with_context(coordinates, context)
+            .wrap_err_with(|| {
+                format!(
+                    "sampling graph '{}' channel '{}' target {:?}, master-frame edges {:?}",
+                    self.master_graph, self.name, self.definition, self.embedded_edges,
+                )
+            })
     }
 
     pub fn inverse(&self, point: &[T]) -> Result<Option<SamplingMapEvaluation<T>>> {
-        self.inverse_with_context(point, &[])
+        self.inverse_with_context(point, &mut SamplingMapContext::detached(&[]))
     }
 
     pub fn inverse_with_context(
         &self,
         point: &[T],
-        context: &[T],
+        context: &mut SamplingMapContext<'_, T>,
     ) -> Result<Option<SamplingMapEvaluation<T>>> {
-        self.map.inverse_with_context(point, context)
+        self.map
+            .inverse_with_context(point, context)
+            .wrap_err_with(|| {
+                format!(
+                    "sampling graph '{}' channel '{}' target {:?}, master-frame edges {:?}",
+                    self.master_graph, self.name, self.definition, self.embedded_edges,
+                )
+            })
     }
 }
 
@@ -2045,6 +2120,17 @@ fn compile_lmb_map<T: FloatLike>(
 }
 
 impl SamplingChannelCatalogue {
+    /// Inspect the already resolved blocks, without requiring a successful
+    /// binding at a precision which may itself need original-source rescue.
+    pub(crate) fn requires_proposal_policy(&self) -> bool {
+        self.named_entries().any(|channel| {
+            channel
+                .blocks
+                .iter()
+                .any(|block| block.target.energy_edge_sets().len() == 2)
+        })
+    }
+
     /// Return generated-LMB metadata carried by canonical catalogue entries.
     ///
     /// The returned `basis_id` is an implementation detail used to prepare
@@ -3171,6 +3257,63 @@ mod tests {
                     - (4.0 + scale * raw[4] / 5.0);
                 assert!(h.hypot(zeta) < 0.125);
             }
+            // Generating rows remain distinct while each selected/foreign map
+            // revisits the same compiled path in forward and inverse. Sealing
+            // forbids an incidental later lane from filling a missing record.
+            let cube = [0.1, 0.31, 0.43, 0.47, 0.29, 0.37];
+            let mut policies = SamplingProposalPolicies::default();
+            policies.begin_collection();
+            for generator in 0..2 {
+                let mut contexts = SamplingChannelRuntimeContexts::for_draw(
+                    3,
+                    7,
+                    SamplingChannelId(generator),
+                    &mut policies,
+                );
+                bridge.forward_with_runtime_contexts(
+                    SamplingChannelId(generator),
+                    &cube,
+                    &mut contexts,
+                )?;
+            }
+            assert_eq!(policies.len(), 4);
+            policies.seal();
+            let sealed = policies.clone();
+            for generator in 0..2 {
+                let mut contexts = SamplingChannelRuntimeContexts::for_draw(
+                    3,
+                    7,
+                    SamplingChannelId(generator),
+                    &mut policies,
+                );
+                let mapped = bridge.forward_with_runtime_contexts(
+                    SamplingChannelId(generator),
+                    &cube,
+                    &mut contexts,
+                )?;
+                assert!(
+                    bridge
+                        .inverse_with_runtime_contexts(
+                            SamplingChannelId(generator),
+                            &mapped.raw_coordinates,
+                            &mut contexts
+                        )?
+                        .is_some()
+                );
+            }
+            assert_eq!(policies, sealed);
+            let mut empty = SamplingProposalPolicies::default();
+            let mut contexts =
+                SamplingChannelRuntimeContexts::for_draw(3, 7, SamplingChannelId(0), &mut empty);
+            let error = bridge
+                .forward_with_runtime_contexts(SamplingChannelId(0), &cube, &mut contexts)
+                .unwrap_err();
+            assert!(matches!(
+                error.downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::UncertainGeometry { .. })
+            ));
+            assert!(format!("{error:#}").contains("conditional-shared-energy-pair"));
+            assert!(empty.is_empty());
         }
         Ok(())
     }
@@ -3206,20 +3349,20 @@ mod tests {
             fn forward(
                 &self,
                 coordinates: &[T],
-                context: &[T],
+                context: &mut SamplingMapContext<'_, T>,
             ) -> Result<SamplingMapEvaluation<T>> {
                 self.map.forward(coordinates, context)
             }
             fn inverse(
                 &self,
                 point: &[T],
-                context: &[T],
+                context: &mut SamplingMapContext<'_, T>,
             ) -> Result<Option<SamplingMapEvaluation<T>>> {
                 self.calls.fetch_add(1, Ordering::Relaxed);
                 if self.unavailable {
                     return Err(eyre!("foreign inverse must not be evaluated"));
                 }
-                let mut inverse = self.map.inverse(point, context)?;
+                let mut inverse = self.map.inverse(point, context.previous)?;
                 inverse.inverse_jacobian =
                     (F(inverse.inverse_jacobian) * F(self.multiplier.clone())).0;
                 Ok(Some(inverse))
@@ -4899,7 +5042,7 @@ mod tests {
         contexts.set(SamplingChannelId::from(1), vec![0.2]).unwrap();
         let coordinates = [0.31, 0.42, 0.57, 0.23, 0.68, 0.81];
         let mapped = bridge
-            .forward_with_runtime_contexts(SamplingChannelId::from(0), &coordinates, &contexts)
+            .forward_with_runtime_contexts(SamplingChannelId::from(0), &coordinates, &mut contexts)
             .unwrap();
         assert!((mapped.partition.weight_sum() - 1.0).abs() < 1.0e-12);
         assert!(mapped.partition.weights.iter().all(|weight| *weight > 0.0));
@@ -4907,7 +5050,7 @@ mod tests {
             .inverse_with_runtime_contexts(
                 SamplingChannelId::from(0),
                 &mapped.raw_coordinates,
-                &contexts,
+                &mut contexts,
             )
             .unwrap()
             .expect("full-support inverse");

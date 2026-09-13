@@ -244,7 +244,10 @@ dependency data. The common-equation prerequisite additionally needs exact
 massless and shifted massive endpoint checks, and a nonzero tiny mass whose
 square underflows in Double/Quad but remains representable in Arb.
 
-### Proposal policy across native retries — unimplemented
+### Proposal policy across native retries
+
+Implemented and validated in the current supported amplitude class. The complete
+generated kite gate passes alongside 170 focused core tests and two API regressions.
 
 For each target block b, define its proposal decision as `P_b(y_b)`, where y_b
 contains only that block's ordered raw prerequisites. The decision may select
@@ -264,11 +267,11 @@ prerequisites must choose the same law regardless of the generating channel.
 Use canonical graph/channel identities and compiled-tree block paths, not
 floating-coordinate hashes or mutable occurrence counters.
 
-The accepted next implementation uses one fixed preparation phase in
+The implementation uses one fixed preparation phase in
 [`evaluate_from_source_precise`](../../../crates/gammalooprs/src/integrands/process/mod.rs),
 before norm-based lane selection. It reconstructs participating generator rows
 at the existing [`ArbPrec = VarFloat<1000>`](../../../crates/gammalooprs/src/utils/mod.rs)
-budget through the same bridge forward and common partition. Reuse
+budget through the same bridge forward and common partition. It reuses
 `evaluate_single`/`evaluate_graph_group` traversal, skipping final targets,
 physics, rotations, events and the physical shared-overlap pipeline. Existing
 map-required roots/centers still run: an implicit surface may call
@@ -277,18 +280,20 @@ SOCP seed, then validate it natively. A preparation failure aborts explicitly
 at this budget; it does not select another proposal or introduce a second retry
 loop. Then seal the decisions and enter the existing stability loop.
 
-Store only nonnumeric decisions beside
+Only nonnumeric decisions are stored beside
 [`EvaluationMetaData`](../../../crates/gammalooprs/src/integrands/evaluation.rs)
-root diagnostics. Extend the existing
+root diagnostics. The existing
 [`SamplingChannelRuntimeContexts`](../../../crates/gammalooprs/src/integrands/process/sampling_selection.rs)
-owner with borrowed policy access, and replace
+owner now supplies borrowed policy access, and
 [`SamplingMapComponent`](../../../crates/gammalooprs/src/integrands/process/sampling_maps.rs)
-forward/inverse context slices with its typed borrowed component view.
+forward/inverse methods receive its typed borrowed component view.
 Composition and embedding preserve lineage while supplying their existing
-ordered numerical prerequisites. There is no mutable warm-bridge cache or
+ordered numerical prerequisites. Empty-prior amplitude blocks bind once at
+warmup through static `Affine`; only nonempty priors use ordered embedding.
+There is no mutable warm-bridge cache or
 separate policy evaluator: the existing
 [`SharedEnergyJointMap::prepare`](../../../crates/gammalooprs/src/integrands/process/sampling_joint.rs)
-algorithm resolves the native decision. Compare its **complete choice** with
+algorithm resolves the native decision. It compares its **complete choice** with
 the sealed canonical entry, including ordinary fallback. Merely certifying that
 a retained disk is valid is insufficient: two valid radii can have different
 densities. Missing entries, mismatches or unresolved certificates request the
@@ -296,7 +301,7 @@ existing native retry/error; they never insert records or change the law.
 Diagnostics identify graph, generator, target block, native precision and both
 choices.
 
-Thread the same access through `EvaluationSource::build_gamma_sample`,
+The source threads this access through `EvaluationSource::build_gamma_sample`,
 [`parameterize`](../../../crates/gammalooprs/src/integrands/process/gammaloop_sample.rs),
 direct-channel inverses and summed mapping. `loop_norm_sum` and `debug_sample`
 only read sealed decisions. A previously unseen foreign policy cannot inherit
@@ -324,12 +329,20 @@ That is the compact-generator oracle. With an equally selected full-support
 sibling and constant positive support-gated proxies, changing only that
 generator gives the complete estimator mean 5/4 instead of 1. Keep this
 partition-aware process check distinct from the component oracle.
-Extend this original-source test to foreign support decisions, nonuniform
-channel probabilities, summed channels, fallback and norm/debug prepasses;
-count collection separately from native rebuilds. Invalid retained disks and
-native-choice mismatches must error. This transport remains unimplemented and
-gates production binding, independently of the represented-geometry kernel's
-fixed-context normalization, inverse-density and `F=1/R` bounded-weight tests.
+The added generated-kite source regression uses a fixed native reference density
+and controlled Double body failure, then compares original-source Quad replay,
+sealed debug access, norm escalation and ordinary-only phase bypass. The bridge
+regression exercises separate generating rows and missing foreign records.
+The generated triangle separately exercises empty-prior binding with nonzero
+offset, compact roundtrip and one production reference evaluation.
+These source checks and the all-18-orientation physical consistency and
+8192-draw Gaussian/moment gates pass. Nonuniform probabilities, summed acceptance
+and fallback retain their existing coverage. Current joint source fixtures
+clear rotation probes. These gates are separate from
+the kernel's fixed-context normalization and `F=1/R` bounded-weight tests, and
+do not complete cross-section host or CT-center/alpha authority. The complete
+kite test takes 1537.369 s in the unoptimized test profile; the optimized GL638
+10% sampling-cost budget remains unmeasured.
 
 ## Resolve a star without requiring user threshold directives
 
