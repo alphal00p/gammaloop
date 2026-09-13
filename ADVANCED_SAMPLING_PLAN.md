@@ -39,6 +39,14 @@ canonical catalogue entry through the same bridge, including mixed LMB and
 named entries; cross-section summed graph-aware entries remain guarded until
 their per-sample LU/\(t^\star\) context is available.
 
+The deferred boundary now has a typed hand-off carrying the same canonical
+`SamplingChannelId`, the original unit-cube coordinates, and the parent-frame
+momentum sample. It validates the coordinate domain and preserves the sample
+identity, but deliberately supplies no physical-map Jacobian; cross-section
+code must attach the solved LU/\(t^\star\) context before evaluating a
+conditional map. This is a carrier within the one catalogue axis, not a
+second channel enumeration.
+
 The partition also supports the explicit `singularity_proxy` weight. A named
 channel may supply a Symbolica expression in the complete parent-frame raw
 coordinates (`x0`, `x1`, ...); it is compiled eagerly and must be finite, real
