@@ -272,6 +272,21 @@ pub enum DiscreteGraphSample<T: FloatLike> {
     },
 }
 
+/// Whether the selected runtime mode still uses the legacy *summed* channel
+/// estimator.  Both top-level summed sampling and discrete graph sampling can
+/// request this mode; keeping the predicate central prevents the nested graph
+/// form from bypassing the graph-aware-channel guard below.
+fn is_summed_multichanneling(settings: &SamplingSettings) -> bool {
+    match settings {
+        SamplingSettings::MultiChanneling(_) => true,
+        SamplingSettings::DiscreteGraphs(settings) => matches!(
+            &settings.sampling_type,
+            DiscreteGraphSamplingType::MultiChanneling(_)
+        ),
+        SamplingSettings::Default(_) => false,
+    }
+}
+
 impl<T: FloatLike> DiscreteGraphSample<T> {
     #[allow(dead_code)]
     pub(crate) fn zero(&self) -> F<T> {
@@ -483,7 +498,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
         for group_id in 0..integrand.get_group_structure().len() {
             let graph = integrand.get_master_graph(GroupId(group_id));
             graph.sampling_channel_ids(parameterization_settings)?;
-            if matches!(&settings.sampling, SamplingSettings::MultiChanneling(_)) {
+            if is_summed_multichanneling(&settings.sampling) {
                 for channel_id in graph.sampling_channel_ids(parameterization_settings)? {
                     if !graph.sampling_channel_is_lmb(channel_id, parameterization_settings)? {
                         return Err(eyre!(
@@ -751,4 +766,39 @@ fn default_parametrize<T: FloatLike>(
     }
 
     sample
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_summed_multichanneling;
+    use crate::settings::runtime::{
+        DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, MultiChannelingSettings,
+        ParameterizationSettings, SamplingSettings,
+    };
+
+    #[test]
+    fn summed_multichanneling_guard_covers_top_level_and_graph_modes() {
+        assert!(is_summed_multichanneling(
+            &SamplingSettings::MultiChanneling(MultiChannelingSettings::default(),)
+        ));
+        assert!(is_summed_multichanneling(
+            &SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                sampling_type: DiscreteGraphSamplingType::MultiChanneling(
+                    MultiChannelingSettings::default(),
+                ),
+                ..Default::default()
+            },)
+        ));
+        assert!(!is_summed_multichanneling(
+            &SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                sampling_type: DiscreteGraphSamplingType::DiscreteMultiChanneling(
+                    MultiChannelingSettings::default(),
+                ),
+                ..Default::default()
+            },)
+        ));
+        assert!(!is_summed_multichanneling(&SamplingSettings::Default(
+            ParameterizationSettings::default(),
+        )));
+    }
 }
