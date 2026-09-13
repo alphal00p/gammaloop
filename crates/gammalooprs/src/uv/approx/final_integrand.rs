@@ -97,6 +97,13 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .get_single_atom()
             .expect("graph numerator should be available")
             * global_num;
+        debug_tags!(#generation, #profile, #uv, #numerator, #dump;
+            stage = "final_cograph_numerator_ready",
+            graph = %graph.name,
+            numerator_bytes = resnum.as_view().get_byte_size(),
+            file.atom = %resnum.to_canonical_string(),
+            "Cograph numerator before residue mapping"
+        );
         let localized_integrated = self
             .localizer
             .localize(
@@ -160,6 +167,13 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .expect("graph numerator should be available")
             * global_num;
         let localizer = self.localizer.with_independent_source_sum();
+        debug_tags!(#generation, #profile, #uv, #numerator, #dump;
+            stage = "final_cograph_numerator_ready",
+            graph = %graph.name,
+            numerator_bytes = resnum.as_view().get_byte_size(),
+            file.atom = %resnum.to_canonical_string(),
+            "Cograph numerator before residue mapping"
+        );
         // Only the projected local-4D route reaches this assembly boundary.
         // Its child Taylor coefficient deliberately omits the untouched
         // cograph; choose its outer CFF per independent sector here, converting
@@ -292,10 +306,15 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 .with(W_.prop_);
             // Preserve the sum of CFF denominators after residue mapping, just
             // as the Taylor stage preserves its separate propagator topologies.
+            atom = atom.replace(GS.dim).with(4).simplify_metrics();
+            debug_tags!(#generation, #profile, #uv, #numerator, #dump;
+                stage = "final_integrand_before_color",
+                graph = %graph.name,
+                numerator_bytes = atom.as_view().get_byte_size(),
+                file.atom = %atom.to_canonical_string(),
+                "Mapped factorized integrand before final color simplification"
+            );
             atom = atom
-                .replace(GS.dim)
-                .with(4)
-                .simplify_metrics()
                 .simplify_color_with(
                     ColorSimplifySettings::default().with_cof_dimension_invariants(),
                 )

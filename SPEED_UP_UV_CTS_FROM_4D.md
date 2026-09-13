@@ -727,3 +727,131 @@ If a gate fails, use the measurements to continue the generic implementation, in
   `40f7f703f770f6942f8fdf21cf5be9089a9dae0a8836ff80ed880926f12738fd`.
   Its 3m58s build, source patch, binary and six matched diagnostic cards are
   recorded in `tests/artifacts/aa_aa_uv_slowdown/diagnostic_tensor_boundaries`.
+
+
+### 2026-09-13 — first physical generation/runtime improvement
+
+- Milestone `d21ce5c92e7030bfd5cbf5a977b04ea6cedb04ef` was committed and
+  pushed as ValentinHirschi. All 633 focused tests pass; the frozen `40f7f703`
+  CLI contains this production implementation. The separately built physical
+  and scalar integration executables are also copied and hashed in
+  `diagnostic_tensor_boundaries/integration_binaries` before further edits.
+- Production finite-tensor replay of the captured GL00 and GL01 inputs makes
+  84 boundary moves each. Preparation takes 4.221/4.213 s, execution takes
+  4.301/4.314 s, and scalar outputs are 39,489,750/39,252,026 bytes. The GL00
+  output is reduced from 3,450,351,988 bytes without modifying its incoming
+  symbolic Atom. Exact coordinate tests and graph seam certificates remain
+  unchanged. Preparation itself is now substantial; batching compatible
+  closing leaves of one sum is being evaluated as a generic refinement.
+- Fresh matched GL00 generations complete in **18.840463931 s (4D)** and
+  **19.603097009 s (erased 3D)**, ratio **0.9611**. Expression work takes
+  4.712439665/6.481769429 s, Spenso takes 8.976910534/4.202542809 s, and
+  Symbolica takes 5.151113732/8.918784771 s. Reported peak memory is
+  651,010,048/832,045,056 bytes. These are single concurrent-build diagnostics,
+  not the required three fresh-process final measurements.
+- Matched saved-state runtime uses three adequate primed passes of twenty
+  batches each. Median evaluator time is **79.3137/94.3283 microseconds**
+  (4D/erased, ratio **0.840827**); median Total time is
+  **90.6994/106.1245 microseconds** (ratio **0.854651**). Direct retains
+  121,548 samples over actual measured pass durations 3.722/3.741/3.582 s;
+  erased retains 104,935 samples over 3.615/3.757/3.839 s. Pointwise relative
+  complex differences are **1.1943e-15** at the base point and **1.2644e-15**
+  at the 100-times-scaled point. Direct instruction/multiplication/addition
+  counts are 26,465/19,294/15,347 versus erased 31,382/23,192/17,309.
+  Full state-content identities are verified before and after read-only reuse.
+  The same frozen binary and matching physical cards serve both routes.
+- Generation and runtime commands are serialized under the shared benchmark
+  lock, but the original GL262 baseline and compilation remain concurrent, so
+  these are diagnostic observations. GL01 and GL262 remain required, and no
+  final acceptance gate is declared complete. Original GL262 is still pending
+  after five hours without a saved result.
+- Profiling now records per-call preparation/row-cache work in addition to
+  cumulative lifetime counters, allowing exact overhead sums across contexts.
+  The summarizer refuses to infer multi-context cost from cumulative maxima;
+  old single-context profiles require an explicit scope assertion. Synthetic
+  delta, uncertified cumulative and certified single-context controls pass.
+
+### 2026-09-13 — first successful tensor-boundary physical comparison
+
+- Frozen CLI `40f7f703f770f6942f8fdf21cf5be9089a9dae0a8836ff80ed880926f12738fd`
+  contains the production changes committed in `d21ce5c92`. The exact precommit
+  source binding is retained in `diagnostic_tensor_boundaries/source_manifest.json`.
+  Standalone production preparation made 84 boundary moves on each captured
+  GL00/GL01 input. Preparation took 4.221/4.213 s and tensor execution
+  4.301/4.314 s, producing 39,489,750/39,252,026 scalar Atom bytes. These use
+  the generic network method, with the original input Atom unchanged.
+- Full GL00 direct generation now completes in **18.840464 s**, versus
+  **19.603097 s** for a fresh erased3D generation with the same binary. Direct
+  expression/Spenso/Symbolica times are 4.712440/8.976911/5.151114 s; erased
+  times are 6.481769/4.202543/8.918785 s. Reported peak RAM is
+  651,010,048/832,045,056 bytes. Both produced one evaluator.
+- Serialized adaptive saved-state measurements give direct/erased median Total
+  times **90.699/106.125 microseconds (ratio 0.854651)** and evaluator times
+  **79.314/94.328 microseconds (ratio 0.840827)**. Three twenty-batch passes
+  retained 121,548/104,935 samples. Actual measured durations are
+  3.722/3.741/3.582 s for direct and 3.615/3.757/3.839 s for erased; initial
+  short attempts remain preserved and excluded. Direct/erased instructions are
+  26,465/31,382, multiplications 19,294/23,192, and additions 15,347/17,309.
+- Base and 100x-point values agree at relative complex norm differences
+  **1.1943e-15/1.2644e-15**. The full saved-state file inventories were hashed
+  and remained unchanged through read-only runtime/counting. Results and all
+  attempts are in `diagnostic_tensor_boundaries/GL00_adaptive_runtime_summary.json`.
+  These are promising single-generation diagnostics under concurrent build and
+  original-baseline load. They do not replace the required three fresh isolated
+  generations or the GL01/GL262 correctness and performance gates.
+
+- The matching GL01 diagnostic completes in **18.838888610/19.576989172 s**
+  (4D/erased), with reported peak memory **626,102,272/803,491,840 bytes**.
+  Expression/Spenso/Symbolica times are 4.691252835/8.911709881/5.235925894 s
+  for direct and 6.425137982/4.235130774/8.916720416 s for erased.
+  Median evaluator time is **79.6264/96.0689 microseconds** and Total time is
+  **91.2902/107.9295 microseconds**. Three primed twenty-batch passes retain
+  118,815/105,221 samples; their actual measured durations are
+  3.364/3.812/3.700 s and 3.774/3.832/3.797 s. Both physical points agree,
+  with relative complex differences **2.3019e-15** and **5.4482e-16**.
+  Direct instruction/multiplication/addition counts are 26,169/19,029/15,158
+  versus erased 31,999/23,657/17,588. The frozen binary, complete state hashes,
+  counters and timing attempts are retained in the same diagnostic directory.
+- The GL00/GL01 local construction-plus-projection subtotals are
+  182.708/181.572 ms. Allocation, candidate certification/selection and cache
+  work total 11.984/11.200 ms, or **6.56%/6.17%**. These include losing CFF
+  generation once: 4.685/4.683 ms. Winning CFF generation takes
+  20.870/20.991 ms. Both have ten admitted candidates across eight requests
+  and 196 native rows in total. Summaries use the explicitly certified single
+  graph-owned context of these legacy-forest cards. These are profiling
+  diagnostics, separate from final unprofiled performance gates.
+- The generic batch refinement now closes all eligible tensor leaves attached
+  exclusively to the same Sum in one pass. It keeps that Sum's native arms,
+  retains store references, and preserves the complete residual boundary.
+  A partial-closure regression keeps two coupled sums separate in either
+  operand order. The unchanged coordinate and graph invariants, plus the
+  broader focused suite, pass **634/634 tests** in 58.225 s (3m12s build).
+  Check39 passes before compilation. Physical replay and timing of the batch
+  implementation remain pending.
+
+- The batch replay improves GL00 preparation from **4.220910 to 1.068252 s**
+  and GL01 from **4.212994 to 1.058098 s**, about four times faster in both.
+  Tensor execution is 4.083161/4.162146 s and outputs are
+  39,268,458/39,370,594 bytes. All 84 moved leaves and four root terms remain;
+  the exact tests are unchanged. The combined preparation/execution stages
+  improve by factors 1.654/1.634. These are single captured-input replays;
+  complete generation and runtime of the batch revision remain to be measured.
+  The immutable CLI hash is
+  `d381b796830d86c8868b42e2d2b9e5ec781915956865040daca101b1ccf30dd8`,
+  based on d21ce5c92 plus recorded patch
+  `925dfab412485338691ac18d393e7156e3183b0e14d12496eeb8aefb0bda1e05`.
+  The CLI build takes 4m00s; clippy again succeeds with the same three tuple
+  warnings. Probe receipts are in `tensor_component_replay/prepared_nextest14`.
+- GL262 with the preceding `40f7f703` CLI remains incomplete. It was explicitly
+  terminated after 301.196892 s (exit -15, peak RSS 463,589,376 bytes), still
+  inside the first forest node, with 3,038 production orientations. There is
+  no evaluator, saved state or production forest export, hence no timing ratio
+  or production-forest verification. The original baseline remains untouched.
+- A fresh 124-sample GL262 profile (zero lost samples) locates 91.13% inclusive
+  cost in final `collect_color` / representation collection, including 89.52%
+  in symbolic zero tests. This is a different subpath from the earlier
+  `collect_chains` bottleneck: early cograph simplification removed that work,
+  but final color-tensor collection is still expensive. New existing-boundary
+  debug events expose the exact cograph and mapped integrand before final
+  color simplification. Their source-only capture will distinguish remaining
+  scalar color invariants from open tensors before the next generic fix.

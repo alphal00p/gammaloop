@@ -465,6 +465,8 @@ impl Projected4dApproximation<'_> {
         context: &mut Local4dProjectionContext,
     ) -> Result<Projected4dCts> {
         let projection_started = Instant::now();
+        let preparation_cache_before = context.preparations.cache_time;
+        let row_cache_before = context.numerator_rows.cache_time;
         if !self.settings.local_uv_cts_from_expanded_4d_integrands {
             return Err(eyre!(
                 "the typed local-4D child projection is reserved for local counterterms requested from expanded 4D integrands"
@@ -545,6 +547,7 @@ impl Projected4dApproximation<'_> {
             preparation_evictions = context.preparations.evictions,
             retained_preparation_bytes = context.preparations.retained_bytes(),
             preparation_cache_ms = context.preparations.cache_time.as_secs_f64() * 1000.0,
+            preparation_cache_work_ms = (context.preparations.cache_time - preparation_cache_before).as_secs_f64() * 1000.0,
             cff_hits,
             cff_misses,
             cff_evictions,
@@ -555,6 +558,7 @@ impl Projected4dApproximation<'_> {
             row_evictions = context.numerator_rows.evictions,
             retained_row_bytes = context.numerator_rows.retained_bytes(),
             row_cache_ms = context.numerator_rows.cache_time.as_secs_f64() * 1000.0,
+            row_cache_work_ms = (context.numerator_rows.cache_time - row_cache_before).as_secs_f64() * 1000.0,
             "Completed local four-dimensional UV projection"
         );
         Ok(Projected4dCts::new(active_sectors))

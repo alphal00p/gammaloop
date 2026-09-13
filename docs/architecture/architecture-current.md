@@ -384,9 +384,10 @@ Evaluator construction parses the factorized numerator into a Spenso network,
 aliases large scalar references, and contracts its tensor products before
 resolving those aliases. At this finite component boundary, a ready tensor
 whose exposed indices all contract with a pending tensor sum is attached to
-each immediate sum branch first. This reduces the sum's open tensor rank
-before large component expressions are constructed. The tensor store is
-shared by reference and scalar spectators stay outside; sums are not multiplied
+each immediate sum branch first. Eligible leaves of the same sum move together,
+so its branches and boundary are reconstructed once. This reduces the sum's
+open tensor rank before large component expressions are constructed. The tensor
+store is shared by reference and scalar spectators stay outside; sums are not multiplied
 through other sums, powers or opaque functions. Repeating the transformation
 decreases an existing sum's exposed rank. Eligibility requires self-dual exposed
 sum slots, so shared edge descriptors retain their exact endpoint meaning;
