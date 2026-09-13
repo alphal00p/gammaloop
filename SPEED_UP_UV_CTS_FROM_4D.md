@@ -1994,3 +1994,80 @@ If a gate fails, use the measurements to continue the generic implementation, in
   exact Atom equality are recorded without expanding the numerator. No probe
   workload has run while the erased generation owns the common measurement
   lock; full-input completion and runtime validation remain required.
+- The ownership change is committed and pushed as
+  `8ff1bc018af3c0d2f704a90b282acc7baaba46a1`. Immutable CLI19 passes its own
+  check/build and has SHA256
+  `3e75fa2d9c356af35acd08c44dec5c7e4db9fecc3b1f9f125da61b5fd888d65b`.
+  Counter19 passes metadata/link against the exact frozen API/core dependency
+  fingerprints; its SHA256 is
+  `97f05d15cf636d06ccd6edc948cea81b7fd8fe6b65dd65cdf0f445e4391ce576`.
+  Integration check88 and build14 also pass, freezing all four current
+  executables under `validation_candidate_8ff1b` before any execution. The
+  counter control, small replay control and fourteen integration boundaries
+  are queued serially after the running erased diagnostic; none is claimed
+  successful from build completion alone.
+- New paired CLI19 GL262 diagnostics retain all physical settings and use
+  H1/CPE5 with 500 GB guards. The generic final benchmark harness now accepts
+  an explicit positive `--horner-iterations`, retaining its historical default
+  of five and recording effective settings plus both card hashes. Twelve
+  lightweight argument/provenance/resume controls pass. All 27 required final
+  cases are prepared with `--horner-iterations 1`; no final generation has run.
+- Inspection of the pinned Symbolica direct-translation path separates the
+  effect of H1: it skips the additional scheme search but still counts
+  indeterminates, constructs a full Hornered expression, processes function-map
+  bodies and linearizes them before CSE/CPE. The transformed expression remains
+  live until linearization returns. External perf will distinguish these phases;
+  verbose optimization logging is avoided because it adds large expression
+  scans and temporary operation-count tables. The probe invokes the existing
+  evaluator operation and introduces no numerator-expansion command.
+
+### 2026-09-13 — Matched memory stages and typed scalar aliases
+
+- The initially small erased-3D RSS was observed during forest construction,
+  before tensor preprocessing. Its immutable CLI18 GL262 run later reached
+  213,034,311,680 bytes VmHWM while restoring scalar aliases after the second
+  contracted summand. This exceeds direct-4D's completed tensor-preprocessing
+  peak of 68,568,248,320 bytes. Neither observation is a completed evaluator
+  comparison; direct-4D was stopped by its former 100 GB guard during evaluator
+  construction, while erased-3D remains in preprocessing under the approved
+  500 GB guard. Erased-3D has 5,274 initial scalar-contraction summands versus
+  direct-4D's 3,050. Counts alone do not determine expression size or complexity.
+- The completed same-binary forest timings are 900.274 s for direct-4D and
+  2,254.471 s for erased-3D (ratio 0.3993). These are diagnostic stage timings,
+  not accepted full-generation measurements. Nine nonroot nodes take 879.897 s
+  and 2,233.803 s respectively; the shared root takes about 20.4/20.7 s.
+- A separate 20 s, 49 Hz sample of erased-3D after term 1 contraction contains
+  573 samples. Scalar alias restoration accounts for about 84% inclusive in
+  this interval, with roughly 46.6% self time hashing Atom bytes and 23.2% self
+  time copying memory. The generic alias map hashes every subtree even though
+  this owner's keys are typed scalar-store indices. These sampled percentages
+  are interval-local, overlapping where inclusive, and are not whole-generation
+  phase fractions. The raw profile and report are retained in the erased case.
+- The existing `ScalarAliases::resolve_atom` now uses the existing typed index
+  decoder and borrows registered definitions directly. Its exact substitution
+  fixed point remains, including forward/nested definitions and handles exposed
+  by normalization. A symbol-presence guard avoids the final unchanged Atom
+  copy once all handles disappear. No graph-specific rule, new mapper, cache,
+  numerator expansion or prepared lookup table is introduced. A dedicated
+  evaluator milestone separates alias resolution time and input/output Atom
+  bytes from contraction time. Exact old-resolver oracles cover factorized
+  spectators, unregistered and malformed handles, nested arguments and stable
+  self-references. Validation and isolated timing are pending.
+- The first scalar-stage RSS monitor stopped after 13:00:33 UTC. Its original
+  files are preserved with hashes. The existing monitor was restarted at
+  13:10:14 UTC as a detached process after checking for duplicates; VmHWM still
+  captures the intervening peak, but no exact historical stage RSS is invented.
+  The guard remained active and generation was never paused.
+- Format, Spenso check89 and GammaLoop check91 pass. Four targeted alias/store
+  tests and nineteen evaluator/symbol tests pass (nextest36/37), including the
+  exact generic-alias oracle. Clippy18 passes with the same three existing
+  type-complexity warnings. Check90 first caught an unqualified timer name in
+  the new profiling event; it was corrected before compilation. No physics
+  expectations or tolerances changed. These checks overlap the immutable
+  diagnostic and supply correctness evidence only.
+- The CLI20 build wrapper and paired GL262 H1/CPE5 cards are prepared under
+  `diagnostic_typed_scalar_aliases`; all physical card contents match CLI19
+  after changing only output paths. The supervisor records available RAM after
+  acquiring the common measurement lock and refuses launch if it is below
+  the requested 500 GB guard. A small generic alias A/B and exact-equality
+  probe is prepared separately; its compilation and execution remain pending.

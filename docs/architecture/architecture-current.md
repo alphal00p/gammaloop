@@ -462,7 +462,11 @@ existing top-level summand into an independent Spenso network. This bounds
 network preparation to the current summand. Products, powers and nested sums
 retain their grouping.
 Each network aliases large scalar references and contracts its tensor products
-before resolving its own aliases. Scalar results are combined in one bulk sum
+before resolving its own aliases. Typed scalar-store handles are substituted
+directly from their definitions.
+Resolution retains its exact fixed point for nested or newly exposed handles;
+it avoids hashing unrelated subexpressions and copying alias-free results.
+Scalar results are combined in one bulk sum
 before global evaluator optimization; open tensors, including open zero tensors,
 remain invalid scalar outputs. Optional evaluator variants borrow these scalars
 before the final parametric evaluator takes ownership. Selector-free inputs and

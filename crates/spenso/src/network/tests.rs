@@ -69,6 +69,55 @@ fn scalar_alias_refs_resolve_to_original_atom() {
 
 #[cfg(feature = "shadowing")]
 #[test]
+fn scalar_alias_resolution_preserves_nested_and_unregistered_handles() {
+    use symbolica::{
+        atom::{Atom, AtomCore},
+        function, parse, symbol,
+    };
+
+    use super::{
+        Network,
+        store::{NetworkStore, TensorScalarStore},
+        tags::{SPENSO_TAG, scalar_store_alias},
+    };
+
+    let mut net: Network<NetworkStore<(), Atom>, i8, i8> = Network::from_scalar(Atom::num(1));
+    net.store.add_scalar(scalar_store_alias(3));
+    net.store.add_scalar(parse!("unregistered"));
+    net.store.add_scalar(parse!("(x+y)^7*(z+w)^5"));
+    net.store.add_scalar(scalar_store_alias(4));
+    let aliases = net.alias_scalar_refs(|index, _| index != 2);
+
+    // Forward definitions and handles produced by normalization require the
+    // same fixed point as the generic alias map. Spectator powers stay intact.
+    let nested = function!(SPENSO_TAG.scalar, scalar_store_alias(0));
+    let expected = parse!("(x+y)^7*(z+w)^5");
+    assert_eq!(
+        net.resolve_scalar_aliases(&aliases, nested.clone()),
+        expected
+    );
+    for root in [
+        nested,
+        scalar_store_alias(1).pow(3) * parse!("(a+b)^4"),
+        function!(symbol!("f"), scalar_store_alias(1)),
+        scalar_store_alias(2),
+        scalar_store_alias(4),
+        scalar_store_alias(99),
+        Atom::var(SPENSO_TAG.scalar),
+        function!(SPENSO_TAG.scalar, -1),
+        function!(SPENSO_TAG.scalar, parse!("1/2")),
+        function!(SPENSO_TAG.scalar, 0, 1),
+        function!(SPENSO_TAG.scalar, scalar_store_alias(0), parse!("x")),
+        function!(SPENSO_TAG.scalar, parse!("x")),
+        expected,
+    ] {
+        let expected = net.aliased_atom(&aliases, root.clone()).into_inner();
+        assert_eq!(net.resolve_scalar_aliases(&aliases, root), expected);
+    }
+}
+
+#[cfg(feature = "shadowing")]
+#[test]
 fn auto_serializes_unlicensed_symbolic_fast_tensor_sum() {
     use std::collections::HashMap;
 

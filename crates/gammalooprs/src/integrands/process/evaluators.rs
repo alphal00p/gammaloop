@@ -808,7 +808,21 @@ impl EvaluatorStack {
                         ExecutionResult::Zero => Atom::Zero,
                         ExecutionResult::Val(v) => v.into_owned(),
                     })
-                    .map(|root| net.resolve_scalar_aliases(&scalar_aliases, root))
+                    .map(|root| {
+                        let started = std::time::Instant::now();
+                        let input_bytes = root.as_view().get_byte_size();
+                        let resolved = net.resolve_scalar_aliases(&scalar_aliases, root);
+                        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                            stage = "evaluator_stack_parse_atom_alias_resolution_done",
+                            atom_index,
+                            term_index,
+                            input_bytes,
+                            result_bytes = resolved.as_view().get_byte_size(),
+                            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                            "Evaluator timing milestone"
+                        );
+                        resolved
+                    })
                     .map_err(|a| {
                         Report::from(a)
                             .with_note(|| format!("Network looks like: {}", net.dot_pretty()))

@@ -66,7 +66,7 @@ use symbolica::id::AliasedAtom;
 #[cfg(feature = "shadowing")]
 pub mod tags;
 #[cfg(feature = "shadowing")]
-use tags::scalar_store_alias;
+use tags::{SPENSO_TAG, scalar_store_alias, scalar_store_alias_index};
 // use eyre::Result;
 
 use std::{convert::Infallible, fmt::Debug};
@@ -1751,11 +1751,34 @@ impl ScalarAliases {
         aliased
     }
 
-    pub fn resolve_atom<T>(&self, store: &NetworkStore<T, Atom>, root: Atom) -> Atom {
+    pub fn resolve_atom<T>(&self, store: &NetworkStore<T, Atom>, mut root: Atom) -> Atom {
         if self.is_empty() {
             return root;
         }
-        self.to_aliased_atom(store, root).into_inner()
+
+        // Store aliases are indexed handles: hashing arbitrary subtrees would
+        // repeatedly scan large scalar bodies that cannot be alias keys. Borrow
+        // definitions directly, and avoid copying an already alias-free result.
+        while root.contains_symbol(SPENSO_TAG.scalar) {
+            let resolved = root.replace_map(|view, _, out| {
+                if let Some(index) = scalar_store_alias_index(view)
+                    && self.is_aliased(index)
+                {
+                    let original = store
+                        .scalar
+                        .get(index)
+                        .expect("scalar alias references an existing scalar");
+                    out.set_from_view(&original.as_view());
+                }
+            });
+            // Definitions can contain other aliases, and normalization can
+            // expose a new handle. Preserve the exact substitution fixed point.
+            if resolved == root {
+                break;
+            }
+            root = resolved;
+        }
+        root
     }
 }
 
