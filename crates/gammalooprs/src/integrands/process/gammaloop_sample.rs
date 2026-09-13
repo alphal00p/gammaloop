@@ -307,6 +307,67 @@ pub enum DiscreteGraphSample<T: FloatLike> {
     },
 }
 
+/// Typed hand-off for a physical cross-section channel which still has to be
+/// prepared against the sampled cut (LU root, `t*`, and external momenta).
+///
+/// This deliberately carries only the information that is already available
+/// at the sampling boundary: the canonical channel id, its unit-cube input,
+/// and the parent-frame momentum sample.  It does not evaluate a map or
+/// provide a Jacobian.  The cross-section process must consume this value when
+/// it has solved the corresponding cut and construct its
+/// [`DeferredCrossSectionSamplingState`] transactionally.
+#[derive(Debug, Clone)]
+pub struct DeferredCrossSectionSample<T: FloatLike> {
+    channel_id: SamplingChannelId,
+    sampling_coordinates: Vec<F<T>>,
+    parent_sample: MomentumSample<T>,
+}
+
+impl<T: FloatLike> DeferredCrossSectionSample<T> {
+    pub fn new(
+        channel_id: SamplingChannelId,
+        sampling_coordinates: Vec<F<T>>,
+        parent_sample: MomentumSample<T>,
+    ) -> Result<Self> {
+        if sampling_coordinates.is_empty() {
+            return Err(eyre!(
+                "deferred cross-section channel {} needs unit-cube coordinates",
+                channel_id.index()
+            ));
+        }
+        if sampling_coordinates.iter().any(|coordinate| {
+            let coordinate = coordinate.into_f64();
+            !coordinate.is_finite() || !(0.0..=1.0).contains(&coordinate)
+        }) {
+            return Err(eyre!(
+                "deferred cross-section channel {} has non-finite or non-unit-cube coordinates",
+                channel_id.index()
+            ));
+        }
+        Ok(Self {
+            channel_id,
+            sampling_coordinates,
+            parent_sample,
+        })
+    }
+
+    pub fn channel_id(&self) -> SamplingChannelId {
+        self.channel_id
+    }
+
+    pub fn sampling_coordinates(&self) -> &[F<T>] {
+        &self.sampling_coordinates
+    }
+
+    pub fn parent_sample(&self) -> &MomentumSample<T> {
+        &self.parent_sample
+    }
+
+    pub fn into_parent_sample(self) -> MomentumSample<T> {
+        self.parent_sample
+    }
+}
+
 /// Whether the selected runtime mode still uses the legacy *summed* channel
 /// estimator.  Both top-level summed sampling and discrete graph sampling can
 /// request this mode; keeping the predicate central prevents the nested graph
@@ -564,6 +625,37 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                 ..
             } => sampling_coordinates.as_deref(),
             _ => None,
+        }
+    }
+
+    /// Extract the canonical deferred cross-section hand-off, if this sample
+    /// was generated from a unit-cube channel.  Direct momentum samples are
+    /// intentionally reported as an error when they claim a physical channel:
+    /// they have no coordinates from which a cut-dependent map can be
+    /// replayed.
+    pub(crate) fn deferred_cross_section_sample(
+        &self,
+    ) -> Result<Option<DeferredCrossSectionSample<T>>> {
+        match self {
+            Self::SamplingChannel {
+                channel_id,
+                sampling_coordinates: Some(coordinates),
+                sample,
+                ..
+            } => Ok(Some(DeferredCrossSectionSample::new(
+                *channel_id,
+                coordinates.clone(),
+                sample.clone(),
+            )?)),
+            Self::SamplingChannel {
+                channel_id,
+                sampling_coordinates: None,
+                ..
+            } => Err(eyre!(
+                "deferred cross-section channel {} has no retained unit-cube coordinates",
+                channel_id.index()
+            )),
+            _ => Ok(None),
         }
     }
 }
@@ -985,6 +1077,73 @@ mod tests {
             sample,
         };
         assert!(sampling_channel.sampling_coordinates().is_none());
+        let error = sampling_channel
+            .deferred_cross_section_sample()
+            .expect_err("physical channels need replay coordinates");
+        assert!(
+            error
+                .to_string()
+                .contains("has no retained unit-cube coordinates")
+        );
+    }
+
+    #[test]
+    fn deferred_cross_section_sample_preserves_canonical_identity_and_parent() {
+        let sample = MomentumSample::new(
+            LoopMomenta::from(vec![]),
+            0,
+            &Externals::default(),
+            0,
+            F(1.0),
+            DependentMomentaConstructor::CrossSection,
+            None,
+        )
+        .expect("empty cross-section sample is valid for metadata test");
+        let coordinates = vec![F(0.125), F(0.625), F(0.875)];
+        let sampling_channel = DiscreteGraphSample::SamplingChannel {
+            channel_id: SamplingChannelId::from(11),
+            sampling_coordinates: Some(coordinates.clone()),
+            partition_weight: None,
+            sample: sample.clone(),
+        };
+        let deferred = sampling_channel
+            .deferred_cross_section_sample()
+            .expect("well-formed channel should build a hand-off")
+            .expect("sampling-channel variant should carry a hand-off");
+        assert_eq!(deferred.channel_id(), SamplingChannelId::from(11));
+        assert_eq!(deferred.sampling_coordinates(), coordinates.as_slice());
+        assert_eq!(
+            deferred.parent_sample().sample.jacobian,
+            sample.sample.jacobian
+        );
+        assert_eq!(
+            deferred.parent_sample().sample.loop_mom_cache_id,
+            sample.sample.loop_mom_cache_id
+        );
+    }
+
+    #[test]
+    fn deferred_cross_section_sample_rejects_non_unit_coordinates() {
+        let sample = MomentumSample::new(
+            LoopMomenta::from(vec![]),
+            0,
+            &Externals::default(),
+            0,
+            F(1.0),
+            DependentMomentaConstructor::CrossSection,
+            None,
+        )
+        .unwrap();
+        let sampling_channel = DiscreteGraphSample::SamplingChannel {
+            channel_id: SamplingChannelId::from(2),
+            sampling_coordinates: Some(vec![F(0.2), F(1.2)]),
+            partition_weight: None,
+            sample,
+        };
+        let error = sampling_channel
+            .deferred_cross_section_sample()
+            .expect_err("coordinates outside the unit cube must be rejected");
+        assert!(error.to_string().contains("non-finite or non-unit-cube"));
     }
 
     #[test]
