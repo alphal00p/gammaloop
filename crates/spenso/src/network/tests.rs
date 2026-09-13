@@ -638,3 +638,217 @@ fn sparse_pair_cost_counts_only_matching_contracted_coordinates() {
         }
     }
 }
+
+#[test]
+fn lazy_scalar_tensor_leaves_add_scalars_in_either_order() {
+    use crate::{
+        network::{
+            ExecutionResult, Network, NetworkLeaf, NetworkNode, Sequential, SmallestDegree,
+            graph::{ScalarRef, ScaledTensorRef},
+            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+            store::{NetworkStore, TensorScalarStore},
+        },
+        structure::{OrderedStructure, representation::Euclidean},
+        tensors::data::DenseTensor,
+    };
+
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    let lib = DummyLibrary::<Tensor, DummyKey>::new();
+    let functions = ErroringLibrary::<DummyKey>::new();
+    let structure = OrderedStructure::new(vec![]).structure;
+    let mut tensor =
+        Net::from_tensor(DenseTensor::from_data(vec![3.0], structure.clone()).unwrap());
+    let second = tensor
+        .store
+        .add_tensor(DenseTensor::from_data(vec![7.0], structure).unwrap());
+    let scale = tensor.store.add_scalar(2.0);
+    let other_scale = tensor.store.add_scalar(-5.0);
+    tensor.store.scalar_aliases = vec![Some(11.0), Some(-13.0)];
+
+    // Distinct entries and coefficients detect reused references; aliases must
+    // resolve through the store without broadcasting scales into tensors.
+    for (leaf, expected) in [
+        (NetworkLeaf::Scalar(scale.into()), 2.0),
+        (NetworkLeaf::Scalar(ScalarRef::Alias(scale)), 11.0),
+        (NetworkLeaf::LocalTensor(0), 3.0),
+        (NetworkLeaf::TensorSum(vec![0, second]), 10.0),
+        (
+            NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled(0, scale)),
+            6.0,
+        ),
+        (
+            NetworkLeaf::ScaledTensor(ScaledTensorRef::tensor(second)),
+            7.0,
+        ),
+        (
+            NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled_ref(0, ScalarRef::Alias(scale))),
+            33.0,
+        ),
+        (
+            NetworkLeaf::ScaledTensorSum(vec![
+                ScaledTensorRef::scaled(0, scale),
+                ScaledTensorRef::scaled(second, other_scale),
+                ScaledTensorRef::tensor(0),
+            ]),
+            -26.0,
+        ),
+        (
+            NetworkLeaf::ScaledTensorSum(vec![
+                ScaledTensorRef::scaled_ref(0, ScalarRef::Alias(scale)),
+                ScaledTensorRef::scaled_ref(second, ScalarRef::Alias(other_scale)),
+                ScaledTensorRef::tensor(0),
+            ]),
+            -55.0,
+        ),
+    ] {
+        let mut left = tensor.clone();
+        let root = left.graph.result().unwrap().1;
+        left.graph.graph[root] = NetworkNode::Leaf(leaf.clone());
+        for mut sum in [
+            left.clone() + Net::from_scalar(1.0),
+            Net::from_scalar(1.0) + left,
+        ] {
+            sum.execute::<Sequential, SmallestDegree, DummyLibraryTensor<Tensor>, _, _>(
+                &lib, &functions,
+            )
+            .unwrap();
+            let ExecutionResult::Val(actual) = sum.result_scalar().unwrap() else {
+                panic!("expected a scalar result for {leaf:?}");
+            };
+            assert_eq!(*actual, expected + 1.0, "{leaf:?}");
+            assert!(matches!(
+                sum.graph.result().unwrap().0,
+                NetworkNode::Leaf(NetworkLeaf::Scalar(_))
+            ));
+            assert_eq!(sum.store.tensors.len(), tensor.store.tensors.len());
+        }
+    }
+}
+
+#[test]
+fn lazy_scalar_tensor_sum_rejects_free_indices() {
+    use crate::{
+        network::{
+            Network, NetworkLeaf,
+            graph::ScaledTensorRef,
+            store::{NetworkStore, TensorScalarStore},
+        },
+        structure::{
+            OrderedStructure,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    let structure = OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure;
+    let mut tensor = Net::from_tensor(DenseTensor::from_data(vec![1.0, 2.0], structure).unwrap());
+    let scale = tensor.store.add_scalar(2.0);
+    let root = tensor.graph.result().unwrap().1;
+    let scalar = NetworkLeaf::Scalar(scale.into());
+    for leaf in [
+        NetworkLeaf::LocalTensor(0),
+        NetworkLeaf::TensorSum(vec![0, 0]),
+        NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled(0, scale)),
+        NetworkLeaf::ScaledTensorSum(vec![
+            ScaledTensorRef::scaled(0, scale),
+            ScaledTensorRef::tensor(0),
+        ]),
+    ] {
+        for targets in [
+            [(root, &leaf), (root, &scalar)],
+            [(root, &scalar), (root, &leaf)],
+        ] {
+            assert!(
+                super::try_balanced_scalar_sum::<DummyKey, super::AbstractIndex, _>(
+                    &mut tensor.store,
+                    &targets,
+                    None,
+                )
+                .is_none(),
+                "a tensor with a free index must not be treated as a scalar: {leaf:?}"
+            );
+        }
+    }
+
+    // Even a malformed lazy sum whose first tensor is scalar must fail the
+    // scalar eligibility check when a later tensor carries a free index.
+    let scalar_tensor = tensor.store.add_tensor(
+        DenseTensor::from_data(vec![3.0], OrderedStructure::new(vec![]).structure).unwrap(),
+    );
+    for leaf in [
+        NetworkLeaf::TensorSum(vec![scalar_tensor, 0]),
+        NetworkLeaf::ScaledTensorSum(vec![
+            ScaledTensorRef::scaled(scalar_tensor, scale),
+            ScaledTensorRef::tensor(0),
+        ]),
+    ] {
+        for targets in [
+            [(root, &leaf), (root, &scalar)],
+            [(root, &scalar), (root, &leaf)],
+        ] {
+            assert!(
+                super::try_balanced_scalar_sum::<DummyKey, super::AbstractIndex, _>(
+                    &mut tensor.store,
+                    &targets,
+                    None,
+                )
+                .is_none()
+            );
+        }
+    }
+}
+
+#[test]
+fn lazy_scalar_tensor_contraction_adds_scalar_in_either_order() {
+    use crate::{
+        network::{
+            ExecutionResult, Network, NetworkLeaf, NetworkNode, Sequential, SmallestDegree,
+            graph::ScaledTensorRef,
+            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+            store::{NetworkStore, TensorScalarStore},
+        },
+        structure::{
+            OrderedStructure,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    let lib = DummyLibrary::<Tensor, DummyKey>::new();
+    let functions = ErroringLibrary::<DummyKey>::new();
+    let structure = OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure;
+    let mut sum =
+        Net::from_tensor(DenseTensor::from_data(vec![1.0, 2.0], structure.clone()).unwrap());
+    let second = sum
+        .store
+        .add_tensor(DenseTensor::from_data(vec![3.0, 4.0], structure.clone()).unwrap());
+    let two = sum.store.add_scalar(2.0);
+    let three = sum.store.add_scalar(3.0);
+    let root = sum.graph.result().unwrap().1;
+    // Construct the deferred 2A + 3B explicitly so the regression does not
+    // depend on the eager-sum size threshold or process-global environment.
+    sum.graph.graph[root] = NetworkNode::Leaf(NetworkLeaf::ScaledTensorSum(vec![
+        ScaledTensorRef::scaled(0, two),
+        ScaledTensorRef::scaled(second, three),
+    ]));
+    let c = Net::from_tensor(DenseTensor::from_data(vec![5.0, 6.0], structure).unwrap());
+    let contracted = sum * c;
+    for mut sum in [
+        contracted.clone() + Net::from_scalar(1.0),
+        Net::from_scalar(1.0) + contracted,
+    ] {
+        sum.execute::<Sequential, SmallestDegree, DummyLibraryTensor<Tensor>, _, _>(
+            &lib, &functions,
+        )
+        .unwrap();
+        let ExecutionResult::Val(actual) = sum.result_scalar().unwrap() else {
+            panic!("expected a fully contracted scalar");
+        };
+        assert_eq!(*actual, 152.0);
+    }
+}
