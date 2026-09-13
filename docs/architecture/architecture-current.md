@@ -150,6 +150,16 @@ remain explicit. The class algebra contains powered denominators and a
 factorized numerator, with no CFF capacities or sampling conventions. This is
 the boundary a future LTD consumer can use directly.
 
+Local Taylor construction retains spinor products, chains and traces after
+metric simplification. Numerical tensor execution contracts them after residue
+mapping; the integrated-CT preparation separately performs the required
+analytic Dirac algebra on its copy before Vakint. This avoids expanding a local
+trace into scalar contractions before canonical merging and energy sampling.
+Both local routes simplify the reduced numerator's color algebra before Taylor
+construction using the existing numerator operation. Open color indices remain
+explicit; later color simplification still contracts the attached cograph and
+projector. Raw graph storage and parse-time validation are unchanged.
+
 Rational-shell extraction groups equal denominator multisets through sums,
 products and powers while leaving denominator-free numerator subtrees opaque.
 It adds powers and numerators, prunes exact zeros, and never constructs a global
@@ -158,6 +168,8 @@ numerator blocks with their complete polynomial and signed binding. Compatible
 sectors merge before reconstruction. After each independent component contour,
 states with equal remaining requests and bindings share numerators when their
 carriers agree, or share carriers when their numerators agree.
+Grouping repeats until the state count stops decreasing, because one sum can
+create an equality for the next grouping pass.
 
 Every algebra bucket retains one deterministic physical source witness. The
 existing source builder inherits original incidence, contracts omitted edges,
@@ -182,13 +194,15 @@ boundary payload rather than inferred attachments.
 
 The immutable CFF assignment is constructed compositionally. Sums take the
 componentwise maximum, products and registered multilinear arguments add degrees,
-and positive integer powers retain compressed repetitions. Freely assignable
+and positive integer powers retain compressed repetitions. The inert cyclic,
+symmetric and antisymmetric tensor projectors use the same slotwise degree rule
+while keeping their symbolic heads intact. Freely assignable
 leaves use cyclic offsets within each class; opaque blocks use deterministic
 least-loaded placement. An ordinary affine request admits one candidate. A
 nonlinear request admits at most three distinct valid candidates: baseline,
 packed unavoidable excess, then reversal of the best-scored placement (rotation
-only replaces a duplicate). Each challenger changes one class, with no Cartesian
-search across classes.
+only replaces a duplicate). Each challenger changes one eligible occurrence pool,
+with no Cartesian search across pools.
 
 Selection uses native `generated.expression.orientations.len()` before surface
 conversion and host selection. Maximum rank, descending rank envelope and stable
@@ -196,9 +210,10 @@ candidate order break ties. The cache key preserves exact ordered capacities;
 identical physical energies do not authorize permuting loads. This bounded
 selection is not an exhaustive minimum. Tests retain small exhaustive oracles,
 including the 62-row full-vacuum source. All losing generation belongs to
-selection cost. Soft routing retains its existing bounded off-shell proposals,
-including every fixed external shift, and root-expression reuse retains its
-established capacities.
+selection cost. Soft routing retains its existing exact-basis/Pareto frontier
+for off-shell proposals, including every fixed external shift. Its at-most-three
+native generation trials do not bound that separate frontier's preparation cost.
+Root-expression reuse retains its established capacities.
 
 One nonserialized `Local4dProjectionContext` spans each graph's complete UV
 computation in both forest orchestrators. Its deterministic LRU caches retain
@@ -295,6 +310,10 @@ sequential forest construction composes the same local and integrated replay
 operations used by disconnected forests. Integrated localization registers its
 source surfaces before either Taylor branch reads the graph, and its normalized
 localizing factor remains inert under subsequent Taylor operations.
+Evaluator preparation skips residue-selector parametrization when the selector
+symbol is absent, and skips orientation collection when neither theta nor IF
+occurs. Expressions with conditionals retain the existing guarded-branch
+rewrites so inactive residue-local inverses are never evaluated.
 
 The shared CFF core also returns its connected-loop and pure
 duplicate-denominator global sign as typed metadata. GammaLoop consumes that

@@ -5,7 +5,7 @@ use std::{
 
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
-use spenso::shadowing::symbolica_utils::LogPrint;
+use spenso::shadowing::{ANTISYM, CYCLIC, SYM, symbolica_utils::LogPrint};
 use spenso::structure::{
     abstract_index::AIND_SYMBOLS,
     representation::{LibraryRep, Minkowski},
@@ -1466,7 +1466,7 @@ impl EnergyPowerAnalyzer {
                 })
             }
             AtomView::Fun(function)
-                if function.get_symbol() == GS.dot
+                if [GS.dot, *CYCLIC, *SYM, *ANTISYM].contains(&function.get_symbol())
                     || (function.get_symbol().is_linear()
                         && function.get_symbol() != GS.emr_mom
                         && function.get_symbol() != GS.loop_mom
@@ -1620,28 +1620,23 @@ impl EnergyPowerAnalyzer {
                     return self.analyze_view(function.get(3), mode);
                 }
 
-                // Dot products are bilinear. Keep that composition explicit:
-                // the Symbolica symbol is intentionally not globally declared
-                // linear, while numerator energy degrees still add between its
-                // two vector slots.
-                if function.get_nargs() == 2 && function.get_symbol() == GS.dot {
-                    let mut degree = self.analyze_view(function.get(0), mode)?;
-                    degree.add_assign(self.analyze_view(function.get(1), mode)?)?;
-                    return Ok(degree);
-                }
-
+                // Dot products are bilinear, and the inert tensor projectors
+                // are normalized sums of products containing each argument once.
+                // Their energy degrees therefore add across slots without
+                // expanding them or changing their global Symbolica attributes.
+                let multilinear = function.get_symbol().is_linear()
+                    || (function.get_nargs() == 2 && function.get_symbol() == GS.dot)
+                    || [*CYCLIC, *SYM, *ANTISYM].contains(&function.get_symbol());
                 let argument_degrees = function
                     .iter()
                     .map(|argument| self.analyze_view(argument, mode))
                     .collect::<Result<Vec<_>, _>>()?;
-                if argument_degrees.iter().any(|degree| !degree.is_empty())
-                    && !function.get_symbol().is_linear()
-                {
+                if argument_degrees.iter().any(|degree| !degree.is_empty()) && !multilinear {
                     return Err(EnergyPowerAnalysisError::OpaqueEnergyFunction {
                         expression: Atom::from(function.to_owned()).log_print(None),
                     });
                 }
-                if function.get_symbol().is_linear() {
+                if multilinear {
                     let mut degree = EnergyPowerCapMap::default();
                     for argument_degree in argument_degrees {
                         degree.add_assign(argument_degree)?;
@@ -2130,7 +2125,7 @@ mod tests {
         },
     };
     use linnet::half_edge::involution::EdgeIndex;
-    use spenso::shadowing::symbolica_utils::ReplaceBuilderExt;
+    use spenso::shadowing::{ANTISYM, CYCLIC, SYM, symbolica_utils::ReplaceBuilderExt};
     use spenso::structure::{
         abstract_index::AIND_SYMBOLS,
         representation::{LibraryRep, Minkowski},
@@ -3166,5 +3161,99 @@ mod tests {
             error,
             EnergyPowerAnalysisError::InvalidLoopMomentumArgument { .. }
         ));
+    }
+    #[test]
+    fn real_dirac_functions_keep_cyclic_energy_assignments_factorized() {
+        test_initialise().unwrap();
+        let class = UvDenominatorClassId(0);
+        let reference = EnergyReference::UvClass(class);
+        let marker = GS.uv_class_ref(class);
+        let vector = function!(GS.emr_mom, &marker, compact_minkowski_vector());
+        let energy = function!(GS.emr_mom, &marker, GS.cind(0));
+        let start = idenso::bis!(4, Atom::var(symbol!("uv_spin_start")));
+        let end = idenso::bis!(4, Atom::var(symbol!("uv_spin_end")));
+        let bis = function!(
+            LibraryRep::from(idenso::representations::Bispinor {}).symbol(),
+            4
+        );
+        let mut expressions = vec![
+            idenso::gamma!(&vector, &start, &end) * (&energy + Atom::one()).pow(4),
+            spenso::chain!(
+                &start,
+                &end,
+                idenso::gamma!(&vector),
+                idenso::gamma!(&vector)
+            ) * (&energy + Atom::one()).pow(3),
+            spenso::trace!(&bis, idenso::gamma!(&vector), idenso::gamma!(&vector))
+                * (&energy + Atom::one()).pow(3),
+        ];
+        let shifted_vector = &vector + function!(GS.emr_vec, 99, compact_minkowski_vector());
+        for projector in [*CYCLIC, *SYM, *ANTISYM] {
+            // Distinct slashes in an open chain keep the antisymmetrizer
+            // nonzero; a closed two-factor trace would hide its energy bounds.
+            let projected = function!(
+                projector,
+                idenso::gamma!(&vector),
+                idenso::gamma!(&shifted_vector)
+            );
+            expressions
+                .push(spenso::chain!(&start, &end, projected) * (&energy + Atom::one()).pow(3));
+        }
+        let mut candidates = EquivalentEnergyCandidates::try_from_source_occurrences([]).unwrap();
+        candidates
+            .add_uv_classes([(class, (10..15).collect())])
+            .unwrap();
+        let analyzer = EnergyPowerAnalyzer::for_physical_emr_edges([]);
+        for expression in expressions {
+            assert!(!expression.is_zero());
+            let plans = analyzer
+                .plan_atom_assignment_proposals(&expression, &candidates)
+                .unwrap();
+            assert_eq!(plans.len(), 1);
+            let plan = &plans[0];
+            assert_eq!(
+                plan.energy_degree_bounds(),
+                &[(10, 1), (11, 1), (12, 1), (13, 1), (14, 1)]
+            );
+            plan.certify_roundtrip(&expression).unwrap();
+            let mapped = plan
+                .prepare_factors(|factor, assignments| {
+                    Ok::<_, ()>(assignments.get(&reference).map_or_else(
+                        || factor.clone(),
+                        |occurrence| {
+                            factor
+                                .replace(marker.to_pattern())
+                                .with(Atom::num(*occurrence))
+                        },
+                    ))
+                })
+                .unwrap()
+                .map(&mut |_, factor, _| Ok::<_, ()>(factor.clone()))
+                .unwrap();
+            assert!(mapped.contains_symbol(idenso::dirac::AGS.gamma));
+            for projector in [*CYCLIC, *SYM, *ANTISYM] {
+                assert_eq!(
+                    mapped.contains_symbol(projector),
+                    expression.contains_symbol(projector)
+                );
+            }
+            assert_eq!(
+                EnergyPowerAnalyzer::new([])
+                    .analyze_atom(&mapped)
+                    .unwrap()
+                    .into_generation_bounds(),
+                plan.energy_degree_bounds()
+            );
+            let collapsed = mapped.replace_map(|view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                    && momentum.get_nargs() == 2
+                    && usize::try_from(momentum.get(0)).is_ok_and(|id| (10..15).contains(&id))
+                {
+                    **output = function!(GS.emr_mom, &marker, momentum.get(1));
+                }
+            });
+            assert_eq!(collapsed.collect_factors(), expression.collect_factors());
+        }
     }
 }

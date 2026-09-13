@@ -3010,7 +3010,7 @@ pub mod test {
                     continue;
                 }
                 used.union_with(&subgraph);
-                expected.push((node, op.clone(), children, subgraph));
+                expected.push((node, *op, children, subgraph));
             }
             assert!(!expected.is_empty());
             if hidden.is_empty() {

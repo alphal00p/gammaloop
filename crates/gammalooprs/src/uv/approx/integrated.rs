@@ -197,8 +197,9 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
         log.expr = schoonschip,
         "After gamma schoonschip"
     );
-    // Vakint receives the individual Taylor denominator topologies; a common
-    // denominator would introduce artificial numerator powers before reduction.
+    // Keep each Taylor term's propagator powers. Vakint receives the individual
+    // denominator topologies: collecting factors across the sum clears denominators
+    // and manufactures higher-rank numerator factors before reduction.
     let collected = schoonschip
         .collect_chains_and_traces()
         .simplify_metrics()

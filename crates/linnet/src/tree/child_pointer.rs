@@ -4,13 +4,13 @@
 
 use std::{collections::VecDeque, fmt::Write};
 
-use crate::half_edge::subgraph::{Inclusion, ModifySubSet, SubSetLike, subset::SubSet};
+use crate::half_edge::subgraph::{subset::SubSet, Inclusion, ModifySubSet, SubSetLike};
 
 use super::{
-    ForestError, ForestNodeStore, ForestNodeStoreAncestors, ForestNodeStoreBfs,
-    ForestNodeStoreDown, ForestNodeStorePreorder, RootId, TreeNodeId,
     child_vec::ChildVecStore,
     parent_pointer::{PPNode, ParentId, ParentPointerStore},
+    ForestError, ForestNodeStore, ForestNodeStoreAncestors, ForestNodeStoreBfs,
+    ForestNodeStoreDown, ForestNodeStorePreorder, RootId, TreeNodeId,
 };
 
 /// Represents a node within a `ParentChildStore`.
@@ -742,7 +742,7 @@ mod test {
             nodestore::NodeStorageOps,
             subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
         },
-        tree::{Forest, ForestNodeStore, RootId, TreeNodeId, child_vec::ChildVecStore},
+        tree::{child_vec::ChildVecStore, Forest, ForestNodeStore, RootId, TreeNodeId},
     };
 
     use super::ParentChildStore;

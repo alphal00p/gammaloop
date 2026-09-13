@@ -419,3 +419,135 @@ If a gate fails, use the measurements to continue the generic implementation, in
   simplifies traces/Schoonschip, duplicating the integrated path's existing
   analytic preparation. Deferring that duplicate local spin algebra is the
   next generic experiment; success and unchanged row counts are not assumed.
+
+
+### 2026-09-13 — GL01 saved-state diagnostic completed
+
+- The same immutable cache/Spenso/Linnet CLI (SHA256
+  `895e2ea230ebc6fbc0e04f468c226a87709b11a63ed09e264165e6819c528517`)
+  generated GL01 successfully in 682.069602369 s: expression construction
+  130.396855471 s, Spenso 317.377554948 s, Symbolica 234.295191950 s,
+  compilation 0 s. Reported peak RAM was 23,740,649,472 bytes. The outer
+  receipt records 684.484785132 s and 24,388,227,072 sampled peak RSS bytes.
+  This snapshot predates the latest representation predicate, network scheduler
+  and proposed deferred local Dirac algebra. Generation ran concurrently with
+  unit compilation and the old GL262 localized baseline, so it remains a
+  diagnostic rather than a final acceptance measurement.
+- Saved-state replay used that immutable CLI for both direct4D and the original
+  erased3D evaluator, with the state read-only. One priming pass preceded three
+  timed passes of 20 batches, and all runtime, point inspection and operation
+  counting held the shared benchmark lock. Median full-integrand/evaluator
+  times were 1,418.340558/1,366.547650 microseconds for direct4D (8,170 samples)
+  and 96.251632/78.577745 microseconds for erased3D (29,743 samples). The
+  diagnostic gaps are 14.74x/17.39x; the runtime performance gate remains open.
+- Direct4D has 274,845 instructions, 159,144 multiplications, 198,851 additions,
+  36 inversions and 19 function calls. Erased3D has 26,458 instructions, 19,109
+  multiplications, 13,984 additions, 35 inversions and 18 function calls. The
+  complex full-integrand values agree to relative differences 2.1740e-15 at
+  the base point and 4.4902e-16 after scaling all spatial coordinates by 100.
+  Integrated UV and threshold counterterms were disabled in both routes.
+- Exact timing, counts, point values and executable/state provenance are under
+  `tests/artifacts/aa_aa_uv_slowdown/diagnostic_cache_shared`, in
+  `GL01_saved_runtime_summary.json`, `GL01_saved_runtime_comparison.json` and
+  the two GL01 case directories' receipts. No further generation was launched.
+  The separate GL00 source comparison identifies early gamma-trace contraction
+  as the first representation divergence: its two no-OSE UV terms account for
+  95.84% of the direct source and are 23.22x the combined erased terms' text.
+  `spf` is the SpinFundamental representation, not a scalar-product shorthand.
+  That causal owner trace motivates the deferred-algebra experiment; the new
+  GL01 timings alone do not prove the same term-level cause.
+
+- Milestone `f3ec6fcb1bb367ce71c8f24f1901fd1f81c28b9d` was committed and pushed
+  as ValentinHirschi <valentin.hirschi@gmail.com>. Its final focused nextest
+  run passed **324/324** checks in 6.731 s after a 2m50s optimized build with
+  debug assertions enabled. Both newly corrected regression checks pass,
+  including signed-normalization idempotence and exact legacy scan parity.
+  The next source change defers local spin algebra to its existing analytic or
+  numerical owners; this is not yet measured or accepted as a performance fix.
+
+### 2026-09-13 — deferred local spin algebra experiment
+
+- Local Taylor construction now keeps its tensor products/chains/traces after
+  metric simplification. Rescaling, Taylor order and t=1 substitution are
+  unchanged. The integrated counterterm already invokes its own complete
+  analytic simplifier on a copy before Vakint; that owner retains the moved
+  denominator-topology comment. No dispatch policy or evaluator setting changes.
+- Added focused real gamma/chain/trace allocation coverage and a local Taylor
+  trace-retention test with identical raw output for the integrated flag on/off.
+  Formatting and cargo check passed; the broader core UV nextest run is building.
+  Physical timing, pointwise and native-row effects remain to be measured.
+- `local_4d_construction` now reports total construction, nested Taylor time,
+  overhead and sector counts in the shared UV-limit owner. Summing its elapsed
+  times plus projection times gives a conservative local-UV generation subtotal;
+  pre-call recursion-input preparation and disconnected-union bookkeeping are
+  excluded, and nested Taylor milliseconds must not be added again. The profile
+  summarizer reports dispatch/selection/cache work against this explicit subtotal.
+
+- The explicit inert CYCLIC/SYM/ANTISYM heads now use the existing multilinear
+  planned expression, without changing their global symbolic attributes. The
+  broader core UV/energy/source/CFF suite passes **286/286** (15.883 s; build
+  2m43s). The analytic ordering, gamma5 guard and nested Taylor checks pass.
+- The next immutable diagnostic CLI is based on `f3ec6fcb1` plus recorded patch
+  `ecc4afcb6fb1c35491823d127d984ef2967596a9105a1e544b6bba551da1459f`;
+  binary SHA-256
+  `16248ab4974403799c1600c2207755f643a94cf8287ccffc2b3abe662c3fd429`.
+  `cargo check` passed before the 3m29s assertion-enabled dev-optim CLI build.
+  Cards, binary and source receipts are in `diagnostic_deferred_spin`.
+- Its GL00 projection diagnostic takes 165.948 ms, with 11.602 ms of separately
+  measured construction. Native rows remain 196 in total, maximum 62, with ten
+  logically admitted proposals across eight requests. Immutable template nodes
+  fall from 9,071 to 715; template construction takes 62.197 ms. Dispatch,
+  selection and all cache work total 11.994 ms, or 6.76% of this conservative
+  construction-plus-projection subtotal. This is a profiling diagnostic, not a
+  final unprofiled gate. Full generation remains pending and still shows costly
+  downstream work with substantial memory growth, so no end-to-end improvement
+  or runtime acceptance is inferred from the faster projection.
+
+### 2026-09-13 — shared preprocessing follow-up
+
+- Deep sampling of the deferred-spin GL00 diagnostic attributes 94.29% of 200
+  samples (no lost samples) to `collect_orientation_if`. The actual source has
+  neither theta, IF nor residue selectors. Added exact no-op guards in that
+  existing owner and selector parametrization, leaving guarded inverse handling
+  intact. New factorization regressions accompany the guards. Tensor execution
+  is separately measured at 169.099 s; a new byte-count field on its existing
+  completion event will expose the scalar output size without an expression dump.
+- Reused `Numerator::color_simplify` on reduced numerators before Taylor in both
+  local routes. Six real GL262 scopes, including the DOD2 bubble and nested
+  prefixes, have exact raw partition and early/late cograph recombination
+  equality with unchanged open interfaces. Bubble color becomes three times an
+  open adjoint metric in about 2.45 ms; full-graph color simplifies in 9.58 ms.
+  This artifact probe does not establish end-to-end timing. A focused generic
+  open/nested color test also keeps each momentum factor on its owning edge.
+- Full-workspace formatting and check34 pass. Clippy completes successfully;
+  redundant borrows and a test-only clone of a Copy value have been corrected.
+  Three tuple-signature complexity warnings remain; no compatibility helper
+  layer was added merely to silence them. The next CLI build and targeted test
+  rerun include these shared changes. The 167-case scalar acceptance run on the
+  preceding immutable test executable remains in progress; its hash and source
+  binding are retained in `diagnostic_deferred_spin/scalar_matrix_1_manifest.json`.
+- The deferred-spin physical diagnostic remains pending in the avoidable
+  downstream collector stage and has exceeded the prior 550 s successful run.
+  It is not a completed timing result. New immutable diagnostics will use the
+  corrected shared preprocessing; all final per-graph performance gates remain
+  open.
+
+- The follow-up focused nextest run passes **407/407** tests in 15.833 s
+  (2m59s build), covering UV/CFF/source/energy logic, evaluator selectors, symbol
+  conventions, Spenso network/shadowing and Linnet child-pointer behavior.
+- The superseded deferred-spin GL00 diagnostic was explicitly terminated after
+  1,388.644 s, exit -15, with peak RSS 43,915,075,584 bytes. Its termination note
+  records the measured no-op collector cause. It has no completed generation
+  or runtime result; the original immutable GL262 baseline was not interrupted.
+- The new immutable CLI hash is
+  `fe064ff6d4c191b20f4d56de9077c2280e293373792e57502ca929efa442c5b7`,
+  based on f3ec6fcb1 plus recorded patch
+  `53fd4a4e1030ddde3496302e7178835df2fbbebbbdc3cb6a128caacd80fb610f`.
+  The new GL00 tensor execution takes 86.515 s in this concurrent diagnostic,
+  but produces **3,450,351,988 scalar Atom bytes** from 1,416,191 input Atom bytes.
+  A 333-sample tensor-phase profile (no lost samples) attributes 71.26% to
+  scalar-product folding/normalization and 12.76% to balanced scalar sums.
+  Existing component optimization is being tested on the identical input to
+  diagnose this growth. No graph numerator expansion or new production setting
+  has been introduced for that experiment. Physical generation and runtime
+  acceptance remain pending.

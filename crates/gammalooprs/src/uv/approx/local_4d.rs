@@ -1,20 +1,15 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Neg,
+    time::{Duration, Instant},
 };
 
 use color_eyre::Result;
 use eyre::eyre;
 use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
-    color::ColorSimplifier,
-    dirac::{AGS, GammaSimplifier},
-    representations::Bispinor,
-    shorthands::{
-        chain::Chain,
-        metric::MetricSimplifier,
-        schoonschip::{Schoonschip, SchoonschipSettings},
-    },
+    dirac::AGS,
+    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
 
 #[cfg(test)]
@@ -23,7 +18,6 @@ use linnet::half_edge::{
     involution::EdgeIndex,
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike},
 };
-use spenso::shadowing::TensorCollectExt;
 use symbolica::{
     atom::{AtomCore, AtomView},
     prelude::*,
@@ -33,7 +27,7 @@ use crate::utils::symbols::{UvDenominatorClassId, UvMomentumProvenanceRole};
 use crate::{
     debug_tags,
     graph::{FourDDenominator, Graph, LMBext, LoopMomentumBasis},
-    numerator::{aind::Aind, ufo::UFO},
+    numerator::ufo::UFO,
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
@@ -1598,6 +1592,7 @@ fn grow<S: super::ForestNodeLike>(
         .graph
         .numerator(&reduced, given.subgraph())
         .to_d_dim(GS.dim)
+        .color_simplify()
         .get_single_atom()
         .unwrap();
 
@@ -1673,52 +1668,10 @@ fn t<S: super::ForestNodeLike>(
     let evalutated = series.replace(GS.rescale).with(Atom::num(1));
     debug_tags!(#uv,#integrated,#series;log.res = evalutated, "Evaluated at t = 1");
 
-    let collected = evalutated
-        .simplify_metrics()
-        .collect_rep((Bispinor {}).into())
-        .collect_gamma_chains();
-    debug_tags!(#uv,#integrated,#collect;log.expr = collected, "After gamma chain collection");
-
-    let schoonschip = collected
-        .schoonschip_with_settings(&SchoonschipSettings {
-            simplify_chain_like_functions: true,
-            schoonschip_rank1_tensors: true,
-            ..Default::default()
-        })
-        .normalize_chains();
-    debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
-        log.expr = schoonschip,
-        "After gamma schoonschip"
-    );
-    // Keep each Taylor term's propagator powers. Collecting factors across the
-    // sum clears denominators and manufactures higher-rank numerator factors.
-    let collected = schoonschip
-        .collect_chains_and_traces()
-        .simplify_metrics()
-        .collect_gamma_chains()
-        .collect_color();
-    debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
-        log.expr = collected,
-        "After gamma collection"
-    );
-
-    let simplified = collected.simplify_gamma();
-    debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #start, #gamma;
-        log.expr = simplified,
-        "After gamma simplification"
-    );
-    let schoonschipped = simplified.schoonschip_net::<Aind>();
-    debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
-        log.expr = schoonschipped,
-        "After Schoonschip net"
-    );
-    let dotted = schoonschipped.to_dots().normalize_dots();
-    debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #dots;
-        log.expr = dotted,
-        "After dots"
-    );
-
-    Ok((dotted, lmb.clone()))
+    // Keep the local Taylor numerator factorized through exact CFF projection.
+    // Analytic integration owns its Dirac algebra in integrated::simplify;
+    // numerical evaluation contracts the retained tensors after residue mapping.
+    Ok((evalutated.simplify_metrics(), lmb.clone()))
 }
 
 pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
@@ -1729,6 +1682,8 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
     marker_current: &M,
     marker_given: &M,
 ) -> Result<Local4dCts> {
+    let started = Instant::now();
+    let mut taylor_time = Duration::ZERO;
     match current.renormalization_scheme() {
         ApproximationType::MUV | ApproximationType::PolePart => {
             if ctx.settings.generate_integrated {
@@ -1833,6 +1788,7 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                         retained_loop_edges.len()
                     ));
                 }
+                let taylor_started = Instant::now();
                 let (result, coordinate_lmb) = t(
                     &grown,
                     ctx,
@@ -1841,6 +1797,7 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                     &retained_loop_edges,
                     expected_prefix_loops,
                 )?;
+                taylor_time += taylor_started.elapsed();
                 // Exact residues must use the very coordinates in which T
                 // produced their hard momenta. Rebuilding a canonical quotient
                 // LMB here can choose an equivalent but differently spelled
@@ -1913,7 +1870,21 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
             // T is linear. Summing the individually framed sectors preserves the
             // aggregate compatibility atom without inventing one coordinate LMB
             // for a disconnected product.
-            Ok(Local4dCts(FourDSectors::new(sectors, Vec::new())))
+            let local = Local4dCts(FourDSectors::new(sectors, Vec::new()));
+            let elapsed = started.elapsed();
+            debug_tags!(#generation, #uv, #local, #four_d, #profile;
+                stage = "local_4d_construction",
+                graph = %ctx.graph.name,
+                current = %current.log_display(),
+                given = %given.log_display(),
+                elapsed_ms = elapsed.as_secs_f64() * 1000.0,
+                taylor_ms = taylor_time.as_secs_f64() * 1000.0,
+                construction_overhead_ms = elapsed.saturating_sub(taylor_time).as_secs_f64() * 1000.0,
+                input_sectors = integrand.0.active.len() + integrand.0.recursive_completion.len(),
+                output_sectors = local.0.active.len() + local.0.recursive_completion.len(),
+                "Constructed factorized local-4D Taylor sectors"
+            );
+            Ok(local)
         }
         atype => Err(eyre!("Not yet implemented {:?}", atype)),
     }
@@ -1928,9 +1899,14 @@ mod tests {
         dot,
         graph::{Graph, GraphThreeDSource, parse::IntoGraph},
         initialisation::test_initialise,
-        numerator::energy_degree::EnergyPowerAnalyzer,
+        numerator::{aind::Aind, energy_degree::EnergyPowerAnalyzer},
         uv::approx::projected_4d::Local4dProjectionContext,
         uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode},
+    };
+    use idenso::{
+        color::ColorSimplifier,
+        dirac::GammaSimplifier,
+        representations::{Bispinor, ColorAdjoint},
     };
     use linnet::half_edge::involution::EdgeIndex;
     use linnet::half_edge::subgraph::{InternalSubGraph, SubSetOps};
@@ -3621,6 +3597,174 @@ mod tests {
                     .is_zero()
                 );
             }
+        }
+        Ok(())
+    }
+    #[test]
+    fn early_color_simplification_preserves_open_and_nested_numerator_boundaries() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph nested_open_color_bubble {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+            b -> c [id=2 lmb_id=1]
+            c -> a [id=3]
+        })?;
+        let [a, b, c, d, u, v]: [Atom; 6] =
+            std::array::from_fn(|i| idenso::coad!(8, Atom::from(Aind::Normal(80 + i))));
+        let spectator = (GS.emr_mom(EdgeIndex(0), GS.cind(0)) + Atom::one())
+            * (GS.emr_mom(EdgeIndex(1), GS.cind(0)) + Atom::num(2));
+        graph.underlying[EdgeIndex(0)].num.value =
+            idenso::color_f!(&a, &u, &v) * (GS.emr_mom(EdgeIndex(0), GS.cind(0)) + Atom::one());
+        graph.underlying[EdgeIndex(1)].num.value =
+            idenso::color_f!(&b, &u, &v) * (GS.emr_mom(EdgeIndex(1), GS.cind(0)) + Atom::num(2));
+        graph.underlying[EdgeIndex(2)].num.value = spenso::g!(&a, &c);
+        graph.underlying[EdgeIndex(3)].num.value = spenso::g!(&b, &d);
+        let bubble = graph
+            .get_edge_subgraph(EdgeIndex(0))
+            .union(&graph.get_edge_subgraph(EdgeIndex(1)));
+        let nodes = [bubble, graph.full_filter()].map(|filter| OwnedForestNode {
+            spinney: Spinney::with_scheme(
+                InternalSubGraph::cleaned_filter_optimist(filter, graph.as_ref()),
+                &graph,
+                &graph.loop_momentum_basis,
+                ApproximationType::MUV,
+                0,
+            )
+            .expect("the nested bubble has a compatible loop-momentum basis"),
+            topo_order: 0,
+        });
+        let [inner, outer] = &nodes;
+        let empty = OwnedForestNode {
+            spinney: Spinney::empty(&graph),
+            topo_order: 0,
+        };
+        let settings = UVgenerationSettings::default();
+        let ctx = UVCtx::new(&graph, &settings);
+        let raw_inner = graph
+            .numerator(inner.subgraph(), empty.subgraph())
+            .get_single_atom()?;
+        let casimir = idenso::color_cas!(2, &ColorAdjoint {}.new_rep(8));
+        let expected_inner = &casimir * spenso::g!(&a, &b) * &spectator;
+        // The same existing numerator operation is used by direct 3D. The
+        // complete open metric, including both boundary labels, stays explicit.
+        let prepared_inner = graph
+            .numerator(inner.subgraph(), empty.subgraph())
+            .color_simplify()
+            .get_single_atom()?;
+        assert_eq!(prepared_inner, expected_inner);
+        let grown_inner = grow(&Atom::one(), &ctx, inner, &empty)?;
+        assert_eq!(
+            &grown_inner * graph.denominator(inner.subgraph(), |_| 1),
+            expected_inner
+        );
+
+        let raw_remainder = graph
+            .numerator(&outer.reduced_subgraph(inner), inner.subgraph())
+            .get_single_atom()?;
+        let raw_full = graph
+            .numerator(outer.subgraph(), empty.subgraph())
+            .get_single_atom()?;
+        assert_eq!(&raw_inner * &raw_remainder, raw_full);
+        let nested =
+            grow(&grown_inner, &ctx, outer, inner)? * graph.denominator(outer.subgraph(), |_| 1);
+        let late = raw_full.simplify_color().simplify_metrics();
+        assert_eq!(nested, late);
+        assert_eq!(nested, casimir * spenso::g!(&c, &d) * &spectator);
+        // Closing the remaining boundary commutes with both preparations;
+        // the factorized momentum spectator is never distributed.
+        let closure = spenso::g!(&c, &d);
+        assert_eq!(
+            (&nested * &closure).simplify_color(),
+            (raw_full * closure).simplify_color()
+        );
+        assert_eq!(
+            graph
+                .numerator(inner.subgraph(), empty.subgraph())
+                .get_single_atom()?,
+            raw_inner
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn local_taylor_retains_dirac_traces_with_or_without_analytic_addbacks() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph factorized_local_spin {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            a -> b [id=1 lmb_id=0]
+            b -> a [id=2]
+            b -> outgoing [id=3]
+        })?;
+        let filter = graph
+            .get_edge_subgraph(EdgeIndex(1))
+            .union(&graph.get_edge_subgraph(EdgeIndex(2)));
+        let current = OwnedForestNode {
+            spinney: Spinney::with_scheme(
+                InternalSubGraph::cleaned_filter_optimist(filter, graph.as_ref()),
+                &graph,
+                &graph.loop_momentum_basis,
+                ApproximationType::MUV,
+                0,
+            )
+            .expect("the bubble has a compatible UV loop-momentum basis"),
+            topo_order: 0,
+        };
+        let given = OwnedForestNode {
+            spinney: Spinney::empty(&graph),
+            topo_order: 0,
+        };
+        let index = spenso::mink!(4, Atom::from(Aind::Normal(23)));
+        let trace = spenso::trace!(
+            Bispinor {}.new_rep(4).to_symbolic([]),
+            idenso::gamma!(&index),
+            idenso::gamma!(&index),
+        );
+        let (a, b, c, d) = symbol!(
+            "local_spin_a",
+            "local_spin_b",
+            "local_spin_c",
+            "local_spin_d"
+        );
+        let spectator = (Atom::var(a) + b) * (Atom::var(c) + d);
+        graph.underlying[EdgeIndex(1)].num.value = &spectator * trace;
+        let input = Full4dCts(FourDSectors::active_atom(Atom::one()));
+        let mut previous = None;
+        for generate_integrated in [false, true] {
+            let settings = UVgenerationSettings {
+                generate_integrated,
+                ..Default::default()
+            };
+            let local = uv_limit(
+                &input,
+                &UVCtx::new(&graph, &settings),
+                &current,
+                &given,
+                &current,
+                &given,
+            )?;
+            assert!(local.atom().contains_symbol(AGS.gamma));
+            assert!(
+                local
+                    .atom()
+                    .contains_symbol(spenso::network::tags::SPENSO_TAG.trace)
+            );
+            assert!(
+                local
+                    .atom()
+                    .pattern_match(&spectator.to_pattern(), None, None)
+                    .next()
+                    .is_some()
+            );
+            if let Some(previous) = &previous {
+                assert_eq!(local.atom(), previous);
+            }
+            previous = Some(local.atom().clone());
         }
         Ok(())
     }

@@ -270,8 +270,12 @@ pub struct GammaloopSymbols {
 
 impl GammaloopSymbols {
     pub fn collect_orientation_if<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
-        arg.into()
-            .replace(self.sign_theta(W_.a_))
+        let arg = arg.into();
+        if !arg.as_view().contains_symbol(self.theta) && !arg.as_view().contains_symbol(Symbol::IF)
+        {
+            return arg.into_owned();
+        }
+        arg.replace(self.sign_theta(W_.a_))
             .with(Symbol::IF.call(Atom::var(W_.a_) + 1))
             // A generalized residue-map delta is represented as
             // IF(current_id-key, 0, 1). Move the selected branch body inside
@@ -1406,6 +1410,21 @@ mod tests {
     use spenso::shadowing::symbolica_utils::LogPrint;
 
     use super::*;
+
+    #[test]
+    fn orientation_collection_preserves_selector_free_factorization() {
+        let (a, b, c, d, x) = symbol!(
+            "selector_free_a",
+            "selector_free_b",
+            "selector_free_c",
+            "selector_free_d",
+            "selector_free_x"
+        );
+        let expression = (Atom::var(a) + b).pow(7) * (Atom::var(c) + d).pow(5)
+            / (Atom::var(x) + Atom::one()).pow(2);
+        assert_eq!(GS.collect_orientation_if(expression.clone()), expression);
+        assert_eq!(GS.collect_orientation_if(expression.as_view()), expression);
+    }
 
     #[test]
     fn canonical_uv_class_references_are_distinct_from_physical_owners() {

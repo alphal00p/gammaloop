@@ -149,9 +149,10 @@ the production projection performs the following operations:
    set. Distinct masses, pole families and component domains keep separate sets.
 8. Completed hard roles zero and one, including original numerator factors,
    may use their class's candidate set. Physical and soft roles retain their
-   owner restrictions. Rank analysis proposes a baseline assignment and at most
-   two deterministic alternatives. The proposal producing fewer native CFF map rows wins;
-   the rank/canonical proposal order breaks count ties.
+   owner restrictions. Cyclic/greedy allocation proposes a baseline assignment
+   and at most two deterministic alternatives. The proposal producing fewer
+   native CFF map rows wins; descending degree envelopes and stable proposal
+   order break count ties.
 9. One immutable assignment plan owns both the bounds passed to generalized CFF
    and the substitutions used later to evaluate the numerator.
 10. If an occurrence has momentum `-Q` rather than `Q`, that literal algebraic
@@ -278,7 +279,7 @@ canonical temporary exact ParsedGraph
   | exact literal +/-Q candidates        |
   +--------------------+-----------------+
                        |
-                       | rank-ordered proposals, K <= 3
+                       | cyclic/greedy proposals, K <= 3
                        v
             exact occurrence -> energy bound
             factor -> exact occurrence assignment
@@ -300,8 +301,9 @@ retains the winning generated payload with that same plan and exact-source
 numerator mapper. This is the certification boundary: the expression eventually
 sampled is the expression whose bounds were supplied to CFF.
 
-Projection constructs each canonical exact source and its bounded proposal set
-once. It reuses an expression only when canonical topology, occurrence-local
+Projection prepares each canonical exact source with its initial immutable
+plans; selection derives the final placement challenger from the best native
+score. It reuses an expression only when canonical topology, occurrence-local
 capacity and generation options match, and maps each term with its selected
 plan. Equal physical energies do not allow the cache to redistribute their
 individual bounds. Independent requests never combine into a larger Cartesian
@@ -1198,13 +1200,14 @@ domain, mass, and exact signature canonicalized up to sign. Consequently
 factors of different mass, do not. None of these support operations modifies
 the rational incidence, exact energy map, or numerator routing sign.
 
-## Stage 4: analyze the factorized numerator in physical EMR variables
+## Stage 4: analyze the factorized numerator before occurrence substitution
 
-The numerator is analyzed before any occurrence-local substitution. The
-analysis works solely in physical `Q(edge, index)` variables.
+The numerator is analyzed in physical `Q(edge, index)` variables and, for
+completed hard UV factors, certified `Q(uv_class(id), index)` variables. These
+references remain distinct from the exact occurrence IDs allocated later.
 
-For each physical edge `e`, it computes a conservative exact polynomial degree
-`d_e` using the following composition rules:
+For each active physical edge or UV class, the analyzer computes a certified
+polynomial degree bound using the following composition rules:
 
 | Expression | Degree rule |
 | --- | --- |
@@ -1214,7 +1217,7 @@ For each physical edge `e`, it computes a conservative exact polynomial degree
 | Product | componentwise sum |
 | Nonnegative integer power | multiply the base degree by the exponent |
 | Dot product | add the degrees of the two vector slots |
-| Declared multilinear function | add the degrees of its argument slots |
+| Declared multilinear function or inert cyclic/symmetric/antisymmetric tensor projector | add the degrees of its argument slots |
 | `den(..., full_expr)` retained positively in a numerator | analyze `full_expr`, not provenance metadata |
 
 These rules avoid algebraic expansion. In particular,
@@ -1224,9 +1227,12 @@ These rules avoid algebraic expansion. In particular,
 
 \]
 
-is traversed as `r` factor slots containing the same base. It is not expanded
-into `r+1` monomials. Additive branches reuse capacity because the degree of a
-sum is a maximum, not a sum.
+retains a repeated factorized base. Allocation reuses repeated assignment
+cycles where possible instead of eagerly copying the base `r` times; it never
+expands the power into `r+1` monomials. Additive branches reuse capacity because
+the degree of a sum is a maximum, not a sum. Inert tensor projectors keep their
+heads and argument structure; recognizing their multilinearity here does not
+change their global Symbolica attributes.
 
 Opaque nonlinear functions of EMR energies and negative energy-dependent
 powers are rejected. Production does not guess a bound for an expression it
@@ -1273,15 +1279,17 @@ derived hard factors use that owner's certified copies. Completed canonical UV
 input permits every eligible hard factor to use its class's certified pool.
 The factorized expression supplies structural degree bounds: sums
 take componentwise maxima, while products and multilinear slots add loads.
-The rank baseline compares the complete descending envelope lexicographically,
-then uses deterministic assignment tie-breaks. It prefers `(4,2,2)` to `(4,3,1)`
-even though their maximal degree is equal. A raw original quartic factor stays
-fixed; a class-owned quartic can be allocated under the exact lift certificate.
-This rank ordering proposes candidates; actual map count selects the production
-assignment. The canonical allocator uses bounded cyclic/greedy proposals,
-without enumerating the Cartesian frontier of class assignments.
+The baseline allocates freely assignable class-owned unit factors by cyclic
+occurrence offsets. Product and multilinear children advance the offset; sum
+branches share their starting offset. Fixed physical factors retain their
+occurrence, while other indivisible factors use deterministic least-loaded
+placement within their certified pool. A raw original quartic stays fixed; a
+class-owned quartic may use a factorized lift under its exact certificate.
+The former Cartesian/Pareto hard frontier is not enumerated. Actual native map
+count selects among the bounded proposals; the descending degree envelope and
+stable proposal order break count ties.
 
-### Rank-ordered hard proposals
+### Cyclic and greedy hard proposals
 
 For the special case of `d` freely assignable unit factors and `n` equivalent
 occurrences with no fixed load, any valid assignment has nonnegative loads
@@ -1298,7 +1306,7 @@ The smallest possible maximum load is
   \min \max_i \ell_i = \left\lceil\frac{d}{n}\right\rceil.
 \]
 
-For this rank objective, the exact frontier optimum is the
+For this unit-factor rank objective, cyclic allocation attains the
 quotient/remainder distribution:
 
 \[
@@ -1307,14 +1315,15 @@ quotient/remainder distribution:
 \]
 
 and assigns load `q+1` to the first `r` canonical candidates and `q` to the
-rest. This is whole-envelope optimal and deterministic; it does not predict
-native map count. With fixed loads or shared factors inside sums, the frontier
-retains the actual factor structure instead of applying this special-case
-formula to a summed degree.
+rest. This is whole-envelope optimal in the stated special case and
+deterministic; it does not predict native map count. Sums preserve their branch
+structure and share offsets. Fixed loads and indivisible positive-denominator
+blocks require the actual structural allocation; the unit-factor formula does
+not promise an optimal envelope for those cases.
 
-Rank-baseline examples are:
+Cyclic-baseline examples without fixed loads are:
 
-| Physical degree | Equivalent occurrences | Exact loads |
+| Class degree | Equivalent occurrences | Baseline loads |
 | ---: | ---: | --- |
 | 2 | 2 | `(1,1)` |
 | 3 | 2 | `(2,1)` |
@@ -1323,7 +1332,7 @@ Rank-baseline examples are:
 | 7 | 3 | `(3,2,2)` |
 
 The planner assigns individual admissible factor slots, not merely total
-degrees. For three newly denominator-derived unit factors,
+degrees. For three completed class-owned unit factors,
 
 \[
   (Q^0+c_1)(Q^0+c_2)(Q^0+c_3)
@@ -1333,7 +1342,7 @@ degrees. For three newly denominator-derived unit factors,
 over two equivalent occurrences `a,b`, the canonical plan is conceptually
 
 \[
-  (E_a+c_1)(E_a+c_2)(E_b+c_3),
+  (E_a+c_1)(E_b+c_2)(E_a+c_3),
 
 \]
 
@@ -1354,17 +1363,21 @@ the internal planned representation repeats the unexpanded base and maps it as
 
 \]
 
-The original expanded polynomial is never constructed. These examples do not
-permit redistributing a pre-existing numerator factor across other owners.
+The original expanded polynomial is never constructed. Raw physical owner
+restrictions remain in force; cross-owner reuse requires the completed hard
+factor's certified canonical class.
 
 ### Native map-row selection
 
-The hard search proposes the rank baseline and at most two alternatives, each
-changing a single owner's assignment. Each owner's first two distinct
-alternative occurrence bounds come from the existing frontier; the complete
-descending envelope and deterministic assignment order select up to two global
-challengers. Equal sorted envelopes with different occurrence positions remain
-distinct proposals.
+An affine baseline needs one proposal. For nonlinear input, the planner
+chooses one eligible occurrence pool deterministically by its largest baseline
+load, then its degree beyond the pool size, then stable family order. A UV-class
+pool can supply a second proposal which packs unavoidable excess after its
+initial pass. After scoring the initial proposals, selection asks the current
+winner for a reversed placement in that same pool; a one-step rotation replaces
+a duplicate. Ordered capacity duplicates are skipped, leaving at most three
+certified proposals. No Cartesian product across pools is constructed. Equal
+sorted envelopes at different occurrence positions remain distinct capacities.
 
 For each proposal, the ordinary exact source generator receives the same source
 and options with that plan's occurrence bounds. The score is the actual stored
@@ -1374,10 +1387,12 @@ zero rows count too. It is neither the sum of key lengths nor a degree-product
 formula, and it has no extra physical-orientation multiplier. Different Taylor
 terms keep their own source maps even when key lengths differ.
 
-The smaller count wins; an equal count retains the earlier rank-ordered proposal.
-The same generated payload, assignment and bound report move forward together.
-Existing rank/Pareto pruning only defines the proposal class: no monotonicity
-of map count under rank reduction or independence between owners is assumed.
+The smaller count wins; an equal count prefers the smaller descending degree
+envelope, then the earlier admitted proposal. For example, `(4,2,2)` breaks a
+count tie ahead of `(4,3,1)` despite equal maximal degree. The same generated
+payload, assignment and bound report move forward together. The cyclic/greedy
+proposal family assumes neither monotonicity of map count under rank reduction
+nor independence between occurrence pools.
 K<=3 bounds the number of candidates, not each generation's time or memory, and
 does not promise a global minimum. A generation error remains an error rather
 than silently discarding an unsupported contender. Stage 8 describes how the
@@ -1430,7 +1445,7 @@ and LTD paths retain their existing behavior.
 The assignment plan contains both:
 
 - `exact occurrence -> certified degree bound`; and
-- `factor-local physical edge -> chosen exact occurrence`.
+- `factor-local physical edge or certified UV class -> chosen exact occurrence`.
 
 The first map is passed to the shared generalized-CFF generator. The second map
 is retained by the exact-source numerator evaluator. Each orientation, LU
@@ -1451,8 +1466,9 @@ pinch.
 
 ## Stage 8: cache exact topology and per-request capacity
 
-Each completed Taylor coefficient builds its source-backed exact graph and
-bounded immutable proposal set once. Counts and generated expressions use the
+Each completed Taylor coefficient prepares its source-backed exact graph and
+initial immutable plans together. The final placement challenger depends on
+native scores and is constructed during selection. Counts and generated expressions use the
 same complete canonical `ParsedGraph`, energy-edge map and generation-options
 key, including the unchanged per-occurrence bounds. Every term is evaluated
 with its selected plan.
@@ -2081,15 +2097,17 @@ The analyzer implements polynomial composition rules over sums, products,
 powers, dot products, and multilinear functions. It does not recognize a
 particular numerator string or expand it into process-specific monomials.
 
-### 5. Actual native map rows select among certified rank proposals
+### 5. Actual native map rows select among certified bounded proposals
 
-Rank/Pareto planning retains fixed owner loads and the factorized sum/product
-rules. Comparing descending envelopes proposes balanced lower degrees even when
-another occurrence fixes the maximum; quotient/remainder balancing is its
-special case for freely assignable unit factors. The production choice uses
-actual native source-map rows among K<=3 certified proposals, with rank and
-deterministic order breaking count ties. This restricted proposal class does
-not imply a globally minimal map count.
+The hard allocator preserves fixed owner loads and factorized sum/product
+rules using cyclic unit-factor assignment, compressed repetitions and greedy
+indivisible-block placement. Its nonlinear alternatives pack excess and reverse
+the best scored placement in one eligible pool. Production compares actual
+native source-map rows among K<=3 certified proposals, with descending degree
+envelopes and deterministic order breaking count ties. Quotient/remainder
+balancing is rank-optimal for freely assignable unit factors without fixed
+loads; this does not imply globally minimal map count. The separate soft-routing
+boundary retains its exact-basis/Pareto proposal construction.
 
 ### 6. Bound and evaluation cannot diverge
 
@@ -2149,7 +2167,7 @@ It does not clone the surrounding graph or algebraically cancel
 numerator/denominator pairs upstream.
 
 Second, the numerator lift compares actual native map rows for a small set of
-rank-ordered proposals. Assigning four eligible new hard unit factors as
+cyclic/greedy proposals. Assigning four eligible class-owned unit factors as
 `(2,2)` instead of `(4,0)` can reduce reconstruction/contact work, but topology
 and complete-map coalescing determine the actual count. The bounded search may
 prefer a less balanced proposal when it produces fewer rows. Raw original
@@ -2237,6 +2255,15 @@ Future changes to this path should preserve all of the following:
 
 ## Code map
 
+Local Taylor construction preserves spinor products, chains and traces after
+metric simplification. Their registered multilinearity supplies structural
+energy degrees without evaluating a trace or expanding its numerator. The
+integrated-CT owner performs analytic Dirac simplification on its own copy
+before Vakint; the local numerical route leaves finite tensor contraction to
+evaluator preprocessing after residue mapping. These placements preserve the
+same Taylor coefficients while avoiding repeated scalar trace expressions in
+the local residue sum.
+
 The principal implementation sites are:
 
 - `crates/gammalooprs/src/uv/approx/local_4d.rs`
@@ -2260,7 +2287,7 @@ The principal implementation sites are:
 - `crates/gammalooprs/src/numerator/energy_degree.rs`
   - factorized physical-EMR degree analysis;
   - equivalent-candidate validation;
-  - deterministic rank-ordered hard and certified soft proposals (K<=3);
+  - deterministic cyclic/greedy hard and certified soft proposals (K<=3);
   - immutable factor-local mapping plan.
 - `crates/gammalooprs/src/cff/generation.rs`
   - physical degree extraction;

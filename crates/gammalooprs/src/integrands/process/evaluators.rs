@@ -282,6 +282,9 @@ pub struct EvaluatorStack {
 
 impl EvaluatorStack {
     fn parametrize_residue_map_selectors<A: AtomCore>(atom: &A, selected_id: Atom) -> Atom {
+        if !atom.contains_symbol(OrientationID::symbol()) {
+            return atom.as_atom_view().to_owned();
+        }
         atom.as_atom_view()
             .replace(function!(OrientationID::symbol(), W_.a_))
             .with(Symbol::IF.call_args([selected_id - Atom::var(W_.a_), Atom::Zero, Atom::one()]))
@@ -765,6 +768,7 @@ impl EvaluatorStack {
             stage = "evaluator_stack_parse_atom_done",
             atom_index,
             success = result.is_ok(),
+            result_bytes = result.as_ref().map_or(0, |atom| atom.as_view().get_byte_size()),
             elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
             "Evaluator timing milestone"
         );
@@ -1891,6 +1895,32 @@ mod tests {
             panic!("expected one scalar evaluator output")
         };
         *value
+    }
+
+    #[test]
+    fn selector_free_parametrization_preserves_factorized_scalar() {
+        let (a, b, c, d) = symbol!(
+            "unselected_scalar_a",
+            "unselected_scalar_b",
+            "unselected_scalar_c",
+            "unselected_scalar_d"
+        );
+        let expression = (Atom::var(a) + b).pow(7) * (Atom::var(c) + d).pow(5);
+        assert_eq!(
+            EvaluatorStack::parametrize_residue_map_selectors(
+                &expression,
+                Atom::var(GS.residue_map_id)
+            ),
+            expression,
+        );
+        let guarded = Symbol::IF.call_args([Atom::var(a), Atom::Zero, expression]);
+        assert_eq!(
+            EvaluatorStack::parametrize_residue_map_selectors(
+                &guarded,
+                Atom::var(GS.residue_map_id)
+            ),
+            guarded,
+        );
     }
 
     #[test]

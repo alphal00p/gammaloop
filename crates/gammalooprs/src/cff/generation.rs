@@ -793,7 +793,7 @@ impl Graph {
                         self.name,
                         physical_energy_degree_bounds,
                         source_options.energy_degree_bounds,
-                        three_d_source_summary(&parsed),
+                        three_d_source_summary(parsed),
                     )
                 },
             )
@@ -832,7 +832,7 @@ impl Graph {
             rank_envelope.sort_unstable_by(|left, right| right.cmp(left));
             source_options.energy_degree_bounds = Some(plan.energy_degree_bounds().to_vec());
             let key =
-                ExactCffGenerationCache::generation_key(&parsed, &energy_edges, &source_options);
+                ExactCffGenerationCache::generation_key(parsed, energy_edges, &source_options);
             let known_count = cache.as_deref_mut().and_then(|cache| cache.count(&key));
             let started = std::time::Instant::now();
             // A known contender needs no expression until it wins. Generated
@@ -891,7 +891,7 @@ impl Graph {
             selected.expect("rank planning always provides a baseline assignment");
         source_options.energy_degree_bounds =
             Some(energy_assignment_plan.energy_degree_bounds().to_vec());
-        let key = ExactCffGenerationCache::generation_key(&parsed, &energy_edges, &source_options);
+        let key = ExactCffGenerationCache::generation_key(parsed, energy_edges, &source_options);
         let cached = cache
             .as_deref_mut()
             .and_then(|cache| cache.entries.get(&key))
