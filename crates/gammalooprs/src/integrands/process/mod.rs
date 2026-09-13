@@ -2168,6 +2168,31 @@ impl LmbMultiChannelingSetup {
                 );
             }
         }
+        for channel in catalogue.named_entries() {
+            let SamplingMapDefinition::Lmb(edges) = &channel.map else {
+                continue;
+            };
+            if edges == context.parent_lmb.as_slice() {
+                continue;
+            }
+            let Some((basis_id, _)) = self.all_bases.iter_enumerated().find(|(_, basis)| {
+                basis
+                    .loop_edges
+                    .iter()
+                    .map(|edge| edge.0)
+                    .eq(edges.iter().copied())
+            }) else {
+                return Err(eyre!(
+                    "named sampling channel '{}' selects LMB edges {:?}, but the graph has no matching generated LMB basis",
+                    channel.name,
+                    edges
+                ));
+            };
+            context.lmb_frame_maps_by_edges.insert(
+                edges.clone(),
+                self.lmb_frame_map(basis_id, external_momenta)?,
+            );
+        }
         catalogue.compile(&context).map_err(Into::into)
     }
 

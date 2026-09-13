@@ -205,6 +205,10 @@ pub struct SamplingChannelCompileContext {
     /// key is the generated catalogue basis id; absent entries are diagnosed
     /// when a non-master LMB is selected.
     pub lmb_frame_maps: BTreeMap<usize, SamplingMapAffine>,
+    /// Explicit named `lmb(...)` definitions use their edge list rather than
+    /// a generated basis id, so their prepared routing is keyed by that same
+    /// master-graph edge list.
+    pub lmb_frame_maps_by_edges: BTreeMap<Vec<usize>, SamplingMapAffine>,
 }
 
 impl SamplingChannelCompileContext {
@@ -223,6 +227,7 @@ impl SamplingChannelCompileContext {
             n_loop_momenta,
             surfaces: BTreeMap::new(),
             lmb_frame_maps: BTreeMap::new(),
+            lmb_frame_maps_by_edges: BTreeMap::new(),
             cut_id: None,
             orientation: None,
             side: None,
@@ -1034,45 +1039,12 @@ impl SamplingChannelCatalogue {
                     basis_id, edges, ..
                 } => {
                     let definition = SamplingMapDefinition::Lmb(edges.clone());
-                    let map = SamplingMapKernel::new(
-                        definition.clone(),
-                        context.parameterization_settings.clone(),
-                        context.e_cm,
-                        context.n_loop_momenta,
-                    )
-                    .map_err(|error| {
-                        SamplingChannelCompileError::InvalidChannel {
-                            channel: format!("lmb[{basis_id}]"),
-                            error: error.to_string(),
-                        }
-                    })?;
-                    let map = if edges == &context.parent_lmb {
-                        CompiledSamplingMap::Lmb(map)
-                    } else {
-                        let frame = context.lmb_frame_maps.get(basis_id).ok_or_else(|| {
-                            SamplingChannelCompileError::MissingLmbFrameMap {
-                                channel: format!("lmb[{basis_id}]"),
-                                basis_id: Some(*basis_id),
-                                edges: edges.clone(),
-                                parent_lmb: context.parent_lmb.clone(),
-                            }
-                        })?;
-                        if frame.dimension() != 3 * context.n_loop_momenta {
-                            return Err(SamplingChannelCompileError::InvalidLmbFrameMap {
-                                channel: format!("lmb[{basis_id}]"),
-                                basis_id: *basis_id,
-                                error: format!(
-                                    "affine frame routing has dimension {}, expected {}",
-                                    frame.dimension(),
-                                    3 * context.n_loop_momenta
-                                ),
-                            });
-                        }
-                        CompiledSamplingMap::AffineLmb {
-                            lmb: map,
-                            frame: frame.clone(),
-                        }
-                    };
+                    let map = compile_lmb_map(
+                        &format!("lmb[{basis_id}]"),
+                        Some(*basis_id),
+                        edges,
+                        context,
+                    )?;
                     (format!("lmb[{basis_id}]"), Some(*basis_id), definition, map)
                 }
                 SamplingCatalogueEntry::Surface { edges, parent_lmb } => {
@@ -1144,7 +1116,45 @@ impl SamplingChannelCatalogue {
                     }
                     let map = match &definition {
                         SamplingMapDefinition::Lmb(edges) => {
-                            compile_lmb_map(&channel.name, None, edges, context)?
+                            let map = SamplingMapKernel::new(
+                                definition.clone(),
+                                context.parameterization_settings.clone(),
+                                context.e_cm,
+                                context.n_loop_momenta,
+                            )
+                            .map_err(|error| {
+                                SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: error.to_string(),
+                                }
+                            })?;
+                            if edges == &context.parent_lmb {
+                                CompiledSamplingMap::Lmb(map)
+                            } else {
+                                let frame = context.lmb_frame_maps_by_edges.get(edges).ok_or_else(
+                                    || SamplingChannelCompileError::MissingLmbFrameMap {
+                                        channel: channel.name.clone(),
+                                        basis_id: None,
+                                        edges: edges.clone(),
+                                        parent_lmb: context.parent_lmb.clone(),
+                                    },
+                                )?;
+                                if frame.dimension() != 3 * context.n_loop_momenta {
+                                    return Err(SamplingChannelCompileError::InvalidLmbFrameMap {
+                                        channel: channel.name.clone(),
+                                        basis_id: usize::MAX,
+                                        error: format!(
+                                            "affine frame routing has dimension {}, expected {}",
+                                            frame.dimension(),
+                                            3 * context.n_loop_momenta
+                                        ),
+                                    });
+                                }
+                                CompiledSamplingMap::AffineLmb {
+                                    lmb: map,
+                                    frame: frame.clone(),
+                                }
+                            }
                         }
                         SamplingMapDefinition::Surface(edges) => {
                             compile_surface_map(&channel.name, edges, context)?
@@ -1857,6 +1867,54 @@ mod tests {
             .unwrap();
         assert_eq!(bridged.raw_coordinates, point.point);
         assert!((bridged.partition.weight_sum() - 1.0).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn named_non_parent_lmb_uses_edge_keyed_affine_frame() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["named".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert(
+                "named".into(),
+                SamplingChannelDefinition {
+                    around: "lmb(2,4)".into(),
+                    parent_lmb: vec![1, 2],
+                    on_cut: Vec::new(),
+                },
+            );
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context.lmb_frame_maps_by_edges.insert(
+            vec![2, 4],
+            SamplingMapAffine::new(
+                vec![
+                    vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+                ],
+                vec![0.0; 6],
+            )
+            .unwrap(),
+        );
+        let compiled = catalogue.compile(&context).unwrap();
+        assert!(matches!(
+            compiled[0].map,
+            CompiledSamplingMap::AffineLmb { .. }
+        ));
+        assert_eq!(compiled[0].embedded_edges, vec![1, 2]);
     }
 
     #[test]
