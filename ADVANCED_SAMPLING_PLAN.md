@@ -1,9 +1,141 @@
 # Advanced sampling channels for GammaLoop
 
-Status: implementation plan, 2026-09-12. This document records the accepted
+Status: implementation in progress, 2026-09-13. This document records the accepted
 design before source changes. It is the authority for the implementation that
 follows. It applies to arbitrary loop order and topology, to amplitudes and
 cross sections, and to both ordinary and threshold-adapted sampling.
+
+Current implementation status: the canonical `SamplingChannelId` catalogue,
+Symbolica selection parser, explicit parent-LMB validation, explicit active
+`subspace_lmb` metadata for named surface channels, prepared cut/side guards,
+exact affine LMB routing, and the discrete map-density bridge are implemented
+and pushed on `advanced_sampling`. There is one channel catalogue and one ID
+domain: the remaining LMB reinterpretation branch is an evaluation detail of
+that catalogue during migration, never a second enumeration or index space.
+It is scheduled for removal once all momentum-space consumers use compiled
+parent-frame maps. The exact implicit radial kernel now also accepts a
+conditional evaluator whose root depends on a preceding complement block;
+ordered `then` composition passes that context and has focused forward/inverse
+coverage. A prepared cross-section context can now be constructed from one
+solved LU sample, with positive `t*` and frame validation. Physical directional
+E-surface maps, connecting that context to the per-sample conditional density,
+and the saved-state replacement harness remain open milestones. Production
+standalone-integrand owners have already been removed; the test-only probe is
+only a temporary fixture for generic integration/UI tests and is not a second
+physical parameterization. The
+`ProcessIntegrand::evaluate_reference_coordinates` entry point now provides a
+loaded-process coordinate-batch hook with exact `1/N` weights and diagnostics;
+`evaluate_reference_discrete_coordinates` and `group_sampling_channel_ids` add
+the corresponding explicit canonical `(group, orientation, channel)` route.
+Focused discrete decoding/order coverage and a saved/reloaded scalar-bubble
+amplitude acceptance fixture are in place; the full saved-state
+amplitude/cross-section assertions, including physical cut maps, remain open.
+The process-level bridge acceptance harness also exercises a mixed named/LMB
+catalogue and verifies that both canonical IDs are sampled without compacting
+the generated LMB basis number into a second axis. An unused combined legacy
+LMB reinterpretation/prefactor helper has been removed; the remaining
+compatibility route is limited to the helpers still consumed by cross-section
+evaluation and remains scheduled for retirement with the deferred map bridge.
+discrete graph sampler now carries the selected canonical partition factor
+with the parent-frame map Jacobian, including for the direct momentum route;
+the obsolete separate per-channel sample representation has been removed
+rather than maintained as a second channel model. Top-level
+summed amplitude sampling now retains its unit-cube point and routes every
+canonical catalogue entry through the same bridge, including mixed LMB and
+named entries; cross-section summed graph-aware entries remain guarded until
+their per-sample LU/\(t^\star\) context is available.
+
+The deferred boundary now has a typed hand-off carrying the same canonical
+`SamplingChannelId`, the original unit-cube coordinates, and the parent-frame
+momentum sample. It validates the coordinate domain and preserves the sample
+identity, but deliberately supplies no physical-map Jacobian; cross-section
+code must attach the solved LU/\(t^\star\) context before evaluating a
+conditional map. This is a carrier within the one catalogue axis, not a
+second channel enumeration.
+
+The exact-result boundary is represented by `PreparedCrossSectionMapEvaluation<T>`.
+It keeps the canonical channel identity, mapped sample, forward and inverse
+Jacobians, runtime map context, and solved cut context together. Stability
+rotations transform both the mapped momenta and the prepared kinematic context
+as one value, preserving the frame in which projections and Jacobians are
+interpreted. This is an interface and invariant for the eventual physical maps;
+it does not claim that the cut, left, and right maps are implemented yet.
+
+The partition also supports the explicit `singularity_proxy` weight. A named
+channel may supply a Symbolica expression in the complete parent-frame raw
+coordinates (`x0`, `x1`, ...); it is compiled eagerly and must be finite, real
+and strictly positive wherever the proxy has support. Every channel must
+provide its own proxy when this mode is selected, and the selected map still
+uses its true forward Jacobian. No proxy is inferred from a map. A typed
+`DeferredCrossSectionSamplingState` carries per-canonical-channel prepared
+cut data and runtime evaluator contexts, while the cross-section evaluator
+currently rejects physical cut/left/right maps at its pre-LU boundary until a
+two-stage carrier can use that state in both the selected map and every
+partition denominator.
+
+The Symbolica evaluator now exposes real map values and the full dual-derived
+Jacobian matrix, including its signed and absolute determinant. Its audit also
+fixed the HyperDual input layout and tests both eager values and derivatives.
+Soft/collinear syntax has explicit capability diagnostics until graph-resolved
+frames and normalized profiles can be compiled; it cannot enter the exact-map
+catalogue as an unlabelled proxy.
+
+Implicit radial maps can now take a context-dependent centre as well as a
+context-dependent directional root. They remain conditional alone and become
+full-support only inside an ordered composition whose earlier blocks provide
+the context; invalid centres and unbracketed roots are hard errors. The bridge
+acceptance harness now integrates a normalized Gaussian through every selected
+canonical channel with the exact `N J_i w_i` estimator and reports finite
+counts, normalization and second-moment errors, partition and Jacobian ranges,
+and round-trip residuals. Cross-section
+event metadata also preserves the canonical advanced channel id while physical
+cut maps remain guarded until their per-sample LU density is complete.
+
+A bounded `product(...)` compiler is now available as one canonical channel
+entry when its `lmb(...)`/`complement(...)` blocks, and at most one explicit
+surface block, form a disjoint cover of the parent LMB. Each block is compiled
+in its local dimension and embedded by an explicit parent-frame permutation.
+The same bounded block compiler now supports ordered `then(...)`; when its
+first block has full support, later context-dependent blocks are resolved by
+the composition inverse and the complete map advertises full support to the
+partition. A standalone conditional map remains guarded. Multiple per-child
+surface metadata and prepared cut maps remain open until their context and
+partition-density contracts are complete.
+
+The first process-level acceptance probe now integrates a normalized Gaussian
+through the canonical compiled bridge and checks the map partition. The loaded
+process API now drives both continuous and explicit canonical discrete
+selections without reconstructing a channel index. The full
+amplitude/cross-section saved-state harness, moments, absent/pinched branches,
+and multi-channel grid checks remain to be added. They validate the production
+replacement for the deleted standalone tests; they must not recreate a second
+standalone integrand owner.
+
+The current cross-section and conditional-channel bridge is intentionally a
+safe boundary: it is compiled before the per-sample LU root and `t*` solve, so
+it must reject cut/phase-space/left/right maps and standalone conditional maps
+whose partition scores do not yet carry the same context, rather than attach
+stale global kinematics or miscompute the channel denominator. A complete
+ordered composition may promote an internal conditional block to full support
+when its inverse derives that context from an earlier full block.
+Full cross-section support requires a two-stage conditional map (or an
+equivalent composite proposal) whose implicit root and `t*` Jacobian are part
+of the same canonical channel density.
+
+`PreparedCutSamplingContext::from_lu_sample` now provides the per-sample
+handoff: it takes the unrescaled parent-frame loop vectors used in the LU
+root solve, applies that sample's finite positive `t*`, retains its external
+data and checks the complete loop dimension. This record is preparation data,
+not a sampling map or a substitute for the LU implicit Jacobian. Physical
+cut/left/right channels remain guarded until a complete composition supplies
+the same conditional data to both forward maps and every inverse density in
+the canonical partition.
+
+The bridge now exposes `SamplingChannelRuntimeContexts`, indexed by the same
+catalogue IDs. Context-aware forward, inverse and partition calls evaluate
+every denominator score with that channel's context, so a selected cut cannot
+silently reuse its kinematics for another cut or side. This is the runtime
+boundary used by the deferred cross-section implementation.
 
 The portable research bundle is in
 [`docs/research/advanced_sampling/README.md`](docs/research/advanced_sampling/README.md).
@@ -65,6 +197,44 @@ partitions and samples the complete already-subtracted physical integrand.
   `ValentinHirschi`; use SSH `git push`, not an alternate `gh` identity.
 * Make coherent milestone commits on `advanced_sampling` and push only after
   the root agent has reviewed each milestone. Do not force-push.
+* Do not introduce a parallel LMB/channel enumeration while migrating. Every
+  grid, evaluator, diagnostic and API consumer must resolve through the same
+`SamplingChannelCatalogue` and `SamplingChannelId`; legacy LMB fields may be
+consumed only as catalogue inputs until deleted.
+
+The graph-evaluation boundary also has one channel request field,
+`SamplingChannelEvaluation<T>`, carrying the same canonical id for both the
+temporary LMB compatibility route and the mapped route.  No separate
+`advanced_channel_id`/legacy index pair may be reintroduced.  The LMB variant
+is a migration seam only and must disappear when cross-section LU/`t*`
+preparation can feed the compiled maps per sample.
+
+Event metadata and observable axes now use `sampling_channel_id` and
+`sampling_channel_edge_ids` (with corresponding `SamplingChannel*` enum
+variants).  These values describe the canonical catalogue position and
+selected map edges, including surface channels; the remaining LMB-specific
+names are restricted to temporary basis/weight internals slated for the same
+retirement sequence.
+
+The discrete sample representation is likewise named `SamplingChannel`; the
+old `Advanced` variant is gone, so callers cannot mistake mapped channel
+samples for a second enumeration.
+
+The discrete settings variant formerly called `DiscreteMultiChanneling` is
+now `SamplingMultiChanneling`.  It remains a temporary dispatch mode for
+per-channel sampling and is scheduled for removal once all graph terms use
+conditional compiled maps; it does not define a separate channel index type.
+
+The retirement sequence is explicit: first route direct momentum evaluation
+through compiled parent-frame maps for every catalogue entry; then remove the
+`DiscreteGraphSamplingType::SamplingMultiChanneling` compatibility mode and
+the LMB-only prefactor/reinterpretation helpers; finally remove
+`LmbMultiChannelingSetup` and remaining LMB-specific labels/API quantities
+where they describe a generic sampling channel. The ordinal
+`SamplingChannelId` remains only as the catalogue's stable position, never as
+an independently generated LMB index. Until each step is complete, its
+compatibility code must consume canonical catalogue IDs and may not enumerate
+or renumber a second list.
 
 ### Milestones
 
@@ -153,6 +323,8 @@ regular-expression mini-parser:
 ```toml
 [sampling.channel_definitions.GL638.HZ]
 around = "intersect(surface(2,4,12), surface(3,10,13))"
+subspace_lmb = [3, 10]
+parent_lmb = [3, 6, 7, 10]
 on_cut = [2,6,10]
 ```
 
@@ -203,11 +375,15 @@ remain inspection/replay data only. Update all UnitVolume test callers and
 settings arms while preserving their validation purpose. No saved-state
 compatibility shim is required.
 
-`ChannelIndex` and the current LMB-only discrete enumeration are migration
-scaffolding, not a second production channel model. New catalogue, map-density,
-grid and evaluator work must use the resolved `SamplingChannelId` catalogue;
-once that driver covers the existing sampling modes, remove the legacy index
-and its parallel enumeration path rather than expanding both systems.
+The former `ChannelIndex` and the current LMB-only discrete enumeration are
+migration scaffolding, not a second production channel model. There must never
+be two channel enumeration techniques in the final implementation. New
+catalogue, map-density, grid and evaluator work must use the resolved
+`SamplingChannelId` catalogue. Once that driver covers the existing sampling
+modes and the summed/Monte-Carlo equivalence gate passes, remove the remaining
+LMB-only index/reinterpretation path, its prefactor helpers and its settings
+labels rather than expanding both systems. The canonical catalogue is the
+only long-term source of channel identity.
 
 ## 3. Engine contracts
 
@@ -222,8 +398,10 @@ in the full derivative.
 
 `product` requires a direct-sum block and independent fixed-complement data.
 `then` is an explicitly ordered acyclic conditional map with reverse inverse and
-triangular determinant. `intersect` uses scalar normals plus tangent coordinates,
-requires full rank and controls all inverse branches and chart patches. A
+triangular determinant; both ordered compositions and their master-frame
+embeddings propagate an outer context before appending earlier child outputs.
+`intersect` uses scalar normals plus tangent coordinates, requires full rank and
+controls all inverse branches and chart patches. A
 successful root solve does not establish global injectivity; unsupported or
 rank-changing maps fail with a capability diagnostic.
 

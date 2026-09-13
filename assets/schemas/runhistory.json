@@ -4192,6 +4192,15 @@
           "type": "string",
           "default": ""
         },
+        "subspace_lmb": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
         "on_cut": {
           "type": "array",
           "default": [],

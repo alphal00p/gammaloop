@@ -7,14 +7,134 @@
 //! boundary between that kinematic preparation and the graph-independent map
 //! kernels in [`super::sampling_maps`].
 
+use crate::{
+    momentum::{
+        FourMomentum, Rotatable, Rotation, ThreeMomentum,
+        sample::{ExternalFourMomenta, LoopMomenta, MomentumSample},
+    },
+    utils::{F, FloatLike},
+};
 use color_eyre::eyre::{Result, eyre};
 use serde::{Deserialize, Serialize};
+
+use super::SamplingChannelId;
 
 /// Which amplitude side owns a prepared threshold map.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SamplingCutSide {
     Left,
     Right,
+}
+
+/// Exact result of a cut-dependent sampling-map evaluation.
+///
+/// This is the typed hand-off a cross-section host can use once it has solved
+/// the cut LU root and constructed a conditional map.  The mapped momentum
+/// sample, determinant and the channel's runtime context stay together so a
+/// stability rotation or precision rescue cannot accidentally pair a map with
+/// context from another canonical channel.  Construction is deliberately
+/// independent of the physical map implementation; the host supplies the
+/// already evaluated values.
+#[derive(Clone, Debug)]
+pub struct PreparedCrossSectionMapEvaluation<T: FloatLike> {
+    channel_id: SamplingChannelId,
+    mapped_sample: MomentumSample<T>,
+    jacobian: F<T>,
+    inverse_jacobian: F<T>,
+    runtime_context: Vec<F<T>>,
+    prepared_cut_context: PreparedCutSamplingContext,
+}
+
+impl<T: FloatLike> PreparedCrossSectionMapEvaluation<T> {
+    pub fn new(
+        channel_id: SamplingChannelId,
+        mapped_sample: MomentumSample<T>,
+        jacobian: F<T>,
+        inverse_jacobian: F<T>,
+        runtime_context: Vec<F<T>>,
+        prepared_cut_context: PreparedCutSamplingContext,
+    ) -> Result<Self> {
+        prepared_cut_context.validate_loop_dimension(mapped_sample.loop_moms().0.len())?;
+        for (name, value) in [
+            ("map Jacobian", &jacobian),
+            ("inverse map Jacobian", &inverse_jacobian),
+        ] {
+            if !value.0.is_finite() || value <= &value.zero() {
+                return Err(eyre!("{name} must be finite and positive, got {value}"));
+            }
+        }
+        if runtime_context.iter().any(|value| !value.0.is_finite()) {
+            return Err(eyre!(
+                "deferred map runtime context contains a non-finite value"
+            ));
+        }
+        Ok(Self {
+            channel_id,
+            mapped_sample,
+            jacobian,
+            inverse_jacobian,
+            runtime_context,
+            prepared_cut_context,
+        })
+    }
+
+    pub fn channel_id(&self) -> SamplingChannelId {
+        self.channel_id
+    }
+    pub fn mapped_sample(&self) -> &MomentumSample<T> {
+        &self.mapped_sample
+    }
+    pub fn jacobian(&self) -> &F<T> {
+        &self.jacobian
+    }
+    pub fn inverse_jacobian(&self) -> &F<T> {
+        &self.inverse_jacobian
+    }
+    pub fn runtime_context(&self) -> &[F<T>] {
+        &self.runtime_context
+    }
+    pub fn prepared_cut_context(&self) -> &PreparedCutSamplingContext {
+        &self.prepared_cut_context
+    }
+
+    pub fn rotate(
+        &self,
+        rotation: &Rotation,
+        loop_mom_cache_id: usize,
+        external_mom_cache_id: usize,
+    ) -> Self {
+        Self {
+            channel_id: self.channel_id,
+            mapped_sample: self.mapped_sample.rotate(
+                rotation,
+                loop_mom_cache_id,
+                external_mom_cache_id,
+            ),
+            jacobian: self.jacobian.clone(),
+            inverse_jacobian: self.inverse_jacobian.clone(),
+            runtime_context: self.runtime_context.clone(),
+            prepared_cut_context: self.prepared_cut_context.rotated(rotation),
+        }
+    }
+
+    pub fn cast_sample<T2: FloatLike>(&self) -> PreparedCrossSectionMapEvaluation<T2>
+    where
+        F<T2>: From<F<T>>,
+    {
+        PreparedCrossSectionMapEvaluation {
+            channel_id: self.channel_id,
+            mapped_sample: self.mapped_sample.cast_sample(),
+            jacobian: self.jacobian.clone().into(),
+            inverse_jacobian: self.inverse_jacobian.clone().into(),
+            runtime_context: self
+                .runtime_context
+                .iter()
+                .cloned()
+                .map(F::<T2>::from)
+                .collect(),
+            prepared_cut_context: self.prepared_cut_context.clone(),
+        }
+    }
 }
 
 /// Pointwise classification of an energy surface for the prepared cut data.
@@ -152,6 +272,11 @@ impl PreparedCutSamplingContext {
         }
         validate_edges(&parent_lmb, "parent LMB")?;
         validate_finite(rescaling_t_star, "cut rescaling t*")?;
+        if rescaling_t_star <= 0.0 {
+            return Err(eyre!(
+                "cut rescaling t* must be strictly positive, got {rescaling_t_star}"
+            ));
+        }
         for momentum in loop_momenta.iter().flatten() {
             validate_finite(*momentum, "loop momentum")?;
         }
@@ -183,6 +308,125 @@ impl PreparedCutSamplingContext {
             external_momenta,
             surfaces,
         })
+    }
+
+    /// Build the kinematic part of a prepared context directly from one
+    /// solved LU sample. The input loop momenta are the unrescaled vectors
+    /// used by that root solve; applying `t*` here keeps the resulting cut
+    /// point and its rescaling together, without any process-global cut cache.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_lu_sample<T: FloatLike>(
+        graph_name: impl Into<String>,
+        graph_id: usize,
+        cut_id: usize,
+        orientation: Option<usize>,
+        side: SamplingCutSide,
+        parent_lmb: Vec<usize>,
+        rescaling_t_star: &F<T>,
+        unrescaled_loop_momenta: &LoopMomenta<F<T>>,
+        external_momenta: &ExternalFourMomenta<F<T>>,
+        surfaces: Vec<PreparedSamplingSurface>,
+    ) -> Result<Self> {
+        let zero = rescaling_t_star.zero();
+        if !rescaling_t_star.0.is_finite() || rescaling_t_star.0 <= zero.0 {
+            return Err(eyre!(
+                "a prepared LU sample requires a finite positive t*, got {rescaling_t_star}"
+            ));
+        }
+        let n_loop_momenta = parent_lmb.len();
+        let loop_momenta = unrescaled_loop_momenta
+            .rescale(rescaling_t_star, None)
+            .iter()
+            .map(|momentum| {
+                [
+                    momentum.px.into_f64(),
+                    momentum.py.into_f64(),
+                    momentum.pz.into_f64(),
+                ]
+            })
+            .collect();
+        let external_momenta = external_momenta
+            .iter()
+            .map(|momentum: &FourMomentum<F<T>>| {
+                [
+                    momentum.temporal.value.into_f64(),
+                    momentum.spatial.px.into_f64(),
+                    momentum.spatial.py.into_f64(),
+                    momentum.spatial.pz.into_f64(),
+                ]
+            })
+            .collect();
+        let prepared = Self::new(
+            graph_name,
+            graph_id,
+            cut_id,
+            orientation,
+            side,
+            parent_lmb,
+            rescaling_t_star.into_f64(),
+            loop_momenta,
+            external_momenta,
+            surfaces,
+        )?;
+        prepared.validate_loop_dimension(n_loop_momenta)?;
+        Ok(prepared)
+    }
+
+    /// Rotate the kinematic payload together with a mapped momentum sample.
+    /// Surface identities and the parent frame stay unchanged; the numerical
+    /// loop and external vectors must remain in the same frame as the sample
+    /// after stability rotations.
+    pub(crate) fn rotated(&self, rotation: &Rotation) -> Self {
+        let rotate_three = |momentum: [f64; 3]| {
+            let rotated =
+                ThreeMomentum::new(F(momentum[0]), F(momentum[1]), F(momentum[2])).rotate(rotation);
+            [
+                rotated.px.into_f64(),
+                rotated.py.into_f64(),
+                rotated.pz.into_f64(),
+            ]
+        };
+        let rotate_four = |momentum: [f64; 4]| {
+            let spatial = rotate_three([momentum[1], momentum[2], momentum[3]]);
+            [momentum[0], spatial[0], spatial[1], spatial[2]]
+        };
+        Self {
+            loop_momenta: self
+                .loop_momenta
+                .iter()
+                .copied()
+                .map(rotate_three)
+                .collect(),
+            external_momenta: self
+                .external_momenta
+                .iter()
+                .copied()
+                .map(rotate_four)
+                .collect(),
+            ..self.clone()
+        }
+    }
+
+    /// Check that this context is suitable for a parent frame with the given
+    /// loop dimension.  This is intentionally a separate check from
+    /// construction: a serialized context can be valid in isolation while
+    /// still belonging to a different graph or sample frame.
+    pub fn validate_loop_dimension(&self, n_loop_momenta: usize) -> Result<()> {
+        if self.parent_lmb.len() != n_loop_momenta {
+            return Err(eyre!(
+                "prepared parent LMB has {} edges, expected {} loop momenta",
+                self.parent_lmb.len(),
+                n_loop_momenta
+            ));
+        }
+        if self.loop_momenta.len() != n_loop_momenta {
+            return Err(eyre!(
+                "prepared LU sample has {} loop momenta, expected {}",
+                self.loop_momenta.len(),
+                n_loop_momenta
+            ));
+        }
+        Ok(())
     }
 
     pub fn surface(&self, index: usize) -> Option<&PreparedSamplingSurface> {
@@ -231,6 +475,7 @@ fn validate_finite_non_negative(value: f64, label: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{DependentMomentaConstructor, settings::runtime::kinematic::Externals};
 
     fn surface(status: PreparedSurfaceStatus) -> PreparedSamplingSurface {
         PreparedSamplingSurface::new(vec![3, 7], vec![3], status).unwrap()
@@ -245,7 +490,7 @@ mod tests {
             side,
             vec![3, 7, 11],
             0.83,
-            vec![[1.0, 2.0, 3.0]],
+            vec![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]],
             vec![[10.0, 0.0, 0.0, 10.0]],
             vec![surface(
                 PreparedSurfaceStatus::existing(2.5, Some(0.1)).unwrap(),
@@ -283,7 +528,7 @@ mod tests {
             1.0,
             vec![[0.0, 0.0, 0.0]],
             vec![],
-            vec![surface(absent)],
+            vec![PreparedSamplingSurface::new(vec![3, 7], vec![0], absent).unwrap()],
         )
         .unwrap();
         assert!(context.has_absent_surface());
@@ -316,5 +561,188 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn lu_sample_constructor_rejects_nonpositive_root_and_checks_frame_dimension() {
+        let loop_momenta =
+            LoopMomenta::from_iter([crate::momentum::ThreeMomentum::new(F(1.0), F(2.0), F(3.0))]);
+        let external_momenta = ExternalFourMomenta::from_iter([FourMomentum::new(
+            crate::momentum::Energy::new(F(10.0)),
+            crate::momentum::ThreeMomentum::new(F(0.0), F(0.0), F(10.0)),
+        )]);
+        for t_star in [0.0, -0.5, f64::INFINITY, f64::NAN] {
+            assert!(
+                PreparedCutSamplingContext::from_lu_sample(
+                    "g",
+                    0,
+                    0,
+                    Some(0),
+                    SamplingCutSide::Left,
+                    vec![0],
+                    &F(t_star),
+                    &loop_momenta,
+                    &external_momenta,
+                    vec![],
+                )
+                .is_err()
+            );
+        }
+
+        let context = PreparedCutSamplingContext::from_lu_sample(
+            "g",
+            0,
+            0,
+            Some(0),
+            SamplingCutSide::Left,
+            vec![0],
+            &F(0.5),
+            &loop_momenta,
+            &external_momenta,
+            vec![],
+        )
+        .unwrap();
+        context.validate_loop_dimension(1).unwrap();
+        assert!(context.validate_loop_dimension(2).is_err());
+        assert_eq!(context.rescaling_t_star, 0.5);
+        assert_eq!(context.loop_momenta, vec![[0.5, 1.0, 1.5]]);
+        assert_eq!(context.external_momenta, vec![[10.0, 0.0, 0.0, 10.0]]);
+        let wrong_dimension = PreparedCutSamplingContext::from_lu_sample(
+            "g",
+            0,
+            0,
+            Some(0),
+            SamplingCutSide::Left,
+            vec![0, 1],
+            &F(0.5),
+            &loop_momenta,
+            &external_momenta,
+            vec![],
+        )
+        .unwrap_err();
+        assert!(
+            wrong_dimension
+                .to_string()
+                .contains("1 loop momenta, expected 2")
+        );
+    }
+
+    #[test]
+    fn prepared_map_evaluation_keeps_channel_context_and_rotates_together() {
+        let sample = MomentumSample::new(
+            LoopMomenta::from_iter([
+                crate::momentum::ThreeMomentum::new(F(1.0), F(2.0), F(3.0)),
+                crate::momentum::ThreeMomentum::new(F(4.0), F(5.0), F(6.0)),
+                crate::momentum::ThreeMomentum::new(F(7.0), F(8.0), F(9.0)),
+            ]),
+            0,
+            &Externals::default(),
+            0,
+            F(1.0),
+            DependentMomentaConstructor::CrossSection,
+            Some(0),
+        )
+        .unwrap();
+        let evaluation = PreparedCrossSectionMapEvaluation::new(
+            SamplingChannelId::from(7),
+            sample,
+            F(2.0),
+            F(0.5),
+            vec![F(0.25), F(0.75)],
+            context(SamplingCutSide::Left),
+        )
+        .unwrap();
+        assert_eq!(evaluation.channel_id(), SamplingChannelId::from(7));
+        assert_eq!(evaluation.runtime_context(), &[F(0.25), F(0.75)]);
+
+        let rotated = evaluation.rotate(
+            &Rotation::new(crate::momentum::RotationMethod::Pi2X),
+            11,
+            13,
+        );
+        assert_eq!(rotated.channel_id(), evaluation.channel_id());
+        assert_eq!(
+            rotated.prepared_cut_context().loop_momenta[0],
+            [1.0, -3.0, 2.0]
+        );
+        assert_eq!(
+            rotated.prepared_cut_context().external_momenta[0],
+            [10.0, 0.0, -10.0, 0.0]
+        );
+        assert_eq!(rotated.mapped_sample().sample.loop_mom_cache_id, 11);
+        assert_eq!(rotated.mapped_sample().sample.external_mom_cache_id, 13);
+    }
+
+    #[test]
+    fn prepared_map_evaluation_rejects_invalid_jacobians_and_context() {
+        let sample = MomentumSample::new(
+            LoopMomenta::from_iter(vec![ThreeMomentum::new(F(0.0), F(0.0), F(0.0)); 3]),
+            0,
+            &Externals::default(),
+            0,
+            F(1.0),
+            DependentMomentaConstructor::CrossSection,
+            None,
+        )
+        .unwrap();
+        for (jacobian, inverse_jacobian) in [(0.0, 1.0), (1.0, 0.0), (-1.0, 1.0)] {
+            let error = PreparedCrossSectionMapEvaluation::new(
+                SamplingChannelId::from(0),
+                sample.clone(),
+                F(jacobian),
+                F(inverse_jacobian),
+                vec![],
+                context(SamplingCutSide::Right),
+            )
+            .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("Jacobian must be finite and positive")
+            );
+        }
+        let error = PreparedCrossSectionMapEvaluation::new(
+            SamplingChannelId::from(0),
+            sample.clone(),
+            F(1.0),
+            F(1.0),
+            vec![F(f64::NAN)],
+            context(SamplingCutSide::Right),
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("runtime context contains a non-finite value")
+        );
+
+        // A finite value at rescue precision need not fit in f64. Validation
+        // must not classify an underflowed or overflowed conversion as invalid.
+        let one = F::<crate::utils::ArbPrec>::default().one();
+        let large = one.from_usize(10).powi(400);
+        let small = &one / &large;
+        assert!(large.into_f64().is_infinite());
+        assert_eq!(small.into_f64(), 0.0);
+        PreparedCrossSectionMapEvaluation::new(
+            SamplingChannelId::from(0),
+            MomentumSample::new(
+                LoopMomenta::from_iter(vec![
+                    ThreeMomentum::new(one.zero(), one.zero(), one.zero());
+                    3
+                ]),
+                0,
+                &Externals::default(),
+                0,
+                one,
+                DependentMomentaConstructor::CrossSection,
+                None,
+            )
+            .unwrap(),
+            large.clone(),
+            small,
+            vec![large],
+            context(SamplingCutSide::Right),
+        )
+        .unwrap();
     }
 }

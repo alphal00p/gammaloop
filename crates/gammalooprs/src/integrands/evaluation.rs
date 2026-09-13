@@ -75,7 +75,9 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
 /// The result of an evaluation of the integrand
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationResult {
-    /// Integrand value before any parameterization Jacobian is applied.
+    /// Integrand value before the separately reported top-level Jacobian is
+    /// applied. Summed sampling channels already include their individual
+    /// map Jacobians and partition factors and report a unit top-level Jacobian.
     pub integrand_result: Complex<F<f64>>,
     pub parameterization_jacobian: Option<F<f64>>,
     /// Monte Carlo sample weight supplied by the integrator/grid, excluding the parameterization Jacobian.

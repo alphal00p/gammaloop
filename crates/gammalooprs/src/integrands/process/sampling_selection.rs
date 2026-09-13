@@ -14,9 +14,12 @@ use std::{
 use crate::settings::runtime::{SamplingChannelDefinition, SamplingChannelSelection};
 use color_eyre::eyre::{Result, eyre};
 use serde::{Deserialize, Serialize};
+use symbolica::{atom::Atom, symbol, try_parse};
 
+use super::sampling_maps::combine_contracts;
 use super::{
-    SamplingChannelScore, SamplingMapComponent, SamplingMapContract, SamplingMapDefinition,
+    ImplicitSurfaceRadialMap, PreparedCutSamplingContext, SamplingChannelScore, SamplingMapAffine,
+    SamplingMapComponent, SamplingMapComposition, SamplingMapContract, SamplingMapDefinition,
     SamplingMapEmbedding, SamplingMapEvaluation, SamplingMapKernel, SamplingPartition,
     SamplingPartitionMode, SamplingScoreFunction, SurfaceRadialMap,
 };
@@ -117,6 +120,30 @@ pub struct ResolvedNamedSamplingChannel {
     pub map: SamplingMapDefinition,
 }
 
+/// Parse and eagerly compile a user supplied singularity proxy in the
+/// complete master raw frame.  Proxy expressions use the canonical coordinate
+/// names `x0`, `x1`, ...; using a fixed ordered parameter list keeps the
+/// expression independent of Rust-side map implementation details.
+fn compile_sampling_proxy(source: &str, dimensions: usize) -> Result<SamplingScoreFunction> {
+    let source = source.trim();
+    if source.is_empty() {
+        return Err(eyre!(
+            "sampling singularity proxy expression cannot be empty"
+        ));
+    }
+    if dimensions == 0 {
+        return Err(eyre!(
+            "sampling singularity proxy requires a non-empty raw coordinate frame"
+        ));
+    }
+    let expression = try_parse!(source)
+        .map_err(|error| eyre!("failed to parse sampling singularity proxy `{source}`: {error}"))?;
+    let parameters = (0..dimensions)
+        .map(|index| Atom::var(symbol!(format!("x{index}"))))
+        .collect::<Vec<_>>();
+    SamplingScoreFunction::from_symbolica_positive_expression(expression, parameters)
+}
+
 /// The complete selection for one graph after applying the settings' fallback.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedSamplingChannelSelection {
@@ -153,6 +180,23 @@ pub struct SamplingChannelCatalogue {
     pub entries: Vec<SamplingCatalogueEntry>,
 }
 
+/// Conservative coverage facts for a resolved catalogue.
+///
+/// This report only makes claims that can be established from the canonical
+/// catalogue itself.  In particular, an LMB entry is known to provide a
+/// full-domain ordinary map, while a named graph-aware map is not assumed to
+/// have full support until its compiled contract has been checked.  The soft
+/// audit is deliberately elementary: it records massless loop edges that are
+/// present in at least one generated LMB and whether an ordinary selected
+/// channel exposes each one.  It does not claim coverage of compound soft or
+/// collinear strata.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SamplingCoverageReport {
+    pub has_full_domain_lmb: bool,
+    pub covered_massless_loop_edges: Vec<usize>,
+    pub missing_massless_loop_edges: Vec<usize>,
+}
+
 /// Stable, side-effect-free view of the resolved catalogue for diagnostics.
 ///
 /// This report is deliberately built from [`SamplingChannelCatalogue`] rather
@@ -186,16 +230,43 @@ pub struct SamplingSurfaceGeometry {
 /// A caller must identify the master graph explicitly.  This prevents a
 /// surface block from being mistaken for a coordinate block in a different
 /// graph when channel definitions are shared across a graph group.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct SamplingChannelCompileContext {
     pub master_graph: String,
+    /// Optional graph identity used to validate prepared physical-cut
+    /// contexts. A cut/side map requires this to be supplied explicitly.
+    pub graph_id: Option<usize>,
     /// Complete ordered parent LMB in the master graph frame. Every named
     /// channel is resolved against this exact list before compilation.
     pub parent_lmb: Vec<usize>,
     pub parameterization_settings: ParameterizationSettings,
     pub e_cm: f64,
     pub n_loop_momenta: usize,
-    pub surfaces: BTreeMap<Vec<usize>, SamplingSurfaceGeometry>,
+    /// Geometry keyed by (physical energy edges, ordered active LMB edges).
+    pub surfaces: BTreeMap<(Vec<usize>, Vec<usize>), SamplingSurfaceGeometry>,
+    /// Optional exact direction-dependent surface maps prepared by the
+    /// process layer. Their evaluators already capture the relevant external
+    /// and cut data, so compilation does not infer kinematics from edge lists.
+    pub implicit_surfaces: BTreeMap<(Vec<usize>, Vec<usize>), ImplicitSurfaceRadialMap>,
+    /// Physical cut IDs resolved by the graph, keyed by their energy edges.
+    /// These identify cut kinematics, not entries in the channel catalogue.
+    pub physical_cut_ids: BTreeMap<Vec<usize>, Vec<usize>>,
+    /// Host cut identity for metadata whose `on_cut` list is explicit.
+    pub cut_id: Option<usize>,
+    pub orientation: Option<usize>,
+    pub side: Option<super::SamplingCutSide>,
+    /// Kinematics prepared by the physical-cut host. This remains optional
+    /// for ordinary LMB/surface channels, but is mandatory for phase-space
+    /// and side-qualified maps.
+    pub prepared_cut_context: Option<PreparedCutSamplingContext>,
+    /// Exact affine maps routing a generated LMB into the master frame. The
+    /// key is the generated catalogue basis id; absent entries are diagnosed
+    /// when a non-master LMB is selected.
+    pub lmb_frame_maps: BTreeMap<usize, SamplingMapAffine>,
+    /// Explicit named `lmb(...)` definitions use their edge list rather than
+    /// a generated basis id, so their prepared routing is keyed by that same
+    /// master-graph edge list.
+    pub lmb_frame_maps_by_edges: BTreeMap<Vec<usize>, SamplingMapAffine>,
 }
 
 impl SamplingChannelCompileContext {
@@ -208,22 +279,119 @@ impl SamplingChannelCompileContext {
     ) -> Self {
         Self {
             master_graph: master_graph.into(),
+            graph_id: None,
             parent_lmb,
             parameterization_settings,
             e_cm,
             n_loop_momenta,
             surfaces: BTreeMap::new(),
+            implicit_surfaces: BTreeMap::new(),
+            lmb_frame_maps: BTreeMap::new(),
+            lmb_frame_maps_by_edges: BTreeMap::new(),
+            physical_cut_ids: BTreeMap::new(),
+            cut_id: None,
+            orientation: None,
+            side: None,
+            prepared_cut_context: None,
         }
+    }
+
+    /// Attach a graph/cut/orientation/side context prepared from one solved
+    /// Cutkosky cut. The checks are transactional: conflicting context data
+    /// leave this compile context unchanged.
+    pub fn with_prepared_cut_context(
+        mut self,
+        prepared: PreparedCutSamplingContext,
+    ) -> std::result::Result<Self, SamplingChannelCompileError> {
+        self.set_prepared_cut_context(prepared)?;
+        Ok(self)
+    }
+
+    /// Attach prepared cut data and populate the corresponding host fields.
+    /// Named phase-space/left/right maps therefore cannot accidentally reuse
+    /// a stale cut, orientation, side, parent LMB, or t* value.
+    pub fn set_prepared_cut_context(
+        &mut self,
+        prepared: PreparedCutSamplingContext,
+    ) -> std::result::Result<(), SamplingChannelCompileError> {
+        validate_prepared_context_identity(self, &prepared, "<prepared-context>")?;
+        prepared
+            .validate_loop_dimension(self.n_loop_momenta)
+            .map_err(
+                |error| SamplingChannelCompileError::InvalidPreparedCutContext {
+                    channel: "<prepared-context>".to_owned(),
+                    error: error.to_string(),
+                },
+            )?;
+        self.graph_id = Some(prepared.graph_id);
+        self.cut_id = Some(prepared.cut_id);
+        self.orientation = prepared.orientation;
+        self.side = Some(prepared.side);
+        self.prepared_cut_context = Some(prepared);
+        Ok(())
+    }
+
+    /// Set the graph id needed when compiling a physical-cut channel.
+    pub fn with_graph_id(mut self, graph_id: usize) -> Self {
+        self.graph_id = Some(graph_id);
+        self
+    }
+
+    pub fn insert_implicit_surface(
+        &mut self,
+        surface_edges: Vec<usize>,
+        subspace_lmb: Vec<usize>,
+        map: ImplicitSurfaceRadialMap,
+    ) -> Result<()> {
+        if surface_edges.is_empty() || subspace_lmb.is_empty() {
+            return Err(eyre!(
+                "implicit surface map needs non-empty physical and subspace edge lists"
+            ));
+        }
+        let mut surface_seen = BTreeSet::new();
+        if surface_edges.iter().any(|edge| !surface_seen.insert(*edge)) {
+            return Err(eyre!(
+                "implicit surface map physical edge list contains duplicates: {surface_edges:?}"
+            ));
+        }
+        let mut subspace_seen = BTreeSet::new();
+        if subspace_lmb.iter().any(|edge| !subspace_seen.insert(*edge))
+            || subspace_lmb
+                .iter()
+                .any(|edge| !self.parent_lmb.contains(edge))
+        {
+            return Err(eyre!(
+                "implicit surface map subspace_lmb {subspace_lmb:?} must be unique and contained in parent LMB {:?}",
+                self.parent_lmb
+            ));
+        }
+        if map.dimension() != 3 * subspace_lmb.len() {
+            return Err(eyre!(
+                "implicit surface map has dimension {}, expected {} for subspace {:?}",
+                map.dimension(),
+                3 * subspace_lmb.len(),
+                subspace_lmb
+            ));
+        }
+        self.implicit_surfaces
+            .insert((surface_edges, subspace_lmb), map);
+        Ok(())
     }
 }
 
 /// The map kernels currently compilable without a graph-specific implicit
-/// solver.  Composite/cut maps stay in the typed catalogue until their
-/// prepared kinematic context is supplied by the process layer.
+/// solver.  Physical conditional/cut maps stay in the typed catalogue until
+/// their prepared kinematic context is supplied by the process layer; the
+/// bounded direct-product route is compiled there when its blocks are explicit.
 #[derive(Clone, Debug)]
 pub enum CompiledSamplingMap {
     Lmb(SamplingMapKernel),
+    AffineLmb {
+        lmb: SamplingMapKernel,
+        frame: SamplingMapAffine,
+    },
     Surface(SurfaceRadialMap),
+    ImplicitSurface(ImplicitSurfaceRadialMap),
     Embedded(SamplingMapEmbedding),
 }
 
@@ -231,7 +399,9 @@ impl CompiledSamplingMap {
     pub fn contract(&self) -> SamplingMapContract {
         match self {
             Self::Lmb(map) => map.contract(),
+            Self::AffineLmb { lmb, frame } => combine_contracts(lmb.contract(), frame.contract()),
             Self::Surface(map) => map.contract(),
+            Self::ImplicitSurface(map) => map.contract(),
             Self::Embedded(map) => map.contract(),
         }
     }
@@ -239,25 +409,119 @@ impl CompiledSamplingMap {
     pub fn dimensions(&self) -> usize {
         match self {
             Self::Lmb(map) => map.dimensions(),
+            Self::AffineLmb { lmb, .. } => lmb.dimensions(),
             Self::Surface(map) => map.dimension(),
+            Self::ImplicitSurface(map) => map.dimension(),
             Self::Embedded(map) => map.dimensions(),
         }
     }
 
     pub fn as_component(&self) -> &dyn SamplingMapComponent {
-        match self {
-            Self::Lmb(map) => map,
-            Self::Surface(map) => map,
-            Self::Embedded(map) => map,
-        }
+        self
     }
 
     pub fn forward(&self, coordinates: &[f64]) -> Result<SamplingMapEvaluation> {
-        self.as_component().forward(coordinates, &[])
+        self.forward_with_context(coordinates, &[])
+    }
+
+    pub fn forward_with_context(
+        &self,
+        coordinates: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingMapEvaluation> {
+        <Self as SamplingMapComponent>::forward(self, coordinates, context)
     }
 
     pub fn inverse(&self, point: &[f64]) -> Result<SamplingMapEvaluation> {
-        self.as_component().inverse(point, &[])
+        self.inverse_with_context(point, &[])
+    }
+
+    pub fn inverse_with_context(
+        &self,
+        point: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingMapEvaluation> {
+        <Self as SamplingMapComponent>::inverse(self, point, context)
+    }
+}
+
+impl SamplingMapComponent for CompiledSamplingMap {
+    fn dimensions(&self) -> usize {
+        self.dimensions()
+    }
+
+    fn output_dimensions(&self) -> usize {
+        self.dimensions()
+    }
+
+    fn contract(&self) -> SamplingMapContract {
+        self.contract()
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Lmb(_) => "lmb",
+            Self::AffineLmb { .. } => "affine_lmb",
+            Self::Surface(_) => "surface",
+            Self::ImplicitSurface(_) => "implicit_surface",
+            Self::Embedded(_) => "embedded",
+        }
+    }
+
+    fn forward(&self, coordinates: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+        match self {
+            Self::Lmb(map) => SamplingMapComponent::forward(map, coordinates, context),
+            Self::Surface(map) => SamplingMapComponent::forward(map, coordinates, context),
+            Self::ImplicitSurface(map) => SamplingMapComponent::forward(map, coordinates, context),
+            Self::Embedded(map) => SamplingMapComponent::forward(map, coordinates, context),
+            Self::AffineLmb { lmb, frame } => {
+                let lmb_evaluation = SamplingMapComponent::forward(lmb, coordinates, context)?;
+                let frame_evaluation =
+                    SamplingMapComponent::forward(frame, &lmb_evaluation.point, context)?;
+                Ok(SamplingMapEvaluation {
+                    coordinates: lmb_evaluation.coordinates,
+                    point: frame_evaluation.point,
+                    jacobian: lmb_evaluation.jacobian * frame_evaluation.jacobian,
+                    inverse_jacobian: lmb_evaluation.inverse_jacobian
+                        * frame_evaluation.inverse_jacobian,
+                    residual: lmb_evaluation.residual.max(frame_evaluation.residual),
+                    support: combine_contracts(lmb.contract(), frame.contract()).support,
+                    diagnostics: lmb_evaluation
+                        .diagnostics
+                        .into_iter()
+                        .chain(frame_evaluation.diagnostics)
+                        .collect(),
+                })
+            }
+        }
+    }
+
+    fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+        match self {
+            Self::Lmb(map) => SamplingMapComponent::inverse(map, point, context),
+            Self::Surface(map) => SamplingMapComponent::inverse(map, point, context),
+            Self::ImplicitSurface(map) => SamplingMapComponent::inverse(map, point, context),
+            Self::Embedded(map) => SamplingMapComponent::inverse(map, point, context),
+            Self::AffineLmb { lmb, frame } => {
+                let frame_evaluation = SamplingMapComponent::inverse(frame, point, context)?;
+                let lmb_evaluation =
+                    SamplingMapComponent::inverse(lmb, &frame_evaluation.coordinates, context)?;
+                Ok(SamplingMapEvaluation {
+                    coordinates: lmb_evaluation.coordinates,
+                    point: point.to_vec(),
+                    jacobian: lmb_evaluation.jacobian * frame_evaluation.jacobian,
+                    inverse_jacobian: lmb_evaluation.inverse_jacobian
+                        * frame_evaluation.inverse_jacobian,
+                    residual: lmb_evaluation.residual.max(frame_evaluation.residual),
+                    support: combine_contracts(lmb.contract(), frame.contract()).support,
+                    diagnostics: lmb_evaluation
+                        .diagnostics
+                        .into_iter()
+                        .chain(frame_evaluation.diagnostics)
+                        .collect(),
+                })
+            }
+        }
     }
 }
 
@@ -271,6 +535,9 @@ pub struct CompiledSamplingChannel {
     /// Ordered master-graph edge ids for this raw coordinate block.
     pub embedded_edges: Vec<usize>,
     pub map: CompiledSamplingMap,
+    /// Optional eager positive score used by the singularity-proxy partition.
+    /// It is compiled once from the channel metadata during warmup.
+    pub singularity_proxy: Option<SamplingScoreFunction>,
 }
 
 /// Canonical identifier for a compiled sampling channel.
@@ -305,8 +572,254 @@ impl From<SamplingChannelId> for usize {
 #[derive(Clone, Debug)]
 pub struct SamplingChannelBridge {
     channels: Vec<CompiledSamplingChannel>,
-    scores: Vec<SamplingChannelScore>,
     dimensions: usize,
+    partition_mode: SamplingPartitionMode,
+}
+
+/// Per-sample context supplied to conditional channel maps and to every
+/// inverse-density score in a common partition.  Contexts are indexed by the
+/// canonical catalogue position; they are never compacted into a second
+/// channel list.  An absent context means the ordinary empty context and is
+/// valid for maps which do not depend on earlier blocks.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SamplingChannelRuntimeContexts {
+    contexts: Vec<Option<Vec<f64>>>,
+}
+
+impl SamplingChannelRuntimeContexts {
+    pub fn new(channel_count: usize) -> Self {
+        Self {
+            contexts: vec![None; channel_count],
+        }
+    }
+
+    pub fn channel_count(&self) -> usize {
+        self.contexts.len()
+    }
+
+    pub fn set(&mut self, channel_id: SamplingChannelId, context: Vec<f64>) -> Result<()> {
+        let Some(slot) = self.contexts.get_mut(channel_id.0) else {
+            return Err(eyre!(
+                "sampling channel context id {} is out of range for {} channels",
+                channel_id.0,
+                self.contexts.len()
+            ));
+        };
+        if context.iter().any(|value| !value.is_finite()) {
+            return Err(eyre!(
+                "sampling channel context {} contains a non-finite value",
+                channel_id.0
+            ));
+        }
+        *slot = Some(context);
+        Ok(())
+    }
+
+    fn get(&self, channel_id: SamplingChannelId) -> Result<&[f64]> {
+        self.contexts
+            .get(channel_id.0)
+            .ok_or_else(|| {
+                eyre!(
+                    "sampling channel context id {} is out of range for {} channels",
+                    channel_id.0,
+                    self.contexts.len()
+                )
+            })
+            .map(|context| context.as_deref().unwrap_or(&[]))
+    }
+}
+
+/// Per-sample kinematic handoff for deferred cross-section sampling.
+///
+/// Cross-section physical maps cannot be compiled from a graph/cut label alone:
+/// the LU root, its positive `t*`, external momenta, and the native parent LMB
+/// must all come from the same sample. This state keeps that typed preparation
+/// next to the numerical runtime contexts used by map evaluators. It does not
+/// construct a map or infer a context vector from kinematics; the process layer
+/// must supply the map-specific runtime vector explicitly.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeferredCrossSectionSamplingState {
+    master_graph: String,
+    graph_id: usize,
+    orientation: Option<usize>,
+    parent_lmb: Vec<usize>,
+    n_loop_momenta: usize,
+    prepared: Vec<Option<PreparedCutSamplingContext>>,
+    runtime_contexts: SamplingChannelRuntimeContexts,
+}
+
+impl DeferredCrossSectionSamplingState {
+    /// Create an empty state for one master graph and one canonical catalogue.
+    pub fn new(
+        master_graph: impl Into<String>,
+        graph_id: usize,
+        orientation: Option<usize>,
+        parent_lmb: Vec<usize>,
+        n_loop_momenta: usize,
+        channel_count: usize,
+    ) -> Result<Self> {
+        let master_graph = master_graph.into();
+        if master_graph.trim().is_empty() {
+            return Err(eyre!("deferred cross-section state needs a master graph"));
+        }
+        if parent_lmb.is_empty() {
+            return Err(eyre!("deferred cross-section state needs a parent LMB"));
+        }
+        if parent_lmb.len() != n_loop_momenta {
+            return Err(eyre!(
+                "deferred cross-section parent LMB has {} edges, expected {} loop momenta",
+                parent_lmb.len(),
+                n_loop_momenta
+            ));
+        }
+        let mut seen = BTreeSet::new();
+        if parent_lmb.iter().any(|edge| !seen.insert(*edge)) {
+            return Err(eyre!(
+                "deferred cross-section parent LMB contains duplicate edges: {parent_lmb:?}"
+            ));
+        }
+        Ok(Self {
+            master_graph,
+            graph_id,
+            orientation,
+            parent_lmb,
+            n_loop_momenta,
+            prepared: vec![None; channel_count],
+            runtime_contexts: SamplingChannelRuntimeContexts::new(channel_count),
+        })
+    }
+
+    pub fn channel_count(&self) -> usize {
+        self.prepared.len()
+    }
+
+    pub fn master_graph(&self) -> &str {
+        &self.master_graph
+    }
+
+    pub fn graph_id(&self) -> usize {
+        self.graph_id
+    }
+
+    pub fn orientation(&self) -> Option<usize> {
+        self.orientation
+    }
+
+    pub fn parent_lmb(&self) -> &[usize] {
+        &self.parent_lmb
+    }
+
+    pub fn prepared_context(
+        &self,
+        channel_id: SamplingChannelId,
+    ) -> Option<&PreparedCutSamplingContext> {
+        self.prepared.get(channel_id.0).and_then(Option::as_ref)
+    }
+
+    pub fn runtime_contexts(&self) -> &SamplingChannelRuntimeContexts {
+        &self.runtime_contexts
+    }
+
+    /// Attach one solved cut/side and its map-specific evaluator context.
+    /// Validation is transactional: a failed attachment leaves the state
+    /// unchanged, preventing stale LU data from being reused accidentally.
+    pub fn set_channel(
+        &mut self,
+        channel_id: SamplingChannelId,
+        prepared: PreparedCutSamplingContext,
+        map_context: Vec<f64>,
+    ) -> Result<()> {
+        let Some(slot) = self.prepared.get_mut(channel_id.0) else {
+            return Err(eyre!(
+                "deferred cross-section channel id {} is out of range for {} channels",
+                channel_id.0,
+                self.channel_count()
+            ));
+        };
+        if prepared.graph_name != self.master_graph {
+            return Err(eyre!(
+                "deferred cross-section context graph `{}` does not match master graph `{}`",
+                prepared.graph_name,
+                self.master_graph
+            ));
+        }
+        if prepared.graph_id != self.graph_id {
+            return Err(eyre!(
+                "deferred cross-section context graph id {} does not match {}",
+                prepared.graph_id,
+                self.graph_id
+            ));
+        }
+        if prepared.orientation != self.orientation {
+            return Err(eyre!(
+                "deferred cross-section context orientation {:?} does not match {:?}",
+                prepared.orientation,
+                self.orientation
+            ));
+        }
+        if prepared.parent_lmb != self.parent_lmb {
+            return Err(eyre!(
+                "deferred cross-section context parent LMB {:?} does not match {:?}",
+                prepared.parent_lmb,
+                self.parent_lmb
+            ));
+        }
+        prepared.validate_loop_dimension(self.n_loop_momenta)?;
+        if !prepared.rescaling_t_star.is_finite() || prepared.rescaling_t_star <= 0.0 {
+            return Err(eyre!(
+                "deferred cross-section context needs finite positive t*, got {}",
+                prepared.rescaling_t_star
+            ));
+        }
+        // Validate the runtime vector before touching the prepared slot.
+        let mut runtime = self.runtime_contexts.clone();
+        runtime.set(channel_id, map_context)?;
+        *slot = Some(prepared);
+        self.runtime_contexts = runtime;
+        Ok(())
+    }
+
+    /// Require every listed channel to have a solved cut/side context.
+    pub fn validate_channels(
+        &self,
+        channel_ids: impl IntoIterator<Item = SamplingChannelId>,
+    ) -> Result<()> {
+        for channel_id in channel_ids {
+            if channel_id.0 >= self.channel_count() {
+                return Err(eyre!(
+                    "deferred cross-section channel id {} is out of range for {} channels",
+                    channel_id.0,
+                    self.channel_count()
+                ));
+            }
+            if self.prepared[channel_id.0].is_none() {
+                return Err(eyre!(
+                    "deferred cross-section channel {} has no solved cut/side context",
+                    channel_id.0
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_bridge(&self, dimensions: usize, channel_count: usize) -> Result<()> {
+        if channel_count != self.channel_count() {
+            return Err(eyre!(
+                "deferred cross-section state has {} channels, bridge has {}",
+                self.channel_count(),
+                channel_count
+            ));
+        }
+        let expected = 3 * self.n_loop_momenta;
+        if dimensions != expected {
+            return Err(eyre!(
+                "deferred cross-section state has {} loop coordinates, bridge has {} dimensions",
+                expected,
+                dimensions
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// One push-forward/inverse result together with the common raw-frame
@@ -319,6 +832,198 @@ pub struct SamplingChannelBridgeEvaluation {
     pub raw_coordinates: Vec<f64>,
     pub map: SamplingMapEvaluation,
     pub partition: SamplingPartition,
+}
+
+/// Summary of a deterministic acceptance run through a complete channel
+/// bridge.  The reference integrand is a normalized isotropic Gaussian in
+/// the bridge's raw master frame.  Every canonical channel is sampled with
+/// equal probability and the estimator includes its exact map determinant
+/// and the common inverse-density partition.  This makes the report useful
+/// for acceptance tests of arbitrary graph-resolved channel catalogues,
+/// including products and ordered surface compositions.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SamplingChannelBridgeAcceptanceReport {
+    pub sample_count: usize,
+    pub channel_count: usize,
+    pub finite_sample_count: usize,
+    pub normalization: f64,
+    pub normalization_stderr: f64,
+    pub second_moment: f64,
+    pub expected_second_moment: f64,
+    pub second_moment_stderr: f64,
+    pub partition_min: f64,
+    pub partition_max: f64,
+    pub jacobian_min: f64,
+    pub jacobian_max: f64,
+    /// Maximum forward/inverse coordinate residual seen by the acceptance run.
+    /// A finite small value is required before a channel is trusted in a
+    /// graph-level acceptance test.
+    pub round_trip_residual_max: f64,
+}
+
+impl SamplingChannelBridgeAcceptanceReport {
+    /// Integrate a normalized Gaussian over all channels in `bridge`.
+    ///
+    /// The returned normalization converges to one as `sample_count` grows.
+    /// A sample count applies independently to each channel; no channel is
+    /// silently omitted from the acceptance run.  The deterministic Halton
+    /// points keep this suitable for reproducible unit and acceptance tests.
+    pub fn normalized_gaussian(
+        bridge: &SamplingChannelBridge,
+        sample_count: usize,
+        width: f64,
+        center: &[f64],
+    ) -> Result<Self> {
+        if sample_count == 0 {
+            return Err(eyre!(
+                "sampling bridge acceptance harness needs at least one sample"
+            ));
+        }
+        if !width.is_finite() || width <= 0.0 {
+            return Err(eyre!(
+                "sampling bridge acceptance Gaussian width must be positive and finite"
+            ));
+        }
+        if center.len() != bridge.dimensions {
+            return Err(eyre!(
+                "sampling bridge acceptance Gaussian has dimension {}, expected {}",
+                center.len(),
+                bridge.dimensions
+            ));
+        }
+        if center.iter().any(|component| !component.is_finite()) {
+            return Err(eyre!(
+                "sampling bridge acceptance Gaussian centre must be finite"
+            ));
+        }
+
+        let channel_count = bridge.channels.len();
+        if channel_count == 0 {
+            return Err(eyre!(
+                "sampling bridge acceptance harness needs at least one channel"
+            ));
+        }
+        let dimension = bridge.dimensions as f64;
+        let gaussian_normalization =
+            (2.0 * std::f64::consts::PI * width * width).powf(-0.5 * dimension);
+        let expected_second_moment = center
+            .iter()
+            .map(|component| component * component)
+            .sum::<f64>()
+            + dimension * width.powi(2);
+        let mut report = Self {
+            sample_count,
+            channel_count,
+            finite_sample_count: 0,
+            normalization: 0.0,
+            normalization_stderr: 0.0,
+            second_moment: 0.0,
+            expected_second_moment,
+            second_moment_stderr: 0.0,
+            partition_min: f64::INFINITY,
+            partition_max: f64::NEG_INFINITY,
+            jacobian_min: f64::INFINITY,
+            jacobian_max: f64::NEG_INFINITY,
+            round_trip_residual_max: 0.0,
+        };
+        let mut square_sum = 0.0;
+        let mut second_moment_square_sum = 0.0;
+        let total_samples = sample_count * channel_count;
+        for channel_index in 0..channel_count {
+            let channel_id = SamplingChannelId::from(channel_index);
+            for sample in 1..=sample_count {
+                let coordinates = (0..bridge.channels[channel_index].dimensions())
+                    .map(|axis| bridge_halton(sample, bridge_prime(axis)))
+                    .collect::<Vec<_>>();
+                let evaluation = bridge.forward(channel_id, &coordinates)?;
+                // Exercise the inverse on every accepted point as well.  This
+                // catches a channel whose forward determinant is finite while
+                // its inverse uses a different branch or frame, which would
+                // invalidate the graph-level map-density estimator.
+                let inverse = bridge.inverse(channel_id, &evaluation.raw_coordinates)?;
+                let coordinate_residual = inverse
+                    .map
+                    .coordinates
+                    .iter()
+                    .zip(&coordinates)
+                    .map(|(recovered, original)| (recovered - original).abs())
+                    .fold(inverse.map.residual, f64::max);
+                if !coordinate_residual.is_finite() {
+                    return Err(eyre!(
+                        "sampling bridge acceptance inverse residual is non-finite for channel {} sample {}",
+                        channel_index,
+                        sample
+                    ));
+                }
+                report.round_trip_residual_max =
+                    report.round_trip_residual_max.max(coordinate_residual);
+                let partition_sum = evaluation.partition.weights.iter().sum::<f64>();
+                if !partition_sum.is_finite() {
+                    return Err(eyre!(
+                        "sampling bridge acceptance partition is non-finite for channel {} sample {}",
+                        channel_index,
+                        sample
+                    ));
+                }
+                report.partition_min = report.partition_min.min(partition_sum);
+                report.partition_max = report.partition_max.max(partition_sum);
+                let radius_squared = evaluation
+                    .raw_coordinates
+                    .iter()
+                    .zip(center)
+                    .map(|(point, centre)| (point - centre).powi(2))
+                    .sum::<f64>();
+                let weight = gaussian_normalization
+                    * (-0.5 * radius_squared / width.powi(2)).exp()
+                    * evaluation.map.jacobian
+                    * evaluation.partition.weight(channel_index).ok_or_else(|| {
+                        eyre!("sampling bridge partition has no channel {channel_index}")
+                    })?
+                    * channel_count as f64;
+                report.jacobian_min = report.jacobian_min.min(evaluation.map.jacobian);
+                report.jacobian_max = report.jacobian_max.max(evaluation.map.jacobian);
+                if !weight.is_finite() {
+                    continue;
+                }
+                report.finite_sample_count += 1;
+                report.normalization += weight;
+                square_sum += weight * weight;
+                let second_moment = weight * radius_squared;
+                report.second_moment += second_moment;
+                second_moment_square_sum += second_moment * second_moment;
+            }
+        }
+        if report.finite_sample_count > 0 {
+            report.normalization /= total_samples as f64;
+            report.normalization_stderr =
+                ((square_sum / total_samples as f64 - report.normalization.powi(2)).max(0.0)
+                    / total_samples as f64)
+                    .sqrt();
+            report.second_moment /= total_samples as f64;
+            report.second_moment_stderr = ((second_moment_square_sum / total_samples as f64
+                - report.second_moment.powi(2))
+            .max(0.0)
+                / total_samples as f64)
+                .sqrt();
+        }
+        Ok(report)
+    }
+}
+
+fn bridge_prime(index: usize) -> u64 {
+    const PRIMES: [u64; 16] = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53];
+    PRIMES.get(index).copied().unwrap_or(59 + 2 * index as u64)
+}
+
+fn bridge_halton(mut index: usize, base: u64) -> f64 {
+    let mut fraction = 1.0;
+    let mut value = 0.0;
+    while index > 0 {
+        fraction /= base as f64;
+        value += fraction * (index as u64 % base) as f64;
+        index /= base as usize;
+    }
+    value
 }
 
 /// Runtime context needed to turn one bridge point into the sample consumed by
@@ -336,10 +1041,8 @@ pub struct SamplingMomentumSampleContext<'a> {
 
 impl SamplingChannelBridgeEvaluation {
     /// Materialize this exact full-frame bridge point as a graph-evaluator
-    /// momentum sample.  This is intentionally opt-in: wiring the advanced
-    /// bridge into the production sampler still requires process-level graph
-    /// and channel selection, but the conversion and its dimension checks are
-    /// shared and testable here.
+    /// momentum sample. The production sampler uses the same conversion after
+    /// graph-level channel and cut preparation.
     pub fn to_momentum_sample<T: FloatLike>(
         &self,
         context: SamplingMomentumSampleContext<'_>,
@@ -488,13 +1191,23 @@ impl SamplingChannelBridge {
     pub fn new(
         channels: Vec<CompiledSamplingChannel>,
     ) -> std::result::Result<Self, SamplingChannelBridgeError> {
+        Self::new_with_partition_mode(channels, SamplingPartitionMode::MapDensity)
+    }
+
+    /// Construct a bridge with an explicit common partition score.  The
+    /// singularity-proxy mode requires every compiled channel to carry an
+    /// explicit proxy; missing metadata is diagnosed by the partition rather
+    /// than silently falling back to map densities.
+    pub fn new_with_partition_mode(
+        channels: Vec<CompiledSamplingChannel>,
+        partition_mode: SamplingPartitionMode,
+    ) -> std::result::Result<Self, SamplingChannelBridgeError> {
         let Some(first) = channels.first() else {
             return Err(SamplingChannelBridgeError::Empty);
         };
         let dimensions = first.dimensions();
         let frame = &first.embedded_edges;
         let master_graph = &first.master_graph;
-        let mut scores = Vec::with_capacity(channels.len());
         for channel in &channels {
             if channel.master_graph != *master_graph {
                 return Err(SamplingChannelBridgeError::MasterGraphMismatch {
@@ -530,26 +1243,11 @@ impl SamplingChannelBridge {
                     jacobian: contract.jacobian,
                 });
             }
-            let map = channel.map.clone();
-            let name = channel.name.clone();
-            scores.push(SamplingChannelScore::map_density(
-                name,
-                SamplingScoreFunction::from_positive_function(move |raw| {
-                    let evaluation = map.inverse(raw)?;
-                    let density = evaluation.inverse_jacobian.abs();
-                    if !density.is_finite() || density <= 0.0 {
-                        return Err(color_eyre::eyre::eyre!(
-                            "inverse map density is not finite and positive: {density}"
-                        ));
-                    }
-                    Ok(Some(density))
-                }),
-            ));
         }
         Ok(Self {
             channels,
-            scores,
             dimensions,
+            partition_mode,
         })
     }
 
@@ -562,6 +1260,21 @@ impl SamplingChannelBridge {
     }
 
     pub fn partition(&self, raw_coordinates: &[f64]) -> Result<SamplingPartition> {
+        self.partition_with_contexts(
+            raw_coordinates,
+            &SamplingChannelRuntimeContexts::new(self.channels.len()),
+        )
+    }
+
+    /// Build the common inverse-density partition using the context belonging
+    /// to every canonical channel.  A selected channel's context alone is
+    /// insufficient: all denominator scores must describe the same raw point
+    /// and their own map branches.
+    pub fn partition_with_contexts(
+        &self,
+        raw_coordinates: &[f64],
+        contexts: &SamplingChannelRuntimeContexts,
+    ) -> Result<SamplingPartition> {
         if raw_coordinates.len() != self.dimensions {
             return Err(color_eyre::eyre::eyre!(
                 "raw sampling frame has {}, expected {} dimensions",
@@ -569,17 +1282,89 @@ impl SamplingChannelBridge {
                 self.dimensions
             ));
         }
-        SamplingPartition::new(
-            SamplingPartitionMode::MapDensity,
-            &self.scores,
-            raw_coordinates,
-        )
+        if contexts.channel_count() != self.channels.len() {
+            return Err(eyre!(
+                "sampling channel runtime context has {} channels, expected {}",
+                contexts.channel_count(),
+                self.channels.len()
+            ));
+        }
+        let scores = self
+            .channels
+            .iter()
+            .enumerate()
+            .map(|(index, channel)| {
+                let map = channel.map.clone();
+                let context = contexts
+                    .get(SamplingChannelId::from(index))
+                    .map(ToOwned::to_owned)?;
+                let map_density = SamplingScoreFunction::from_positive_function(move |raw| {
+                    let evaluation = map.inverse_with_context(raw, &context)?;
+                    let density = evaluation.inverse_jacobian.abs();
+                    if !density.is_finite() || density <= 0.0 {
+                        return Err(eyre!(
+                            "inverse map density is not finite and positive: {density}"
+                        ));
+                    }
+                    Ok(Some(density))
+                });
+                Ok(match self.partition_mode {
+                    SamplingPartitionMode::MapDensity => {
+                        SamplingChannelScore::map_density(channel.name.clone(), map_density)
+                    }
+                    SamplingPartitionMode::SingularityProxy => {
+                        let proxy = channel.singularity_proxy.clone().ok_or_else(|| {
+                            eyre!(
+                                "channel '{}' has no singularity_proxy metadata; provide a positive expression for every channel when sampling_channel_weight = 'singularity_proxy'",
+                                channel.name
+                            )
+                        })?;
+                        SamplingChannelScore::with_proxy(channel.name.clone(), map_density, proxy)
+                    }
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        SamplingPartition::new(self.partition_mode, &scores, raw_coordinates)
+    }
+
+    /// Build a partition from a deferred cross-section state. This only
+    /// forwards the already prepared per-channel runtime contexts; it does not
+    /// solve a cut or infer a physical map from `PreparedCutSamplingContext`.
+    pub fn partition_with_deferred_state(
+        &self,
+        raw_coordinates: &[f64],
+        state: &DeferredCrossSectionSamplingState,
+    ) -> Result<SamplingPartition> {
+        state.validate_bridge(self.dimensions, self.channels.len())?;
+        self.partition_with_contexts(raw_coordinates, state.runtime_contexts())
     }
 
     pub fn forward(
         &self,
         channel_id: SamplingChannelId,
         coordinates: &[f64],
+    ) -> Result<SamplingChannelBridgeEvaluation> {
+        self.forward_with_context(channel_id, coordinates, &[])
+    }
+
+    /// Forward a channel while supplying the output of an earlier conditional
+    /// map (for example a sampled complement block) to the selected map.
+    pub fn forward_with_context(
+        &self,
+        channel_id: SamplingChannelId,
+        coordinates: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingChannelBridgeEvaluation> {
+        let mut contexts = SamplingChannelRuntimeContexts::new(self.channels.len());
+        contexts.set(channel_id, context.to_vec())?;
+        self.forward_with_runtime_contexts(channel_id, coordinates, &contexts)
+    }
+
+    pub fn forward_with_runtime_contexts(
+        &self,
+        channel_id: SamplingChannelId,
+        coordinates: &[f64],
+        contexts: &SamplingChannelRuntimeContexts,
     ) -> Result<SamplingChannelBridgeEvaluation> {
         let channel_index = channel_id.0;
         let channel =
@@ -588,7 +1373,7 @@ impl SamplingChannelBridge {
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
                     channel: channel_id,
                 })?;
-        let map = channel.forward(coordinates)?;
+        let map = channel.forward_with_context(coordinates, contexts.get(channel_id)?)?;
         if map.point.len() != self.dimensions {
             return Err(SamplingChannelBridgeError::DimensionMismatch {
                 channel: channel.name.clone(),
@@ -597,7 +1382,7 @@ impl SamplingChannelBridge {
             }
             .into());
         }
-        let partition = self.partition(&map.point)?;
+        let partition = self.partition_with_contexts(&map.point, contexts)?;
         Ok(SamplingChannelBridgeEvaluation {
             channel_id,
             channel_name: channel.name.clone(),
@@ -607,10 +1392,44 @@ impl SamplingChannelBridge {
         })
     }
 
+    /// Forward a channel using the per-sample deferred cross-section state.
+    /// The host must have attached a solved cut/side context for the selected
+    /// channel before this method is called.
+    pub fn forward_with_deferred_state(
+        &self,
+        channel_id: SamplingChannelId,
+        coordinates: &[f64],
+        state: &DeferredCrossSectionSamplingState,
+    ) -> Result<SamplingChannelBridgeEvaluation> {
+        state.validate_bridge(self.dimensions, self.channels.len())?;
+        state.validate_channels([channel_id])?;
+        self.forward_with_runtime_contexts(channel_id, coordinates, state.runtime_contexts())
+    }
+
     pub fn inverse(
         &self,
         channel_id: SamplingChannelId,
         raw_coordinates: &[f64],
+    ) -> Result<SamplingChannelBridgeEvaluation> {
+        self.inverse_with_context(channel_id, raw_coordinates, &[])
+    }
+
+    pub fn inverse_with_context(
+        &self,
+        channel_id: SamplingChannelId,
+        raw_coordinates: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingChannelBridgeEvaluation> {
+        let mut contexts = SamplingChannelRuntimeContexts::new(self.channels.len());
+        contexts.set(channel_id, context.to_vec())?;
+        self.inverse_with_runtime_contexts(channel_id, raw_coordinates, &contexts)
+    }
+
+    pub fn inverse_with_runtime_contexts(
+        &self,
+        channel_id: SamplingChannelId,
+        raw_coordinates: &[f64],
+        contexts: &SamplingChannelRuntimeContexts,
     ) -> Result<SamplingChannelBridgeEvaluation> {
         let channel_index = channel_id.0;
         let channel =
@@ -619,8 +1438,8 @@ impl SamplingChannelBridge {
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
                     channel: channel_id,
                 })?;
-        let map = channel.inverse(raw_coordinates)?;
-        let partition = self.partition(raw_coordinates)?;
+        let map = channel.inverse_with_context(raw_coordinates, contexts.get(channel_id)?)?;
+        let partition = self.partition_with_contexts(raw_coordinates, contexts)?;
         Ok(SamplingChannelBridgeEvaluation {
             channel_id,
             channel_name: channel.name.clone(),
@@ -628,6 +1447,18 @@ impl SamplingChannelBridge {
             map,
             partition,
         })
+    }
+
+    /// Invert a channel using the per-sample deferred cross-section state.
+    pub fn inverse_with_deferred_state(
+        &self,
+        channel_id: SamplingChannelId,
+        raw_coordinates: &[f64],
+        state: &DeferredCrossSectionSamplingState,
+    ) -> Result<SamplingChannelBridgeEvaluation> {
+        state.validate_bridge(self.dimensions, self.channels.len())?;
+        state.validate_channels([channel_id])?;
+        self.inverse_with_runtime_contexts(channel_id, raw_coordinates, state.runtime_contexts())
     }
 }
 
@@ -641,20 +1472,75 @@ impl CompiledSamplingChannel {
     }
 
     pub fn forward(&self, coordinates: &[f64]) -> Result<SamplingMapEvaluation> {
-        self.map.forward(coordinates)
+        self.forward_with_context(coordinates, &[])
+    }
+
+    pub fn forward_with_context(
+        &self,
+        coordinates: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingMapEvaluation> {
+        self.map.forward_with_context(coordinates, context)
     }
 
     pub fn inverse(&self, point: &[f64]) -> Result<SamplingMapEvaluation> {
-        self.map.inverse(point)
+        self.inverse_with_context(point, &[])
+    }
+
+    pub fn inverse_with_context(
+        &self,
+        point: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingMapEvaluation> {
+        self.map.inverse_with_context(point, context)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SamplingChannelCompileError {
     EmptyMasterGraph,
-    UnsupportedMap { channel: String, map: String },
-    MissingSurfaceGeometry { channel: String, edges: Vec<usize> },
-    InvalidChannel { channel: String, error: String },
+    MissingPreparedCutContext {
+        channel: String,
+        map: String,
+    },
+    InvalidPreparedCutContext {
+        channel: String,
+        error: String,
+    },
+    UnsupportedMap {
+        channel: String,
+        map: String,
+    },
+    /// A soft or collinear selector was parsed successfully but cannot yet be
+    /// turned into a map-density channel from edge ids alone.  These targets
+    /// need a graph-resolved frame and an explicit radial/angular profile;
+    /// retaining this distinction avoids accidentally treating a proxy score
+    /// as the selected channel's integration Jacobian.
+    UnsupportedSingularPrimitive {
+        channel: String,
+        primitive: String,
+        reason: String,
+    },
+    MissingSurfaceGeometry {
+        channel: String,
+        edges: Vec<usize>,
+        subspace_lmb: Vec<usize>,
+    },
+    MissingLmbFrameMap {
+        channel: String,
+        basis_id: Option<usize>,
+        edges: Vec<usize>,
+        parent_lmb: Vec<usize>,
+    },
+    InvalidLmbFrameMap {
+        channel: String,
+        basis_id: usize,
+        error: String,
+    },
+    InvalidChannel {
+        channel: String,
+        error: String,
+    },
 }
 
 impl fmt::Display for SamplingChannelCompileError {
@@ -663,13 +1549,50 @@ impl fmt::Display for SamplingChannelCompileError {
             Self::EmptyMasterGraph => {
                 formatter.write_str("sampling channel compilation requires a master graph")
             }
+            Self::MissingPreparedCutContext { channel, map } => write!(
+                formatter,
+                "sampling channel `{channel}` uses `{map}` but no prepared cut context was supplied (graph, cut, orientation, side, parent LMB and t* are required)"
+            ),
+            Self::InvalidPreparedCutContext { channel, error } => write!(
+                formatter,
+                "sampling channel `{channel}` has invalid prepared cut context: {error}"
+            ),
             Self::UnsupportedMap { channel, map } => write!(
                 formatter,
                 "sampling channel `{channel}` uses map `{map}`, which needs prepared graph context before it can be compiled"
             ),
-            Self::MissingSurfaceGeometry { channel, edges } => write!(
+            Self::UnsupportedSingularPrimitive {
+                channel,
+                primitive,
+                reason,
+            } => write!(
                 formatter,
-                "sampling channel `{channel}` has no prepared surface geometry for master-graph edges {edges:?}"
+                "sampling channel `{channel}` uses singular primitive `{primitive}`, which is not compiled: {reason}"
+            ),
+            Self::MissingSurfaceGeometry {
+                channel,
+                edges,
+                subspace_lmb,
+            } => write!(
+                formatter,
+                "sampling channel `{channel}` has no prepared surface geometry for energy edges {edges:?} in subspace_lmb {subspace_lmb:?}"
+            ),
+            Self::MissingLmbFrameMap {
+                channel,
+                basis_id,
+                edges,
+                parent_lmb,
+            } => write!(
+                formatter,
+                "sampling channel `{channel}` uses non-master LMB edges {edges:?} (parent LMB {parent_lmb:?}) but no affine frame map was supplied for basis {basis_id:?}"
+            ),
+            Self::InvalidLmbFrameMap {
+                channel,
+                basis_id,
+                error,
+            } => write!(
+                formatter,
+                "sampling channel `{channel}` has invalid affine frame map for basis {basis_id}: {error}"
             ),
             Self::InvalidChannel { channel, error } => write!(
                 formatter,
@@ -681,14 +1604,225 @@ impl fmt::Display for SamplingChannelCompileError {
 
 impl std::error::Error for SamplingChannelCompileError {}
 
-/// Compile one radial surface in its native subspace and embed it together
+fn validate_prepared_context_identity(
+    context: &SamplingChannelCompileContext,
+    prepared: &PreparedCutSamplingContext,
+    channel: &str,
+) -> std::result::Result<(), SamplingChannelCompileError> {
+    if context.master_graph != prepared.graph_name {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "prepared graph `{}` does not match master graph `{}`",
+                prepared.graph_name, context.master_graph
+            ),
+        });
+    }
+    if let Some(graph_id) = context.graph_id {
+        if graph_id != prepared.graph_id {
+            return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+                channel: channel.to_owned(),
+                error: format!(
+                    "prepared graph id {} does not match compile-context graph id {}",
+                    prepared.graph_id, graph_id
+                ),
+            });
+        }
+    }
+    if prepared.parent_lmb != context.parent_lmb {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "prepared parent LMB {:?} does not match compile context {:?}",
+                prepared.parent_lmb, context.parent_lmb
+            ),
+        });
+    }
+    if let Some(cut_id) = context.cut_id {
+        if cut_id != prepared.cut_id {
+            return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+                channel: channel.to_owned(),
+                error: format!(
+                    "prepared cut id {} does not match compile-context cut id {}",
+                    prepared.cut_id, cut_id
+                ),
+            });
+        }
+    }
+    if context.orientation.is_some() && context.orientation != prepared.orientation {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "prepared orientation {:?} does not match compile-context orientation {:?}",
+                prepared.orientation, context.orientation
+            ),
+        });
+    }
+    if context.side.is_some() && context.side != Some(prepared.side) {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "prepared side {:?} does not match compile-context side {:?}",
+                prepared.side, context.side
+            ),
+        });
+    }
+    if !prepared.rescaling_t_star.is_finite() || prepared.rescaling_t_star <= 0.0 {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "cut rescaling t* must be finite and positive, got {}",
+                prepared.rescaling_t_star
+            ),
+        });
+    }
+    Ok(())
+}
+
+fn prepared_map_name(definition: &SamplingMapDefinition) -> Option<&'static str> {
+    match definition {
+        SamplingMapDefinition::PhaseSpace(_) => Some("phase_space"),
+        SamplingMapDefinition::Left(_) => Some("left"),
+        SamplingMapDefinition::Right(_) => Some("right"),
+        SamplingMapDefinition::Product(maps)
+        | SamplingMapDefinition::Intersect(maps)
+        | SamplingMapDefinition::Then(maps) => maps.iter().find_map(prepared_map_name),
+        _ => None,
+    }
+}
+
+/// Whether a map can only be evaluated after a physical cut host has supplied
+/// solved LU/t* data.  This is deliberately kept as a structural query: it
+/// does not attempt to infer a cut, a side, or a map Jacobian from edge ids.
+/// The process evaluator uses it as a typed boundary check. Ordinary
+/// `lmb`/`surface` maps and a standalone graph-resolved `phase_space(cut)`
+/// chart remain available before LU preparation; that cut chart solves its
+/// own directional radius while retaining the full raw integration volume.
+pub(crate) fn sampling_map_requires_deferred_cut_context(
+    definition: &SamplingMapDefinition,
+) -> bool {
+    // A standalone physical-cut chart maps the complete raw radius and
+    // angles. It solves its own directional cut radius and retains the LU
+    // auxiliary scale, so it has no sampled side data to prepare first.
+    !matches!(definition, SamplingMapDefinition::PhaseSpace(inner)
+        if matches!(inner.as_ref(), SamplingMapDefinition::Cut(_)))
+        && prepared_map_name(definition).is_some()
+}
+
+/// Validate the physical-cut boundary before any graph-independent map is
+/// compiled. A standalone cut chart supplies its exact full-frame map and
+/// graph cut identity instead of sampled side data. Side-qualified maps still
+/// require the atomic solved context; accepting them without this boundary
+/// would make stale cut or t* data indistinguishable from valid coordinates.
+fn validate_prepared_map_context(
+    channel: &str,
+    definition: &SamplingMapDefinition,
+    context: &SamplingChannelCompileContext,
+) -> std::result::Result<(), SamplingChannelCompileError> {
+    if let SamplingMapDefinition::PhaseSpace(inner) = definition
+        && let SamplingMapDefinition::Cut(edges) = inner.as_ref()
+        && context.physical_cut_ids.contains_key(edges)
+        && context
+            .implicit_surfaces
+            .contains_key(&(edges.clone(), context.parent_lmb.clone()))
+    {
+        return Ok(());
+    }
+    let Some(map_name) = prepared_map_name(definition) else {
+        return Ok(());
+    };
+    let Some(prepared) = context.prepared_cut_context.as_ref() else {
+        return Err(SamplingChannelCompileError::MissingPreparedCutContext {
+            channel: channel.to_owned(),
+            map: map_name.to_owned(),
+        });
+    };
+    validate_prepared_context_identity(context, prepared, channel)?;
+    if context.graph_id.is_none() {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: "compile context omitted graph id for a physical-cut map".to_owned(),
+        });
+    }
+    if prepared.orientation.is_none() || context.orientation.is_none() {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: "physical-cut map requires an explicit orientation".to_owned(),
+        });
+    }
+    if context.cut_id != Some(prepared.cut_id) {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "physical-cut map requires cut id {}, compile context supplies {:?}",
+                prepared.cut_id, context.cut_id
+            ),
+        });
+    }
+    if context.side != Some(prepared.side) {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "physical-cut map requires prepared side {:?}, compile context supplies {:?}",
+                prepared.side, context.side
+            ),
+        });
+    }
+    match definition {
+        SamplingMapDefinition::PhaseSpace(inner) => {
+            if !matches!(inner.as_ref(), SamplingMapDefinition::Cut(_)) {
+                return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+                    channel: channel.to_owned(),
+                    error: "phase_space(...) must wrap exactly one cut(...) map".to_owned(),
+                });
+            }
+        }
+        SamplingMapDefinition::Left(inner) => {
+            if context.side != Some(super::SamplingCutSide::Left) {
+                return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+                    channel: channel.to_owned(),
+                    error: format!(
+                        "left(...) requires the left prepared side, got {:?}",
+                        context.side
+                    ),
+                });
+            }
+            validate_prepared_map_context(channel, inner, context)?;
+        }
+        SamplingMapDefinition::Right(inner) => {
+            if context.side != Some(super::SamplingCutSide::Right) {
+                return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+                    channel: channel.to_owned(),
+                    error: format!(
+                        "right(...) requires the right prepared side, got {:?}",
+                        context.side
+                    ),
+                });
+            }
+            validate_prepared_map_context(channel, inner, context)?;
+        }
+        SamplingMapDefinition::Product(maps)
+        | SamplingMapDefinition::Intersect(maps)
+        | SamplingMapDefinition::Then(maps) => {
+            for map in maps {
+                validate_prepared_map_context(channel, map, context)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Compile one radial surface in its native subspace and optionally embed it together
 /// with the ordinary map on the complementary parent-LMB edges.  The output
 /// permutation is explicit, so sharing a surface across graph channels never
 /// relies on an implicit edge ordering or a silent local-frame assumption.
 fn compile_surface_map(
     channel: &str,
+    surface_edges: &[usize],
     edges: &[usize],
     context: &SamplingChannelCompileContext,
+    embed_complement: bool,
 ) -> Result<CompiledSamplingMap, SamplingChannelCompileError> {
     if edges.is_empty() {
         return Err(SamplingChannelCompileError::InvalidChannel {
@@ -714,37 +1848,57 @@ fn compile_surface_map(
             ),
         });
     }
-    let Some(geometry) = context.surfaces.get(edges) else {
-        return Err(SamplingChannelCompileError::MissingSurfaceGeometry {
-            channel: channel.to_owned(),
-            edges: edges.to_vec(),
-        });
-    };
     let expected_dimension = 3 * edges.len();
-    if geometry.center.len() != expected_dimension {
-        return Err(SamplingChannelCompileError::InvalidChannel {
+    let key = (surface_edges.to_vec(), edges.to_vec());
+    let surface = if let Some(surface) = context.implicit_surfaces.get(&key) {
+        if surface.dimension() != expected_dimension {
+            return Err(SamplingChannelCompileError::InvalidChannel {
+                channel: channel.to_owned(),
+                error: format!(
+                    "prepared implicit surface has dimension {}, expected {}",
+                    surface.dimension(),
+                    expected_dimension
+                ),
+            });
+        }
+        CompiledSamplingMap::ImplicitSurface(surface.clone())
+    } else {
+        let Some(geometry) = context.surfaces.get(&key) else {
+            return Err(SamplingChannelCompileError::MissingSurfaceGeometry {
+                channel: channel.to_owned(),
+                edges: surface_edges.to_vec(),
+                subspace_lmb: edges.to_vec(),
+            });
+        };
+        if geometry.center.len() != expected_dimension {
+            return Err(SamplingChannelCompileError::InvalidChannel {
+                channel: channel.to_owned(),
+                error: format!(
+                    "surface centre has dimension {}, expected {} for edges {edges:?}",
+                    geometry.center.len(),
+                    expected_dimension
+                ),
+            });
+        }
+        let surface = SurfaceRadialMap::new(
+            expected_dimension,
+            geometry.center.clone(),
+            geometry.threshold_radius,
+            geometry.beta,
+            geometry.power,
+        )
+        .map_err(|error| SamplingChannelCompileError::InvalidChannel {
             channel: channel.to_owned(),
-            error: format!(
-                "surface centre has dimension {}, expected {} for edges {edges:?}",
-                geometry.center.len(),
-                expected_dimension
-            ),
-        });
+            error: error.to_string(),
+        })?;
+        CompiledSamplingMap::Surface(surface)
+    };
+    if !embed_complement {
+        return Ok(surface);
     }
-    let surface = SurfaceRadialMap::new(
-        expected_dimension,
-        geometry.center.clone(),
-        geometry.threshold_radius,
-        geometry.beta,
-        geometry.power,
-    )
-    .map_err(|error| SamplingChannelCompileError::InvalidChannel {
-        channel: channel.to_owned(),
-        error: error.to_string(),
-    })?;
     if edges.len() == context.n_loop_momenta {
         if edges == context.parent_lmb {
-            return Ok(CompiledSamplingMap::Surface(surface));
+            return Ok(surface);
         }
         let output_indices = edges
             .iter()
@@ -800,8 +1954,340 @@ fn compile_surface_map(
     })
 }
 
+#[derive(Clone, Copy)]
+enum PartitionedMapKind {
+    Product,
+    Then,
+}
+
+impl PartitionedMapKind {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Product => "product",
+            Self::Then => "then",
+        }
+    }
+}
+
+fn compile_partitioned_children(
+    kind: PartitionedMapKind,
+    channel: &str,
+    maps: &[SamplingMapDefinition],
+    channel_subspace_lmb: &[usize],
+    context: &SamplingChannelCompileContext,
+) -> Result<
+    (
+        Vec<Box<dyn SamplingMapComponent>>,
+        Vec<Vec<usize>>,
+        BTreeMap<usize, usize>,
+    ),
+    SamplingChannelCompileError,
+> {
+    let parent_positions = context
+        .parent_lmb
+        .iter()
+        .enumerate()
+        .map(|(position, edge)| (*edge, position))
+        .collect::<BTreeMap<_, _>>();
+    let mut used_edges = BTreeMap::<usize, usize>::new();
+    let mut children = Vec::<Box<dyn SamplingMapComponent>>::with_capacity(maps.len());
+    let mut child_blocks = Vec::<Vec<usize>>::with_capacity(maps.len());
+    let mut surface_child = None;
+
+    let map_name = kind.name();
+    for (child_index, map) in maps.iter().enumerate() {
+        let (block_edges, compiled) = match map {
+            SamplingMapDefinition::Lmb(edges) | SamplingMapDefinition::Complement(edges) => {
+                if edges.is_empty() {
+                    return Err(SamplingChannelCompileError::InvalidChannel {
+                        channel: channel.to_owned(),
+                        error: format!("{map_name} child {child_index} has an empty edge block"),
+                    });
+                }
+                let compiled = SamplingMapKernel::new(
+                    map.clone(),
+                    context.parameterization_settings.clone(),
+                    context.e_cm,
+                    edges.len(),
+                )
+                .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+                    channel: channel.to_owned(),
+                    error: format!("{map_name} child {child_index} {map:?} is invalid: {error}"),
+                })?;
+                (edges.clone(), CompiledSamplingMap::Lmb(compiled))
+            }
+            SamplingMapDefinition::Surface(surface_edges) => {
+                if let Some(previous) = surface_child {
+                    return Err(SamplingChannelCompileError::InvalidChannel {
+                        channel: channel.to_owned(),
+                        error: format!(
+                            "{map_name} contains more than one surface child; surface children at indices {} and {}",
+                            previous, child_index
+                        ),
+                    });
+                }
+                surface_child = Some(child_index);
+                if channel_subspace_lmb.is_empty() {
+                    return Err(SamplingChannelCompileError::InvalidChannel {
+                        channel: channel.to_owned(),
+                        error: format!(
+                            "{map_name} surface child requires non-empty channel subspace_lmb"
+                        ),
+                    });
+                }
+                let compiled = compile_surface_map(
+                    channel,
+                    surface_edges,
+                    channel_subspace_lmb,
+                    context,
+                    false,
+                )?;
+                (channel_subspace_lmb.to_vec(), compiled)
+            }
+            unsupported => {
+                return Err(unsupported_map_error(
+                    channel,
+                    format!("{map_name} child {child_index}: {unsupported:?}"),
+                    unsupported,
+                ));
+            }
+        };
+
+        for edge in &block_edges {
+            if !parent_positions.contains_key(edge) {
+                return Err(SamplingChannelCompileError::InvalidChannel {
+                    channel: channel.to_owned(),
+                    error: format!(
+                        "{map_name} child {child_index} block {block_edges:?} contains edge {edge}, which is outside parent LMB {:?}",
+                        context.parent_lmb
+                    ),
+                });
+            }
+            if let Some(previous) = used_edges.insert(*edge, child_index) {
+                return Err(SamplingChannelCompileError::InvalidChannel {
+                    channel: channel.to_owned(),
+                    error: format!(
+                        "{map_name} child {child_index} block {block_edges:?} overlaps child {previous} on parent edge {edge}; child blocks must be disjoint and cover parent LMB {:?}",
+                        context.parent_lmb
+                    ),
+                });
+            }
+        }
+        child_blocks.push(block_edges);
+        children.push(Box::new(compiled));
+    }
+
+    let missing = context
+        .parent_lmb
+        .iter()
+        .copied()
+        .filter(|edge| !used_edges.contains_key(edge))
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Err(SamplingChannelCompileError::InvalidChannel {
+            channel: channel.to_owned(),
+            error: format!(
+                "{map_name} child blocks leave parent edges {missing:?} uncovered; blocks {:?} must cover parent LMB {:?}",
+                child_blocks, context.parent_lmb
+            ),
+        });
+    }
+
+    Ok((children, child_blocks, parent_positions))
+}
+
+/// Keep parsed soft/collinear syntax from becoming a silently approximate
+/// channel.  A useful singular proposal must be resolved against the actual
+/// routed vectors (and, for collinearity, a relative angular frame) and carry
+/// a normalized profile.  Neither can be reconstructed from the edge labels
+/// in a graph-independent compiler.  Until those ingredients are supplied,
+/// report a capability error rather than installing a proxy-only map in the
+/// exact-density catalogue.
+fn unsupported_map_error(
+    channel: &str,
+    map_label: String,
+    map: &SamplingMapDefinition,
+) -> SamplingChannelCompileError {
+    match singular_primitive(map) {
+        Some(SamplingMapDefinition::Soft(edge)) => {
+            SamplingChannelCompileError::UnsupportedSingularPrimitive {
+                channel: channel.to_owned(),
+                primitive: format!("soft({edge})"),
+                reason: "a graph-resolved routed three-momentum frame and a normalized radial profile are required; edge ids alone do not define an exact push-forward density".to_owned(),
+            }
+        }
+        Some(SamplingMapDefinition::Collinear(a, b)) => {
+            SamplingChannelCompileError::UnsupportedSingularPrimitive {
+                channel: channel.to_owned(),
+                primitive: format!("collinear({a},{b})"),
+                reason: "a graph-resolved relative angular frame, branch/support rules and a normalized angular profile are required; edge ids alone do not define an exact push-forward density".to_owned(),
+            }
+        }
+        Some(other) => SamplingChannelCompileError::UnsupportedMap {
+            channel: channel.to_owned(),
+            map: format!("{}: unsupported primitive {other:?}", map_label),
+        },
+        None => SamplingChannelCompileError::UnsupportedMap {
+            channel: channel.to_owned(),
+            map: map_label,
+        },
+    }
+}
+
+fn singular_primitive(map: &SamplingMapDefinition) -> Option<&SamplingMapDefinition> {
+    match map {
+        SamplingMapDefinition::Soft(_) | SamplingMapDefinition::Collinear(_, _) => Some(map),
+        SamplingMapDefinition::Product(maps)
+        | SamplingMapDefinition::Intersect(maps)
+        | SamplingMapDefinition::Then(maps) => maps.iter().find_map(singular_primitive),
+        SamplingMapDefinition::PhaseSpace(map)
+        | SamplingMapDefinition::Left(map)
+        | SamplingMapDefinition::Right(map) => singular_primitive(map),
+        _ => None,
+    }
+}
+
+/// Compile a direct-product channel whose children explicitly partition the
+/// parent LMB.  The surface child is the only child whose active coordinate
+/// block comes from channel metadata (`subspace_lmb`); its `surface(...)`
+/// arguments identify the physical energy constraints.  Ordinary `lmb(...)`
+/// and `complement(...)` children retain their own local edge ordering.
+fn compile_product_map(
+    channel: &str,
+    maps: &[SamplingMapDefinition],
+    channel_subspace_lmb: &[usize],
+    context: &SamplingChannelCompileContext,
+) -> Result<CompiledSamplingMap, SamplingChannelCompileError> {
+    let (children, child_blocks, parent_positions) = compile_partitioned_children(
+        PartitionedMapKind::Product,
+        channel,
+        maps,
+        channel_subspace_lmb,
+        context,
+    )?;
+
+    let output_indices = child_blocks
+        .iter()
+        .flat_map(|block| {
+            block.iter().flat_map(|edge| {
+                let position = parent_positions[edge];
+                [3 * position, 3 * position + 1, 3 * position + 2]
+            })
+        })
+        .collect::<Vec<_>>();
+    SamplingMapEmbedding::product(children, output_indices)
+        .map(CompiledSamplingMap::Embedded)
+        .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+            channel: channel.to_owned(),
+            error: format!("product embedding is invalid: {error}"),
+        })
+}
+
+/// Compile an ordered conditional channel whose children partition the parent
+/// LMB in the same way as [`compile_product_map`].  The only semantic
+/// difference is that each later child receives all previous output blocks as
+/// context.  This is deliberately kept as a bounded compiler route: ordinary
+/// `lmb`/`complement` blocks and at most one active `surface` block are
+/// accepted, while physical cut and multi-surface compositions remain
+/// process-layer work.
+fn compile_then_map(
+    channel: &str,
+    maps: &[SamplingMapDefinition],
+    channel_subspace_lmb: &[usize],
+    context: &SamplingChannelCompileContext,
+) -> Result<CompiledSamplingMap, SamplingChannelCompileError> {
+    let (children, child_blocks, parent_positions) = compile_partitioned_children(
+        PartitionedMapKind::Then,
+        channel,
+        maps,
+        channel_subspace_lmb,
+        context,
+    )?;
+
+    let output_indices = child_blocks
+        .iter()
+        .flat_map(|block| {
+            block.iter().flat_map(|edge| {
+                let position = parent_positions[edge];
+                [3 * position, 3 * position + 1, 3 * position + 2]
+            })
+        })
+        .collect::<Vec<_>>();
+    let composition = SamplingMapComposition::then(children).map_err(|error| {
+        SamplingChannelCompileError::InvalidChannel {
+            channel: channel.to_owned(),
+            error: format!("then composition is invalid: {error}"),
+        }
+    })?;
+    SamplingMapEmbedding::from_composition(composition, output_indices)
+        .map(CompiledSamplingMap::Embedded)
+        .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+            channel: channel.to_owned(),
+            error: format!("then embedding is invalid: {error}"),
+        })
+}
+
+fn compile_lmb_map(
+    channel: &str,
+    basis_id: Option<usize>,
+    edges: &[usize],
+    context: &SamplingChannelCompileContext,
+) -> Result<CompiledSamplingMap, SamplingChannelCompileError> {
+    let definition = SamplingMapDefinition::Lmb(edges.to_vec());
+    let lmb = SamplingMapKernel::new(
+        definition,
+        context.parameterization_settings.clone(),
+        context.e_cm,
+        context.n_loop_momenta,
+    )
+    .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+        channel: channel.to_owned(),
+        error: error.to_string(),
+    })?;
+    if edges == context.parent_lmb {
+        return Ok(CompiledSamplingMap::Lmb(lmb));
+    }
+    let Some(basis_id) = basis_id else {
+        return Err(SamplingChannelCompileError::MissingLmbFrameMap {
+            channel: channel.to_owned(),
+            basis_id: None,
+            edges: edges.to_vec(),
+            parent_lmb: context.parent_lmb.clone(),
+        });
+    };
+    let Some(frame) = context.lmb_frame_maps.get(&basis_id) else {
+        return Err(SamplingChannelCompileError::MissingLmbFrameMap {
+            channel: channel.to_owned(),
+            basis_id: Some(basis_id),
+            edges: edges.to_vec(),
+            parent_lmb: context.parent_lmb.clone(),
+        });
+    };
+    let expected_dimension = 3 * context.n_loop_momenta;
+    if frame.dimension() != expected_dimension {
+        return Err(SamplingChannelCompileError::InvalidLmbFrameMap {
+            channel: channel.to_owned(),
+            basis_id,
+            error: format!(
+                "affine frame dimension {} does not match parent raw dimension {expected_dimension}",
+                frame.dimension()
+            ),
+        });
+    }
+    Ok(CompiledSamplingMap::AffineLmb {
+        lmb,
+        frame: frame.clone(),
+    })
+}
+
 impl SamplingChannelCatalogue {
-    pub fn lmb_entries(&self) -> impl Iterator<Item = (usize, &[usize])> {
+    /// Return generated-LMB metadata carried by canonical catalogue entries.
+    ///
+    /// The returned `basis_id` is an implementation detail used to prepare
+    /// affine frame maps; it is deliberately not a channel index.  Callers
+    /// that need the production channel axis must enumerate `entries` and
+    /// assign [`SamplingChannelId`] from the entry position.
+    pub fn lmb_basis_entries(&self) -> impl Iterator<Item = (usize, &[usize])> {
         self.entries.iter().filter_map(|entry| match entry {
             SamplingCatalogueEntry::Lmb {
                 basis_id, edges, ..
@@ -819,12 +2305,60 @@ impl SamplingChannelCatalogue {
         })
     }
 
-    /// Compile the ordinary LMB and radial surface entries in this catalogue.
+    /// Audit ordinary full-domain and elementary soft coverage using the same
+    /// catalogue entries that drive production channel enumeration.
+    pub fn coverage_report(
+        &self,
+        all_lmbs: &[(usize, Vec<usize>)],
+        massless_edges: &[usize],
+    ) -> SamplingCoverageReport {
+        let selected_lmbs = self
+            .entries
+            .iter()
+            .filter_map(|entry| match entry {
+                SamplingCatalogueEntry::Lmb {
+                    basis_id, edges, ..
+                } => Some((*basis_id, edges.as_slice())),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        // A zero-loop graph has a zero-dimensional momentum domain and needs
+        // no ordinary LMB coordinate block to cover it.
+        let has_full_domain_lmb = !selected_lmbs.is_empty() || all_lmbs.is_empty();
+        let relevant_massless = massless_edges
+            .iter()
+            .copied()
+            .filter(|edge| all_lmbs.iter().any(|(_, lmb)| lmb.contains(edge)))
+            .collect::<BTreeSet<_>>();
+        let covered_massless_loop_edges = relevant_massless
+            .iter()
+            .copied()
+            .filter(|edge| selected_lmbs.iter().any(|(_, lmb)| lmb.contains(edge)))
+            .collect::<Vec<_>>();
+        let covered_set = covered_massless_loop_edges
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let missing_massless_loop_edges = relevant_massless
+            .difference(&covered_set)
+            .copied()
+            .collect();
+        SamplingCoverageReport {
+            has_full_domain_lmb,
+            covered_massless_loop_edges,
+            missing_massless_loop_edges,
+        }
+    }
+
+    /// Compile ordinary LMB/surface entries and the bounded conditional
+    /// `then(lmb|complement, surface?)` route in this catalogue.
     ///
     /// Surface geometry is looked up by its canonical master-graph edge list.
-    /// Maps such as `cut`, `intersect` and `then` are deliberately rejected
-    /// here until the process has prepared their conditional kinematics; this
-    /// avoids creating a numerically plausible map with an incorrect frame.
+    /// Standalone `phase_space(cut(...))` entries use the graph's exact
+    /// full-frame radial evaluator, retaining the auxiliary LU scale. Bare
+    /// `cut`, `intersect`, and side-qualified compositions remain rejected
+    /// until their conditional kinematics are prepared; this avoids creating
+    /// a numerically plausible map with an incorrect frame.
     pub fn compile(
         &self,
         context: &SamplingChannelCompileContext,
@@ -849,37 +2383,23 @@ impl SamplingChannelCatalogue {
         }
         let mut compiled = Vec::with_capacity(self.entries.len());
         for entry in &self.entries {
-            let (name, basis_id, definition, map) = match entry {
+            let (name, basis_id, definition, map, singularity_proxy) = match entry {
                 SamplingCatalogueEntry::Lmb {
                     basis_id, edges, ..
                 } => {
-                    if edges != &context.parent_lmb {
-                        return Err(SamplingChannelCompileError::InvalidChannel {
-                            channel: format!("lmb[{basis_id}]"),
-                            error: format!(
-                                "LMB edges {edges:?} do not match master parent LMB {:?}; the graph-frame affine routing must be compiled before this channel can be sampled",
-                                context.parent_lmb
-                            ),
-                        });
-                    }
                     let definition = SamplingMapDefinition::Lmb(edges.clone());
-                    let map = SamplingMapKernel::new(
-                        definition.clone(),
-                        context.parameterization_settings.clone(),
-                        context.e_cm,
-                        context.n_loop_momenta,
-                    )
-                    .map_err(|error| {
-                        SamplingChannelCompileError::InvalidChannel {
-                            channel: format!("lmb[{basis_id}]"),
-                            error: error.to_string(),
-                        }
-                    })?;
+                    let map = compile_lmb_map(
+                        &format!("lmb[{basis_id}]"),
+                        Some(*basis_id),
+                        edges,
+                        context,
+                    )?;
                     (
                         format!("lmb[{basis_id}]"),
                         Some(*basis_id),
                         definition,
-                        CompiledSamplingMap::Lmb(map),
+                        map,
+                        None,
                     )
                 }
                 SamplingCatalogueEntry::Surface { edges, parent_lmb } => {
@@ -893,10 +2413,48 @@ impl SamplingChannelCatalogue {
                         });
                     }
                     let definition = SamplingMapDefinition::Surface(edges.clone());
-                    let map = compile_surface_map(&format!("surface:{edges:?}"), edges, context)?;
-                    (format!("surface:{edges:?}"), None, definition, map)
+                    let map = compile_surface_map(
+                        &format!("surface:{edges:?}"),
+                        edges,
+                        edges,
+                        context,
+                        true,
+                    )?;
+                    (format!("surface:{edges:?}"), None, definition, map, None)
                 }
                 SamplingCatalogueEntry::Named(channel) => {
+                    let physical_cut_ids = match &channel.map {
+                        SamplingMapDefinition::PhaseSpace(inner) => match inner.as_ref() {
+                            SamplingMapDefinition::Cut(edges) => {
+                                context.physical_cut_ids.get(edges)
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    if !channel.definition.on_cut.is_empty() {
+                        let cut_matches = physical_cut_ids.map_or_else(
+                            || {
+                                context.cut_id.is_some_and(|cut_id| {
+                                    channel.definition.on_cut.contains(&cut_id)
+                                })
+                            },
+                            |cut_ids| {
+                                cut_ids
+                                    .iter()
+                                    .any(|cut_id| channel.definition.on_cut.contains(cut_id))
+                            },
+                        );
+                        if !cut_matches {
+                            return Err(SamplingChannelCompileError::InvalidChannel {
+                                channel: channel.name.clone(),
+                                error: format!(
+                                    "channel declares on_cut {:?}, incompatible with prepared cut {:?} and graph-resolved cuts {:?}",
+                                    channel.definition.on_cut, context.cut_id, physical_cut_ids,
+                                ),
+                            });
+                        }
+                    }
                     if channel.definition.parent_lmb != context.parent_lmb {
                         return Err(SamplingChannelCompileError::InvalidChannel {
                             channel: channel.name.clone(),
@@ -907,47 +2465,157 @@ impl SamplingChannelCatalogue {
                         });
                     }
                     let definition = channel.map.clone();
-                    let map = match &definition {
-                        SamplingMapDefinition::Lmb(edges) => {
-                            if edges != &context.parent_lmb {
+                    match &definition {
+                        SamplingMapDefinition::Left(_) | SamplingMapDefinition::Right(_) => {
+                            let required_side =
+                                if matches!(&definition, SamplingMapDefinition::Left(_)) {
+                                    super::SamplingCutSide::Left
+                                } else {
+                                    super::SamplingCutSide::Right
+                                };
+                            if context.side != Some(required_side) {
                                 return Err(SamplingChannelCompileError::InvalidChannel {
                                     channel: channel.name.clone(),
                                     error: format!(
-                                        "LMB edges {edges:?} do not match master parent LMB {:?}; the graph-frame affine routing must be compiled before this channel can be sampled",
-                                        context.parent_lmb
+                                        "map `{definition:?}` requires prepared side {required_side:?}, but context supplies {:?}",
+                                        context.side
                                     ),
                                 });
                             }
-                            SamplingMapKernel::new(
+                        }
+                        _ => {}
+                    }
+                    validate_prepared_map_context(&channel.name, &definition, context)?;
+                    let map = match &definition {
+                        SamplingMapDefinition::Lmb(edges) => {
+                            let map = SamplingMapKernel::new(
                                 definition.clone(),
                                 context.parameterization_settings.clone(),
                                 context.e_cm,
                                 context.n_loop_momenta,
                             )
-                            .map(CompiledSamplingMap::Lmb)
                             .map_err(|error| {
                                 SamplingChannelCompileError::InvalidChannel {
                                     channel: channel.name.clone(),
                                     error: error.to_string(),
                                 }
-                            })?
+                            })?;
+                            if edges == &context.parent_lmb {
+                                CompiledSamplingMap::Lmb(map)
+                            } else {
+                                let frame = context.lmb_frame_maps_by_edges.get(edges).ok_or_else(
+                                    || SamplingChannelCompileError::MissingLmbFrameMap {
+                                        channel: channel.name.clone(),
+                                        basis_id: None,
+                                        edges: edges.clone(),
+                                        parent_lmb: context.parent_lmb.clone(),
+                                    },
+                                )?;
+                                if frame.dimension() != 3 * context.n_loop_momenta {
+                                    return Err(SamplingChannelCompileError::InvalidLmbFrameMap {
+                                        channel: channel.name.clone(),
+                                        basis_id: usize::MAX,
+                                        error: format!(
+                                            "affine frame routing has dimension {}, expected {}",
+                                            frame.dimension(),
+                                            3 * context.n_loop_momenta
+                                        ),
+                                    });
+                                }
+                                CompiledSamplingMap::AffineLmb {
+                                    lmb: map,
+                                    frame: frame.clone(),
+                                }
+                            }
+                        }
+                        SamplingMapDefinition::PhaseSpace(inner)
+                            if matches!(inner.as_ref(), SamplingMapDefinition::Cut(_)) =>
+                        {
+                            let SamplingMapDefinition::Cut(edges) = inner.as_ref() else {
+                                unreachable!()
+                            };
+                            if !channel.definition.subspace_lmb.is_empty()
+                                && channel.definition.subspace_lmb != context.parent_lmb
+                            {
+                                return Err(SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: "standalone phase_space(cut(...)) requires the complete parent LMB; cut/side composition is not implemented".to_owned(),
+                                });
+                            }
+                            let map = context.implicit_surfaces
+                                .get(&(edges.clone(), context.parent_lmb.clone()))
+                                .filter(|_| context.physical_cut_ids.contains_key(edges))
+                                .ok_or_else(|| SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: format!("phase_space(cut({edges:?})) requires a graph-resolved physical cut and its exact full-frame radial evaluator"),
+                                })?;
+                            CompiledSamplingMap::ImplicitSurface(map.clone())
                         }
                         SamplingMapDefinition::Surface(edges) => {
-                            compile_surface_map(&channel.name, edges, context)?
+                            let subspace = &channel.definition.subspace_lmb;
+                            if subspace.is_empty() {
+                                return Err(SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: "surface channel is missing subspace_lmb metadata"
+                                        .to_owned(),
+                                });
+                            }
+                            // `edges` identifies the physical energy constraints;
+                            // the radial chart itself is solved only in the
+                            // explicitly supplied active loop subspace.
+                            let _ = edges;
+                            compile_surface_map(&channel.name, edges, subspace, context, true)?
                         }
+                        SamplingMapDefinition::Product(maps) => compile_product_map(
+                            &channel.name,
+                            maps,
+                            &channel.definition.subspace_lmb,
+                            context,
+                        )?,
+                        SamplingMapDefinition::Then(maps) => compile_then_map(
+                            &channel.name,
+                            maps,
+                            &channel.definition.subspace_lmb,
+                            context,
+                        )?,
                         unsupported => {
-                            return Err(SamplingChannelCompileError::UnsupportedMap {
-                                channel: channel.name.clone(),
-                                map: format!("{unsupported:?}"),
-                            });
+                            return Err(unsupported_map_error(
+                                &channel.name,
+                                format!("{unsupported:?}"),
+                                unsupported,
+                            ));
                         }
                     };
-                    (channel.name.clone(), None, definition, map)
+                    let singularity_proxy = channel
+                        .definition
+                        .singularity_proxy
+                        .as_deref()
+                        .map(|source| {
+                            compile_sampling_proxy(source, 3 * context.n_loop_momenta).map_err(
+                                |error| SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: format!(
+                                        "invalid singularity_proxy expression `{source}`: {error}"
+                                    ),
+                                },
+                            )
+                        })
+                        .transpose()?;
+                    (
+                        channel.name.clone(),
+                        None,
+                        definition,
+                        map,
+                        singularity_proxy,
+                    )
                 }
             };
             let embedded_edges = match &map {
-                CompiledSamplingMap::Embedded(_) => context.parent_lmb.clone(),
+                CompiledSamplingMap::Embedded(_) | CompiledSamplingMap::AffineLmb { .. } => {
+                    context.parent_lmb.clone()
+                }
                 _ => match &definition {
+                    SamplingMapDefinition::PhaseSpace(_) => context.parent_lmb.clone(),
                     SamplingMapDefinition::Lmb(edges)
                     | SamplingMapDefinition::Surface(edges)
                     | SamplingMapDefinition::Complement(edges)
@@ -962,6 +2630,7 @@ impl SamplingChannelCatalogue {
                 definition,
                 embedded_edges,
                 map,
+                singularity_proxy,
             });
         }
         Ok(compiled)
@@ -986,9 +2655,10 @@ impl SamplingChannelCatalogue {
                     format!("{index}: surface edges={edges:?} parent_lmb={parent_lmb:?}")
                 }
                 SamplingCatalogueEntry::Named(channel) => format!(
-                    "{index}: {} around={} parent_lmb={:?} on_cut={:?}",
+                    "{index}: {} around={} subspace_lmb={:?} parent_lmb={:?} on_cut={:?}",
                     channel.name,
                     channel.definition.around,
+                    channel.definition.subspace_lmb,
                     channel.definition.parent_lmb,
                     channel.definition.on_cut
                 ),
@@ -1031,6 +2701,27 @@ pub fn build_sampling_channel_catalogue_with_surfaces(
     surface_edges: &[Vec<usize>],
     parent_lmb: &[usize],
 ) -> SamplingChannelCatalogue {
+    build_sampling_channel_catalogue_with_surfaces_and_coverage(
+        resolved,
+        all_lmbs,
+        optimized_lmbs,
+        surface_edges,
+        parent_lmb,
+        &[],
+    )
+}
+
+/// Expand a selection while applying the automatic elementary soft-coverage
+/// audit.  Physical E-surface candidates remain an explicit input prepared by
+/// the process layer; this helper never invents them from edge ids.
+pub fn build_sampling_channel_catalogue_with_surfaces_and_coverage(
+    resolved: &ResolvedSamplingChannelSelection,
+    all_lmbs: &[(usize, Vec<usize>)],
+    optimized_lmbs: &[usize],
+    surface_edges: &[Vec<usize>],
+    parent_lmb: &[usize],
+    massless_edges: &[usize],
+) -> SamplingChannelCatalogue {
     let mut entries = Vec::new();
     for selector in &resolved.selectors {
         let Some(preset) = selector.preset() else {
@@ -1044,12 +2735,46 @@ pub fn build_sampling_channel_catalogue_with_surfaces(
             }
             continue;
         };
-        let basis_ids: Vec<usize> = match preset {
+        let mut basis_ids: Vec<usize> = match preset {
             SamplingChannelPreset::Lmb => all_lmbs.iter().map(|(id, _)| *id).collect(),
-            SamplingChannelPreset::OptimizedLmb | SamplingChannelPreset::Surfaces => {
-                optimized_lmbs.to_vec()
-            }
+            SamplingChannelPreset::OptimizedLmb | SamplingChannelPreset::Surfaces => optimized_lmbs
+                .iter()
+                .copied()
+                .filter(|id| all_lmbs.iter().any(|(candidate, _)| candidate == id))
+                .collect(),
         };
+        if matches!(
+            preset,
+            SamplingChannelPreset::OptimizedLmb | SamplingChannelPreset::Surfaces
+        ) {
+            // A surface-aware or optimized preset must retain at least one
+            // ordinary full-domain channel when generated LMBs exist.  This
+            // is a deterministic fallback, not a hidden second catalogue.
+            if basis_ids.is_empty() && optimized_lmbs.is_empty() {
+                if let Some((basis_id, _)) = all_lmbs.first() {
+                    basis_ids.push(*basis_id);
+                }
+            }
+            // Add the smallest available ordinary channel exposing each
+            // elementary massless loop edge omitted by the heuristic.  This
+            // is intentionally weaker than a compound-soft guarantee.
+            if !basis_ids.is_empty() {
+                for edge in massless_edges {
+                    if basis_ids.iter().any(|basis_id| {
+                        all_lmbs
+                            .iter()
+                            .find(|(candidate, _)| candidate == basis_id)
+                            .is_some_and(|(_, lmb)| lmb.contains(edge))
+                    }) {
+                        continue;
+                    }
+                    if let Some((basis_id, _)) = all_lmbs.iter().find(|(_, lmb)| lmb.contains(edge))
+                    {
+                        basis_ids.push(*basis_id);
+                    }
+                }
+            }
+        }
         for basis_id in basis_ids {
             let Some((_, edges)) = all_lmbs.iter().find(|(id, _)| *id == basis_id) else {
                 continue;
@@ -1122,6 +2847,14 @@ pub enum SamplingSelectionError {
         channel: String,
         available: Vec<String>,
     },
+    MissingParentLmb {
+        graph: String,
+        channel: String,
+    },
+    MissingSubspaceLmb {
+        graph: String,
+        channel: String,
+    },
     InvalidChannelDefinition {
         graph: String,
         channel: String,
@@ -1150,6 +2883,14 @@ impl fmt::Display for SamplingSelectionError {
                 formatter,
                 "sampling channel `{graph}.{channel}` was selected but has no channel definition; available definitions: {available:?}"
             ),
+            Self::MissingParentLmb { graph, channel } => write!(
+                formatter,
+                "sampling channel `{graph}.{channel}` must declare a non-empty parent_lmb"
+            ),
+            Self::MissingSubspaceLmb { graph, channel } => write!(
+                formatter,
+                "sampling channel `{graph}.{channel}` contains a surface/cut map and must declare a non-empty subspace_lmb"
+            ),
             Self::InvalidChannelDefinition {
                 graph,
                 channel,
@@ -1168,7 +2909,9 @@ impl std::error::Error for SamplingSelectionError {}
 ///
 /// A graph-specific entry replaces the default list. If no entry exists for
 /// this graph, the default list applies. Entries within the selected list are
-/// additive and deduplicated in declaration order.
+/// additive and deduplicated in declaration order. An omitted default with no
+/// graph override selects `auto:optimized_lmb`; an explicit empty graph list
+/// stays empty. Counting and compiling channels share this default resolution.
 pub fn resolve_sampling_channel_selection(
     graph_name: &str,
     selection: &SamplingChannelSelection,
@@ -1195,6 +2938,19 @@ pub fn resolve_sampling_channel_selection_replacing_default(
     selection: &SamplingChannelSelection,
 ) -> Result<ResolvedSamplingChannelSelection, SamplingSelectionError> {
     resolve_selection(graph_name, selection, true)
+}
+
+fn contains_surface_map(map: &SamplingMapDefinition) -> bool {
+    match map {
+        SamplingMapDefinition::Surface(_) | SamplingMapDefinition::Cut(_) => true,
+        SamplingMapDefinition::Product(maps)
+        | SamplingMapDefinition::Intersect(maps)
+        | SamplingMapDefinition::Then(maps) => maps.iter().any(contains_surface_map),
+        SamplingMapDefinition::PhaseSpace(map)
+        | SamplingMapDefinition::Left(map)
+        | SamplingMapDefinition::Right(map) => contains_surface_map(map),
+        _ => false,
+    }
 }
 
 fn resolve_selection(
@@ -1224,6 +2980,11 @@ fn resolve_selection(
             .collect::<Vec<_>>()
     };
     let mut selectors = Vec::with_capacity(raw_selectors.len());
+    if raw_selectors.is_empty() && graph_selectors.is_none() {
+        selectors.push(SamplingChannelSelector::Preset(
+            SamplingChannelPreset::OptimizedLmb,
+        ));
+    }
     for raw in raw_selectors {
         let selector = SamplingChannelSelector::parse(raw)?;
         if !selectors.contains(&selector) {
@@ -1249,6 +3010,27 @@ fn resolve_selection(
                 available: available.clone(),
             });
         };
+        if definition.parent_lmb.is_empty() {
+            return Err(SamplingSelectionError::MissingParentLmb {
+                graph: graph_name.to_owned(),
+                channel: name.clone(),
+            });
+        }
+        let mut parent_seen = BTreeSet::new();
+        if definition
+            .parent_lmb
+            .iter()
+            .any(|edge| !parent_seen.insert(*edge))
+        {
+            return Err(SamplingSelectionError::InvalidChannelDefinition {
+                graph: graph_name.to_owned(),
+                channel: name.clone(),
+                error: format!(
+                    "parent_lmb {:?} must contain unique ordered edge ids",
+                    definition.parent_lmb
+                ),
+            });
+        }
         let map = SamplingMapDefinition::parse(&definition.around).map_err(|error| {
             SamplingSelectionError::InvalidChannelDefinition {
                 graph: graph_name.to_owned(),
@@ -1256,6 +3038,40 @@ fn resolve_selection(
                 error: error.to_string(),
             }
         })?;
+        if let Some(proxy) = definition.singularity_proxy.as_deref() {
+            let _ = try_parse!(proxy.trim()).map_err(|error| {
+                SamplingSelectionError::InvalidChannelDefinition {
+                    graph: graph_name.to_owned(),
+                    channel: name.clone(),
+                    error: format!(
+                        "failed to parse singularity_proxy `{proxy}` with Symbolica: {error}"
+                    ),
+                }
+            })?;
+        }
+        if contains_surface_map(&map) {
+            if definition.subspace_lmb.is_empty() {
+                return Err(SamplingSelectionError::MissingSubspaceLmb {
+                    graph: graph_name.to_owned(),
+                    channel: name.clone(),
+                });
+            }
+            let mut seen = BTreeSet::new();
+            if definition
+                .subspace_lmb
+                .iter()
+                .any(|edge| !seen.insert(*edge) || !definition.parent_lmb.contains(edge))
+            {
+                return Err(SamplingSelectionError::InvalidChannelDefinition {
+                    graph: graph_name.to_owned(),
+                    channel: name.clone(),
+                    error: format!(
+                        "subspace_lmb {:?} must be unique and contained in parent_lmb {:?}",
+                        definition.subspace_lmb, definition.parent_lmb
+                    ),
+                });
+            }
+        }
         named_channels.push(ResolvedNamedSamplingChannel {
             name: name.clone(),
             definition: definition.clone(),
@@ -1293,15 +3109,232 @@ pub fn graph_channel_definitions(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
+    use crate::initialisation::test_initialise;
+    use crate::integrands::process::{SamplingCutSide, SamplingSupport};
     use crate::settings::runtime::ParameterizationSettings;
 
     fn definition(around: &str) -> SamplingChannelDefinition {
         SamplingChannelDefinition {
             around: around.to_owned(),
+            subspace_lmb: vec![1, 2],
             parent_lmb: vec![1, 2],
             on_cut: vec![],
+            singularity_proxy: None,
         }
+    }
+
+    fn prepared_cut_context(
+        side: SamplingCutSide,
+        orientation: Option<usize>,
+        parent_lmb: Vec<usize>,
+    ) -> PreparedCutSamplingContext {
+        let n_loop_momenta = parent_lmb.len();
+        PreparedCutSamplingContext::new(
+            "G",
+            17,
+            3,
+            orientation,
+            side,
+            parent_lmb,
+            0.75,
+            vec![[0.0, 0.0, 0.0]; n_loop_momenta],
+            vec![[100.0, 0.0, 0.0, 100.0]],
+            vec![],
+        )
+        .unwrap()
+    }
+
+    fn proxy_selection(first: Option<&str>, second: Option<&str>) -> SamplingChannelSelection {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["first".into(), "second".into()];
+        let definitions = selection.channel_definitions.entry("G".into()).or_default();
+        for (name, proxy) in [("first", first), ("second", second)] {
+            let channel = SamplingChannelDefinition {
+                around: "lmb(1)".into(),
+                subspace_lmb: Vec::new(),
+                parent_lmb: vec![1],
+                on_cut: Vec::new(),
+                singularity_proxy: proxy.map(str::to_owned),
+            };
+            definitions.insert(name.into(), channel);
+        }
+        selection
+    }
+
+    fn proxy_bridge(selection: &SamplingChannelSelection) -> Result<SamplingChannelBridge> {
+        test_initialise()?;
+        let resolved = resolve_sampling_channel_selection("G", selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1],
+            ParameterizationSettings::default(),
+            100.0,
+            1,
+        );
+        let channels = catalogue.compile(&context)?;
+        SamplingChannelBridge::new_with_partition_mode(
+            channels,
+            SamplingPartitionMode::SingularityProxy,
+        )
+        .map_err(Into::into)
+    }
+
+    #[test]
+    fn named_proxy_is_eagerly_compiled_and_uses_complete_frame_coordinates() {
+        let selection = proxy_selection(Some("1 + x0^2 + x1^2 + x2^2"), Some("2 + x0^2"));
+        let bridge = proxy_bridge(&selection).unwrap();
+        assert_eq!(bridge.dimensions(), 3);
+        let partition = bridge.partition(&[0.2, 0.3, 0.4]).unwrap();
+        let first = 1.0 + 0.2_f64.powi(2) + 0.3_f64.powi(2) + 0.4_f64.powi(2);
+        let second = 2.0 + 0.2_f64.powi(2);
+        assert!((partition.weights[0] - first / (first + second)).abs() < 1.0e-13);
+        assert!((partition.weights[1] - second / (first + second)).abs() < 1.0e-13);
+    }
+
+    #[test]
+    fn singularity_proxy_mode_rejects_missing_channel_metadata() {
+        let selection = proxy_selection(Some("1 + x0^2"), None);
+        let error = proxy_bridge(&selection)
+            .unwrap()
+            .partition(&[0.2, 0.3, 0.4]);
+        let error = error.unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("has no singularity_proxy metadata")
+        );
+    }
+
+    #[test]
+    fn singularity_proxy_reports_symbolica_parse_and_positivity_errors() {
+        let invalid = proxy_selection(Some("x0 + ("), Some("1"));
+        let error = resolve_sampling_channel_selection("G", &invalid).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("failed to parse singularity_proxy")
+        );
+
+        let non_positive = proxy_selection(Some("x0 - x0"), Some("1"));
+        let bridge = proxy_bridge(&non_positive).unwrap();
+        let error = bridge.partition(&[0.2, 0.3, 0.4]).unwrap_err();
+        assert!(error.to_string().contains("strictly positive"));
+    }
+
+    #[test]
+    fn deferred_cross_section_state_validates_and_keeps_cut_contexts_typed() {
+        let mut state =
+            DeferredCrossSectionSamplingState::new("G", 17, Some(2), vec![1, 2], 2, 2).unwrap();
+        let prepared = prepared_cut_context(SamplingCutSide::Left, Some(2), vec![1, 2]);
+        state
+            .set_channel(
+                SamplingChannelId::from(0),
+                prepared.clone(),
+                vec![0.25, 0.5],
+            )
+            .unwrap();
+        assert_eq!(
+            state.prepared_context(SamplingChannelId::from(0)),
+            Some(&prepared)
+        );
+        assert!(state.prepared_context(SamplingChannelId::from(1)).is_none());
+        assert!(
+            state
+                .validate_channels([SamplingChannelId::from(0)])
+                .is_ok()
+        );
+        let error = state
+            .validate_channels([SamplingChannelId::from(1)])
+            .unwrap_err();
+        assert!(error.to_string().contains("has no solved cut/side context"));
+    }
+
+    #[test]
+    fn deferred_cross_section_state_rejects_identity_mismatch_transactionally() {
+        let mut state =
+            DeferredCrossSectionSamplingState::new("G", 17, Some(2), vec![1, 2], 2, 1).unwrap();
+        let mut wrong_graph = prepared_cut_context(SamplingCutSide::Left, Some(2), vec![1, 2]);
+        wrong_graph.graph_name = "other".into();
+        assert!(
+            state
+                .set_channel(SamplingChannelId::from(0), wrong_graph, vec![0.1])
+                .is_err()
+        );
+        assert!(state.prepared_context(SamplingChannelId::from(0)).is_none());
+        assert_eq!(
+            state.runtime_contexts(),
+            &SamplingChannelRuntimeContexts::new(1)
+        );
+
+        let wrong_orientation = prepared_cut_context(SamplingCutSide::Left, Some(3), vec![1, 2]);
+        let error = state
+            .set_channel(SamplingChannelId::from(0), wrong_orientation, vec![0.1])
+            .unwrap_err();
+        assert!(error.to_string().contains("orientation"));
+        assert!(state.prepared_context(SamplingChannelId::from(0)).is_none());
+
+        let prepared = prepared_cut_context(SamplingCutSide::Left, Some(2), vec![1, 2]);
+        let unchanged = state.clone();
+        assert!(
+            state
+                .set_channel(SamplingChannelId::from(0), prepared.clone(), vec![f64::NAN])
+                .is_err()
+        );
+        assert_eq!(state, unchanged);
+
+        let mut nonpositive_root = prepared;
+        nonpositive_root.rescaling_t_star = 0.0;
+        assert!(
+            state
+                .set_channel(SamplingChannelId::from(0), nonpositive_root, vec![0.1])
+                .is_err()
+        );
+        assert_eq!(state, unchanged);
+    }
+
+    #[test]
+    fn deferred_cross_section_state_checks_bridge_shape_and_catalogue_count() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["ordinary".into()];
+        let mut ordinary = definition("lmb(1,2)");
+        ordinary.parent_lmb = vec![1, 2];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("ordinary".into(), ordinary);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+
+        let state =
+            DeferredCrossSectionSamplingState::new("G", 17, Some(2), vec![1, 2], 2, 2).unwrap();
+        let error = bridge
+            .partition_with_deferred_state(&[0.1; 6], &state)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("state has 2 channels, bridge has 1")
+        );
+
+        let wrong_dimension =
+            DeferredCrossSectionSamplingState::new("G", 17, Some(2), vec![1], 1, 1).unwrap();
+        let error = bridge
+            .partition_with_deferred_state(&[0.1; 6], &wrong_dimension)
+            .unwrap_err();
+        assert!(error.to_string().contains("state has 3 loop coordinates"));
     }
 
     #[test]
@@ -1346,6 +3379,11 @@ mod tests {
             .channel_definitions
             .entry("G".into())
             .or_default()
+            .insert("common".into(), definition("lmb(1,2)"));
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
             .insert("named".into(), definition("surface(1,2)"));
 
         let resolved = resolve_sampling_channel_selection_with_defaults("G", &selection).unwrap();
@@ -1376,6 +3414,39 @@ mod tests {
             vec![SamplingChannelSelector::Preset(
                 SamplingChannelPreset::Surfaces
             )]
+        );
+    }
+
+    #[test]
+    fn implicit_default_preserves_empty_and_named_graph_selections() {
+        let mut selection = SamplingChannelSelection::default();
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        assert_eq!(
+            resolved.selectors,
+            vec![SamplingChannelSelector::Preset(
+                SamplingChannelPreset::OptimizedLmb
+            )]
+        );
+        selection.channel_selection.insert("G".into(), vec![]);
+        assert!(
+            resolve_sampling_channel_selection("G", &selection)
+                .unwrap()
+                .selectors
+                .is_empty()
+        );
+        selection
+            .channel_selection
+            .insert("G".into(), vec!["custom".into()]);
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("custom".into(), definition("lmb(1,2)"));
+        assert_eq!(
+            resolve_sampling_channel_selection("G", &selection)
+                .unwrap()
+                .selectors,
+            vec![SamplingChannelSelector::Named("custom".into())]
         );
     }
 
@@ -1416,6 +3487,54 @@ mod tests {
     }
 
     #[test]
+    fn named_channel_requires_explicit_parent_lmb() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["named".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert(
+                "named".into(),
+                SamplingChannelDefinition {
+                    around: "lmb(1,2)".into(),
+                    subspace_lmb: Vec::new(),
+                    parent_lmb: Vec::new(),
+                    on_cut: Vec::new(),
+                    singularity_proxy: None,
+                },
+            );
+        assert!(matches!(
+            resolve_sampling_channel_selection("G", &selection),
+            Err(SamplingSelectionError::MissingParentLmb { .. })
+        ));
+    }
+
+    #[test]
+    fn named_surface_requires_explicit_active_subspace() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["threshold".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert(
+                "threshold".into(),
+                SamplingChannelDefinition {
+                    around: "surface(2,4)".into(),
+                    subspace_lmb: Vec::new(),
+                    parent_lmb: vec![1, 2, 4],
+                    on_cut: Vec::new(),
+                    singularity_proxy: None,
+                },
+            );
+        assert!(matches!(
+            resolve_sampling_channel_selection("G", &selection),
+            Err(SamplingSelectionError::MissingSubspaceLmb { .. })
+        ));
+    }
+
+    #[test]
     fn unknown_auto_preset_is_rejected() {
         assert_eq!(
             SamplingChannelSelector::parse("auto:not_a_mode").unwrap_err(),
@@ -1438,10 +3557,47 @@ mod tests {
         let catalogue =
             build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2]), (1, vec![2, 4])], &[1]);
         assert_eq!(catalogue.entries.len(), 2);
-        assert_eq!(catalogue.lmb_entries().next(), Some((1, &[2, 4][..])));
+        assert_eq!(catalogue.lmb_basis_entries().next(), Some((1, &[2, 4][..])));
         assert_eq!(catalogue.named_entries().next().unwrap().name, "surface_hz");
         assert!(catalogue.inspection_rows()[0].contains("basis=1"));
         assert!(catalogue.inspection_rows()[1].contains("parent_lmb=[1, 2]"));
+    }
+
+    #[test]
+    fn catalogue_keeps_one_id_axis_when_named_channel_precedes_lmb() {
+        let mut selection = SamplingChannelSelection {
+            default_channel_selection: vec!["threshold".into(), "auto:lmb".into()],
+            ..Default::default()
+        };
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("threshold".into(), definition("surface(1,2)"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[(7, vec![1, 2])], &[7]);
+
+        // The LMB basis number is metadata of the second catalogue entry. It
+        // must not become a compacted positional channel number after the
+        // named entry, otherwise LMB-only consumers would enumerate a second
+        // channel axis and disagree with the canonical SamplingChannelId.
+        assert!(matches!(
+            catalogue.entries.first(),
+            Some(SamplingCatalogueEntry::Named(channel)) if channel.name == "threshold"
+        ));
+        assert!(matches!(
+            catalogue.entries.get(1),
+            Some(SamplingCatalogueEntry::Lmb { basis_id: 7, .. })
+        ));
+        assert_eq!(
+            catalogue
+                .entries
+                .iter()
+                .enumerate()
+                .map(|(index, _)| SamplingChannelId::from(index))
+                .collect::<Vec<_>>(),
+            vec![SamplingChannelId::from(0), SamplingChannelId::from(1)]
+        );
     }
 
     #[test]
@@ -1468,7 +3624,7 @@ mod tests {
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue =
             build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![2])], &[0, 1]);
-        assert_eq!(catalogue.lmb_entries().count(), 2);
+        assert_eq!(catalogue.lmb_basis_entries().count(), 2);
     }
 
     #[test]
@@ -1488,6 +3644,63 @@ mod tests {
             SamplingCatalogueEntry::Surface { edges, parent_lmb }
                 if edges == &vec![1, 2] && parent_lmb == &vec![1, 2]
         )));
+    }
+
+    #[test]
+    fn optimized_and_surface_presets_retain_full_domain_and_elementary_soft_coverage() {
+        let all_lmbs = vec![(0, vec![4, 5]), (1, vec![1, 5]), (2, vec![2, 4])];
+        for preset in ["auto:optimized_lmb", "auto:surfaces"] {
+            let mut selection = SamplingChannelSelection::default();
+            selection.default_channel_selection = vec![preset.into()];
+            let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+            // The heuristic selected only basis 0.  The automatic audit adds
+            // the smallest available basis exposing each omitted
+            // loop-dependent soft edge, while leaving the catalogue's single
+            // canonical axis intact.
+            let catalogue = build_sampling_channel_catalogue_with_surfaces_and_coverage(
+                &resolved,
+                &all_lmbs,
+                &[0],
+                &[],
+                &[4, 5],
+                &[1, 2, 99],
+            );
+            assert_eq!(
+                catalogue
+                    .lmb_basis_entries()
+                    .map(|(basis, _)| basis)
+                    .collect::<Vec<_>>(),
+                vec![0, 1, 2]
+            );
+            let report = catalogue.coverage_report(&all_lmbs, &[1, 2, 99]);
+            assert!(report.has_full_domain_lmb);
+            assert_eq!(report.covered_massless_loop_edges, vec![1, 2]);
+            assert!(report.missing_massless_loop_edges.is_empty());
+        }
+    }
+
+    #[test]
+    fn optimized_preset_falls_back_to_one_full_domain_lmb_when_heuristic_is_empty() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:optimized_lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue_with_surfaces_and_coverage(
+            &resolved,
+            &[(7, vec![1, 2])],
+            &[],
+            &[],
+            &[1, 2],
+            &[],
+        );
+        assert_eq!(
+            catalogue.lmb_basis_entries().collect::<Vec<_>>(),
+            vec![(7, &[1, 2][..])]
+        );
+        assert!(
+            catalogue
+                .coverage_report(&[(7, vec![1, 2])], &[])
+                .has_full_domain_lmb
+        );
     }
 
     #[test]
@@ -1511,7 +3724,7 @@ mod tests {
             2,
         );
         context.surfaces.insert(
-            vec![1, 2],
+            (vec![1, 2], vec![1, 2]),
             SamplingSurfaceGeometry {
                 center: vec![0.0; 6],
                 threshold_radius: Some(3.0),
@@ -1526,6 +3739,279 @@ mod tests {
         assert!(matches!(compiled[1].map, CompiledSamplingMap::Surface(_)));
         assert_eq!(compiled[1].master_graph, "G");
         assert_eq!(compiled[1].dimensions(), 6);
+    }
+
+    #[test]
+    fn singular_primitives_fail_with_actionable_exact_density_diagnostics() {
+        for (name, around, expected_primitive, expected_requirement) in [
+            (
+                "soft_target",
+                "soft(1)",
+                "soft(1)",
+                "routed three-momentum frame",
+            ),
+            (
+                "collinear_target",
+                "collinear(1,2)",
+                "collinear(1,2)",
+                "relative angular frame",
+            ),
+            (
+                "nested_soft_target",
+                "then(lmb(1,2), soft(1))",
+                "soft(1)",
+                "normalized radial profile",
+            ),
+        ] {
+            let mut selection = SamplingChannelSelection::default();
+            selection.default_channel_selection = vec![name.to_owned()];
+            selection
+                .channel_definitions
+                .entry("G".to_owned())
+                .or_default()
+                .insert(name.to_owned(), definition(around));
+            let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+            let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+            let context = SamplingChannelCompileContext::new(
+                "G",
+                vec![1, 2],
+                ParameterizationSettings::default(),
+                100.0,
+                2,
+            );
+            let error = catalogue.compile(&context).unwrap_err();
+            match error {
+                SamplingChannelCompileError::UnsupportedSingularPrimitive {
+                    primitive,
+                    reason,
+                    ..
+                } => {
+                    assert_eq!(primitive, expected_primitive);
+                    assert!(reason.contains(expected_requirement), "{reason}");
+                    assert!(reason.contains("edge ids alone"), "{reason}");
+                }
+                other => panic!("expected singular primitive diagnostic, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn catalogue_accepts_prepared_exact_implicit_surface_map() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["threshold".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("threshold".into(), definition("surface(1,2)"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context
+            .insert_implicit_surface(
+                vec![1, 2],
+                vec![1, 2],
+                ImplicitSurfaceRadialMap::new(
+                    6,
+                    vec![0.0; 6],
+                    2.0,
+                    2.0,
+                    Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let compiled = catalogue.compile(&context).unwrap();
+        assert!(matches!(
+            compiled[0].map,
+            CompiledSamplingMap::ImplicitSurface(_)
+        ));
+        let bridge = SamplingChannelBridge::new(compiled).unwrap();
+        let mapped = bridge.forward(
+            SamplingChannelId::from(0),
+            &[0.31, 0.42, 0.57, 0.23, 0.68, 0.81],
+        );
+        assert!(mapped.is_ok());
+    }
+
+    #[test]
+    fn catalogue_compiles_then_with_context_surface_and_bridges_full_composition() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["conditional".into()];
+        let mut channel = definition("then(lmb(1),surface(2,4))");
+        channel.subspace_lmb = vec![2];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("conditional".into(), channel);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context
+            .insert_implicit_surface(
+                vec![2, 4],
+                vec![2],
+                ImplicitSurfaceRadialMap::new(
+                    3,
+                    vec![0.0; 3],
+                    1.0,
+                    1.0,
+                    Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+                )
+                .unwrap()
+                .with_context_evaluator(Arc::new(|_, radius, context| {
+                    let shift = context.first().copied().unwrap_or_default().abs().min(0.2);
+                    Ok((radius - (1.0 + shift), 1.0))
+                })),
+            )
+            .unwrap();
+        let compiled = catalogue.compile(&context).unwrap();
+        assert_eq!(compiled.len(), 1);
+        let channel = &compiled[0];
+        assert_eq!(channel.embedded_edges, vec![1, 2]);
+        assert_eq!(channel.map.contract().support, SamplingSupport::Full);
+        let coordinates = [0.31, 0.42, 0.57, 0.23, 0.68, 0.81];
+        let mapped = channel.map.forward(&coordinates).unwrap();
+        assert_eq!(mapped.support, SamplingSupport::Full);
+        let inverse = channel.map.inverse(&mapped.point).unwrap();
+        assert!(inverse.residual < 1.0e-9, "{}", inverse.residual);
+        assert!(
+            inverse
+                .coordinates
+                .iter()
+                .zip(coordinates)
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-9)
+        );
+        let bridge = SamplingChannelBridge::new(compiled).unwrap();
+        let bridged = bridge
+            .forward(SamplingChannelId::from(0), &coordinates)
+            .unwrap();
+        assert!((bridged.partition.weight_sum() - 1.0).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn runtime_context_partition_uses_each_canonical_channel_context() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["left_chart".into(), "right_chart".into()];
+        for name in ["left_chart", "right_chart"] {
+            let mut channel = definition("then(lmb(1),surface(2,4))");
+            channel.subspace_lmb = vec![2];
+            selection
+                .channel_definitions
+                .entry("G".into())
+                .or_default()
+                .insert(name.into(), channel);
+        }
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context
+            .insert_implicit_surface(
+                vec![2, 4],
+                vec![2],
+                ImplicitSurfaceRadialMap::new(
+                    3,
+                    vec![0.0; 3],
+                    1.0,
+                    1.0,
+                    Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+                )
+                .unwrap()
+                .with_context_evaluator(Arc::new(|_, radius, context| {
+                    let shift = context.first().copied().unwrap_or_default();
+                    Ok((radius - (1.0 + shift), 1.0))
+                })),
+            )
+            .unwrap();
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let mut contexts = SamplingChannelRuntimeContexts::new(bridge.channels().len());
+        contexts.set(SamplingChannelId::from(0), vec![0.0]).unwrap();
+        contexts.set(SamplingChannelId::from(1), vec![0.2]).unwrap();
+        let coordinates = [0.31, 0.42, 0.57, 0.23, 0.68, 0.81];
+        let mapped = bridge
+            .forward_with_runtime_contexts(SamplingChannelId::from(0), &coordinates, &contexts)
+            .unwrap();
+        assert!((mapped.partition.weight_sum() - 1.0).abs() < 1.0e-12);
+        assert!(mapped.partition.weights.iter().all(|weight| *weight > 0.0));
+        let inverse = bridge
+            .inverse_with_runtime_contexts(
+                SamplingChannelId::from(0),
+                &mapped.raw_coordinates,
+                &contexts,
+            )
+            .unwrap();
+        assert!(inverse.map.residual < 1.0e-9, "{}", inverse.map.residual);
+        assert!(
+            inverse
+                .map
+                .coordinates
+                .iter()
+                .zip(coordinates)
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-9)
+        );
+    }
+
+    #[test]
+    fn distinct_physical_surfaces_share_one_active_subspace_without_overwrite() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["h".into(), "z".into()];
+        let mut h = definition("surface(2,4)");
+        h.subspace_lmb = vec![1, 2];
+        let mut z = definition("surface(3,10)");
+        z.subspace_lmb = vec![1, 2];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .extend([(String::from("h"), h), (String::from("z"), z)]);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        for edges in [vec![2, 4], vec![3, 10]] {
+            context
+                .insert_implicit_surface(
+                    edges,
+                    vec![1, 2],
+                    ImplicitSurfaceRadialMap::new(
+                        6,
+                        vec![0.0; 6],
+                        2.0,
+                        2.0,
+                        Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+        let compiled = catalogue.compile(&context).unwrap();
+        assert_eq!(compiled.len(), 2);
+        assert_eq!(compiled[0].name, "h");
+        assert_eq!(compiled[1].name, "z");
     }
 
     #[test]
@@ -1545,9 +4031,115 @@ mod tests {
         let error = catalogue.compile(&context).unwrap_err();
         assert!(matches!(
             error,
-            SamplingChannelCompileError::InvalidChannel { .. }
+            SamplingChannelCompileError::MissingLmbFrameMap { .. }
         ));
-        assert!(error.to_string().contains("graph-frame affine routing"));
+        assert!(error.to_string().contains("no affine frame map"));
+    }
+
+    #[test]
+    fn catalogue_wraps_non_parent_lmb_in_supplied_affine_frame() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![2, 4])], &[0]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context.lmb_frame_maps.insert(
+            0,
+            SamplingMapAffine::new(
+                vec![
+                    vec![2.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+                ],
+                vec![0.5; 6],
+            )
+            .unwrap(),
+        );
+        let compiled = catalogue.compile(&context).unwrap();
+        assert!(matches!(
+            compiled[0].map,
+            CompiledSamplingMap::AffineLmb { .. }
+        ));
+        assert_eq!(compiled[0].embedded_edges, vec![1, 2]);
+        let point = compiled[0]
+            .forward(&[0.31, 0.42, 0.57, 0.23, 0.68, 0.81])
+            .unwrap();
+        assert!(point.residual < 1.0e-10);
+        assert!((point.point[0] - 0.5).abs() > 1.0e-6);
+        let inverse = compiled[0].inverse(&point.point).unwrap();
+        assert!(inverse.residual < 1.0e-10);
+        for (recovered, original) in inverse.coordinates.iter().zip(&point.coordinates) {
+            assert!((recovered - original).abs() < 1.0e-10);
+        }
+        assert!((point.jacobian * inverse.inverse_jacobian - 1.0).abs() < 1.0e-10);
+        let bridge = SamplingChannelBridge::new(compiled.clone()).unwrap();
+        let bridged = bridge
+            .forward(
+                SamplingChannelId::from(0),
+                &[0.31, 0.42, 0.57, 0.23, 0.68, 0.81],
+            )
+            .unwrap();
+        assert_eq!(bridged.raw_coordinates, point.point);
+        assert!((bridged.partition.weight_sum() - 1.0).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn named_non_parent_lmb_uses_edge_keyed_affine_frame() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["named".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert(
+                "named".into(),
+                SamplingChannelDefinition {
+                    around: "lmb(2,4)".into(),
+                    subspace_lmb: Vec::new(),
+                    parent_lmb: vec![1, 2],
+                    on_cut: Vec::new(),
+                    singularity_proxy: None,
+                },
+            );
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context.lmb_frame_maps_by_edges.insert(
+            vec![2, 4],
+            SamplingMapAffine::new(
+                vec![
+                    vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+                ],
+                vec![0.0; 6],
+            )
+            .unwrap(),
+        );
+        let compiled = catalogue.compile(&context).unwrap();
+        assert!(matches!(
+            compiled[0].map,
+            CompiledSamplingMap::AffineLmb { .. }
+        ));
+        assert_eq!(compiled[0].embedded_edges, vec![1, 2]);
     }
 
     #[test]
@@ -1558,7 +4150,11 @@ mod tests {
             .channel_definitions
             .entry("G".into())
             .or_default()
-            .insert("threshold".into(), definition("surface(2)"));
+            .insert("threshold".into(), {
+                let mut channel = definition("surface(2)");
+                channel.subspace_lmb = vec![2];
+                channel
+            });
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
         let mut context = SamplingChannelCompileContext::new(
@@ -1568,15 +4164,20 @@ mod tests {
             100.0,
             2,
         );
-        context.surfaces.insert(
-            vec![2],
-            SamplingSurfaceGeometry {
-                center: vec![0.0; 3],
-                threshold_radius: Some(3.0),
-                beta: 2.0,
-                power: 1.0,
-            },
-        );
+        context
+            .insert_implicit_surface(
+                vec![2],
+                vec![2],
+                ImplicitSurfaceRadialMap::new(
+                    3,
+                    vec![0.0; 3],
+                    2.0,
+                    1.0,
+                    Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+                )
+                .unwrap(),
+            )
+            .unwrap();
         let compiled = catalogue.compile(&context).unwrap();
         assert_eq!(compiled.len(), 1);
         assert!(matches!(compiled[0].map, CompiledSamplingMap::Embedded(_)));
@@ -1586,6 +4187,343 @@ mod tests {
             .unwrap();
         let inverse = compiled[0].inverse(&point.point).unwrap();
         assert!(inverse.residual < 1.0e-10);
+    }
+
+    #[test]
+    fn named_cut_metadata_requires_matching_prepared_cut_context() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["cut_channel".into()];
+        let mut cut_definition = definition("lmb(1,2)");
+        cut_definition.on_cut = vec![3];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("cut_channel".into(), cut_definition);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        let error = catalogue.compile(&context).unwrap_err();
+        assert!(error.to_string().contains("on_cut [3]"));
+
+        let mut matching = context.clone();
+        matching.cut_id = Some(3);
+        assert!(catalogue.compile(&matching).is_ok());
+        matching.cut_id = Some(4);
+        assert!(catalogue.compile(&matching).is_err());
+    }
+
+    #[test]
+    fn side_qualified_channel_requires_matching_prepared_side() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["right_channel".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("right_channel".into(), definition("right(lmb(1,2))"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        let error = catalogue.compile(&context).unwrap_err();
+        assert!(error.to_string().contains("requires prepared side Right"));
+
+        let mut left = context.clone();
+        left.side = Some(crate::integrands::process::SamplingCutSide::Left);
+        let error = catalogue.compile(&left).unwrap_err();
+        assert!(error.to_string().contains("requires prepared side Right"));
+    }
+
+    #[test]
+    fn phase_space_channel_requires_prepared_cut_context() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["cut_chart".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("cut_chart".into(), definition("phase_space(cut(4,7))"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        let error = catalogue.compile(&context).unwrap_err();
+        assert!(matches!(
+            error,
+            SamplingChannelCompileError::MissingPreparedCutContext { .. }
+        ));
+        assert!(error.to_string().contains("graph, cut, orientation"));
+    }
+
+    #[test]
+    fn standalone_cut_charts_share_the_canonical_partition_without_side_context() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["first".into(), "second".into()];
+        let definitions = selection.channel_definitions.entry("G".into()).or_default();
+        for (name, around, cut) in [
+            ("first", "phase_space(cut(4,7))", 3),
+            ("second", "phase_space(cut(5,8))", 6),
+        ] {
+            let mut channel = definition(around);
+            channel.parent_lmb = vec![1];
+            channel.subspace_lmb = vec![1];
+            channel.on_cut = vec![cut];
+            definitions.insert(name.into(), channel);
+        }
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1],
+            ParameterizationSettings::default(),
+            2.0,
+            1,
+        );
+        for (edges, cut, radius) in [(vec![4, 7], 3, 2.0), (vec![5, 8], 6, 3.0)] {
+            context.physical_cut_ids.insert(edges.clone(), vec![cut]);
+            context
+                .insert_implicit_surface(
+                    edges,
+                    vec![1],
+                    ImplicitSurfaceRadialMap::new(
+                        3,
+                        vec![0.0; 3],
+                        2.0,
+                        1.0,
+                        std::sync::Arc::new(move |_: &[f64], r: f64| {
+                            Ok((r * r - radius * radius, 2.0 * r))
+                        }),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        assert_eq!(bridge.channels().len(), 2);
+        for (id, channel) in bridge.channels().iter().enumerate() {
+            assert_eq!(channel.embedded_edges, vec![1]);
+            assert!(!sampling_map_requires_deferred_cut_context(
+                &channel.definition
+            ));
+            let mapped = bridge
+                .forward(SamplingChannelId::from(id), &[0.31, 0.47, 0.68])
+                .unwrap();
+            assert!((mapped.partition.weight_sum() - 1.0).abs() < 1.0e-13);
+            assert!(
+                bridge
+                    .inverse(SamplingChannelId::from(id), &mapped.raw_coordinates)
+                    .unwrap()
+                    .map
+                    .residual
+                    < 1.0e-9
+            );
+        }
+        let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
+            &bridge, 4096, 1.0, &[0.0; 3],
+        )
+        .unwrap();
+        assert!((report.normalization - 1.0).abs() < 0.015, "{report:?}");
+        assert!((report.second_moment - 3.0).abs() < 0.06, "{report:?}");
+        // Neither a cut label without a map nor a map without a graph cut
+        // registration is sufficient to enable the physical-cut syntax.
+        context.physical_cut_ids.remove(&vec![4, 7]);
+        assert!(catalogue.compile(&context).is_err());
+        context.physical_cut_ids.insert(vec![4, 7], vec![9]);
+        assert!(
+            catalogue
+                .compile(&context)
+                .unwrap_err()
+                .to_string()
+                .contains("on_cut [3]")
+        );
+        let combined =
+            SamplingMapDefinition::parse("then(phase_space(cut(4,7)),left(surface(2)))").unwrap();
+        assert!(sampling_map_requires_deferred_cut_context(&combined));
+    }
+
+    #[test]
+    fn physical_cut_maps_reject_partially_supplied_runtime_identity() {
+        // Supplying the host-side graph/cut fields alone must not make a
+        // physical map look ready. Side maps require the solved LU point,
+        // including t*, atomically as PreparedCutSamplingContext. A standalone
+        // cut chart instead requires the graph's exact radial map; labels
+        // alone cannot enable either phase-space or left/right channels.
+        for (name, around) in [
+            ("phase_space", "phase_space(cut(4,7))"),
+            ("left", "left(lmb(1,2))"),
+            ("right", "right(lmb(1,2))"),
+        ] {
+            let mut selection = SamplingChannelSelection::default();
+            selection.default_channel_selection = vec![name.to_owned()];
+            selection
+                .channel_definitions
+                .entry("G".into())
+                .or_default()
+                .insert(name.to_owned(), definition(around));
+            let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+            let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+            let mut context = SamplingChannelCompileContext::new(
+                "G",
+                vec![1, 2],
+                ParameterizationSettings::default(),
+                100.0,
+                2,
+            );
+            context.graph_id = Some(17);
+            context.cut_id = Some(3);
+            context.orientation = Some(2);
+            context.side = Some(if name == "right" {
+                SamplingCutSide::Right
+            } else {
+                SamplingCutSide::Left
+            });
+
+            assert!(matches!(
+                catalogue.compile(&context),
+                Err(SamplingChannelCompileError::MissingPreparedCutContext {
+                    channel,
+                    ..
+                }) if channel == name
+            ));
+        }
+    }
+
+    #[test]
+    fn prepared_cut_context_populates_and_validates_host_metadata() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["cut_chart".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("cut_chart".into(), definition("phase_space(cut(4,7))"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        )
+        .with_prepared_cut_context(prepared_cut_context(
+            SamplingCutSide::Left,
+            Some(2),
+            vec![1, 2],
+        ))
+        .unwrap();
+        assert_eq!(context.graph_id, Some(17));
+        assert_eq!(context.cut_id, Some(3));
+        assert_eq!(context.orientation, Some(2));
+        assert_eq!(context.side, Some(SamplingCutSide::Left));
+        assert!(matches!(
+            catalogue.compile(&context),
+            Err(SamplingChannelCompileError::InvalidChannel { .. })
+        ));
+
+        let mismatch = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        )
+        .with_prepared_cut_context(prepared_cut_context(
+            SamplingCutSide::Left,
+            Some(2),
+            vec![1, 3],
+        ))
+        .unwrap_err();
+        assert!(mismatch.to_string().contains("parent LMB"));
+    }
+
+    #[test]
+    fn prepared_cut_context_rejects_loop_frame_dimension_mismatch() {
+        let prepared = PreparedCutSamplingContext::new(
+            "G",
+            17,
+            3,
+            Some(2),
+            SamplingCutSide::Left,
+            vec![1, 2],
+            0.75,
+            vec![[0.0, 0.0, 0.0]; 2],
+            vec![[100.0, 0.0, 0.0, 100.0]],
+            vec![],
+        )
+        .unwrap();
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            1,
+        );
+        let error = context.set_prepared_cut_context(prepared).unwrap_err();
+        assert!(error.to_string().contains("expected 1 loop momenta"));
+        assert!(context.prepared_cut_context.is_none());
+        assert!(context.graph_id.is_none());
+    }
+
+    #[test]
+    fn side_map_rejects_missing_orientation_and_wrong_prepared_side() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["left_target".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("left_target".into(), definition("left(lmb(1,2))"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let missing_orientation = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        )
+        .with_prepared_cut_context(prepared_cut_context(
+            SamplingCutSide::Left,
+            None,
+            vec![1, 2],
+        ))
+        .unwrap();
+        let error = catalogue.compile(&missing_orientation).unwrap_err();
+        assert!(error.to_string().contains("explicit orientation"));
+
+        let wrong_side = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        )
+        .with_prepared_cut_context(prepared_cut_context(
+            SamplingCutSide::Right,
+            Some(2),
+            vec![1, 2],
+        ))
+        .unwrap();
+        let error = catalogue.compile(&wrong_side).unwrap_err();
+        assert!(error.to_string().contains("requires prepared side Left"));
     }
 
     #[test]
@@ -1613,7 +4551,7 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_composite_map_is_rejected_without_context() {
+    fn composite_map_with_overlapping_blocks_is_rejected_with_context_diagnostic() {
         let mut selection = SamplingChannelSelection::default();
         selection.default_channel_selection = vec!["joint".into()];
         selection
@@ -1630,10 +4568,111 @@ mod tests {
             100.0,
             2,
         );
-        assert!(matches!(
-            catalogue.compile(&context),
-            Err(SamplingChannelCompileError::UnsupportedMap { .. })
-        ));
+        let mut context = context;
+        context.surfaces.insert(
+            (vec![1], vec![1, 2]),
+            SamplingSurfaceGeometry {
+                center: vec![0.0; 6],
+                threshold_radius: Some(3.0),
+                beta: 2.0,
+                power: 1.0,
+            },
+        );
+        let error = catalogue.compile(&context).unwrap_err().to_string();
+        assert!(error.contains("overlaps child"));
+        assert!(error.contains("parent LMB [1, 2]"));
+    }
+
+    #[test]
+    fn product_surface_and_complement_compile_as_one_master_frame_channel() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["joint".into()];
+        let mut channel = definition("product(surface(2), complement(1))");
+        channel.subspace_lmb = vec![2];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("joint".into(), channel);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context
+            .insert_implicit_surface(
+                vec![2],
+                vec![2],
+                ImplicitSurfaceRadialMap::new(
+                    3,
+                    vec![0.0; 3],
+                    2.0,
+                    1.0,
+                    Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let compiled = catalogue.compile(&context).unwrap();
+        assert!(matches!(compiled[0].map, CompiledSamplingMap::Embedded(_)));
+        assert_eq!(compiled[0].embedded_edges, vec![1, 2]);
+        assert_eq!(
+            compiled[0].map.contract().support,
+            crate::integrands::process::SamplingSupport::Full
+        );
+        let point = compiled[0]
+            .forward(&[0.31, 0.42, 0.57, 0.23, 0.68, 0.81])
+            .unwrap();
+        let inverse = compiled[0].inverse(&point.point).unwrap();
+        assert!(point.residual < 1.0e-10);
+        assert!(inverse.residual < 1.0e-10);
+        let bridge = SamplingChannelBridge::new(compiled).unwrap();
+        let bridged = bridge
+            .forward(
+                SamplingChannelId::from(0),
+                &[0.31, 0.42, 0.57, 0.23, 0.68, 0.81],
+            )
+            .unwrap();
+        assert!((bridged.partition.weight_sum() - 1.0).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn product_rejects_overlapping_child_blocks_with_parent_diagnostic() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["joint".into()];
+        let mut channel = definition("product(surface(2), complement(2))");
+        channel.subspace_lmb = vec![2];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("joint".into(), channel);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context.surfaces.insert(
+            (vec![2], vec![2]),
+            SamplingSurfaceGeometry {
+                center: vec![0.0; 3],
+                threshold_radius: Some(3.0),
+                beta: 2.0,
+                power: 1.0,
+            },
+        );
+        let error = catalogue.compile(&context).unwrap_err();
+        let diagnostic = error.to_string();
+        assert!(diagnostic.contains("overlaps child 0"));
+        assert!(diagnostic.contains("parent LMB [1, 2]"));
     }
 
     #[test]
@@ -1657,6 +4696,7 @@ mod tests {
                 definition: SamplingMapDefinition::Lmb(vec![1]),
                 embedded_edges: vec![1],
                 map: CompiledSamplingMap::Lmb(map),
+                singularity_proxy: None,
             },
             CompiledSamplingChannel {
                 name: "right".into(),
@@ -1665,6 +4705,7 @@ mod tests {
                 definition: SamplingMapDefinition::Lmb(vec![1]),
                 embedded_edges: vec![1],
                 map: CompiledSamplingMap::Lmb(second),
+                singularity_proxy: None,
             },
         ])
         .unwrap();
@@ -1702,6 +4743,163 @@ mod tests {
     }
 
     #[test]
+    fn canonical_lmb_bridge_integrates_normalized_gaussian_with_map_partition() {
+        // Build both channels through the canonical catalogue.  The selected
+        // map is sampled uniformly in channel space; multiplying by
+        // `n_channels * J_i * w_i` converts that sample to the exact
+        // map-density mixture estimator, where w_i = rho_i / sum_j rho_j.
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![1])], &[0, 1]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1],
+            ParameterizationSettings::default(),
+            2.0,
+            1,
+        );
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+
+        let bins = 24usize;
+        let normalisation = (2.0 * std::f64::consts::PI).powf(-1.5);
+        let channel_count = bridge.channels().len() as f64;
+        let mut integral = 0.0;
+        for i in 0..bins {
+            for j in 0..bins {
+                for k in 0..bins {
+                    let coordinates = [
+                        (i as f64 + 0.5) / bins as f64,
+                        (j as f64 + 0.5) / bins as f64,
+                        (k as f64 + 0.5) / bins as f64,
+                    ];
+                    let channel = SamplingChannelId::from((i + j + k) % bridge.channels().len());
+                    let evaluation = bridge.forward(channel, &coordinates).unwrap();
+                    let radius_squared = evaluation
+                        .raw_coordinates
+                        .iter()
+                        .map(|component| component.powi(2))
+                        .sum::<f64>();
+                    let target = normalisation * (-0.5 * radius_squared).exp();
+                    let partition_weight = evaluation.partition.weight(channel.index()).unwrap();
+                    integral += target * evaluation.map.jacobian * channel_count * partition_weight;
+                }
+            }
+        }
+        integral /= bins.pow(3) as f64;
+        assert!(
+            (integral - 1.0).abs() < 2.0e-2,
+            "canonical map-density mixture integral = {integral}"
+        );
+    }
+
+    #[test]
+    fn bridge_acceptance_report_integrates_every_canonical_channel() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![1])], &[0, 1]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1],
+            ParameterizationSettings::default(),
+            2.0,
+            1,
+        );
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
+            &bridge,
+            1024,
+            1.0,
+            &[0.0, 0.0, 0.0],
+        )
+        .unwrap();
+        assert_eq!(report.sample_count, 1024);
+        assert_eq!(report.channel_count, 2);
+        assert_eq!(report.finite_sample_count, 2048);
+        assert!((report.partition_min - 1.0).abs() < 1.0e-12);
+        assert!((report.partition_max - 1.0).abs() < 1.0e-12);
+        assert!((report.normalization - 1.0).abs() < 5.0e-2);
+        assert!(report.normalization_stderr.is_finite());
+        assert!((report.second_moment - report.expected_second_moment).abs() < 2.0e-1);
+        assert!(report.second_moment_stderr.is_finite());
+        assert!(report.round_trip_residual_max < 1.0e-10);
+    }
+
+    #[test]
+    fn bridge_acceptance_report_integrates_mixed_named_and_lmb_catalogue() {
+        // A named map and an automatically generated LMB map share the same
+        // master frame but remain two distinct canonical catalogue entries.
+        // The acceptance harness must visit both IDs; silently compacting the
+        // generated basis would make the mixed selection under-sample one map.
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:lmb".into(), "named_lmb".into()];
+        let mut named_lmb = definition("lmb(1)");
+        named_lmb.subspace_lmb = vec![1];
+        named_lmb.parent_lmb = vec![1];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("named_lmb".into(), named_lmb);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1])], &[0]);
+        assert_eq!(catalogue.entries.len(), 2);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1],
+            ParameterizationSettings::default(),
+            2.0,
+            1,
+        );
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
+            &bridge,
+            512,
+            1.0,
+            &[0.0, 0.0, 0.0],
+        )
+        .unwrap();
+        assert_eq!(report.channel_count, 2);
+        assert_eq!(report.finite_sample_count, 1024);
+        assert!((report.normalization - 1.0).abs() < 5.0e-2);
+        assert!((report.partition_min - 1.0).abs() < 1.0e-12);
+        assert!((report.partition_max - 1.0).abs() < 1.0e-12);
+        assert!(report.round_trip_residual_max < 1.0e-10);
+    }
+
+    #[test]
+    fn bridge_acceptance_report_supports_a_single_canonical_channel() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1])], &[0]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1],
+            ParameterizationSettings::default(),
+            2.0,
+            1,
+        );
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
+            &bridge,
+            512,
+            1.0,
+            &[0.0, 0.0, 0.0],
+        )
+        .unwrap();
+        assert_eq!(report.channel_count, 1);
+        assert_eq!(report.finite_sample_count, report.sample_count);
+        assert!((report.normalization - 1.0).abs() < 5.0e-2);
+        assert!((report.partition_min - 1.0).abs() < 1.0e-12);
+        assert!((report.partition_max - 1.0).abs() < 1.0e-12);
+        assert!(report.round_trip_residual_max < 1.0e-10);
+    }
+
+    #[test]
     fn bridge_rejects_partial_or_mismatched_channels() {
         let settings = ParameterizationSettings::default();
         let map = SamplingMapKernel::new(SamplingMapDefinition::Lmb(vec![1]), settings, 100.0, 1)
@@ -1713,6 +4911,7 @@ mod tests {
             definition: SamplingMapDefinition::Lmb(vec![1]),
             embedded_edges: vec![1],
             map: CompiledSamplingMap::Lmb(map),
+            singularity_proxy: None,
         };
         let bridge = SamplingChannelBridge::new(vec![channel.clone()]).unwrap();
         assert!(
@@ -1751,6 +4950,7 @@ mod tests {
                 )
                 .unwrap(),
             ),
+            singularity_proxy: None,
         };
         assert!(matches!(
             SamplingChannelBridge::new(vec![bridge.channels()[0].clone(), different_frame]),

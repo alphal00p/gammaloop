@@ -7,10 +7,13 @@
 //! density.
 
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use color_eyre::Result;
 use eyre::eyre;
+use symbolica::atom::Atom;
+
+use super::SamplingExpressionEvaluator;
 
 /// Which positive score is used to form a multichannel partition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -96,6 +99,55 @@ impl SamplingScoreFunction {
                 })
                 .transpose()
         })
+    }
+
+    /// Construct a positive score from one Symbolica expression.
+    ///
+    /// The expression is compiled eagerly when this function is called and
+    /// evaluated at every partition point.  A score is only accepted when it
+    /// is finite, real, and strictly positive.  This keeps proxy channels on
+    /// the same positivity boundary as callback-based scores while allowing
+    /// process warmup code to build the evaluator once from the user supplied
+    /// Symbolica expression.
+    ///
+    /// The evaluator is protected by a mutex because Symbolica's eager
+    /// evaluator is stateful.  It is still compiled exactly once and the
+    /// resulting score is safe to share between channel partitions.
+    ///
+    /// Positivity alone does not establish that a proxy captures every
+    /// singular feature of a map.  The graph compiler must supply and audit
+    /// those expressions explicitly.  Graph channel metadata does not yet
+    /// carry proxy expressions, so this constructor does not enable the
+    /// production `singularity_proxy` setting by itself.
+    pub fn from_symbolica_positive_expression(
+        expression: Atom,
+        parameters: impl IntoIterator<Item = Atom>,
+    ) -> Result<Self> {
+        let evaluator = SamplingExpressionEvaluator::new([expression], parameters, false)?;
+        let evaluator = Arc::new(Mutex::new(evaluator));
+        Ok(Self::from_positive_function(move |coordinates| {
+            let mut evaluator = evaluator
+                .lock()
+                .map_err(|_| eyre!("sampling Symbolica score evaluator mutex was poisoned"))?;
+            let values = evaluator.evaluate(coordinates)?;
+            let value = values
+                .first()
+                .ok_or_else(|| eyre!("sampling Symbolica score evaluator returned no output"))?;
+            let real = value.re.0;
+            let imaginary = value.im.0;
+            let tolerance = 1.0e-13 * real.abs().max(1.0);
+            if !real.is_finite() || !imaginary.is_finite() {
+                return Err(eyre!(
+                    "sampling Symbolica score evaluated to a non-finite value: {value:?}"
+                ));
+            }
+            if imaginary.abs() > tolerance {
+                return Err(eyre!(
+                    "sampling Symbolica score has a non-negligible imaginary part {imaginary}"
+                ));
+            }
+            Ok(Some(real))
+        }))
     }
 
     fn evaluate(&self, raw_coordinates: &[f64]) -> Result<Option<f64>> {
@@ -270,6 +322,8 @@ impl SamplingPartition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::initialisation::test_initialise;
+    use symbolica::symbol;
 
     fn positive(score: f64) -> SamplingScoreFunction {
         SamplingScoreFunction::from_positive_function(move |_| Ok(Some(score)))
@@ -349,6 +403,46 @@ mod tests {
         )];
         let error =
             SamplingPartition::new(SamplingPartitionMode::MapDensity, &channels, &[]).unwrap_err();
+        assert!(error.to_string().contains("strictly positive"));
+    }
+
+    #[test]
+    fn symbolica_positive_proxy_is_compiled_once_and_partitioned() {
+        test_initialise().unwrap();
+        let radius = Atom::var(symbol!("sampling_proxy_radius"));
+        let proxy = SamplingScoreFunction::from_symbolica_positive_expression(
+            radius.clone() * radius.clone() + 1,
+            [radius],
+        )
+        .unwrap();
+        let channels = vec![
+            SamplingChannelScore::with_proxy("surface", positive(1.0), proxy),
+            SamplingChannelScore::with_proxy("fallback", positive(1.0), positive(1.0)),
+        ];
+        let partition =
+            SamplingPartition::new(SamplingPartitionMode::SingularityProxy, &channels, &[2.0])
+                .unwrap();
+        assert!((partition.weights[0] - 5.0 / 6.0).abs() < 1.0e-14);
+        assert!((partition.weights[1] - 1.0 / 6.0).abs() < 1.0e-14);
+    }
+
+    #[test]
+    fn symbolica_positive_proxy_rejects_non_positive_values() {
+        test_initialise().unwrap();
+        let radius = Atom::var(symbol!("sampling_proxy_non_positive"));
+        let proxy = SamplingScoreFunction::from_symbolica_positive_expression(
+            radius.clone() - radius.clone(),
+            [radius],
+        )
+        .unwrap();
+        let channels = vec![SamplingChannelScore::with_proxy(
+            "surface",
+            positive(1.0),
+            proxy,
+        )];
+        let error =
+            SamplingPartition::new(SamplingPartitionMode::SingularityProxy, &channels, &[2.0])
+                .unwrap_err();
         assert!(error.to_string().contains("strictly positive"));
     }
 }

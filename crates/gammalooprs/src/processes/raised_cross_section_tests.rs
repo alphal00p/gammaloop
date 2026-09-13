@@ -763,3 +763,200 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
         .join()
         .unwrap();
 }
+
+#[test]
+fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
+    std::thread::Builder::new()
+        .name("physical-cut-sampling".to_owned())
+        .stack_size(64 * 1024 * 1024)
+        .spawn(|| {
+            use crate::integrands::process::{GraphTerm, SamplingChannelBridgeAcceptanceReport};
+            use crate::settings::runtime::{ParameterizationSettings, SamplingChannelDefinition};
+
+            test_initialise().unwrap();
+            let model = Model::from_str(SCALARS_2P_3P_MODEL.to_string(), "json").unwrap();
+            for (pdg, mass) in [(1001, 1.0), (1000, 0.0)] {
+                let graph: Graph = r#"digraph cut_sampling_bubble {
+                num=1; edge [pdg=PDG]; node [num=1];
+                ext [style=invis, is_cut=0];
+                ext -> a [id=0];
+                a -> b [id=1, lmb_id=0];
+                a -> b [id=2];
+                b -> ext [id=3];
+            }"#
+                .replace("PDG", &pdg.to_string())
+                .as_str()
+                .into_graph(&model)
+                .unwrap();
+                let generation = generation_settings();
+                let runtime = runtime_settings();
+                let mut cross_section = preprocess_graph(graph, &model, &generation, &runtime);
+                let definition = ProcessDefinition::from_graph_list(
+                    std::slice::from_ref(&cross_section.supergraphs[0].graph),
+                    GenerationType::CrossSection,
+                    &model,
+                )
+                .unwrap();
+                cross_section
+                    .build_integrand(
+                        &model,
+                        &definition,
+                        &GlobalSettings {
+                            generation,
+                            ..Default::default()
+                        },
+                        (&runtime).into(),
+                        &generation_pool(),
+                    )
+                    .unwrap();
+                let integrand = cross_section.integrand.as_mut().unwrap();
+                integrand.warm_up(&model).unwrap();
+                let ProcessIntegrand::CrossSection(integrand) = integrand else {
+                    unreachable!()
+                };
+                let term = &integrand.data.graph_terms[0];
+                let parent_lmb = term
+                    .graph
+                    .loop_momentum_basis
+                    .loop_edges
+                    .iter()
+                    .map(|edge| edge.0)
+                    .collect::<Vec<_>>();
+                let (cut_id, cut_surface) = term.cut_esurface.iter_enumerated().next().unwrap();
+                let cut_edges = cut_surface
+                    .energies
+                    .iter()
+                    .map(|edge| edge.0.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let mut parameterization = ParameterizationSettings::default();
+                parameterization.sampling_channels.default_channel_selection =
+                    vec!["physical_cut".into()];
+                parameterization
+                    .sampling_channels
+                    .channel_definitions
+                    .entry(term.graph.name.clone())
+                    .or_default()
+                    .insert(
+                        "physical_cut".into(),
+                        SamplingChannelDefinition {
+                            around: format!("phase_space(cut({cut_edges}))"),
+                            subspace_lmb: parent_lmb.clone(),
+                            parent_lmb,
+                            on_cut: vec![cut_id.0],
+                            ..Default::default()
+                        },
+                    );
+                let externals = runtime
+                    .kinematics
+                    .externals
+                    .get_dependent_externals::<f64>(
+                        crate::DependentMomentaConstructor::CrossSection,
+                    )
+                    .unwrap()
+                    .iter()
+                    .map(|momentum| {
+                        [
+                            momentum.temporal.value.0,
+                            momentum.spatial.px.0,
+                            momentum.spatial.py.0,
+                            momentum.spatial.pz.0,
+                        ]
+                    })
+                    .collect::<Vec<_>>();
+                let bridge = term
+                    .compile_sampling_bridge(
+                        &parameterization,
+                        runtime.kinematics.e_cm,
+                        &externals,
+                        None,
+                    )
+                    .unwrap();
+                assert_eq!(bridge.channels().len(), 1);
+                assert_eq!(bridge.channels()[0].name, "physical_cut");
+                // At the analytic two-particle threshold the LU scale is one.
+                // This checks the graph's actual masses and cut equation, which
+                // Gaussian normalization alone cannot distinguish from a chart
+                // accidentally centered on some other radial shell.
+                let masses = term.graph.get_real_mass_vector::<f64>(&model);
+                assert!(
+                    cut_surface
+                        .energies
+                        .iter()
+                        .all(|edge| masses[*edge] == F(mass))
+                );
+                let threshold_radius = ((runtime.kinematics.e_cm / 2.0).powi(2)
+                    - masses[cut_surface.energies[0]].0.powi(2))
+                .sqrt();
+                let shell_coordinate = threshold_radius
+                    / (threshold_radius + runtime.kinematics.e_cm * parameterization.b);
+                let shell = bridge
+                    .forward(
+                        crate::integrands::process::SamplingChannelId::from(0),
+                        &[shell_coordinate, 0.31, 0.47],
+                    )
+                    .unwrap();
+                let shell_loops = crate::momentum::sample::LoopMomenta::from_iter([
+                    crate::momentum::ThreeMomentum::new(
+                        F(shell.raw_coordinates[0]),
+                        F(shell.raw_coordinates[1]),
+                        F(shell.raw_coordinates[2]),
+                    ),
+                ]);
+                let center = crate::momentum::sample::LoopMomenta::from_iter([
+                    crate::momentum::ThreeMomentum::new(F(0.0), F(0.0), F(0.0)),
+                ]);
+                let prepared_externals = runtime
+                    .kinematics
+                    .externals
+                    .get_dependent_externals::<f64>(
+                        crate::DependentMomentaConstructor::CrossSection,
+                    )
+                    .unwrap();
+                let (shell_value, derivative) = cut_surface.compute_self_and_r_derivative(
+                    &F(1.0),
+                    &shell_loops,
+                    &center,
+                    &prepared_externals,
+                    &masses,
+                    &term.graph.loop_momentum_basis,
+                );
+                assert!(shell_value.0.abs() < 1.0e-8, "{shell_value}");
+                assert!(derivative.0 > 0.0);
+                let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
+                    &bridge,
+                    4096,
+                    1.0,
+                    &vec![0.0; bridge.dimensions()],
+                )
+                .unwrap();
+                assert!((report.normalization - 1.0).abs() < 0.02, "{report:?}");
+                assert!(report.round_trip_residual_max < 1.0e-8, "{report:?}");
+
+                // User cut selectors are validated against the production CutId,
+                // even though there is only one canonical channel in this test.
+                parameterization
+                    .sampling_channels
+                    .channel_definitions
+                    .get_mut(&term.graph.name)
+                    .unwrap()
+                    .get_mut("physical_cut")
+                    .unwrap()
+                    .on_cut = vec![usize::MAX];
+                assert!(
+                    term.compile_sampling_bridge(
+                        &parameterization,
+                        runtime.kinematics.e_cm,
+                        &externals,
+                        None,
+                    )
+                    .unwrap_err()
+                    .to_string()
+                    .contains("on_cut")
+                );
+            }
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}

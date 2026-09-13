@@ -27,11 +27,11 @@ use symbolica::numerical_integration::{
 };
 
 use crate::Integrand;
-use crate::graph::{GroupId, LoopMomentumBasis};
+use crate::graph::GroupId;
 use crate::integrands::HasIntegrand;
 use crate::integrands::evaluation::EvaluationResult;
 use crate::integrands::evaluation::StatisticsCounter;
-use crate::integrands::process::ProcessIntegrand;
+use crate::integrands::process::{GraphTerm, ProcessIntegrand};
 use crate::model::{Model, SerializableInputParamCard};
 use crate::observables::{
     EventGroupList, ObservableAccumulatorBundle, ObservableFileFormat, ObservableSnapshotBundle,
@@ -260,7 +260,8 @@ impl SamplingSlotState {
                     .map(str::to_string)
                     .collect_vec()
             }
-            _ => Vec::new(),
+            #[cfg(test)]
+            Integrand::TestProbe(_) => Vec::new(),
         };
         Self::new(grid, discrete_axis_labels)
     }
@@ -716,7 +717,7 @@ fn discrete_grid_at_path<'a>(
             .sub_grid
             .as_ref()
             .and_then(|sub_grid| discrete_grid_at_path(sub_grid, rest)),
-        _ => None,
+        (Grid::Continuous(_) | Grid::Uniform(_, _), _) => None,
     }
 }
 
@@ -838,11 +839,11 @@ fn discrete_axis_labels(sampling: &SamplingSettings) -> Vec<&'static str> {
                         labels.push("orientation");
                     }
                 }
-                DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => {
+                DiscreteGraphSamplingType::SamplingMultiChanneling(_) => {
                     if settings.sample_orientations {
                         labels.push("orientation");
                     }
-                    labels.push("LMB channel");
+                    labels.push("sampling channel");
                 }
             }
             labels
@@ -871,16 +872,6 @@ where
     }
 
     format!("[{}]", graph_names.join(","))
-}
-
-fn lmb_channel_description(lmb: &LoopMomentumBasis) -> String {
-    format!(
-        "({})",
-        lmb.loop_edges
-            .iter()
-            .map(|edge_id| edge_id.0.to_string())
-            .join(",")
-    )
 }
 
 fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
@@ -941,7 +932,7 @@ fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
                     .collect(),
             )
         }
-        (ProcessIntegrand::Amplitude(integrand), "LMB channel") => {
+        (ProcessIntegrand::Amplitude(integrand), "sampling channel") => {
             let group_id = GroupId(*path.first()?);
             let group = integrand.data.graph_group_structure.get(group_id)?;
             let master = group.master();
@@ -951,22 +942,23 @@ fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
                 .sampling
                 .get_parameterization_settings()
                 .unwrap_or_default();
-            let effective_channels = graph_term
-                .multi_channeling_setup
-                .effective_channels(&graph_term.graph.name, &parameterization_settings)
+            let channel_ids = graph_term
+                .sampling_channel_ids(&parameterization_settings)
                 .ok()?;
             Some(
-                effective_channels
+                channel_ids
                     .iter()
-                    .map(|&channel_lmb| {
-                        lmb_channel_description(
-                            &graph_term.multi_channeling_setup.all_bases[channel_lmb],
-                        )
+                    .map(|&channel_id| {
+                        graph_term
+                            .sampling_channel_label(channel_id, &parameterization_settings)
+                            .ok()
+                            .flatten()
+                            .unwrap_or_else(|| format!("#{}", channel_id.index()))
                     })
                     .collect(),
             )
         }
-        (ProcessIntegrand::CrossSection(integrand), "LMB channel") => {
+        (ProcessIntegrand::CrossSection(integrand), "sampling channel") => {
             let group_id = GroupId(*path.first()?);
             let group = integrand.data.graph_group_structure.get(group_id)?;
             let master = group.master();
@@ -976,17 +968,18 @@ fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
                 .sampling
                 .get_parameterization_settings()
                 .unwrap_or_default();
-            let effective_channels = graph_term
-                .multi_channeling_setup
-                .effective_channels(&graph_term.graph.name, &parameterization_settings)
+            let channel_ids = graph_term
+                .sampling_channel_ids(&parameterization_settings)
                 .ok()?;
             Some(
-                effective_channels
+                channel_ids
                     .iter()
-                    .map(|&channel_lmb| {
-                        lmb_channel_description(
-                            &graph_term.multi_channeling_setup.all_bases[channel_lmb],
-                        )
+                    .map(|&channel_id| {
+                        graph_term
+                            .sampling_channel_label(channel_id, &parameterization_settings)
+                            .ok()
+                            .flatten()
+                            .unwrap_or_else(|| format!("#{}", channel_id.index()))
                     })
                     .collect(),
             )
@@ -1008,7 +1001,8 @@ fn first_non_trivial_discrete_bin_descriptions_for_integrand(
                 axis_label,
             )
         }
-        _ => None,
+        #[cfg(test)]
+        Integrand::TestProbe(_) => None,
     }
 }
 
@@ -3345,8 +3339,10 @@ fn numerical_stability_output_path(
 }
 
 fn user_facing_observables_output_formats(integrand: &Integrand) -> Vec<ObservableFileFormat> {
-    let Integrand::ProcessIntegrand(process_integrand) = integrand else {
-        return Vec::new();
+    let process_integrand = match integrand {
+        Integrand::ProcessIntegrand(process_integrand) => process_integrand,
+        #[cfg(test)]
+        Integrand::TestProbe(_) => return Vec::new(),
     };
     if !integrand.has_observables() {
         return Vec::new();
@@ -3360,8 +3356,10 @@ fn user_facing_observables_output_formats(integrand: &Integrand) -> Vec<Observab
 }
 
 fn user_facing_observables_output_enabled(integrand: &Integrand) -> bool {
-    let Integrand::ProcessIntegrand(process_integrand) = integrand else {
-        return false;
+    let process_integrand = match integrand {
+        Integrand::ProcessIntegrand(process_integrand) => process_integrand,
+        #[cfg(test)]
+        Integrand::TestProbe(_) => return false,
     };
     if !integrand.has_observables() {
         return false;
@@ -4262,7 +4260,7 @@ fn render_integral_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{UnitVolumeIntegrand, UnitVolumeSettings};
+    use crate::integrands::TestProbeIntegrand;
     use colored::control;
     use ratatui::{Terminal, backend::TestBackend};
     use std::fs;
@@ -4455,10 +4453,7 @@ mod tests {
             false,
         ));
         let settings = RuntimeSettings::default();
-        let integrand = Integrand::UnitVolume(UnitVolumeIntegrand::new(
-            settings,
-            UnitVolumeSettings { n_3d_momenta: 1 },
-        ));
+        let integrand = Integrand::TestProbe(TestProbeIntegrand::new(settings, 3));
         let mut without_monitor = CoreIterationState::new(
             vec![integrand.clone()],
             SamplingCorrelationMode::Correlated,
@@ -4597,10 +4592,7 @@ mod tests {
                     meta,
                     settings.clone(),
                     Model::default(),
-                    Integrand::UnitVolume(UnitVolumeIntegrand::new(
-                        settings,
-                        UnitVolumeSettings { n_3d_momenta: 1 },
-                    )),
+                    Integrand::TestProbe(TestProbeIntegrand::new(settings, 3)),
                     None,
                 )
             })
@@ -4857,14 +4849,8 @@ mod tests {
     fn correlated_core_iteration_state_populates_slot_statistics() {
         let settings_a = RuntimeSettings::default();
         let settings_b = RuntimeSettings::default();
-        let integrand_a = Integrand::UnitVolume(UnitVolumeIntegrand::new(
-            settings_a.clone(),
-            UnitVolumeSettings { n_3d_momenta: 1 },
-        ));
-        let integrand_b = Integrand::UnitVolume(UnitVolumeIntegrand::new(
-            settings_b.clone(),
-            UnitVolumeSettings { n_3d_momenta: 1 },
-        ));
+        let integrand_a = Integrand::TestProbe(TestProbeIntegrand::new(settings_a.clone(), 3));
+        let integrand_b = Integrand::TestProbe(TestProbeIntegrand::new(settings_b.clone(), 3));
         let sampling_grid_template = SamplingSlotState::from_integrand(&integrand_a).grid;
         let mut core_state = CoreIterationState::new(
             vec![integrand_a, integrand_b],
@@ -5699,7 +5685,7 @@ mod tests {
 
     #[test]
     fn format_max_eval_sample_keeps_full_discrete_coordinates() {
-        let axis_labels = vec!["graph".to_string(), "LMB channel".to_string()];
+        let axis_labels = vec!["graph".to_string(), "sampling channel".to_string()];
         let full_sample = Sample::Discrete(
             F(1.0),
             0,
@@ -5717,11 +5703,11 @@ mod tests {
 
         assert_eq!(
             display::format_max_eval_sample(&full_sample, &axis_labels, &[]),
-            "graph: 0, LMB channel: 1, xs: [ 2.5000000000000000e-01 ]"
+            "graph: 0, sampling channel: 1, xs: [ 2.5000000000000000e-01 ]"
         );
         assert_eq!(
             display::format_max_eval_sample(&nested_sample, &axis_labels, &[0]),
-            "graph: 0, LMB channel: 1, xs: [ 7.5000000000000000e-01 ]"
+            "graph: 0, sampling channel: 1, xs: [ 7.5000000000000000e-01 ]"
         );
     }
 
@@ -5832,10 +5818,7 @@ mod tests {
             },
             settings.clone(),
             Model::default(),
-            Integrand::UnitVolume(UnitVolumeIntegrand::new(
-                settings,
-                UnitVolumeSettings { n_3d_momenta: 1 },
-            )),
+            Integrand::TestProbe(TestProbeIntegrand::new(settings, 3)),
             None,
         );
         let rendered = render_results_output_summary_table(
@@ -5876,10 +5859,7 @@ mod tests {
             },
             settings.clone(),
             Model::default(),
-            Integrand::UnitVolume(UnitVolumeIntegrand::new(
-                settings,
-                UnitVolumeSettings { n_3d_momenta: 1 },
-            )),
+            Integrand::TestProbe(TestProbeIntegrand::new(settings, 3)),
             None,
         );
         let rendered = render_results_output_summary_table(

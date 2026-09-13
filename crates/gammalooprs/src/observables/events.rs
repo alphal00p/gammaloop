@@ -20,8 +20,8 @@ pub struct CutInfo {
     pub graph_id: usize,
     pub graph_group_id: Option<usize>,
     pub orientation_id: Option<usize>,
-    pub lmb_channel_id: Option<usize>,
-    pub lmb_channel_edge_ids: Option<SmallVec<[usize; 4]>>,
+    pub sampling_channel_id: Option<usize>,
+    pub sampling_channel_edge_ids: Option<SmallVec<[usize; 4]>>,
 }
 
 pub type Event = GenericEvent<f64>;
@@ -535,7 +535,7 @@ fn format_pdg_with_state_color(pdg: Option<isize>, incoming: bool) -> String {
     }
 }
 
-fn format_lmb_channel_edge_ids(edge_ids: Option<&[usize]>) -> String {
+fn format_sampling_channel_edge_ids(edge_ids: Option<&[usize]>) -> String {
     edge_ids
         .map(|edge_ids| {
             format!(
@@ -720,13 +720,13 @@ impl fmt::Display for CutInfo {
             EventSummaryRow {
                 field: "lmb channel id".to_string(),
                 value: self
-                    .lmb_channel_id
+                    .sampling_channel_id
                     .map(|value| value.to_string())
                     .unwrap_or_else(|| "None".to_string()),
             },
             EventSummaryRow {
                 field: "lmb channel".to_string(),
-                value: format_lmb_channel_edge_ids(self.lmb_channel_edge_ids.as_deref()),
+                value: format_sampling_channel_edge_ids(self.sampling_channel_edge_ids.as_deref()),
             },
         ];
         write!(f, "{}", Table::new(rows).with(Style::rounded()))
@@ -764,13 +764,15 @@ impl<T: FloatLike> fmt::Display for GenericEvent<T> {
                 field: "lmb channel id".to_string(),
                 value: self
                     .cut_info
-                    .lmb_channel_id
+                    .sampling_channel_id
                     .map(|value| value.to_string())
                     .unwrap_or_else(|| "None".to_string()),
             },
             EventSummaryRow {
                 field: "lmb channel".to_string(),
-                value: format_lmb_channel_edge_ids(self.cut_info.lmb_channel_edge_ids.as_deref()),
+                value: format_sampling_channel_edge_ids(
+                    self.cut_info.sampling_channel_edge_ids.as_deref(),
+                ),
             },
             EventSummaryRow {
                 field: "weight".to_string(),
