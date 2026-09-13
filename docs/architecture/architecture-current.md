@@ -429,17 +429,23 @@ projected local4D are summed representations and reject that request.
 
 Evaluator construction normalizes its factorized input once, then parses each
 existing top-level summand into an independent Spenso network. This bounds
-boundary extraction to the current summand instead of repeatedly scanning the
-complete additive input. Products, powers and nested sums retain their grouping.
+network preparation to the current summand. Products, powers and nested sums
+retain their grouping.
 Each network aliases large scalar references and contracts its tensor products
 before resolving its own aliases. Scalar results are combined in one bulk sum
 before global evaluator optimization; open tensors, including open zero tensors,
 remain invalid scalar outputs. At this finite component boundary, a ready tensor
 whose exposed indices all contract with a pending tensor sum is attached to
-each immediate sum branch first. Eligible leaves of the same sum move together,
-so its branches and boundary are reconstructed once. This reduces the sum's
-open tensor rank before large component expressions are constructed. The tensor
-store is shared by reference and scalar spectators stay outside; sums are not multiplied
+each immediate sum branch first. One expression traversal selects all eligible
+disjoint outermost sums, including siblings within a product. Small product
+wrappers copy only the closing leaf references and their exact slot order,
+flow and internal traces. Native arms and sum shells stay in place; stable
+half-edge identifiers bind the consumed inputs while residual seams remain
+untouched. The wrappers are appended together, followed by one deletion and
+operator merge per wave. This reduces the sum's open tensor rank before large
+component expressions are constructed, without repeated extraction of a whole
+sum or its arms. The tensor store is shared by reference and scalar spectators
+stay outside; sums are not multiplied
 through other sums, powers or opaque functions. Repeating the transformation
 decreases an existing sum's exposed rank. Eligibility requires self-dual exposed
 sum slots, so shared edge descriptors retain their exact endpoint meaning;

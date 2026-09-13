@@ -690,6 +690,87 @@ fn ready_sum_boundary_closure_matches_coordinates_across_execution_strategies() 
         panic!("expected a closed scalar");
     };
     assert_eq!(*actual, expected as f64);
+
+    // Equal slot labels in independent scopes must never identify their seams.
+    let mut disjoint = (0..8).map(|offset| {
+        tensor(&[1], offset + 1)
+            .n_add([tensor(&[1], offset + 3)])
+            .n_mul([tensor(&[1], 2)])
+    });
+    let disjoint = disjoint.next().unwrap().n_add(disjoint);
+    let disjoint_expected: usize = (0..8)
+        .flat_map(|offset| (0..2).map(move |i| (2 * offset + 4 + 2 * i) * (2 + i)))
+        .sum();
+
+    // All four Sum targets share one Product and should be prepared together.
+    let siblings = Net::from_scalar(1.0).n_mul((1..=4).flat_map(|axis| {
+        [
+            tensor(&[axis], 4).n_add([tensor(&[axis], 6)]),
+            tensor(&[axis], 2),
+        ]
+    }));
+    let sibling_expected: usize = (0..2).map(|i| (10 + 2 * i) * (2 + i)).sum();
+
+    // The b seam couples two sums while a and c close independently. Neither
+    // the shared residual edge nor its axis order may be reconstructed by name.
+    let coupled = tensor(&[2, 1], 1).n_add([tensor(&[1, 2], 3)]).n_mul([
+        tensor(&[2, 3], 4).n_add([tensor(&[3, 2], 6)]),
+        tensor(&[1], 1),
+        tensor(&[3], 2),
+    ]);
+    let mut coupled_expected = 0usize;
+    for a in 0..2 {
+        for b in 0..2 {
+            for c in 0..2 {
+                coupled_expected += (1 + a) * (2 + c) * (4 + 3 * a + 3 * b) * (10 + 3 * b + 3 * c);
+            }
+        }
+    }
+
+    // Closing the outer b boundary exposes another ready Sum in the next wave.
+    let nested = tensor(&[2, 1], 1)
+        .n_add([tensor(&[1, 2], 3)])
+        .n_mul([tensor(&[1], 1)])
+        .n_add([tensor(&[2], 5)])
+        .n_mul([tensor(&[2], 2)]);
+    let nested_expected: usize = (0..2)
+        .map(|b| (2 + b) * ((0..2).map(|a| (1 + a) * (4 + 3 * a + 3 * b)).sum::<usize>() + 5 + b))
+        .sum();
+
+    // A ready leaf can also carry an internal trace; clone its two half-edges
+    // and their axis positions, not just its free boundary to the Sum.
+    let traced = tensor(&[2], 4)
+        .n_add([tensor(&[2], 6)])
+        .n_mul([tensor(&[9, 9, 2], 3)]);
+    let traced_expected: usize = (0..2).map(|i| (10 + 2 * i) * (12 + 2 * i)).sum();
+
+    for (name, original, moved, expected) in [
+        ("disjoint", disjoint, 8, disjoint_expected),
+        ("siblings", siblings, 4, sibling_expected.pow(4)),
+        ("coupled", coupled, 2, coupled_expected),
+        ("nested", nested, 3, nested_expected),
+        ("traced", traced, 1, traced_expected),
+    ] {
+        let mut prepared = original.clone();
+        let stored_tensors = prepared.store.tensors.len();
+        assert_eq!(
+            prepared.graph.contract_ready_sum_boundaries(),
+            moved,
+            "{name}"
+        );
+        assert_eq!(prepared.store.tensors.len(), stored_tensors, "{name}");
+        prepared.graph.graph.check().unwrap();
+        assert_eq!(prepared.graph.n_dangling(), 0, "{name}");
+        assert_eq!(prepared.graph.contract_ready_sum_boundaries(), 0, "{name}");
+        for mut net in [original, prepared] {
+            net.execute::<SequentialRef, SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+                .unwrap();
+            let ExecutionResult::Val(actual) = net.result_scalar().unwrap() else {
+                panic!("expected a closed scalar for {name}");
+            };
+            assert_eq!(*actual, expected as f64, "{name}");
+        }
+    }
 }
 
 #[cfg(feature = "shadowing")]

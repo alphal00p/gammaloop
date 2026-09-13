@@ -1356,3 +1356,84 @@ If a gate fails, use the measurements to continue the generic implementation, in
   the only intervening change was the new test's coefficient representation.
   No physical expectation or tolerance was changed. Final clippy11 is running.
 - Clippy11 passes in 18.11 s with the same three tuple-complexity warnings.
+- The additive-preprocessing milestone is committed and pushed as
+  `1eb32575d9b16fee2910f3bb2c791fbae2eae5ba`, with ValentinHirschi as author
+  and committer. CLI14 check passes in 9.441 s and build in 205.144 s. Its
+  immutable clean-source binary has SHA-256
+  `7aad642f9b065f89e8842d6943173f15aeeb17b24230779c7a050b75021829db`,
+  1,575,509,560 bytes, in `diagnostic_additive_component_preprocessing`.
+  Manifests record the empty source patch, exact flags, compiler and assertions.
+- Counter14 links in 22.382 s with unchanged direct dependency hashes and is
+  frozen with SHA-256
+  `96038ccd0115814c67999f760dc71bbabde4dfa320ff5b9041d89bdb44e66b78`.
+  Its known GL00 validation reproduces every evaluator-count row and preserves
+  all saved-state hashes. CLI14's fresh GL262 direct run starts at
+  07:19:22.549834 UTC with the same 2,400 s cap and 30 GiB guard from launch.
+  It overlaps the following integration compilation and is a diagnostic,
+  not a final timing run.
+- Integration check70 passes in 10.32 s and build9 passes in 3m42s. Four
+  immutable executables from clean `1eb32575d` are bound by
+  `validation_candidate_1eb32/final_build_manifest.json`. The exact four,
+  seven, two and one boundary-check groups are queued under the common lock
+  after CLI14. The full scalar/physical matrix and repeated performance gates
+  remain pending. CLI14 has completed six of ten forest nodes; evaluator
+  preprocessing has not yet been reached.
+
+
+### 2026-09-13 — Batched finite tensor boundary preparation
+
+- CLI14 completes all ten GL262 forest nodes in 913.275 s, with the root
+  taking 20.137 s. Evaluator normalization takes 4.654 s and finds 3,050
+  top-level summands. The first summand takes 0.575 s for parsing/preparation
+  (including 0.383 s for sixteen boundary closures) and 3.247 s for execution.
+  The second summand remains in boundary preparation near the diagnostic cap;
+  no completed evaluator or performance ratio is claimed.
+- A separate six-second, 19 Hz user-CPU stack sample of CLI14's generation
+  worker records 85 samples with none lost. Boundary preparation appears in
+  98.82% of inclusive stacks; extraction in 42.35%, expression-tree building
+  in 23.53%, and deletion in 17.65%. These overlapping stack percentages
+  characterize this window, not the whole run. The immutable binary identity,
+  thread, tool, commands and artifact hashes are recorded in
+  `diagnostic_additive_component_preprocessing/GL262_4d_direct_r1/` under
+  `perf_large_summand_manifest.json`.
+- The existing finite-component boundary owner now selects disjoint outermost
+  Sum scopes, including all eligible siblings, from one expression traversal.
+  It appends small Product wrappers holding copies of ready leaf references,
+  rewires exact half-edge IDs and removes obsolete endpoints once per wave.
+  Original Sum shells, native arms, residual seams, tensor data and scalar
+  spectators stay in place. Traced leaf loops preserve both axis positions.
+  One operator merge follows the batch. The obsolete per-arm extraction path
+  is removed and its meaningful comments are carried to the replacement.
+- The existing independent coordinate oracle now also covers eight disjoint
+  scopes with reused slot labels, four sibling targets, sums sharing a residual
+  connection, nested waves and a closing leaf with an internal trace. Each
+  checks exact finite-component values, graph consistency, store sharing and
+  idempotence. No physical expectation, tolerance or graph numerator changes.
+- Formatting and check71 pass (10.04 s). Nextest27 exits before compilation
+  because `-j8` aliases test threads and duplicates the explicit serial setting;
+  nextest28 uses CARGO_BUILD_JOBS=8 and a single test-thread argument. Results
+  and the remaining generation/runtime gates are pending.
+
+- CLI14 reaches its unchanged cap: SIGTERM at 2,400.101208 s, outer wall
+  2,400.666167 s, exit -15 and peak RSS 6,287,552,512 bytes (5.86 GiB).
+  The memory guard did not intervene. Term one remains unfinished; there is
+  no saved evaluator, production forest export or runtime measurement.
+- A source/listing audit confirms the full existing scalar LU matrix is 166
+  three-route cases over 49 graph labels: 49 base, 90 quadratic numerator,
+  ten quartic numerator and seventeen owned-dot/component probes. One extra
+  sampling-scale check gives the harness's 167. Integrated UV and threshold
+  counterterms are enabled in all three-route cases. Dedicated raised-line
+  amplitude and cut acceptances are also selected separately. Numerator
+  degree variants are not propagator-power variants, and these counts do not
+  establish more than 100 distinct topologies. No authored case is omitted.
+
+- Nextest28 builds in 3m09s and passes all 343 selected Spenso, local UV,
+  energy-degree and evaluator-preprocessing unit checks in 37.620 s. The five
+  added coordinate cases pass without expectation changes. Clippy12 passes
+  in 1m01s including the build-lock wait, with the same three existing
+  tuple-complexity warnings. Formatting and diff whitespace checks pass.
+- All fourteen frozen `1eb32575d` boundary acceptances pass: UV composition
+  four in 22.205 s, cut/threshold seven in 18.057 s, API two in 4.492 s and
+  analytic renormalization one in 0.401 s. These certify the previous additive
+  preprocessing revision, not yet this batched graph transformation. The
+  complete scalar/physical matrix and repeated performance gates remain open.
