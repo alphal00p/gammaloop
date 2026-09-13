@@ -1536,6 +1536,11 @@ mod tests {
             .channel_definitions
             .entry("G".into())
             .or_default()
+            .insert("common".into(), definition("lmb(1,2)"));
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
             .insert("named".into(), definition("surface(1,2)"));
 
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
