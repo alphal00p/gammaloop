@@ -1,0 +1,2126 @@
+{
+  "created_utc": "2026-09-13T21:37:52.016384+00:00",
+  "status": "pass",
+  "scope": "Final GL00 and GL01 physical three-route acceptance. GL262 explicitly deferred by the user; no GL262 performance acceptance is claimed.",
+  "snapshot": "measurements_GL00_GL01_complete_20260913T213752Z.json",
+  "snapshot_sha256": "8f43528c8f4cdf815d199df0f96f7956da1106f454246c233f1f40608a29a1ca",
+  "identity": {
+    "source_revision": "f938f9c1386eb2670a0a7f603f5eb0878086352a",
+    "binary_sha256": "b84c2d9e89f7a28fd1c1910db8b2d43cd1fda2db460fd2e5d6fa4661eca6c36a",
+    "counter_sha256": "f7eb7998ef2cfb991b45838bfb80f96bea21f0c10bbd84c363dc1a9e7f948822",
+    "harness_sha256": "39c2df8037b58753398f063df71f6c5a4e474e1f69f751af25b953cdd57e10e4",
+    "runtime_helper_sha256": "c0bbb9b281dfa229467e15c994deae0700805ec14bf0366d1f65987cb6bc62ac",
+    "evaluator_optimization": {
+      "horner_iterations": 1,
+      "cpe_iterations": 5
+    },
+    "thread_limits": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "RUST_MIN_STACK": "67108864"
+    },
+    "memory_limit_gb": 500.0
+  },
+  "build": {
+    "profile": "dev-optim",
+    "debug_assertions": true,
+    "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "cargo_lock_sha256": "5ca128a5828fb99e142beb43afdea60cc7ad2c0fd44f0247251331bfb75b488a"
+  },
+  "protocol": {
+    "minimum_measured_total_seconds_per_pass": 3.0,
+    "maximum_retries_per_pass": 5,
+    "retained_passes": 3,
+    "batches_per_pass": 20,
+    "points": [
+      "base",
+      "scaled"
+    ],
+    "duration_measure": "sum(batch.total * batch_sample_count), excluding warmup and priming"
+  },
+  "settings": {
+    "evaluator_mode": "eager, uncompiled",
+    "evaluator_optimization": {
+      "horner_iterations": 1,
+      "cpe_iterations": 5
+    },
+    "workers": 1,
+    "runtime_space": "fixed momentum-space points; minimal_integrand=true",
+    "integrated_cts": false,
+    "threshold_cts": false,
+    "memory_guard_limit_bytes": 500000000000
+  },
+  "timing_boundary_definitions": {
+    "total_time": "Native graph generation timer; excludes CLI startup and state serialization. Includes Spenso preprocessing and Symbolica evaluator construction.",
+    "expression_build_time": "Native total_time minus evaluator_spenso_time, evaluator_symbolica_time, and evaluator_compile_time. Broader expression/UV construction and setup; not an isolated UV-only timer.",
+    "evaluator_spenso_time": "EvaluatorStack preprocessing: tensor parsing/contraction, scalar alias resolution and scalar combination.",
+    "evaluator_symbolica_time": "Evaluator variant preparation/build and optimization after tensor preprocessing.",
+    "total_minus_symbolica_time": "Native total_time minus evaluator_symbolica_time; retains tensor preprocessing. This boundary is not faster for direct 4D in these runs.",
+    "evaluator_compile_time": "Zero for every final run; generated evaluator code compilation disabled.",
+    "process_wall_seconds": "Supervisor child wall time, including CLI startup/serialization; 1-second polling granularity; not the generation acceptance metric."
+  },
+  "uncertainty_scope": "Observed spreads and pass-mean \u00b12 within-pass SEM envelopes are descriptive repeat triggers, not statistical confidence intervals.",
+  "dispatch_scope": "Dispatch profiling is a separate validation stage. Its profiled generation times never enter final unprofiled generation/runtime statistics; historical child-only percentages do not certify current complete dispatch overhead.",
+  "graphs": {
+    "GL00": {
+      "generation_cases": 9,
+      "point_rows": 18,
+      "accepted_passes": 54,
+      "accepted_batches": 1080,
+      "accepted_total_samples": 2388838,
+      "accepted_actual_total_seconds": 195.91659359800002,
+      "rejected_undersized_attempts_not_counted": 54,
+      "worst_relative_complex_norm_difference": 4.329377502341159e-15,
+      "pointwise_tolerance": 1e-09,
+      "base_point": [
+        0.11,
+        -0.07,
+        0.19,
+        -0.13,
+        0.05,
+        0.29
+      ],
+      "scaled_point": [
+        11.0,
+        -7.000000000000001,
+        19.0,
+        -13.0,
+        5.0,
+        28.999999999999996
+      ],
+      "graph_sha256": "f54e26aa470db8c05923e50b624e4e67cfff5403f153dfd7fe3e26352b0aa41d",
+      "routes": {
+        "3d_local": {
+          "generation_cases": [
+            {
+              "repeat": 1,
+              "case": "GL00_3d_local_r1",
+              "pid": 383160,
+              "started_utc": "2026-09-13T18:58:56.650343+00:00",
+              "ended_utc": "2026-09-13T18:59:09.659054+00:00",
+              "timings_seconds": {
+                "total_time": 11.925558421,
+                "evaluator_spenso_time": 1.868717304,
+                "evaluator_symbolica_time": 7.004701478,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 3.052139639,
+                "total_minus_symbolica_time": 4.9208569429999995,
+                "process_wall_seconds": 13.008576945983805
+              },
+              "generation_card_sha256": "aef6a77215844fa60f0f14a1f36520af17266a92ad7c1968e921328ccbf314c9",
+              "runtime_card_sha256": "7eb4a8d6b7820deed75af0975b34ff7e693426a65b4f2d61d25863067761580a",
+              "state_content_sha256": "df9a3f14e4a98a211de70748347ef873b1ee1ee325ce8c277c58641ed307f608",
+              "state_total_bytes": 39333825,
+              "graph_reported_peak_ram_bytes": 463609856,
+              "supervisor_observed_peak_rss_bytes": 463609856,
+              "supervisor_observed_peak_vmhwm_bytes": 573980672
+            },
+            {
+              "repeat": 2,
+              "case": "GL00_3d_local_r2",
+              "pid": 401193,
+              "started_utc": "2026-09-13T19:01:36.895049+00:00",
+              "ended_utc": "2026-09-13T19:01:49.901692+00:00",
+              "timings_seconds": {
+                "total_time": 11.921723657,
+                "evaluator_spenso_time": 1.862908677,
+                "evaluator_symbolica_time": 7.015245479,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 3.0435695009999986,
+                "total_minus_symbolica_time": 4.9064781779999995,
+                "process_wall_seconds": 13.006635055993684
+              },
+              "generation_card_sha256": "e81f98d0ef59b43f486d34ad045a984940afe63d8f5a3fb1d50afb1120c53aa2",
+              "runtime_card_sha256": "b265109822840037baac66928d02cf435cfefb3371c699bfb6734760f0372421",
+              "state_content_sha256": "af3538d4e7d17724013ac332b79a43e2f73e8470444017a8ee3411d7ef77cc44",
+              "state_total_bytes": 39333826,
+              "graph_reported_peak_ram_bytes": 491462656,
+              "supervisor_observed_peak_rss_bytes": 491380736,
+              "supervisor_observed_peak_vmhwm_bytes": 542183424
+            },
+            {
+              "repeat": 3,
+              "case": "GL00_3d_local_r3",
+              "pid": 420662,
+              "started_utc": "2026-09-13T19:04:16.582739+00:00",
+              "ended_utc": "2026-09-13T19:04:29.589165+00:00",
+              "timings_seconds": {
+                "total_time": 12.163796569,
+                "evaluator_spenso_time": 1.875863403,
+                "evaluator_symbolica_time": 7.219275849,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 3.0686573170000013,
+                "total_minus_symbolica_time": 4.944520720000001,
+                "process_wall_seconds": 13.006402489962056
+              },
+              "generation_card_sha256": "c1273809c6bdae8aa98402cb7fa7fc3279bd1fed9671f835d7fe8166af09a78b",
+              "runtime_card_sha256": "575d6f9709577e873f95c1ec5a439ec77522ad5bd6544e33363e3069def145ef",
+              "state_content_sha256": "18e8cc684f984d6245df1c264dfbd1783c0d6b92bed4dcd0bdf392a94bf7ec63",
+              "state_total_bytes": 39333827,
+              "graph_reported_peak_ram_bytes": 480038912,
+              "supervisor_observed_peak_rss_bytes": 468123648,
+              "supervisor_observed_peak_vmhwm_bytes": 520507392
+            }
+          ],
+          "generation_statistics": {
+            "total_time": {
+              "n": 3,
+              "values": [
+                11.925558421,
+                11.921723657,
+                12.163796569
+              ],
+              "median": 11.925558421,
+              "minimum": 11.921723657,
+              "maximum": 12.163796569,
+              "sample_standard_deviation": 0.1386671165667178
+            },
+            "evaluator_spenso_time": {
+              "n": 3,
+              "values": [
+                1.868717304,
+                1.862908677,
+                1.875863403
+              ],
+              "median": 1.868717304,
+              "minimum": 1.862908677,
+              "maximum": 1.875863403,
+              "sample_standard_deviation": 0.006488859739045159
+            },
+            "evaluator_symbolica_time": {
+              "n": 3,
+              "values": [
+                7.004701478,
+                7.015245479,
+                7.219275849
+              ],
+              "median": 7.015245479,
+              "minimum": 7.004701478,
+              "maximum": 7.219275849,
+              "sample_standard_deviation": 0.12095572780255195
+            },
+            "evaluator_compile_time": {
+              "n": 3,
+              "values": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "median": 0.0,
+              "minimum": 0.0,
+              "maximum": 0.0,
+              "sample_standard_deviation": 0.0
+            },
+            "expression_build_time": {
+              "n": 3,
+              "values": [
+                3.052139639,
+                3.0435695009999986,
+                3.0686573170000013
+              ],
+              "median": 3.052139639,
+              "minimum": 3.0435695009999986,
+              "maximum": 3.0686573170000013,
+              "sample_standard_deviation": 0.012751989802254336
+            },
+            "total_minus_symbolica_time": {
+              "n": 3,
+              "values": [
+                4.9208569429999995,
+                4.9064781779999995,
+                4.944520720000001
+              ],
+              "median": 4.9208569429999995,
+              "minimum": 4.9064781779999995,
+              "maximum": 4.944520720000001,
+              "sample_standard_deviation": 0.019209191491977955
+            },
+            "process_wall_seconds": {
+              "n": 3,
+              "values": [
+                13.008576945983805,
+                13.006635055993684,
+                13.006402489962056
+              ],
+              "median": 13.006635055993684,
+              "minimum": 13.006402489962056,
+              "maximum": 13.008576945983805,
+              "sample_standard_deviation": 0.001193962777429135
+            }
+          },
+          "runtime": {
+            "base": {
+              "fresh_states": 3,
+              "accepted_passes": 9,
+              "batches": 180,
+              "total_samples": 368116,
+              "actual_total_seconds": 32.826298108,
+              "actual_pass_seconds_range": [
+                3.4169067890000004,
+                3.7421877540000006
+              ],
+              "rejected_undersized_attempts": 9,
+              "evaluator_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  7.78946323955709e-05,
+                  7.819681745562016e-05,
+                  7.760130926417525e-05
+                ],
+                "median": 7.78946323955709e-05,
+                "minimum": 7.760130926417525e-05,
+                "maximum": 7.819681745562016e-05,
+                "mean": 7.789758637178877e-05,
+                "sample_standard_deviation": 2.97765085262051e-07,
+                "standard_error_of_mean": 1.7191475213131701e-07
+              },
+              "total_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  8.911495912660548e-05,
+                  8.963353341723032e-05,
+                  8.935007126800639e-05
+                ],
+                "median": 8.935007126800639e-05,
+                "minimum": 8.911495912660548e-05,
+                "maximum": 8.963353341723032e-05,
+                "mean": 8.936618793728073e-05,
+                "sample_standard_deviation": 2.596625386836522e-07,
+                "standard_error_of_mean": 1.4991623660746822e-07
+              },
+              "pass_mean_plus_minus_two_sem_envelopes": {
+                "Total": {
+                  "minimum": 8.796210292636567e-05,
+                  "maximum": 9.020274163898632e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                },
+                "evaluators": {
+                  "minimum": 7.642346839497955e-05,
+                  "maximum": 7.86897603765093e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                }
+              }
+            },
+            "scaled": {
+              "fresh_states": 3,
+              "accepted_passes": 9,
+              "batches": 180,
+              "total_samples": 364468,
+              "actual_total_seconds": 32.277958591,
+              "actual_pass_seconds_range": [
+                3.3623057120000004,
+                3.697169327
+              ],
+              "rejected_undersized_attempts": 9,
+              "evaluator_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  7.714994131540017e-05,
+                  7.795637888083935e-05,
+                  7.673468450568469e-05
+                ],
+                "median": 7.714994131540017e-05,
+                "minimum": 7.673468450568469e-05,
+                "maximum": 7.795637888083935e-05,
+                "mean": 7.72803349006414e-05,
+                "sample_standard_deviation": 6.211973534032326e-07,
+                "standard_error_of_mean": 3.5864845920723944e-07
+              },
+              "total_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  8.853318845486903e-05,
+                  8.956438119542458e-05,
+                  8.816846041202533e-05
+                ],
+                "median": 8.853318845486903e-05,
+                "minimum": 8.816846041202533e-05,
+                "maximum": 8.956438119542458e-05,
+                "mean": 8.875534335410631e-05,
+                "sample_standard_deviation": 7.239912346312173e-07,
+                "standard_error_of_mean": 4.179965342052628e-07
+              },
+              "pass_mean_plus_minus_two_sem_envelopes": {
+                "Total": {
+                  "minimum": 8.709312292492434e-05,
+                  "maximum": 9.027482815448651e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                },
+                "evaluators": {
+                  "minimum": 7.571448218712141e-05,
+                  "maximum": 7.833269398970503e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                }
+              }
+            }
+          },
+          "evaluator_programs": [
+            {
+              "additions": 43542,
+              "conditional_branches": 244,
+              "explicit_multiplications": 56412,
+              "fn_map_entry_count": 51,
+              "function_calls": 1642,
+              "functions": {
+                "powf": 664,
+                "symbolica::sqrt[]": 978
+              },
+              "input_count": 214,
+              "instructions": 87768,
+              "integer_power_multiplications": 0,
+              "inversions": 1892,
+              "multiplications": 56412,
+              "orientation_count": 62,
+              "output_count": 1,
+              "stack": "original",
+              "variant": "single_parametric"
+            },
+            {
+              "additions": 14066,
+              "conditional_branches": 0,
+              "explicit_multiplications": 18649,
+              "fn_map_entry_count": 1,
+              "function_calls": 18,
+              "functions": {
+                "powf": 9,
+                "symbolica::sqrt[]": 9
+              },
+              "input_count": 214,
+              "instructions": 26041,
+              "integer_power_multiplications": 0,
+              "inversions": 35,
+              "multiplications": 18649,
+              "orientation_count": 62,
+              "output_count": 1,
+              "stack": "original",
+              "variant": "summed_function_map"
+            }
+          ]
+        },
+        "3d_erased": {
+          "generation_cases": [
+            {
+              "repeat": 1,
+              "case": "GL00_3d_erased_r1",
+              "pid": 389123,
+              "started_utc": "2026-09-13T18:59:52.676509+00:00",
+              "ended_utc": "2026-09-13T18:59:59.681241+00:00",
+              "timings_seconds": {
+                "total_time": 6.261713106,
+                "evaluator_spenso_time": 1.865056827,
+                "evaluator_symbolica_time": 1.352501486,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 3.044154793,
+                "total_minus_symbolica_time": 4.909211620000001,
+                "process_wall_seconds": 7.004717301926576
+              },
+              "generation_card_sha256": "085846c11dec9976277963ebbf1cdf8a3ee7e344a875d29555f13fc2946b89ee",
+              "runtime_card_sha256": "91408d8278b2726825bfc3fa5f21a3268cb1e1a35992296cb8375ca5ebc7b7d3",
+              "state_content_sha256": "9c929092cbbb2856f8b2ef4efa5254d29235c9a70e878157b69c1a654e285a0c",
+              "state_total_bytes": 3021299,
+              "graph_reported_peak_ram_bytes": 293785600,
+              "supervisor_observed_peak_rss_bytes": 293785600,
+              "supervisor_observed_peak_vmhwm_bytes": 297926656
+            },
+            {
+              "repeat": 2,
+              "case": "GL00_3d_erased_r2",
+              "pid": 411002,
+              "started_utc": "2026-09-13T19:02:38.246617+00:00",
+              "ended_utc": "2026-09-13T19:02:45.250829+00:00",
+              "timings_seconds": {
+                "total_time": 6.316841179,
+                "evaluator_spenso_time": 1.880193851,
+                "evaluator_symbolica_time": 1.347904991,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 3.088742337,
+                "total_minus_symbolica_time": 4.968936188,
+                "process_wall_seconds": 7.004196207970381
+              },
+              "generation_card_sha256": "0735c060845b00fe54975ac7a11bd2cbeeba6174d7656e7d710d303567da2b4b",
+              "runtime_card_sha256": "2b0b4fb17641383031594bb48e4609dd8ba89464548ff9266ab2be609535ebe1",
+              "state_content_sha256": "e4f3cafea35395d72399bdd01a467f38eb47fcad93914a0cc8b3bd14a3c20edf",
+              "state_total_bytes": 3021299,
+              "graph_reported_peak_ram_bytes": 295911424,
+              "supervisor_observed_peak_rss_bytes": 290058240,
+              "supervisor_observed_peak_vmhwm_bytes": 298303488
+            },
+            {
+              "repeat": 3,
+              "case": "GL00_3d_erased_r3",
+              "pid": 425082,
+              "started_utc": "2026-09-13T19:05:12.707752+00:00",
+              "ended_utc": "2026-09-13T19:05:20.712158+00:00",
+              "timings_seconds": {
+                "total_time": 6.3414279239999995,
+                "evaluator_spenso_time": 1.890417957,
+                "evaluator_symbolica_time": 1.385855215,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 3.0651547519999998,
+                "total_minus_symbolica_time": 4.955572708999999,
+                "process_wall_seconds": 8.004373472067527
+              },
+              "generation_card_sha256": "f4f4563758f6d4edeafae94c2c3025a026ae781c240c62992c8d84a70f2f82a7",
+              "runtime_card_sha256": "7679f8528092087809a92e267dcaa9f777b1095f703b492e51b31b29a430f9ac",
+              "state_content_sha256": "01eddd04312a06e01ebd8e8594a919a7c7316e259d66495339e664155ccf3222",
+              "state_total_bytes": 3021299,
+              "graph_reported_peak_ram_bytes": 316358656,
+              "supervisor_observed_peak_rss_bytes": 322211840,
+              "supervisor_observed_peak_vmhwm_bytes": 355844096
+            }
+          ],
+          "generation_statistics": {
+            "total_time": {
+              "n": 3,
+              "values": [
+                6.261713106,
+                6.316841179,
+                6.3414279239999995
+              ],
+              "median": 6.316841179,
+              "minimum": 6.261713106,
+              "maximum": 6.3414279239999995,
+              "sample_standard_deviation": 0.0408208783817818
+            },
+            "evaluator_spenso_time": {
+              "n": 3,
+              "values": [
+                1.865056827,
+                1.880193851,
+                1.890417957
+              ],
+              "median": 1.880193851,
+              "minimum": 1.865056827,
+              "maximum": 1.890417957,
+              "sample_standard_deviation": 0.012759628742983998
+            },
+            "evaluator_symbolica_time": {
+              "n": 3,
+              "values": [
+                1.352501486,
+                1.347904991,
+                1.385855215
+              ],
+              "median": 1.352501486,
+              "minimum": 1.347904991,
+              "maximum": 1.385855215,
+              "sample_standard_deviation": 0.020711584947160414
+            },
+            "evaluator_compile_time": {
+              "n": 3,
+              "values": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "median": 0.0,
+              "minimum": 0.0,
+              "maximum": 0.0,
+              "sample_standard_deviation": 0.0
+            },
+            "expression_build_time": {
+              "n": 3,
+              "values": [
+                3.044154793,
+                3.088742337,
+                3.0651547519999998
+              ],
+              "median": 3.0651547519999998,
+              "minimum": 3.044154793,
+              "maximum": 3.088742337,
+              "sample_standard_deviation": 0.022306282837225463
+            },
+            "total_minus_symbolica_time": {
+              "n": 3,
+              "values": [
+                4.909211620000001,
+                4.968936188,
+                4.955572708999999
+              ],
+              "median": 4.955572708999999,
+              "minimum": 4.909211620000001,
+              "maximum": 4.968936188,
+              "sample_standard_deviation": 0.031344742161527314
+            },
+            "process_wall_seconds": {
+              "n": 3,
+              "values": [
+                7.004717301926576,
+                7.004196207970381,
+                8.004373472067527
+              ],
+              "median": 7.004717301926576,
+              "minimum": 7.004196207970381,
+              "maximum": 8.004373472067527,
+              "sample_standard_deviation": 0.5773022445906824
+            }
+          },
+          "runtime": {
+            "base": {
+              "fresh_states": 3,
+              "accepted_passes": 9,
+              "batches": 180,
+              "total_samples": 378213,
+              "actual_total_seconds": 32.89241747,
+              "actual_pass_seconds_range": [
+                3.427416765,
+                3.845248883
+              ],
+              "rejected_undersized_attempts": 9,
+              "evaluator_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  7.570159317973695e-05,
+                  7.505263226531786e-05,
+                  7.625385001336352e-05
+                ],
+                "median": 7.570159317973695e-05,
+                "minimum": 7.505263226531786e-05,
+                "maximum": 7.625385001336352e-05,
+                "mean": 7.566935848613944e-05,
+                "sample_standard_deviation": 6.012572878214993e-07,
+                "standard_error_of_mean": 3.4713605697596694e-07
+              },
+              "total_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  8.705743928106557e-05,
+                  8.629465721653511e-05,
+                  8.756217786966721e-05
+                ],
+                "median": 8.705743928106557e-05,
+                "minimum": 8.629465721653511e-05,
+                "maximum": 8.756217786966721e-05,
+                "mean": 8.69714247890893e-05,
+                "sample_standard_deviation": 6.381230454634576e-07,
+                "standard_error_of_mean": 3.684205120744311e-07
+              },
+              "pass_mean_plus_minus_two_sem_envelopes": {
+                "Total": {
+                  "minimum": 8.577454452533815e-05,
+                  "maximum": 8.847545826726043e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                },
+                "evaluators": {
+                  "minimum": 7.435205092354435e-05,
+                  "maximum": 7.700370963989965e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                }
+              }
+            },
+            "scaled": {
+              "fresh_states": 3,
+              "accepted_passes": 9,
+              "batches": 180,
+              "total_samples": 373834,
+              "actual_total_seconds": 32.836211615,
+              "actual_pass_seconds_range": [
+                3.4462417699999994,
+                3.9063754430000004
+              ],
+              "rejected_undersized_attempts": 9,
+              "evaluator_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  7.517930630083706e-05,
+                  7.578859769755277e-05,
+                  7.767778154721797e-05
+                ],
+                "median": 7.578859769755277e-05,
+                "minimum": 7.517930630083706e-05,
+                "maximum": 7.767778154721797e-05,
+                "mean": 7.62152285152026e-05,
+                "sample_standard_deviation": 1.3027298377334242e-06,
+                "standard_error_of_mean": 7.5213142249675e-07
+              },
+              "total_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  8.673278508861221e-05,
+                  8.730745965330122e-05,
+                  8.929084270476279e-05
+                ],
+                "median": 8.730745965330122e-05,
+                "minimum": 8.673278508861221e-05,
+                "maximum": 8.929084270476279e-05,
+                "mean": 8.777702914889208e-05,
+                "sample_standard_deviation": 1.3421200860126424e-06,
+                "standard_error_of_mean": 7.748733929442028e-07
+              },
+              "pass_mean_plus_minus_two_sem_envelopes": {
+                "Total": {
+                  "minimum": 8.564822125405901e-05,
+                  "maximum": 9.02112012126317e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                },
+                "evaluators": {
+                  "minimum": 7.433724485305995e-05,
+                  "maximum": 7.865824431087968e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                }
+              }
+            }
+          },
+          "evaluator_programs": [
+            {
+              "additions": 13562,
+              "conditional_branches": 0,
+              "explicit_multiplications": 18574,
+              "fn_map_entry_count": 51,
+              "function_calls": 18,
+              "functions": {
+                "powf": 9,
+                "symbolica::sqrt[]": 9
+              },
+              "input_count": 214,
+              "instructions": 25840,
+              "integer_power_multiplications": 0,
+              "inversions": 35,
+              "multiplications": 18574,
+              "orientation_count": 62,
+              "output_count": 1,
+              "stack": "original",
+              "variant": "single_parametric"
+            }
+          ]
+        },
+        "4d_direct": {
+          "generation_cases": [
+            {
+              "repeat": 1,
+              "case": "GL00_4d_direct_r1",
+              "pid": 394382,
+              "started_utc": "2026-09-13T19:00:41.777271+00:00",
+              "ended_utc": "2026-09-13T19:00:49.782037+00:00",
+              "timings_seconds": {
+                "total_time": 6.417256368,
+                "evaluator_spenso_time": 3.36669707,
+                "evaluator_symbolica_time": 1.117818301,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 1.9327409970000007,
+                "total_minus_symbolica_time": 5.2994380670000005,
+                "process_wall_seconds": 8.004754295921884
+              },
+              "generation_card_sha256": "d2d8c29b74ad56bc48216d340e121df116d682445b327a3dcfa7a2b6b26fe189",
+              "runtime_card_sha256": "73d64fe723c45f03d20f66cbdc17dc86138ab901a6e7419594c397d6c7e5ba37",
+              "state_content_sha256": "1a4cb925e1c6a1b1e0263ef8b5cac897914f8b793e0a1fa464bc4d373cc0b02c",
+              "state_total_bytes": 2709194,
+              "graph_reported_peak_ram_bytes": 348151808,
+              "supervisor_observed_peak_rss_bytes": 338640896,
+              "supervisor_observed_peak_vmhwm_bytes": 396267520
+            },
+            {
+              "repeat": 2,
+              "case": "GL00_4d_direct_r2",
+              "pid": 415669,
+              "started_utc": "2026-09-13T19:03:27.486860+00:00",
+              "ended_utc": "2026-09-13T19:03:35.491686+00:00",
+              "timings_seconds": {
+                "total_time": 6.47648675,
+                "evaluator_spenso_time": 3.380584226,
+                "evaluator_symbolica_time": 1.11205354,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 1.9838489840000006,
+                "total_minus_symbolica_time": 5.3644332100000005,
+                "process_wall_seconds": 8.004809253965504
+              },
+              "generation_card_sha256": "a8155937750b3bc1958710af25ab801c2808b816670ef12e3c968089e5743c1e",
+              "runtime_card_sha256": "edb755a03c13fe5f54c2bbbb41c9031cb523c292ee508b1ec84919f702f5b4a5",
+              "state_content_sha256": "f0dc9f04d6a982be49bffeb8143fb453ac290890535623d70e7a1b74cad03124",
+              "state_total_bytes": 2709194,
+              "graph_reported_peak_ram_bytes": 342876160,
+              "supervisor_observed_peak_rss_bytes": 342876160,
+              "supervisor_observed_peak_vmhwm_bytes": 408158208
+            },
+            {
+              "repeat": 3,
+              "case": "GL00_4d_direct_r3",
+              "pid": 430891,
+              "started_utc": "2026-09-13T19:06:02.818029+00:00",
+              "ended_utc": "2026-09-13T19:06:10.822266+00:00",
+              "timings_seconds": {
+                "total_time": 6.508565965,
+                "evaluator_spenso_time": 3.3653902540000002,
+                "evaluator_symbolica_time": 1.141292468,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 2.001883242999999,
+                "total_minus_symbolica_time": 5.367273496999999,
+                "process_wall_seconds": 8.004222878953442
+              },
+              "generation_card_sha256": "15ffd49b90aa264fa8bcad966a2852ce98a28c38c9b0ce17173addd8aee14d36",
+              "runtime_card_sha256": "bf91fada496f2465e43da47cc70303093da4b7da0a1cc0c66957e799359c80e4",
+              "state_content_sha256": "d7f5399242844244536a06c05605d0085e7bf70111e77a496ebe8146a96a043d",
+              "state_total_bytes": 2709194,
+              "graph_reported_peak_ram_bytes": 332238848,
+              "supervisor_observed_peak_rss_bytes": 326758400,
+              "supervisor_observed_peak_vmhwm_bytes": 394108928
+            }
+          ],
+          "generation_statistics": {
+            "total_time": {
+              "n": 3,
+              "values": [
+                6.417256368,
+                6.47648675,
+                6.508565965
+              ],
+              "median": 6.47648675,
+              "minimum": 6.417256368,
+              "maximum": 6.508565965,
+              "sample_standard_deviation": 0.046322702661482015
+            },
+            "evaluator_spenso_time": {
+              "n": 3,
+              "values": [
+                3.36669707,
+                3.380584226,
+                3.3653902540000002
+              ],
+              "median": 3.36669707,
+              "minimum": 3.3653902540000002,
+              "maximum": 3.380584226,
+              "sample_standard_deviation": 0.008420388500171903
+            },
+            "evaluator_symbolica_time": {
+              "n": 3,
+              "values": [
+                1.117818301,
+                1.11205354,
+                1.141292468
+              ],
+              "median": 1.117818301,
+              "minimum": 1.11205354,
+              "maximum": 1.141292468,
+              "sample_standard_deviation": 0.015487542823832101
+            },
+            "evaluator_compile_time": {
+              "n": 3,
+              "values": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "median": 0.0,
+              "minimum": 0.0,
+              "maximum": 0.0,
+              "sample_standard_deviation": 0.0
+            },
+            "expression_build_time": {
+              "n": 3,
+              "values": [
+                1.9327409970000007,
+                1.9838489840000006,
+                2.001883242999999
+              ],
+              "median": 1.9838489840000006,
+              "minimum": 1.9327409970000007,
+              "maximum": 2.001883242999999,
+              "sample_standard_deviation": 0.035865282690450306
+            },
+            "total_minus_symbolica_time": {
+              "n": 3,
+              "values": [
+                5.2994380670000005,
+                5.3644332100000005,
+                5.367273496999999
+              ],
+              "median": 5.3644332100000005,
+              "minimum": 5.2994380670000005,
+              "maximum": 5.367273496999999,
+              "sample_standard_deviation": 0.03837117278877801
+            },
+            "process_wall_seconds": {
+              "n": 3,
+              "values": [
+                8.004754295921884,
+                8.004809253965504,
+                8.004222878953442
+              ],
+              "median": 8.004754295921884,
+              "minimum": 8.004222878953442,
+              "maximum": 8.004809253965504,
+              "sample_standard_deviation": 0.0003238466807195546
+            }
+          },
+          "runtime": {
+            "base": {
+              "fresh_states": 3,
+              "accepted_passes": 9,
+              "batches": 180,
+              "total_samples": 456135,
+              "actual_total_seconds": 32.780243479999996,
+              "actual_pass_seconds_range": [
+                3.498715655,
+                3.8176589029999994
+              ],
+              "rejected_undersized_attempts": 9,
+              "evaluator_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  5.968555369614979e-05,
+                  6.248643171486232e-05,
+                  6.023309691492245e-05
+                ],
+                "median": 6.023309691492245e-05,
+                "minimum": 5.968555369614979e-05,
+                "maximum": 6.248643171486232e-05,
+                "mean": 6.080169410864485e-05,
+                "sample_standard_deviation": 1.4844886309630311e-06,
+                "standard_error_of_mean": 8.570699106954451e-07
+              },
+              "total_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  7.063903686230802e-05,
+                  7.37399331897887e-05,
+                  7.127374275761098e-05
+                ],
+                "median": 7.127374275761098e-05,
+                "minimum": 7.063903686230802e-05,
+                "maximum": 7.37399331897887e-05,
+                "mean": 7.18842376032359e-05,
+                "sample_standard_deviation": 1.6381139996492125e-06,
+                "standard_error_of_mean": 9.457655586607674e-07
+              },
+              "pass_mean_plus_minus_two_sem_envelopes": {
+                "Total": {
+                  "minimum": 6.976434954170128e-05,
+                  "maximum": 7.462416807597245e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                },
+                "evaluators": {
+                  "minimum": 5.896999572428185e-05,
+                  "maximum": 6.342940400292777e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                }
+              }
+            },
+            "scaled": {
+              "fresh_states": 3,
+              "accepted_passes": 9,
+              "batches": 180,
+              "total_samples": 448072,
+              "actual_total_seconds": 32.303464334,
+              "actual_pass_seconds_range": [
+                3.4446197489999992,
+                3.7557841859999996
+              ],
+              "rejected_undersized_attempts": 9,
+              "evaluator_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  6.15018735980386e-05,
+                  6.107994102976671e-05,
+                  6.009637275810101e-05
+                ],
+                "median": 6.107994102976671e-05,
+                "minimum": 6.009637275810101e-05,
+                "maximum": 6.15018735980386e-05,
+                "mean": 6.0892729128635445e-05,
+                "sample_standard_deviation": 7.212103539954241e-07,
+                "standard_error_of_mean": 4.163909920216034e-07
+              },
+              "total_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  7.266977347584295e-05,
+                  7.204375488736926e-05,
+                  7.114933628977595e-05
+                ],
+                "median": 7.204375488736926e-05,
+                "minimum": 7.114933628977595e-05,
+                "maximum": 7.266977347584295e-05,
+                "mean": 7.195428821766272e-05,
+                "sample_standard_deviation": 7.641567397694771e-07,
+                "standard_error_of_mean": 4.4118609940897443e-07
+              },
+              "pass_mean_plus_minus_two_sem_envelopes": {
+                "Total": {
+                  "minimum": 7.026455989352543e-05,
+                  "maximum": 7.4279527490485e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                },
+                "evaluators": {
+                  "minimum": 5.941498063852848e-05,
+                  "maximum": 6.275049535740214e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                }
+              }
+            }
+          },
+          "evaluator_programs": [
+            {
+              "additions": 11570,
+              "conditional_branches": 0,
+              "explicit_multiplications": 14748,
+              "fn_map_entry_count": 51,
+              "function_calls": 18,
+              "functions": {
+                "powf": 9,
+                "symbolica::sqrt[]": 9
+              },
+              "input_count": 214,
+              "instructions": 20210,
+              "integer_power_multiplications": 0,
+              "inversions": 36,
+              "multiplications": 14748,
+              "orientation_count": 62,
+              "output_count": 1,
+              "stack": "original",
+              "variant": "single_parametric"
+            }
+          ]
+        }
+      },
+      "performance_gates": [
+        {
+          "graph": "GL00",
+          "metric": "generation_seconds",
+          "point": null,
+          "maximum_median_ratio": 1.15,
+          "status": "pass",
+          "median_ratio": 1.025273006947006,
+          "passes": true,
+          "observed_range_ratio": [
+            1.0119576292451449,
+            1.0394225757107052
+          ],
+          "range_crosses_threshold": false,
+          "range_interpretation": "Extrema across observed fresh states; this is not a statistical confidence interval."
+        },
+        {
+          "graph": "GL00",
+          "metric": "evaluator_seconds_per_sample",
+          "point": "base",
+          "maximum_median_ratio": 1.15,
+          "status": "pass",
+          "median_ratio": 0.7956648517543359,
+          "passes": true,
+          "observed_range_ratio": [
+            0.7827218387752208,
+            0.8325681568897826
+          ],
+          "range_crosses_threshold": false,
+          "range_interpretation": "Extrema across observed fresh states; this is not a statistical confidence interval.",
+          "runtime_pass_ratio_envelope": [
+            0.7658072059131864,
+            0.8530955530487215
+          ],
+          "runtime_noise_crosses_threshold": false,
+          "runtime_envelope_interpretation": "Ratios of the extrema of all accepted pass means plus/minus two reported within-pass SEMs. A null upper endpoint is unbounded because the reference time envelope reaches zero. This is a conservative repeat trigger, not a statistical confidence interval."
+        },
+        {
+          "graph": "GL00",
+          "metric": "total_seconds_per_sample",
+          "point": "base",
+          "maximum_median_ratio": 1.15,
+          "status": "pass",
+          "median_ratio": 0.8186979004459709,
+          "passes": true,
+          "observed_range_ratio": [
+            0.806730012671126,
+            0.8545133101897209
+          ],
+          "range_crosses_threshold": false,
+          "range_interpretation": "Extrema across observed fresh states; this is not a statistical confidence interval.",
+          "runtime_pass_ratio_envelope": [
+            0.7885163966143249,
+            0.8700036647111331
+          ],
+          "runtime_noise_crosses_threshold": false,
+          "runtime_envelope_interpretation": "Ratios of the extrema of all accepted pass means plus/minus two reported within-pass SEMs. A null upper endpoint is unbounded because the reference time envelope reaches zero. This is a conservative repeat trigger, not a statistical confidence interval."
+        },
+        {
+          "graph": "GL00",
+          "metric": "evaluator_seconds_per_sample",
+          "point": "scaled",
+          "maximum_median_ratio": 1.15,
+          "status": "pass",
+          "median_ratio": 0.8059252035974667,
+          "passes": true,
+          "observed_range_ratio": [
+            0.7736623209504284,
+            0.818069181856149
+          ],
+          "range_crosses_threshold": false,
+          "range_interpretation": "Extrema across observed fresh states; this is not a statistical confidence interval.",
+          "runtime_pass_ratio_envelope": [
+            0.7553560489311665,
+            0.8441326481959217
+          ],
+          "runtime_noise_crosses_threshold": false,
+          "runtime_envelope_interpretation": "Ratios of the extrema of all accepted pass means plus/minus two reported within-pass SEMs. A null upper endpoint is unbounded because the reference time envelope reaches zero. This is a conservative repeat trigger, not a statistical confidence interval."
+        },
+        {
+          "graph": "GL00",
+          "metric": "total_seconds_per_sample",
+          "point": "scaled",
+          "maximum_median_ratio": 1.15,
+          "status": "pass",
+          "median_ratio": 0.82517295971565,
+          "passes": true,
+          "observed_range_ratio": [
+            0.7968267980741192,
+            0.8378581801748726
+          ],
+          "range_crosses_threshold": false,
+          "range_interpretation": "Extrema across observed fresh states; this is not a statistical confidence interval.",
+          "runtime_pass_ratio_envelope": [
+            0.7788895275644188,
+            0.8672629320596051
+          ],
+          "runtime_noise_crosses_threshold": false,
+          "runtime_envelope_interpretation": "Ratios of the extrema of all accepted pass means plus/minus two reported within-pass SEMs. A null upper endpoint is unbounded because the reference time envelope reaches zero. This is a conservative repeat trigger, not a statistical confidence interval."
+        }
+      ],
+      "accepted_actual_pass_seconds_range": [
+        3.3623057120000004,
+        3.9063754430000004
+      ],
+      "direct_over_erased_phase_median_ratios": {
+        "total_time": 1.025273006947006,
+        "evaluator_spenso_time": 1.7906116798591742,
+        "evaluator_symbolica_time": 0.8264821241017106,
+        "expression_build_time": 0.6472263701222746,
+        "total_minus_symbolica_time": 1.0825051966763508,
+        "process_wall_seconds": 1.1427662175203357
+      }
+    },
+    "GL01": {
+      "generation_cases": 9,
+      "point_rows": 18,
+      "accepted_passes": 54,
+      "accepted_batches": 1080,
+      "accepted_total_samples": 2524202,
+      "accepted_actual_total_seconds": 200.63069464699998,
+      "rejected_undersized_attempts_not_counted": 55,
+      "worst_relative_complex_norm_difference": 4.475869895443919e-15,
+      "pointwise_tolerance": 1e-09,
+      "base_point": [
+        0.11,
+        -0.07,
+        0.19,
+        -0.13,
+        0.05,
+        0.29
+      ],
+      "scaled_point": [
+        11.0,
+        -7.000000000000001,
+        19.0,
+        -13.0,
+        5.0,
+        28.999999999999996
+      ],
+      "graph_sha256": "7f77bfe2b84b07c7bbecbcecbf0356dd26cccf82a3e743d0a74e470567ef5aca",
+      "routes": {
+        "3d_local": {
+          "generation_cases": [
+            {
+              "repeat": 1,
+              "case": "GL01_3d_local_r1",
+              "pid": 1170909,
+              "started_utc": "2026-09-13T20:30:01.598122+00:00",
+              "ended_utc": "2026-09-13T20:30:15.605267+00:00",
+              "timings_seconds": {
+                "total_time": 12.209643921,
+                "evaluator_spenso_time": 1.914179764,
+                "evaluator_symbolica_time": 7.196925781,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 3.0985383759999987,
+                "total_minus_symbolica_time": 5.01271814,
+                "process_wall_seconds": 14.007129337987863
+              },
+              "generation_card_sha256": "4fca6beaf713be0d20df10410ded5ecd81b0ba319a578447b418e9030e49bf5f",
+              "runtime_card_sha256": "1b573116a37e19496eafa90cb5c4ae35033a18bdbc4472d60bd2850d855fd228",
+              "state_content_sha256": "e71082c1b1643c53d432a27b446a258fbdc4ec80bb8d06f49d880c62d7813db2",
+              "state_total_bytes": 39168105,
+              "graph_reported_peak_ram_bytes": 531787776,
+              "supervisor_observed_peak_rss_bytes": 406769664,
+              "supervisor_observed_peak_vmhwm_bytes": 577306624
+            },
+            {
+              "repeat": 2,
+              "case": "GL01_3d_local_r2",
+              "pid": 1191499,
+              "started_utc": "2026-09-13T20:32:38.116983+00:00",
+              "ended_utc": "2026-09-13T20:32:51.124862+00:00",
+              "timings_seconds": {
+                "total_time": 12.136310984,
+                "evaluator_spenso_time": 1.90677636,
+                "evaluator_symbolica_time": 7.137425188,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 3.0921094359999994,
+                "total_minus_symbolica_time": 4.998885796,
+                "process_wall_seconds": 13.007859171950258
+              },
+              "generation_card_sha256": "963287cdb6e81f12c97b5459887c3c81a5f11322f7c8641f2478a6527b454f2a",
+              "runtime_card_sha256": "b23109355af645502a21631c61dc68661187a50a9fa066d5ed2581e71f826d98",
+              "state_content_sha256": "35fed4154e2e85f7a922e6dc0692db03575279cb143e8004c8cbf51a67cc128d",
+              "state_total_bytes": 39168105,
+              "graph_reported_peak_ram_bytes": 460677120,
+              "supervisor_observed_peak_rss_bytes": 460677120,
+              "supervisor_observed_peak_vmhwm_bytes": 542568448
+            },
+            {
+              "repeat": 3,
+              "case": "GL01_3d_local_r3",
+              "pid": 1661932,
+              "started_utc": "2026-09-13T21:25:14.825560+00:00",
+              "ended_utc": "2026-09-13T21:25:28.831619+00:00",
+              "timings_seconds": {
+                "total_time": 12.330522167,
+                "evaluator_spenso_time": 1.923111359,
+                "evaluator_symbolica_time": 7.308686546,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 3.0987242619999993,
+                "total_minus_symbolica_time": 5.021835621,
+                "process_wall_seconds": 14.00604442495387
+              },
+              "generation_card_sha256": "b91e9e96f88e864394287129df81739de3f1c5b6be097fa844c04303043393ce",
+              "runtime_card_sha256": "9ad2fac421d3d3473cf848cd0ceb0a301209e9da178d3a9ac054f00eab8f78f8",
+              "state_content_sha256": "22644f7a951922782a7caa2ef3b749c0b7297a48b2202496c9e5c5480fcbc5cb",
+              "state_total_bytes": 39168105,
+              "graph_reported_peak_ram_bytes": 512565248,
+              "supervisor_observed_peak_rss_bytes": 423280640,
+              "supervisor_observed_peak_vmhwm_bytes": 526082048
+            }
+          ],
+          "generation_statistics": {
+            "total_time": {
+              "n": 3,
+              "values": [
+                12.209643921,
+                12.136310984,
+                12.330522167
+              ],
+              "median": 12.209643921,
+              "minimum": 12.136310984,
+              "maximum": 12.330522167,
+              "sample_standard_deviation": 0.09807076833197383
+            },
+            "evaluator_spenso_time": {
+              "n": 3,
+              "values": [
+                1.914179764,
+                1.90677636,
+                1.923111359
+              ],
+              "median": 1.914179764,
+              "minimum": 1.90677636,
+              "maximum": 1.923111359,
+              "sample_standard_deviation": 0.008179404749748372
+            },
+            "evaluator_symbolica_time": {
+              "n": 3,
+              "values": [
+                7.196925781,
+                7.137425188,
+                7.308686546
+              ],
+              "median": 7.196925781,
+              "minimum": 7.137425188,
+              "maximum": 7.308686546,
+              "sample_standard_deviation": 0.08694945074078088
+            },
+            "evaluator_compile_time": {
+              "n": 3,
+              "values": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "median": 0.0,
+              "minimum": 0.0,
+              "maximum": 0.0,
+              "sample_standard_deviation": 0.0
+            },
+            "expression_build_time": {
+              "n": 3,
+              "values": [
+                3.0985383759999987,
+                3.0921094359999994,
+                3.0987242619999993
+              ],
+              "median": 3.0985383759999987,
+              "minimum": 3.0921094359999994,
+              "maximum": 3.0987242619999993,
+              "sample_standard_deviation": 0.0037665578038588695
+            },
+            "total_minus_symbolica_time": {
+              "n": 3,
+              "values": [
+                5.01271814,
+                4.998885796,
+                5.021835621
+              ],
+              "median": 5.01271814,
+              "minimum": 4.998885796,
+              "maximum": 5.021835621,
+              "sample_standard_deviation": 0.011555349899868518
+            },
+            "process_wall_seconds": {
+              "n": 3,
+              "values": [
+                14.007129337987863,
+                13.007859171950258,
+                14.00604442495387
+              ],
+              "median": 14.00604442495387,
+              "minimum": 13.007859171950258,
+              "maximum": 14.007129337987863,
+              "sample_standard_deviation": 0.5766159670992757
+            }
+          },
+          "runtime": {
+            "base": {
+              "fresh_states": 3,
+              "accepted_passes": 9,
+              "batches": 180,
+              "total_samples": 375273,
+              "actual_total_seconds": 32.513496262000004,
+              "actual_pass_seconds_range": [
+                3.340310539,
+                3.7661570220000002
+              ],
+              "rejected_undersized_attempts": 9,
+              "evaluator_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  7.508448104635152e-05,
+                  7.466233379960357e-05,
+                  7.490416643817506e-05
+                ],
+                "median": 7.490416643817506e-05,
+                "minimum": 7.466233379960357e-05,
+                "maximum": 7.508448104635152e-05,
+                "mean": 7.488366042804338e-05,
+                "sample_standard_deviation": 2.1181937310562152e-07,
+                "standard_error_of_mean": 1.2229397208210836e-07
+              },
+              "total_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  8.641939013308858e-05,
+                  8.618899162748391e-05,
+                  8.668759819082013e-05
+                ],
+                "median": 8.641939013308858e-05,
+                "minimum": 8.618899162748391e-05,
+                "maximum": 8.668759819082013e-05,
+                "mean": 8.643199331713087e-05,
+                "sample_standard_deviation": 2.4954209351628534e-07,
+                "standard_error_of_mean": 1.4407319486577012e-07
+              },
+              "pass_mean_plus_minus_two_sem_envelopes": {
+                "Total": {
+                  "minimum": 8.490436755527818e-05,
+                  "maximum": 9.029722751028158e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                },
+                "evaluators": {
+                  "minimum": 7.380748525147054e-05,
+                  "maximum": 7.832694834781451e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                }
+              }
+            },
+            "scaled": {
+              "fresh_states": 3,
+              "accepted_passes": 9,
+              "batches": 180,
+              "total_samples": 385973,
+              "actual_total_seconds": 33.365606514,
+              "actual_pass_seconds_range": [
+                3.5456595369999997,
+                3.92577159
+              ],
+              "rejected_undersized_attempts": 9,
+              "evaluator_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  7.505788644848746e-05,
+                  7.453881832869372e-05,
+                  7.473835388940853e-05
+                ],
+                "median": 7.473835388940853e-05,
+                "minimum": 7.453881832869372e-05,
+                "maximum": 7.505788644848746e-05,
+                "mean": 7.477835288886324e-05,
+                "sample_standard_deviation": 2.618355747689484e-07,
+                "standard_error_of_mean": 1.5117083957627275e-07
+              },
+              "total_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  8.660882587746972e-05,
+                  8.597697149577675e-05,
+                  8.671624316220413e-05
+                ],
+                "median": 8.660882587746972e-05,
+                "minimum": 8.597697149577675e-05,
+                "maximum": 8.671624316220413e-05,
+                "mean": 8.643401351181686e-05,
+                "sample_standard_deviation": 3.9943731871776936e-07,
+                "standard_error_of_mean": 2.306152434860865e-07
+              },
+              "pass_mean_plus_minus_two_sem_envelopes": {
+                "Total": {
+                  "minimum": 8.52677270833107e-05,
+                  "maximum": 8.818103418656494e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                },
+                "evaluators": {
+                  "minimum": 7.39821228160843e-05,
+                  "maximum": 7.675393749803873e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                }
+              }
+            }
+          },
+          "evaluator_programs": [
+            {
+              "additions": 43684,
+              "conditional_branches": 244,
+              "explicit_multiplications": 58132,
+              "fn_map_entry_count": 51,
+              "function_calls": 1650,
+              "functions": {
+                "powf": 672,
+                "symbolica::sqrt[]": 978
+              },
+              "input_count": 214,
+              "instructions": 89639,
+              "integer_power_multiplications": 0,
+              "inversions": 1892,
+              "multiplications": 58132,
+              "orientation_count": 62,
+              "output_count": 1,
+              "stack": "original",
+              "variant": "single_parametric"
+            },
+            {
+              "additions": 13491,
+              "conditional_branches": 0,
+              "explicit_multiplications": 17931,
+              "fn_map_entry_count": 1,
+              "function_calls": 18,
+              "functions": {
+                "powf": 9,
+                "symbolica::sqrt[]": 9
+              },
+              "input_count": 214,
+              "instructions": 24987,
+              "integer_power_multiplications": 0,
+              "inversions": 35,
+              "multiplications": 17931,
+              "orientation_count": 62,
+              "output_count": 1,
+              "stack": "original",
+              "variant": "summed_function_map"
+            }
+          ]
+        },
+        "3d_erased": {
+          "generation_cases": [
+            {
+              "repeat": 1,
+              "case": "GL01_3d_erased_r1",
+              "pid": 1179353,
+              "started_utc": "2026-09-13T20:30:58.204750+00:00",
+              "ended_utc": "2026-09-13T20:31:06.209684+00:00",
+              "timings_seconds": {
+                "total_time": 6.443167522,
+                "evaluator_spenso_time": 1.929739918,
+                "evaluator_symbolica_time": 1.373066618,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 3.140360986,
+                "total_minus_symbolica_time": 5.070100904,
+                "process_wall_seconds": 8.00487918406725
+              },
+              "generation_card_sha256": "9e18bd6b0a4d179ca613254dfafe95b25ac0358c29aa193bfb0d987b84c9456d",
+              "runtime_card_sha256": "4a93db2b5388a469517b703081da407c40982f9e736a63138312031e8baba37f",
+              "state_content_sha256": "ab31f87b2dd76e84eedd934a061942d4bbb8e4aefc99f8e6bb04642273c9ea7d",
+              "state_total_bytes": 2971809,
+              "graph_reported_peak_ram_bytes": 348614656,
+              "supervisor_observed_peak_rss_bytes": 336945152,
+              "supervisor_observed_peak_vmhwm_bytes": 452304896
+            },
+            {
+              "repeat": 2,
+              "case": "GL01_3d_erased_r2",
+              "pid": 1201903,
+              "started_utc": "2026-09-13T20:33:39.192582+00:00",
+              "ended_utc": "2026-09-13T20:33:47.197973+00:00",
+              "timings_seconds": {
+                "total_time": 6.392131978,
+                "evaluator_spenso_time": 1.9183932010000002,
+                "evaluator_symbolica_time": 1.354577442,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 3.119161335,
+                "total_minus_symbolica_time": 5.037554536,
+                "process_wall_seconds": 8.005372570012696
+              },
+              "generation_card_sha256": "a76eb89ef8612a6eb31d6c5bbb4cb750423057059503adeea7b54d5bbf266001",
+              "runtime_card_sha256": "e2930ceab3d07378a9cd7948efa43a7d7c26ea0f9bec4ff7800eadbf9d80fb54",
+              "state_content_sha256": "f7d3f06f01b9abaa4b6eaa015b20df1dd58aea1392970ef1e49b60648a611f75",
+              "state_total_bytes": 2971809,
+              "graph_reported_peak_ram_bytes": 257220608,
+              "supervisor_observed_peak_rss_bytes": 315670528,
+              "supervisor_observed_peak_vmhwm_bytes": 359022592
+            },
+            {
+              "repeat": 3,
+              "case": "GL01_3d_erased_r3",
+              "pid": 1789695,
+              "started_utc": "2026-09-13T21:35:56.815890+00:00",
+              "ended_utc": "2026-09-13T21:36:04.820243+00:00",
+              "timings_seconds": {
+                "total_time": 6.467199472,
+                "evaluator_spenso_time": 1.928317381,
+                "evaluator_symbolica_time": 1.36434735,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 3.1745347409999995,
+                "total_minus_symbolica_time": 5.102852122,
+                "process_wall_seconds": 8.004347285954282
+              },
+              "generation_card_sha256": "223257e024d92d75eaaa1da1f21ed3c0bfca8fae7fd8a1c628ae3a6d5778de75",
+              "runtime_card_sha256": "8cfeb6fb5376d7c1e7f40a4683359057e7f44269bb1ede08d99b32d574010946",
+              "state_content_sha256": "0c86b99391ddf681326c2f7f63ddf957812a6805f78537d8d1b1eac1370e216b",
+              "state_total_bytes": 2971809,
+              "graph_reported_peak_ram_bytes": 318111744,
+              "supervisor_observed_peak_rss_bytes": 318111744,
+              "supervisor_observed_peak_vmhwm_bytes": 375033856
+            }
+          ],
+          "generation_statistics": {
+            "total_time": {
+              "n": 3,
+              "values": [
+                6.443167522,
+                6.392131978,
+                6.467199472
+              ],
+              "median": 6.443167522,
+              "minimum": 6.392131978,
+              "maximum": 6.467199472,
+              "sample_standard_deviation": 0.038334688441885215
+            },
+            "evaluator_spenso_time": {
+              "n": 3,
+              "values": [
+                1.929739918,
+                1.9183932010000002,
+                1.928317381
+              ],
+              "median": 1.928317381,
+              "minimum": 1.9183932010000002,
+              "maximum": 1.929739918,
+              "sample_standard_deviation": 0.006181436549147949
+            },
+            "evaluator_symbolica_time": {
+              "n": 3,
+              "values": [
+                1.373066618,
+                1.354577442,
+                1.36434735
+              ],
+              "median": 1.36434735,
+              "minimum": 1.354577442,
+              "maximum": 1.373066618,
+              "sample_standard_deviation": 0.009249561844967375
+            },
+            "evaluator_compile_time": {
+              "n": 3,
+              "values": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "median": 0.0,
+              "minimum": 0.0,
+              "maximum": 0.0,
+              "sample_standard_deviation": 0.0
+            },
+            "expression_build_time": {
+              "n": 3,
+              "values": [
+                3.140360986,
+                3.119161335,
+                3.1745347409999995
+              ],
+              "median": 3.140360986,
+              "minimum": 3.119161335,
+              "maximum": 3.1745347409999995,
+              "sample_standard_deviation": 0.027938876216252885
+            },
+            "total_minus_symbolica_time": {
+              "n": 3,
+              "values": [
+                5.070100904,
+                5.037554536,
+                5.102852122
+              ],
+              "median": 5.070100904,
+              "minimum": 5.037554536,
+              "maximum": 5.102852122,
+              "sample_standard_deviation": 0.03264884655415947
+            },
+            "process_wall_seconds": {
+              "n": 3,
+              "values": [
+                8.00487918406725,
+                8.005372570012696,
+                8.004347285954282
+              ],
+              "median": 8.00487918406725,
+              "minimum": 8.004347285954282,
+              "maximum": 8.005372570012696,
+              "sample_standard_deviation": 0.0005127625659408762
+            }
+          },
+          "runtime": {
+            "base": {
+              "fresh_states": 3,
+              "accepted_passes": 9,
+              "batches": 180,
+              "total_samples": 400687,
+              "actual_total_seconds": 33.843694273,
+              "actual_pass_seconds_range": [
+                3.6541429190000003,
+                3.8777440039999997
+              ],
+              "rejected_undersized_attempts": 9,
+              "evaluator_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  7.203665114589602e-05,
+                  7.31592023820431e-05,
+                  7.36264207371184e-05
+                ],
+                "median": 7.31592023820431e-05,
+                "minimum": 7.203665114589602e-05,
+                "maximum": 7.36264207371184e-05,
+                "mean": 7.294075808835251e-05,
+                "sample_standard_deviation": 8.170864522058458e-07,
+                "standard_error_of_mean": 4.717450831322414e-07
+              },
+              "total_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  8.315234581818181e-05,
+                  8.442580341273476e-05,
+                  8.535817101625997e-05
+                ],
+                "median": 8.442580341273476e-05,
+                "minimum": 8.315234581818181e-05,
+                "maximum": 8.535817101625997e-05,
+                "mean": 8.431210674905884e-05,
+                "sample_standard_deviation": 1.1072991463996592e-06,
+                "standard_error_of_mean": 6.392994602472861e-07
+              },
+              "pass_mean_plus_minus_two_sem_envelopes": {
+                "Total": {
+                  "minimum": 8.287067642425409e-05,
+                  "maximum": 8.635574957892674e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                },
+                "evaluators": {
+                  "minimum": 7.156911818231096e-05,
+                  "maximum": 7.507885815632724e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                }
+              }
+            },
+            "scaled": {
+              "fresh_states": 3,
+              "accepted_passes": 9,
+              "batches": 180,
+              "total_samples": 390744,
+              "actual_total_seconds": 32.918105306,
+              "actual_pass_seconds_range": [
+                3.515968559,
+                3.733393988999999
+              ],
+              "rejected_undersized_attempts": 9,
+              "evaluator_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  7.311239587296021e-05,
+                  7.319793900232671e-05,
+                  7.271424644211979e-05
+                ],
+                "median": 7.311239587296021e-05,
+                "minimum": 7.271424644211979e-05,
+                "maximum": 7.319793900232671e-05,
+                "mean": 7.30081937724689e-05,
+                "sample_standard_deviation": 2.58134037875642e-07,
+                "standard_error_of_mean": 1.4903375625450696e-07
+              },
+              "total_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  8.430067007658511e-05,
+                  8.450282488622074e-05,
+                  8.39863242376038e-05
+                ],
+                "median": 8.430067007658511e-05,
+                "minimum": 8.39863242376038e-05,
+                "maximum": 8.450282488622074e-05,
+                "mean": 8.426327306680322e-05,
+                "sample_standard_deviation": 2.602731877487598e-07,
+                "standard_error_of_mean": 1.502687950095885e-07
+              },
+              "pass_mean_plus_minus_two_sem_envelopes": {
+                "Total": {
+                  "minimum": 8.275653202244329e-05,
+                  "maximum": 8.578277584528887e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                },
+                "evaluators": {
+                  "minimum": 7.155729859067903e-05,
+                  "maximum": 7.428740827291979e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                }
+              }
+            }
+          },
+          "evaluator_programs": [
+            {
+              "additions": 12987,
+              "conditional_branches": 0,
+              "explicit_multiplications": 17863,
+              "fn_map_entry_count": 51,
+              "function_calls": 18,
+              "functions": {
+                "powf": 9,
+                "symbolica::sqrt[]": 9
+              },
+              "input_count": 214,
+              "instructions": 24789,
+              "integer_power_multiplications": 0,
+              "inversions": 35,
+              "multiplications": 17863,
+              "orientation_count": 62,
+              "output_count": 1,
+              "stack": "original",
+              "variant": "single_parametric"
+            }
+          ]
+        },
+        "4d_direct": {
+          "generation_cases": [
+            {
+              "repeat": 1,
+              "case": "GL01_4d_direct_r1",
+              "pid": 1185874,
+              "started_utc": "2026-09-13T20:31:48.959980+00:00",
+              "ended_utc": "2026-09-13T20:31:56.964617+00:00",
+              "timings_seconds": {
+                "total_time": 6.492536996,
+                "evaluator_spenso_time": 3.393893428,
+                "evaluator_symbolica_time": 1.142115031,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 1.9565285370000005,
+                "total_minus_symbolica_time": 5.350421965000001,
+                "process_wall_seconds": 8.004602619912475
+              },
+              "generation_card_sha256": "2438ef1533352084e9902b7d2b8ae29faf2be7bd14445bee8b6d3a7391987418",
+              "runtime_card_sha256": "db6013796d15b7c6ea2473c89ac3e25cb0be7016ea8345773e01b27154a18b90",
+              "state_content_sha256": "919e24605810bbe188209efb790a17af6b050a9ddebbd0f85ec129cadb1ddef9",
+              "state_total_bytes": 2680542,
+              "graph_reported_peak_ram_bytes": 363401216,
+              "supervisor_observed_peak_rss_bytes": 335880192,
+              "supervisor_observed_peak_vmhwm_bytes": 389050368
+            },
+            {
+              "repeat": 2,
+              "case": "GL01_4d_direct_r2",
+              "pid": 1213368,
+              "started_utc": "2026-09-13T20:34:35.313797+00:00",
+              "ended_utc": "2026-09-13T20:34:43.318997+00:00",
+              "timings_seconds": {
+                "total_time": 6.409814403,
+                "evaluator_spenso_time": 3.392791769,
+                "evaluator_symbolica_time": 1.070414213,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 1.9466084210000005,
+                "total_minus_symbolica_time": 5.33940019,
+                "process_wall_seconds": 8.00518837699201
+              },
+              "generation_card_sha256": "4097c99b0b2434a070551baff48c70628ee65c44fbcef808c6aba102d232ac9f",
+              "runtime_card_sha256": "a7a0beda1734f368faff3cae424c11b8c576fa21722df45e5cdf41b95ac0246f",
+              "state_content_sha256": "6c4d7f1c7c66fa62b664e65c7f5db2401a671a8b5392b9dcb8017957d979cad8",
+              "state_total_bytes": 2680541,
+              "graph_reported_peak_ram_bytes": 368979968,
+              "supervisor_observed_peak_rss_bytes": 353599488,
+              "supervisor_observed_peak_vmhwm_bytes": 377835520
+            },
+            {
+              "repeat": 3,
+              "case": "GL01_4d_direct_r3",
+              "pid": 1799159,
+              "started_utc": "2026-09-13T21:36:52.387741+00:00",
+              "ended_utc": "2026-09-13T21:37:00.392085+00:00",
+              "timings_seconds": {
+                "total_time": 6.450018431,
+                "evaluator_spenso_time": 3.387672145,
+                "evaluator_symbolica_time": 1.100288093,
+                "evaluator_compile_time": 0.0,
+                "expression_build_time": 1.9620581930000007,
+                "total_minus_symbolica_time": 5.3497303380000005,
+                "process_wall_seconds": 8.00432639196515
+              },
+              "generation_card_sha256": "d8a7090d8ccc72871599524d4302ad13f73c00a10022a97c2669f854833297f4",
+              "runtime_card_sha256": "549b9d201cfd7fe44357568d272409ff258cd9c87afd0dbceca9b9586a2ec4ba",
+              "state_content_sha256": "936e5f7f22fb218ef3a3fcde65a225e43ebaf926e3f46750ed773c369f94492a",
+              "state_total_bytes": 2680542,
+              "graph_reported_peak_ram_bytes": 383963136,
+              "supervisor_observed_peak_rss_bytes": 367210496,
+              "supervisor_observed_peak_vmhwm_bytes": 419164160
+            }
+          ],
+          "generation_statistics": {
+            "total_time": {
+              "n": 3,
+              "values": [
+                6.492536996,
+                6.409814403,
+                6.450018431
+              ],
+              "median": 6.450018431,
+              "minimum": 6.409814403,
+              "maximum": 6.492536996,
+              "sample_standard_deviation": 0.04136669278080211
+            },
+            "evaluator_spenso_time": {
+              "n": 3,
+              "values": [
+                3.393893428,
+                3.392791769,
+                3.387672145
+              ],
+              "median": 3.392791769,
+              "minimum": 3.387672145,
+              "maximum": 3.393893428,
+              "sample_standard_deviation": 0.003319853526381169
+            },
+            "evaluator_symbolica_time": {
+              "n": 3,
+              "values": [
+                1.142115031,
+                1.070414213,
+                1.100288093
+              ],
+              "median": 1.100288093,
+              "minimum": 1.070414213,
+              "maximum": 1.142115031,
+              "sample_standard_deviation": 0.03601608147892487
+            },
+            "evaluator_compile_time": {
+              "n": 3,
+              "values": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "median": 0.0,
+              "minimum": 0.0,
+              "maximum": 0.0,
+              "sample_standard_deviation": 0.0
+            },
+            "expression_build_time": {
+              "n": 3,
+              "values": [
+                1.9565285370000005,
+                1.9466084210000005,
+                1.9620581930000007
+              ],
+              "median": 1.9565285370000005,
+              "minimum": 1.9466084210000005,
+              "maximum": 1.9620581930000007,
+              "sample_standard_deviation": 0.007828167641960069
+            },
+            "total_minus_symbolica_time": {
+              "n": 3,
+              "values": [
+                5.350421965000001,
+                5.33940019,
+                5.3497303380000005
+              ],
+              "median": 5.3497303380000005,
+              "minimum": 5.33940019,
+              "maximum": 5.350421965000001,
+              "sample_standard_deviation": 0.006173462423411997
+            },
+            "process_wall_seconds": {
+              "n": 3,
+              "values": [
+                8.004602619912475,
+                8.00518837699201,
+                8.00432639196515
+              ],
+              "median": 8.004602619912475,
+              "minimum": 8.00432639196515,
+              "maximum": 8.00518837699201,
+              "sample_standard_deviation": 0.00044015743805223885
+            }
+          },
+          "runtime": {
+            "base": {
+              "fresh_states": 3,
+              "accepted_passes": 9,
+              "batches": 180,
+              "total_samples": 457020,
+              "actual_total_seconds": 32.180891953999996,
+              "actual_pass_seconds_range": [
+                3.4532373119999997,
+                3.721205714
+              ],
+              "rejected_undersized_attempts": 9,
+              "evaluator_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  5.847716019351328e-05,
+                  5.9067833272292274e-05,
+                  5.9425932428104266e-05
+                ],
+                "median": 5.9067833272292274e-05,
+                "minimum": 5.847716019351328e-05,
+                "maximum": 5.9425932428104266e-05,
+                "mean": 5.8990308631303276e-05,
+                "sample_standard_deviation": 4.791134946471938e-07,
+                "standard_error_of_mean": 2.7661630510693964e-07
+              },
+              "total_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  6.958688693294242e-05,
+                  7.011034603721362e-05,
+                  7.070948041958946e-05
+                ],
+                "median": 7.011034603721362e-05,
+                "minimum": 6.958688693294242e-05,
+                "maximum": 7.070948041958946e-05,
+                "mean": 7.013557112991516e-05,
+                "sample_standard_deviation": 5.617216953634081e-07,
+                "standard_error_of_mean": 3.243101720277167e-07
+              },
+              "pass_mean_plus_minus_two_sem_envelopes": {
+                "Total": {
+                  "minimum": 6.919155603834739e-05,
+                  "maximum": 7.523303464490853e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                },
+                "evaluators": {
+                  "minimum": 5.8242173334030643e-05,
+                  "maximum": 6.362821838609538e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                }
+              }
+            },
+            "scaled": {
+              "fresh_states": 3,
+              "accepted_passes": 9,
+              "batches": 180,
+              "total_samples": 514505,
+              "actual_total_seconds": 35.808900338,
+              "actual_pass_seconds_range": [
+                3.4467312559999996,
+                7.199305293
+              ],
+              "rejected_undersized_attempts": 10,
+              "evaluator_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  5.843827723480331e-05,
+                  5.851419860928535e-05,
+                  5.896159283631858e-05
+                ],
+                "median": 5.851419860928535e-05,
+                "minimum": 5.843827723480331e-05,
+                "maximum": 5.896159283631858e-05,
+                "mean": 5.863802289346908e-05,
+                "sample_standard_deviation": 2.827793215787409e-07,
+                "standard_error_of_mean": 1.632627174347458e-07
+              },
+              "total_seconds_per_sample": {
+                "samples": 3,
+                "values": [
+                  6.943449966229639e-05,
+                  6.911709942563314e-05,
+                  6.985788067152497e-05
+                ],
+                "median": 6.943449966229639e-05,
+                "minimum": 6.911709942563314e-05,
+                "maximum": 6.985788067152497e-05,
+                "mean": 6.946982658648483e-05,
+                "sample_standard_deviation": 3.7165199749997873e-07,
+                "standard_error_of_mean": 2.1457338080147486e-07
+              },
+              "pass_mean_plus_minus_two_sem_envelopes": {
+                "Total": {
+                  "minimum": 6.842720925532813e-05,
+                  "maximum": 7.18149556340308e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                },
+                "evaluators": {
+                  "minimum": 5.7811763114730924e-05,
+                  "maximum": 6.0682861449054925e-05,
+                  "interpretation": "Envelope of all observed pass means plus/minus twice their reported within-pass SEM, clipped at zero; a conservative repeat trigger, not a statistical confidence interval."
+                }
+              }
+            }
+          },
+          "evaluator_programs": [
+            {
+              "additions": 11472,
+              "conditional_branches": 0,
+              "explicit_multiplications": 14659,
+              "fn_map_entry_count": 51,
+              "function_calls": 18,
+              "functions": {
+                "powf": 9,
+                "symbolica::sqrt[]": 9
+              },
+              "input_count": 214,
+              "instructions": 20029,
+              "integer_power_multiplications": 0,
+              "inversions": 36,
+              "multiplications": 14659,
+              "orientation_count": 62,
+              "output_count": 1,
+              "stack": "original",
+              "variant": "single_parametric"
+            }
+          ]
+        }
+      },
+      "performance_gates": [
+        {
+          "graph": "GL01",
+          "metric": "generation_seconds",
+          "point": null,
+          "maximum_median_ratio": 1.15,
+          "status": "pass",
+          "median_ratio": 1.0010632827683912,
+          "passes": true,
+          "observed_range_ratio": [
+            0.9911267513475577,
+            1.0157075946406562
+          ],
+          "range_crosses_threshold": false,
+          "range_interpretation": "Extrema across observed fresh states; this is not a statistical confidence interval."
+        },
+        {
+          "graph": "GL01",
+          "metric": "evaluator_seconds_per_sample",
+          "point": "base",
+          "maximum_median_ratio": 1.15,
+          "status": "pass",
+          "median_ratio": 0.8073876060572039,
+          "passes": true,
+          "observed_range_ratio": [
+            0.7942415183036639,
+            0.8249402419852745
+          ],
+          "range_crosses_threshold": false,
+          "range_interpretation": "Extrema across observed fresh states; this is not a statistical confidence interval.",
+          "runtime_pass_ratio_envelope": [
+            0.7757466584369239,
+            0.8890457225421249
+          ],
+          "runtime_noise_crosses_threshold": false,
+          "runtime_envelope_interpretation": "Ratios of the extrema of all accepted pass means plus/minus two reported within-pass SEMs. A null upper endpoint is unbounded because the reference time envelope reaches zero. This is a conservative repeat trigger, not a statistical confidence interval."
+        },
+        {
+          "graph": "GL01",
+          "metric": "total_seconds_per_sample",
+          "point": "base",
+          "maximum_median_ratio": 1.15,
+          "status": "pass",
+          "median_ratio": 0.8304374160878664,
+          "passes": true,
+          "observed_range_ratio": [
+            0.8152340438466839,
+            0.8503606209041954
+          ],
+          "range_crosses_threshold": false,
+          "range_interpretation": "Extrema across observed fresh states; this is not a statistical confidence interval.",
+          "runtime_pass_ratio_envelope": [
+            0.801238555344925,
+            0.9078366183444084
+          ],
+          "runtime_noise_crosses_threshold": false,
+          "runtime_envelope_interpretation": "Ratios of the extrema of all accepted pass means plus/minus two reported within-pass SEMs. A null upper endpoint is unbounded because the reference time envelope reaches zero. This is a conservative repeat trigger, not a statistical confidence interval."
+        },
+        {
+          "graph": "GL01",
+          "metric": "evaluator_seconds_per_sample",
+          "point": "scaled",
+          "maximum_median_ratio": 1.15,
+          "status": "pass",
+          "median_ratio": 0.8003321175653904,
+          "passes": true,
+          "observed_range_ratio": [
+            0.7983595990721236,
+            0.810867137064423
+          ],
+          "range_crosses_threshold": false,
+          "range_interpretation": "Extrema across observed fresh states; this is not a statistical confidence interval.",
+          "runtime_pass_ratio_envelope": [
+            0.7782175264795881,
+            0.8480317541914502
+          ],
+          "runtime_noise_crosses_threshold": false,
+          "runtime_envelope_interpretation": "Ratios of the extrema of all accepted pass means plus/minus two reported within-pass SEMs. A null upper endpoint is unbounded because the reference time envelope reaches zero. This is a conservative repeat trigger, not a statistical confidence interval."
+        },
+        {
+          "graph": "GL01",
+          "metric": "total_seconds_per_sample",
+          "point": "scaled",
+          "maximum_median_ratio": 1.15,
+          "status": "pass",
+          "median_ratio": 0.8236529982409017,
+          "passes": true,
+          "observed_range_ratio": [
+            0.8179264955780615,
+            0.8317768554067402
+          ],
+          "range_crosses_threshold": false,
+          "range_interpretation": "Extrema across observed fresh states; this is not a statistical confidence interval.",
+          "runtime_pass_ratio_envelope": [
+            0.7976800538459855,
+            0.8677859484802338
+          ],
+          "runtime_noise_crosses_threshold": false,
+          "runtime_envelope_interpretation": "Ratios of the extrema of all accepted pass means plus/minus two reported within-pass SEMs. A null upper endpoint is unbounded because the reference time envelope reaches zero. This is a conservative repeat trigger, not a statistical confidence interval."
+        }
+      ],
+      "accepted_actual_pass_seconds_range": [
+        3.340310539,
+        7.199305293
+      ],
+      "direct_over_erased_phase_median_ratios": {
+        "total_time": 1.0010632827683912,
+        "evaluator_spenso_time": 1.759457132124455,
+        "evaluator_symbolica_time": 0.8064574560136757,
+        "expression_build_time": 0.6230266347475253,
+        "total_minus_symbolica_time": 1.0551526368596313,
+        "process_wall_seconds": 0.9999654505522926
+      }
+    }
+  },
+  "totals": {
+    "fresh_generation_processes": 18,
+    "successful_serial_child_receipts": 163,
+    "accepted_passes": 108,
+    "accepted_batches": 2160,
+    "accepted_total_samples": 4913040,
+    "accepted_actual_total_seconds": 396.547288245,
+    "rejected_undersized_attempts_not_counted": 109,
+    "performance_gates_passed": 10,
+    "pointwise_comparisons_passed": 36
+  }
+}

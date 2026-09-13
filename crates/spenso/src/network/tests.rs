@@ -273,6 +273,139 @@ fn executed_scaled_tensors_add_distinct_tensors() {
 }
 
 #[test]
+fn odd_tensor_powers_keep_the_base_square_fixed() {
+    use super::{
+        ExecutionResult, Network, NetworkGraph, NetworkLeaf, ScaledTensorRef, Sequential,
+        SmallestDegree,
+        library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+        store::{NetworkStore, TensorScalarStore},
+    };
+    use crate::{
+        structure::{
+            OrderedStructure, ScalarTensor,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    type LibTensor = DummyLibraryTensor<Tensor>;
+    type Lib = DummyLibrary<Tensor, DummyKey>;
+    type FnLib = ErroringLibrary<DummyKey>;
+    let lib = Lib::new();
+    let fn_lib = FnLib::new();
+
+    for open_index in [false, true] {
+        let mut net = Net::from_tensor(if open_index {
+            let structure = OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure;
+            DenseTensor::from_data(vec![1.0, 2.0], structure).unwrap()
+        } else {
+            Tensor::new_scalar(3.0)
+        });
+        net.store.add_tensor(net.store.tensors[0].clone());
+        let twice = net.store.add_scalar(2.0);
+        let thrice = net.store.add_scalar(3.0);
+        for (leaf, scale) in [
+            (NetworkLeaf::LocalTensor(0), 1.0_f64),
+            (NetworkLeaf::TensorSum(vec![0, 1]), 2.0),
+            (
+                NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled(0, twice)),
+                2.0,
+            ),
+            (
+                NetworkLeaf::ScaledTensorSum(vec![
+                    ScaledTensorRef::scaled(0, twice),
+                    ScaledTensorRef::scaled(1, thrice),
+                ]),
+                5.0,
+            ),
+        ] {
+            net.graph = NetworkGraph::tensor(&net.store.tensors[0], leaf);
+            for power in [1, 3, 5] {
+                let mut powered = net.clone().pow(power);
+                powered
+                    .execute::<Sequential, SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+                    .unwrap();
+                let ExecutionResult::Val(actual) =
+                    powered.result_tensor::<LibTensor, Lib>(&lib).unwrap()
+                else {
+                    panic!("expected tensor result");
+                };
+                let expected = if open_index {
+                    // Each pair contracts to the squared norm; the last factor
+                    // retains the original free index and tensor components.
+                    let factor = scale * (5.0 * scale * scale).powi(i32::from(power / 2));
+                    vec![factor, 2.0 * factor]
+                } else {
+                    vec![(3.0 * scale).powi(i32::from(power))]
+                };
+                assert_eq!(actual.data, expected, "open={open_index}, power={power}");
+            }
+        }
+    }
+}
+
+#[cfg(feature = "shadowing")]
+#[test]
+fn odd_library_tensor_powers_keep_the_base_square_fixed() {
+    use symbolica::{
+        atom::{Atom, Symbol},
+        symbol,
+    };
+
+    use super::{
+        ExecutionResult, Network, Sequential, SmallestDegree,
+        library::{
+            panicing::ErroringLibrary,
+            symbolic::{ExplicitKey, TensorLibrary},
+        },
+        store::NetworkStore,
+    };
+    use crate::{
+        structure::{
+            NamedStructure,
+            abstract_index::AbstractIndex,
+            representation::{LibraryRep, Representation},
+        },
+        tensors::data::DataTensor,
+    };
+
+    type Tensor = DataTensor<f64, NamedStructure<Symbol, Vec<Atom>, LibraryRep>>;
+    type LibTensor = DataTensor<f64, ExplicitKey<AbstractIndex>>;
+    type Lib = TensorLibrary<LibTensor, AbstractIndex>;
+    type FnLib = ErroringLibrary<DummyKey>;
+    type Net = Network<NetworkStore<Tensor, f64>, ExplicitKey<AbstractIndex>, DummyKey>;
+    let mut lib = Lib::new();
+    let fn_lib = FnLib::new();
+    let key = ExplicitKey::from_iter(
+        [] as [Representation<LibraryRep>; 0],
+        symbol!("odd_power_scalar_tensor"),
+        None,
+    );
+    lib.insert_explicit_dense(key.clone(), vec![3.0]).unwrap();
+    let structure = key
+        .clone()
+        .reindex([] as [AbstractIndex; 0])
+        .unwrap()
+        .structure;
+
+    for power in [1, 3, 5] {
+        let mut net = Net::library_tensor(&structure, key.clone()).pow(power);
+        net.execute::<Sequential, SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+            .unwrap();
+        let ExecutionResult::Val(actual) = net.result_tensor::<LibTensor, Lib>(&lib).unwrap()
+        else {
+            panic!("expected tensor result");
+        };
+        assert_eq!(
+            actual.into_owned().to_bare_dense().data,
+            vec![3.0_f64.powi(i32::from(power))]
+        );
+    }
+}
+
+#[test]
 fn lazy_scalar_tensors_add_scalars_in_either_order() {
     use super::{
         ExecutionResult, Network, NetworkGraph, NetworkLeaf, NodeIndex, ScaledTensorRef,

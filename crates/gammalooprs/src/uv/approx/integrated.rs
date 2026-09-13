@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::debug_instrument;
@@ -36,13 +38,14 @@ use spenso::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
+    atom::{AliasedAtom, Atom, AtomCore, AtomView, FunctionBuilder},
     domains::atom::AtomField,
     function,
     id::Replacement,
     parse, parse_lit,
     poly::series::Series,
     solve::SolveError,
+    symbol,
 };
 use symbolica_utils::ReplaceBuilderExt;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
@@ -164,7 +167,45 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
     // not need expansion, and numerically integrated cographs stay factorized.
     let integrand =
         if integrand.contains_symbol(AGS.gamma) || integrand.contains_symbol(SPENSO_TAG.trace) {
-            integrand
+            // Scalar products already bind their contracted slots. Materializing
+            // a powered dot before symbolic multiplication reuses its dummy index
+            // and turns (p.k)^2 into p^2 k^2. Protect completed scalar spectators,
+            // while retaining full expansion of spin/vector contractions with
+            // open slots. The symbolic network also checks hidden shorthand
+            // slots without requiring concrete tensor dimensions or execution.
+            let mut used = integrand.get_all_symbols(true);
+            let mut aliases = BTreeMap::<Atom, Atom>::new();
+            let mut serial = 0usize;
+            let protected = integrand.replace_map(|arg, _context, out| {
+                if matches!(arg, AtomView::Fun(fun)
+                    if fun.get_symbol() == SPENSO_TAG.dot || fun.get_symbol() == ETS.metric)
+                    && !arg.contains_symbol(AGS.gamma)
+                    && !arg.contains_symbol(SPENSO_TAG.trace)
+                    && arg
+                        .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                            shorthand_parsing: ShorthandParsing::expand_all(),
+                            ..Default::default()
+                        })
+                        .is_ok_and(|network| network.graph.dangling_indices().is_empty())
+                {
+                    let alias = aliases.entry(arg.to_owned()).or_insert_with(|| {
+                        loop {
+                            let symbol = symbol!(&format!("gammaloop::uv_scalar_product_{serial}"));
+                            serial += 1;
+                            if used.insert(symbol) {
+                                break Atom::var(symbol);
+                            }
+                        }
+                    });
+                    **out = alias.clone();
+                }
+            });
+            let mut protected = AliasedAtom::from(protected);
+            for (original, alias) in aliases {
+                protected.register_alias(alias, original);
+            }
+            let expanded = protected
+                .get_root()
                 .parse_to_symbolic_net::<Aind>(&ParseSettings {
                     shorthand_parsing: ShorthandParsing::Expand {
                         schoonschip: SchoonschipExpansionMode::full(),
@@ -175,7 +216,8 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
                 })
                 .map_err(|error| eyre!("invalid analytic UV spin tensor notation: {error}"))?
                 .simple_execute::<()>()
-                .expand()
+                .expand();
+            protected.map_root(|_| expanded).into_inner()
         } else {
             integrand.clone()
         };
@@ -1489,6 +1531,50 @@ mod tests {
     use crate::{initialisation::test_initialise, utils::symbolica_ext::Q_I};
 
     use super::*;
+
+    #[test]
+    fn analytic_spin_expansion_preserves_powered_scalar_products() {
+        test_initialise().unwrap();
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let nu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let bis = Bispinor {}.new_rep(4);
+        let a = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+        let b = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+        let p = function!(GS.loop_mom, 1, mink.to_symbolic([]));
+        let k = function!(GS.loop_mom, 2, mink.to_symbolic([]));
+        let spin = function!(AGS.gamma, &a, &b, &mu) * function!(AGS.gamma, &b, &a, &nu);
+        for product in [spenso::dot!(&p, &k), spenso::g!(&p, &k)] {
+            for power in [2, 3] {
+                // A closed Dirac loop makes the analytic spin-expansion path
+                // active. Its scalar spectator must retain its own contractions.
+                let expected =
+                    Atom::num(4) * spenso::g!(&mu, &nu) * spenso::dot!(&p, &k).pow(power);
+                assert_eq!(
+                    simplify(&(product.pow(power) * &spin))
+                        .unwrap()
+                        .normalize_dots(),
+                    expected
+                );
+                // These compact metrics are tensor contractions, so they must
+                // remain visible even beside the protected scalar spectator.
+                assert_eq!(
+                    simplify(&(product.pow(power) * &spin * spenso::g!(&mu, &p)))
+                        .unwrap()
+                        .normalize_dots(),
+                    Atom::num(4) * function!(GS.loop_mom, 1, &nu) * spenso::dot!(&p, &k).pow(power)
+                );
+                assert_eq!(
+                    simplify(
+                        &(product.pow(power) * &spin * spenso::g!(&mu, &p) * spenso::g!(&nu, &k)),
+                    )
+                    .unwrap()
+                    .normalize_dots(),
+                    Atom::num(4) * spenso::dot!(&p, &k).pow(power + 1)
+                );
+            }
+        }
+    }
 
     #[test]
     fn projected_dirac_algebra_precedes_single_and_double_pole_expansion() {

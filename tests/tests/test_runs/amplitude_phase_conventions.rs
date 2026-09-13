@@ -202,7 +202,9 @@ target_relative_accuracy = 0.01
         // contributes -i/(32E^5). Its remaining spatial normalization is
         // (2π)^(-3), with no momentum-space Jacobian here.
         let density = point
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|momentum| {
                 let e_squared = 1.0 + momentum.iter().map(|k| k * k).sum::<f64>();
                 1.0 / (256.0 * PI.powi(3) * e_squared.powf(2.5))

@@ -147,7 +147,7 @@ fn check_scalar_contact_point(
                     signature
                         .internal
                         .iter()
-                        .zip(point.chunks_exact(3))
+                        .zip(point.as_chunks::<3>().0)
                         .map(|(sign, momentum)| *sign as i8 as f64 * momentum[axis])
                         .sum::<f64>()
                         .powi(2)

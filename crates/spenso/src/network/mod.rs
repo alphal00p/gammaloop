@@ -5409,13 +5409,10 @@ where
                                 },
                                 _ => {
                                     let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
+                                    let square = t.contract(&t)?;
 
                                     if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
+                                        for _ in 0..squares {
                                             t = square.contract(&t)?;
                                         }
 
@@ -5463,13 +5460,10 @@ where
                                 1 => NetworkLeaf::LocalTensor(*ti),
                                 _ => {
                                     let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
+                                    let square = t.contract(&t)?;
 
                                     if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
+                                        for _ in 0..squares {
                                             t = square.contract(&t)?;
                                         }
                                         if pow < 0 {
@@ -5521,13 +5515,10 @@ where
                                 1 => NetworkLeaf::LocalTensor(ti),
                                 _ => {
                                     let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
+                                    let square = t.contract(&t)?;
 
                                     if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
+                                        for _ in 0..squares {
                                             t = square.contract(&t)?;
                                         }
                                         if pow < 0 {
@@ -5582,13 +5573,10 @@ where
                                 1 => NetworkLeaf::LocalTensor(ti),
                                 _ => {
                                     let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
+                                    let square = t.contract(&t)?;
 
                                     if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
+                                        for _ in 0..squares {
                                             t = square.contract(&t)?;
                                         }
                                         if pow < 0 {
@@ -5640,13 +5628,10 @@ where
                                 1 => NetworkLeaf::LocalTensor(ti),
                                 _ => {
                                     let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
+                                    let square = t.contract(&t)?;
 
                                     if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
+                                        for _ in 0..squares {
                                             t = square.contract(&t)?;
                                         }
                                         if pow < 0 {

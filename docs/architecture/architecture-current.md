@@ -155,6 +155,13 @@ metric simplification. Numerical tensor execution contracts them after residue
 mapping; the integrated-CT preparation separately performs the required
 analytic Dirac algebra on its copy before Vakint. This avoids expanding a local
 trace into scalar contractions before canonical merging and energy sampling.
+Analytic spin expansion temporarily aliases completed, spin-independent scalar
+products, certified by their expanded tensor structure. Their internally bound
+indices must not be reused when a powered product is materialized. Open compact
+tensor contractions remain visible to full shorthand expansion; the existing
+alias owner restores scalar products afterwards. Tensor execution evaluates odd
+powers as paired contractions times the remaining base, preserving its free
+indices and the requested exponent.
 Both local routes simplify the reduced numerator's color algebra before Taylor
 construction and the cograph's color algebra before residue mapping, using the
 existing numerator operation. Open color indices remain explicit; the final

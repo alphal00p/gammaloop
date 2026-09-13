@@ -2459,3 +2459,123 @@ If a gate fails, use the measurements to continue the generic implementation, in
   integration test embeds a tracked `.snap` with `include_str!`, but only the
   runtime source set retained it. Add that exact existing fixture to the
   existing compile-time-extra source owner. Nix syntax validation passes.
+
+### 2026-09-13 — Complete physical performance gates and analytic regression
+
+- Final CLI22 GL00/GL01 measurements complete with three fresh generations per
+  route and graph, 108 accepted runtime passes of twenty batches, 4,913,040
+  samples and 396.547288 actual timed seconds. All 163 child receipts succeed
+  with nonoverlapping timing intervals; 109 undersized attempts remain
+  preserved and excluded. All 36 pointwise comparisons pass, with worst
+  relative difference 4.476e-15 against the unchanged 1e-9 tolerance.
+- GL01 direct/erased ratios are 1.001063 for complete graph generation,
+  0.807388/0.800332 for evaluator time at base/scaled points and
+  0.830437/0.823653 for total sample time. Together with GL00, all ten required
+  performance gates pass below 1.15, including the uncertainty repeat-trigger
+  envelopes. GL01 expression construction is 1.956529/3.140361 s (ratio
+  0.623027); including tensor preprocessing but excluding Symbolica is
+  5.349730/5.070101 s (ratio 1.055153).
+- Independent cold CLI22 profiles certify complete dispatch overhead:
+  GL00 65.248288/1,641.227113 ms = 3.97558%, GL01
+  67.809295/1,654.383686 ms = 4.09876%. This includes losing templates,
+  losing CFF requests, allocation and cache work. Winning hard CFF generation
+  is 20.918657/20.866779 ms, winning template preparation 61.343699/64.230217 ms,
+  and row mapping 22.963092/22.862368 ms for GL00/GL01 respectively. Each
+  profile completes four forest nodes, 196 selected hard rows and six unique
+  certified native keys. The exact benchmark and profile summaries are
+  retained in `docs/architecture/local-4d-uv-benchmarks.json` and
+  `docs/architecture/local-4d-uv-dispatch-profile.json`.
+- Merge lint milestone `c08b0d9f1` is pushed with ValentinHirschi author and
+  committer identity. Workspace formatting, check and clippy pass locally;
+  the rebuilt focused unit selection passes 521/521. Rust 1.98 CI found two
+  additional mechanical triplet-iterator lints in phase-convention tests;
+  their iteration semantics and expected values are preserved by the fixes.
+- The failing ghost graph now reproduces in two frozen feature binaries and
+  has a matched original-base CLI comparison. Both routes retain `(p.k)^2`
+  immediately after Taylor expansion. The feature's analytic spin-network
+  expansion turns that square into `p^2 k^2` before Vakint, changing the inner
+  fermion-bubble tensor. The base retains the square and yields the expected
+  two-loop result. This excludes flavor normalization, outer forest dispatch
+  and Vakint reduction as the first differing boundary.
+- A narrow fix in the existing analytic spin-preparation owner uses the
+  parser's existing setting to retain compact scalar products while expanding
+  spin/vector arguments. Focused powered-product and physical regression
+  validation is pending. Both forest orchestrators call this analytic owner
+  only when `generate_integrated` is true; all final local-only physical
+  benchmark cards set it false. The measured local-only path is unaffected.
+
+### 2026-09-13 — Final assembly diagnostic and analytic boundary refinement
+
+- A separate frozen GL21 base diagnostic passes its unchanged three-route
+  checks. With the graph-owned product numerator and integrated/threshold
+  subtraction enabled, 4D UV/forest orchestration takes 5,944.078 ms versus
+  3,377.569 ms in erased 3D. Without that numerator it improves from 972.364 ms
+  to 405.324 ms. Hard projection (55.666 ms) and outer routing selection
+  (82.152 ms) are small relative to the remaining mapped assembly and
+  simplification intervals. Tensor preprocessing is 1,005.779/644.301 ms;
+  Symbolica construction is 172.676/176.267 ms. This diagnostic identifies a
+  remaining generic assembly/preprocessing cost; it does not support claiming
+  that every pre-evaluator generation case is now faster.
+- The initial analytic scalar-product correction passes all three formerly
+  failing physics tests, with unchanged expectations. Its focused selection
+  passes 18/20: retaining every compact inner product also retains a compact
+  gamma contraction that must be expanded, while a cubic scalar product
+  exposes an existing odd tensor-power execution error. These failed receipts
+  remain in `ci_triage_d979/analytic_scalar_products_r1`.
+- The refinement protects only spin-independent dot/metric expressions whose
+  expanded tensor structure certifies that they are scalar. It uses the
+  existing capture-free alias owner and restores the original expression
+  after spin expansion. Open tensor products retain full shorthand expansion.
+  The existing network executor is also corrected to multiply a fixed base
+  square into the base for odd powers, rather than repeatedly squaring that
+  square. New checks cover scalar products beside partial/full compact tensor
+  contractions, plus all five tensor leaf variants at powers one, three and
+  five. No existing test expectations or tolerances change.
+- Formatting and workspace/all-target `cargo check` pass for the refinement.
+  Focused analytic/physical regressions and full Spenso/Idenso unit validation
+  are running. Because the odd-power correction touches shared tensor code,
+  a fresh paired physical benchmark must be made before assigning the prior
+  performance receipts to the final source revision.
+
+- The second rebuilt selection runs 425 tests: 420 pass, including all five
+  odd-power leaf variants and the existing compact-gamma contraction. Five
+  analytic/physical checks expose a concrete-dimension requirement in the
+  general expanded structure-inference oracle. The analytic owner now reads
+  dangling slots from the existing symbolic network parser instead: shorthand
+  is still fully expanded for the certificate, but no tensor components are
+  materialized or executed. This supports the symbolic dimension used by UV
+  renormalization. The failed second-run receipts remain preserved; a third
+  focused run will validate this correction before wider final acceptance.
+
+### 2026-09-13 — Analytic correctness restored before final remeasurement
+
+- The dimension-neutral symbolic parser correction passes the complete
+  focused selection: 20/20 tests in 83.856 s, after a 5m45s optimized rebuild.
+  This includes `finite_part_ghost_2loop`, `se1l_uv`, `epem_a_bbx_amp_uv`,
+  all selected analytic-renormalization checks and the new powered scalar
+  products beside partial/full compact metric contractions. Existing physics
+  expectations and tolerances remain unchanged. Receipts are preserved in
+  `ci_triage_d979/analytic_scalar_products_r4`; the third attempt stopped at
+  `cargo check` on a Vec API mismatch before compilation, also preserved.
+- The shared odd-power correction passed all Spenso/Idenso checks in the
+  preceding 425-test run. That run's five failures were solely the now-fixed
+  analytic dimension predicate, rather than shared tensor-power regressions.
+- Fresh final-source GL00/GL01 cards preserve the previous physical settings
+  exactly except output paths. All eighteen generations and runtime passes
+  will be repeated after the validated milestone is committed and the new
+  CLI/counter frozen. The exact 183-test acceptance rerun is also prepared.
+- Earlier physical receipts recorded whole-process memory peaks, not RAM at
+  evaluator entry. Six separate final profiling runs will use the existing
+  stage monitor to record both post-Spenso and actual Symbolica build-entry
+  RSS/HWM, with sampling lag. Native `evaluator_symbolica_time` also includes
+  function-map preparation and numerical-program conversion; actual `.build()`
+  intervals are reported separately and never substituted into timing gates.
+- Existing deferred GL262 CLI21 evidence records post-Spenso RSS
+  46,050,947,072 bytes (42.844 ms observation lag) and actual build-entry RSS
+  46,050,967,552 bytes (8.255 ms lag), each with HWM 68,617,658,368 bytes.
+  The later Symbolica failure reached HWM 120,480,550,912 bytes. The erased
+  CLI18 run never reached the matching post-Spenso boundary. No new GL262 run
+  is requested or counted toward merge acceptance.
+- Final local workspace formatting, all-target `cargo check` and clippy
+  with warnings denied pass for this correction. The completed regression
+  runner has exited successfully; the build and measurement locks are free.
