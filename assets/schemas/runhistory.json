@@ -44,6 +44,14 @@
             "type": "string"
           }
         },
+        "axis_labels": {
+          "description": "Human-readable label for each approach axis, in axis order",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
         "discrete_dim": {
           "description": "The discrete dimensions of the sample",
           "type": "array",
@@ -77,10 +85,17 @@
           "description": "Use logarithmic spacing in |t|",
           "type": "boolean"
         },
+        "max_abs_t": {
+          "description": "Largest |t| evaluated on either side of the midpoint",
+          "type": "number",
+          "format": "double",
+          "default": 1.0
+        },
         "min_abs_t": {
           "description": "Smallest non-zero |t| for logarithmic spacing",
           "type": "number",
-          "format": "double"
+          "format": "double",
+          "default": 1e-6
         },
         "momentum_space": {
           "description": "Interpret point as momentum-space coordinates",
@@ -117,6 +132,11 @@
             "null"
           ]
         },
+        "parameter_name": {
+          "description": "Name of the physical parameter t in point(t) = midpoint + t * axis",
+          "type": "string",
+          "default": "t"
+        },
         "point": {
           "description": "The midpoint to inspect (x y) or (p0 px ...)",
           "type": "array",
@@ -136,6 +156,11 @@
             }
           ]
         },
+        "skip_midpoint": {
+          "description": "Do not evaluate the midpoint at t = 0",
+          "type": "boolean",
+          "default": false
+        },
         "use_arb_prec": {
           "description": "Evaluate in f128 precision",
           "type": "boolean"
@@ -147,7 +172,6 @@
         "n_points",
         "linear",
         "logarithmic",
-        "min_abs_t",
         "use_arb_prec",
         "momentum_space",
         "discrete_dim"
@@ -1145,6 +1169,11 @@
                       "type": "null"
                     }
                   ]
+                },
+                "show_threshold_functions": {
+                  "description": "Show full threshold-counterterm multiplier expressions and flags",
+                  "type": "boolean",
+                  "default": false
                 }
               },
               "required": [
@@ -2635,13 +2664,6 @@
       "required": [
         "key",
         "value"
-      ]
-    },
-    "LmbChannelWeight": {
-      "type": "string",
-      "enum": [
-        "ose",
-        "inverse_jacobian"
       ]
     },
     "LocalCounterTermSettings": {
@@ -4160,6 +4182,44 @@
       },
       "additionalProperties": false
     },
+    "SamplingChannelDefinition": {
+      "description": "A graph-scoped channel definition.  `parent_lmb` is deliberately explicit:\nresolving a short expression against a graph is a later validation step,\nwhile exported definitions must never lose the routing frame they use.",
+      "type": "object",
+      "properties": {
+        "around": {
+          "type": "string",
+          "default": ""
+        },
+        "on_cut": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "parent_lmb": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "SamplingChannelWeight": {
+      "description": "Weighting strategy for the resolved sampling-channel partition.\n\n`Ose` and `InverseJacobian` are retained as input aliases for old cards;\nnew cards should use `map_density` or `singularity_proxy`.",
+      "type": "string",
+      "enum": [
+        "map_density",
+        "singularity_proxy",
+        "inverse_jacobian"
+      ]
+    },
     "SamplingSettings": {
       "type": "object",
       "properties": {
@@ -4171,8 +4231,32 @@
           "type": "number",
           "format": "double"
         },
+        "channel_definitions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/SamplingChannelDefinition"
+            }
+          }
+        },
+        "channel_selection": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
         "coordinate_system": {
           "$ref": "#/$defs/CoordinateSystem"
+        },
+        "default_channel_selection": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "graph_names": {
           "type": "array",
@@ -4194,15 +4278,6 @@
             }
           }
         },
-        "lmb_channel_weight": {
-          "$ref": "#/$defs/LmbChannelWeight"
-        },
-        "lmb_channels": {
-          "$ref": "#/$defs/SumMode"
-        },
-        "lmb_multichanneling": {
-          "type": "boolean"
-        },
         "mapping": {
           "$ref": "#/$defs/ParameterizationMapping"
         },
@@ -4212,6 +4287,15 @@
         "power": {
           "type": "number",
           "format": "double"
+        },
+        "sampling_channel_weight": {
+          "$ref": "#/$defs/SamplingChannelWeight"
+        },
+        "sampling_channels": {
+          "$ref": "#/$defs/SumMode"
+        },
+        "sampling_multichanneling": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -5049,7 +5133,8 @@
             "minimum": 0
           }
         },
-        "number_of_factorized_loop_subtopologies": {
+        "number_of_anticommutating_loops": {
+          "description": "Number of closed anticommutating (fermion or ghost) loops; negative disables",
           "type": [
             "array",
             "null"
@@ -5059,8 +5144,7 @@
             "format": "int32"
           }
         },
-        "number_of_anticommutating_loops": {
-          "description": "Number of closed anticommutating (fermion or ghost) loops; negative disables",
+        "number_of_factorized_loop_subtopologies": {
           "type": [
             "array",
             "null"
@@ -5461,6 +5545,20 @@
       },
       "additionalProperties": false
     },
+    "UVLimitSelection": {
+      "oneOf": [
+        {
+          "description": "One representative for every expected divergent cycle union: the generation LMB when\nsuitable, otherwise the first suitable basis in the deterministically sorted full list.",
+          "type": "string",
+          "const": "only-divergent"
+        },
+        {
+          "description": "Every nonempty loop subset in every generated physical LMB.",
+          "type": "string",
+          "const": "all"
+        }
+      ]
+    },
     "UVLocalisationSettings": {
       "type": "object",
       "properties": {
@@ -5811,20 +5909,6 @@
       "enum": [
         "Feynman",
         "LightLikeAxial"
-      ]
-    },
-    "UVLimitSelection": {
-      "oneOf": [
-        {
-          "description": "One representative for every expected divergent cycle union: the generation LMB when\nsuitable, otherwise the first suitable basis in the deterministically sorted full list.",
-          "type": "string",
-          "const": "only-divergent"
-        },
-        {
-          "description": "Every nonempty loop subset in every generated physical LMB.",
-          "type": "string",
-          "const": "all"
-        }
       ]
     }
   }
