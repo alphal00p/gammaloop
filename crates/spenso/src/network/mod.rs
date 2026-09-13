@@ -670,7 +670,8 @@ where
     let (estimated_output_entries, max_output_entry_products) = if exact_combinations
         <= exact_join_limit
     {
-        let mut output_counts = HashMap::<(Vec<ConcreteIndex>, Vec<ConcreteIndex>), u128>::new();
+        // Both groups stay immutable, so count coordinate contents without copying their vectors.
+        let mut output_counts = HashMap::<(&[ConcreteIndex], &[ConcreteIndex]), u128>::new();
         for (key, left_free_keys) in &left_groups {
             let Some(right_free_keys) = right_groups.get(key) else {
                 continue;
@@ -678,7 +679,7 @@ where
             for left_key in left_free_keys {
                 for right_key in right_free_keys {
                     *output_counts
-                        .entry((left_key.clone(), right_key.clone()))
+                        .entry((left_key.as_slice(), right_key.as_slice()))
                         .or_default() += 1;
                 }
             }

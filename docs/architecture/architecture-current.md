@@ -527,6 +527,9 @@ Cartesian entry count, capped by output and contracted-coordinate volume for
 single tensors. That cap is not applied to lazy sums, whose terms may share
 coordinates. The existing bounded output-support join and deterministic
 operand-order ties remain in use.
+The bounded join counts output coordinates through borrowed slices of its
+immutable support groups, avoiding per-product coordinate copies while merging
+equal output coordinates from distinct contracted groups by their contents.
 
 These scores estimate work before cancellations. They are not physical memory
 bounds or a prediction of the globally best contraction sequence. They use

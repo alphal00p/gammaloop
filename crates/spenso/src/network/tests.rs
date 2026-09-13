@@ -498,6 +498,106 @@ fn bulk_atom_sum_accepts_closed_tensor_leaves_and_preserves_aliases() {
 
 #[cfg(feature = "shadowing")]
 #[test]
+fn sparse_pair_estimate_counts_shared_output_coordinates() {
+    use linnet::permutation::Permutation;
+    use symbolica::atom::Atom;
+
+    use super::{FastTensorSumContractible, TensorContractionPairEstimate};
+    use crate::{
+        structure::{
+            OrderedStructure, TensorStructure,
+            representation::{Euclidean, RepName},
+        },
+        tensors::{
+            data::{DataTensor, SparseTensor},
+            parametric::ParamTensor,
+        },
+    };
+
+    let structure: OrderedStructure<Euclidean> = OrderedStructure::new(vec![
+        Euclidean {}.new_slot(2, 1),
+        Euclidean {}.new_slot(2, 2),
+    ])
+    .structure;
+    let tensor = |support: &[[usize; 2]]| {
+        ParamTensor::composite(DataTensor::Sparse(SparseTensor {
+            elements: support
+                .iter()
+                .map(|coordinates| (structure.flat_index(*coordinates).unwrap(), Atom::num(1)))
+                .collect(),
+            zero: Atom::Zero,
+            structure: structure.clone(),
+        }))
+    };
+    let left = tensor(&[[0, 0], [0, 1], [1, 0]]);
+    let right = tensor(&[[0, 0], [1, 0], [1, 1]]);
+
+    // Contracting the first axis produces (0,0) twice, from distinct contracted
+    // groups, and (1,0)/(0,1) once each. Full contraction joins two coordinates;
+    // both products have the same pair of empty free-coordinate keys.
+    for (matches, limit, products, entries, max_products) in [
+        ([true, false], 4, 4, 3, 2),
+        ([true, false], 3, 4, 4, 2),
+        ([true, true], 2, 2, 1, 2),
+    ] {
+        let matched_axes = matches.iter().filter(|matched| **matched).count();
+        let output_dense_size = if matched_axes == 2 { 1 } else { 4 };
+        let actual = left.contraction_pair_estimate(
+            &right,
+            &Permutation::id(matched_axes),
+            &matches,
+            &matches,
+            left.contraction_profile(),
+            right.contraction_profile(),
+            output_dense_size,
+            limit,
+        );
+        assert_eq!(
+            actual,
+            TensorContractionPairEstimate {
+                estimated_products: products,
+                estimated_output_entries: entries,
+                output_dense_size,
+                max_output_entry_products: max_products,
+                simple_tensor_penalty: 0,
+                common_factor_penalty: 1,
+            },
+            "matches={matches:?}, exact_join_limit={limit}",
+        );
+    }
+
+    // These supports overlap only after reordering the matched coordinates.
+    let left = tensor(&[[0, 1]]);
+    let right = tensor(&[[1, 0]]);
+    for (permutation, products) in [
+        (Permutation::id(2), 0),
+        (Permutation::from_map(vec![1, 0]), 1),
+    ] {
+        assert_eq!(
+            left.contraction_pair_estimate(
+                &right,
+                &permutation,
+                &[true, true],
+                &[true, true],
+                left.contraction_profile(),
+                right.contraction_profile(),
+                1,
+                1,
+            ),
+            TensorContractionPairEstimate {
+                estimated_products: products,
+                estimated_output_entries: 1,
+                output_dense_size: 1,
+                max_output_entry_products: 1,
+                simple_tensor_penalty: 0,
+                common_factor_penalty: 1,
+            },
+        );
+    }
+}
+
+#[cfg(feature = "shadowing")]
+#[test]
 fn large_scaled_tensor_sum_preserves_results_across_strategies() {
     use std::collections::HashMap;
 

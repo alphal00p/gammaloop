@@ -2216,3 +2216,43 @@ If a gate fails, use the measurements to continue the generic implementation, in
   evidence establishes GL262's ten paths/nine arcs and independent four-region
   classification, but does not substitute for the still-pending production DOT.
   The existing topology verifier can consume that export after generation.
+
+### 2026-09-13 — Borrowed sparse contraction-estimate coordinates
+
+- A separate 49 Hz, twenty-second stack sample of the immutable CLI21 direct
+  GL262 run captured 954 samples with no lost events during term 1 contraction.
+  Candidate-pair planning accounts for 45.36% of that sampled interval;
+  `sparse_atom_pair_estimate` accounts for 44.07% inclusively. Allocator
+  `_int_malloc` accounts for 23.38% self time across the interval. These are
+  interval-local observations, not whole-generation fractions or a comparison
+  with the earlier erased-route sample at a different term. This planner is
+  shared tensor-contraction planning, distinct from UV energy dispatch and its
+  separate selection-overhead gate.
+- The existing bounded sparse join now borrows free-coordinate slices from its
+  immutable support groups instead of cloning two vectors for every joined
+  product. Slice keys compare coordinate contents, so equal output coordinates
+  in separate contracted groups still merge. Support counts, cutoff behavior,
+  scores, pair enumeration and deterministic ties are unchanged. No tensors,
+  scalar expressions, assignments or cache policies are modified. No new
+  production abstraction or graph-specific condition is introduced.
+- A focused exact-support test covers repeated outputs across contracted
+  groups, the exact-join cutoff, empty free-coordinate keys under full
+  contraction, disjoint support and a nonidentity matched-coordinate
+  permutation. All six estimate fields are checked. The initial check caught
+  an ambiguous abstract-index type in the new fixture; adding its explicit
+  existing `OrderedStructure<Euclidean>` type fixes compilation without changing
+  assertions. That failed check is preserved alongside subsequent validation.
+- The ongoing immutable CLI21 run has now measured nonempty physical alias
+  restoration: term 3 contains 60 aliases with 248,010 definition bytes. Its
+  scalar grows from 3,772,234,894 to 3,772,481,212 bytes in 43.718728636 s.
+  The observed process high-water mark has reached 43,821,854,720 bytes before
+  the evaluator boundary. This is distinct from the earlier empty-alias fast
+  paths and the small synthetic probe. Neither the ongoing generation nor the
+  prospective borrowed-coordinate speedup establishes a final performance gate.
+- Format95 and check98 pass. Nextest44 passes all 169 Spenso unit tests in
+  3.201 s of test execution; clippy21 passes with no Spenso diagnostics (the
+  existing dependency future-incompatibility notice remains). Validation logs,
+  including the original check97 fixture-inference failure, are retained in
+  `diagnostic_sparse_pair_estimate/unit_checks`. The broader integration and
+  final physical generation/runtime gates remain pending. These checks overlap
+  the immutable diagnostic and are correctness evidence only.
