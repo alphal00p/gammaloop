@@ -2994,25 +2994,12 @@ pub struct GraphTermEvaluationContext<'a, 'm, T: FloatLike> {
     pub rotation: &'a Rotation,
     pub evaluation_metadata: &'m mut EvaluationMetaData,
     pub record_primary_timing: bool,
-    /// Canonical sampling-channel selection. The current amplitude and
-    /// cross-section evaluators still use this field for their LMB prefactor
-    /// path while the advanced map result below is migrated into the same
-    /// estimator.
+    /// Canonical sampling-channel selection used by the graph estimator.
     pub channel_id: Option<(SamplingChannelId, F<T>, LmbChannelWeight)>,
     pub lmb_basis_id: Option<LmbIndex>,
-    /// Optional advanced sampling result supplied by the sampling driver. The
-    /// channel identity is the same canonical `SamplingChannelId` domain; this
-    /// payload additionally carries the master-frame point, exact map
-    /// Jacobian and partition needed by surface/cut compositions. The current
-    /// graph evaluators do not yet consume those fields.
-    pub advanced_sampling_channel: Option<SamplingChannelBridgeEvaluation>,
 }
 
-/// Evaluate a graph term with the legacy LMB channel contract.
-///
-/// All existing callers use this wrapper. Advanced sampling code can call
-/// [`evaluate_graph_term_with_sampling_channel`] once it has prepared a full
-/// master-frame map evaluation and estimator partition.
+/// Evaluate one graph term using the canonical sampling channel contract.
 fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     graph_id: usize,
@@ -3020,34 +3007,6 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     context: &mut EvaluationContext<'_, '_>,
     channel_id: Option<(SamplingChannelId, F<T>, LmbChannelWeight)>,
     lmb_basis_id: Option<LmbIndex>,
-) -> Result<GraphEvaluationResult<T>> {
-    evaluate_graph_term_with_sampling_channel(
-        integrand,
-        graph_id,
-        sample,
-        context,
-        channel_id,
-        lmb_basis_id,
-        None,
-    )
-}
-
-/// Evaluate a graph term while carrying an advanced sampling-channel result.
-///
-/// This is an opt-in bridge for the eventual advanced sampler. It carries the
-/// complete master-frame point, exact map Jacobian and positive multichannel
-/// partition into the graph context without changing the current evaluator
-/// semantics. No caller currently selects this path automatically: prepared
-/// cut kinematics and conversion to a `MomentumSample` must be supplied by the
-/// advanced sampling driver before this entry point is used.
-fn evaluate_graph_term_with_sampling_channel<T: FloatLike, I: ProcessIntegrandImpl>(
-    integrand: &mut I,
-    graph_id: usize,
-    sample: &MomentumSample<T>,
-    context: &mut EvaluationContext<'_, '_>,
-    channel_id: Option<(SamplingChannelId, F<T>, LmbChannelWeight)>,
-    lmb_basis_id: Option<LmbIndex>,
-    advanced_sampling_channel: Option<SamplingChannelBridgeEvaluation>,
 ) -> Result<GraphEvaluationResult<T>> {
     let mut event_processing_runtime = integrand.take_event_processing_runtime();
     let result = {
@@ -3060,7 +3019,6 @@ fn evaluate_graph_term_with_sampling_channel<T: FloatLike, I: ProcessIntegrandIm
             record_primary_timing: context.record_primary_timing,
             channel_id,
             lmb_basis_id,
-            advanced_sampling_channel,
         };
         integrand
             .get_graph_mut(graph_id)
