@@ -798,13 +798,6 @@
       },
       "additionalProperties": false
     },
-    "LmbChannelWeight": {
-      "type": "string",
-      "enum": [
-        "ose",
-        "inverse_jacobian"
-      ]
-    },
     "LocalCounterTermSettings": {
       "type": "object",
       "properties": {
@@ -1474,6 +1467,44 @@
         ]
       }
     },
+    "SamplingChannelDefinition": {
+      "description": "A graph-scoped channel definition.  `parent_lmb` is deliberately explicit:\nresolving a short expression against a graph is a later validation step,\nwhile exported definitions must never lose the routing frame they use.",
+      "type": "object",
+      "properties": {
+        "around": {
+          "type": "string",
+          "default": ""
+        },
+        "on_cut": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "parent_lmb": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "SamplingChannelWeight": {
+      "description": "Weighting strategy for the resolved sampling-channel partition.\n\n`Ose` and `InverseJacobian` are retained as input aliases for old cards;\nnew cards should use `map_density` or `singularity_proxy`.",
+      "type": "string",
+      "enum": [
+        "map_density",
+        "singularity_proxy",
+        "inverse_jacobian"
+      ]
+    },
     "SamplingSettings": {
       "type": "object",
       "properties": {
@@ -1485,8 +1516,32 @@
           "type": "number",
           "format": "double"
         },
+        "channel_definitions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/SamplingChannelDefinition"
+            }
+          }
+        },
+        "channel_selection": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
         "coordinate_system": {
           "$ref": "#/$defs/CoordinateSystem"
+        },
+        "default_channel_selection": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "graph_names": {
           "type": "array",
@@ -1508,15 +1563,6 @@
             }
           }
         },
-        "lmb_channel_weight": {
-          "$ref": "#/$defs/LmbChannelWeight"
-        },
-        "lmb_channels": {
-          "$ref": "#/$defs/SumMode"
-        },
-        "lmb_multichanneling": {
-          "type": "boolean"
-        },
         "mapping": {
           "$ref": "#/$defs/ParameterizationMapping"
         },
@@ -1526,6 +1572,15 @@
         "power": {
           "type": "number",
           "format": "double"
+        },
+        "sampling_channel_weight": {
+          "$ref": "#/$defs/SamplingChannelWeight"
+        },
+        "sampling_channels": {
+          "$ref": "#/$defs/SumMode"
+        },
+        "sampling_multichanneling": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false
