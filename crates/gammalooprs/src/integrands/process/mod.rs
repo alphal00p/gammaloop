@@ -3392,6 +3392,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
             }
             DiscreteGraphSample::Advanced {
                 channel_id,
+                sampling_coordinates: _,
                 partition_weight,
                 sample,
             } => {
@@ -4335,6 +4336,7 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                     }
                     DiscreteGraphSample::Advanced {
                         channel_id,
+                        sampling_coordinates: None,
                         partition_weight: Some(F::from_f64(partition_weight)),
                         sample,
                     }
