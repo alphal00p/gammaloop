@@ -1816,3 +1816,63 @@ If a gate fails, use the measurements to continue the generic implementation, in
   CLI18, its matched counter and the identical candidate probe are prepared
   for rebuilding after this milestone. Full graph generation, saved evaluators,
   pointwise physical checks and final timing gates remain pending.
+
+- Milestone eighteen is committed and pushed as
+  `d6e4c13d9b9b301a9e9201875446cbc199028d56`, with ValentinHirschi as author and
+  committer. CLI18 is frozen from that clean revision: check 12.378 s, build
+  217.802 s; SHA-256
+  `22b6560abceb9e65bbaec193bf351e8807829c682385b53a7a421e07d675fc0c`,
+  1,577,498,240 bytes. The exact API/core and six-library identities were
+  captured before integration compilation changed dependency feature selection.
+- Counter18 is frozen with SHA-256
+  `1228640d14286b58a7a7d29e99371a8ca74c1e5b3aa5052979a4b9e516b5fa77`.
+  Its known-GL00 validation preserves the saved state and reproduces the
+  reference operation-count row. No API/core restoration build was needed.
+- The unprofiled CLI17 reference export completes in 565.912 s with peak
+  52.9368 GiB, reproducing the complete v4 scalar/store inventory. Its portable
+  scalar file has 3,389,426,376 bytes and artifact SHA-256
+  `66240aab1ee9115af7d8e0c4e5c5291b2cf74ef74a931efe07ce09db84e7fce0`.
+  The file digest identifies the artifact, not a cross-process symbolic proof.
+  This remains a single-summand correctness diagnostic; concurrent compilation
+  and its export work exclude acceptance timing claims.
+- The identical v5 probe source is linked against CLI18 (metadata 0.1653 s,
+  link 20.2991 s); candidate binary SHA-256
+  `d90666ac6278aa9fac0d79ebc9bf405b9800061aa912d5cae3b4ce4e2de11050`.
+  Small tensor and alias controls compare exactly after importing both route
+  exports into one Symbolica state. The tensor control has no retained tensors;
+  its 11,996,015-byte final scalar and 48,309,278 dead scalar bytes are unchanged,
+  while the previous 35,233,400 dead tensor bytes are removed. The largest
+  candidate replay and its same-state comparison are in progress.
+- Integration check85 passes (9.73 s; wrapper 9.788 s), and build13 passes
+  (3m37s; wrapper 218.308 s). Four immutable binaries and complete receipts are
+  frozen under `validation_candidate_d6e4c`; execution of the fourteen boundary
+  checks and the complete final matrix is pending. Builds and replays use
+  separate locks; all diagnostic executions and numerical benchmarks remain
+  serialized by the common measurement lock.
+
+- The largest CLI18 candidate replay completes successfully in 509.560 s, with
+  measured peak RSS 28,444,950,528 bytes (26.4914 GiB), compared with the frozen
+  CLI17 reference's 565.912 s and 52.9368 GiB. Its final tensor store is empty:
+  precisely 21,542,810,048 dead tensor Atom bytes are removed. The live scalar
+  remains 3,389,407,083 Atom bytes and the retained dead scalar payload remains
+  3,507,371,376 bytes. This comparison concerns one captured summand and includes
+  diagnostic preparation/export work; it is not a final generation ratio.
+- Exact import comparison passes after importing both portable scalar files
+  into one Symbolica state (153.407 s), without expanding graph numerators.
+  Both exports also have identical bytes (`cmp --silent` succeeds). The complete
+  replay, immutable-library and control evidence is recorded in
+  `diagnostic_tensor_store_reclamation/replay_validation.json`.
+- All fourteen d6e4c integration boundary tests pass: four UV composition checks,
+  seven cut/threshold checks, two threshold API checks, and the analytic quark
+  finite-part check. Nextest execution times are respectively 22.281, 18.070,
+  4.423 and 0.383 s. All eight list/run receipts exit successfully and identify
+  the same frozen assertion-enabled build. The full scalar/physical matrix
+  remains pending.
+- Full GL262 direct generation is now running from immutable CLI18, under the
+  common measurement lock. Both direct and erased cards retain matching eager,
+  uncompiled local-subtraction settings. Their diagnostic supervision permits
+  64 GiB RSS and 7,200 s, allowing headroom above the completed isolated replay
+  for the remaining summands and evaluator optimization. These are diagnostic
+  guards, not changed acceptance criteria; previous capped failures remain
+  preserved. The erased run will follow serially. No successful full GL262
+  state, runtime ratio or completed performance gate is claimed yet.
