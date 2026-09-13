@@ -32,10 +32,11 @@ than one process, and compressed or swapped-out pages are excluded. It does not
 provide the macOS footprint guarantee. Whole-machine memory is not monitored.
 Each start record names the metric; `tree_bytes` and `peak_tree_bytes` use it.
 
-The default and maximum cap is 30 GB. The helper defaults `CARGO_BUILD_JOBS`
-and `NEXTEST_TEST_THREADS` to 2 when unset; the
-scalar recipe explicitly sets both to 1. Sampling occurs about every 0.25 seconds,
-with ordinary log records every five seconds and observed peaks recorded at
+The default cap is 30 GB; `--limit-gb` accepts an explicit positive finite cap
+such as `--limit-gb 100`. The scalar recipe retains its explicit 30 GB cap.
+The helper defaults `CARGO_BUILD_JOBS` and `NEXTEST_TEST_THREADS` to 2 when
+unset; the scalar recipe explicitly sets both to 1. Sampling occurs about every
+0.25 seconds, with ordinary log records every five seconds and observed peaks recorded at
 completion or a cap stop. Allocations can briefly exceed a cap between samples.
 
 The child starts a new session. Cleanup freezes newly discovered descendants

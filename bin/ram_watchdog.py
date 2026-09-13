@@ -5,6 +5,7 @@ import argparse
 import ctypes
 import fcntl
 import json
+import math
 import os
 import signal
 import subprocess
@@ -153,8 +154,11 @@ def main():
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
-    if not command or not 0 < args.limit_gb <= 30:
-        parser.error("provide a command and a positive limit no greater than 30 GB")
+    if not command or not math.isfinite(args.limit_gb) or args.limit_gb <= 0:
+        parser.error("provide a command and a positive finite memory limit in GB")
+    numerator, denominator = args.limit_gb.as_integer_ratio()
+    # Convert without overflowing for large finite caps; memory uses whole bytes.
+    limit_bytes = (numerator * 10**9 + denominator - 1) // denominator
     args.log.parent.mkdir(parents=True, exist_ok=True)
     lock = Path(__file__).resolve().with_name("heavy-run.lock").open("a")
     try:
@@ -189,7 +193,7 @@ def main():
         record(
             "start",
             command=command,
-            tree_limit_bytes=int(args.limit_gb * 1e9),
+            tree_limit_bytes=limit_bytes,
             memory_metric=metric,
         )
         try:
@@ -216,7 +220,7 @@ def main():
                 live, tree_bytes = snapshot(known, groups, proc_pid_rusage)
                 peak_tree = max(peak_tree, tree_bytes)
                 elapsed = time.monotonic() - started
-                if tree_bytes >= args.limit_gb * 1e9:
+                if tree_bytes >= limit_bytes:
                     record(
                         "memory_limit",
                         pids=list(live),

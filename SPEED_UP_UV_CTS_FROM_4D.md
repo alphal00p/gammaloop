@@ -1876,3 +1876,29 @@ If a gate fails, use the measurements to continue the generic implementation, in
   guards, not changed acceptance criteria; previous capped failures remain
   preserved. The erased run will follow serially. No successful full GL262
   state, runtime ratio or completed performance gate is claimed yet.
+
+- User steering: "Continue as planned, but you can increase the memory guard to
+  100 GB for GL262, although still try to limit the memory load as much as you
+  can, but also without introducing crazy complications. Generation and runtime
+  optimizations are most important, but often memory optimization helps with
+  those objective too." Future GL262 supervision may therefore use
+  100,000,000,000 bytes. The currently running direct process stays uninterrupted
+  under its already-active 64 GiB guard; its memory remains well below that
+  limit. This permission changes diagnostic headroom only, not performance or
+  pointwise acceptance thresholds. Subsequent final paired runs will use the
+  same supervision limit.
+
+- The existing process-tree watchdog now accepts an explicitly requested positive
+  finite memory cap while preserving its 30 GB default and scalar recipe.
+  The final correctness harness forwards an explicit `--memory-limit-gb` and
+  records it in provenance; the physical GL262 group can use 100 GB without
+  numerical-code changes or graph-specific branches. Eighteen tiny execution
+  and argument controls pass, including 100 GB, invalid/nonfinite limits and
+  overflow-safe byte conversion. Ruff, Python compilation and diff checks pass.
+  Results are retained in `watchdog_memory_cap_validation/results.json`.
+- A 20-second, 961-sample profile of the running CLI18 nested forest node places
+  approximately 99% of that interval in final-integrand dot normalization,
+  including 69% in `normalize_dots`. These are inclusive sampled intervals,
+  not additive stages or whole-generation percentages. Remaining root-matcher
+  guards are under read-only review; no numerical implementation change is
+  made while the full generation result remains pending.
