@@ -570,6 +570,9 @@ pub struct SamplingChannelBridgeAcceptanceReport {
     pub finite_sample_count: usize,
     pub normalization: f64,
     pub normalization_stderr: f64,
+    pub second_moment: f64,
+    pub expected_second_moment: f64,
+    pub second_moment_stderr: f64,
     pub partition_min: f64,
     pub partition_max: f64,
     pub jacobian_min: f64,
@@ -625,12 +628,20 @@ impl SamplingChannelBridgeAcceptanceReport {
         let dimension = bridge.dimensions as f64;
         let gaussian_normalization =
             (2.0 * std::f64::consts::PI * width * width).powf(-0.5 * dimension);
+        let expected_second_moment = center
+            .iter()
+            .map(|component| component * component)
+            .sum::<f64>()
+            + dimension * width.powi(2);
         let mut report = Self {
             sample_count,
             channel_count,
             finite_sample_count: 0,
             normalization: 0.0,
             normalization_stderr: 0.0,
+            second_moment: 0.0,
+            expected_second_moment,
+            second_moment_stderr: 0.0,
             partition_min: f64::INFINITY,
             partition_max: f64::NEG_INFINITY,
             jacobian_min: f64::INFINITY,
@@ -638,6 +649,7 @@ impl SamplingChannelBridgeAcceptanceReport {
             round_trip_residual_max: 0.0,
         };
         let mut square_sum = 0.0;
+        let mut second_moment_square_sum = 0.0;
         let total_samples = sample_count * channel_count;
         for channel_index in 0..channel_count {
             let channel_id = SamplingChannelId::from(channel_index);
@@ -698,6 +710,9 @@ impl SamplingChannelBridgeAcceptanceReport {
                 report.finite_sample_count += 1;
                 report.normalization += weight;
                 square_sum += weight * weight;
+                let second_moment = weight * radius_squared;
+                report.second_moment += second_moment;
+                second_moment_square_sum += second_moment * second_moment;
             }
         }
         if report.finite_sample_count > 0 {
@@ -706,6 +721,12 @@ impl SamplingChannelBridgeAcceptanceReport {
                 ((square_sum / total_samples as f64 - report.normalization.powi(2)).max(0.0)
                     / total_samples as f64)
                     .sqrt();
+            report.second_moment /= total_samples as f64;
+            report.second_moment_stderr = ((second_moment_square_sum / total_samples as f64
+                - report.second_moment.powi(2))
+            .max(0.0)
+                / total_samples as f64)
+                .sqrt();
         }
         Ok(report)
     }
@@ -3829,6 +3850,8 @@ mod tests {
         assert!((report.partition_max - 1.0).abs() < 1.0e-12);
         assert!((report.normalization - 1.0).abs() < 5.0e-2);
         assert!(report.normalization_stderr.is_finite());
+        assert!((report.second_moment - report.expected_second_moment).abs() < 2.0e-1);
+        assert!(report.second_moment_stderr.is_finite());
         assert!(report.round_trip_residual_max < 1.0e-10);
     }
 
