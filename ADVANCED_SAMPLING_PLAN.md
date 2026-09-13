@@ -24,8 +24,11 @@ A bounded `product(...)` compiler is now available as one canonical channel
 entry when its `lmb(...)`/`complement(...)` blocks, and at most one explicit
 surface block, form a disjoint cover of the parent LMB. Each block is compiled
 in its local dimension and embedded by an explicit parent-frame permutation.
-Ordered conditional `then(...)` compilation, multiple per-child surface
-metadata, and prepared cut maps remain guarded until their context and
+The same bounded block compiler now supports ordered `then(...)`; when its
+first block has full support, later context-dependent blocks are resolved by
+the composition inverse and the complete map advertises full support to the
+partition. A standalone conditional map remains guarded. Multiple per-child
+surface metadata and prepared cut maps remain open until their context and
 partition-density contracts are complete.
 
 The first process-level acceptance probe now integrates a normalized Gaussian
@@ -36,9 +39,11 @@ integrands can be deleted.
 
 The current cross-section and conditional-channel bridge is intentionally a
 safe boundary: it is compiled before the per-sample LU root and `t*` solve, so
-it must reject cut/phase-space/left/right maps and conditional maps whose
-partition scores do not yet carry the same context, rather than attach stale
-global kinematics or miscompute the channel denominator.
+it must reject cut/phase-space/left/right maps and standalone conditional maps
+whose partition scores do not yet carry the same context, rather than attach
+stale global kinematics or miscompute the channel denominator. A complete
+ordered composition may promote an internal conditional block to full support
+when its inverse derives that context from an earlier full block.
 Full cross-section support requires a two-stage conditional map (or an
 equivalent composite proposal) whose implicit root and `t*` Jacobian are part
 of the same canonical channel density.
