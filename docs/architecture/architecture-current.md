@@ -156,9 +156,10 @@ mapping; the integrated-CT preparation separately performs the required
 analytic Dirac algebra on its copy before Vakint. This avoids expanding a local
 trace into scalar contractions before canonical merging and energy sampling.
 Both local routes simplify the reduced numerator's color algebra before Taylor
-construction using the existing numerator operation. Open color indices remain
-explicit; later color simplification still contracts the attached cograph and
-projector. Raw graph storage and parse-time validation are unchanged.
+construction and the cograph's color algebra before residue mapping, using the
+existing numerator operation. Open color indices remain explicit; the final
+color pass contracts indices closed by attached UV terms and projectors. Raw
+graph storage and parse-time validation are unchanged.
 
 Rational-shell extraction groups equal denominator multisets through sums,
 products and powers while leaving denominator-free numerator subtrees opaque.
@@ -381,7 +382,20 @@ projected local4D are summed representations and reject that request.
 
 Evaluator construction parses the factorized numerator into a Spenso network,
 aliases large scalar references, and contracts its tensor products before
-resolving those aliases. The default `intermediate_cost` preset selects
+resolving those aliases. At this finite component boundary, a ready tensor
+whose exposed indices all contract with a pending tensor sum is attached to
+each immediate sum branch first. This reduces the sum's open tensor rank
+before large component expressions are constructed. The tensor store is
+shared by reference and scalar spectators stay outside; sums are not multiplied
+through other sums, powers or opaque functions. Repeating the transformation
+decreases an existing sum's exposed rank. Eligibility requires self-dual exposed
+sum slots, so shared edge descriptors retain their exact endpoint meaning;
+internal dual contractions and spectator incidence are preserved. It changes
+the contraction graph, leaving the input Atom, raw Taylor algebra and selected
+energy assignments untouched. Symbolic networks used to reconstruct numerator
+Atoms do not invoke this preparation.
+
+The default `intermediate_cost` preset selects
 `MinIntermediateCost`, a configuration of the existing `ContractionStrategy`
 implementation. It changes pair selection, preserving the scalar, trace,
 library, disconnected-product and final cleanup rules.

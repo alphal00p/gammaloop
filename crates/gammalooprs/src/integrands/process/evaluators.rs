@@ -642,6 +642,17 @@ impl EvaluatorStack {
             elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
             "Evaluator timing milestone"
         );
+        // Prepare only the finite component contraction. Raw symbolic networks
+        // used by Taylor expansion retain their original product/sum grouping.
+        let contraction_preparation_started = std::time::Instant::now();
+        let closed_sum_boundaries = net.graph.contract_ready_sum_boundaries();
+        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+            stage = "evaluator_stack_parse_atom_tensor_boundaries_done",
+            atom_index,
+            closed_sum_boundaries,
+            elapsed_ms = contraction_preparation_started.elapsed().as_secs_f64() * 1000.0,
+            "Prepared finite tensor contractions through pending sums"
+        );
         crate::debug_tags!(#generation, #compile, #term, #dump;
             stage = "evaluator_stack_parse_atom_network_dump",
             atom_index,

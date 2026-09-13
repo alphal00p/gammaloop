@@ -758,6 +758,204 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
     }
 
+    /// Close tensor boundaries before materializing the arms of a tensor sum.
+    ///
+    /// This is finite tensor execution preparation, not symbolic parsing: callers
+    /// returning a factorized graph numerator must not apply this transformation.
+    /// Only ready tensor leaves and sum boundaries with self-dual slots qualify.
+    /// Each move consumes all of that leaf's free slots and strictly reduces the
+    /// existing sum's rank;
+    /// it never copies a sum, scalar spectator, power, or function. Tensor storage
+    /// is shared through the original leaf references.
+    pub fn contract_ready_sum_boundaries(&mut self) -> usize
+    where
+        K: Clone + Display,
+        FK: Clone + Display,
+    {
+        self.merge_ops();
+        let mut contractions = 0;
+        loop {
+            let tree: SimpleTraversalTree<ChildVecStore<()>> = self.expr_tree().cast();
+            let root = self.graph.node_id(self.head());
+            let Some((tensor, sum)) = tree
+                .iter_preorder_tree_nodes(&self.graph, root)
+                .find_map(|node| self.ready_sum_boundary(node, &tree))
+            else {
+                return contractions;
+            };
+            let mut scope: SuBitGraph = self.graph.empty_subgraph();
+            for node in
+                std::iter::once(tensor).chain(tree.iter_preorder_tree_nodes(&self.graph, sum))
+            {
+                for hedge in self.graph.iter_crown(node) {
+                    scope.add(hedge);
+                }
+            }
+            // Extract only this certified pair. In particular, spinor and other
+            // non-self-dual contractions between spectators keep their incidence.
+            let mut sum = self.extract(&scope);
+            let residual_boundary: Vec<_> = sum
+                .dangling_slot_hedges()
+                .into_iter()
+                .map(|(slot, hedge)| (slot, sum.graph.flow(hedge), sum.slot_order[hedge.0]))
+                .collect();
+            let tensor = sum.graph.node_id(
+                sum.graph
+                    .external_filter::<SuBitGraph>()
+                    .included_iter()
+                    .find(|h| {
+                        sum.graph[[h]] == NetworkEdge::Head
+                            && sum.graph.flow(*h) == Flow::Source
+                            && matches!(sum.graph[sum.graph.node_id(*h)], NetworkNode::Leaf(_))
+                    })
+                    .expect("the certified pair has one tensor root"),
+            );
+            let mut scope: SuBitGraph = sum.graph.empty_subgraph();
+            for hedge in sum.graph.iter_crown(tensor) {
+                scope.add(hedge);
+            }
+            let tensor = sum.extract(&scope);
+            let previous_rank = sum.n_dangling();
+            let mut arms = sum.into_root_arguments().into_iter().map(|arm| {
+                let mut closed = tensor.clone().n_mul([arm]);
+                // Make the closing leaf available alongside each intact arm's
+                // factors, before the arm could become a large open tensor.
+                closed.merge_ops();
+                closed
+            });
+            let mut closed_sum = arms.next().expect("sum has an arm").n_add(arms);
+            debug_assert!(closed_sum.n_dangling() < previous_rank);
+            assert_eq!(
+                closed_sum.n_dangling(),
+                residual_boundary.len(),
+                "closing the tensor preserves the complete residual sum boundary",
+            );
+            // n_add creates source outputs, whereas an existing outside factor
+            // may have sewn the old Sum endpoint as a sink. Restore that exact
+            // residual seam before splice, independently of operand ordering.
+            for (slot, hedge) in closed_sum.dangling_slot_hedges() {
+                let (_, flow, order) = residual_boundary
+                    .iter()
+                    .find(|(original, _, _)| *original == slot)
+                    .expect("closing the tensor preserves every residual sum slot");
+                closed_sum.graph.set_flow(hedge, *flow);
+                closed_sum.slot_order[hedge.0] = *order;
+            }
+
+            // Two Product inputs become one. All other edges, including the
+            // unconsumed Sum boundary, are reattached by the existing splice.
+            let redundant_input = self
+                .graph
+                .external_filter::<SuBitGraph>()
+                .included_iter()
+                .find(|h| self.graph[[h]] == NetworkEdge::Head && self.graph.flow(*h) == Flow::Sink)
+                .expect("extracting the pair leaves two product inputs");
+            let mut redundant: SuBitGraph = self.graph.empty_subgraph();
+            redundant.add(redundant_input);
+            self.delete(&redundant);
+            self.splice_descendents_of(closed_sum);
+            contractions += 1;
+        }
+    }
+
+    fn ready_sum_boundary(
+        &self,
+        product: NodeIndex,
+        tree: &SimpleTraversalTree<ChildVecStore<()>>,
+    ) -> Option<(NodeIndex, NodeIndex)> {
+        if !matches!(self.graph[product], NetworkNode::Op(NetworkOp::Product)) {
+            return None;
+        }
+        let children: Vec<_> = tree.iter_children(product, &self.graph).collect();
+        children.iter().find_map(|tensor| {
+            if !matches!(
+                self.graph[*tensor],
+                NetworkNode::Leaf(NetworkLeaf::LocalTensor(_) | NetworkLeaf::LibraryKey { .. })
+            ) {
+                return None;
+            }
+            let boundary: Vec<_> = self
+                .graph
+                .iter_crown(*tensor)
+                .filter(|h| {
+                    matches!(self.graph[[h]], NetworkEdge::Slot(_))
+                        && (self.graph.inv(*h) == *h
+                            || self.graph.node_id(self.graph.inv(*h)) != *tensor)
+                })
+                .collect();
+            let first = boundary.first()?;
+            let sum = self.graph.node_id(self.graph.inv(*first));
+            let mut exposed_slots = BTreeSet::new();
+            (children.contains(&sum)
+                && matches!(self.graph[sum], NetworkNode::Op(NetworkOp::Sum))
+                && self.graph.iter_crown(sum).all(|h| {
+                    let NetworkEdge::Slot(slot) = self.graph[[&h]] else {
+                        return true;
+                    };
+                    // A unique descriptor must identify each residual endpoint
+                    // when its original flow and slot order are restored.
+                    slot.matches(&slot)
+                        && ((self.graph.inv(h) != h
+                            && tree
+                                .ancestor_iter_node(
+                                    self.graph.node_id(self.graph.inv(h)),
+                                    self.graph.as_ref(),
+                                )
+                                .any(|node| node == sum))
+                            || exposed_slots.insert(slot))
+                })
+                && boundary.iter().all(|h| {
+                    // Edge descriptors are shared by both endpoints. Splitting a
+                    // dualizable edge would need endpoint variance restoration;
+                    // self-dual slots can be rejoined without that extra data.
+                    matches!(self.graph[[h]], NetworkEdge::Slot(slot) if slot.matches(&slot))
+                        && self.graph.inv(*h) != *h
+                        && self.graph.node_id(self.graph.inv(*h)) == sum
+                }))
+            .then_some((*tensor, sum))
+        })
+    }
+
+    fn into_root_arguments(mut self) -> Vec<Self>
+    where
+        K: Clone + Display,
+        FK: Clone + Display,
+    {
+        let mut arguments = Vec::new();
+        loop {
+            // Extracted inputs leave dangling sink heads on the operator shell.
+            // The source head continues to identify the original expression root.
+            let root = self.graph.node_id(
+                self.graph
+                    .external_filter::<SuBitGraph>()
+                    .included_iter()
+                    .find(|h| {
+                        self.graph[[h]] == NetworkEdge::Head && self.graph.flow(*h) == Flow::Source
+                    })
+                    .expect("operator has a source head"),
+            );
+            let tree: SimpleTraversalTree<ChildVecStore<()>> =
+                SimpleTraversalTree::depth_first_traverse(
+                    &self.graph,
+                    &self.expression_subgraph(),
+                    &root,
+                    None,
+                )
+                .unwrap()
+                .cast();
+            let Some(child) = tree.iter_children(root, &self.graph).next() else {
+                return arguments;
+            };
+            let mut scope: SuBitGraph = self.graph.empty_subgraph();
+            for node in tree.iter_preorder_tree_nodes(&self.graph, child) {
+                for hedge in self.graph.iter_crown(node) {
+                    scope.add(hedge);
+                }
+            }
+            arguments.push(self.extract(&scope));
+        }
+    }
+
     pub fn find_all_ready_ops(&mut self) -> Vec<ReadyNetworkOp<K, FK, Aind>>
     where
         K: Clone + Display,
@@ -1434,6 +1632,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             }
         }
         self.graph.delete_hedges(subgraph);
+        self.slot_order.truncate(self.graph.n_hedges());
     }
     pub fn identify_nodes_without_self_edges(
         &mut self,
@@ -2134,7 +2333,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         if profile::enabled() {
             eprintln!("spenso_profile merge_ops.after_forget");
         }
-        self.graph.delete_hedges(&to_del);
+        self.delete(&to_del);
         if profile::enabled() {
             eprintln!(
                 "spenso_profile merge_ops.end nodes={} hedges={}",
@@ -2716,7 +2915,168 @@ pub mod test {
         },
     };
 
-    use super::{NetworkGraph, NetworkNode, NetworkOp};
+    use super::{NAdd, NMul, NetworkGraph, NetworkNode, NetworkOp};
+
+    #[test]
+    fn deleting_hedges_keeps_tensor_slot_order_aligned() {
+        let mut graph = NetworkGraph::<i8>::mul_graph(3);
+        graph.slot_order = vec![0, 1, 2, 3];
+        let mut removed = SuBitGraph::empty(graph.graph.n_hedges());
+        removed.add(super::Hedge(1));
+        graph.delete(&removed);
+        assert_eq!(graph.slot_order.len(), graph.graph.n_hedges());
+        assert_eq!(graph.slot_order, [0, 3, 2]);
+        graph.graph.check().unwrap();
+    }
+
+    #[test]
+    fn ready_sum_boundaries_preserve_dual_spectators_and_shared_library_references() {
+        type Graph = NetworkGraph<OrderedStructure>;
+        let matrix = |index| {
+            Graph::tensor(
+                &PermutedStructure::<OrderedStructure>::from_iter([
+                    Minkowski {}.new_slot(3, 2).to_lib(),
+                    Minkowski {}.new_slot(2, 1).to_lib(),
+                ])
+                .structure,
+                NetworkLeaf::LocalTensor(index),
+            )
+        };
+        let vector = Graph::key(PermutedStructure::<OrderedStructure>::from_iter([
+            Minkowski {}.new_slot(2, 1).to_lib(),
+        ]));
+        let spectator = |index, slot| {
+            Graph::tensor(
+                &PermutedStructure::<OrderedStructure>::from_iter([slot]).structure,
+                NetworkLeaf::LocalTensor(index),
+            )
+        };
+        let mut graph = vector.n_mul([
+            matrix(0).n_add([matrix(1)]),
+            Graph::scalar(7),
+            spectator(2, Lorentz {}.new_slot(2, 3).to_lib()),
+            spectator(3, Lorentz {}.dual().new_slot(2, 3).to_lib()),
+        ]);
+        assert_eq!(graph.n_dangling(), 1);
+        assert_eq!(graph.contract_ready_sum_boundaries(), 1);
+        assert_eq!(graph.n_dangling(), 1);
+        assert_eq!(graph.contract_ready_sum_boundaries(), 0);
+        graph.graph.check().unwrap();
+        let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = graph.graph.node_id(graph.head());
+        let nodes: Vec<_> = tree.iter_preorder_tree_nodes(&graph.graph, root).collect();
+        assert_eq!(
+            nodes
+                .iter()
+                .filter(|node| matches!(
+                    graph.graph[**node],
+                    NetworkNode::Leaf(NetworkLeaf::LibraryKey { .. })
+                ))
+                .count(),
+            2,
+        );
+        assert_eq!(
+            nodes
+                .iter()
+                .filter(|node| matches!(
+                    graph.graph[**node],
+                    NetworkNode::Leaf(NetworkLeaf::Scalar(_))
+                ))
+                .count(),
+            1,
+            "scalar spectator stays outside the sum",
+        );
+        assert_eq!(
+            nodes
+                .iter()
+                .filter(|node| matches!(graph.graph[**node], NetworkNode::Op(NetworkOp::Sum)))
+                .count(),
+            1,
+        );
+
+        // A moved dualizable boundary needs endpoint metadata beyond the shared
+        // edge descriptor; retain this valid contraction for ordinary execution.
+        let mut dual = spectator(0, Lorentz {}.new_slot(2, 3).to_lib()).n_mul([spectator(
+            1,
+            Lorentz {}.dual().new_slot(2, 3).to_lib(),
+        )
+        .n_add([spectator(2, Lorentz {}.dual().new_slot(2, 3).to_lib())])]);
+        dual.merge_ops();
+        let unchanged = dual.clone();
+        assert_eq!(dual.contract_ready_sum_boundaries(), 0);
+        assert_eq!(dual, unchanged);
+
+        let mixed = |index| {
+            Graph::tensor(
+                &PermutedStructure::<OrderedStructure>::from_iter([
+                    Minkowski {}.new_slot(2, 1).to_lib(),
+                    Lorentz {}.new_slot(2, 3).to_lib(),
+                ])
+                .structure,
+                NetworkLeaf::LocalTensor(index),
+            )
+        };
+        // An unconsumed dualizable boundary also needs endpoint restoration.
+        // Retain both original operand orders without cutting their shared edge.
+        for outside_first in [false, true] {
+            let sum = mixed(0).n_add([mixed(1)]);
+            let closing = spectator(2, Minkowski {}.new_slot(2, 1).to_lib());
+            let outside = spectator(3, Lorentz {}.dual().new_slot(2, 3).to_lib());
+            let mut graph = if outside_first {
+                outside.n_mul([closing, sum])
+            } else {
+                sum.n_mul([closing, outside])
+            };
+            graph.merge_ops();
+            assert_eq!(graph.n_dangling(), 0);
+            let unchanged = graph.clone();
+            assert_eq!(graph.contract_ready_sum_boundaries(), 0);
+            assert_eq!(graph, unchanged);
+        }
+    }
+
+    #[test]
+    fn ready_sum_boundaries_do_not_distribute_additive_or_partly_open_factors() {
+        let tensor = |index, axes: &[usize]| {
+            NetworkGraph::<i8>::tensor(
+                &PermutedStructure::<OrderedStructure>::from_iter(
+                    axes.iter().map(|axis| Euclidean {}.new_slot(2, *axis)),
+                )
+                .structure,
+                NetworkLeaf::LocalTensor(index),
+            )
+        };
+        let sum = || tensor(0, &[1]).n_add([tensor(1, &[1])]);
+        for mut graph in [
+            sum().n_mul([sum()]),
+            tensor(2, &[1, 2]).n_mul([sum()]),
+            NetworkGraph::scalar(0).n_mul([sum()]),
+        ] {
+            graph.merge_ops();
+            let unchanged = graph.clone();
+            assert_eq!(graph.contract_ready_sum_boundaries(), 0);
+            assert_eq!(graph, unchanged);
+        }
+
+        // Two independent closures keep two independent sums; neither additive
+        // operand becomes a Cartesian product of the other sum's arms.
+        let mut graph = tensor(2, &[1]).n_mul([
+            sum(),
+            tensor(3, &[2]),
+            tensor(4, &[2]).n_add([tensor(5, &[2])]),
+        ]);
+        assert_eq!(graph.contract_ready_sum_boundaries(), 2);
+        let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = graph.graph.node_id(graph.head());
+        assert_eq!(
+            tree.iter_preorder_tree_nodes(&graph.graph, root)
+                .filter(|node| matches!(graph.graph[*node], NetworkNode::Op(NetworkOp::Sum)))
+                .count(),
+            2,
+        );
+        assert_eq!(graph.contract_ready_sum_boundaries(), 0);
+        graph.graph.check().unwrap();
+    }
 
     #[test]
     fn addition() {

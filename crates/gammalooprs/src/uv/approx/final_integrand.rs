@@ -88,8 +88,12 @@ impl<'a> FinalIntegrandBuilder<'a> {
             "Computed global numerator"
         );
 
+        // Resolve the cograph's color algebra before residue mapping repeats its
+        // momentum numerator. The final pass still closes attached UV/projector
+        // color indices that remain open at this boundary.
         let resnum = graph
             .numerator(&reduced, current.subgraph())
+            .color_simplify()
             .get_single_atom()
             .expect("graph numerator should be available")
             * global_num;
@@ -151,6 +155,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
         );
         let resnum = graph
             .numerator(&reduced, current.subgraph())
+            .color_simplify()
             .get_single_atom()
             .expect("graph numerator should be available")
             * global_num;

@@ -551,3 +551,179 @@ If a gate fails, use the measurements to continue the generic implementation, in
   diagnose this growth. No graph numerator expansion or new production setting
   has been introduced for that experiment. Physical generation and runtime
   acceptance remain pending.
+
+### 2026-09-13: locating the remaining tensor growth
+
+- Milestone `a1673901fa3417ce3b4eebc480d6edd658e87255` was committed and
+  pushed as ValentinHirschi. The current immutable diagnostic CLI above contains
+  its production code. These are concurrent diagnostic measurements, not final
+  acceptance timings.
+- Matched current-code GL00 generations completed: direct 4D **829.149287255 s**
+  (expression 5.174840171 s, Spenso 90.901857385 s, Symbolica 733.072589699 s),
+  erased 3D **19.740054989 s** (expression 6.642393406 s, Spenso 4.111505172 s,
+  Symbolica 8.986156411 s). Both use the same immutable binary, physical inputs
+  and settings except the route. Direct reported peak memory is 41,532,669,952
+  bytes. Generation remains far outside the required gate.
+- The shared tensor owner receives similarly sized inputs: direct 1,416,191
+  bytes and erased 1,432,379 bytes. Erased produces 41,119,289 scalar bytes in
+  2.776 s tensor execution; direct produces 3,450,351,988 bytes in 86.515 s,
+  about 83.91 times the output size. Standalone replays reproduce both output
+  sizes exactly. The original, unsubtracted term is identical at this boundary.
+- Existing `HornerAtomComponents<4096>` reduces the direct scalar size by only
+  160,846 bytes (0.00466%); it is not a useful remedy. A scalar-fold trace shows
+  every multiplying fold has exactly two factors. The sampled late hotspot is
+  copying already enormous scalar results, not multiplying many factors.
+- Existing lazy tensor sums are active; all 21 logged nontrivial sums remain
+  lazy and no distributed-term threshold forces materialization. The first
+  large external-vector contraction receives 20 already completed rank-four
+  tensors, 5,120 component entries and 246,405,632 bytes. The growth therefore
+  precedes the external contractions. The full-vacuum contribution has 62
+  mapped numerator copies in both routes, but direct groups them into 12
+  carriers before attaching the external cograph. The next diagnostic tests
+  closing the native residue summands before forming their open tensor sum,
+  while preserving every incoming graph numerator's factorization. No
+  production grouping policy has been changed on this evidence alone.
+
+- The matched GL00 diagnostic completed with the same immutable `fe064ff6`
+  executable for direct4D and a fresh erased3D generation. Generation took
+  829.149 s versus 19.740 s (42.00x): expression work 5.175/6.642 s,
+  Spenso 90.902/4.112 s, and Symbolica 733.073/8.986 s. Reported peak RAM
+  was 41,532,669,952/688,590,848 bytes. These single generations overlapped
+  other diagnostic work and remain observational, not final acceptance timings.
+- The subsequent saved-state runtime commands and counters held the shared
+  benchmark lock. Three primed passes of twenty batches each retained 7,200
+  direct samples and 109,603 erased samples. Actual measured Total durations
+  were 4.061/4.038/4.090 s for direct and 3.895/3.686/3.728 s for erased.
+  The erased route's initial approximately one-second attempts were preserved
+  but excluded; adaptive retries requested nineteen seconds and each exceeded
+  the three-second actual-duration gate. Median Total time was
+  **1691.152/103.050 microseconds (16.411x)** and evaluator time was
+  **1633.378/91.313 microseconds (17.888x)**, direct/erased respectively.
+  The original long-running GL262 baseline remained active, so these are
+  diagnostic measurements even though runtime commands were serialized.
+- Direct/erased instruction counts are **408,227/31,382 (13.008x)**, with
+  307,911/23,192 multiplications and 250,738/17,309 additions. Both programs
+  have 35 inversions, eighteen function calls, 214 inputs, one output and a
+  62-orientation catalog. Full-amplitude plus local-UV values agree to relative
+  complex norm differences **1.79e-15** at the base point and **2.94e-15**
+  at the point with spatial coordinates scaled by 100. Integrated UV and
+  threshold CTs are off; evaluation is eager and uncompiled in both routes.
+- The exact current before-network inputs are 1,416,191 direct Atom bytes and
+  1,432,379 erased Atom bytes. The erased route creates sixteen scalar aliases
+  totalling 69,918 bytes (largest 5,941 bytes); direct creates none at the same
+  4,096-byte threshold. Tensor execution yields 3,450,351,988/41,119,289 scalar
+  Atom bytes in 86.515/2.776 s. This locates the large growth after the actual
+  shared tensor boundary and motivates comparing the differing factorization
+  of its inputs. It does not establish an algebraic error or a successful
+  performance fix. Receipts, all timing attempts, counts, point values and
+  exact binary/state provenance are in
+  `tests/artifacts/aa_aa_uv_slowdown/diagnostic_early_color_and_guards/GL00_adaptive_runtime_summary.json`
+  and its case directories. The saved erased reference is the fresh state in
+  this same diagnostic directory, despite the replay output directory's
+  `GL00_3d_erased_baseline_state` suffix.
+
+- A bounded finite-tensor closure experiment now confirms that mechanism.
+  It identifies the 21 native residue aggregation scopes in this captured GL00
+  input and preserves all 298 complete numerator summands, including their
+  internal sums and powers. Exact reverse reconstruction of every original
+  scope passes. Attaching the existing external tensors before aggregating
+  those summands changes input size from 1,416,191 to 1,547,061 bytes (+9.24%),
+  costs 17.2 ms, and reduces tensor execution from 84.77 to **3.755 s**.
+  Result extraction falls from 1.812 to 0.0189 s and scalar output from
+  3,450,351,988 to **38,471,036 bytes**, slightly below erased 3D's
+  41,119,289 bytes. The diagnostic's inspected gamma/polarization predicates
+  are confined to ignored artifacts and must not enter production.
+- The implementation owner for this refinement is the existing tensor network
+  graph/execution boundary. Its pending Product/Sum structure retains the
+  necessary contraction context after all UV mappings are complete. Closing
+  tensor indices through that pending sum can preserve canonical UV grouping,
+  selected immutable assignments, cache identities and the original input
+  Atom. Selection must use generic tensor slots and reduce the open boundary;
+  scalar factors, products of sums, powers and unknown functions must not be
+  distributed. Native-row sidecars in projected UV coefficients would instead
+  have to survive every prior component grouping and both hard/soft mappings,
+  so they are not being introduced as a second representation.
+- The existing `finite_part_quark_lo` analytic regression passes **1/1** in
+  0.396 s, with dev-optim assertions enabled and the standard licensed runtime.
+  Its separate target passed cargo check (23.30 s) before compilation (3m10s);
+  the running scalar matrix's `test_runs` executable was not rebuilt. Binary
+  provenance, nextest metadata, check/build logs and the execution receipt are
+  in `tests/artifacts/aa_aa_uv_slowdown/finite_part_quark_lo_check_1`.
+- Bounded source-only diagnostics reused the same immutable `fe064ff6` CLI and
+  matched physical cards under the shared lock. GL01 reached the exact
+  before-network event after 5.172 s, containing four terms and 1,420,147 Atom
+  bytes; its payload was saved and the newly launched process deliberately
+  terminated. GL262 reached the 180.028 s cap without that payload and was
+  deliberately terminated too. Neither is a completed generation timing or a
+  numerical failure. Receipts and the GL01 input are in
+  `diagnostic_early_color_and_guards/GL01_4d_source_capture_r1` and
+  `GL262_4d_source_capture_r1` under the measurement artifact directory.
+- During the capped GL262 capture, a six-second 19 Hz sample of its worker and
+  auxiliary resource-monitor thread collected 122 user-CPU samples with none
+  lost. Of those samples, 90.98% include `simplify_final` → `simplify_color` →
+  `collect_chains` → `collect_symbol`, and 88.52% include symbolic zero tests.
+  The last logged forest node was topo index zero, DOD0, with no parents.
+  This isolates an upstream color-collection bottleneck; it does not establish
+  a DOD2-specific issue or describe the whole generation. The original GL262
+  baseline remains active and was neither paused nor terminated by these runs.
+- The scalar acceptance matrix completed **167/167 tests passing** in
+  2,949.565 s. It used the immutable deferred-spin test executable
+  `f7a5f864bd7ba23756b5e0fd9d9bd7e76b4a5d7a7aa85b8897b32907caacfd17`,
+  with its source manifest recorded before the run. This validates the canonical
+  projection, assignments and caches across the existing scalar graph,
+  numerator, raised-propagator and integrated/threshold configurations on
+  that snapshot. The pending finite-tensor preparation and final source still
+  require a new matrix run; this result is not a final performance gate.
+- The GL262 root profile identifies another missing early-color boundary:
+  the untouched cograph numerator in final assembly. Both final assembly routes
+  now call its existing color simplifier before any residue mapping repeats
+  that numerator. The later color pass remains responsible for color indices
+  closed by attached UV terms or projectors. Raw stored graph numerators remain
+  unchanged; the new order will be checked in the next paired snapshot.
+
+
+### 2026-09-13 — generic finite tensor preparation
+
+- Added preparation on the existing Spenso contraction graph: a ready tensor
+  whose complete exposed boundary meets one immediate sum is attached to each
+  intact arm before that sum materializes. It uses tensor-store references and
+  exact self-dual slot bindings, preserves scalar spectators and unrelated
+  incidence, and never multiplies sums through other sums, powers or unknown
+  functions. The original symbolic Atom and UV projection representation remain
+  unchanged. Each move strictly decreases an existing sum's exposed rank.
+- The first broad run completed 416/425 tests successfully. Eight failures came
+  from accidentally overriding the repository filter for explicitly marked
+  `::failing::` tests; these are recorded separately from the new regression.
+  The new independent coordinate test exposed a real implementation defect:
+  the sum-first operand order closed four boundaries, but the outside-first
+  order closed one and left six dangling slots. Its expected values and counts
+  were not changed.
+- The cause was the existing `SmartEdgeVec::set_flow`: its source/sink setters
+  ignored dangling Identity edges. It now uses the existing involution flip,
+  with a regression checking dangling and paired flow, payload consistency,
+  idempotence and exact round trips. The preparation also exposed stale slot
+  bookkeeping: `NetworkGraph::delete` did not truncate its slot-order vector,
+  and `merge_ops` bypassed that owner entirely. Both now use the aligned graph
+  deletion path. Restoration additionally checks the exact residual slot count.
+- The broader scalar fixture now always emits its existing paired setup-plus-
+  generation timings, so the next matrix run can retain per-case observational
+  comparisons. No physics expectation, numerator, route setting or tolerance
+  changed. Final physical generation/runtime gates remain open.
+
+- The corrected focused run passes **633/633 tests** in 58.093 s (3m15s
+  compilation), including the unchanged independent coordinate oracle, both
+  operand orders, four execution strategies, graph seam/slot regressions,
+  UV/CFF/source/energy coverage, evaluator guards and the Idenso library suite.
+  The preceding cargo check passes in 11.07 s. The source retains normal debug
+  assertions. A newly built immutable CLI will provide the next physical
+  measurements; neither these unit results nor the small structural replay
+  establish the generation/runtime acceptance gates.
+
+- Clippy completes successfully; the same three documented tuple-complexity
+  warnings remain and the new tensor/graph changes introduce no warnings.
+  The next immutable assertion-enabled CLI is based on a1673901 plus patch
+  `ed44598ebfb02533a79109f9eccdd0118a713bfe56db7afa220a20578a3af175`,
+  with binary SHA-256
+  `40f7f703f770f6942f8fdf21cf5be9089a9dae0a8836ff80ed880926f12738fd`.
+  Its 3m58s build, source patch, binary and six matched diagnostic cards are
+  recorded in `tests/artifacts/aa_aa_uv_slowdown/diagnostic_tensor_boundaries`.

@@ -830,13 +830,11 @@ fn run_scalar_3l_cross_section_case_impl(
         &integrand_command_refs,
         exercise_orientation_local_3d,
     )?;
-    if exercise_orientation_local_3d {
-        println!(
-            "scalar {} local-UV route explicit-sum local-3D: setup and generation {:?}",
-            case.graph,
-            generation_started.elapsed()
-        );
-    }
+    println!(
+        "scalar {} local-UV route explicit-sum local-3D: setup and generation {:?}",
+        case.graph,
+        generation_started.elapsed()
+    );
 
     let generation_started = Instant::now();
     let mut cff_4d = setup_scalar_3l_cross_section_cli(
@@ -850,13 +848,11 @@ fn run_scalar_3l_cross_section_case_impl(
         &integrand_command_refs,
         exercise_orientation_local_3d,
     )?;
-    if exercise_orientation_local_3d {
-        println!(
-            "scalar {} local-UV route projected local-4D: setup and generation {:?}",
-            case.graph,
-            generation_started.elapsed()
-        );
-    }
+    println!(
+        "scalar {} local-UV route projected local-4D: setup and generation {:?}",
+        case.graph,
+        generation_started.elapsed()
+    );
     if profile_scalar_uv_routes {
         assert_scalar_uv_profile(
             &mut cff_4d,

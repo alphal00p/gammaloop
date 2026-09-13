@@ -1044,14 +1044,9 @@ impl<T> SmartEdgeVec<T> {
         if self.flow(hedge) != flow {
             let edge_id = self[&hedge];
             self[&edge_id].1.swap();
-            match flow {
-                Flow::Source => {
-                    self.involution.set_as_source(hedge);
-                }
-                Flow::Sink => {
-                    self.involution.set_as_sink(hedge);
-                }
-            }
+            // Changing a dangling endpoint must update its Identity flow too;
+            // set_as_source/sink only change paired involution mappings.
+            self.involution.flip_underlying(hedge);
         }
     }
 
@@ -1308,5 +1303,38 @@ impl<T> Swap<EdgeIndex> for SmartEdgeVec<T> {
 
             self.data.swap(e1, e2);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Flow, Involution, SmartEdgeVec};
+
+    #[test]
+    fn set_flow_updates_dangling_and_paired_endpoints_consistently() {
+        let mut involution = Involution::new();
+        let dangling = involution.add_identity(11, true, Flow::Source);
+        let (source, sink) = involution.add_pair(17, true);
+        let mut edges = SmartEdgeVec::new(involution);
+        let original = edges.clone();
+        for flow in [Flow::Sink, Flow::Source] {
+            edges.set_flow(dangling, flow);
+            edges.set_flow(source, flow);
+            assert_eq!(edges.flow(dangling), flow);
+            assert_eq!(edges.flow(source), flow);
+            assert_eq!(edges.flow(sink), -flow);
+            for hedge in [dangling, source, sink] {
+                let edge_id = edges[&hedge];
+                assert_eq!(edges[&edge_id].1, edges.involution.hedge_pair(hedge));
+            }
+            let unchanged = edges.clone();
+            edges.set_flow(dangling, flow);
+            edges.set_flow(source, flow);
+            assert_eq!(edges, unchanged);
+        }
+        assert_eq!(
+            edges, original,
+            "round trip preserves payloads and orientations"
+        );
     }
 }

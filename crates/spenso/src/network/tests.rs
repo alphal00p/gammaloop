@@ -574,6 +574,124 @@ fn contraction_strategies_match_independent_coordinate_sum() {
     // contraction orders must produce the complete coordinate sum above.
 }
 
+#[test]
+fn ready_sum_boundary_closure_matches_coordinates_across_execution_strategies() {
+    use crate::{
+        network::{
+            ExecutionResult, Network, Sequential, SequentialExtract, SequentialRef, SmallestDegree,
+            graph::{NAdd, NMul},
+            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+            store::NetworkStore,
+        },
+        structure::{
+            OrderedStructure, TensorStructure,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    type LibTensor = DummyLibraryTensor<Tensor>;
+    type Lib = DummyLibrary<Tensor, DummyKey>;
+    type FnLib = ErroringLibrary<DummyKey>;
+
+    let tensor = |axes: &[usize], offset: usize| {
+        let ordered = OrderedStructure::new(
+            axes.iter()
+                .map(|axis| Euclidean {}.new_slot(2, *axis))
+                .collect(),
+        );
+        let mut data = vec![0.0; 1 << axes.len()];
+        for linear in 0..data.len() {
+            let mut indices: Vec<_> = (0..axes.len())
+                .map(|axis| (linear >> (axes.len() - axis - 1)) & 1)
+                .collect();
+            let value = (offset + linear) as f64;
+            ordered.rep_permutation.apply_slice_in_place(&mut indices);
+            ordered.index_permutation.apply_slice_in_place(&mut indices);
+            let flat: usize = ordered.structure.flat_index(indices).unwrap().into();
+            data[flat] = value;
+        }
+        Net::from_tensor(DenseTensor::from_data(data, ordered.structure).unwrap())
+    };
+    // Each native arm is a product with four exposed indices. Its matrix factors
+    // stay intact while the four external vectors close it. Reversed written
+    // matrix indices exercise slot permutations during extraction and rejoining.
+    let left = tensor(&[2, 1], 1).n_mul([tensor(&[3, 4], 2)]);
+    let right = tensor(&[1, 2], 3).n_mul([tensor(&[4, 3], 4)]);
+    let sum = left.n_add([right]);
+    let original = sum.clone().n_mul([
+        tensor(&[1], 1),
+        tensor(&[2], 2),
+        tensor(&[3], 3),
+        tensor(&[4], 4),
+        Net::from_scalar(7.0),
+    ]);
+    let reordered = tensor(&[1], 1).n_mul([
+        tensor(&[2], 2),
+        tensor(&[3], 3),
+        tensor(&[4], 4),
+        Net::from_scalar(7.0),
+        sum,
+    ]);
+    let mut expected = 0usize;
+    for i in 0..2 {
+        for j in 0..2 {
+            for k in 0..2 {
+                for l in 0..2 {
+                    expected += 7
+                        * (1 + i)
+                        * (2 + j)
+                        * (3 + k)
+                        * (4 + l)
+                        * ((1 + 2 * j + i) * (2 + 2 * k + l) + (3 + 2 * i + j) * (4 + 2 * l + k));
+                }
+            }
+        }
+    }
+    let lib = Lib::new();
+    let fn_lib = FnLib::new();
+    let mut prepared = original.clone();
+    let stored_tensors = prepared.store.tensors.len();
+    assert_eq!(prepared.graph.contract_ready_sum_boundaries(), 4);
+    assert_eq!(prepared.store.tensors.len(), stored_tensors);
+    assert_eq!(prepared.graph.contract_ready_sum_boundaries(), 0);
+    // With closing factors first, the original Sum endpoints have opposite
+    // graph flows. Their residual seam must survive every partial closure.
+    let mut reordered_prepared = reordered.clone();
+    assert_eq!(reordered_prepared.graph.contract_ready_sum_boundaries(), 4);
+    assert_eq!(reordered_prepared.graph.n_dangling(), 0);
+
+    macro_rules! check {
+        ($strategy:ty) => {{
+            for mut net in [
+                original.clone(),
+                prepared.clone(),
+                reordered.clone(),
+                reordered_prepared.clone(),
+            ] {
+                net.execute::<$strategy, SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+                    .unwrap();
+                let ExecutionResult::Val(actual) = net.result_scalar().unwrap() else {
+                    panic!("expected a closed scalar");
+                };
+                assert_eq!(*actual, expected as f64);
+            }
+        }};
+    }
+    check!(Sequential);
+    check!(SequentialRef);
+    check!(SequentialExtract);
+    prepared
+        .execute_parallel::<SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+        .unwrap();
+    let ExecutionResult::Val(actual) = prepared.result_scalar().unwrap() else {
+        panic!("expected a closed scalar");
+    };
+    assert_eq!(*actual, expected as f64);
+}
+
 #[cfg(feature = "shadowing")]
 #[test]
 fn sparse_contraction_preserves_overlapping_and_disjoint_support() {
