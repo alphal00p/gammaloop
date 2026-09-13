@@ -205,7 +205,7 @@ fn discrete_sampling_type_name(sampling_type: &DiscreteGraphSamplingType) -> &'s
         DiscreteGraphSamplingType::Default(_) => "default",
         DiscreteGraphSamplingType::MultiChanneling(_) => "multi_channeling",
         DiscreteGraphSamplingType::TropicalSampling(_) => "tropical",
-        DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => "discrete_multi_channeling",
+        DiscreteGraphSamplingType::SamplingMultiChanneling(_) => "sampling_multi_channeling",
     }
 }
 
@@ -214,7 +214,7 @@ pub(crate) fn discrete_sampling_depth_for_settings(
 ) -> usize {
     let orientation_depth = usize::from(settings.sample_orientations);
     match &settings.sampling_type {
-        DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => 2 + orientation_depth,
+        DiscreteGraphSamplingType::SamplingMultiChanneling(_) => 2 + orientation_depth,
         _ => 1 + orientation_depth,
     }
 }
@@ -229,7 +229,7 @@ fn invalid_discrete_sampling_depth_error(
     }
     if matches!(
         settings.sampling_type,
-        DiscreteGraphSamplingType::DiscreteMultiChanneling(_)
+        DiscreteGraphSamplingType::SamplingMultiChanneling(_)
     ) {
         axes.push("channel");
     }
@@ -301,7 +301,7 @@ pub(crate) fn resolve_discrete_selection_for_sampling(
             };
 
             let channel = match &settings.sampling_type {
-                DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => {
+                DiscreteGraphSamplingType::SamplingMultiChanneling(_) => {
                     let channel_index = *discrete_dimensions.last().expect("validated depth");
                     let channel_count = channel_count_for_group(group_id)?.ok_or_else(|| {
                         eyre!(
@@ -4196,7 +4196,7 @@ fn create_grid_for_graph<G: GraphTerm>(
                 continuous_grid
             }
         }
-        DiscreteGraphSamplingType::DiscreteMultiChanneling(multichanneling_settings) => {
+        DiscreteGraphSamplingType::SamplingMultiChanneling(multichanneling_settings) => {
             let continuous_grid = create_default_continous_grid(graph_term, integrator_settings);
             let channel_count = graph_term
                 .sampling_channel_ids(&multichanneling_settings.parameterization_settings)
@@ -4509,7 +4509,7 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                     }
                     DiscreteGraphSample::Tropical(sample)
                 }
-                DiscreteGraphSamplingType::DiscreteMultiChanneling(multichanneling_settings) => {
+                DiscreteGraphSamplingType::SamplingMultiChanneling(multichanneling_settings) => {
                     let channel_id = input.channel_id.ok_or_else(|| {
                         eyre!(
                             "Momentum-space evaluation for discrete multichanneling requires selecting a channel."
@@ -5503,7 +5503,7 @@ mod tests {
     fn discrete_acceptance_selection_decodes_canonical_channel_id() {
         let settings = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
             sample_orientations: true,
-            sampling_type: DiscreteGraphSamplingType::DiscreteMultiChanneling(
+            sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(
                 MultiChannelingSettings::default(),
             ),
             ..Default::default()

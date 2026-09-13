@@ -728,7 +728,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                         sample: DiscreteGraphSample::Tropical(default_sample),
                     })
                 }
-                DiscreteGraphSamplingType::DiscreteMultiChanneling(multichanneling_settings) => {
+                DiscreteGraphSamplingType::SamplingMultiChanneling(multichanneling_settings) => {
                     let channel_id = channel_id.ok_or_else(|| {
                         eyre!(
                             "Internal error: missing channel selection for discrete multi-channeling."
@@ -866,7 +866,7 @@ mod tests {
         ));
         assert!(!is_summed_multichanneling(
             &SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
-                sampling_type: DiscreteGraphSamplingType::DiscreteMultiChanneling(
+                sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(
                     MultiChannelingSettings::default(),
                 ),
                 ..Default::default()

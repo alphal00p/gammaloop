@@ -1675,7 +1675,7 @@ impl SamplingSettings {
                                 .clone(),
                         }
                     }
-                    DiscreteGraphSamplingType::DiscreteMultiChanneling(
+                    DiscreteGraphSamplingType::SamplingMultiChanneling(
                         multichanneling_settings,
                     ) => SamplingSettingsParser {
                         graphs: SumMode::MonteCarlo,
@@ -1941,7 +1941,7 @@ impl SamplingSettings {
                     match sampling_channels {
                         SumMode::Summed => DiscreteGraphSamplingType::MultiChanneling(settings),
                         SumMode::MonteCarlo => {
-                            DiscreteGraphSamplingType::DiscreteMultiChanneling(settings)
+                            DiscreteGraphSamplingType::SamplingMultiChanneling(settings)
                         }
                     }
                 } else {
@@ -2043,7 +2043,7 @@ impl SamplingSettings {
                 DiscreteGraphSamplingType::MultiChanneling(settings) => {
                     Some(settings.parameterization_settings.clone())
                 }
-                DiscreteGraphSamplingType::DiscreteMultiChanneling(settings) => {
+                DiscreteGraphSamplingType::SamplingMultiChanneling(settings) => {
                     Some(settings.parameterization_settings.clone())
                 }
                 DiscreteGraphSamplingType::TropicalSampling(_) => None,
@@ -2061,7 +2061,7 @@ impl SamplingSettings {
                 match &settings.sampling_type {
                     DiscreteGraphSamplingType::Default(_) => 1 + depth_from_orientations,
                     DiscreteGraphSamplingType::MultiChanneling(_) => 1 + depth_from_orientations,
-                    DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => {
+                    DiscreteGraphSamplingType::SamplingMultiChanneling(_) => {
                         2 + depth_from_orientations
                     }
                     DiscreteGraphSamplingType::TropicalSampling(_) => 1 + depth_from_orientations,
@@ -2111,7 +2111,7 @@ impl SamplingSettings {
                             orientation_sampling_string,
                         )
                     }
-                    DiscreteGraphSamplingType::DiscreteMultiChanneling(settings) => {
+                    DiscreteGraphSamplingType::SamplingMultiChanneling(settings) => {
                         format!(
                             "{}, {} and monte carlo over lmbs in {} coordinates",
                             discrete_graph_string,
@@ -2205,7 +2205,7 @@ pub enum DiscreteGraphSamplingType {
     #[serde(rename = "multi_channeling")]
     MultiChanneling(MultiChannelingSettings),
     #[serde(rename = "discrete_multi_channeling")]
-    DiscreteMultiChanneling(MultiChannelingSettings),
+    SamplingMultiChanneling(MultiChannelingSettings),
     #[serde(rename = "tropical")]
     TropicalSampling(GammaloopTropicalSamplingSettings),
 }
