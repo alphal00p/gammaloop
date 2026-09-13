@@ -20,7 +20,7 @@ use super::{
     ImplicitSurfaceRadialMap, PreparedCutSamplingContext, SamplingChannelScore, SamplingMapAffine,
     SamplingMapComponent, SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding,
     SamplingMapEvaluation, SamplingMapKernel, SamplingPartition, SamplingPartitionMode,
-    SamplingScoreFunction, SurfaceRadialMap,
+    SamplingScoreFunction, SamplingSupport, SurfaceRadialMap,
 };
 use crate::momentum::sample::{LoopMomenta, MomentumSample};
 use crate::settings::runtime::ParameterizationSettings;
@@ -326,8 +326,9 @@ impl SamplingChannelCompileContext {
 }
 
 /// The map kernels currently compilable without a graph-specific implicit
-/// solver.  Composite/cut maps stay in the typed catalogue until their
-/// prepared kinematic context is supplied by the process layer.
+/// solver.  Physical conditional/cut maps stay in the typed catalogue until
+/// their prepared kinematic context is supplied by the process layer; the
+/// bounded direct-product route is compiled there when its blocks are explicit.
 #[derive(Clone, Debug)]
 pub enum CompiledSamplingMap {
     Lmb(SamplingMapKernel),
@@ -1163,7 +1164,7 @@ fn validate_prepared_map_context(
     Ok(())
 }
 
-/// Compile one radial surface in its native subspace and embed it together
+/// Compile one radial surface in its native subspace and optionally embed it together
 /// with the ordinary map on the complementary parent-LMB edges.  The output
 /// permutation is explicit, so sharing a surface across graph channels never
 /// relies on an implicit edge ordering or a silent local-frame assumption.
@@ -1172,6 +1173,7 @@ fn compile_surface_map(
     surface_edges: &[usize],
     edges: &[usize],
     context: &SamplingChannelCompileContext,
+    embed_complement: bool,
 ) -> Result<CompiledSamplingMap, SamplingChannelCompileError> {
     if edges.is_empty() {
         return Err(SamplingChannelCompileError::InvalidChannel {
@@ -1242,6 +1244,9 @@ fn compile_surface_map(
         })?;
         CompiledSamplingMap::Surface(surface)
     };
+    if !embed_complement {
+        return Ok(surface);
+    }
     if edges.len() == context.n_loop_momenta {
         if edges == context.parent_lmb {
             return Ok(surface);
@@ -1298,6 +1303,141 @@ fn compile_surface_map(
         channel: channel.to_owned(),
         error: error.to_string(),
     })
+}
+
+/// Compile a direct-product channel whose children explicitly partition the
+/// parent LMB.  The surface child is the only child whose active coordinate
+/// block comes from channel metadata (`subspace_lmb`); its `surface(...)`
+/// arguments identify the physical energy constraints.  Ordinary `lmb(...)`
+/// and `complement(...)` children retain their own local edge ordering.
+fn compile_product_map(
+    channel: &str,
+    maps: &[SamplingMapDefinition],
+    channel_subspace_lmb: &[usize],
+    context: &SamplingChannelCompileContext,
+) -> Result<CompiledSamplingMap, SamplingChannelCompileError> {
+    let parent_positions = context
+        .parent_lmb
+        .iter()
+        .enumerate()
+        .map(|(position, edge)| (*edge, position))
+        .collect::<BTreeMap<_, _>>();
+    let mut used_edges = BTreeMap::<usize, usize>::new();
+    let mut children = Vec::<Box<dyn SamplingMapComponent>>::with_capacity(maps.len());
+    let mut child_blocks = Vec::<Vec<usize>>::with_capacity(maps.len());
+    let mut surface_child = None;
+
+    for (child_index, map) in maps.iter().enumerate() {
+        let (block_edges, compiled) = match map {
+            SamplingMapDefinition::Lmb(edges) | SamplingMapDefinition::Complement(edges) => {
+                if edges.is_empty() {
+                    return Err(SamplingChannelCompileError::InvalidChannel {
+                        channel: channel.to_owned(),
+                        error: format!("product child {child_index} has an empty edge block"),
+                    });
+                }
+                let compiled = SamplingMapKernel::new(
+                    map.clone(),
+                    context.parameterization_settings.clone(),
+                    context.e_cm,
+                    edges.len(),
+                )
+                .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+                    channel: channel.to_owned(),
+                    error: format!("product child {child_index} {map:?} is invalid: {error}"),
+                })?;
+                (edges.clone(), CompiledSamplingMap::Lmb(compiled))
+            }
+            SamplingMapDefinition::Surface(surface_edges) => {
+                if let Some(previous) = surface_child {
+                    return Err(SamplingChannelCompileError::InvalidChannel {
+                        channel: channel.to_owned(),
+                        error: format!(
+                            "product contains more than one surface child; surface children at indices {} and {}",
+                            previous, child_index
+                        ),
+                    });
+                }
+                surface_child = Some(child_index);
+                if channel_subspace_lmb.is_empty() {
+                    return Err(SamplingChannelCompileError::InvalidChannel {
+                        channel: channel.to_owned(),
+                        error: "product surface child requires non-empty channel subspace_lmb"
+                            .to_owned(),
+                    });
+                }
+                let compiled = compile_surface_map(
+                    channel,
+                    surface_edges,
+                    channel_subspace_lmb,
+                    context,
+                    false,
+                )?;
+                (channel_subspace_lmb.to_vec(), compiled)
+            }
+            unsupported => {
+                return Err(SamplingChannelCompileError::UnsupportedMap {
+                    channel: channel.to_owned(),
+                    map: format!("product child {child_index}: {unsupported:?}"),
+                });
+            }
+        };
+
+        for edge in &block_edges {
+            if !parent_positions.contains_key(edge) {
+                return Err(SamplingChannelCompileError::InvalidChannel {
+                    channel: channel.to_owned(),
+                    error: format!(
+                        "product child {child_index} block {block_edges:?} contains edge {edge}, which is outside parent LMB {:?}",
+                        context.parent_lmb
+                    ),
+                });
+            }
+            if let Some(previous) = used_edges.insert(*edge, child_index) {
+                return Err(SamplingChannelCompileError::InvalidChannel {
+                    channel: channel.to_owned(),
+                    error: format!(
+                        "product child {child_index} block {block_edges:?} overlaps child {previous} on parent edge {edge}; child blocks must be disjoint and cover parent LMB {:?}",
+                        context.parent_lmb
+                    ),
+                });
+            }
+        }
+        child_blocks.push(block_edges);
+        children.push(Box::new(compiled));
+    }
+
+    let missing = context
+        .parent_lmb
+        .iter()
+        .copied()
+        .filter(|edge| !used_edges.contains_key(edge))
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Err(SamplingChannelCompileError::InvalidChannel {
+            channel: channel.to_owned(),
+            error: format!(
+                "product child blocks leave parent edges {missing:?} uncovered; blocks {:?} must cover parent LMB {:?}",
+                child_blocks, context.parent_lmb
+            ),
+        });
+    }
+
+    let output_indices = child_blocks
+        .iter()
+        .flat_map(|block| {
+            block.iter().flat_map(|edge| {
+                let position = parent_positions[edge];
+                [3 * position, 3 * position + 1, 3 * position + 2]
+            })
+        })
+        .collect::<Vec<_>>();
+    SamplingMapEmbedding::product(children, output_indices)
+        .map(CompiledSamplingMap::Embedded)
+        .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+            channel: channel.to_owned(),
+            error: format!("product embedding is invalid: {error}"),
+        })
 }
 
 fn compile_lmb_map(
@@ -1426,8 +1566,13 @@ impl SamplingChannelCatalogue {
                         });
                     }
                     let definition = SamplingMapDefinition::Surface(edges.clone());
-                    let map =
-                        compile_surface_map(&format!("surface:{edges:?}"), edges, edges, context)?;
+                    let map = compile_surface_map(
+                        &format!("surface:{edges:?}"),
+                        edges,
+                        edges,
+                        context,
+                        true,
+                    )?;
                     (format!("surface:{edges:?}"), None, definition, map)
                 }
                 SamplingCatalogueEntry::Named(channel) => {
@@ -1539,8 +1684,14 @@ impl SamplingChannelCatalogue {
                             // the radial chart itself is solved only in the
                             // explicitly supplied active loop subspace.
                             let _ = edges;
-                            compile_surface_map(&channel.name, edges, subspace, context)?
+                            compile_surface_map(&channel.name, edges, subspace, context, true)?
                         }
+                        SamplingMapDefinition::Product(maps) => compile_product_map(
+                            &channel.name,
+                            maps,
+                            &channel.definition.subspace_lmb,
+                            context,
+                        )?,
                         unsupported => {
                             return Err(SamplingChannelCompileError::UnsupportedMap {
                                 channel: channel.name.clone(),
@@ -2519,15 +2670,20 @@ mod tests {
             100.0,
             2,
         );
-        context.surfaces.insert(
-            (vec![2], vec![2]),
-            SamplingSurfaceGeometry {
-                center: vec![0.0; 3],
-                threshold_radius: Some(3.0),
-                beta: 2.0,
-                power: 1.0,
-            },
-        );
+        context
+            .insert_implicit_surface(
+                vec![2],
+                vec![2],
+                ImplicitSurfaceRadialMap::new(
+                    3,
+                    vec![0.0; 3],
+                    2.0,
+                    1.0,
+                    Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+                )
+                .unwrap(),
+            )
+            .unwrap();
         let compiled = catalogue.compile(&context).unwrap();
         assert_eq!(compiled.len(), 1);
         assert!(matches!(compiled[0].map, CompiledSamplingMap::Embedded(_)));
@@ -2740,7 +2896,7 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_composite_map_is_rejected_without_context() {
+    fn composite_map_with_overlapping_blocks_is_rejected_with_context_diagnostic() {
         let mut selection = SamplingChannelSelection::default();
         selection.default_channel_selection = vec!["joint".into()];
         selection
@@ -2757,10 +2913,108 @@ mod tests {
             100.0,
             2,
         );
-        assert!(matches!(
-            catalogue.compile(&context),
-            Err(SamplingChannelCompileError::UnsupportedMap { .. })
-        ));
+        let mut context = context;
+        context.surfaces.insert(
+            (vec![1], vec![1, 2]),
+            SamplingSurfaceGeometry {
+                center: vec![0.0; 6],
+                threshold_radius: Some(3.0),
+                beta: 2.0,
+                power: 1.0,
+            },
+        );
+        let error = catalogue.compile(&context).unwrap_err().to_string();
+        assert!(error.contains("overlaps child"));
+        assert!(error.contains("parent LMB [1, 2]"));
+    }
+
+    #[test]
+    fn product_surface_and_complement_compile_as_one_master_frame_channel() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["joint".into()];
+        let mut channel = definition("product(surface(2), complement(1))");
+        channel.subspace_lmb = vec![2];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("joint".into(), channel);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context
+            .insert_implicit_surface(
+                vec![2],
+                vec![2],
+                ImplicitSurfaceRadialMap::new(
+                    3,
+                    vec![0.0; 3],
+                    2.0,
+                    1.0,
+                    Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let compiled = catalogue.compile(&context).unwrap();
+        assert!(matches!(compiled[0].map, CompiledSamplingMap::Embedded(_)));
+        assert_eq!(compiled[0].embedded_edges, vec![1, 2]);
+        assert_eq!(compiled[0].map.contract().support, SamplingSupport::Full);
+        let point = compiled[0]
+            .forward(&[0.31, 0.42, 0.57, 0.23, 0.68, 0.81])
+            .unwrap();
+        let inverse = compiled[0].inverse(&point.point).unwrap();
+        assert!(point.residual < 1.0e-10);
+        assert!(inverse.residual < 1.0e-10);
+        let bridge = SamplingChannelBridge::new(compiled).unwrap();
+        let bridged = bridge
+            .forward(
+                SamplingChannelId::from(0),
+                &[0.31, 0.42, 0.57, 0.23, 0.68, 0.81],
+            )
+            .unwrap();
+        assert!((bridged.partition.weight_sum() - 1.0).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn product_rejects_overlapping_child_blocks_with_parent_diagnostic() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["joint".into()];
+        let mut channel = definition("product(surface(2), complement(2))");
+        channel.subspace_lmb = vec![2];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("joint".into(), channel);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context.surfaces.insert(
+            (vec![2], vec![2]),
+            SamplingSurfaceGeometry {
+                center: vec![0.0; 3],
+                threshold_radius: Some(3.0),
+                beta: 2.0,
+                power: 1.0,
+            },
+        );
+        let error = catalogue.compile(&context).unwrap_err();
+        let diagnostic = error.to_string();
+        assert!(diagnostic.contains("overlaps child 0"));
+        assert!(diagnostic.contains("parent LMB [1, 2]"));
     }
 
     #[test]
