@@ -264,8 +264,10 @@ in the full derivative.
 
 `product` requires a direct-sum block and independent fixed-complement data.
 `then` is an explicitly ordered acyclic conditional map with reverse inverse and
-triangular determinant. `intersect` uses scalar normals plus tangent coordinates,
-requires full rank and controls all inverse branches and chart patches. A
+triangular determinant; both ordered compositions and their master-frame
+embeddings propagate an outer context before appending earlier child outputs.
+`intersect` uses scalar normals plus tangent coordinates, requires full rank and
+controls all inverse branches and chart patches. A
 successful root solve does not establish global injectivity; unsupported or
 rank-changing maps fail with a capability diagnostic.
 

@@ -767,8 +767,8 @@ impl SamplingMapComponent for SamplingMapEmbedding {
         "embedded_product"
     }
 
-    fn forward(&self, coordinates: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
-        let mut evaluation = self.map.forward(coordinates, &[])?;
+    fn forward(&self, coordinates: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+        let mut evaluation = self.map.forward(coordinates, context)?;
         evaluation.point = self.embed_point(&evaluation.point);
         evaluation
             .diagnostics
@@ -776,7 +776,7 @@ impl SamplingMapComponent for SamplingMapEmbedding {
         Ok(evaluation)
     }
 
-    fn inverse(&self, point: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+    fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
         if point.len() != self.output_dimensions() {
             return Err(eyre!(
                 "sampling-map embedding inverse received output dimension {}, expected {}",
@@ -784,7 +784,7 @@ impl SamplingMapComponent for SamplingMapEmbedding {
                 self.output_dimensions()
             ));
         }
-        let mut evaluation = self.map.inverse(&self.unembed_point(point), &[])?;
+        let mut evaluation = self.map.inverse(&self.unembed_point(point), context)?;
         // The inverse's point is the user-supplied master-frame point.
         evaluation.point = point.to_vec();
         evaluation
@@ -893,10 +893,18 @@ impl SamplingMapComposition {
         Ok(())
     }
 
-    fn evaluate_forward(&self, coordinates: &[f64]) -> Result<SamplingMapEvaluation> {
+    fn evaluate_forward(
+        &self,
+        coordinates: &[f64],
+        initial_context: &[f64],
+    ) -> Result<SamplingMapEvaluation> {
         self.validate_input(coordinates.len(), "composition")?;
         let mut offset = 0;
-        let mut context = Vec::new();
+        let mut context = if self.is_then() {
+            initial_context.to_vec()
+        } else {
+            Vec::new()
+        };
         let mut evaluations = Vec::with_capacity(self.children.len());
         for child in &self.children {
             let end = offset + child.dimensions();
@@ -914,10 +922,18 @@ impl SamplingMapComposition {
         Ok(combine_evaluations(evaluations))
     }
 
-    fn evaluate_inverse(&self, point: &[f64]) -> Result<SamplingMapEvaluation> {
+    fn evaluate_inverse(
+        &self,
+        point: &[f64],
+        initial_context: &[f64],
+    ) -> Result<SamplingMapEvaluation> {
         self.validate_output(point.len())?;
         let mut offset = 0;
-        let mut context = Vec::new();
+        let mut context = if self.is_then() {
+            initial_context.to_vec()
+        } else {
+            Vec::new()
+        };
         let mut evaluations = Vec::with_capacity(self.children.len());
         // In a triangular map, prior output blocks are known before later
         // blocks are inverted, so inverse traversal remains in declaration
@@ -963,12 +979,12 @@ impl SamplingMapComponent for SamplingMapComposition {
         }
     }
 
-    fn forward(&self, coordinates: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
-        self.evaluate_forward(coordinates)
+    fn forward(&self, coordinates: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.evaluate_forward(coordinates, context)
     }
 
-    fn inverse(&self, point: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
-        self.evaluate_inverse(point)
+    fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.evaluate_inverse(point, context)
     }
 }
 
@@ -2655,10 +2671,47 @@ mod tests {
         assert!(composition.is_then());
         assert_eq!(composition.contract().support, SamplingSupport::Conditional);
         let mapped = composition.forward(&[0.2, 0.4], &[]).unwrap();
-        assert_eq!(mapped.point, vec![0.2, 0.6]);
+        assert!(
+            mapped
+                .point
+                .iter()
+                .zip([0.2, 0.6])
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-15)
+        );
         assert_eq!(mapped.diagnostics, vec!["shift=0", "shift=0.2"]);
         let inverse = composition.inverse(&mapped.point, &[]).unwrap();
-        assert_eq!(inverse.coordinates, vec![0.2, 0.4]);
+        assert!(
+            inverse
+                .coordinates
+                .iter()
+                .zip([0.2, 0.4])
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-15)
+        );
+    }
+
+    #[test]
+    fn then_composition_accepts_outer_context_for_forward_and_inverse() {
+        let composition = SamplingMapComposition::then(vec![
+            Box::new(ContextShiftMap),
+            Box::new(ContextShiftMap),
+        ])
+        .expect("valid conditional composition");
+        let mapped = composition.forward(&[0.2, 0.4], &[0.1]).unwrap();
+        assert!(
+            mapped
+                .point
+                .iter()
+                .zip([0.3, 0.5])
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-15)
+        );
+        let inverse = composition.inverse(&mapped.point, &[0.1]).unwrap();
+        assert!(
+            inverse
+                .coordinates
+                .iter()
+                .zip([0.2, 0.4])
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-15)
+        );
     }
 
     #[test]
