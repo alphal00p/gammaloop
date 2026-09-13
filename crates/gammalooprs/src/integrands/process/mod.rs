@@ -2233,6 +2233,23 @@ impl LmbMultiChannelingSetup {
             .len())
     }
 
+    pub fn sampling_channel_is_lmb(
+        &self,
+        channel_id: SamplingChannelId,
+        graph_name: &str,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<bool> {
+        let catalogue = self.canonical_sampling_catalogue(graph_name, parameterization_settings)?;
+        let entry = catalogue.entries.get(channel_id.index()).ok_or_else(|| {
+            eyre!(
+                "Requested sampling channel {} is out of range for graph '{}'",
+                channel_id.index(),
+                graph_name
+            )
+        })?;
+        Ok(matches!(entry, SamplingCatalogueEntry::Lmb { .. }))
+    }
+
     pub fn effective_channel_lmb_id(
         &self,
         channel_index: SamplingChannelId,
@@ -3085,6 +3102,22 @@ pub trait GraphTerm {
     fn get_tropical_sampler(&self) -> &SampleGenerator<3>;
     fn get_mut_param_builder(&mut self) -> &mut ParamBuilder<f64>;
     fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>>;
+
+    /// Compile the canonical full-frame sampling bridge for this graph.
+    /// Process implementations own the graph-specific external signature and
+    /// LMB setup; the sampler only supplies the already-resolved kinematics.
+    fn compile_sampling_bridge(
+        &self,
+        parameterization_settings: &ParameterizationSettings,
+        e_cm: f64,
+        external_momenta: &[[f64; 4]],
+        orientation: Option<usize>,
+    ) -> Result<SamplingChannelBridge>;
+    fn sampling_channel_is_lmb(
+        &self,
+        channel_id: SamplingChannelId,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<bool>;
 }
 
 struct EvaluationContext<'a, 'm> {
@@ -3104,6 +3137,9 @@ pub struct GraphTermEvaluationContext<'a, 'm, T: FloatLike> {
     pub record_primary_timing: bool,
     /// Canonical sampling-channel selection used by the graph estimator.
     pub channel_id: Option<(SamplingChannelId, F<T>, LmbChannelWeight)>,
+    /// Canonical advanced channel id. Its point has already been mapped into
+    /// the parent frame and must not be LMB-reinterpreted by the graph term.
+    pub advanced_channel_id: Option<SamplingChannelId>,
     pub lmb_basis_id: Option<LmbIndex>,
 }
 
@@ -3114,6 +3150,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     sample: &MomentumSample<T>,
     context: &mut EvaluationContext<'_, '_>,
     channel_id: Option<(SamplingChannelId, F<T>, LmbChannelWeight)>,
+    advanced_channel_id: Option<SamplingChannelId>,
     lmb_basis_id: Option<LmbIndex>,
 ) -> Result<GraphEvaluationResult<T>> {
     let mut event_processing_runtime = integrand.take_event_processing_runtime();
@@ -3126,6 +3163,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
             evaluation_metadata: context.evaluation_metadata,
             record_primary_timing: context.record_primary_timing,
             channel_id,
+            advanced_channel_id,
             lmb_basis_id,
         };
         integrand
@@ -3195,7 +3233,15 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
             } => {
                 let lmb_basis_id =
                     selected_lmb_basis_for_default_sampling(integrand, graph_id, *use_lmb_basis)?;
-                evaluate_graph_term(integrand, graph_id, sample, context, None, lmb_basis_id)
+                evaluate_graph_term(
+                    integrand,
+                    graph_id,
+                    sample,
+                    context,
+                    None,
+                    None,
+                    lmb_basis_id,
+                )
             }
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
@@ -3208,6 +3254,16 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                 sample,
                 context,
                 Some((*channel_id, alpha.clone(), *channel_weight)),
+                None,
+                None,
+            ),
+            DiscreteGraphSample::Advanced { channel_id, sample } => evaluate_graph_term(
+                integrand,
+                graph_id,
+                sample,
+                context,
+                None,
+                Some(*channel_id),
                 None,
             ),
             DiscreteGraphSample::MultiChanneling {
@@ -3232,6 +3288,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                             sample,
                             context,
                             Some((channel_index, alpha.clone(), *channel_weight)),
+                            None,
                             None,
                         )
                     })
@@ -3268,7 +3325,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     });
 
                 let mut graph_result =
-                    evaluate_graph_term(integrand, graph_id, sample, context, None, None)?;
+                    evaluate_graph_term(integrand, graph_id, sample, context, None, None, None)?;
                 graph_result.integrand_result *= Complex::new_re(prefactor);
                 Ok(graph_result)
             }
@@ -3671,6 +3728,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                                 sample,
                                 &mut context,
                                 None,
+                                None,
                                 lmb_basis_id,
                             )?;
                             sum.merge_in_place(graph_result);
@@ -3680,7 +3738,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                 }
             }
             GammaLoopSample::Graph { graph_id, sample } => {
-                evaluate_graph_term(integrand, *graph_id, sample, &mut context, None, None)?
+                evaluate_graph_term(integrand, *graph_id, sample, &mut context, None, None, None)?
             }
             GammaLoopSample::MultiChanneling {
                 alpha,
@@ -3706,6 +3764,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                                 sample,
                                 &mut context,
                                 Some((channel_index, alpha.clone(), *channel_weight)),
+                                None,
                                 None,
                             )?;
                             channel_sum.merge_in_place(channel_result);

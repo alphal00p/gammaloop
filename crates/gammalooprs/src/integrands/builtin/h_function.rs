@@ -21,6 +21,11 @@ use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 use tracing::info;
 
+/// Legacy one-dimensional profile probe.
+///
+/// Prefer a process-level reference-function acceptance test. This type is
+/// kept temporarily for historical test fixtures and will be removed once the
+/// process harness covers all profile diagnostics.
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]

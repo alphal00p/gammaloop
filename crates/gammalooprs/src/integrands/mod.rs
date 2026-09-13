@@ -43,10 +43,20 @@ use tracing::{debug, error, info, instrument, trace, warn};
 #[allow(non_snake_case)]
 #[serde(tag = "type")]
 pub enum IntegrandSettings {
+    /// Legacy standalone angular/coarea normalization probe.
+    ///
+    /// New tests should use the process-level sampling acceptance harness.
     #[serde(rename = "unit_surface")]
     UnitSurface(UnitSurfaceSettings),
+    /// Legacy standalone volume normalization probe.
+    ///
+    /// New tests should use the process-level sampling acceptance harness.
     #[serde(rename = "unit_volume")]
     UnitVolume(UnitVolumeSettings),
+    /// Legacy one-dimensional h-function probe.
+    ///
+    /// New tests should evaluate profiles directly or through a process-level
+    /// reference-function acceptance run.
     #[serde(rename = "h_function_test")]
     HFunctionTest(HFunctionTestSettings),
 }
@@ -307,10 +317,15 @@ pub(crate) fn integrand_factory(settings: &RuntimeSettings) -> Integrand {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
+/// Configuration for the legacy standalone surface probe.
+///
+/// Kept for migration of old fixtures; use a process-level sampling
+/// acceptance run for new tests.
 pub struct UnitSurfaceSettings {
     pub n_3d_momenta: usize,
 }
 
+/// Legacy standalone surface integrand. See [`UnitSurfaceSettings`].
 #[derive(Clone)]
 pub struct UnitSurfaceIntegrand {
     pub settings: RuntimeSettings,
@@ -461,10 +476,15 @@ impl HasIntegrand for UnitSurfaceIntegrand {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
+/// Configuration for the legacy standalone volume probe.
+///
+/// Kept for migration of old fixtures; use a process-level sampling
+/// acceptance run for new tests.
 pub struct UnitVolumeSettings {
     pub n_3d_momenta: usize,
 }
 
+/// Legacy standalone volume integrand. See [`UnitVolumeSettings`].
 #[derive(Clone)]
 pub struct UnitVolumeIntegrand {
     pub settings: RuntimeSettings,

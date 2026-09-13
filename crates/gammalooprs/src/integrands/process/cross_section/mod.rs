@@ -13,11 +13,11 @@ use crate::{
         evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
             GraphTermEvaluationContext, LmbChannelWeightingSettings, ParamBuilder,
-            SamplingChannelId,
+            SamplingChannelBridge, SamplingChannelCompileContext, SamplingChannelId,
             evaluators::{ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single},
             graph_to_group_id_for_group_structure,
             param_builder::LUParams,
-            prepare_buffered_event,
+            prepare_buffered_event, resolve_sampling_channel_selection,
             threshold_multiplier::{
                 ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierExpression,
                 ThresholdMultiplierLayout,
@@ -1605,6 +1605,49 @@ impl GraphTerm for CrossSectionGraphTerm {
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<LmbIndex> {
         self.multi_channeling_setup.selected_lmb_basis_id(
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
+    }
+
+    fn compile_sampling_bridge(
+        &self,
+        parameterization_settings: &ParameterizationSettings,
+        e_cm: f64,
+        external_momenta: &[[f64; 4]],
+        orientation: Option<usize>,
+    ) -> Result<SamplingChannelBridge> {
+        let parent_lmb = self
+            .multi_channeling_setup
+            .graph
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .map(|edge| edge.0)
+            .collect();
+        let mut context = SamplingChannelCompileContext::new(
+            self.multi_channeling_setup.graph.name.clone(),
+            parent_lmb,
+            parameterization_settings.clone(),
+            e_cm,
+            self.graph.get_loop_number(),
+        );
+        context.orientation = orientation;
+        let resolved = resolve_sampling_channel_selection(
+            &self.multi_channeling_setup.graph.name,
+            &parameterization_settings.sampling_channels,
+        )?;
+        self.multi_channeling_setup
+            .compile_sampling_channel_bridge_with_external(&resolved, &context, external_momenta)
+    }
+
+    fn sampling_channel_is_lmb(
+        &self,
+        channel_id: SamplingChannelId,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<bool> {
+        self.multi_channeling_setup.sampling_channel_is_lmb(
+            channel_id,
             &self.multi_channeling_setup.graph.name,
             parameterization_settings,
         )

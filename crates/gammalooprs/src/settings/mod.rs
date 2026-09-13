@@ -50,6 +50,9 @@ pub struct RuntimeSettings {
     pub general: GeneralSettings,
     #[serde(rename = "model", skip_serializing_if = "IsDefault::is_default")]
     pub model: RuntimeModelSettings,
+    /// Legacy standalone integrand override used by historical normalization
+    /// tests. New validation should load a process and use the process-level
+    /// sampling acceptance harness instead.
     #[serde(rename = "integrand", skip_serializing_if = "IsDefault::is_default")]
     pub hard_coded_integrand: Option<IntegrandSettings>,
     #[serde(rename = "kinematics", skip_serializing_if = "IsDefault::is_default")]

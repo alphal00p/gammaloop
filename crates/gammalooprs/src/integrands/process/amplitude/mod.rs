@@ -45,9 +45,10 @@ use crate::{
         HasIntegrand,
         evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
-            LmbChannelWeightingSettings, ParamBuilder, SamplingChannelId,
+            LmbChannelWeightingSettings, ParamBuilder, SamplingChannelBridge,
+            SamplingChannelCompileContext, SamplingChannelId,
             evaluators::{ActiveF64Backend, EvaluatorStack},
-            graph_to_group_id_for_group_structure,
+            graph_to_group_id_for_group_structure, resolve_sampling_channel_selection,
             threshold_multiplier::ThresholdMultiplierEvaluatorCollection,
         },
     },
@@ -752,19 +753,27 @@ impl AmplitudeGraphTerm {
             orientation_id
         };
         event.cut_info.lmb_channel_id = channel_id.map(usize::from);
-        event.cut_info.lmb_channel_edge_ids = channel_id
-            .map(|channel_id| {
-                let parameterization_settings = settings
-                    .sampling
-                    .get_parameterization_settings()
-                    .expect("LMB channel event metadata requires a parameterization.");
-                self.multi_channeling_setup.effective_channel_edge_ids(
+        event.cut_info.lmb_channel_edge_ids = if let Some(channel_id) = channel_id {
+            let parameterization_settings = settings
+                .sampling
+                .get_parameterization_settings()
+                .expect("sampling channel event metadata requires a parameterization.");
+            if self.multi_channeling_setup.sampling_channel_is_lmb(
+                channel_id,
+                &self.multi_channeling_setup.graph.name,
+                &parameterization_settings,
+            )? {
+                Some(self.multi_channeling_setup.effective_channel_edge_ids(
                     channel_id,
                     &self.multi_channeling_setup.graph.name,
                     &parameterization_settings,
-                )
-            })
-            .transpose()?;
+                )?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         for ((sign, momentum), pdg) in self
             .master_external_signature
@@ -1157,6 +1166,49 @@ impl GraphTerm for AmplitudeGraphTerm {
         )
     }
 
+    fn compile_sampling_bridge(
+        &self,
+        parameterization_settings: &ParameterizationSettings,
+        e_cm: f64,
+        external_momenta: &[[f64; 4]],
+        orientation: Option<usize>,
+    ) -> Result<SamplingChannelBridge> {
+        let parent_lmb = self
+            .multi_channeling_setup
+            .graph
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .map(|edge| edge.0)
+            .collect();
+        let mut context = SamplingChannelCompileContext::new(
+            self.multi_channeling_setup.graph.name.clone(),
+            parent_lmb,
+            parameterization_settings.clone(),
+            e_cm,
+            self.graph.get_loop_number(),
+        );
+        context.orientation = orientation;
+        let resolved = resolve_sampling_channel_selection(
+            &self.multi_channeling_setup.graph.name,
+            &parameterization_settings.sampling_channels,
+        )?;
+        self.multi_channeling_setup
+            .compile_sampling_channel_bridge_with_external(&resolved, &context, external_momenta)
+    }
+
+    fn sampling_channel_is_lmb(
+        &self,
+        channel_id: SamplingChannelId,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<bool> {
+        self.multi_channeling_setup.sampling_channel_is_lmb(
+            channel_id,
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
+    }
+
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
@@ -1165,7 +1217,8 @@ impl GraphTerm for AmplitudeGraphTerm {
         let event_channel_id = context
             .channel_id
             .as_ref()
-            .map(|(channel_id, _, _)| *channel_id);
+            .map(|(channel_id, _, _)| *channel_id)
+            .or(context.advanced_channel_id);
         let prepared_event = prepare_buffered_event(
             context.settings,
             context.rotation,
