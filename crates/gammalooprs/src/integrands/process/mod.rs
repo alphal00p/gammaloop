@@ -2120,6 +2120,31 @@ impl LmbMultiChannelingSetup {
         catalogue.compile(context).map_err(Into::into)
     }
 
+    /// Compile channels after preparing the external data needed by every
+    /// selected-LMB-to-parent affine routing.  This is the required entry
+    /// point when a channel catalogue contains more than the parent LMB;
+    /// callers must pass external data from the same solved cut/orientation
+    /// context as the map geometry.
+    pub fn compile_sampling_channels_with_external(
+        &self,
+        resolved: &ResolvedSamplingChannelSelection,
+        context: &SamplingChannelCompileContext,
+        external_momenta: &[[f64; 4]],
+    ) -> Result<Vec<CompiledSamplingChannel>> {
+        let mut context = context.clone();
+        let catalogue =
+            self.sampling_channel_catalogue(resolved, &context.parameterization_settings)?;
+        for (basis_id, edges) in catalogue.lmb_entries() {
+            if edges != context.parent_lmb.as_slice() {
+                context.lmb_frame_maps.insert(
+                    basis_id,
+                    self.lmb_frame_map(LmbIndex::from(basis_id), external_momenta)?,
+                );
+            }
+        }
+        catalogue.compile(&context).map_err(Into::into)
+    }
+
     /// Compile the selected channels and bind them to the raw-frame bridge.
     /// Runtime integration is staged: callers must not mix this bridge with
     /// the pre-catalogue channel loop until its frame and prepared cut context
@@ -2130,6 +2155,18 @@ impl LmbMultiChannelingSetup {
         context: &SamplingChannelCompileContext,
     ) -> Result<SamplingChannelBridge> {
         let channels = self.compile_sampling_channels(resolved, context)?;
+        SamplingChannelBridge::new(channels).map_err(Into::into)
+    }
+
+    /// External-data variant of [`Self::compile_sampling_channel_bridge`].
+    pub fn compile_sampling_channel_bridge_with_external(
+        &self,
+        resolved: &ResolvedSamplingChannelSelection,
+        context: &SamplingChannelCompileContext,
+        external_momenta: &[[f64; 4]],
+    ) -> Result<SamplingChannelBridge> {
+        let channels =
+            self.compile_sampling_channels_with_external(resolved, context, external_momenta)?;
         SamplingChannelBridge::new(channels).map_err(Into::into)
     }
 
