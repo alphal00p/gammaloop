@@ -2037,7 +2037,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             // multi-channeling internal to threshold subtraction.
             let lmb_channel_prefactor = Complex::new_re(
                 if let Some(SamplingChannelEvaluation::LegacyLmb {
-                    id: channel_index,
+                    id: channel_id,
                     alpha,
                     channel_weight,
                 }) = &context.sampling_channel
@@ -2056,7 +2056,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         e_cm: context.settings.kinematics.e_cm,
                     };
                     let selected_lmb = self.multi_channeling_setup.sampling_channel_lmb_basis_id(
-                        *channel_index,
+                        *channel_id,
                         &self.multi_channeling_setup.graph.name,
                         &parameterization_settings,
                     )?;
@@ -2064,7 +2064,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         momentum_sample.rescaled_loop_momenta(&solution.solution, Subspace::None);
 
                     self.multi_channeling_setup.compute_prefactor_impl(
-                        *channel_index,
+                        *channel_id,
                         selected_lmb,
                         &cut_momentum_sample,
                         weighting_settings,
