@@ -2131,3 +2131,88 @@ If a gate fails, use the measurements to continue the generic implementation, in
   type-complexity warnings. Exact zero, scale, alias and open-tensor assertions
   remain intact. The original plan prefix is unchanged. These checks overlap
   the old diagnostic and are correctness evidence only.
+
+### 2026-09-13 — Capped erased baseline and isolated alias/sum controls
+
+- Milestone 24 is committed and pushed as
+  `a8b4c9d96c3994f77bba80826e16715d53ddbfc9`, with ValentinHirschi as author
+  and committer. Immutable CLI21 has SHA256
+  `91c9e3389d9b7c3cd614890d24d46422cb45c4339efa3333db8858f958733fe2`;
+  counter21 has SHA256
+  `10ad4be73def5d438ccbde7533478172074d82d53307c4615f0a6615a8dc68cd`.
+  Check and build pass in 10.233 s and 203.393 s. The counter's known-GL00
+  control passes with exact count equality and an unchanged saved state.
+  Paired diagnostics and all 27 final H1/CPE5 cases have finalized identities;
+  preparation alone is not generation or performance evidence.
+- The immutable CLI18 erased-3D GL262 run stopped at its original time limit:
+  exit -15, outer wall 7,215.814457280 s, termination requested after
+  7,200.069243180 s. Its observed peak was 375,509,811,200 bytes. The approved
+  500 GB RSS guard did not trigger. All ten forest nodes completed in
+  2,254.471267532 s; only seven of 5,274 tensor summands reached execution
+  completion. No pre-evaluator boundary, evaluator, saved state, production
+  forest export, counter output or runtime exists for this failed attempt.
+- Through term 6 execution, the observed preprocessing prefix is
+  4,857.316288205 s: normalization 7.799106124 s; parsing and preparation
+  297.422270102 s; contraction 1,911.610710178 s; preceding scalar finalization
+  and loop overhead 2,640.484201801 s. Boundary preparation is a 121.758081121 s
+  subset of parsing. Legacy alias-resolution time cannot be isolated from the
+  residual and remains explicitly unobserved. Prior receipts are preserved;
+  separate `final_failed_audit.json` and `final_failed_profile.json` record the
+  completed observations and failed eligibility.
+- The queued counter19 and H1/CPE5 scalar-replay controls pass. The latter
+  reproduces exact value 36 and all numeric-domain conversions. All fourteen
+  queued integration boundaries pass on their frozen milestone-22 executables.
+  This is historical validation of that revision, not a substitute for current
+  integration execution.
+- The generic alias probe passes exact same-frame equality for nested and
+  alias-free inputs at both tested sizes. At scale 65,536, three fresh runs per
+  resolver give nested medians 2.456507315 s (typed) and 2.815747797 s (old),
+  ratio 0.8724, with the same 75,487,207-byte result. Alias-free medians are
+  0.071083854 s and 0.220198779 s. These are isolated synthetic diagnostics,
+  not physical generation or numerical-runtime ratios.
+- Nested process VmHWM medians are 388,702,208 and 380,751,872 bytes, a 2.09%
+  increase for the typed resolver. Periodic current-RSS maxima suggested a
+  much larger gap because they missed the old resolver's brief peak; use the
+  kernel high-water marks for this comparison. Both owners use the same
+  rebuilding/normalizing replacement routine. Temporary Atom buffers and
+  allocator retention can explain modest endpoint differences, but allocator
+  traffic was not measured. The probe has matched isolated lifetimes; its
+  two-result exact check runs separately and is excluded from timing ratios.
+- All 26 public-network sum-probe processes pass exact equality. Small inputs
+  expose streaming overhead: at 32 by 1,024 terms the CLI20/CLI21 medians are
+  6.967245/12.255105 ms. At 128 by 4,096 terms (26,181,642 output bytes), they
+  are 135.520324/147.611895 ms. At 256 by 4,096 terms (52,363,274 bytes), they
+  are 289.677145/284.544955 ms, with overlapping ranges. These short, generic
+  measurements neither prove a physical speedup nor justify selecting a path
+  by graph identity. Their memory samples cover whole processes, not the timed
+  execution alone; tiny cases finish between polls.
+- Source inspection confirms that in-memory bulk addition borrows normalized
+  additive inputs through merge cursors, whereas streaming owns and sorts
+  individual terms before rebuilding the result. All tested sizes fit below
+  the existing 4 GiB stream buffer. A total-byte criterion may avoid needless
+  streaming for small sums, but it has not been implemented or validated. The
+  untimed oracle's residual interval includes extraction, bulk addition,
+  destruction, comparison and logging; it is not a pure native-addition timer.
+- Integration check95/build16 pass in 10.017374494 s and 203.933597533 s;
+  all four current executables are frozen in `validation_candidate_a8b4c`.
+  Their full correctness execution remains pending. A broader current unit
+  suite is now running separately from acceptance measurements.
+- The immutable CLI21 direct-4D GL262 diagnostic started at 14:18:09 UTC with
+  H1/CPE5, one worker and the 500 GB guard. The independent stage monitor was
+  armed after verifying binary, card, process start and guard identities.
+  Available memory before monitor launch was 829,036,617,728 bytes. It records
+  the tensor/evaluator boundary and subsequent preparation, Symbolica-build
+  and numeric-program stages with explicit observation lag. No completed
+  generation or final gate is claimed while this run is active.
+- Format93/check96 pass. Nextest42 passes 597 selected Linnet, Spenso, UV,
+  CFF, allocation and evaluator tests. A disjoint selection of the remaining
+  signed/affine source-mapping cases passes all 32 tests in nextest43: 629
+  current tests in total, including the fixed-source 62-row oracle and exact
+  reconstruction boundaries. No assertions, tolerances or physics changed.
+  These correctness checks overlap the diagnostic and are not timing runs.
+- The existing `save uv-forest` command requires a generated integrand even
+  for topology-only export. Its internal constructor/serializer already covers
+  both forest orchestrators and needs no new topology algorithm. Current trace
+  evidence establishes GL262's ten paths/nine arcs and independent four-region
+  classification, but does not substitute for the still-pending production DOT.
+  The existing topology verifier can consume that export after generation.
