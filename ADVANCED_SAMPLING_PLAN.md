@@ -16,9 +16,21 @@ It is scheduled for removal once all momentum-space consumers use compiled
 parent-frame maps. The exact implicit radial kernel now also accepts a
 conditional evaluator whose root depends on a preceding complement block;
 ordered `then` composition passes that context and has focused forward/inverse
-coverage. Physical directional E-surface maps, prepared cross-section `t*`
-context construction, and final old standalone-integrand removal remain open
-milestones.
+coverage. A prepared cross-section context can now be constructed from one
+solved LU sample, with positive `t*` and frame validation. Physical directional
+E-surface maps, connecting that context to the per-sample conditional density,
+and final old standalone-integrand removal remain open milestones. The
+discrete graph sampler now carries the selected canonical partition factor
+with the parent-frame map Jacobian, including for the direct momentum route;
+the obsolete `DiscreteGraphSample::DiscreteMultiChanneling` representation has
+been removed rather than maintained as a second channel model.
+
+The Symbolica evaluator now exposes real map values and the full dual-derived
+Jacobian matrix, including its signed and absolute determinant. Its audit also
+fixed the HyperDual input layout and tests both eager values and derivatives.
+Soft/collinear syntax has explicit capability diagnostics until graph-resolved
+frames and normalized profiles can be compiled; it cannot enter the exact-map
+catalogue as an unlabelled proxy.
 
 A bounded `product(...)` compiler is now available as one canonical channel
 entry when its `lmb(...)`/`complement(...)` blocks, and at most one explicit
@@ -47,6 +59,15 @@ when its inverse derives that context from an earlier full block.
 Full cross-section support requires a two-stage conditional map (or an
 equivalent composite proposal) whose implicit root and `t*` Jacobian are part
 of the same canonical channel density.
+
+`PreparedCutSamplingContext::from_lu_sample` now provides the per-sample
+handoff: it takes the unrescaled parent-frame loop vectors used in the LU
+root solve, applies that sample's finite positive `t*`, retains its external
+data and checks the complete loop dimension. This record is preparation data,
+not a sampling map or a substitute for the LU implicit Jacobian. Physical
+cut/left/right channels remain guarded until a complete composition supplies
+the same conditional data to both forward maps and every inverse density in
+the canonical partition.
 
 The portable research bundle is in
 [`docs/research/advanced_sampling/README.md`](docs/research/advanced_sampling/README.md).

@@ -908,6 +908,16 @@ pub enum SamplingChannelCompileError {
         channel: String,
         map: String,
     },
+    /// A soft or collinear selector was parsed successfully but cannot yet be
+    /// turned into a map-density channel from edge ids alone.  These targets
+    /// need a graph-resolved frame and an explicit radial/angular profile;
+    /// retaining this distinction avoids accidentally treating a proxy score
+    /// as the selected channel's integration Jacobian.
+    UnsupportedSingularPrimitive {
+        channel: String,
+        primitive: String,
+        reason: String,
+    },
     MissingSurfaceGeometry {
         channel: String,
         edges: Vec<usize>,
@@ -947,6 +957,14 @@ impl fmt::Display for SamplingChannelCompileError {
             Self::UnsupportedMap { channel, map } => write!(
                 formatter,
                 "sampling channel `{channel}` uses map `{map}`, which needs prepared graph context before it can be compiled"
+            ),
+            Self::UnsupportedSingularPrimitive {
+                channel,
+                primitive,
+                reason,
+            } => write!(
+                formatter,
+                "sampling channel `{channel}` uses singular primitive `{primitive}`, which is not compiled: {reason}"
             ),
             Self::MissingSurfaceGeometry {
                 channel,
@@ -1396,10 +1414,11 @@ fn compile_partitioned_children(
                 (channel_subspace_lmb.to_vec(), compiled)
             }
             unsupported => {
-                return Err(SamplingChannelCompileError::UnsupportedMap {
-                    channel: channel.to_owned(),
-                    map: format!("{map_name} child {child_index}: {unsupported:?}"),
-                });
+                return Err(unsupported_map_error(
+                    channel,
+                    format!("{map_name} child {child_index}: {unsupported:?}"),
+                    unsupported,
+                ));
             }
         };
 
@@ -1444,6 +1463,57 @@ fn compile_partitioned_children(
     }
 
     Ok((children, child_blocks, parent_positions))
+}
+
+/// Keep parsed soft/collinear syntax from becoming a silently approximate
+/// channel.  A useful singular proposal must be resolved against the actual
+/// routed vectors (and, for collinearity, a relative angular frame) and carry
+/// a normalized profile.  Neither can be reconstructed from the edge labels
+/// in a graph-independent compiler.  Until those ingredients are supplied,
+/// report a capability error rather than installing a proxy-only map in the
+/// exact-density catalogue.
+fn unsupported_map_error(
+    channel: &str,
+    map_label: String,
+    map: &SamplingMapDefinition,
+) -> SamplingChannelCompileError {
+    match singular_primitive(map) {
+        Some(SamplingMapDefinition::Soft(edge)) => {
+            SamplingChannelCompileError::UnsupportedSingularPrimitive {
+                channel: channel.to_owned(),
+                primitive: format!("soft({edge})"),
+                reason: "a graph-resolved routed three-momentum frame and a normalized radial profile are required; edge ids alone do not define an exact push-forward density".to_owned(),
+            }
+        }
+        Some(SamplingMapDefinition::Collinear(a, b)) => {
+            SamplingChannelCompileError::UnsupportedSingularPrimitive {
+                channel: channel.to_owned(),
+                primitive: format!("collinear({a},{b})"),
+                reason: "a graph-resolved relative angular frame, branch/support rules and a normalized angular profile are required; edge ids alone do not define an exact push-forward density".to_owned(),
+            }
+        }
+        Some(other) => SamplingChannelCompileError::UnsupportedMap {
+            channel: channel.to_owned(),
+            map: format!("{}: unsupported primitive {other:?}", map_label),
+        },
+        None => SamplingChannelCompileError::UnsupportedMap {
+            channel: channel.to_owned(),
+            map: map_label,
+        },
+    }
+}
+
+fn singular_primitive(map: &SamplingMapDefinition) -> Option<&SamplingMapDefinition> {
+    match map {
+        SamplingMapDefinition::Soft(_) | SamplingMapDefinition::Collinear(_, _) => Some(map),
+        SamplingMapDefinition::Product(maps)
+        | SamplingMapDefinition::Intersect(maps)
+        | SamplingMapDefinition::Then(maps) => maps.iter().find_map(singular_primitive),
+        SamplingMapDefinition::PhaseSpace(map)
+        | SamplingMapDefinition::Left(map)
+        | SamplingMapDefinition::Right(map) => singular_primitive(map),
+        _ => None,
+    }
 }
 
 /// Compile a direct-product channel whose children explicitly partition the
@@ -1787,10 +1857,11 @@ impl SamplingChannelCatalogue {
                             context,
                         )?,
                         unsupported => {
-                            return Err(SamplingChannelCompileError::UnsupportedMap {
-                                channel: channel.name.clone(),
-                                map: format!("{unsupported:?}"),
-                            });
+                            return Err(unsupported_map_error(
+                                &channel.name,
+                                format!("{unsupported:?}"),
+                                unsupported,
+                            ));
                         }
                     };
                     (channel.name.clone(), None, definition, map)
@@ -2528,6 +2599,60 @@ mod tests {
         assert!(matches!(compiled[1].map, CompiledSamplingMap::Surface(_)));
         assert_eq!(compiled[1].master_graph, "G");
         assert_eq!(compiled[1].dimensions(), 6);
+    }
+
+    #[test]
+    fn singular_primitives_fail_with_actionable_exact_density_diagnostics() {
+        for (name, around, expected_primitive, expected_requirement) in [
+            (
+                "soft_target",
+                "soft(1)",
+                "soft(1)",
+                "routed three-momentum frame",
+            ),
+            (
+                "collinear_target",
+                "collinear(1,2)",
+                "collinear(1,2)",
+                "relative angular frame",
+            ),
+            (
+                "nested_soft_target",
+                "then(lmb(1,2), soft(1))",
+                "soft(1)",
+                "normalized radial profile",
+            ),
+        ] {
+            let mut selection = SamplingChannelSelection::default();
+            selection.default_channel_selection = vec![name.to_owned()];
+            selection
+                .channel_definitions
+                .entry("G".to_owned())
+                .or_default()
+                .insert(name.to_owned(), definition(around));
+            let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+            let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+            let context = SamplingChannelCompileContext::new(
+                "G",
+                vec![1, 2],
+                ParameterizationSettings::default(),
+                100.0,
+                2,
+            );
+            let error = catalogue.compile(&context).unwrap_err();
+            match error {
+                SamplingChannelCompileError::UnsupportedSingularPrimitive {
+                    primitive,
+                    reason,
+                    ..
+                } => {
+                    assert_eq!(primitive, expected_primitive);
+                    assert!(reason.contains(expected_requirement), "{reason}");
+                    assert!(reason.contains("edge ids alone"), "{reason}");
+                }
+                other => panic!("expected singular primitive diagnostic, got {other:?}"),
+            }
+        }
     }
 
     #[test]

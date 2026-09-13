@@ -3346,29 +3346,30 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     lmb_basis_id,
                 )
             }
-            DiscreteGraphSample::DiscreteMultiChanneling {
-                alpha,
-                channel_weight,
+            DiscreteGraphSample::Advanced {
                 channel_id,
+                partition_weight,
                 sample,
-            } => evaluate_graph_term(
-                integrand,
-                graph_id,
-                sample,
-                context,
-                Some((*channel_id, alpha.clone(), *channel_weight)),
-                None,
-                None,
-            ),
-            DiscreteGraphSample::Advanced { channel_id, sample } => evaluate_graph_term(
-                integrand,
-                graph_id,
-                sample,
-                context,
-                None,
-                Some(*channel_id),
-                None,
-            ),
+            } => {
+                let mut result = evaluate_graph_term(
+                    integrand,
+                    graph_id,
+                    sample,
+                    context,
+                    None,
+                    Some(*channel_id),
+                    None,
+                )?;
+                if let Some(weight) = partition_weight {
+                    let factor = Complex::new_re(weight.clone());
+                    result.integrand_result *= factor.clone();
+                    apply_full_event_multiplicative_factor_precise(
+                        &mut result.event_groups,
+                        &factor,
+                    );
+                }
+                Ok(result)
+            }
             DiscreteGraphSample::MultiChanneling {
                 alpha,
                 channel_weight,
@@ -4244,21 +4245,54 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                     let parameterization_settings =
                         &multichanneling_settings.parameterization_settings;
                     let graph = integrand.get_master_graph(group_id);
-                    // Resolve the ID against the canonical graph catalogue before
-                    // selecting the evaluator route. Named/surface entries are
-                    // already in the parent frame and must not be interpreted as
-                    // legacy LMB coordinates.
-                    let is_lmb =
-                        graph.sampling_channel_is_lmb(channel_id, parameterization_settings)?;
-                    if is_lmb {
-                        DiscreteGraphSample::DiscreteMultiChanneling {
-                            alpha: F::from_f64(multichanneling_settings.alpha),
-                            channel_weight: multichanneling_settings.channel_weight,
-                            channel_id,
-                            sample,
-                        }
-                    } else {
-                        DiscreteGraphSample::Advanced { channel_id, sample }
+                    let externals = integrand
+                        .get_settings()
+                        .kinematics
+                        .externals
+                        .get_dependent_externals::<f64>(
+                            integrand.get_dependent_momenta_constructor(),
+                        )?;
+                    let external_momenta = externals
+                        .iter()
+                        .map(|momentum| {
+                            [
+                                momentum.temporal.value.0,
+                                momentum.spatial.px.0,
+                                momentum.spatial.py.0,
+                                momentum.spatial.pz.0,
+                            ]
+                        })
+                        .collect::<Vec<_>>();
+                    let bridge = graph.compile_sampling_bridge(
+                        parameterization_settings,
+                        integrand.get_settings().kinematics.e_cm,
+                        &external_momenta,
+                        input.orientation,
+                    )?;
+                    let mapped = bridge.inverse(
+                        channel_id,
+                        &input
+                            .loop_momenta
+                            .iter()
+                            .flat_map(|momentum| [momentum.px.0, momentum.py.0, momentum.pz.0])
+                            .collect::<Vec<_>>(),
+                    )?;
+                    let partition_weight =
+                        mapped.partition.weight(channel_id.0).ok_or_else(|| {
+                            eyre!(
+                                "sampling channel partition has no weight for channel {}",
+                                channel_id.0
+                            )
+                        })?;
+                    if !partition_weight.is_finite() || partition_weight <= 0.0 {
+                        return Err(eyre!(
+                            "sampling channel partition has invalid weight {partition_weight}"
+                        ));
+                    }
+                    DiscreteGraphSample::Advanced {
+                        channel_id,
+                        partition_weight: Some(F::from_f64(partition_weight)),
+                        sample,
                     }
                 }
             };
