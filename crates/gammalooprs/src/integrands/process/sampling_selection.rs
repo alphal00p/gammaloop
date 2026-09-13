@@ -197,6 +197,10 @@ pub struct SamplingChannelCompileContext {
     pub e_cm: f64,
     pub n_loop_momenta: usize,
     pub surfaces: BTreeMap<Vec<usize>, SamplingSurfaceGeometry>,
+    /// Host cut identity for metadata whose `on_cut` list is explicit.
+    pub cut_id: Option<usize>,
+    pub orientation: Option<usize>,
+    pub side: Option<super::SamplingCutSide>,
     /// Exact affine maps routing a generated LMB into the master frame. The
     /// key is the generated catalogue basis id; absent entries are diagnosed
     /// when a non-master LMB is selected.
@@ -219,6 +223,9 @@ impl SamplingChannelCompileContext {
             n_loop_momenta,
             surfaces: BTreeMap::new(),
             lmb_frame_maps: BTreeMap::new(),
+            cut_id: None,
+            orientation: None,
+            side: None,
         }
     }
 }
@@ -1085,6 +1092,28 @@ impl SamplingChannelCatalogue {
                     (format!("surface:{edges:?}"), None, definition, map)
                 }
                 SamplingCatalogueEntry::Named(channel) => {
+                    if !channel.definition.on_cut.is_empty()
+                        && !channel
+                            .definition
+                            .on_cut
+                            .contains(&context.cut_id.ok_or_else(|| {
+                                SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: format!(
+                                        "channel declares on_cut {:?}, but no prepared host cut identity was supplied",
+                                        channel.definition.on_cut
+                                    ),
+                                }
+                            })?)
+                    {
+                        return Err(SamplingChannelCompileError::InvalidChannel {
+                            channel: channel.name.clone(),
+                            error: format!(
+                                "channel declares on_cut {:?}, incompatible with prepared cut {:?}",
+                                channel.definition.on_cut, context.cut_id
+                            ),
+                        });
+                    }
                     if channel.definition.parent_lmb != context.parent_lmb {
                         return Err(SamplingChannelCompileError::InvalidChannel {
                             channel: channel.name.clone(),
@@ -1807,6 +1836,36 @@ mod tests {
             .unwrap();
         let inverse = compiled[0].inverse(&point.point).unwrap();
         assert!(inverse.residual < 1.0e-10);
+    }
+
+    #[test]
+    fn named_cut_metadata_requires_matching_prepared_cut_context() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["cut_channel".into()];
+        let mut cut_definition = definition("lmb(1,2)");
+        cut_definition.on_cut = vec![3];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("cut_channel".into(), cut_definition);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        let error = catalogue.compile(&context).unwrap_err();
+        assert!(error.to_string().contains("on_cut [3]"));
+
+        let mut matching = context.clone();
+        matching.cut_id = Some(3);
+        assert!(catalogue.compile(&matching).is_ok());
+        matching.cut_id = Some(4);
+        assert!(catalogue.compile(&matching).is_err());
     }
 
     #[test]
