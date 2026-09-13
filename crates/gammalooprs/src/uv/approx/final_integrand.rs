@@ -44,7 +44,7 @@ impl FinalIntegrands {
     }
 
     pub(crate) fn zip_add(self, other: Self) -> Result<Self> {
-        Ok(Self(self.0.zip_add(other.0)?))
+        Ok(Self(self.0.zip_add([other.0])?))
     }
 
     pub(crate) fn into_integrands(self) -> Integrands {
@@ -207,14 +207,14 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 .then_some(edge)
             })
             .collect::<Vec<_>>();
-        let mut selector_free: Option<Integrands> = None;
+        let mut selector_free: Option<Vec<Integrands>> = None;
         for sector in active_sectors {
             if sector.coefficient.is_zero() {
                 // A disabled integrated prefix can deliberately retain a
                 // typed zero sector for later forest replay. Preserve all
                 // allowed cut orders without asking the outer CFF to resolve
                 // a map for an identically zero coefficient.
-                selector_free.get_or_insert_with(|| allowed_zero.clone());
+                selector_free.get_or_insert_with(Vec::new);
                 continue;
             }
             // Choose the soft Taylor routing once with the untouched cograph
@@ -249,8 +249,9 @@ impl<'a> FinalIntegrandBuilder<'a> {
             // branches carry maps and cut orders; consume each map once before
             // adding its value, checking the complete allowed cut-key shape.
             for (_, _, integrands) in localized.iter_orientations() {
-                let sum = selector_free.take().unwrap_or_else(|| allowed_zero.clone());
-                selector_free = Some(sum.zip_add(integrands.clone())?);
+                selector_free
+                    .get_or_insert_with(Vec::new)
+                    .push(integrands.clone());
             }
         }
         // The integrated addback is shared with the direct route. Its localizer
@@ -274,13 +275,14 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // lane: sum them explicitly without ever materializing a selector or
         // traversing another numerator map.
         for (_, _, integrands) in localized_integrated.iter_orientations() {
-            let sum = selector_free.take().unwrap_or_else(|| allowed_zero.clone());
-            selector_free = Some(sum.zip_add(integrands.clone())?);
+            selector_free
+                .get_or_insert_with(Vec::new)
+                .push(integrands.clone());
         }
         let selector_free = selector_free.ok_or_else(|| {
             eyre::eyre!("final 3D UV integrand contains no production energy maps")
         })?;
-        Self::simplify_final(graph, &reduced, selector_free)
+        Self::simplify_final(graph, &reduced, allowed_zero.zip_add(selector_free)?)
     }
 
     /// Normalize an already mapped and selector-assembled final integrand. This

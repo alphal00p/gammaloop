@@ -1023,3 +1023,83 @@ If a gate fails, use the measurements to continue the generic implementation, in
   cut/threshold and one analytic renormalization check) are queued under the
   same measurement lock, behind CLI10. The full scalar and physical matrix
   and final repeated generation/runtime gates remain outstanding.
+
+### 2026-09-13 — Bulk final residue assembly and production-node inventory
+
+- The two-point runtime harness is prepared and passes fifteen synthetic
+  controls. Its 27 fresh generation cases yield 54 point-specific runtime rows;
+  generation statistics count each state once. Base and 100-times-scaled
+  points have separate priming, actual-duration requirements and performance
+  gates. Existing diagnostic receipts are preserved. Policy, controls and
+  prepared cards are in `physical_protocol_two_point_validation` and
+  `optimized_physical_matrix_two_points`.
+- CLI10 reached its explicitly authorized 2,400 s cap and exited -15 after
+  2,400.264068 s, with peak RSS 4,167,876,608 bytes. It produced no evaluator,
+  saved state or production forest export. The extension watcher encountered
+  a process-disappearance race after SIGTERM; its `finally` cleanup resumed
+  the supervisor correctly. Raw supervisor/watcher receipts retain that note.
+- **Correction to the live progress inventory above:** the complete post-stop
+  log contains nine completed nodes and ten starts. The previously described
+  final node completed in 928.612672 s at 04:37:01.924 UTC, another completed
+  in 2.302546 s, and the following projection was interrupted. The production
+  traversal includes `current=18NfM, given=11vs, DOD0`, followed by
+  `current=18OW0, given=18NfM`. The earlier eight-node assumption was inferred
+  from the three initially identified regions, not certified by an export.
+  Additional production nodes are under independent investigation. No test
+  expectation or definitive forest count is changed on this incomplete record.
+- A six-second final-assembly profile has 28 user-CPU samples, zero lost;
+  92.86% is copying inside binary `Integrands::zip_add` / Symbolica addition.
+  The existing native `Atom::add_many` performs one merge of normalized sums
+  without distributing products. The existing `Integrands::zip_add` API now
+  accepts a whole summand wave, validates every cut-key shape, and uses that
+  bulk operation. Both projected assembly and direct selector materialization
+  consume it; no alternate mapper or graph-specific rule is added.
+- Check52 passes in 24.21 s after fixing two ordinary compile errors in checks
+  50/51 (iterator reference depth and the infallible test parsing macro). Two
+  new regressions check intact numerator powers, denominator buckets, exact
+  cancellation and missing/extra cut keys. Focused nextest18 is running.
+- The seven frozen `eef89` boundary checks pass: UV composition 4/4 in
+  22.220 s, API cut/threshold 2/2 in 4.399 s, and analytic renormalization 1/1
+  in 0.387 s. These binaries precede bulk assembly and do not certify that
+  subsequent change. Large-Atom diagnostic logging and the interrupted final
+  projection make CLI10's aggregate dispatch ratio indicative only; the final
+  dispatch gate requires a separate complete cold profile with minimal payloads.
+- Independent enumeration of all 1,023 nonempty internal-edge subsets confirms
+  exactly four aggregate-admitted regions: the three connected regions and
+  `U=[4,6,8,9,10,11,12,13]`, a two-loop disconnected union of the DOD -2
+  top-quark hexagon and DOD +2 gluon bubble. The existing forest builder admits
+  U by aggregate DOD zero, before canonical UV projection. Its component-parent
+  rules produce ten nodes/nine arcs: empty once, bubble once, self-energy twice,
+  U once and full graph five times. The two additional paths are bubble-to-U
+  and bubble-to-U-to-full. Actual production export remains required. The new
+  GL262 test's incomplete region assertion is corrected to include U; existing
+  physics expectations, tolerances and forest semantics are unchanged.
+- Nextest18 passes **647/647 tests** in 58.760 s after a 2m50s build. Check53
+  for the matched CLI configuration passes in 8.89 s. CLI build11 is running;
+  its prepared GL262 cards use an initial 2,400 s cap and exclude `dump` and
+  `trace` tags while retaining stage counters.
+- CLI10's matched completed-projection prefix has 125.921 ms construction plus
+  19,650.092 ms projection; conservative dispatch/cache work is 741.048 ms
+  (3.7472%, indicative only). It includes 100 preparations, 162 admitted
+  candidates, 7,828 mapped native rows and 15 native generations. Template
+  preparation takes 8.653 s, row mapping 1.947 s, component composition
+  278.101 ms and sector composition 4.874 s; these are nested timings.
+  The CFF cache records 247 hits/15 misses/no evictions. Row memos record
+  115,364 hits/42,095 misses/28,777 evictions. Full and matched-prefix summaries
+  remain preserved separately; the unfinished-call aggregate is not a gate.
+- CLI11 build passes in 3m32s and its immutable executable has SHA-256
+  `c76a89674c2d02df791890691cd975d801693072cce40012d0f2382af33060d9`.
+  Its source revision, patch, compiler and settings are recorded under
+  `diagnostic_batched_integrand_sum`. The GL262 diagnostic started at
+  04:50:57.341817 UTC with a 2,400 s cap. Its initial log filter accidentally
+  required explicitly false `dump`/`trace` fields, suppressing stage logs.
+  This attempt continues with its original card and receipt preserved; a
+  separate complete cold profile will use the corrected absent-field filter
+  `[{#generation,#profile,!dump,!trace}]=debug`. No dispatch timing gate can
+  be inferred from this uninstrumented attempt.
+- Independent review finds no bulk-addition correctness blocker. Every full
+  cut-key shape is validated, including zero summands; multiplication, powers
+  and function arguments stay intact. Clippy7 passes with the same three
+  tuple-complexity warnings in existing assignment/source preparation code.
+  Formatting and integration check54 pass; the four updated integration
+  executables will be rebuilt and frozen before broader execution.

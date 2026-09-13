@@ -2187,13 +2187,17 @@ impl GraphUvRichInspectCase {
                         (edges, graph.n_loops(&region), graph.local_dod(&region))
                     })
                     .collect::<BTreeSet<_>>();
-                // The strict gluon-self-energy / top-self-energy / full-graph
+                // The connected gluon-self-energy / top-self-energy / full-graph
                 // chain gives eight conventional forests, including empty.
+                // Production also admits the disconnected hexagon-plus-bubble
+                // union by its aggregate DOD (-2 + 2 = 0), adding two nodes to
+                // the unfolded forest. Keep this existing contribution covered.
                 assert_eq!(
                     regions,
                     BTreeSet::from([
                         (vec![9, 10], 1, 2),
                         (vec![4, 5, 7, 9, 10], 2, 1),
+                        (vec![4, 6, 8, 9, 10, 11, 12, 13], 2, 0),
                         ((4..14).collect(), 3, 0),
                     ]),
                     "GL262 must retain the physical DOD-2 gluon self-energy chain",

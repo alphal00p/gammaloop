@@ -1199,12 +1199,14 @@ fn projected_shared_coefficient_uses_each_outer_map_once_per_cut_order() -> Resu
     let product = outer.multiply_mapped(|host, source_map| {
         localizer.map_numerator(&graph, host, source_map, &coefficient)
     })?;
-    let mut sum: crate::uv::Integrands = [(index, Atom::Zero), (raised, Atom::Zero)]
+    let sum: crate::uv::Integrands = [(index, Atom::Zero), (raised, Atom::Zero)]
         .into_iter()
         .collect();
-    for (_, _, integrands) in product.iter_orientations() {
-        sum = sum.zip_add(integrands.clone())?;
-    }
+    let sum = sum.zip_add(
+        product
+            .iter_orientations()
+            .map(|(_, _, integrands)| integrands.clone()),
+    )?;
     let mut expected = [Atom::Zero, Atom::Zero];
     for (scale, values) in [(2, [2, 7]), (3, [3, 11]), (5, [5, 13])] {
         let energy = Atom::num(scale) * Atom::var(GS.numerator_sampling_scale);
@@ -1221,7 +1223,7 @@ fn projected_shared_coefficient_uses_each_outer_map_once_per_cut_order() -> Resu
         "fully mapped outer branches must sum independently for every cut order"
     );
     assert!(
-        sum.zip_add([(index, Atom::one())].into_iter().collect())
+        sum.zip_add([[(index, Atom::one())].into_iter().collect()])
             .is_err(),
         "final projected accumulation must reject an incomplete cut-key shape"
     );

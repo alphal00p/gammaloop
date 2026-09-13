@@ -178,6 +178,13 @@ Chain composition uses this same collector before applying its existing
 composition and normalization rules, including when color simplification
 encounters chain factors in a mapped numerator.
 
+Final residue assembly validates the complete cut-key shape of every summand,
+then uses Symbolica's native bulk addition once per cut order. Projected sectors
+and direct-route selector materialization retain their already mapped branch
+values until this merge. This avoids repeatedly copying the growing numerator;
+it merges existing top-level sums without distributing product factors or
+constructing common denominators.
+
 Rational-shell extraction groups equal denominator multisets through sums,
 products and powers while leaving denominator-free numerator subtrees opaque.
 It adds powers and numerators, prunes exact zeros, and never constructs a global
