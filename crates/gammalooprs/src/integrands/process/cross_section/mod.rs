@@ -1653,6 +1653,16 @@ impl GraphTerm for CrossSectionGraphTerm {
         )
     }
 
+    fn sampling_channel_ids(
+        &self,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<Vec<SamplingChannelId>> {
+        self.multi_channeling_setup.sampling_channel_ids(
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
+    }
+
     fn orientation_label(&self, orientation_id: usize) -> Option<String> {
         if self.explicit_orientation_sum_only {
             return (orientation_id == 0).then(|| {
@@ -1678,13 +1688,25 @@ impl GraphTerm for CrossSectionGraphTerm {
         channel_id: SamplingChannelId,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<Option<String>> {
-        Ok(Some(format_lmb_channel_label(
-            &self.multi_channeling_setup.effective_channel_edge_ids(
+        if self.multi_channeling_setup.sampling_channel_is_lmb(
+            channel_id,
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )? {
+            Ok(Some(format_lmb_channel_label(
+                &self.multi_channeling_setup.effective_channel_edge_ids(
+                    channel_id,
+                    &self.multi_channeling_setup.graph.name,
+                    parameterization_settings,
+                )?,
+            )))
+        } else {
+            Ok(Some(self.multi_channeling_setup.sampling_channel_label(
                 channel_id,
                 &self.multi_channeling_setup.graph.name,
                 parameterization_settings,
-            )?,
-        )))
+            )?))
+        }
     }
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
