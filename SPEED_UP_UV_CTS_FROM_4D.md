@@ -1941,3 +1941,56 @@ If a gate fails, use the measurements to continue the generic implementation, in
   whole-generation timings. Read-only follow-up identifies existing earlier
   graph deletion and alias/function-map APIs as conditional next experiments;
   neither is implemented without evidence from the pending full comparison.
+
+### 2026-09-13 — Separating scalar preparation and evaluator construction
+
+- The full CLI18 direct diagnostic subsequently hits the 100 GB guard at
+  12:06:08 UTC, after completing all tensor preprocessing. Its final receipt
+  records exit -15 and 3,484.833 s; the guard observes 101,899,558,912 bytes.
+  The completed scalar expression occupies 19,982,016,710 Atom bytes. The last
+  completed log stage is `evaluator_stack_parse_atoms_done`; no evaluator,
+  saved state or production forest export is available. Receipt `complete`
+  describes finished supervision, not successful generation. The final profile
+  remains ineligible for acceptance. Earlier completed-stage observations and
+  failed-run evidence are preserved.
+- User steering: "Continue as planned, but maybe in order to separate evaluator
+  construction efficiency and expression building, you could lower the evaluator
+  building hyperparameters to a minimum, i.e. only 1 horner iteration and 5 CPE
+  round only? You can also for now increase the RAM watchdog to 500 GB (if current
+  free RAM allows it), but record separately the RAM usage before entering
+  evaluator building."
+- Future paired diagnostics use one Horner iteration and five CPE rounds.
+  The running CLI18 erased diagnostic retains its original five/five settings.
+  At 12:16:56 UTC, with 762,059,776,000 bytes available on the host, its guard is
+  raised from 100 to 500 GB using the same verified-process handover, without
+  pausing generation. The new guard is armed before the old watcher is suspended.
+  Before-evaluator RSS and peak RSS will be recorded separately; a larger guard
+  and lower diagnostic optimization settings do not establish performance gates.
+- Pinned Symbolica source confirms that an empty `replace_multiple` skips
+  recursive matching but still copies the complete Atom. The existing generic
+  evaluator applies two such passes even when function-map replacements are
+  disabled. The candidate removes these two copies, transfers completed scalar
+  ownership after optional evaluator variants finish borrowing it, and releases
+  unstored source expressions before dual/numeric program construction. Existing
+  selector transformations and nonempty two-pass replacements are preserved.
+  Additional timing milestones separate expression preparation, each Symbolica
+  build and numeric-program conversion. Validation and measured impact are
+  pending; the running CLI18 binary remains immutable.
+- Format and `cargo check` pass for the ownership change. All 19 selected
+  evaluator/symbol tests pass, including nested function-map definitions with
+  both replacement settings, both source-retention settings and multiple
+  outputs; existing tests retain orientation-selector and hyperdual coverage.
+  Clippy passes with the same three existing type-complexity warnings. The
+  first check caught a test-only comparison of `DualOrNot` without `PartialEq`;
+  the test now uses its existing `unwrap_real` accessor. No numerical expected
+  values or tolerances changed. These correctness checks overlap the immutable
+  erased diagnostic and are not performance measurements.
+- An immutable standalone CLI18 probe is prepared for the existing 3.389 GB
+  portable scalar. Its model restriction, physical overrides, LMB, ordered
+  parameters and function-map setup are independently checked against the full
+  generation path. It replays constituent operations and can stop before
+  optimization, after Symbolica construction or after precision conversions.
+  It is one term, not the unavailable complete 19.982 GB scalar. RSS/VmHWM and
+  exact Atom equality are recorded without expanding the numerator. No probe
+  workload has run while the erased generation owns the common measurement
+  lock; full-input completion and runtime validation remain required.

@@ -464,7 +464,13 @@ retain their grouping.
 Each network aliases large scalar references and contracts its tensor products
 before resolving its own aliases. Scalar results are combined in one bulk sum
 before global evaluator optimization; open tensors, including open zero tensors,
-remain invalid scalar outputs. At this finite component boundary, a ready tensor
+remain invalid scalar outputs. Optional evaluator variants borrow these scalars
+before the final parametric evaluator takes ownership. Selector-free inputs and
+empty function-map replacement lists retain that ownership without copying the
+expression. Once symbolic programs are built, unstored source expressions are
+released before dual and numeric programs are constructed. Profiling separates
+expression preparation, Symbolica construction and numeric-program conversion.
+At this finite component boundary, a ready tensor
 whose exposed indices all contract with a pending tensor sum is attached to
 each immediate sum branch first. One expression traversal selects all eligible
 disjoint outermost sums, including siblings within a product. Small product

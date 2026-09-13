@@ -281,9 +281,13 @@ pub struct EvaluatorStack {
 }
 
 impl EvaluatorStack {
-    fn parametrize_residue_map_selectors<A: AtomCore>(atom: &A, selected_id: Atom) -> Atom {
+    fn parametrize_residue_map_selectors<'a>(
+        atom: impl Into<AtomOrView<'a>>,
+        selected_id: Atom,
+    ) -> Atom {
+        let atom = atom.into();
         if !atom.contains_symbol(OrientationID::symbol()) {
-            return atom.as_atom_view().to_owned();
+            return atom.into_owned();
         }
         atom.as_atom_view()
             .replace(function!(OrientationID::symbol(), W_.a_))
@@ -315,8 +319,8 @@ impl EvaluatorStack {
     }
 
     #[instrument(skip_all)]
-    fn new_single_parametric<A: AtomCore>(
-        parametric_atom: &[A],
+    fn new_single_parametric(
+        parametric_atoms: Vec<Atom>,
         param_builder: &ParamBuilder,
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
@@ -327,7 +331,7 @@ impl EvaluatorStack {
         let opt_settings = settings.optimization_settings();
 
         GenericEvaluator::new_from_builder(
-            parametric_atom.iter().map(|atom| {
+            parametric_atoms.into_iter().map(|atom| {
                 GS.collect_orientation_if(Self::parametrize_residue_map_selectors(
                     atom,
                     Atom::var(GS.residue_map_id),
@@ -423,9 +427,11 @@ impl EvaluatorStack {
                     lhs = lhs.add_arg(GS.sign(e));
                     args.push(Indeterminate::try_from(GS.sign(e)).unwrap());
                 }
-                let param_integrand = GS.collect_orientation_if(
-                    Self::parametrize_residue_map_selectors(a, Atom::var(residue_map_id_arg)),
-                );
+                let param_integrand =
+                    GS.collect_orientation_if(Self::parametrize_residue_map_selectors(
+                        a.as_atom_view(),
+                        Atom::var(residue_map_id_arg),
+                    ));
                 fn_map
                     .add_tagged_function(
                         GS.integrand,
@@ -953,8 +959,10 @@ impl EvaluatorStack {
         }
 
         let single_started = std::time::Instant::now();
+        // The optional variants have finished borrowing these scalars. Transfer
+        // them to the final evaluator instead of retaining a second full copy.
         let single_parametric =
-            Self::new_single_parametric(&parsed_atoms, param_builder, &dual_shape, settings)
+            Self::new_single_parametric(parsed_atoms, param_builder, &dual_shape, settings)
                 .with_context(|| "Failed to create parametric")?;
         crate::debug_tags!(#generation, #profile, #compile, #summary;
             stage = "evaluator_stack_new_single_parametric_done",
@@ -966,7 +974,7 @@ impl EvaluatorStack {
         timings.symbolica_time += symbolica_started.elapsed();
         crate::debug_tags!(#generation, #profile, #compile, #summary;
             stage = "evaluator_stack_new_done",
-            atom_count = parsed_atoms.len(),
+            atom_count = atoms.len(),
             orientation_count = orientations.len(),
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             spenso_ms = timings.spenso_time.as_secs_f64() * 1000.0,
@@ -1468,19 +1476,44 @@ impl GenericEvaluator {
             );
         }
 
+        let preparation_started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_expression_preparation_start",
+            replacement_count = evaluator_replacements.len(),
+            "Evaluator timing milestone"
+        );
         let exprs: Vec<Atom> = atoms
             .into_iter()
             .map(|a| {
-                a.replace_multiple(&evaluator_replacements)
-                    .replace_multiple(&evaluator_replacements)
+                // An empty replacement pass still copies the entire Atom.
+                // Preserve ownership when function-map substitution is disabled.
+                if evaluator_replacements.is_empty() {
+                    a
+                } else {
+                    a.replace_multiple(&evaluator_replacements)
+                        .replace_multiple(&evaluator_replacements)
+                }
             })
             .collect();
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_expression_preparation_done",
+            atom_count = exprs.len(),
+            elapsed_ms = preparation_started.elapsed().as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
         // M remains an ordinary runtime input even when `store_atom` is disabled
         // or the emitted sources do not use it. Runtime validation requires a
         // nonzero value without inspecting or expanding shared function bodies.
 
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
-        for n in exprs.iter() {
+        for (atom_index, n) in exprs.iter().enumerate() {
+            let build_started = std::time::Instant::now();
+            crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                stage = "evaluator_symbolica_build_start",
+                atom_index,
+                atom_bytes = n.as_view().get_byte_size(),
+                "Evaluator timing milestone"
+            );
             let eval: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> = n
                 .evaluator(params)
                 .function_map(fn_map.clone())
@@ -1507,6 +1540,12 @@ impl GenericEvaluator {
                     )
                 })?;
 
+            crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                stage = "evaluator_symbolica_build_done",
+                atom_index,
+                elapsed_ms = build_started.elapsed().as_secs_f64() * 1000.0,
+                "Evaluator timing milestone"
+            );
             tree = Some(if let Some(mut tree) = tree {
                 tree.merge(eval, settings.cpe_iterations)
                     .map_err(|e| eyre!("Failed to merge evaluators: {}", e))?;
@@ -1517,7 +1556,16 @@ impl GenericEvaluator {
         }
 
         let mut tree = tree.ok_or_else(|| eyre!("No expressions to evaluate"))?;
+        let exprs_len = exprs.len();
+        // The program owns its data. Release unstored source expressions before
+        // constructing dual and numeric programs, which can themselves be large.
+        let exprs = settings.store_atom.then_some(exprs);
 
+        let domains_started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_numeric_programs_start",
+            "Evaluator timing milestone"
+        );
         if let Some(dual_shape) = &dual_shape {
             let dual = HyperDual::<SymComplex<Rational>>::new(dual_shape.clone());
             let dualizer = Dualizer::new(dual, vec![]);
@@ -1534,15 +1582,16 @@ impl GenericEvaluator {
             .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
         let arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
             tree.map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_numeric_programs_done",
+            elapsed_ms = domains_started.elapsed().as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
 
         let evaluator = GenericEvaluator {
-            exprs_len: exprs.len(),
+            exprs_len,
             fn_map_entries,
-            exprs: if settings.store_atom {
-                Some(exprs)
-            } else {
-                None
-            },
+            exprs,
             backend_policy: EvaluatorBackendPolicy::FollowIntegrand,
             rational: Some(rational),
             f64_compiled: None,
@@ -1959,6 +2008,13 @@ mod tests {
             ),
             expression,
         );
+        assert_eq!(
+            EvaluatorStack::parametrize_residue_map_selectors(
+                expression.clone(),
+                Atom::var(GS.residue_map_id)
+            ),
+            expression,
+        );
         let guarded = Symbol::IF.call_args([Atom::var(a), Atom::Zero, expression]);
         assert_eq!(
             EvaluatorStack::parametrize_residue_map_selectors(
@@ -2133,6 +2189,73 @@ mod tests {
         assert_eq!(actual.values, expected.values);
         assert_eq!(actual.values[0], Complex::new_re(F(29.0)));
         assert_eq!(actual.values[1], Complex::new_re(F(118.0)));
+    }
+
+    #[test]
+    fn evaluator_source_retention_preserves_nested_functions_and_multiple_outputs() {
+        let x = Atom::var(symbol!("evaluator_test::retained_source_x"));
+        let inner = symbol!("evaluator_test::retained_inner");
+        let outer = symbol!("evaluator_test::retained_outer");
+        let inner_call = function!(inner);
+        let outer_call = function!(outer);
+        let inner_body = (&x + 2).pow(3);
+        let outer_body = &inner_call + 1;
+        let mut fn_map = FunctionMap::default();
+        let mut entries = Vec::new();
+        for (symbol, lhs, rhs) in [
+            (inner, inner_call.clone(), inner_body),
+            (outer, outer_call.clone(), outer_body),
+        ] {
+            fn_map
+                .add_function(symbol, Vec::<Indeterminate>::new(), rhs.clone())
+                .unwrap();
+            entries.push(FnMapEntry {
+                lhs,
+                rhs,
+                args: Vec::new(),
+                tags: Vec::new(),
+            });
+        }
+        let source = [outer_call.clone(), inner_call * outer_call];
+        for store_atom in [false, true] {
+            for do_fn_map_replacements in [false, true] {
+                let settings = EvaluatorSettings {
+                    store_atom,
+                    do_fn_map_replacements,
+                    ..Default::default()
+                };
+                let mut evaluator = GenericEvaluator::new_from_raw_params(
+                    source.clone(),
+                    std::slice::from_ref(&x),
+                    &fn_map,
+                    entries.clone(),
+                    settings.optimization_settings(),
+                    None,
+                    &settings,
+                )
+                .unwrap();
+                assert_eq!(evaluator.exprs_len, 2);
+                assert_eq!(evaluator.exprs.is_some(), store_atom);
+                if let Some(stored) = &evaluator.exprs {
+                    assert_eq!(stored.len(), 2);
+                    if !do_fn_map_replacements {
+                        assert_eq!(stored, &source);
+                    }
+                }
+                for (input, expected) in [(2.0, [65.0, 4160.0]), (-1.0, [2.0, 2.0])] {
+                    let values = [Complex::new_re(F(input))];
+                    let actual =
+                        <f64 as GenericEvaluatorFloat>::get_evaluator(&mut evaluator)(&values);
+                    assert_eq!(
+                        actual
+                            .into_iter()
+                            .map(DualOrNot::unwrap_real)
+                            .collect::<Vec<_>>(),
+                        expected.map(|value| Complex::new_re(F(value)))
+                    );
+                }
+            }
+        }
     }
 
     #[test]
