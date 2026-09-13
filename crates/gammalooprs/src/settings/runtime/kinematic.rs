@@ -455,6 +455,15 @@ impl Externals {
         masses: &TiVec<ExternalIndex, F<f64>>,
         e_cm: &F<f64>,
     ) -> Result<()> {
+        // Recompute from the supplied momenta, including after direct Rust
+        // edits. Reading an old improved cache would conceal those changes.
+        let Self::Constant {
+            f_64_cache,
+            f_128_cache,
+            ..
+        } = self;
+        *f_64_cache = None;
+        *f_128_cache = None;
         let dep_momenta_f64 = self.get_dependent_externals::<f64>(constructor)?;
         let dep_momenta_f128 = self.get_dependent_externals::<f128>(constructor)?;
 

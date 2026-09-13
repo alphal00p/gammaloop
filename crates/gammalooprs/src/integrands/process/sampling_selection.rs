@@ -18,10 +18,10 @@ use symbolica::{atom::Atom, symbol, try_parse};
 
 use super::sampling_maps::combine_contracts;
 use super::{
-    ImplicitSurfaceRadialMap, PreparedCutSamplingContext, SamplingChannelScore, SamplingMapAffine,
-    SamplingMapComponent, SamplingMapComposition, SamplingMapContract, SamplingMapDefinition,
-    SamplingMapEmbedding, SamplingMapEvaluation, SamplingMapKernel, SamplingPartition,
-    SamplingPartitionMode, SamplingScoreFunction, SurfaceRadialMap,
+    ImplicitSurfaceRadialMap, PreparedCutSamplingContext, SamplingMapAffine, SamplingMapComponent,
+    SamplingMapComposition, SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding,
+    SamplingMapEvaluation, SamplingMapKernel, SamplingPartition, SamplingPartitionMode,
+    SamplingScoreFunction, SurfaceRadialMap,
 };
 use crate::momentum::sample::{LoopMomenta, MomentumSample};
 use crate::settings::runtime::ParameterizationSettings;
@@ -1289,42 +1289,35 @@ impl SamplingChannelBridge {
                 self.channels.len()
             ));
         }
-        let scores = self
-            .channels
-            .iter()
-            .enumerate()
-            .map(|(index, channel)| {
-                let map = channel.map.clone();
-                let context = contexts
-                    .get(SamplingChannelId::from(index))
-                    .map(ToOwned::to_owned)?;
-                let map_density = SamplingScoreFunction::from_positive_function(move |raw| {
-                    let evaluation = map.inverse_with_context(raw, &context)?;
-                    let density = evaluation.inverse_jacobian.abs();
-                    if !density.is_finite() || density <= 0.0 {
-                        return Err(eyre!(
-                            "inverse map density is not finite and positive: {density}"
-                        ));
-                    }
-                    Ok(Some(density))
-                });
-                Ok(match self.partition_mode {
+        SamplingPartition::from_log_scores(
+            self.partition_mode,
+            raw_coordinates,
+            self.channels.iter().enumerate().map(|(index, channel)| {
+                let score = move || match self.partition_mode {
                     SamplingPartitionMode::MapDensity => {
-                        SamplingChannelScore::map_density(channel.name.clone(), map_density)
+                        let context = contexts.get(SamplingChannelId::from(index))?;
+                        let evaluation = channel.map.inverse_with_context(raw_coordinates, context)?;
+                        let density = evaluation.inverse_jacobian.abs();
+                        if !density.is_finite() || density <= 0.0 {
+                            return Err(eyre!(
+                                "inverse map density is not finite and positive: {density}"
+                            ));
+                        }
+                        Ok(Some(density.ln()))
                     }
                     SamplingPartitionMode::SingularityProxy => {
-                        let proxy = channel.singularity_proxy.clone().ok_or_else(|| {
+                        let proxy = channel.singularity_proxy.as_ref().ok_or_else(|| {
                             eyre!(
                                 "channel '{}' has no singularity_proxy metadata; provide a positive expression for every channel when sampling_channel_weight = 'singularity_proxy'",
                                 channel.name
                             )
                         })?;
-                        SamplingChannelScore::with_proxy(channel.name.clone(), map_density, proxy)
+                        proxy.evaluate(raw_coordinates)
                     }
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        SamplingPartition::new(self.partition_mode, &scores, raw_coordinates)
+                };
+                (channel.name.as_str(), score)
+            }),
+        )
     }
 
     /// Build a partition from a deferred cross-section state. This only

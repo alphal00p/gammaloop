@@ -24,39 +24,44 @@ pub enum SamplingPartitionMode {
     SingularityProxy,
 }
 
+type SamplingScoreCallback = dyn Fn(&[f64]) -> Result<Option<f64>> + Send + Sync;
+
 /// A score evaluator returning a log-density.
 ///
 /// `None` denotes that the channel is not supported at this raw point (and is
 /// therefore assigned zero partition weight).  A supported score must be
 /// finite; the partition checks that at least one channel is supported.
-pub trait SamplingScoreEvaluator: Send + Sync {
-    fn log_score(&self, raw_coordinates: &[f64]) -> Result<Option<f64>>;
+enum SamplingScoreEvaluator {
+    Callback(Arc<SamplingScoreCallback>),
+    Symbolica(Box<Mutex<SamplingExpressionEvaluator>>),
 }
 
-struct ClosureScoreEvaluator<F>(F);
-
-impl<F> SamplingScoreEvaluator for ClosureScoreEvaluator<F>
-where
-    F: Fn(&[f64]) -> Result<Option<f64>> + Send + Sync,
-{
-    fn log_score(&self, raw_coordinates: &[f64]) -> Result<Option<f64>> {
-        (self.0)(raw_coordinates)
-    }
-}
-
-/// A shareable score evaluator constructed from a Rust callback.
+/// A score evaluator constructed from a Rust callback or a Symbolica expression.
 ///
-/// Map compilers can use this type to wrap their warmup-compiled Symbolica
-/// evaluator.  The callback returns a logarithmic score so large powers are
-/// handled without overflowing before the log-sum-exp reduction.
+/// Callback scores remain shareable. Cloning a compiled Symbolica score copies
+/// its mutable evaluation buffers into an independent worker-local mutex without
+/// compiling the expression again. Logarithmic callback scores handle large
+/// powers without overflowing before the log-sum-exp reduction.
 pub struct SamplingScoreFunction {
-    evaluator: Arc<dyn SamplingScoreEvaluator>,
+    evaluator: SamplingScoreEvaluator,
 }
 
 impl Clone for SamplingScoreFunction {
     fn clone(&self) -> Self {
         Self {
-            evaluator: Arc::clone(&self.evaluator),
+            evaluator: match &self.evaluator {
+                SamplingScoreEvaluator::Callback(callback) => {
+                    SamplingScoreEvaluator::Callback(Arc::clone(callback))
+                }
+                SamplingScoreEvaluator::Symbolica(evaluator) => {
+                    SamplingScoreEvaluator::Symbolica(Box::new(Mutex::new(
+                        evaluator
+                            .lock()
+                            .expect("sampling Symbolica score evaluator mutex was poisoned")
+                            .clone(),
+                    )))
+                }
+            },
         }
     }
 }
@@ -74,7 +79,7 @@ impl SamplingScoreFunction {
         F: Fn(&[f64]) -> Result<Option<f64>> + Send + Sync + 'static,
     {
         Self {
-            evaluator: Arc::new(ClosureScoreEvaluator(function)),
+            evaluator: SamplingScoreEvaluator::Callback(Arc::new(function)),
         }
     }
 
@@ -112,46 +117,54 @@ impl SamplingScoreFunction {
     ///
     /// The evaluator is protected by a mutex because Symbolica's eager
     /// evaluator is stateful.  It is still compiled exactly once and the
-    /// resulting score is safe to share between channel partitions.
+    /// resulting score is safe to share between channel partitions. Worker
+    /// clones own independent mutexes and evaluator buffers.
     ///
     /// Positivity alone does not establish that a proxy captures every
     /// singular feature of a map.  The graph compiler must supply and audit
-    /// those expressions explicitly.  Graph channel metadata does not yet
-    /// carry proxy expressions, so this constructor does not enable the
-    /// production `singularity_proxy` setting by itself.
+    /// those expressions explicitly; declaring a positive expression does not
+    /// certify its power near every intended singular feature.
     pub fn from_symbolica_positive_expression(
         expression: Atom,
         parameters: impl IntoIterator<Item = Atom>,
     ) -> Result<Self> {
         let evaluator = SamplingExpressionEvaluator::new([expression], parameters, false)?;
-        let evaluator = Arc::new(Mutex::new(evaluator));
-        Ok(Self::from_positive_function(move |coordinates| {
-            let mut evaluator = evaluator
-                .lock()
-                .map_err(|_| eyre!("sampling Symbolica score evaluator mutex was poisoned"))?;
-            let values = evaluator.evaluate(coordinates)?;
-            let value = values
-                .first()
-                .ok_or_else(|| eyre!("sampling Symbolica score evaluator returned no output"))?;
-            let real = value.re.0;
-            let imaginary = value.im.0;
-            let tolerance = 1.0e-13 * real.abs().max(1.0);
-            if !real.is_finite() || !imaginary.is_finite() {
-                return Err(eyre!(
-                    "sampling Symbolica score evaluated to a non-finite value: {value:?}"
-                ));
-            }
-            if imaginary.abs() > tolerance {
-                return Err(eyre!(
-                    "sampling Symbolica score has a non-negligible imaginary part {imaginary}"
-                ));
-            }
-            Ok(Some(real))
-        }))
+        Ok(Self {
+            evaluator: SamplingScoreEvaluator::Symbolica(Box::new(Mutex::new(evaluator))),
+        })
     }
 
-    fn evaluate(&self, raw_coordinates: &[f64]) -> Result<Option<f64>> {
-        self.evaluator.log_score(raw_coordinates)
+    pub(crate) fn evaluate(&self, raw_coordinates: &[f64]) -> Result<Option<f64>> {
+        let evaluator = match &self.evaluator {
+            SamplingScoreEvaluator::Callback(callback) => return callback(raw_coordinates),
+            SamplingScoreEvaluator::Symbolica(evaluator) => evaluator,
+        };
+        let mut evaluator = evaluator
+            .lock()
+            .map_err(|_| eyre!("sampling Symbolica score evaluator mutex was poisoned"))?;
+        let values = evaluator.evaluate(raw_coordinates)?;
+        let value = values
+            .first()
+            .ok_or_else(|| eyre!("sampling Symbolica score evaluator returned no output"))?;
+        let real = value.re.0;
+        let imaginary = value.im.0;
+        let tolerance = 1.0e-13 * real.abs().max(1.0);
+        if !real.is_finite() || !imaginary.is_finite() {
+            return Err(eyre!(
+                "sampling Symbolica score evaluated to a non-finite value: {value:?}"
+            ));
+        }
+        if imaginary.abs() > tolerance {
+            return Err(eyre!(
+                "sampling Symbolica score has a non-negligible imaginary part {imaginary}"
+            ));
+        }
+        if real <= 0.0 {
+            return Err(eyre!(
+                "sampling channel score must be finite and strictly positive, got {real}"
+            ));
+        }
+        Ok(Some(real.ln()))
     }
 }
 
@@ -219,25 +232,45 @@ impl SamplingPartition {
         channels: &[SamplingChannelScore],
         raw_coordinates: &[f64],
     ) -> Result<Self> {
-        if channels.is_empty() {
-            return Err(eyre!("sampling partition requires at least one channel"));
-        }
+        Self::from_log_scores(
+            mode,
+            raw_coordinates,
+            channels.iter().map(|channel| {
+                (channel.name.as_str(), || {
+                    channel.score(mode, raw_coordinates)
+                })
+            }),
+        )
+    }
+
+    /// Reduce borrowed channel scores after validating names and raw coordinates.
+    /// Deferring each evaluation avoids cloning stateful map or proxy programs
+    /// merely to form the partition at one point.
+    pub(crate) fn from_log_scores<'a, S>(
+        mode: SamplingPartitionMode,
+        raw_coordinates: &[f64],
+        channels: impl IntoIterator<Item = (&'a str, S)>,
+    ) -> Result<Self>
+    where
+        S: FnOnce() -> Result<Option<f64>>,
+    {
         if raw_coordinates
             .iter()
             .any(|coordinate| !coordinate.is_finite())
         {
             return Err(eyre!("raw sampling coordinates must be finite"));
         }
-        let mut names = channels.iter().map(|channel| channel.name.as_str());
+        let channels = channels.into_iter().collect::<Vec<_>>();
+        if channels.is_empty() {
+            return Err(eyre!("sampling partition requires at least one channel"));
+        }
+        let mut names = channels.iter().map(|(name, _)| *name);
         if let Some(empty) = names.find(|name| name.trim().is_empty()) {
             return Err(eyre!(
                 "sampling partition contains an empty channel name: {empty:?}"
             ));
         }
-        let mut sorted_names = channels
-            .iter()
-            .map(|channel| channel.name.as_str())
-            .collect::<Vec<_>>();
+        let mut sorted_names = channels.iter().map(|(name, _)| *name).collect::<Vec<_>>();
         sorted_names.sort_unstable();
         if let Some(duplicate) = sorted_names.windows(2).find(|pair| pair[0] == pair[1]) {
             return Err(eyre!(
@@ -247,15 +280,15 @@ impl SamplingPartition {
         }
 
         let log_scores = channels
-            .iter()
-            .map(|channel| {
-                channel.score(mode, raw_coordinates).and_then(|score| {
+            .into_iter()
+            .map(|(name, score)| {
+                score().and_then(|score| {
                     score
                         .map(|log_score| {
                             if !log_score.is_finite() {
                                 return Err(eyre!(
                                     "channel '{}' returned a non-finite logarithmic score {log_score}",
-                                    channel.name
+                                    name
                                 ));
                             }
                             Ok(log_score)
@@ -269,7 +302,7 @@ impl SamplingPartition {
         let Some(&maximum) = finite_scores.iter().max_by(|a, b| a.total_cmp(b)) else {
             return Err(eyre!(
                 "sampling partition denominator vanishes: all {} channels have zero support",
-                channels.len()
+                log_scores.len()
             ));
         };
         let denominator_scaled = finite_scores
@@ -444,5 +477,101 @@ mod tests {
             SamplingPartition::new(SamplingPartitionMode::SingularityProxy, &channels, &[2.0])
                 .unwrap_err();
         assert!(error.to_string().contains("strictly positive"));
+    }
+
+    #[test]
+    fn cloned_symbolica_scores_have_independent_worker_buffers() {
+        test_initialise().unwrap();
+        let x = Atom::var(symbol!("sampling_worker_x"));
+        let y = Atom::var(symbol!("sampling_worker_y"));
+        let proxy = SamplingScoreFunction::from_symbolica_positive_expression(
+            x.clone() * x.clone() + y.clone() * y.clone() + 1,
+            [x, y],
+        )
+        .unwrap();
+        let workers = (0..4).map(|_| proxy.clone()).collect::<Vec<_>>();
+        let SamplingScoreEvaluator::Symbolica(original) = &proxy.evaluator else {
+            panic!("expected a compiled Symbolica score")
+        };
+        // Holding the original lock must neither block worker evaluation nor
+        // alias its scratch buffers. The try-lock fails promptly for a shared
+        // mutex regression, before the threaded test could deadlock.
+        let _original_guard = original.lock().unwrap();
+        for worker in &workers {
+            let SamplingScoreEvaluator::Symbolica(evaluator) = &worker.evaluator else {
+                panic!("expected a compiled Symbolica score")
+            };
+            assert!(evaluator.try_lock().is_ok());
+        }
+        std::thread::scope(|scope| {
+            let handles = workers
+                .into_iter()
+                .enumerate()
+                .map(|(worker_index, worker)| {
+                    scope.spawn(move || {
+                        for sample in 0..128 {
+                            let x = worker_index as f64 + sample as f64 / 17.0;
+                            let y = 3.0 - sample as f64 / 23.0;
+                            let expected = (1.0 + x * x + y * y).ln();
+                            let actual = worker.evaluate(&[x, y]).unwrap().unwrap();
+                            assert!((actual - expected).abs() < 1.0e-13);
+                        }
+                    })
+                })
+                .collect::<Vec<_>>();
+            for handle in handles {
+                handle.join().unwrap();
+            }
+        });
+        let callback = positive(2.0);
+        let cloned = callback.clone();
+        let (SamplingScoreEvaluator::Callback(original), SamplingScoreEvaluator::Callback(cloned)) =
+            (&callback.evaluator, &cloned.evaluator)
+        else {
+            panic!("expected callback scores")
+        };
+        assert!(Arc::ptr_eq(original, cloned));
+    }
+
+    #[test]
+    fn borrowed_partition_validates_structure_before_evaluating_scores() {
+        let channels = [
+            SamplingChannelScore::map_density("left", positive(2.0)),
+            SamplingChannelScore::map_density("right", positive(3.0)),
+        ];
+        let mode = SamplingPartitionMode::MapDensity;
+        let borrowed = SamplingPartition::from_log_scores(
+            mode,
+            &[0.25],
+            channels
+                .iter()
+                .map(|channel| (channel.name.as_str(), || channel.score(mode, &[0.25]))),
+        )
+        .unwrap();
+        assert_eq!(
+            borrowed,
+            SamplingPartition::new(mode, &channels, &[0.25]).unwrap()
+        );
+
+        let evaluated = std::cell::Cell::new(0);
+        for (names, coordinates, diagnostic) in [
+            (["", "valid"], [0.25], "empty channel name"),
+            (["same", "same"], [0.25], "duplicate channel name"),
+            (["left", "right"], [f64::NAN], "coordinates must be finite"),
+        ] {
+            let error = SamplingPartition::from_log_scores(
+                mode,
+                &coordinates,
+                names.into_iter().map(|name| {
+                    (name, || {
+                        evaluated.set(evaluated.get() + 1);
+                        Ok(Some(0.0))
+                    })
+                }),
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains(diagnostic), "{error}");
+            assert_eq!(evaluated.get(), 0);
+        }
     }
 }

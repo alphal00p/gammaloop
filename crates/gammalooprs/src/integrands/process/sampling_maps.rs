@@ -1317,6 +1317,11 @@ impl ImplicitSurfaceRadialMap {
         let center = self.center_for_context(context)?;
         let root = self.root_for_direction(&direction, context)?;
         let (radius, radial_jacobian) = self.radius_from_coordinate(coordinates[0], root);
+        if self.power != 1.0 && root.is_some_and(|(threshold, _)| radius == threshold) {
+            return Err(eyre!(
+                "implicit surface radial-map radius rounds to the singular threshold seam at the current precision"
+            ));
+        }
         let point = center
             .iter()
             .zip(&direction)
@@ -1537,20 +1542,13 @@ impl ImplicitSurfaceRadialMap {
     }
 
     fn coordinate_from_radius(&self, radius: f64, root: Option<(f64, f64)>) -> f64 {
-        let threshold = root.map(|(radius, _)| radius).unwrap_or(0.0);
-        let split = threshold / (threshold + self.beta);
-        if split > 0.0 && radius < threshold {
-            split * (radius / threshold).powf(1.0 / self.power)
-        } else {
-            let z = ((radius - threshold) / self.beta)
-                .max(0.0)
-                .powf(1.0 / self.power);
-            if split > 0.0 {
-                (z + split) / (1.0 + z)
-            } else {
-                z / (1.0 + z)
-            }
-        }
+        SurfaceRadialMap::coordinate_from_radius(
+            &F(radius),
+            F(root.map(|(radius, _)| radius).unwrap_or(0.0)),
+            F(self.beta),
+            F(self.power),
+        )
+        .0
     }
 }
 
@@ -1642,7 +1640,10 @@ impl SurfaceRadialMap {
     ///
     /// `threshold_radius = Some(r*)` places the surface at `r*`; `None` is the
     /// full-support absent-fibre fallback. `beta` is a positive compactification
-    /// scale and `power` controls the endpoint concentration.
+    /// scale and `power` controls concentration on both sides of the threshold.
+    /// For power greater than one the density diverges as
+    /// `|r - threshold_radius|^(1 / power - 1)` at a nonzero threshold.
+    /// Ordinary soft channels retain separate coverage of the origin.
     pub fn new(
         dimension: usize,
         center: Vec<f64>,
@@ -1721,9 +1722,14 @@ impl SurfaceRadialMap {
     /// Map a unit-cube point to a point around the surface centre.
     pub fn forward<T: FloatLike>(&self, coordinates: &[F<T>]) -> Result<SurfaceRadialPoint<T>> {
         self.validate_coordinates(coordinates)?;
-        let (_, threshold, beta) = self.split_coordinate();
+        let (threshold, beta, power) = self.radial_parameters();
         let (radius, radial_jacobian) =
-            Self::radius_from_coordinate(&coordinates[0], threshold, beta, F::from_f64(self.power));
+            Self::radius_from_coordinate(&coordinates[0], threshold.clone(), beta, power);
+        if self.power != 1.0 && threshold > threshold.zero() && radius == threshold {
+            return Err(eyre!(
+                "surface radial-map radius rounds to the singular threshold seam at the current precision"
+            ));
+        }
         let one = radius.one();
         let two = radius.from_i64(2);
         let phi = radius.TAU() * &coordinates[1];
@@ -1806,7 +1812,8 @@ impl SurfaceRadialMap {
                 "surface radial-map inverse radius must be finite and positive; it is undefined at its centre"
             ));
         }
-        let (radial_coordinate, _) = self.coordinate_from_radius(&radius);
+        let (threshold, beta, power) = self.radial_parameters();
+        let radial_coordinate = Self::coordinate_from_radius(&radius, threshold, beta, power);
         let one = radius.one();
         let two = radius.from_i64(2);
         let mut coordinates = vec![zero.clone(); self.dimension];
@@ -1862,11 +1869,12 @@ impl SurfaceRadialMap {
         Ok(())
     }
 
-    fn split_coordinate<T: FloatLike>(&self) -> (F<T>, F<T>, F<T>) {
-        let threshold = F::<T>::from_f64(self.threshold_radius.unwrap_or(0.0));
-        let beta = F::<T>::from_f64(self.beta);
-        let split = &threshold / (&threshold + &beta);
-        (split, threshold, beta)
+    fn radial_parameters<T: FloatLike>(&self) -> (F<T>, F<T>, F<T>) {
+        (
+            F::from_f64(self.threshold_radius.unwrap_or(0.0)),
+            F::from_f64(self.beta),
+            F::from_f64(self.power),
+        )
     }
 
     fn radius_from_coordinate<T: FloatLike>(
@@ -1879,8 +1887,8 @@ impl SurfaceRadialMap {
         let split = &threshold / (&threshold + &beta);
         if split > coordinate.zero() && coordinate < &split {
             let fraction = coordinate / &split;
-            let radius = &threshold * fraction.powf(&power);
-            let jacobian = &threshold * &power * fraction.powf(&(&power - &one)) / &split;
+            let radius = &threshold * Self::power_complement(&fraction, &power);
+            let jacobian = &threshold * &power * (&one - &fraction).powf(&(&power - &one)) / &split;
             (radius, jacobian)
         } else {
             let odds = (coordinate - &split) / (&one - coordinate);
@@ -1893,20 +1901,51 @@ impl SurfaceRadialMap {
         }
     }
 
-    fn coordinate_from_radius<T: FloatLike>(&self, radius: &F<T>) -> (F<T>, F<T>) {
+    fn coordinate_from_radius<T: FloatLike>(
+        radius: &F<T>,
+        threshold: F<T>,
+        beta: F<T>,
+        power: F<T>,
+    ) -> F<T> {
         let one = radius.one();
-        let power = F::<T>::from_f64(self.power);
-        let (split, threshold, beta) = self.split_coordinate();
+        let split = &threshold / (&threshold + &beta);
         if split > radius.zero() && radius < &threshold {
-            let fraction = radius / &threshold;
-            let coordinate = &split * fraction.powf(&(&one / &power));
-            let (_, jacobian) = Self::radius_from_coordinate(&coordinate, threshold, beta, power);
-            (coordinate, jacobian)
+            &split * Self::power_complement(&(radius / &threshold), &(&one / &power))
         } else {
             let z = ((radius - &threshold) / &beta).powf(&(&one / &power));
-            let coordinate = (&z + &split) / (&one + &z);
-            let (_, jacobian) = Self::radius_from_coordinate(&coordinate, threshold, beta, power);
-            (coordinate, jacobian)
+            (&z + &split) / (&one + &z)
+        }
+    }
+
+    /// Evaluate `1 - (1 - fraction)^power` without cancellation at the origin.
+    /// The existing native hyperbolic operations preserve small arguments;
+    /// direct subtraction is safe once its result is bounded away from zero.
+    /// These native operations are not yet registered as eager primitives.
+    fn power_complement<T: FloatLike>(fraction: &F<T>, power: &F<T>) -> F<T> {
+        let one = fraction.one();
+        if power == &one {
+            return fraction.clone();
+        }
+        let two = fraction.from_i64(2);
+        let half_epsilon = fraction.epsilon() / &two;
+        let logarithm = if fraction < &half_epsilon {
+            // The first-order limit is already accurate to native precision
+            // and avoids underflow from halving the smallest subnormals.
+            -fraction
+        } else if fraction < &(&one / &two) {
+            let argument = fraction / (&two - fraction);
+            -&two * F(argument.0.atanh())
+        } else {
+            (&one - fraction).ln()
+        };
+        let exponent = power * logarithm;
+        if -&exponent < half_epsilon {
+            -exponent
+        } else if exponent > -&one {
+            let half = &exponent / &two;
+            -&two * F(half.0.exp()) * F(half.0.sinh())
+        } else {
+            &one - F(exponent.0.exp())
         }
     }
 }
@@ -2330,7 +2369,7 @@ mod tests {
     #[test]
     fn radial_profiles_include_the_outer_branch_interval_in_the_jacobian() {
         for threshold in [None, Some(2.0)] {
-            for power in [1.0, 2.0] {
+            for power in [1.0, 1.5, 2.0, 3.0] {
                 let explicit = |coordinate| {
                     SurfaceRadialMap::radius_from_coordinate(
                         &F(coordinate),
@@ -2386,6 +2425,200 @@ mod tests {
                         (mapped.jacobian * inverse.inverse_jacobian - F(1.0)).abs() < F(1.0e-10)
                     );
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn surface_radial_profiles_focus_both_signed_normal_limits() {
+        for power in [1.5_f64, 2.0, 3.0] {
+            let alpha = 1.0 - 1.0 / power;
+            let implicit = ImplicitSurfaceRadialMap::new(
+                3,
+                vec![0.0; 3],
+                2.0,
+                power,
+                Arc::new(|_, radius| Ok((radius - 3.0, 1.0))),
+            )
+            .unwrap();
+            for sign in [-1.0, 1.0] {
+                let (scale, interval) = if sign < 0.0 {
+                    (3.0_f64, 0.6)
+                } else {
+                    (2.0_f64, 0.4)
+                };
+                let limiting_weight = power * scale.powf(1.0 / power) / interval;
+                for distance in [1.0e-3, 3.0e-4, 1.0e-4] {
+                    let coordinate = 0.6 + sign * distance;
+                    let (radius, jacobian) = SurfaceRadialMap::radius_from_coordinate(
+                        &F(coordinate),
+                        F(3.0),
+                        F(2.0),
+                        F(power),
+                    );
+                    let delta = radius.0 - 3.0;
+                    assert!(delta * sign > 0.0);
+                    // A |delta|^-alpha normal singularity has a bounded
+                    // radial weight on BOTH sides when alpha = 1 - 1/p.
+                    let normal_weight = jacobian.0 / delta.abs().powf(alpha);
+                    assert!(
+                        (normal_weight / limiting_weight - 1.0).abs() < 0.02,
+                        "p={power}, sign={sign}, u={coordinate}, normal weight={normal_weight}, limit={limiting_weight}",
+                    );
+                    let mapped = implicit.forward(&[coordinate, 0.27, 0.61]).unwrap();
+                    let radial_jacobian =
+                        mapped.jacobian / (4.0 * std::f64::consts::PI * radius.0.powi(2));
+                    assert!((radial_jacobian / jacobian.0 - 1.0).abs() < 1.0e-12);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn surface_radial_profiles_match_eager_branch_derivatives() {
+        use crate::integrands::process::sampling_evaluator::SamplingExpressionEvaluator;
+
+        crate::initialisation::test_initialise().unwrap();
+        let coordinate = try_parse!("radial_profile_test::u").unwrap();
+        let power = try_parse!("radial_profile_test::p").unwrap();
+        // Eager algebra is an independent branch oracle at ordinary points.
+        // The production owner uses stable native primitives near endpoints.
+        for (expression, coordinates) in [
+            (
+                "3*(1-(1-radial_profile_test::u/(3/5))^radial_profile_test::p)",
+                [0.13, 0.43],
+            ),
+            (
+                "3+2*((radial_profile_test::u-3/5)/(1-radial_profile_test::u))^radial_profile_test::p",
+                [0.71, 0.89],
+            ),
+        ] {
+            let mut evaluator = SamplingExpressionEvaluator::new(
+                [try_parse!(expression).unwrap()],
+                [coordinate.clone(), power.clone()],
+                true,
+            )
+            .unwrap();
+            for power in [1.0, 1.5, 2.0, 3.0] {
+                for coordinate in coordinates {
+                    let (radius, jacobian) = SurfaceRadialMap::radius_from_coordinate(
+                        &F(coordinate),
+                        F(3.0),
+                        F(2.0),
+                        F(power),
+                    );
+                    let result = evaluator
+                        .evaluate_with_derivatives(&[coordinate, power])
+                        .unwrap();
+                    assert!((result[0].value.re.0 / radius.0 - 1.0).abs() < 1.0e-12);
+                    assert!((result[0].derivatives[0].re.0 / jacobian.0 - 1.0).abs() < 1.0e-12);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn surface_radial_profiles_preserve_tiny_native_coordinates() {
+        fn check<T: FloatLike>(decimal_exponent: i32) {
+            let one = F::<T>::default().one();
+            let tiny = &one / one.from_usize(10).powi(decimal_exponent);
+            let tolerance = one.epsilon() * one.from_usize(1024);
+            for power in [1.0, 2.0, 3.0] {
+                let map = SurfaceRadialMap::new(3, vec![0.0; 3], Some(3.0), 2.0, power).unwrap();
+                let coordinates = [
+                    tiny.clone(),
+                    &one / one.from_usize(3),
+                    &one / one.from_usize(2),
+                ];
+                let mapped = map.forward(&coordinates).unwrap();
+                let expected = &tiny * one.from_usize(5 * power as usize);
+                assert!((&mapped.radius / expected - &one).abs() < tolerance);
+                let inverse = map.inverse(&mapped.point).unwrap();
+                assert!((&inverse.coordinates[0] / &tiny - &one).abs() < tolerance);
+                assert!((&mapped.jacobian * &inverse.inverse_jacobian - &one).abs() < tolerance);
+            }
+            assert_eq!(SurfaceRadialMap::power_complement(&tiny, &one), tiny);
+        }
+        check::<f64>(100);
+        check::<crate::utils::QuadFloat>(50);
+        check::<crate::utils::ArbPrec>(400);
+        let subnormal = F(f64::from_bits(1));
+        assert_eq!(
+            SurfaceRadialMap::power_complement(&subnormal, &F(2.0)),
+            F(f64::from_bits(2))
+        );
+        let implicit = ImplicitSurfaceRadialMap::new(
+            3,
+            vec![0.0; 3],
+            2.0,
+            2.0,
+            Arc::new(|_, radius| Ok((radius - 3.0, 1.0))),
+        )
+        .unwrap();
+        let coordinates = [1.0e-100, 0.27, 0.61];
+        let mapped = implicit.forward(&coordinates).unwrap();
+        let inverse = implicit.inverse(&mapped.point).unwrap();
+        assert!((inverse.coordinates[0] / coordinates[0] - 1.0).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn surface_radial_profiles_reject_rounded_threshold_seams() {
+        let explicit = SurfaceRadialMap::new(3, vec![0.0; 3], Some(3.0), 2.0, 2.0).unwrap();
+        let implicit = ImplicitSurfaceRadialMap::new(
+            3,
+            vec![0.0; 3],
+            2.0,
+            2.0,
+            Arc::new(|_, radius| Ok((radius - 3.0, 1.0))),
+        )
+        .unwrap();
+        for coordinate in [0.6 - 1.0e-10, 0.6, 0.6 + 1.0e-10] {
+            let error = explicit
+                .forward(&[F(coordinate), F(0.27), F(0.61)])
+                .unwrap_err();
+            assert!(error.to_string().contains("threshold seam"), "{error}");
+            let error = implicit.forward(&[coordinate, 0.27, 0.61]).unwrap_err();
+            assert!(error.to_string().contains("threshold seam"), "{error}");
+        }
+        // Power one has no singular threshold seam and remains invertible.
+        let regular = SurfaceRadialMap::new(3, vec![0.0; 3], Some(3.0), 2.0, 1.0).unwrap();
+        let mapped = regular.forward(&[F(0.6), F(0.27), F(0.61)]).unwrap();
+        assert!(regular.inverse(&mapped.point).is_ok());
+    }
+
+    #[test]
+    fn surface_radial_profiles_preserve_gaussian_normalization_and_second_moment() {
+        let count = 4096;
+        let gaussian_normalization = (2.0 * std::f64::consts::PI).powf(-1.5);
+        for threshold in [None, Some(2.0)] {
+            for power in [1.0, 1.5, 2.0, 3.0] {
+                let map = SurfaceRadialMap::new(3, vec![0.0; 3], threshold, 2.0, power).unwrap();
+                let mut normalization = 0.0;
+                let mut second_moment = 0.0;
+                for sample in 0..count {
+                    // In 3D the uniform-cos(theta) angular determinant is
+                    // exactly 4pi. A radial Gaussian's angular integral is
+                    // therefore exact at any nonsingular angular point.
+                    let coordinate = (sample as f64 + 0.5) / count as f64;
+                    let mapped = map.forward(&[F(coordinate), F(0.27), F(0.61)]).unwrap();
+                    let radius_squared = mapped
+                        .point
+                        .iter()
+                        .map(|component| component.0.powi(2))
+                        .sum::<f64>();
+                    let weight =
+                        gaussian_normalization * (-0.5 * radius_squared).exp() * mapped.jacobian.0;
+                    normalization += weight / count as f64;
+                    second_moment += weight * radius_squared / count as f64;
+                }
+                assert!(
+                    (normalization - 1.0).abs() < 1.0e-5,
+                    "R={threshold:?}, p={power}, norm={normalization}"
+                );
+                assert!(
+                    (second_moment - 3.0).abs() < 5.0e-5,
+                    "R={threshold:?}, p={power}, moment={second_moment}"
+                );
             }
         }
     }

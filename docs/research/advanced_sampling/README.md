@@ -31,6 +31,14 @@ The focused agent studies preserve independent reasoning and review:
 - [AMPLITUDE_BENCHMARK_CANDIDATES.md](AMPLITUDE_BENCHMARK_CANDIDATES.md): generated
   UV-finite massive two-loop kite and double-box candidates, verified threshold
   intersections, production coverage gaps and correctness/variance gates.
+- [DOUBLE_BOX_GEOMETRY_CHECK.md](DOUBLE_BOX_GEOMETRY_CHECK.md): independent
+  routing/rank/center checks and an actual same-orientation A/B intersection.
+- [WARMUP_CACHE_DESIGN.md](WARMUP_CACHE_DESIGN.md): implemented cache ownership,
+  invalidation and worker-local eager buffers, with validation scope.
+- [SAMPLING_PRECISION_RESCUE.md](SAMPLING_PRECISION_RESCUE.md): native map/density
+  migration and original-source rescue required before strong-focus long runs.
+- [CROSS_SECTION_DELIVERY_PATH.md](CROSS_SECTION_DELIVERY_PATH.md): conditional
+  host/block proposal, parallel cut-h/side/star work and early GL638 milestones.
 - [PINCHED_COLLINEAR_SAMPLING.md](PINCHED_COLLINEAR_SAMPLING.md): future light-cone
   and prolate charts, normalized transverse enhancement, soft endpoints and
   architectural requirements for cut-dependent pinched geometry.

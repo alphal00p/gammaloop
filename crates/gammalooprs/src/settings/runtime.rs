@@ -2034,6 +2034,21 @@ impl CoordinateSystem {
 }
 
 impl SamplingSettings {
+    /// Whether the selected runtime mode maps canonical sampling channels.
+    /// Both top-level and discrete graph sampling use the same channel owner;
+    /// keeping the predicate central also guards cut-dependent maps in both forms.
+    pub(crate) fn uses_sampling_channels(&self) -> bool {
+        match self {
+            Self::MultiChanneling(_) => true,
+            Self::DiscreteGraphs(settings) => matches!(
+                &settings.sampling_type,
+                DiscreteGraphSamplingType::MultiChanneling(_)
+                    | DiscreteGraphSamplingType::SamplingMultiChanneling(_)
+            ),
+            Self::Default(_) => false,
+        }
+    }
+
     pub fn selected_graph_names(&self) -> &[String] {
         match self {
             SamplingSettings::DiscreteGraphs(settings) => &settings.graph_names,

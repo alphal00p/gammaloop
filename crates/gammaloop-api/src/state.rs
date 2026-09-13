@@ -6,8 +6,8 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::{
-        Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, Mutex,
     },
     thread,
     time::Duration,
@@ -16,22 +16,22 @@ use std::{
 use clap::Args;
 use color_eyre::{Result, Section};
 use colored::Colorize;
-use eyre::{Context, eyre};
+use eyre::{eyre, Context};
 use gammalooprs::{
     processes::{Amplitude, CrossSection},
     utils::serde_utils::IsDefault,
 };
 use linnet::half_edge::subgraph::SubGraphLike;
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, get_current_pid};
+use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use toml::Value as TomlValue;
-use tracing::{Span, debug, info, info_span};
+use tracing::{debug, info, info_span, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use gammalooprs::{
-    GammaLoopContextContainer, clear_interrupt_request,
+    clear_interrupt_request,
     feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
@@ -39,32 +39,33 @@ use gammalooprs::{
     is_interrupt_requested,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{
-        DotExportSettings, GeneratedGraphReport, GenerationProcessKind, GenerationProgressMode,
-        GenerationProgressModeGuard, GenerationProgressObserver, GenerationProgressObserverGuard,
-        GenerationProgressPhase, GraphGenerationStats, GraphGroupSelectionMode,
-        GraphGroupSelectionPlan, GraphGroupSelectionReport, GraphGroupSelectionSpec,
-        NamedGraphGenerationReport, Process, ProcessCollection, ProcessDefinition, ProcessList,
-        ProcessLoadSelection, begin_phase, merge_generated_graph_reports,
+        begin_phase, merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
+        GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
+        GenerationProgressObserver, GenerationProgressObserverGuard, GenerationProgressPhase,
+        GraphGenerationStats, GraphGroupSelectionMode, GraphGroupSelectionPlan,
+        GraphGroupSelectionReport, GraphGroupSelectionSpec, NamedGraphGenerationReport, Process,
+        ProcessCollection, ProcessDefinition, ProcessList, ProcessLoadSelection,
     },
     settings::{
-        GlobalSettings, RuntimeSettings, global::GenerationSettings, runtime::LockedRuntimeSettings,
+        global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings,
     },
     utils::{
-        F,
-        serde_utils::{SmartSerde, get_schema_folder},
+        serde_utils::{get_schema_folder, SmartSerde},
         tracing::{init_bench_tracing, init_test_tracing},
+        F,
     },
+    GammaLoopContextContainer,
 };
 
 use crate::{
-    CLISettings,
     command_parser::{normalize_clap_args, split_command_line},
-    command_template::{PlaceholderSpec, contains_placeholder, placeholder_specs},
-    commands::{Commands, save::SaveState},
-    integrand_info::{IntegrandInfo, collect_integrand_info},
+    command_template::{contains_placeholder, placeholder_specs, PlaceholderSpec},
+    commands::{save::SaveState, Commands},
+    integrand_info::{collect_integrand_info, IntegrandInfo},
     model_parameters::{external_model_parameter_type, validate_model_parameter_type},
     render_smart_toml,
     tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
+    CLISettings,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -3467,13 +3468,13 @@ mod tests {
         model::InputParamCard,
         momentum::{Dep, ExternalMomenta, Helicity},
         processes::{
-            RaisedPropagatorScope, RaisedPropagatorSignature, SelectionPolarity,
-            process::ProcessCollection,
+            process::ProcessCollection, RaisedPropagatorScope, RaisedPropagatorSignature,
+            SelectionPolarity,
         },
         settings::global::{CompilationMode, FrozenCompilationMode},
         settings::{
+            runtime::kinematic::{improvement::PhaseSpaceImprovementSettings, Externals},
             KinematicsSettings, RuntimeSettings,
-            runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
         },
         utils::{load_generic_model, serde_utils::SHOWDEFAULTS},
     };
@@ -4111,18 +4112,14 @@ mod tests {
         assert_eq!(selected.process_id, 0);
         assert_eq!(selected.integrand_name, "selected");
         let process = &state.process_list.processes[0];
-        assert!(
-            process
-                .collection
-                .get_integrand_names()
-                .contains(&"default")
-        );
-        assert!(
-            process
-                .collection
-                .get_integrand_names()
-                .contains(&"selected")
-        );
+        assert!(process
+            .collection
+            .get_integrand_names()
+            .contains(&"default"));
+        assert!(process
+            .collection
+            .get_integrand_names()
+            .contains(&"selected"));
         match &process.collection {
             ProcessCollection::Amplitudes(amplitudes) => {
                 assert!(amplitudes["default"].integrand.is_none());
@@ -4207,14 +4204,12 @@ mod tests {
         assert!(selected.replaced_existing_target);
         assert!(selected.removed_target_artifacts);
         assert!(!stale_integrand_folder.exists());
-        assert!(
-            !state
-                .generation_summaries
-                .contains_key(&IntegrandGenerationSummaryKey {
-                    process_id: 0,
-                    integrand_name: "selected".to_string(),
-                })
-        );
+        assert!(!state
+            .generation_summaries
+            .contains_key(&IntegrandGenerationSummaryKey {
+                process_id: 0,
+                integrand_name: "selected".to_string(),
+            }));
 
         let err = state
             .select_integrand_graph_groups(
@@ -4352,7 +4347,7 @@ b = 1.0
 
     #[test]
     fn test_command_history_serialization() {
-        use super::{CommandHistory, set_serialize_commands_as_strings};
+        use super::{set_serialize_commands_as_strings, CommandHistory};
         use crate::commands::Commands;
 
         // Test basic construction
@@ -4386,7 +4381,7 @@ b = 1.0
 
     #[test]
     fn test_command_history_toml_and_json_formats() {
-        use super::{CommandHistory, set_serialize_commands_as_strings};
+        use super::{set_serialize_commands_as_strings, CommandHistory};
         use crate::commands::Commands;
 
         // Test different command types
@@ -4454,7 +4449,7 @@ b = 1.0
     #[test]
     fn run_history_push_with_raw_skips_quit_and_definition_commands() {
         use super::RunHistory;
-        use crate::commands::{StartCommandsBlock, run::Run};
+        use crate::commands::{run::Run, StartCommandsBlock};
 
         let mut run_history = RunHistory::default();
         run_history.push_with_raw(
@@ -5493,10 +5488,9 @@ rotation_axis = [{type = "x"}, {type = "y"}]
             .resolve_effective_model_parameter_card_for_settings(&settings)
             .unwrap_err();
 
-        assert!(
-            err.to_string()
-                .contains("cannot be overridden because it is not present")
-        );
+        assert!(err
+            .to_string()
+            .contains("cannot be overridden because it is not present"));
     }
 }
 
