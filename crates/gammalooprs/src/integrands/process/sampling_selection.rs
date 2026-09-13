@@ -125,9 +125,10 @@ pub struct ResolvedSamplingChannelSelection {
     pub named_channels: Vec<ResolvedNamedSamplingChannel>,
 }
 
-/// One entry in the graph-local sampling catalogue.  The catalogue is only
-/// an inspection/resolution product at this stage; ordinary LMB sampling keeps
-/// using `LmbMultiChannelingSetup` unchanged.
+/// One entry in the graph-local sampling catalogue. The catalogue is the
+/// migration target for grid construction and evaluation. The existing setup
+/// only supplies generated entries until that runtime migration is complete;
+/// it is not a second production channel universe.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SamplingCatalogueEntry {
     Lmb {
