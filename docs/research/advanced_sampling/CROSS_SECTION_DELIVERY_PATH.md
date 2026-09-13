@@ -177,6 +177,23 @@ may be represented algebraically without claiming they were sampled.
 | X6: automatic catalogue | Existing `SamplingChannelCatalogue`/selection owner; pass fully resolved physical targets from amplitude and cross-section hosts. | Initial discovery covers supported single surfaces/cuts with deterministic ordinary soft coverage, then adds already-supported side/joint/star candidates under caps. Stable IDs/aliases, current-context fallback, explicit omissions and no-surface graphs. Do not claim complete auto support while conditional candidates are unimplemented. |
 | X7: demonstrated GL638 gain | Existing integration engine, runtime cards and replay/acceptance reports. Compare frozen catalogues at equal evaluations and equal wall time on 20 cores. | Independent seeds, signed/absolute moments, second moments, maxima, rescue/NaN counts, map/physics cost and soft cancellation. Long runs start only after native rescue and map/reference gates. Report neutral or worse outcomes honestly. |
 
+X4 and X5 are partly parallel. The direct joint chart uses prepared host-cut
+kinematics but does not consume CT centers or projection scales; its star
+pullbacks add those X4 dependencies. Consequently its kernel, certified domain,
+support handling and amplitude tests proceed alongside shared CT preparation.
+The first exact component implements the routed shared-energy class specified
+in [the joint proposal](TWO_NORMAL_PROPOSAL.md#generic-shared-energy-component-and-remaining-graph-binding),
+including unequal masses. Other rank-two equations remain explicit binding
+errors until supported by the same component contract and catalogue.
+The active-coordinate eager-Jacobian prerequisite is committed as `66922b469`,
+with native and saved-state acceptance gates passed. The subsequent joint
+component and support migration pass 161 focused checks, including fixed-context
+Gaussian/raw moments and an independent `F=1/R` bounded-weight oracle. Graph
+binding and prerequisite-only proposal decisions across native retries remain
+unimplemented; no bounded GL638 weight claim follows from these component
+checks. Automatic discovery and longer direct-H runs are not prerequisites
+for X5.
+
 ### X2 generated-graph validation
 
 The first complete focused run passes twelve tests in 66.919 seconds. It includes

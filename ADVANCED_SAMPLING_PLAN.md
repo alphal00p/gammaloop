@@ -556,7 +556,7 @@ does not depend on CT centers or alpha. Only its star pullback adds those
 dependencies. Automatic channel discovery and long adaptive runs are not
 prerequisites for this explicit-chart implementation.
 
-The [joint-chart implementation slice](docs/research/advanced_sampling/TWO_NORMAL_PROPOSAL.md#next-implementation-slice-a-generic-shared-energy-chart-unimplemented)
+The [joint-chart implementation slice](docs/research/advanced_sampling/TWO_NORMAL_PROPOSAL.md#generic-shared-energy-component-and-remaining-graph-binding)
 now identifies its independent prerequisites: outside-support inverse results
 flowing into the existing zero-score partition, eager differentiation of active
 coordinates with prepared parameters held fixed, a routed shared-energy pair
@@ -574,8 +574,26 @@ ordered active columns. Static identity-zero seed information prevents unused
 prepared-parameter singular derivatives from poisoning those columns; the
 `u+sqrt(m)` test at `m=0` gives active derivative one in Double, Quad and Arb.
 Requested singular derivatives and structurally active singular intermediates
-remain typed failures. This is not a general removable-singularity solver and
-does not yet implement compact support or the joint component.
+remain typed failures. This is not a general removable-singularity solver.
+
+The represented-geometry joint component and compact-support migration now
+pass all 161 selected core checks. One full-circle map handles the supported
+shared-energy pair, with eager active Jacobians, density evaluated at the
+supplied inverse point, and a directed enclosure certificate for its normal
+disk. The existing partition receives certified outside-support as zero, while
+requiring an explicitly selected full-support sibling. Tests cover unequal and
+massless energies, native Quad/Arb inputs, both circle branches, independent
+Cartesian determinants, normalized Gaussian/raw moments, and foreign support
+through conditional affine/permuted maps. A separate `F=1/R` oracle converges
+to the same finite analytic weight from either selected channel.
+This is a component milestone: graph matching and run-card binding are still
+missing. The production host must also enforce prerequisite-only compact/fallback
+and radius decisions across native retries; later active-point-dependent rescue
+cannot silently select another proposal. These dependencies are recorded in
+the existing joint and shared-preparation audits. No GL638 bounded-weight or
+variance-improvement claim follows from the fixed-context component tests.
+The final nine joint/enclosure tests and two saved-state/canonical-channel API
+regressions also pass; core/API checking and changed-line clippy gates are clear.
 
 In parallel, the subtraction owner has separated representative overlap
 kinematics from the raised derivative packets, using the existing sample and

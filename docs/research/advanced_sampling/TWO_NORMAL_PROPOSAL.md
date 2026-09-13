@@ -183,9 +183,14 @@ the claimed determinant within 1.5e-9 relative; its inverse recovers ell within
 2.3e-16 and p-star within 2.9e-14 GeV. These checks substantiate the formulas
 at regular points, not a global domain certificate or an implementation claim.
 
-## Next implementation slice: a generic shared-energy chart (unimplemented)
+## Generic shared-energy component and remaining graph binding
 
-The first exact primitive should accept two routed energy equations in one
+The represented-geometry component and support/partition migration now pass
+their focused checks. Graph matching, command-card binding and native proposal
+policy transport remain unimplemented. The component is not yet a usable
+GL638 channel through the run-card API.
+
+The first exact primitive accepts two prepared energy equations in one
 three-dimensional active block, rather than graph names or H/Z formulas:
 
 ```
@@ -301,6 +306,33 @@ this supplies coverage outside the patch. Do not select overlapping compact
 and broad laws inside one cube branch and report only the branch Jacobian.
 The current fixed-partition estimator is not changed to a mixture-PDF estimator.
 
+The first implementation uses a bounded 2048-bit MPFR enclosure calculation,
+with separate enclosures of the mathematical box endpoints. Certified failure
+of a conservative lower bound permits dyadic reduction; arithmetic uncertainty
+about that endpoint's sign remains a typed error. It tries
+`max_radius / 2^j`, `0 <= j < 32`, then uses the ordinary conditional map if
+the deliberate domain policy declines every candidate. This arithmetic budget
+is not a claim to resolve every native input. In addition to the singular
+normal origin and disk boundary, the ordinary fallback retains its existing
+open-cube angular endpoints; an exact angular zero there is diagnosed without
+clipping or remapping.
+
+Precision replay adds a production gate beyond within-lane forward/inverse
+agreement. An active-point-dependent physical retry must not silently change
+the compact/fallback choice or dyadic radius and thus select another proposal
+law for the same draw. Fixed MPFR certificate precision alone cannot prevent
+this when the prepared host geometry changes between native lanes. Distinguish
+deliberate box overestimation from arithmetic uncertainty in its bound, and
+retain/check proposal decisions through the existing per-draw context owner
+for selected and foreign maps. Rebuild native geometric coefficients and
+certificates from original inputs; never promote earlier prepared numbers.
+The exact transport contract remains a production integration prerequisite.
+The represented-geometry kernel and fixed-context acceptance tests can proceed
+without claiming this gate is satisfied.
+
+The detailed prerequisite-only policy and its exact bias counterexample are in
+[the shared preparation audit](AFFINE_STAR_IMPLEMENTATION_AUDIT.md#proposal-policy-across-native-retries--unimplemented).
+
 ### Existing owners and dependency order
 
 1. `sampling_maps.rs` owns the new native component and its paired forward/
@@ -362,3 +394,34 @@ of that outer map, not assumptions hidden in the joint kernel.
   for a controlled leading C/R integrand. This proves neither global finite
   variance nor star alignment. Benchmark certificate/map costs before a long
   GL638 run; no performance gain follows from the formulas alone.
+
+### Implemented component validation
+
+The initial combined run passes 161 core tests, including the existing map,
+partition, native solver and raised-cut regressions. After routine explicit
+test initialization, all nine joint/enclosure tests pass again. Core and
+Python-feature API checks pass; clippy reports no warnings on changed lines.
+Two API gates also pass: saved-state reference acceptance and summed versus
+selected canonical-channel evaluation. These use the existing loaded-state
+and integration owners; no joint graph binding is implied by those regressions.
+
+| Component gate | Evidence |
+| --- | --- |
+| Circle and native arithmetic | Unequal masses `(2,3,0)`, nonorthogonal shifts `(3,0,0)` and `(1,4,0)`, both circle signs and joining points; independent Cartesian determinant, Quad/Arb perturbations below binary64 resolution and independent worker buffers. |
+| Rigorous support | Directed native enclosures, including separated Quad limbs; certified disk, declined chart, explicit singular/boundary errors and certified outside-support. |
+| Complete estimator | Compact plus ordinary channels integrate a shifted normalized Gaussian and raw second moment within the fixed 2% and 4% tolerances; compact-only admission is rejected. |
+| Foreign channels | Different complement-dependent energy data and affine frames retain their own inverse support through an ordered, permuted six-dimensional composition, in exact and proxy modes. Constant proxies test support only. |
+| Intended corner power | In Quad and Arb, `J*w/R` from either selected channel approaches the same independent finite analytic limit over four radial decades; final relative error is below `1e-3`. |
+
+The focused component command is:
+
+```sh
+cargo nextest run -p gammalooprs --lib --profile test_gammaloop --retries 0 \
+  -E 'test(sampling_joint::) | test(joint_bridge) | test(joint_density_partition) | test(native_mpfr_enclosures)'
+```
+
+The final nine-test run takes 103.401 seconds in the test profile; its
+Gaussian/partition test accounts for 102.144 seconds. This includes 8192
+reference draws and repeated support/certificate evaluations, not a production
+map benchmark. Prepared-data reuse and production map cost need measurement
+when the graph binder and per-draw context are connected.

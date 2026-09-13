@@ -1,0 +1,985 @@
+//! A compact full-circle chart for two energy sums with one shared energy.
+//!
+//! The disk certificate concerns the exact represented prepared parameters.
+//! A physical binder must additionally preserve the chosen branch/radius across
+//! precision rescue and account for uncertainty in its host preparation.
+
+use std::sync::{Arc, Mutex};
+
+use color_eyre::eyre::{Result, eyre};
+use rug::{
+    Float,
+    float::{Round, Special},
+};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    prelude::{Real, SingleFloat},
+    try_parse,
+};
+
+use crate::utils::{F, FloatLike};
+
+use super::{
+    sampling_evaluator::SamplingExpressionEvaluator,
+    sampling_maps::{
+        SamplingEvaluationError, SamplingJacobian, SamplingMapComponent, SamplingMapContract,
+        SamplingMapEvaluation, SamplingSupport, SurfaceRadialMap,
+    },
+};
+
+/// Parameters of E0(x)+E1(x+a)-C1 and E0(x)+E2(x+b)-C2.
+/// The later graph matcher must establish the shared signed routing and masses.
+#[derive(Clone, Debug)]
+pub struct SharedEnergyJointGeometry<T: FloatLike = f64> {
+    pub shifts: [[T; 3]; 2],
+    pub masses: [T; 3],
+    pub energy_sums: [T; 2],
+}
+
+pub type SharedEnergyJointGeometryEvaluator<T> =
+    Arc<dyn Fn(&[T]) -> Result<SharedEnergyJointGeometry<T>> + Send + Sync>;
+
+/// One compact conditional chart, or the normalized ordinary chart when its
+/// complement-only domain policy declines focusing. Its static support remains
+/// restricted, so the resolved catalogue must also retain a full-support map.
+pub struct SharedEnergyJointMap<T: FloatLike = f64> {
+    geometry: SharedEnergyJointGeometryEvaluator<T>,
+    context_dimension: usize,
+    max_radius: T,
+    normal_scale: T,
+    fallback: SurfaceRadialMap<T>,
+    program: Mutex<SamplingExpressionEvaluator>,
+}
+
+impl<T: FloatLike> Clone for SharedEnergyJointMap<T> {
+    fn clone(&self) -> Self {
+        Self {
+            geometry: self.geometry.clone(),
+            context_dimension: self.context_dimension,
+            max_radius: self.max_radius.clone(),
+            normal_scale: self.normal_scale.clone(),
+            fallback: self.fallback.clone(),
+            program: Mutex::new(
+                self.program
+                    .lock()
+                    .expect("joint evaluator poisoned")
+                    .clone(),
+            ),
+        }
+    }
+}
+
+impl<T: FloatLike> std::fmt::Debug for SharedEnergyJointMap<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SharedEnergyJointMap")
+            .field("context_dimension", &self.context_dimension)
+            .field("max_radius", &self.max_radius)
+            .field("normal_scale", &self.normal_scale)
+            .finish_non_exhaustive()
+    }
+}
+
+// Each endpoint of the conservative box range is itself enclosed. This keeps
+// interval dependency/overestimation distinct from MPFR rounding uncertainty:
+// only a certified sign of the mathematical lower endpoint changes the disk.
+// This arithmetic is deliberately private to the nine rational predicates.
+#[derive(Clone, Debug)]
+struct JointRange {
+    lower: [Float; 2],
+    upper: [Float; 2],
+}
+
+impl JointRange {
+    const PRECISION: u32 = 2048;
+
+    fn native<T: FloatLike>(value: &T) -> Self {
+        let (lo, hi) = value.mpfr_enclosure(Self::PRECISION);
+        Self {
+            lower: [lo.clone(), hi.clone()],
+            upper: [lo, hi],
+        }
+    }
+
+    fn integer(value: i32) -> Self {
+        let value = Float::with_val(Self::PRECISION, value);
+        Self {
+            lower: [value.clone(), value.clone()],
+            upper: [value.clone(), value],
+        }
+    }
+
+    fn bounds(lower: Self, upper: Self) -> Self {
+        Self {
+            lower: lower.lower,
+            upper: upper.upper,
+        }
+    }
+
+    fn add_bound(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
+        [
+            Float::with_val_round(Self::PRECISION, &a[0] + &b[0], Round::Down).0,
+            Float::with_val_round(Self::PRECISION, &a[1] + &b[1], Round::Up).0,
+        ]
+    }
+
+    fn mul_bound(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
+        let products = a.iter().flat_map(|x| b.iter().map(move |y| (x, y)));
+        let mut lower = Float::with_val(Self::PRECISION, Special::Infinity);
+        let mut upper = -lower.clone();
+        for (x, y) in products {
+            lower = lower.min(&Float::with_val_round(Self::PRECISION, x * y, Round::Down).0);
+            upper = upper.max(&Float::with_val_round(Self::PRECISION, x * y, Round::Up).0);
+        }
+        [lower, upper]
+    }
+
+    fn add(&self, rhs: &Self) -> Self {
+        Self {
+            lower: Self::add_bound(&self.lower, &rhs.lower),
+            upper: Self::add_bound(&self.upper, &rhs.upper),
+        }
+    }
+
+    fn neg(&self) -> Self {
+        Self {
+            lower: [-self.upper[1].clone(), -self.upper[0].clone()],
+            upper: [-self.lower[1].clone(), -self.lower[0].clone()],
+        }
+    }
+
+    fn sub(&self, rhs: &Self) -> Self {
+        self.add(&rhs.neg())
+    }
+
+    fn mul(&self, rhs: &Self) -> Self {
+        let products = [&self.lower, &self.upper].into_iter().flat_map(|a| {
+            [&rhs.lower, &rhs.upper]
+                .into_iter()
+                .map(move |b| Self::mul_bound(a, b))
+        });
+        let infinity = Float::with_val(Self::PRECISION, Special::Infinity);
+        let mut lower = [infinity.clone(), infinity.clone()];
+        let mut upper = [-infinity.clone(), -infinity];
+        for product in products {
+            for index in 0..2 {
+                lower[index] = lower[index].clone().min(&product[index]);
+                upper[index] = upper[index].clone().max(&product[index]);
+            }
+        }
+        Self { lower, upper }
+    }
+
+    fn square(&self) -> Self {
+        // The dependency-aware lower square avoids artificially negative
+        // lower bounds when a normal coordinate crosses zero.
+        let zero = Float::with_val(Self::PRECISION, 0);
+        let a = Self::mul_bound(&self.lower, &self.lower);
+        let b = Self::mul_bound(&self.upper, &self.upper);
+        let upper = [a[0].clone().max(&b[0]), a[1].clone().max(&b[1])];
+        let lower = if self.lower[1] <= 0 && self.upper[0] >= 0 {
+            [zero.clone(), zero]
+        } else if self.lower[0] > 0 || self.upper[1] < 0 {
+            [a[0].clone().min(&b[0]), a[1].clone().min(&b[1])]
+        } else {
+            // Only arithmetic uncertainty remains about crossing zero.
+            [zero, a[1].clone().min(&b[1])]
+        };
+        Self { lower, upper }
+    }
+
+    fn div_positive(&self, rhs: &Self) -> Result<Self> {
+        if rhs.lower[0] <= 0 {
+            return Err(SamplingEvaluationError::UncertainGeometry {
+                detail: "joint certificate denominator is not certified positive".into(),
+            }
+            .into());
+        }
+        let reciprocal = |bound: &[Float; 2]| {
+            [
+                Float::with_val_round(Self::PRECISION, 1 / &bound[1], Round::Down).0,
+                Float::with_val_round(Self::PRECISION, 1 / &bound[0], Round::Up).0,
+            ]
+        };
+        Ok(self.mul(&Self {
+            lower: reciprocal(&rhs.upper),
+            upper: reciprocal(&rhs.lower),
+        }))
+    }
+
+    /// Sign of the mathematical conservative lower endpoint. A negative
+    /// endpoint declines a box; it does not prove physical absence.
+    fn lower_positive(&self) -> Result<bool> {
+        if self.lower[0] > 0 {
+            return Ok(true);
+        }
+        if self.lower[1] <= 0 {
+            return Ok(false);
+        }
+        Err(SamplingEvaluationError::UncertainGeometry {
+            detail: "joint certificate lower-endpoint sign is unresolved by directed arithmetic"
+                .into(),
+        }
+        .into())
+    }
+
+    fn sqrt_point(&self) -> Result<Self> {
+        if self.lower[0] < 0 {
+            return Err(SamplingEvaluationError::UncertainGeometry {
+                detail: "joint support energy square is not certified nonnegative".into(),
+            }
+            .into());
+        }
+        let mut lo = self.lower[0].clone();
+        let mut hi = self.upper[1].clone();
+        lo.sqrt_round(Round::Down);
+        hi.sqrt_round(Round::Up);
+        Ok(Self {
+            lower: [lo.clone(), hi.clone()],
+            upper: [lo, hi],
+        })
+    }
+}
+
+impl<T: FloatLike> SharedEnergyJointGeometry<T> {
+    fn validate(&self) -> Result<()> {
+        if self
+            .shifts
+            .iter()
+            .flatten()
+            .chain(&self.masses)
+            .chain(&self.energy_sums)
+            .any(|x| !x.is_finite())
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "joint geometry",
+                detail: "non-finite prepared parameter".into(),
+            }
+            .into());
+        }
+        if self.masses.iter().any(|m| m < &m.zero()) {
+            return Err(eyre!("joint energy masses must be nonnegative"));
+        }
+        Ok(())
+    }
+
+    fn certificate(&self, radius: &T, scale: &T) -> Result<bool> {
+        let a = self.shifts[0].each_ref().map(JointRange::native);
+        let b = self.shifts[1].each_ref().map(JointRange::native);
+        let m = self.masses.each_ref().map(JointRange::native);
+        let dot = |a: &[JointRange; 3], b: &[JointRange; 3]| {
+            a.iter()
+                .zip(b)
+                .fold(JointRange::integer(0), |sum, (a, b)| sum.add(&a.mul(b)))
+        };
+        let aa = dot(&a, &a);
+        let ab = dot(&a, &b);
+        let bb = dot(&b, &b);
+        let gram = aa.mul(&bb).sub(&ab.square());
+        if !gram.lower_positive()? {
+            return Ok(false);
+        }
+        let r = JointRange::native(radius);
+        let z = r.div_positive(&JointRange::native(scale))?;
+        let s = JointRange::native(&self.energy_sums[0]).add(&JointRange::bounds(r.neg(), r));
+        let t = JointRange::native(&self.energy_sums[1]).add(&JointRange::bounds(z.neg(), z));
+        let two = JointRange::integer(2);
+        let da = s
+            .square()
+            .add(&m[0].square())
+            .sub(&m[1].square())
+            .sub(&aa)
+            .div_positive(&two)?;
+        let db = t
+            .square()
+            .add(&m[0].square())
+            .sub(&m[2].square())
+            .sub(&bb)
+            .div_positive(&two)?;
+        let d = [
+            bb.mul(&da).sub(&ab.mul(&db)).div_positive(&gram)?,
+            aa.mul(&db).sub(&ab.mul(&da)).div_positive(&gram)?,
+        ];
+        let e = [
+            ab.mul(&t).sub(&bb.mul(&s)).div_positive(&gram)?,
+            ab.mul(&s).sub(&aa.mul(&t)).div_positive(&gram)?,
+        ];
+        let plane_dot = |x: &[JointRange; 2], y: &[JointRange; 2]| {
+            aa.mul(&x[0])
+                .mul(&y[0])
+                .add(&ab.mul(&x[0].mul(&y[1]).add(&x[1].mul(&y[0]))))
+                .add(&bb.mul(&x[1]).mul(&y[1]))
+        };
+        let k = plane_dot(&e, &e).sub(&JointRange::integer(1));
+        let b = plane_dot(&d, &e);
+        let c = m[0].square().add(&plane_dot(&d, &d));
+        let discriminant = b.square().sub(&k.mul(&c));
+        let limits = [
+            b.neg().sub(&k.mul(&m[0])),
+            k.mul(&s.sub(&m[1])).add(&b),
+            k.mul(&t.sub(&m[2])).add(&b),
+        ];
+        for predicate in [k, discriminant.clone()].into_iter().chain(
+            limits
+                .into_iter()
+                .flat_map(|l| [l.clone(), l.square().sub(&discriminant)]),
+        ) {
+            if !predicate.lower_positive()? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    fn residuals(&self, point: &[T]) -> ([F<T>; 2], [F<T>; 3]) {
+        let zero = F(self.masses[0].zero());
+        let energies = std::array::from_fn(|index| {
+            let square = point.iter().enumerate().fold(
+                F(self.masses[index].clone()).square(),
+                |sum, (component, x)| {
+                    let shifted = F(x.clone())
+                        + if index == 0 {
+                            zero.clone()
+                        } else {
+                            F(self.shifts[index - 1][component].clone())
+                        };
+                    sum + shifted.square()
+                },
+            );
+            square.sqrt()
+        });
+        (
+            [
+                &energies[0] + &energies[1] - F(self.energy_sums[0].clone()),
+                &energies[0] + &energies[2] - F(self.energy_sums[1].clone()),
+            ],
+            energies,
+        )
+    }
+
+    fn support_relation(&self, point: &[T], radius: &T, scale: &T) -> Result<std::cmp::Ordering> {
+        let energies = (0..3)
+            .map(|index| {
+                let square = point.iter().enumerate().fold(
+                    JointRange::native(&self.masses[index]).square(),
+                    |sum, (component, x)| {
+                        let x = JointRange::native(x);
+                        let shifted = if index == 0 {
+                            x
+                        } else {
+                            x.add(&JointRange::native(&self.shifts[index - 1][component]))
+                        };
+                        sum.add(&shifted.square())
+                    },
+                );
+                square.sqrt_point()
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let h = energies[0]
+            .add(&energies[1])
+            .sub(&JointRange::native(&self.energy_sums[0]));
+        let z = energies[0]
+            .add(&energies[2])
+            .sub(&JointRange::native(&self.energy_sums[1]));
+        let difference = h
+            .square()
+            .add(&z.mul(&JointRange::native(scale)).square())
+            .sub(&JointRange::native(radius).square());
+        if difference.lower[0] > 0 {
+            return Ok(std::cmp::Ordering::Greater);
+        }
+        if difference.upper[1] < 0 {
+            return Ok(std::cmp::Ordering::Less);
+        }
+        Err(SamplingEvaluationError::UncertainGeometry {
+            detail: "joint inverse lies on an uncertified normal-disk boundary".into(),
+        }
+        .into())
+    }
+}
+
+impl<T: FloatLike> SharedEnergyJointMap<T> {
+    pub fn new(
+        geometry: SharedEnergyJointGeometryEvaluator<T>,
+        context_dimension: usize,
+        max_radius: T,
+        normal_scale: T,
+        beta: f64,
+        program: SamplingExpressionEvaluator,
+    ) -> Result<Self> {
+        if [&max_radius, &normal_scale]
+            .iter()
+            .any(|x| !x.is_finite() || **x <= x.zero())
+        {
+            return Err(eyre!(
+                "joint normal radius and scale must be positive and finite"
+            ));
+        }
+        if program.parameter_count() != 17 || program.output_count() != 3 {
+            return Err(eyre!(
+                "joint chart requires its three-output, seventeen-parameter eager program"
+            ));
+        }
+        let fallback = SurfaceRadialMap::absent(3, vec![max_radius.zero(); 3], beta, 1.0)?;
+        Ok(Self {
+            geometry,
+            context_dimension,
+            max_radius,
+            normal_scale,
+            fallback,
+            program: Mutex::new(program),
+        })
+    }
+
+    /// Compile the neutral map once; native bindings and worker clones reuse
+    /// these programs. Prepared inputs occupy inactive derivative columns.
+    pub fn compile_program() -> Result<SamplingExpressionEvaluator> {
+        let names = [
+            "jr", "jt", "jp", "rho", "alpha", "tau", "ax", "ay", "az", "bx", "by", "bz", "m0",
+            "m1", "m2", "c1", "c2",
+        ];
+        let p = names
+            .iter()
+            .map(|name| try_parse!(*name).map_err(|e| eyre!(e)))
+            .collect::<Result<Vec<_>>>()?;
+        let a = &p[6..9];
+        let b = &p[9..12];
+        let dot = |a: &[Atom], b: &[Atom]| {
+            a.iter()
+                .zip(b)
+                .fold(Atom::num(0), |sum, (a, b)| sum + a * b)
+        };
+        let anorm = dot(a, a).sqrt();
+        let ea = a.iter().map(|x| x / &anorm).collect::<Vec<_>>();
+        let along = dot(b, &ea);
+        let bp = b
+            .iter()
+            .zip(&ea)
+            .map(|(b, ea)| b - &along * ea)
+            .collect::<Vec<_>>();
+        let bnorm = dot(&bp, &bp).sqrt();
+        let eb = bp.iter().map(|x| x / &bnorm).collect::<Vec<_>>();
+        let normal = [
+            &ea[1] * &eb[2] - &ea[2] * &eb[1],
+            &ea[2] * &eb[0] - &ea[0] * &eb[2],
+            &ea[0] * &eb[1] - &ea[1] * &eb[0],
+        ];
+        let r = &p[3] * &p[0];
+        let theta = &p[5] * &p[1];
+        let phi = &p[5] * &p[2];
+        let s = &p[15] + &r * theta.cos();
+        let t = &p[16] + &r * theta.sin() / &p[4];
+        let d1 = (&s * &s + &p[12] * &p[12] - &p[13] * &p[13] - &anorm * &anorm)
+            / (Atom::num(2) * &anorm);
+        let e1 = -&s / &anorm;
+        let d2 = ((&t * &t + &p[12] * &p[12] - &p[14] * &p[14] - dot(b, b)) / Atom::num(2)
+            - &along * &d1)
+            / &bnorm;
+        let e2 = (-&t - &along * &e1) / &bnorm;
+        let k = &e1 * &e1 + &e2 * &e2 - Atom::num(1);
+        let big_b = &d1 * &e1 + &d2 * &e2;
+        let c = &p[12] * &p[12] + &d1 * &d1 + &d2 * &d2;
+        let delta = (&big_b * &big_b - &k * c).sqrt() / &k;
+        let u = -&big_b / &k + &delta * phi.cos();
+        let w = k.sqrt() * delta * phi.sin();
+        let outputs =
+            (0..3).map(|i| (&d1 + &e1 * &u) * &ea[i] + (&d2 + &e2 * &u) * &eb[i] + &w * &normal[i]);
+        SamplingExpressionEvaluator::new(outputs, p.clone(), true)
+    }
+
+    fn prepare(&self, context: &[T]) -> Result<(SharedEnergyJointGeometry<T>, Option<T>)> {
+        if context.len() != self.context_dimension {
+            return Err(eyre!(
+                "joint chart context has dimension {}, expected {}",
+                context.len(),
+                self.context_dimension
+            ));
+        }
+        if context.iter().any(|x| !x.is_finite()) {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "joint context",
+                detail: "non-finite previous coordinates".into(),
+            }
+            .into());
+        }
+        let geometry = (self.geometry)(context)?;
+        geometry.validate()?;
+        let mut radius = F(self.max_radius.clone());
+        let two = radius.from_usize(2);
+        // A deterministic complement-only policy, not a claim of absence.
+        // Arithmetic ambiguity in a lower-endpoint sign is propagated before
+        // halving; exhausted geometric boxes use the normalized ordinary map.
+        for _ in 0..32 {
+            if geometry.certificate(&radius.0, &self.normal_scale)? {
+                return Ok((geometry, Some(radius.0)));
+            }
+            radius /= &two;
+            if !radius.is_finite() || radius <= radius.zero() {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "joint disk",
+                    detail: "dyadic radius underflow".into(),
+                }
+                .into());
+            }
+        }
+        Ok((geometry, None))
+    }
+
+    fn parameters(
+        &self,
+        geometry: &SharedEnergyJointGeometry<T>,
+        radius: &T,
+        coordinates: &[T],
+    ) -> Vec<T> {
+        coordinates
+            .iter()
+            .cloned()
+            .chain([radius.clone(), self.normal_scale.clone(), radius.TAU()])
+            .chain(geometry.shifts.iter().flatten().cloned())
+            .chain(geometry.masses.iter().cloned())
+            .chain(geometry.energy_sums.iter().cloned())
+            .collect()
+    }
+}
+
+// Native inverse geometry. The production forward determinant comes from the
+// Symbolica map above; the inverse density uses the original supplied point's
+// energies and residual radius, rather than a reconstructed forward point.
+struct JointCircle<T: FloatLike> {
+    axes: [[F<T>; 3]; 3],
+    k: F<T>,
+    center: F<T>,
+    delta: F<T>,
+    cross_norm: F<T>,
+}
+
+impl<T: FloatLike> JointCircle<T> {
+    fn new(geometry: &SharedEnergyJointGeometry<T>, residuals: &[F<T>; 2]) -> Result<Self> {
+        let a = geometry.shifts[0].each_ref().map(|x| F(x.clone()));
+        let b = geometry.shifts[1].each_ref().map(|x| F(x.clone()));
+        let zero = a[0].zero();
+        let dot = |a: &[F<T>; 3], b: &[F<T>; 3]| {
+            a.iter()
+                .zip(b)
+                .fold(zero.clone(), |sum, (a, b)| sum + a * b)
+        };
+        let anorm = dot(&a, &a).sqrt();
+        let ea = a.each_ref().map(|x| x / &anorm);
+        let along = dot(&b, &ea);
+        let bp = std::array::from_fn(|i| &b[i] - &along * &ea[i]);
+        let bnorm = dot(&bp, &bp).sqrt();
+        let eb = bp.each_ref().map(|x| x / &bnorm);
+        let n = [
+            &ea[1] * &eb[2] - &ea[2] * &eb[1],
+            &ea[2] * &eb[0] - &ea[0] * &eb[2],
+            &ea[0] * &eb[1] - &ea[1] * &eb[0],
+        ];
+        let s = F(geometry.energy_sums[0].clone()) + &residuals[0];
+        let t = F(geometry.energy_sums[1].clone()) + &residuals[1];
+        let m = geometry.masses.each_ref().map(|x| F(x.clone()).square());
+        let two = s.from_usize(2);
+        let d1 = (s.square() + &m[0] - &m[1] - anorm.square()) / (&two * &anorm);
+        let e1 = -&s / &anorm;
+        let d2 = ((t.square() + &m[0] - &m[2] - dot(&b, &b)) / &two - &along * &d1) / &bnorm;
+        let e2 = (-&t - &along * &e1) / &bnorm;
+        let k = e1.square() + e2.square() - s.one();
+        let big_b = &d1 * &e1 + &d2 * &e2;
+        let discriminant = big_b.square() - &k * (&m[0] + d1.square() + d2.square());
+        let center = -big_b / &k;
+        let delta = discriminant.sqrt() / &k;
+        let cross_norm = anorm * bnorm;
+        if [&k, &center, &delta, &cross_norm]
+            .into_iter()
+            .any(|x| !x.is_finite())
+            || k <= zero
+            || delta <= zero
+            || cross_norm <= zero
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "joint circle",
+                detail: "certified circle is not representable in the active native precision"
+                    .into(),
+            }
+            .into());
+        }
+        Ok(Self {
+            axes: [ea, eb, n],
+            k,
+            center,
+            delta,
+            cross_norm,
+        })
+    }
+}
+
+impl<T: FloatLike> SamplingMapComponent<T> for SharedEnergyJointMap<T> {
+    fn dimensions(&self) -> usize {
+        3
+    }
+    fn output_dimensions(&self) -> usize {
+        3
+    }
+    fn name(&self) -> &'static str {
+        "shared_energy_joint"
+    }
+    fn contract(&self) -> SamplingMapContract {
+        SamplingMapContract {
+            support: SamplingSupport::Restricted,
+            requires_context: self.context_dimension > 0,
+            jacobian: SamplingJacobian::ExactForward,
+        }
+    }
+
+    fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+        if coordinates.len() != 3
+            || coordinates.iter().enumerate().any(|(i, x)| {
+                !x.is_finite() || x < &x.zero() || x >= &x.one() || (i == 0 && x == &x.zero())
+            })
+        {
+            return Err(eyre!(
+                "joint chart requires radial coordinate in (0,1) and half-open angular coordinates in [0,1)"
+            ));
+        }
+        let (geometry, radius) = self.prepare(context)?;
+        let Some(radius) = radius else {
+            // The full-circle seams are regular in the focused chart. The
+            // ordinary polar fallback has a different, measure-zero angular
+            // boundary there; preserve that law rather than remapping it.
+            if coordinates[1..].iter().any(|x| x == &x.zero()) {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "joint ordinary fallback angular boundary",
+                    detail: "exact angular zero lies on the ordinary chart boundary".into(),
+                }
+                .into());
+            }
+            let mut output = SamplingMapComponent::forward(&self.fallback, coordinates, &[])?;
+            output
+                .diagnostics
+                .push("joint: normalized ordinary fallback; disk policy declined".into());
+            return Ok(output);
+        };
+        let output = self
+            .program
+            .lock()
+            .map_err(|_| eyre!("joint evaluator poisoned"))?
+            .evaluate_with_real_jacobian(
+                &self.parameters(&geometry, &radius, coordinates),
+                Some(&[0, 1, 2]),
+            )?;
+        let jacobian = F(output.absolute_determinant());
+        let (residuals, _) = geometry.residuals(&output.values);
+        let r = F(radius.clone()) * F(coordinates[0].clone());
+        let angle = F(radius.TAU()) * F(coordinates[1].clone());
+        let residual = (&residuals[0] - &r * angle.cos())
+            .abs()
+            .max((residuals[1].clone() - r * angle.sin() / F(self.normal_scale.clone())).abs());
+        SamplingMapEvaluation {
+            coordinates: coordinates.to_vec(),
+            point: output.values,
+            inverse_jacobian: jacobian.inv().0,
+            jacobian: jacobian.0,
+            residual: residual.0,
+            support: SamplingSupport::Restricted,
+            diagnostics: vec![format!("joint: certified normal disk rho={radius}")],
+        }
+        .validate("joint forward")
+    }
+
+    fn inverse(&self, point: &[T], context: &[T]) -> Result<Option<SamplingMapEvaluation<T>>> {
+        if point.len() != 3 {
+            return Err(eyre!("joint chart point must have three components"));
+        }
+        if point.iter().any(|x| !x.is_finite()) {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "joint inverse point",
+                detail: "non-finite supplied point".into(),
+            }
+            .into());
+        }
+        let (geometry, radius) = self.prepare(context)?;
+        let Some(radius) = radius else {
+            let mut output = SamplingMapComponent::inverse(&self.fallback, point, &[])?;
+            if let Some(output) = &mut output {
+                output
+                    .diagnostics
+                    .push("joint: normalized ordinary fallback; disk policy declined".into());
+            }
+            return Ok(output);
+        };
+        if geometry.support_relation(point, &radius, &self.normal_scale)?
+            == std::cmp::Ordering::Greater
+        {
+            return Ok(None);
+        }
+        let (residuals, energies) = geometry.residuals(point);
+        let scaled_z = F(self.normal_scale.clone()) * &residuals[1];
+        let r = (residuals[0].square() + scaled_z.square()).sqrt();
+        if !r.is_finite() || r <= r.zero() {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "joint inverse normal radius",
+                detail: "R=0 is singular; a rounded zero requires native retry".into(),
+            }
+            .into());
+        }
+        let circle = JointCircle::new(&geometry, &residuals)?;
+        let w = point
+            .iter()
+            .zip(&circle.axes[2])
+            .fold(r.zero(), |sum, (x, n)| sum + F(x.clone()) * n);
+        let tau = r.TAU();
+        let wrap = |angle: F<T>| {
+            if angle < angle.zero() {
+                angle + &tau
+            } else {
+                angle
+            }
+        };
+        let theta = wrap(scaled_z.atan2(&residuals[0]));
+        let phi = wrap(
+            (w / (circle.k.sqrt() * &circle.delta))
+                .atan2(&((&energies[0] - &circle.center) / &circle.delta)),
+        );
+        let coordinates = vec![
+            (r.clone() / F(radius.clone())).0,
+            (theta / &tau).0,
+            (phi / &tau).0,
+        ];
+        if coordinates[0] <= radius.zero()
+            || coordinates
+                .iter()
+                .any(|x| !x.is_finite() || x < &x.zero() || x >= &x.one())
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "joint inverse coordinates",
+                detail: "derived radial or half-open angular coordinate rounded outside its chart"
+                    .into(),
+            }
+            .into());
+        }
+        let jacobian =
+            tau.square() * F(radius.clone()) * &r * &energies[0] * &energies[1] * &energies[2]
+                / (F(self.normal_scale.clone()) * &circle.cross_norm * circle.k.sqrt());
+        // Reconstruction is diagnostic only: the density above is evaluated
+        // at the original supplied point, including its original normal radius.
+        let reconstructed = self
+            .program
+            .lock()
+            .map_err(|_| eyre!("joint evaluator poisoned"))?
+            .evaluate(&self.parameters(&geometry, &radius, &coordinates))?;
+        let mut residual = r.zero();
+        for (actual, expected) in reconstructed.iter().zip(point) {
+            if !actual.re.is_finite() || actual.im != actual.im.zero() {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "joint inverse reconstruction",
+                    detail: "recovered cube does not produce finite real Cartesian coordinates"
+                        .into(),
+                }
+                .into());
+            }
+            residual = residual.max((&actual.re - F(expected.clone())).abs());
+        }
+        let evaluation = SamplingMapEvaluation {
+            coordinates,
+            point: point.to_vec(),
+            inverse_jacobian: jacobian.inv().0,
+            jacobian: jacobian.0,
+            residual: residual.0,
+            support: SamplingSupport::Restricted,
+            diagnostics: vec![format!(
+                "joint: certified normal disk rho={radius}; density at supplied point"
+            )],
+        }
+        .validate("joint inverse")?;
+        Ok(Some(evaluation))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::{ArbPrec, QuadFloat};
+
+    fn geometry<T: FloatLike>() -> SharedEnergyJointGeometry<T> {
+        let zero = F::<T>::default();
+        let n = |value| zero.from_usize(value).0;
+        SharedEnergyJointGeometry {
+            shifts: [[n(3), n(0), n(0)], [n(1), n(4), n(0)]],
+            masses: [n(2), n(3), n(0)],
+            energy_sums: [n(10), n(11)],
+        }
+    }
+
+    fn map<T: FloatLike>(
+        geometry: SharedEnergyJointGeometry<T>,
+        program: SamplingExpressionEvaluator,
+    ) -> SharedEnergyJointMap<T> {
+        SharedEnergyJointMap::new(
+            Arc::new(move |_| Ok(geometry.clone())),
+            0,
+            (F::<T>::default().one() / F::<T>::default().from_usize(8)).0,
+            (F::<T>::default().from_usize(3) / F::<T>::default().from_usize(2)).0,
+            4.0,
+            program,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn joint_sampling_certificate_encloses_unequal_mass_nonorthogonal_geometry() {
+        let geometry = geometry::<f64>();
+        // Independently reduced exact-rational oracle at h=z=0:
+        // Gram=144,k=1985/144,D=7829/36, all six energy-sign bounds >0.
+        assert!(geometry.certificate(&0.0, &1.5).unwrap());
+        assert!(geometry.certificate(&0.0001, &1.5).unwrap());
+        assert!(!geometry.certificate(&100.0, &1.5).unwrap());
+        let mut collinear = geometry.clone();
+        collinear.shifts[1] = [6.0, 0.0, 0.0];
+        assert!(!collinear.certificate(&0.01, &1.5).unwrap());
+
+        // The outer endpoint enclosure separates a failing conservative box
+        // from an arithmetic sign that cannot be decided at this precision.
+        let uncertain = JointRange {
+            lower: [Float::with_val(2048, -1), Float::with_val(2048, 1)],
+            upper: [Float::with_val(2048, 2), Float::with_val(2048, 2)],
+        };
+        assert!(
+            uncertain
+                .lower_positive()
+                .unwrap_err()
+                .downcast_ref::<SamplingEvaluationError>()
+                .is_some()
+        );
+        let negative = JointRange::bounds(JointRange::integer(-1), JointRange::integer(1));
+        assert!(!negative.lower_positive().unwrap());
+    }
+
+    #[test]
+    fn joint_sampling_full_circle_eager_jacobian_matches_cartesian_difference() {
+        crate::initialisation::test_initialise().unwrap();
+        let map = map(
+            geometry::<f64>(),
+            SharedEnergyJointMap::<f64>::compile_program().unwrap(),
+        );
+        for phi in [0.0, 0.13, 0.5, 0.83] {
+            let cube = [0.41, 0.27, phi];
+            let output = map.forward(&cube, &[]).unwrap();
+            let inverse = map.inverse(&output.point, &[]).unwrap().unwrap();
+            assert!((output.jacobian * inverse.inverse_jacobian - 1.0).abs() < 2e-9);
+            for (a, b) in cube.iter().zip(&inverse.coordinates) {
+                let difference = (a - b).abs();
+                assert!(difference.min((1.0 - difference).abs()) < 2e-9);
+            }
+            // Three-dimensional Cartesian FD includes both square-root circle
+            // branches and their finite joining points. Angular input is periodic.
+            let step = 1e-5;
+            let mut matrix = [[0.0; 3]; 3];
+            for column in 0..3 {
+                let mut plus = cube;
+                let mut minus = cube;
+                plus[column] += step;
+                minus[column] -= step;
+                if column == 2 {
+                    plus[column] = plus[column].rem_euclid(1.0);
+                    minus[column] = minus[column].rem_euclid(1.0);
+                }
+                let plus = map.forward(&plus, &[]).unwrap();
+                let minus = map.forward(&minus, &[]).unwrap();
+                for (row, values) in matrix.iter_mut().enumerate() {
+                    values[column] = (plus.point[row] - minus.point[row]) / (2.0 * step);
+                }
+            }
+            let determinant = matrix[0][0]
+                * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
+                - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
+                + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
+            assert!(
+                (determinant.abs() / output.jacobian - 1.0).abs() < 3e-6,
+                "phi={phi}: FD={determinant}, eager={}",
+                output.jacobian
+            );
+        }
+        assert!(map.inverse(&[100.0, 100.0, 100.0], &[]).unwrap().is_none());
+    }
+
+    #[test]
+    fn joint_sampling_native_bindings_keep_sub_double_geometry_and_worker_buffers() {
+        crate::initialisation::test_initialise().unwrap();
+        fn check<T: FloatLike>(program: SamplingExpressionEvaluator) {
+            let one = F::<T>::default().one();
+            let delta = one.clone() / one.from_usize(10).powi(25);
+            let original = geometry::<T>();
+            let mut changed = original.clone();
+            changed.energy_sums[0] = (F(changed.energy_sums[0].clone()) + &delta).0;
+            let original = map(original, program.clone());
+            let changed = map(changed, program);
+            let cube = [0.41, 0.27, 0.13].map(T::from_f64_exact_binary);
+            let base = original.forward(&cube, &[]).unwrap();
+            let output = changed.forward(&cube, &[]).unwrap();
+            let inverse = changed.inverse(&output.point, &[]).unwrap().unwrap();
+            let error = (F(output.jacobian.clone()) * F(inverse.inverse_jacobian) - &one).abs();
+            assert!(
+                error < one.clone() / one.from_usize(10).powi(27),
+                "native J*q error {error}"
+            );
+            assert!(
+                output.point.iter().zip(&base.point).any(|(a, b)| a != b),
+                "native geometry perturbation was narrowed away"
+            );
+            // A clone must own independent mutable evaluator buffers. Holding
+            // the parent lock cannot prevent a worker from evaluating.
+            let worker = changed.clone();
+            let _parent_lock = changed.program.lock().unwrap();
+            let threaded = std::thread::spawn(move || worker.forward(&cube, &[]).unwrap())
+                .join()
+                .unwrap();
+            assert_eq!(threaded.point, output.point);
+        }
+        let program = SharedEnergyJointMap::<f64>::compile_program().unwrap();
+        check::<QuadFloat>(program.clone());
+        check::<ArbPrec>(program);
+    }
+
+    #[test]
+    fn joint_sampling_declined_domain_reuses_normalized_ordinary_map() {
+        crate::initialisation::test_initialise().unwrap();
+        let mut geometry = geometry::<f64>();
+        geometry.energy_sums = [1.0, 1.0];
+        let map = map(
+            geometry,
+            SharedEnergyJointMap::<f64>::compile_program().unwrap(),
+        );
+        let cube = [0.41, 0.27, 0.13];
+        let output = map.forward(&cube, &[]).unwrap();
+        let ordinary = SamplingMapComponent::forward(&map.fallback, &cube, &[]).unwrap();
+        assert_eq!(output.point, ordinary.point);
+        assert_eq!(output.jacobian, ordinary.jacobian);
+        assert!(output.diagnostics.iter().any(|d| d.contains("fallback")));
+        let inverse = map.inverse(&output.point, &[]).unwrap().unwrap();
+        assert!((output.jacobian * inverse.inverse_jacobian - 1.0).abs() < 1e-12);
+        assert_eq!(map.contract().support, SamplingSupport::Restricted);
+        let boundary = map.forward(&[0.41, 0.0, 0.13], &[]).unwrap_err();
+        assert!(boundary.downcast_ref::<SamplingEvaluationError>().is_some());
+        assert!(
+            boundary
+                .to_string()
+                .contains("ordinary fallback angular boundary")
+        );
+    }
+
+    #[test]
+    fn joint_sampling_exact_normal_origin_is_an_error_not_outside_support() {
+        crate::initialisation::test_initialise().unwrap();
+        let geometry = SharedEnergyJointGeometry {
+            shifts: [[4.0, 0.0, 0.0], [0.0, 4.0, 0.0]],
+            masses: [0.0, 0.0, 0.0],
+            energy_sums: [8.0, 8.0],
+        };
+        let map = map(
+            geometry,
+            SharedEnergyJointMap::<f64>::compile_program().unwrap(),
+        );
+        // Original unsquared energies are exactly (3,5,5), hence h=z=0.
+        let error = map.inverse(&[0.0, 0.0, 3.0], &[]).unwrap_err();
+        assert!(error.downcast_ref::<SamplingEvaluationError>().is_some());
+        assert!(error.to_string().contains("R=0"), "{error}");
+    }
+}
