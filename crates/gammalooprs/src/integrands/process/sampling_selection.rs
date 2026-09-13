@@ -2264,6 +2264,50 @@ mod tests {
     }
 
     #[test]
+    fn distinct_physical_surfaces_share_one_active_subspace_without_overwrite() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["h".into(), "z".into()];
+        let mut h = definition("surface(2,4)");
+        h.subspace_lmb = vec![1, 2];
+        let mut z = definition("surface(3,10)");
+        z.subspace_lmb = vec![1, 2];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .extend([(String::from("h"), h), (String::from("z"), z)]);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        for edges in [vec![2, 4], vec![3, 10]] {
+            context
+                .insert_implicit_surface(
+                    edges,
+                    vec![1, 2],
+                    ImplicitSurfaceRadialMap::new(
+                        6,
+                        vec![0.0; 6],
+                        2.0,
+                        2.0,
+                        Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+        let compiled = catalogue.compile(&context).unwrap();
+        assert_eq!(compiled.len(), 2);
+        assert_eq!(compiled[0].name, "h");
+        assert_eq!(compiled[1].name, "z");
+    }
+
+    #[test]
     fn catalogue_rejects_non_parent_lmb_until_affine_routing_is_compiled() {
         let mut selection = SamplingChannelSelection::default();
         selection.default_channel_selection = vec!["auto:lmb".into()];
