@@ -14,6 +14,7 @@ use std::{
 use crate::settings::runtime::{SamplingChannelDefinition, SamplingChannelSelection};
 use color_eyre::eyre::{Result, eyre};
 use serde::{Deserialize, Serialize};
+use symbolica::{atom::Atom, symbol, try_parse};
 
 use super::sampling_maps::combine_contracts;
 use super::{
@@ -117,6 +118,30 @@ pub struct ResolvedNamedSamplingChannel {
     pub name: String,
     pub definition: SamplingChannelDefinition,
     pub map: SamplingMapDefinition,
+}
+
+/// Parse and eagerly compile a user supplied singularity proxy in the
+/// complete master raw frame.  Proxy expressions use the canonical coordinate
+/// names `x0`, `x1`, ...; using a fixed ordered parameter list keeps the
+/// expression independent of Rust-side map implementation details.
+fn compile_sampling_proxy(source: &str, dimensions: usize) -> Result<SamplingScoreFunction> {
+    let source = source.trim();
+    if source.is_empty() {
+        return Err(eyre!(
+            "sampling singularity proxy expression cannot be empty"
+        ));
+    }
+    if dimensions == 0 {
+        return Err(eyre!(
+            "sampling singularity proxy requires a non-empty raw coordinate frame"
+        ));
+    }
+    let expression = try_parse!(source)
+        .map_err(|error| eyre!("failed to parse sampling singularity proxy `{source}`: {error}"))?;
+    let parameters = (0..dimensions)
+        .map(|index| Atom::var(symbol!(format!("x{index}"))))
+        .collect::<Vec<_>>();
+    SamplingScoreFunction::from_symbolica_positive_expression(expression, parameters)
 }
 
 /// The complete selection for one graph after applying the settings' fallback.
@@ -506,6 +531,9 @@ pub struct CompiledSamplingChannel {
     /// Ordered master-graph edge ids for this raw coordinate block.
     pub embedded_edges: Vec<usize>,
     pub map: CompiledSamplingMap,
+    /// Optional eager positive score used by the singularity-proxy partition.
+    /// It is compiled once from the channel metadata during warmup.
+    pub singularity_proxy: Option<SamplingScoreFunction>,
 }
 
 /// Canonical identifier for a compiled sampling channel.
@@ -541,6 +569,7 @@ impl From<SamplingChannelId> for usize {
 pub struct SamplingChannelBridge {
     channels: Vec<CompiledSamplingChannel>,
     dimensions: usize,
+    partition_mode: SamplingPartitionMode,
 }
 
 /// Per-sample context supplied to conditional channel maps and to every
@@ -1158,6 +1187,17 @@ impl SamplingChannelBridge {
     pub fn new(
         channels: Vec<CompiledSamplingChannel>,
     ) -> std::result::Result<Self, SamplingChannelBridgeError> {
+        Self::new_with_partition_mode(channels, SamplingPartitionMode::MapDensity)
+    }
+
+    /// Construct a bridge with an explicit common partition score.  The
+    /// singularity-proxy mode requires every compiled channel to carry an
+    /// explicit proxy; missing metadata is diagnosed by the partition rather
+    /// than silently falling back to map densities.
+    pub fn new_with_partition_mode(
+        channels: Vec<CompiledSamplingChannel>,
+        partition_mode: SamplingPartitionMode,
+    ) -> std::result::Result<Self, SamplingChannelBridgeError> {
         let Some(first) = channels.first() else {
             return Err(SamplingChannelBridgeError::Empty);
         };
@@ -1203,6 +1243,7 @@ impl SamplingChannelBridge {
         Ok(Self {
             channels,
             dimensions,
+            partition_mode,
         })
     }
 
@@ -1253,22 +1294,33 @@ impl SamplingChannelBridge {
                 let context = contexts
                     .get(SamplingChannelId::from(index))
                     .map(ToOwned::to_owned)?;
-                Ok(SamplingChannelScore::map_density(
-                    channel.name.clone(),
-                    SamplingScoreFunction::from_positive_function(move |raw| {
-                        let evaluation = map.inverse_with_context(raw, &context)?;
-                        let density = evaluation.inverse_jacobian.abs();
-                        if !density.is_finite() || density <= 0.0 {
-                            return Err(eyre!(
-                                "inverse map density is not finite and positive: {density}"
-                            ));
-                        }
-                        Ok(Some(density))
-                    }),
-                ))
+                let map_density = SamplingScoreFunction::from_positive_function(move |raw| {
+                    let evaluation = map.inverse_with_context(raw, &context)?;
+                    let density = evaluation.inverse_jacobian.abs();
+                    if !density.is_finite() || density <= 0.0 {
+                        return Err(eyre!(
+                            "inverse map density is not finite and positive: {density}"
+                        ));
+                    }
+                    Ok(Some(density))
+                });
+                Ok(match self.partition_mode {
+                    SamplingPartitionMode::MapDensity => {
+                        SamplingChannelScore::map_density(channel.name.clone(), map_density)
+                    }
+                    SamplingPartitionMode::SingularityProxy => {
+                        let proxy = channel.singularity_proxy.clone().ok_or_else(|| {
+                            eyre!(
+                                "channel '{}' has no singularity_proxy metadata; provide a positive expression for every channel when sampling_channel_weight = 'singularity_proxy'",
+                                channel.name
+                            )
+                        })?;
+                        SamplingChannelScore::with_proxy(channel.name.clone(), map_density, proxy)
+                    }
+                })
             })
             .collect::<Result<Vec<_>>>()?;
-        SamplingPartition::new(SamplingPartitionMode::MapDensity, &scores, raw_coordinates)
+        SamplingPartition::new(self.partition_mode, &scores, raw_coordinates)
     }
 
     /// Build a partition from a deferred cross-section state. This only
@@ -1633,6 +1685,17 @@ fn prepared_map_name(definition: &SamplingMapDefinition) -> Option<&'static str>
         | SamplingMapDefinition::Then(maps) => maps.iter().find_map(prepared_map_name),
         _ => None,
     }
+}
+
+/// Whether a map can only be evaluated after a physical cut host has supplied
+/// solved LU/t* data.  This is deliberately kept as a structural query: it
+/// does not attempt to infer a cut, a side, or a map Jacobian from edge ids.
+/// The process evaluator uses it as a typed boundary check and ordinary
+/// `lmb`/`surface`/conditional maps remain available before LU preparation.
+pub(crate) fn sampling_map_requires_deferred_cut_context(
+    definition: &SamplingMapDefinition,
+) -> bool {
+    prepared_map_name(definition).is_some()
 }
 
 /// Validate the physical-cut boundary before any graph-independent map is
@@ -2292,7 +2355,7 @@ impl SamplingChannelCatalogue {
         }
         let mut compiled = Vec::with_capacity(self.entries.len());
         for entry in &self.entries {
-            let (name, basis_id, definition, map) = match entry {
+            let (name, basis_id, definition, map, singularity_proxy) = match entry {
                 SamplingCatalogueEntry::Lmb {
                     basis_id, edges, ..
                 } => {
@@ -2303,7 +2366,13 @@ impl SamplingChannelCatalogue {
                         edges,
                         context,
                     )?;
-                    (format!("lmb[{basis_id}]"), Some(*basis_id), definition, map)
+                    (
+                        format!("lmb[{basis_id}]"),
+                        Some(*basis_id),
+                        definition,
+                        map,
+                        None,
+                    )
                 }
                 SamplingCatalogueEntry::Surface { edges, parent_lmb } => {
                     if parent_lmb != &context.parent_lmb {
@@ -2323,7 +2392,7 @@ impl SamplingChannelCatalogue {
                         context,
                         true,
                     )?;
-                    (format!("surface:{edges:?}"), None, definition, map)
+                    (format!("surface:{edges:?}"), None, definition, map, None)
                 }
                 SamplingCatalogueEntry::Named(channel) => {
                     if !channel.definition.on_cut.is_empty()
@@ -2456,7 +2525,28 @@ impl SamplingChannelCatalogue {
                             ));
                         }
                     };
-                    (channel.name.clone(), None, definition, map)
+                    let singularity_proxy = channel
+                        .definition
+                        .singularity_proxy
+                        .as_deref()
+                        .map(|source| {
+                            compile_sampling_proxy(source, 3 * context.n_loop_momenta).map_err(
+                                |error| SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: format!(
+                                        "invalid singularity_proxy expression `{source}`: {error}"
+                                    ),
+                                },
+                            )
+                        })
+                        .transpose()?;
+                    (
+                        channel.name.clone(),
+                        None,
+                        definition,
+                        map,
+                        singularity_proxy,
+                    )
                 }
             };
             let embedded_edges = match &map {
@@ -2478,6 +2568,7 @@ impl SamplingChannelCatalogue {
                 definition,
                 embedded_edges,
                 map,
+                singularity_proxy,
             });
         }
         Ok(compiled)
@@ -2941,6 +3032,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::initialisation::test_initialise;
     use crate::integrands::process::{SamplingCutSide, SamplingSupport};
     use crate::settings::runtime::ParameterizationSettings;
 
@@ -2950,6 +3042,7 @@ mod tests {
             subspace_lmb: vec![1, 2],
             parent_lmb: vec![1, 2],
             on_cut: vec![],
+            singularity_proxy: None,
         }
     }
 
@@ -2972,6 +3065,84 @@ mod tests {
             vec![],
         )
         .unwrap()
+    }
+
+    fn proxy_selection(first: Option<&str>, second: Option<&str>) -> SamplingChannelSelection {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["first".into(), "second".into()];
+        let definitions = selection.channel_definitions.entry("G".into()).or_default();
+        for (name, proxy) in [("first", first), ("second", second)] {
+            let channel = SamplingChannelDefinition {
+                around: "lmb(1)".into(),
+                subspace_lmb: Vec::new(),
+                parent_lmb: vec![1],
+                on_cut: Vec::new(),
+                singularity_proxy: proxy.map(str::to_owned),
+            };
+            definitions.insert(name.into(), channel);
+        }
+        selection
+    }
+
+    fn proxy_bridge(selection: &SamplingChannelSelection) -> Result<SamplingChannelBridge> {
+        test_initialise()?;
+        let resolved = resolve_sampling_channel_selection("G", selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1],
+            ParameterizationSettings::default(),
+            100.0,
+            1,
+        );
+        let channels = catalogue.compile(&context)?;
+        SamplingChannelBridge::new_with_partition_mode(
+            channels,
+            SamplingPartitionMode::SingularityProxy,
+        )
+        .map_err(Into::into)
+    }
+
+    #[test]
+    fn named_proxy_is_eagerly_compiled_and_uses_complete_frame_coordinates() {
+        let selection = proxy_selection(Some("1 + x0^2 + x1^2 + x2^2"), Some("2 + x0^2"));
+        let bridge = proxy_bridge(&selection).unwrap();
+        assert_eq!(bridge.dimensions(), 3);
+        let partition = bridge.partition(&[0.2, 0.3, 0.4]).unwrap();
+        let first = 1.0 + 0.2_f64.powi(2) + 0.3_f64.powi(2) + 0.4_f64.powi(2);
+        let second = 2.0 + 0.2_f64.powi(2);
+        assert!((partition.weights[0] - first / (first + second)).abs() < 1.0e-13);
+        assert!((partition.weights[1] - second / (first + second)).abs() < 1.0e-13);
+    }
+
+    #[test]
+    fn singularity_proxy_mode_rejects_missing_channel_metadata() {
+        let selection = proxy_selection(Some("1 + x0^2"), None);
+        let error = proxy_bridge(&selection)
+            .unwrap()
+            .partition(&[0.2, 0.3, 0.4]);
+        let error = error.unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("has no singularity_proxy metadata")
+        );
+    }
+
+    #[test]
+    fn singularity_proxy_reports_symbolica_parse_and_positivity_errors() {
+        let invalid = proxy_selection(Some("x0 + ("), Some("1"));
+        let error = proxy_bridge(&invalid).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("invalid singularity_proxy expression")
+        );
+
+        let non_positive = proxy_selection(Some("x0 - x0"), Some("1"));
+        let bridge = proxy_bridge(&non_positive).unwrap();
+        let error = bridge.partition(&[0.2, 0.3, 0.4]).unwrap_err();
+        assert!(error.to_string().contains("strictly positive"));
     }
 
     #[test]
@@ -3217,6 +3388,7 @@ mod tests {
                     subspace_lmb: Vec::new(),
                     parent_lmb: Vec::new(),
                     on_cut: Vec::new(),
+                    singularity_proxy: None,
                 },
             );
         assert!(matches!(
@@ -3240,6 +3412,7 @@ mod tests {
                     subspace_lmb: Vec::new(),
                     parent_lmb: vec![1, 2, 4],
                     on_cut: Vec::new(),
+                    singularity_proxy: None,
                 },
             );
         assert!(matches!(
@@ -3780,6 +3953,7 @@ mod tests {
                     subspace_lmb: Vec::new(),
                     parent_lmb: vec![1, 2],
                     on_cut: Vec::new(),
+                    singularity_proxy: None,
                 },
             );
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
@@ -4281,6 +4455,7 @@ mod tests {
                 definition: SamplingMapDefinition::Lmb(vec![1]),
                 embedded_edges: vec![1],
                 map: CompiledSamplingMap::Lmb(map),
+                singularity_proxy: None,
             },
             CompiledSamplingChannel {
                 name: "right".into(),
@@ -4289,6 +4464,7 @@ mod tests {
                 definition: SamplingMapDefinition::Lmb(vec![1]),
                 embedded_edges: vec![1],
                 map: CompiledSamplingMap::Lmb(second),
+                singularity_proxy: None,
             },
         ])
         .unwrap();
@@ -4452,6 +4628,7 @@ mod tests {
             definition: SamplingMapDefinition::Lmb(vec![1]),
             embedded_edges: vec![1],
             map: CompiledSamplingMap::Lmb(map),
+            singularity_proxy: None,
         };
         let bridge = SamplingChannelBridge::new(vec![channel.clone()]).unwrap();
         assert!(
@@ -4490,6 +4667,7 @@ mod tests {
                 )
                 .unwrap(),
             ),
+            singularity_proxy: None,
         };
         assert!(matches!(
             SamplingChannelBridge::new(vec![bridge.channels()[0].clone(), different_frame]),
