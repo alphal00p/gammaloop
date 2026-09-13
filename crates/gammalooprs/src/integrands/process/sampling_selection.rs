@@ -12,14 +12,18 @@ use std::{
 };
 
 use crate::settings::runtime::{SamplingChannelDefinition, SamplingChannelSelection};
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{Result, eyre};
 
 use super::{
     SamplingChannelScore, SamplingMapComponent, SamplingMapContract, SamplingMapDefinition,
     SamplingMapEvaluation, SamplingMapKernel, SamplingPartition, SamplingPartitionMode,
     SamplingScoreFunction, SurfaceRadialMap,
 };
+use crate::momentum::sample::{LoopMomenta, MomentumSample};
 use crate::settings::runtime::ParameterizationSettings;
+use crate::settings::runtime::kinematic::Externals;
+use crate::utils::{F, FloatLike};
+use crate::{DependentMomentaConstructor, momentum::ThreeMomentum};
 
 /// Built-in selectors understood by the channel catalogue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -294,6 +298,74 @@ pub struct SamplingChannelBridgeEvaluation {
     pub raw_coordinates: Vec<f64>,
     pub map: SamplingMapEvaluation,
     pub partition: SamplingPartition,
+}
+
+/// Runtime context needed to turn one bridge point into the sample consumed by
+/// the graph evaluator.  The bridge itself is graph-frame aware, while this
+/// small context supplies the cache and external-momentum ownership that are
+/// deliberately process-local.
+#[derive(Clone, Copy, Debug)]
+pub struct SamplingMomentumSampleContext<'a> {
+    pub loop_mom_cache_id: usize,
+    pub external_moms: &'a Externals,
+    pub external_mom_cache_id: usize,
+    pub dependent_momenta_constructor: DependentMomentaConstructor<'a>,
+    pub orientation: Option<usize>,
+}
+
+impl SamplingChannelBridgeEvaluation {
+    /// Materialize this exact full-frame bridge point as a graph-evaluator
+    /// momentum sample.  This is intentionally opt-in: wiring the advanced
+    /// bridge into the production sampler still requires process-level graph
+    /// and channel selection, but the conversion and its dimension checks are
+    /// shared and testable here.
+    pub fn to_momentum_sample<T: FloatLike>(
+        &self,
+        context: SamplingMomentumSampleContext<'_>,
+    ) -> Result<MomentumSample<T>> {
+        if self.raw_coordinates.len() != self.map.point.len() {
+            return Err(eyre!(
+                "sampling bridge point has {} coordinates but its raw frame has {}",
+                self.map.point.len(),
+                self.raw_coordinates.len()
+            ));
+        }
+        if self.raw_coordinates.is_empty() || self.raw_coordinates.len() % 3 != 0 {
+            return Err(eyre!(
+                "sampling bridge raw frame has {} coordinates; expected a non-empty multiple of 3",
+                self.raw_coordinates.len()
+            ));
+        }
+        if self.raw_coordinates.iter().any(|value| !value.is_finite()) {
+            return Err(eyre!(
+                "sampling bridge raw frame contains a non-finite momentum component"
+            ));
+        }
+        if !self.map.jacobian.is_finite() || self.map.jacobian <= 0.0 {
+            return Err(eyre!(
+                "sampling bridge map Jacobian must be finite and positive, got {}",
+                self.map.jacobian
+            ));
+        }
+
+        let loop_momenta =
+            LoopMomenta::from_iter(self.raw_coordinates.chunks_exact(3).map(|components| {
+                ThreeMomentum::new(
+                    F::<T>::from_f64(components[0]),
+                    F::<T>::from_f64(components[1]),
+                    F::<T>::from_f64(components[2]),
+                )
+            }));
+        MomentumSample::new(
+            loop_momenta,
+            context.loop_mom_cache_id,
+            context.external_moms,
+            context.external_mom_cache_id,
+            F::<T>::from_f64(self.map.jacobian),
+            context.dependent_momenta_constructor,
+            context.orientation,
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1438,6 +1510,20 @@ mod tests {
             .inverse(SamplingChannelId::from(1), &evaluation.raw_coordinates)
             .unwrap();
         assert!(inverse.map.residual < 1.0e-10);
+
+        let externals = Externals::default();
+        let sample = evaluation
+            .to_momentum_sample::<f64>(SamplingMomentumSampleContext {
+                loop_mom_cache_id: 4,
+                external_moms: &externals,
+                external_mom_cache_id: 7,
+                dependent_momenta_constructor: DependentMomentaConstructor::CrossSection,
+                orientation: Some(2),
+            })
+            .unwrap();
+        assert_eq!(sample.loop_moms().0.len(), 1);
+        assert_eq!(sample.sample.orientation, Some(2));
+        assert!((sample.jacobian().0 - evaluation.map.jacobian).abs() < 1.0e-12);
     }
 
     #[test]
