@@ -2265,6 +2265,71 @@ impl LmbMultiChannelingSetup {
         })
     }
 
+    /// Build the exact affine routing from one generated LMB into this setup's
+    /// parent loop frame.  The integer edge signatures provide the linear
+    /// block matrix; the supplied external momenta provide its translation.
+    /// Keeping this operation on the graph-aware setup ensures that a compiled
+    /// channel never mistakes selected-LMB coordinates for parent-frame
+    /// coordinates.
+    pub fn lmb_frame_map(
+        &self,
+        basis_id: LmbIndex,
+        external_momenta: &[[f64; 4]],
+    ) -> Result<SamplingMapAffine> {
+        let channel_lmb = self
+            .all_bases
+            .get(basis_id)
+            .ok_or_else(|| eyre!("LMB basis {} is out of range", usize::from(basis_id)))?;
+        let parent_loop_edges = &self.graph.loop_momentum_basis.loop_edges;
+        let channel_loop_count = channel_lmb.loop_edges.len();
+        if parent_loop_edges.len() != channel_loop_count {
+            return Err(eyre!(
+                "cannot route LMB {} with {} loop blocks into parent frame with {} blocks",
+                usize::from(basis_id),
+                channel_loop_count,
+                parent_loop_edges.len()
+            ));
+        }
+        let dimension = 3 * channel_loop_count;
+        let mut matrix = vec![vec![0.0; dimension]; dimension];
+        let mut translation = vec![0.0; dimension];
+        for (parent_block, &edge_index) in parent_loop_edges.iter().enumerate() {
+            let signature = &channel_lmb.edge_signatures[edge_index];
+            let internal = signature.internal.to_momtrop_format();
+            if internal.len() != channel_loop_count {
+                return Err(eyre!(
+                    "LMB {} edge {} has internal signature length {}, expected {}",
+                    usize::from(basis_id),
+                    edge_index.0,
+                    internal.len(),
+                    channel_loop_count
+                ));
+            }
+            let external = signature.external.to_momtrop_format();
+            if external.len() != external_momenta.len() {
+                return Err(eyre!(
+                    "LMB {} edge {} has external signature length {}, but {} external momenta were supplied",
+                    usize::from(basis_id),
+                    edge_index.0,
+                    external.len(),
+                    external_momenta.len()
+                ));
+            }
+            for component in 0..3 {
+                let row = 3 * parent_block + component;
+                for (channel_block, coefficient) in internal.iter().enumerate() {
+                    matrix[row][3 * channel_block + component] = *coefficient as f64;
+                }
+                translation[row] = external
+                    .iter()
+                    .zip(external_momenta)
+                    .map(|(coefficient, momentum)| *coefficient as f64 * momentum[component + 1])
+                    .sum();
+            }
+        }
+        SamplingMapAffine::new(matrix, translation)
+    }
+
     fn reinterpret_loop_momenta_for_lmb_impl<T: FloatLike>(
         &self,
         lmb_index: LmbIndex,
