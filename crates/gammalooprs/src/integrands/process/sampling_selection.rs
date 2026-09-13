@@ -1305,17 +1305,35 @@ fn compile_surface_map(
     })
 }
 
-/// Compile a direct-product channel whose children explicitly partition the
-/// parent LMB.  The surface child is the only child whose active coordinate
-/// block comes from channel metadata (`subspace_lmb`); its `surface(...)`
-/// arguments identify the physical energy constraints.  Ordinary `lmb(...)`
-/// and `complement(...)` children retain their own local edge ordering.
-fn compile_product_map(
+#[derive(Clone, Copy)]
+enum PartitionedMapKind {
+    Product,
+    Then,
+}
+
+impl PartitionedMapKind {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Product => "product",
+            Self::Then => "then",
+        }
+    }
+}
+
+fn compile_partitioned_children(
+    kind: PartitionedMapKind,
     channel: &str,
     maps: &[SamplingMapDefinition],
     channel_subspace_lmb: &[usize],
     context: &SamplingChannelCompileContext,
-) -> Result<CompiledSamplingMap, SamplingChannelCompileError> {
+) -> Result<
+    (
+        Vec<Box<dyn SamplingMapComponent>>,
+        Vec<Vec<usize>>,
+        BTreeMap<usize, usize>,
+    ),
+    SamplingChannelCompileError,
+> {
     let parent_positions = context
         .parent_lmb
         .iter()
@@ -1327,13 +1345,14 @@ fn compile_product_map(
     let mut child_blocks = Vec::<Vec<usize>>::with_capacity(maps.len());
     let mut surface_child = None;
 
+    let map_name = kind.name();
     for (child_index, map) in maps.iter().enumerate() {
         let (block_edges, compiled) = match map {
             SamplingMapDefinition::Lmb(edges) | SamplingMapDefinition::Complement(edges) => {
                 if edges.is_empty() {
                     return Err(SamplingChannelCompileError::InvalidChannel {
                         channel: channel.to_owned(),
-                        error: format!("product child {child_index} has an empty edge block"),
+                        error: format!("{map_name} child {child_index} has an empty edge block"),
                     });
                 }
                 let compiled = SamplingMapKernel::new(
@@ -1344,7 +1363,7 @@ fn compile_product_map(
                 )
                 .map_err(|error| SamplingChannelCompileError::InvalidChannel {
                     channel: channel.to_owned(),
-                    error: format!("product child {child_index} {map:?} is invalid: {error}"),
+                    error: format!("{map_name} child {child_index} {map:?} is invalid: {error}"),
                 })?;
                 (edges.clone(), CompiledSamplingMap::Lmb(compiled))
             }
@@ -1353,7 +1372,7 @@ fn compile_product_map(
                     return Err(SamplingChannelCompileError::InvalidChannel {
                         channel: channel.to_owned(),
                         error: format!(
-                            "product contains more than one surface child; surface children at indices {} and {}",
+                            "{map_name} contains more than one surface child; surface children at indices {} and {}",
                             previous, child_index
                         ),
                     });
@@ -1362,8 +1381,9 @@ fn compile_product_map(
                 if channel_subspace_lmb.is_empty() {
                     return Err(SamplingChannelCompileError::InvalidChannel {
                         channel: channel.to_owned(),
-                        error: "product surface child requires non-empty channel subspace_lmb"
-                            .to_owned(),
+                        error: format!(
+                            "{map_name} surface child requires non-empty channel subspace_lmb"
+                        ),
                     });
                 }
                 let compiled = compile_surface_map(
@@ -1378,7 +1398,7 @@ fn compile_product_map(
             unsupported => {
                 return Err(SamplingChannelCompileError::UnsupportedMap {
                     channel: channel.to_owned(),
-                    map: format!("product child {child_index}: {unsupported:?}"),
+                    map: format!("{map_name} child {child_index}: {unsupported:?}"),
                 });
             }
         };
@@ -1388,7 +1408,7 @@ fn compile_product_map(
                 return Err(SamplingChannelCompileError::InvalidChannel {
                     channel: channel.to_owned(),
                     error: format!(
-                        "product child {child_index} block {block_edges:?} contains edge {edge}, which is outside parent LMB {:?}",
+                        "{map_name} child {child_index} block {block_edges:?} contains edge {edge}, which is outside parent LMB {:?}",
                         context.parent_lmb
                     ),
                 });
@@ -1397,7 +1417,7 @@ fn compile_product_map(
                 return Err(SamplingChannelCompileError::InvalidChannel {
                     channel: channel.to_owned(),
                     error: format!(
-                        "product child {child_index} block {block_edges:?} overlaps child {previous} on parent edge {edge}; child blocks must be disjoint and cover parent LMB {:?}",
+                        "{map_name} child {child_index} block {block_edges:?} overlaps child {previous} on parent edge {edge}; child blocks must be disjoint and cover parent LMB {:?}",
                         context.parent_lmb
                     ),
                 });
@@ -1417,11 +1437,33 @@ fn compile_product_map(
         return Err(SamplingChannelCompileError::InvalidChannel {
             channel: channel.to_owned(),
             error: format!(
-                "product child blocks leave parent edges {missing:?} uncovered; blocks {:?} must cover parent LMB {:?}",
+                "{map_name} child blocks leave parent edges {missing:?} uncovered; blocks {:?} must cover parent LMB {:?}",
                 child_blocks, context.parent_lmb
             ),
         });
     }
+
+    Ok((children, child_blocks, parent_positions))
+}
+
+/// Compile a direct-product channel whose children explicitly partition the
+/// parent LMB.  The surface child is the only child whose active coordinate
+/// block comes from channel metadata (`subspace_lmb`); its `surface(...)`
+/// arguments identify the physical energy constraints.  Ordinary `lmb(...)`
+/// and `complement(...)` children retain their own local edge ordering.
+fn compile_product_map(
+    channel: &str,
+    maps: &[SamplingMapDefinition],
+    channel_subspace_lmb: &[usize],
+    context: &SamplingChannelCompileContext,
+) -> Result<CompiledSamplingMap, SamplingChannelCompileError> {
+    let (children, child_blocks, parent_positions) = compile_partitioned_children(
+        PartitionedMapKind::Product,
+        channel,
+        maps,
+        channel_subspace_lmb,
+        context,
+    )?;
 
     let output_indices = child_blocks
         .iter()
@@ -1453,112 +1495,13 @@ fn compile_then_map(
     channel_subspace_lmb: &[usize],
     context: &SamplingChannelCompileContext,
 ) -> Result<CompiledSamplingMap, SamplingChannelCompileError> {
-    let parent_positions = context
-        .parent_lmb
-        .iter()
-        .enumerate()
-        .map(|(position, edge)| (*edge, position))
-        .collect::<BTreeMap<_, _>>();
-    let mut used_edges = BTreeMap::<usize, usize>::new();
-    let mut children = Vec::<Box<dyn SamplingMapComponent>>::with_capacity(maps.len());
-    let mut child_blocks = Vec::<Vec<usize>>::with_capacity(maps.len());
-    let mut surface_child = None;
-
-    for (child_index, map) in maps.iter().enumerate() {
-        let (block_edges, compiled) = match map {
-            SamplingMapDefinition::Lmb(edges) | SamplingMapDefinition::Complement(edges) => {
-                if edges.is_empty() {
-                    return Err(SamplingChannelCompileError::InvalidChannel {
-                        channel: channel.to_owned(),
-                        error: format!("then child {child_index} has an empty edge block"),
-                    });
-                }
-                let compiled = SamplingMapKernel::new(
-                    map.clone(),
-                    context.parameterization_settings.clone(),
-                    context.e_cm,
-                    edges.len(),
-                )
-                .map_err(|error| SamplingChannelCompileError::InvalidChannel {
-                    channel: channel.to_owned(),
-                    error: format!("then child {child_index} {map:?} is invalid: {error}"),
-                })?;
-                (edges.clone(), CompiledSamplingMap::Lmb(compiled))
-            }
-            SamplingMapDefinition::Surface(surface_edges) => {
-                if let Some(previous) = surface_child {
-                    return Err(SamplingChannelCompileError::InvalidChannel {
-                        channel: channel.to_owned(),
-                        error: format!(
-                            "then contains more than one surface child; surface children at indices {} and {}",
-                            previous, child_index
-                        ),
-                    });
-                }
-                surface_child = Some(child_index);
-                if channel_subspace_lmb.is_empty() {
-                    return Err(SamplingChannelCompileError::InvalidChannel {
-                        channel: channel.to_owned(),
-                        error: "then surface child requires non-empty channel subspace_lmb"
-                            .to_owned(),
-                    });
-                }
-                let compiled = compile_surface_map(
-                    channel,
-                    surface_edges,
-                    channel_subspace_lmb,
-                    context,
-                    false,
-                )?;
-                (channel_subspace_lmb.to_vec(), compiled)
-            }
-            unsupported => {
-                return Err(SamplingChannelCompileError::UnsupportedMap {
-                    channel: channel.to_owned(),
-                    map: format!("then child {child_index}: {unsupported:?}"),
-                });
-            }
-        };
-
-        for edge in &block_edges {
-            if !parent_positions.contains_key(edge) {
-                return Err(SamplingChannelCompileError::InvalidChannel {
-                    channel: channel.to_owned(),
-                    error: format!(
-                        "then child {child_index} block {block_edges:?} contains edge {edge}, which is outside parent LMB {:?}",
-                        context.parent_lmb
-                    ),
-                });
-            }
-            if let Some(previous) = used_edges.insert(*edge, child_index) {
-                return Err(SamplingChannelCompileError::InvalidChannel {
-                    channel: channel.to_owned(),
-                    error: format!(
-                        "then child {child_index} block {block_edges:?} overlaps child {previous} on parent edge {edge}; child blocks must be disjoint and cover parent LMB {:?}",
-                        context.parent_lmb
-                    ),
-                });
-            }
-        }
-        child_blocks.push(block_edges);
-        children.push(Box::new(compiled));
-    }
-
-    let missing = context
-        .parent_lmb
-        .iter()
-        .copied()
-        .filter(|edge| !used_edges.contains_key(edge))
-        .collect::<Vec<_>>();
-    if !missing.is_empty() {
-        return Err(SamplingChannelCompileError::InvalidChannel {
-            channel: channel.to_owned(),
-            error: format!(
-                "then child blocks leave parent edges {missing:?} uncovered; blocks {:?} must cover parent LMB {:?}",
-                child_blocks, context.parent_lmb
-            ),
-        });
-    }
+    let (children, child_blocks, parent_positions) = compile_partitioned_children(
+        PartitionedMapKind::Then,
+        channel,
+        maps,
+        channel_subspace_lmb,
+        context,
+    )?;
 
     let output_indices = child_blocks
         .iter()
