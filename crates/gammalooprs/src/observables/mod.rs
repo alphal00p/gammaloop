@@ -39,7 +39,7 @@ pub struct HistogramProcessInfo {
     pub graph_to_group_id: Vec<usize>,
     pub graph_group_master_names: Vec<String>,
     pub orientation_labels_by_group: Vec<Vec<String>>,
-    pub lmb_channel_labels_by_group: Vec<Vec<String>>,
+    pub sampling_channel_labels_by_group: Vec<Vec<String>>,
 }
 
 #[derive(
@@ -3750,9 +3750,9 @@ fn resolve_discrete_histogram_layout(
                     observable_name
                 )
             })?;
-            let labels = info.lmb_channel_labels_by_group.get(group_id).ok_or_else(|| {
+            let labels = info.sampling_channel_labels_by_group.get(group_id).ok_or_else(|| {
                 eyre!(
-                    "Observable '{}' resolved graph-group {} for LmbChannelIds, but no LMB-channel metadata is available.",
+                    "Observable '{}' resolved graph-group {} for LmbChannelIds, but no sampling-channel metadata is available.",
                     observable_name,
                     group_id
                 )
@@ -3878,14 +3878,14 @@ fn resolve_discrete_histogram_layout(
                     observable_name
                 )
             })?;
-            info.lmb_channel_labels_by_group
+            info.sampling_channel_labels_by_group
                 .get(group_id)
                 .ok_or_else(|| {
                     eyre!(
                         "Observable '{}' resolved graph group {} for LmbChannelEdgeIds labels, but the process only exposes {} graph groups.",
                         observable_name,
                         group_id,
-                        info.lmb_channel_labels_by_group.len()
+                        info.sampling_channel_labels_by_group.len()
                     )
                 })?
                 .iter()
@@ -4725,7 +4725,7 @@ max = 0
                 "group2".to_string(),
             ],
             orientation_labels_by_group: vec![Vec::new(), Vec::new(), Vec::new()],
-            lmb_channel_labels_by_group: vec![Vec::new(), Vec::new(), Vec::new()],
+            sampling_channel_labels_by_group: vec![Vec::new(), Vec::new(), Vec::new()],
         };
 
         let resolved = resolve_graph_group_context(
@@ -4764,7 +4764,7 @@ max = 0
             graph_to_group_id: Vec::new(),
             graph_group_master_names: vec!["group0".to_string()],
             orientation_labels_by_group: vec![Vec::new()],
-            lmb_channel_labels_by_group: vec![Vec::new()],
+            sampling_channel_labels_by_group: vec![Vec::new()],
         };
 
         let err = resolve_graph_group_context(
