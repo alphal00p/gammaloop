@@ -1492,6 +1492,26 @@ fn validate_sampling_channel_selection(
                     "Invalid sampling settings: channel definition '{graph}.{name}' contains duplicate parent_lmb edge ids."
                 ));
             }
+            let mut seen_subspace = BTreeSet::new();
+            if definition
+                .subspace_lmb
+                .iter()
+                .any(|edge| !seen_subspace.insert(edge))
+            {
+                return Err(format!(
+                    "Invalid sampling settings: channel definition '{graph}.{name}' contains duplicate subspace_lmb edge ids."
+                ));
+            }
+            let mut seen_on_cut = BTreeSet::new();
+            if definition
+                .on_cut
+                .iter()
+                .any(|edge| !seen_on_cut.insert(edge))
+            {
+                return Err(format!(
+                    "Invalid sampling settings: channel definition '{graph}.{name}' contains duplicate on_cut edge ids."
+                ));
+            }
             SamplingMapDefinition::parse(&definition.around).map_err(|error| {
                 format!(
                     "Invalid sampling settings: channel definition '{graph}.{name}' has an invalid around expression: {error}"

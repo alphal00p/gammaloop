@@ -620,7 +620,8 @@ mod settings_wrapper_tests {
     #[test]
     fn runtime_settings_wrapper_exposes_canonical_sampling_names() {
         use gammalooprs::settings::runtime::{
-            MultiChannelingSettings, SamplingChannelWeight, SamplingSettings,
+            MultiChannelingSettings, SamplingChannelDefinition, SamplingChannelWeight,
+            SamplingSettings,
         };
 
         Python::initialize();
@@ -631,6 +632,25 @@ mod settings_wrapper_tests {
             .parameterization_settings
             .sampling_channels
             .weight = SamplingChannelWeight::SingularityProxy;
+        let selection = &mut multi_channeling.parameterization_settings.sampling_channels;
+        selection.default_channel_selection = vec!["auto:surfaces".to_owned()];
+        selection
+            .channel_selection
+            .insert("GL638".to_owned(), vec!["HZ".to_owned()]);
+        selection.channel_definitions.insert(
+            "GL638".to_owned(),
+            [(
+                "HZ".to_owned(),
+                SamplingChannelDefinition {
+                    around: "surface(2,4,12)".to_owned(),
+                    subspace_lmb: vec![3],
+                    parent_lmb: vec![3, 6, 7, 10],
+                    on_cut: vec![2, 6, 10],
+                },
+            )]
+            .into_iter()
+            .collect(),
+        );
         settings.sampling = SamplingSettings::MultiChanneling(multi_channeling);
 
         let wrapped =
@@ -650,6 +670,33 @@ mod settings_wrapper_tests {
                     .extract::<String>()
                     .unwrap(),
                 "singularity_proxy"
+            );
+            assert_eq!(
+                sampling
+                    .getattr("default_channel_selection")
+                    .unwrap()
+                    .extract::<Vec<String>>()
+                    .unwrap(),
+                vec!["auto:surfaces"]
+            );
+            let channel_selection = sampling.getattr("channel_selection").unwrap();
+            assert_eq!(
+                channel_selection
+                    .getattr("GL638")
+                    .unwrap()
+                    .extract::<Vec<String>>()
+                    .unwrap(),
+                vec!["HZ"]
+            );
+            let definitions = sampling.getattr("channel_definitions").unwrap();
+            let gl638 = definitions.getattr("GL638").unwrap();
+            let hz = gl638.getattr("HZ").unwrap();
+            assert_eq!(
+                hz.getattr("parent_lmb")
+                    .unwrap()
+                    .extract::<Vec<usize>>()
+                    .unwrap(),
+                vec![3, 6, 7, 10]
             );
             assert!(sampling.getattr("lmb_multichanneling").is_err());
         });

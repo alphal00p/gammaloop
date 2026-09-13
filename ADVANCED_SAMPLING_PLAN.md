@@ -239,6 +239,8 @@ regular-expression mini-parser:
 ```toml
 [sampling.channel_definitions.GL638.HZ]
 around = "intersect(surface(2,4,12), surface(3,10,13))"
+subspace_lmb = [3, 10]
+parent_lmb = [3, 6, 7, 10]
 on_cut = [2,6,10]
 ```
 
