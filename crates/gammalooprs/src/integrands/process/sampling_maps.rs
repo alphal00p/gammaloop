@@ -1864,4 +1864,30 @@ mod tests {
         assert!((report.normalization - 1.0).abs() < 2.0e-2);
         assert!(report.normalization_stderr.is_finite());
     }
+
+    #[test]
+    fn generic_acceptance_harness_checks_embedded_partial_surface_map() {
+        let surface = SurfaceRadialMap::absent(2, vec![0.0; 2], 1.3, 1.0).unwrap();
+        let complement = SamplingMapKernel::new(
+            SamplingMapDefinition::Lmb(vec![7]),
+            ParameterizationSettings::default(),
+            42.2,
+            1,
+        )
+        .unwrap();
+        let map = SamplingMapEmbedding::product(
+            vec![Box::new(surface), Box::new(complement)],
+            vec![2, 3, 0, 1, 4],
+        )
+        .unwrap();
+        let report = SamplingMapAcceptanceReport::normalized_gaussian(
+            &map,
+            4096,
+            1.5,
+            &[0.0, 0.0, 0.0, 0.0, 0.0],
+        )
+        .unwrap();
+        assert_eq!(report.finite_sample_count, report.sample_count);
+        assert!((report.normalization - 1.0).abs() < 3.0e-2);
+    }
 }
