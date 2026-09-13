@@ -972,7 +972,10 @@ impl SamplingMapComponent for SamplingMapComposition {
     }
 }
 
-fn combine_contracts(left: SamplingMapContract, right: SamplingMapContract) -> SamplingMapContract {
+pub(crate) fn combine_contracts(
+    left: SamplingMapContract,
+    right: SamplingMapContract,
+) -> SamplingMapContract {
     let support = match (left.support, right.support) {
         (SamplingSupport::Branched, _) | (_, SamplingSupport::Branched) => {
             SamplingSupport::Branched
