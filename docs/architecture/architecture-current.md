@@ -425,8 +425,10 @@ explicit `SmallestDegree` selection is unchanged. The existing
 7. Stability selection still compares only the complex graph weight, but the
    retained branch also carries the final grouped event payload.
 8. The final `EvaluationResult` contains:
-   - the stable `integrand_result`, before any parameterization Jacobian is
-     applied
+   - the stable `integrand_result`, before the separately reported top-level
+     parameterization Jacobian is applied; summed sampling channels include
+     each channel's map Jacobian and partition factor internally and report
+     a unit top-level Jacobian
    - the top-level `parameterization_jacobian` when the sample came from
      x-space parameterization (`None` for direct momentum-space evaluation)
    - the separate `integrator_weight`, i.e. the Monte Carlo/grid weight only
@@ -470,6 +472,39 @@ The same pattern is now also used for evaluator execution backends:
 - symjit evaluators are runtime-only
 - the saved portable representation remains centered on eager Symbolica
   evaluators
+
+### Canonical sampling channels
+
+`SamplingChannelCatalogue` supplies the one channel-ID domain used by grids,
+summed evaluation, explicit channel evaluation and event metadata. Generated
+LMB basis IDs describe graph routing only. Both amplitudes and cross sections
+use `SamplingChannelBridge` to map each selected unit-cube point into the parent
+frame and evaluate the partition at that raw point. Summed evaluation applies
+`J_c w_c` once per graph result and event before summing; Monte-Carlo evaluation
+retains its selected factor and separate grid probability. Stability rotations
+act on the resulting mapped point and external frame together.
+
+Standalone `phase_space(cut(...))` maps use the real graph's cut equation,
+warmup masses and fixed external data through the shared implicit radial kernel.
+They retain the auxiliary raw radial variable. Conditional cut/left/right maps
+remain guarded until their geometry and all foreign-channel densities use the
+correct cut data. The old LMB-specific partition implementation is removed.
+Default single-basis routing and obsolete weight settings remain migration work.
+
+Physical amplitude E-surfaces still need to populate the production compile
+context. The selected UV-finite two-loop amplitude benchmarks and that coverage
+gap are recorded in
+[the amplitude study](../research/advanced_sampling/AMPLITUDE_BENCHMARK_CANDIDATES.md).
+The current implicit kernel falls back when its supplied center is not strictly
+inside a surface; this does not certify global surface absence. Generic geometry
+preparation must distinguish those cases and select suitable interior centers.
+
+The Gaussian reference API currently supports one mapped point per sample;
+summed reference evaluation errors until weighted per-channel moments are
+supported. See [the implementation plan](../../ADVANCED_SAMPLING_PLAN.md) for
+the remaining harness and channel milestones, and
+[the LU localization study](../research/advanced_sampling/LU_H_MATCHED_SAMPLING.md)
+for proposed h-matched radial profiles, which are not implemented settings yet.
 
 ### 3.2 Differential event model
 

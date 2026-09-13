@@ -668,6 +668,24 @@ failures regardless of the central value. Statistical thresholds must account
 for the number of cases; a unit-normalization result alone is not proof of
 injectivity, correct target geometry or bounded physical-integrand weights.
 
+## LU localization profile extension
+
+The later [LU h-matched study](LU_H_MATCHED_SAMPLING.md) extends cut channels
+with a proposal for their auxiliary scale `t=R_c(n)/r`. Including the simple
+residue and radial volume measure leaves `h(t) dt`, so a normalized proposal
+near the runtime LU h can flatten that part of the weight. Its actual Cartesian
+Jacobian and every foreign-channel density must still be evaluated exactly.
+Raised cuts require coverage of `t^j h^(j)(t)`; Gaussian acceptance requires
+adequate broad tails even when a sharply focused proposal has full support.
+
+The proposed named-channel option is `radial_profile = "lu_h"`, with an
+inline-table form for analytic/CDF approximation and broad-mixture settings.
+It uses the existing channel catalogue and inherits the actual `[h_function]`
+settings. It changes neither the LU integrand multiplier nor the symmetry of
+local threshold CT localization. See the consolidated plan for implementation
+and all-orientation GL638 validation gates; the recorded scalar-profile tests
+are not physical GL638 results.
+
 ## Sources
 
 [^soper]: Davison E. Soper, [Choosing integration points for QCD calculations by numerical integration](https://arxiv.org/pdf/hep-ph/0103262), 2001, Sections V–IX.

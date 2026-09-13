@@ -25,6 +25,15 @@ example in isolation. Where proposal details differ, use this precedence:
 
 The focused agent studies preserve independent reasoning and review:
 
+- [LU_H_MATCHED_SAMPLING.md](LU_H_MATCHED_SAMPLING.md): current LU-scale measure,
+  invertible h-matched proposals, raised-cut derivative coverage and finite-variance
+  reference requirements. This extends the earlier cut-channel proposals.
+- [AMPLITUDE_BENCHMARK_CANDIDATES.md](AMPLITUDE_BENCHMARK_CANDIDATES.md): generated
+  UV-finite massive two-loop kite and double-box candidates, verified threshold
+  intersections, production coverage gaps and correctness/variance gates.
+- [PINCHED_COLLINEAR_SAMPLING.md](PINCHED_COLLINEAR_SAMPLING.md): future light-cone
+  and prolate charts, normalized transverse enhancement, soft endpoints and
+  architectural requirements for cut-dependent pinched geometry.
 - [api.md](api.md): existing code owners and estimator boundaries; API sketches
   are historical.
 - [gl638.md](gl638.md): GL638 geometry, projected targets and numerical scope.
@@ -40,6 +49,7 @@ The small records included here are:
 
 | File | Meaning |
 |---|---|
+| [lu_h_profile_checks.py](lu_h_profile_checks.py), [output](lu_h_profile_checks.json) | Portable one-dimensional LU h-profile variance and peak-weight comparisons; not a GL638 integration |
 | [geometry_checks.json](geometry_checks.json) | Ellipsoid forward/inverse, independent Jacobian, volume and moment checks |
 | [gl638_geometry_checks.json](gl638_geometry_checks.json) | Recorded GL638 rank, LU radial invariance and A-star affine arithmetic |
 | [normal_plane_moments.csv](normal_plane_moments.csv) | Analytically normalized model comparisons for a codimension-two singularity |
