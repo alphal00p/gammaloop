@@ -5,7 +5,11 @@
 //! typed, deterministic selection after the graph name is known.  Numerical
 //! channel construction is intentionally kept out of this layer.
 
-use std::{collections::BTreeMap, fmt, str::FromStr};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+    str::FromStr,
+};
 
 use crate::settings::runtime::{SamplingChannelDefinition, SamplingChannelSelection};
 use color_eyre::eyre::Result;
@@ -159,6 +163,9 @@ pub struct SamplingSurfaceGeometry {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SamplingChannelCompileContext {
     pub master_graph: String,
+    /// Complete ordered parent LMB in the master graph frame. Every named
+    /// channel is resolved against this exact list before compilation.
+    pub parent_lmb: Vec<usize>,
     pub parameterization_settings: ParameterizationSettings,
     pub e_cm: f64,
     pub n_loop_momenta: usize,
@@ -168,12 +175,14 @@ pub struct SamplingChannelCompileContext {
 impl SamplingChannelCompileContext {
     pub fn new(
         master_graph: impl Into<String>,
+        parent_lmb: Vec<usize>,
         parameterization_settings: ParameterizationSettings,
         e_cm: f64,
         n_loop_momenta: usize,
     ) -> Self {
         Self {
             master_graph: master_graph.into(),
+            parent_lmb,
             parameterization_settings,
             e_cm,
             n_loop_momenta,
@@ -314,6 +323,21 @@ impl SamplingChannelCatalogue {
         if context.master_graph.trim().is_empty() {
             return Err(SamplingChannelCompileError::EmptyMasterGraph);
         }
+        let mut parent_edges = BTreeSet::new();
+        if context.parent_lmb.len() != context.n_loop_momenta
+            || context
+                .parent_lmb
+                .iter()
+                .any(|edge| !parent_edges.insert(*edge))
+        {
+            return Err(SamplingChannelCompileError::InvalidChannel {
+                channel: context.master_graph.clone(),
+                error: format!(
+                    "parent LMB {:?} must contain one unique edge per loop momentum (expected {})",
+                    context.parent_lmb, context.n_loop_momenta
+                ),
+            });
+        }
         let mut compiled = Vec::with_capacity(self.entries.len());
         for entry in &self.entries {
             let (name, basis_id, definition, map) = match entry {
@@ -341,6 +365,15 @@ impl SamplingChannelCatalogue {
                     )
                 }
                 SamplingCatalogueEntry::Named(channel) => {
+                    if channel.definition.parent_lmb != context.parent_lmb {
+                        return Err(SamplingChannelCompileError::InvalidChannel {
+                            channel: channel.name.clone(),
+                            error: format!(
+                                "parent LMB {:?} does not match master context {:?}",
+                                channel.definition.parent_lmb, context.parent_lmb
+                            ),
+                        });
+                    }
                     let definition = channel.map.clone();
                     let map = match &definition {
                         SamplingMapDefinition::Lmb(_edges) => SamplingMapKernel::new(
@@ -355,6 +388,14 @@ impl SamplingChannelCatalogue {
                             error: error.to_string(),
                         })?,
                         SamplingMapDefinition::Surface(edges) => {
+                            if edges.len() != context.n_loop_momenta {
+                                return Err(SamplingChannelCompileError::UnsupportedMap {
+                                    channel: channel.name.clone(),
+                                    map: format!(
+                                        "surface({edges:?}) is only a full-frame map; supply an explicit product(surface(...), complement(...)) with prepared embedding for a proper subspace"
+                                    ),
+                                });
+                            }
                             let Some(geometry) = context.surfaces.get(edges) else {
                                 return Err(SamplingChannelCompileError::MissingSurfaceGeometry {
                                     channel: channel.name.clone(),
@@ -833,8 +874,13 @@ mod tests {
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue =
             build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2]), (1, vec![2, 4])], &[0]);
-        let mut context =
-            SamplingChannelCompileContext::new("G", ParameterizationSettings::default(), 100.0, 2);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
         context.surfaces.insert(
             vec![1, 2],
             SamplingSurfaceGeometry {
@@ -864,8 +910,13 @@ mod tests {
             .insert("threshold".into(), definition("surface(1,2)"));
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
-        let context =
-            SamplingChannelCompileContext::new("G", ParameterizationSettings::default(), 100.0, 2);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
         assert!(matches!(
             catalogue.compile(&context),
             Err(SamplingChannelCompileError::MissingSurfaceGeometry { .. })
@@ -883,8 +934,13 @@ mod tests {
             .insert("joint".into(), definition("product(surface(1), lmb(1,2))"));
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
-        let context =
-            SamplingChannelCompileContext::new("G", ParameterizationSettings::default(), 100.0, 2);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
         assert!(matches!(
             catalogue.compile(&context),
             Err(SamplingChannelCompileError::UnsupportedMap { .. })
