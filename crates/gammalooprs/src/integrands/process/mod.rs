@@ -80,11 +80,11 @@ pub use sampling_context::{
     PreparedCutSamplingContext, PreparedSamplingSurface, PreparedSurfaceStatus, SamplingCutSide,
 };
 pub use sampling_maps::{
-    ImplicitSurfaceRadialContextEvaluator, ImplicitSurfaceRadialEvaluator,
-    ImplicitSurfaceRadialMap, SamplingJacobian, SamplingMapAcceptanceReport, SamplingMapAffine,
-    SamplingMapComponent, SamplingMapComposition, SamplingMapContract, SamplingMapDefinition,
-    SamplingMapEmbedding, SamplingMapEvaluation, SamplingMapKernel, SamplingMapPoint,
-    SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
+    ImplicitSurfaceCenterEvaluator, ImplicitSurfaceRadialContextEvaluator,
+    ImplicitSurfaceRadialEvaluator, ImplicitSurfaceRadialMap, SamplingJacobian,
+    SamplingMapAcceptanceReport, SamplingMapAffine, SamplingMapComponent, SamplingMapComposition,
+    SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding, SamplingMapEvaluation,
+    SamplingMapKernel, SamplingMapPoint, SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
 };
 pub use sampling_partition::{
     SamplingChannelScore, SamplingPartition, SamplingPartitionMode, SamplingScoreEvaluator,
@@ -96,12 +96,13 @@ pub use sampling_reference::{
 pub use sampling_selection::{
     CompiledSamplingChannel, CompiledSamplingMap, ResolvedNamedSamplingChannel,
     ResolvedSamplingChannelSelection, SamplingCatalogueEntry, SamplingChannelBridge,
-    SamplingChannelBridgeError, SamplingChannelBridgeEvaluation, SamplingChannelCatalogue,
-    SamplingChannelCompileContext, SamplingChannelCompileError, SamplingChannelId,
-    SamplingChannelInspection, SamplingChannelPreset, SamplingChannelSelector,
-    SamplingMomentumSampleContext, SamplingSelectionError, SamplingSurfaceGeometry,
-    build_sampling_channel_catalogue, build_sampling_channel_catalogue_with_surfaces,
-    explicitly_selected_graphs, graph_channel_definitions, resolve_sampling_channel_selection,
+    SamplingChannelBridgeAcceptanceReport, SamplingChannelBridgeError,
+    SamplingChannelBridgeEvaluation, SamplingChannelCatalogue, SamplingChannelCompileContext,
+    SamplingChannelCompileError, SamplingChannelId, SamplingChannelInspection,
+    SamplingChannelPreset, SamplingChannelSelector, SamplingMomentumSampleContext,
+    SamplingSelectionError, SamplingSurfaceGeometry, build_sampling_channel_catalogue,
+    build_sampling_channel_catalogue_with_surfaces, explicitly_selected_graphs,
+    graph_channel_definitions, resolve_sampling_channel_selection,
     resolve_sampling_channel_selection_replacing_default,
 };
 

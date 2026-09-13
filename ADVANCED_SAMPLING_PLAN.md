@@ -32,6 +32,16 @@ Soft/collinear syntax has explicit capability diagnostics until graph-resolved
 frames and normalized profiles can be compiled; it cannot enter the exact-map
 catalogue as an unlabelled proxy.
 
+Implicit radial maps can now take a context-dependent centre as well as a
+context-dependent directional root. They remain conditional alone and become
+full-support only inside an ordered composition whose earlier blocks provide
+the context; invalid centres and unbracketed roots are hard errors. The bridge
+acceptance harness now integrates a normalized Gaussian through every selected
+canonical channel with the exact `N J_i w_i` estimator and reports finite
+counts, normalization error, partition and Jacobian ranges. Cross-section
+event metadata also preserves the canonical advanced channel id while physical
+cut maps remain guarded until their per-sample LU density is complete.
+
 A bounded `product(...)` compiler is now available as one canonical channel
 entry when its `lmb(...)`/`complement(...)` blocks, and at most one explicit
 surface block, form a disjoint cover of the parent LMB. Each block is compiled

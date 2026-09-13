@@ -531,6 +531,151 @@ pub struct SamplingChannelBridgeEvaluation {
     pub partition: SamplingPartition,
 }
 
+/// Summary of a deterministic acceptance run through a complete channel
+/// bridge.  The reference integrand is a normalized isotropic Gaussian in
+/// the bridge's raw master frame.  Every canonical channel is sampled with
+/// equal probability and the estimator includes its exact map determinant
+/// and the common inverse-density partition.  This makes the report useful
+/// for acceptance tests of arbitrary graph-resolved channel catalogues,
+/// including products and ordered surface compositions.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SamplingChannelBridgeAcceptanceReport {
+    pub sample_count: usize,
+    pub channel_count: usize,
+    pub finite_sample_count: usize,
+    pub normalization: f64,
+    pub normalization_stderr: f64,
+    pub partition_min: f64,
+    pub partition_max: f64,
+    pub jacobian_min: f64,
+    pub jacobian_max: f64,
+}
+
+impl SamplingChannelBridgeAcceptanceReport {
+    /// Integrate a normalized Gaussian over all channels in `bridge`.
+    ///
+    /// The returned normalization converges to one as `sample_count` grows.
+    /// A sample count applies independently to each channel; no channel is
+    /// silently omitted from the acceptance run.  The deterministic Halton
+    /// points keep this suitable for reproducible unit and acceptance tests.
+    pub fn normalized_gaussian(
+        bridge: &SamplingChannelBridge,
+        sample_count: usize,
+        width: f64,
+        center: &[f64],
+    ) -> Result<Self> {
+        if sample_count == 0 {
+            return Err(eyre!(
+                "sampling bridge acceptance harness needs at least one sample"
+            ));
+        }
+        if !width.is_finite() || width <= 0.0 {
+            return Err(eyre!(
+                "sampling bridge acceptance Gaussian width must be positive and finite"
+            ));
+        }
+        if center.len() != bridge.dimensions {
+            return Err(eyre!(
+                "sampling bridge acceptance Gaussian has dimension {}, expected {}",
+                center.len(),
+                bridge.dimensions
+            ));
+        }
+        if center.iter().any(|component| !component.is_finite()) {
+            return Err(eyre!(
+                "sampling bridge acceptance Gaussian centre must be finite"
+            ));
+        }
+
+        let channel_count = bridge.channels.len();
+        if channel_count == 0 {
+            return Err(eyre!(
+                "sampling bridge acceptance harness needs at least one channel"
+            ));
+        }
+        let dimension = bridge.dimensions as f64;
+        let gaussian_normalization =
+            (2.0 * std::f64::consts::PI * width * width).powf(-0.5 * dimension);
+        let mut report = Self {
+            sample_count,
+            channel_count,
+            finite_sample_count: 0,
+            normalization: 0.0,
+            normalization_stderr: 0.0,
+            partition_min: f64::INFINITY,
+            partition_max: f64::NEG_INFINITY,
+            jacobian_min: f64::INFINITY,
+            jacobian_max: f64::NEG_INFINITY,
+        };
+        let mut square_sum = 0.0;
+        let total_samples = sample_count * channel_count;
+        for channel_index in 0..channel_count {
+            let channel_id = SamplingChannelId::from(channel_index);
+            for sample in 1..=sample_count {
+                let coordinates = (0..bridge.channels[channel_index].dimensions())
+                    .map(|axis| bridge_halton(sample, bridge_prime(axis)))
+                    .collect::<Vec<_>>();
+                let evaluation = bridge.forward(channel_id, &coordinates)?;
+                let partition_sum = evaluation.partition.weights.iter().sum::<f64>();
+                if !partition_sum.is_finite() {
+                    return Err(eyre!(
+                        "sampling bridge acceptance partition is non-finite for channel {} sample {}",
+                        channel_index,
+                        sample
+                    ));
+                }
+                report.partition_min = report.partition_min.min(partition_sum);
+                report.partition_max = report.partition_max.max(partition_sum);
+                let radius_squared = evaluation
+                    .raw_coordinates
+                    .iter()
+                    .zip(center)
+                    .map(|(point, centre)| (point - centre).powi(2))
+                    .sum::<f64>();
+                let weight = gaussian_normalization
+                    * (-0.5 * radius_squared / width.powi(2)).exp()
+                    * evaluation.map.jacobian
+                    * evaluation.partition.weight(channel_index).ok_or_else(|| {
+                        eyre!("sampling bridge partition has no channel {channel_index}")
+                    })?
+                    * channel_count as f64;
+                report.jacobian_min = report.jacobian_min.min(evaluation.map.jacobian);
+                report.jacobian_max = report.jacobian_max.max(evaluation.map.jacobian);
+                if !weight.is_finite() {
+                    continue;
+                }
+                report.finite_sample_count += 1;
+                report.normalization += weight;
+                square_sum += weight * weight;
+            }
+        }
+        if report.finite_sample_count > 0 {
+            report.normalization /= total_samples as f64;
+            report.normalization_stderr =
+                ((square_sum / total_samples as f64 - report.normalization.powi(2)).max(0.0)
+                    / total_samples as f64)
+                    .sqrt();
+        }
+        Ok(report)
+    }
+}
+
+fn bridge_prime(index: usize) -> u64 {
+    const PRIMES: [u64; 16] = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53];
+    PRIMES.get(index).copied().unwrap_or(59 + 2 * index as u64)
+}
+
+fn bridge_halton(mut index: usize, base: u64) -> f64 {
+    let mut fraction = 1.0;
+    let mut value = 0.0;
+    while index > 0 {
+        fraction /= base as f64;
+        value += fraction * (index as u64 % base) as f64;
+        index /= base as usize;
+    }
+    value
+}
+
 /// Runtime context needed to turn one bridge point into the sample consumed by
 /// the graph evaluator.  The bridge itself is graph-frame aware, while this
 /// small context supplies the cache and external-momentum ownership that are
@@ -3416,6 +3561,65 @@ mod tests {
             (integral - 1.0).abs() < 2.0e-2,
             "canonical map-density mixture integral = {integral}"
         );
+    }
+
+    #[test]
+    fn bridge_acceptance_report_integrates_every_canonical_channel() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![1])], &[0, 1]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1],
+            ParameterizationSettings::default(),
+            2.0,
+            1,
+        );
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
+            &bridge,
+            1024,
+            1.0,
+            &[0.0, 0.0, 0.0],
+        )
+        .unwrap();
+        assert_eq!(report.sample_count, 1024);
+        assert_eq!(report.channel_count, 2);
+        assert_eq!(report.finite_sample_count, 2048);
+        assert!((report.partition_min - 1.0).abs() < 1.0e-12);
+        assert!((report.partition_max - 1.0).abs() < 1.0e-12);
+        assert!((report.normalization - 1.0).abs() < 5.0e-2);
+        assert!(report.normalization_stderr.is_finite());
+    }
+
+    #[test]
+    fn bridge_acceptance_report_supports_a_single_canonical_channel() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1])], &[0]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1],
+            ParameterizationSettings::default(),
+            2.0,
+            1,
+        );
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
+            &bridge,
+            512,
+            1.0,
+            &[0.0, 0.0, 0.0],
+        )
+        .unwrap();
+        assert_eq!(report.channel_count, 1);
+        assert_eq!(report.finite_sample_count, report.sample_count);
+        assert!((report.normalization - 1.0).abs() < 5.0e-2);
+        assert!((report.partition_min - 1.0).abs() < 1.0e-12);
+        assert!((report.partition_max - 1.0).abs() < 1.0e-12);
     }
 
     #[test]

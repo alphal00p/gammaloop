@@ -1124,6 +1124,12 @@ pub struct SurfaceRadialMap {
 /// diagnostics returned by the map.  The caller must provide an evaluator with
 /// a single increasing regular root on every direction where it expects exact
 /// surface targeting.
+///
+/// Both the root equation and the chart centre may depend on a preceding
+/// ordered-map context. In that mode the map is conditional by itself, while
+/// a `then` composition whose earlier blocks are full-support can expose a
+/// full-support chart: context derivatives are off-diagonal and do not alter
+/// the product of active-block determinants.
 pub type ImplicitSurfaceRadialEvaluator =
     Arc<dyn Fn(&[f64], f64) -> Result<(f64, f64)> + Send + Sync + 'static>;
 
@@ -1133,6 +1139,17 @@ pub type ImplicitSurfaceRadialEvaluator =
 pub type ImplicitSurfaceRadialContextEvaluator =
     Arc<dyn Fn(&[f64], f64, &[f64]) -> Result<(f64, f64)> + Send + Sync + 'static>;
 
+/// Context-dependent centre of a directional energy-surface chart.
+///
+/// The context is the output of an earlier ordered map (typically a sampled
+/// complement block).  Keeping the centre evaluator separate from the scalar
+/// surface evaluator makes the dependency explicit: derivatives with respect
+/// to the active radial coordinates remain block diagonal, while centre and
+/// root changes with the complement occupy only the off-diagonal Jacobian
+/// block.  The returned vector must have the map's active dimension.
+pub type ImplicitSurfaceCenterEvaluator =
+    Arc<dyn Fn(&[f64]) -> Result<Vec<f64>> + Send + Sync + 'static>;
+
 #[derive(Clone)]
 pub struct ImplicitSurfaceRadialMap {
     dimension: usize,
@@ -1141,6 +1158,7 @@ pub struct ImplicitSurfaceRadialMap {
     power: f64,
     evaluator: ImplicitSurfaceRadialEvaluator,
     context_evaluator: Option<ImplicitSurfaceRadialContextEvaluator>,
+    center_evaluator: Option<ImplicitSurfaceCenterEvaluator>,
     root_tolerance: f64,
 }
 
@@ -1153,6 +1171,7 @@ impl std::fmt::Debug for ImplicitSurfaceRadialMap {
             .field("beta", &self.beta)
             .field("power", &self.power)
             .field("context_dependent", &self.context_evaluator.is_some())
+            .field("center_context_dependent", &self.center_evaluator.is_some())
             .field("root_tolerance", &self.root_tolerance)
             .finish_non_exhaustive()
     }
@@ -1197,6 +1216,7 @@ impl ImplicitSurfaceRadialMap {
             power,
             evaluator,
             context_evaluator: None,
+            center_evaluator: None,
             root_tolerance: 1.0e-11,
         })
     }
@@ -1222,6 +1242,18 @@ impl ImplicitSurfaceRadialMap {
         self
     }
 
+    /// Attach a context-dependent centre to the chart.  The map remains
+    /// exact in its active coordinates because the centre depends only on
+    /// already sampled context, and therefore contributes no extra diagonal
+    /// determinant factor in an ordered composition.
+    pub fn with_context_center_evaluator(
+        mut self,
+        evaluator: ImplicitSurfaceCenterEvaluator,
+    ) -> Self {
+        self.center_evaluator = Some(evaluator);
+        self
+    }
+
     pub fn dimension(&self) -> usize {
         self.dimension
     }
@@ -1238,9 +1270,30 @@ impl ImplicitSurfaceRadialMap {
         self.power
     }
 
+    fn center_for_context(&self, context: &[f64]) -> Result<Vec<f64>> {
+        let center = if let Some(evaluator) = &self.center_evaluator {
+            evaluator(context)?
+        } else {
+            self.center.clone()
+        };
+        if center.len() != self.dimension {
+            return Err(eyre!(
+                "implicit surface radial-map centre has dimension {}, expected {}",
+                center.len(),
+                self.dimension
+            ));
+        }
+        if center.iter().any(|value| !value.is_finite()) {
+            return Err(eyre!(
+                "implicit surface radial-map context centre must contain only finite values"
+            ));
+        }
+        Ok(center)
+    }
+
     pub fn contract(&self) -> SamplingMapContract {
         SamplingMapContract {
-            support: if self.context_evaluator.is_some() {
+            support: if self.context_evaluator.is_some() || self.center_evaluator.is_some() {
                 SamplingSupport::Conditional
             } else {
                 SamplingSupport::Full
@@ -1260,10 +1313,10 @@ impl ImplicitSurfaceRadialMap {
     ) -> Result<SamplingMapEvaluation> {
         self.validate_coordinates(coordinates)?;
         let (direction, angular_jacobian) = direction_from_coordinates(coordinates)?;
+        let center = self.center_for_context(context)?;
         let root = self.root_for_direction(&direction, context)?;
         let (radius, radial_jacobian) = self.radius_from_coordinate(coordinates[0], root);
-        let point = self
-            .center
+        let point = center
             .iter()
             .zip(&direction)
             .map(|(center, direction)| center + radius * direction)
@@ -1305,9 +1358,10 @@ impl ImplicitSurfaceRadialMap {
                 self.dimension
             ));
         }
+        let center = self.center_for_context(context)?;
         let displacement = point
             .iter()
-            .zip(&self.center)
+            .zip(&center)
             .map(|(point, center)| point - center)
             .collect::<Vec<_>>();
         let radius = displacement
@@ -1393,12 +1447,16 @@ impl ImplicitSurfaceRadialMap {
                 break;
             }
             upper *= 2.0;
-            if !upper.is_finite() || upper > 1.0e15 {
-                return Ok(None);
+            if !upper.is_finite() {
+                return Err(eyre!(
+                    "implicit surface radial root could not be bracketed before the radius overflowed"
+                ));
             }
         }
         let Some((_, _)) = upper_value else {
-            return Ok(None);
+            return Err(eyre!(
+                "implicit surface radial root could not be bracketed after 96 radius expansions"
+            ));
         };
         let mut value_at_lower = origin_value;
         let mut root = 0.5 * (lower + upper);
@@ -2401,6 +2459,16 @@ mod tests {
     }
 
     #[test]
+    fn implicit_surface_map_reports_unbracketed_root_instead_of_absent_fibre() {
+        let evaluator: ImplicitSurfaceRadialEvaluator = Arc::new(|_, _| Ok((-1.0, 0.0)));
+        let map = ImplicitSurfaceRadialMap::new(2, vec![0.0, 0.0], 1.0, 1.0, evaluator).unwrap();
+        let error = map
+            .forward(&[0.29, 0.71])
+            .expect_err("negative surface value without a root must be an error");
+        assert!(error.to_string().contains("could not be bracketed"));
+    }
+
+    #[test]
     fn implicit_surface_map_accepts_conditional_complement_context() {
         let map = ImplicitSurfaceRadialMap::new(
             3,
@@ -2426,6 +2494,135 @@ mod tests {
         assert!((radius - 0.7).abs() < 1.0e-9);
         let inverse = map.inverse_with_context(&mapped.point, &[0.5]).unwrap();
         assert!(inverse.residual < 1.0e-9);
+        assert!(
+            inverse
+                .coordinates
+                .iter()
+                .zip(coordinates)
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-9)
+        );
+    }
+
+    #[test]
+    fn implicit_surface_map_resolves_context_dependent_center_and_root() {
+        let map = ImplicitSurfaceRadialMap::new(
+            3,
+            vec![0.0; 3],
+            2.0,
+            1.0,
+            Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+        )
+        .unwrap()
+        .with_context_center_evaluator(Arc::new(|context| {
+            let shift = context.first().copied().unwrap_or(0.0);
+            Ok(vec![shift, 0.0, 0.0])
+        }))
+        .with_context_evaluator(Arc::new(|_, radius, context| {
+            let shift = context.first().copied().unwrap_or(0.0);
+            Ok((radius - (1.0 + shift), 1.0))
+        }));
+
+        assert_eq!(map.contract().support, SamplingSupport::Conditional);
+        let context = [0.5];
+        let coordinates = [0.23, 0.31, 0.67];
+        let forward = map
+            .forward_with_context(&coordinates, &context)
+            .expect("context-dependent directional chart");
+        let displacement = forward
+            .point
+            .iter()
+            .zip([0.5, 0.0, 0.0])
+            .map(|(point, center)| (point - center).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        let split = 1.5 / (1.5 + 2.0);
+        let expected_radius = 1.5 * (coordinates[0] / split);
+        assert!((displacement - expected_radius).abs() < 1.0e-9);
+
+        let inverse = map
+            .inverse_with_context(&forward.point, &context)
+            .expect("inverse context-dependent directional chart");
+        assert!(inverse.residual < 1.0e-9, "{}", inverse.residual);
+        assert!(
+            inverse
+                .coordinates
+                .iter()
+                .zip(coordinates)
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-9)
+        );
+    }
+
+    #[test]
+    fn implicit_surface_map_rejects_invalid_context_center() {
+        let wrong_dimension = ImplicitSurfaceRadialMap::new(
+            3,
+            vec![0.0; 3],
+            1.0,
+            1.0,
+            Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+        )
+        .unwrap()
+        .with_context_center_evaluator(Arc::new(|_| Ok(vec![0.0, 0.0])));
+        let error = wrong_dimension
+            .forward_with_context(&[0.2, 0.3, 0.7], &[])
+            .expect_err("wrong-dimensional context centre must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("centre has dimension 2, expected 3")
+        );
+
+        let nonfinite = ImplicitSurfaceRadialMap::new(
+            3,
+            vec![0.0; 3],
+            1.0,
+            1.0,
+            Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+        )
+        .unwrap()
+        .with_context_center_evaluator(Arc::new(|_| Ok(vec![f64::NAN, 0.0, 0.0])));
+        let error = nonfinite
+            .forward_with_context(&[0.2, 0.3, 0.7], &[])
+            .expect_err("non-finite context centre must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("must contain only finite values")
+        );
+    }
+
+    #[test]
+    fn context_center_surface_is_full_support_after_full_then_block() {
+        let surface = ImplicitSurfaceRadialMap::new(
+            3,
+            vec![0.0; 3],
+            2.0,
+            1.0,
+            Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+        )
+        .unwrap()
+        .with_context_center_evaluator(Arc::new(|context| {
+            Ok(vec![context.first().copied().unwrap_or(0.0), 0.0, 0.0])
+        }))
+        .with_context_evaluator(Arc::new(|_, radius, context| {
+            Ok((
+                radius - (1.0 + context.first().copied().unwrap_or(0.0)),
+                1.0,
+            ))
+        }));
+        let preceding = SamplingMapAffine::new(vec![vec![1.0]], vec![0.0]).unwrap();
+        let composition =
+            SamplingMapComposition::then(vec![Box::new(preceding), Box::new(surface)])
+                .expect("ordered conditional composition");
+        assert_eq!(composition.contract().support, SamplingSupport::Full);
+        let coordinates = [0.5, 0.23, 0.31, 0.67];
+        let forward = composition
+            .forward(&coordinates, &[])
+            .expect("forward ordered composition");
+        let inverse = composition
+            .inverse(&forward.point, &[])
+            .expect("inverse ordered composition");
+        assert!(inverse.residual < 1.0e-9, "{}", inverse.residual);
         assert!(
             inverse
                 .coordinates
