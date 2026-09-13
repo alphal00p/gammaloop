@@ -75,9 +75,9 @@ pub use sampling_context::{
     PreparedCutSamplingContext, PreparedSamplingSurface, PreparedSurfaceStatus, SamplingCutSide,
 };
 pub use sampling_maps::{
-    SamplingJacobian, SamplingMapComponent, SamplingMapComposition, SamplingMapContract,
-    SamplingMapDefinition, SamplingMapEvaluation, SamplingMapKernel, SamplingMapPoint,
-    SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
+    SamplingJacobian, SamplingMapAcceptanceReport, SamplingMapComponent, SamplingMapComposition,
+    SamplingMapContract, SamplingMapDefinition, SamplingMapEvaluation, SamplingMapKernel,
+    SamplingMapPoint, SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
 };
 pub use sampling_partition::{
     SamplingChannelScore, SamplingPartition, SamplingPartitionMode, SamplingScoreEvaluator,
