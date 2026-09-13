@@ -1076,6 +1076,12 @@ pub struct SurfaceRadialMap {
 pub type ImplicitSurfaceRadialEvaluator =
     Arc<dyn Fn(&[f64], f64) -> Result<(f64, f64)> + Send + Sync + 'static>;
 
+/// Context-aware variant used by conditional surface charts. The context is
+/// the output of an earlier `then(...)`/complement map and may contain the
+/// sampled spectator loop momenta needed to solve a partial-subspace surface.
+pub type ImplicitSurfaceRadialContextEvaluator =
+    Arc<dyn Fn(&[f64], f64, &[f64]) -> Result<(f64, f64)> + Send + Sync + 'static>;
+
 #[derive(Clone)]
 pub struct ImplicitSurfaceRadialMap {
     dimension: usize,
@@ -1083,6 +1089,7 @@ pub struct ImplicitSurfaceRadialMap {
     beta: f64,
     power: f64,
     evaluator: ImplicitSurfaceRadialEvaluator,
+    context_evaluator: Option<ImplicitSurfaceRadialContextEvaluator>,
     root_tolerance: f64,
 }
 
@@ -1094,6 +1101,7 @@ impl std::fmt::Debug for ImplicitSurfaceRadialMap {
             .field("center", &self.center)
             .field("beta", &self.beta)
             .field("power", &self.power)
+            .field("context_dependent", &self.context_evaluator.is_some())
             .field("root_tolerance", &self.root_tolerance)
             .finish_non_exhaustive()
     }
@@ -1137,6 +1145,7 @@ impl ImplicitSurfaceRadialMap {
             beta,
             power,
             evaluator,
+            context_evaluator: None,
             root_tolerance: 1.0e-11,
         })
     }
@@ -1149,6 +1158,17 @@ impl ImplicitSurfaceRadialMap {
         }
         self.root_tolerance = root_tolerance;
         Ok(self)
+    }
+
+    /// Attach a conditional evaluator while retaining the same exact radial
+    /// determinant. Such a map must be composed after the map producing its
+    /// context and therefore advertises conditional support.
+    pub fn with_context_evaluator(
+        mut self,
+        evaluator: ImplicitSurfaceRadialContextEvaluator,
+    ) -> Self {
+        self.context_evaluator = Some(evaluator);
+        self
     }
 
     pub fn dimension(&self) -> usize {
@@ -1169,15 +1189,27 @@ impl ImplicitSurfaceRadialMap {
 
     pub fn contract(&self) -> SamplingMapContract {
         SamplingMapContract {
-            support: SamplingSupport::Full,
+            support: if self.context_evaluator.is_some() {
+                SamplingSupport::Conditional
+            } else {
+                SamplingSupport::Full
+            },
             jacobian: SamplingJacobian::ExactImplicit,
         }
     }
 
     pub fn forward(&self, coordinates: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.forward_with_context(coordinates, &[])
+    }
+
+    pub fn forward_with_context(
+        &self,
+        coordinates: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingMapEvaluation> {
         self.validate_coordinates(coordinates)?;
         let (direction, angular_jacobian) = direction_from_coordinates(coordinates)?;
-        let root = self.root_for_direction(&direction)?;
+        let root = self.root_for_direction(&direction, context)?;
         let (radius, radial_jacobian) = self.radius_from_coordinate(coordinates[0], root);
         let point = self
             .center
@@ -1197,7 +1229,7 @@ impl ImplicitSurfaceRadialMap {
             jacobian,
             inverse_jacobian: 1.0 / jacobian,
             residual: 0.0,
-            support: SamplingSupport::Full,
+            support: self.contract().support,
             diagnostics: vec![if root.is_some() {
                 "implicit_surface:regular_root".to_owned()
             } else {
@@ -1207,6 +1239,14 @@ impl ImplicitSurfaceRadialMap {
     }
 
     pub fn inverse(&self, point: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.inverse_with_context(point, &[])
+    }
+
+    pub fn inverse_with_context(
+        &self,
+        point: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingMapEvaluation> {
         if point.len() != self.dimension {
             return Err(eyre!(
                 "implicit surface radial-map inverse received dimension {}, expected {}",
@@ -1233,18 +1273,18 @@ impl ImplicitSurfaceRadialMap {
             .iter()
             .map(|value| value / radius)
             .collect::<Vec<_>>();
-        let root = self.root_for_direction(&direction)?;
+        let root = self.root_for_direction(&direction, context)?;
         let coordinate = self.coordinate_from_radius(radius, root);
         let mut coordinates = coordinates_from_direction(&direction)?;
         coordinates[0] = coordinate;
-        let mapped = self.forward(&coordinates)?;
+        let mapped = self.forward_with_context(&coordinates, context)?;
         Ok(SamplingMapEvaluation {
             coordinates,
             point: point.to_vec(),
             jacobian: mapped.jacobian,
             inverse_jacobian: mapped.inverse_jacobian,
             residual: max_coordinate_residual_f64(point, &mapped.point),
-            support: SamplingSupport::Full,
+            support: self.contract().support,
             diagnostics: mapped.diagnostics,
         })
     }
@@ -1268,8 +1308,16 @@ impl ImplicitSurfaceRadialMap {
         Ok(())
     }
 
-    fn root_for_direction(&self, direction: &[f64]) -> Result<Option<(f64, f64)>> {
-        let (origin_value, origin_derivative) = (self.evaluator)(direction, 0.0)?;
+    fn evaluate(&self, direction: &[f64], radius: f64, context: &[f64]) -> Result<(f64, f64)> {
+        if let Some(evaluator) = &self.context_evaluator {
+            evaluator(direction, radius, context)
+        } else {
+            (self.evaluator)(direction, radius)
+        }
+    }
+
+    fn root_for_direction(&self, direction: &[f64], context: &[f64]) -> Result<Option<(f64, f64)>> {
+        let (origin_value, origin_derivative) = self.evaluate(direction, 0.0, context)?;
         if !origin_value.is_finite() || !origin_derivative.is_finite() {
             return Err(eyre!(
                 "implicit surface evaluator returned non-finite origin data"
@@ -1283,7 +1331,7 @@ impl ImplicitSurfaceRadialMap {
         let mut upper = self.beta.max(1.0);
         let mut upper_value = None;
         for _ in 0..96 {
-            let (value, derivative) = (self.evaluator)(direction, upper)?;
+            let (value, derivative) = self.evaluate(direction, upper, context)?;
             if !value.is_finite() || !derivative.is_finite() {
                 return Err(eyre!(
                     "implicit surface evaluator returned non-finite bracket data"
@@ -1304,7 +1352,7 @@ impl ImplicitSurfaceRadialMap {
         let mut value_at_lower = origin_value;
         let mut root = 0.5 * (lower + upper);
         for _ in 0..128 {
-            let (value, derivative) = (self.evaluator)(direction, root)?;
+            let (value, derivative) = self.evaluate(direction, root, context)?;
             if !value.is_finite() || !derivative.is_finite() {
                 return Err(eyre!(
                     "implicit surface evaluator returned non-finite root data"
@@ -1334,7 +1382,7 @@ impl ImplicitSurfaceRadialMap {
                 break;
             }
         }
-        let (value, derivative) = (self.evaluator)(direction, root)?;
+        let (value, derivative) = self.evaluate(direction, root, context)?;
         if !value.is_finite() || !derivative.is_finite() || derivative <= 0.0 {
             return Err(eyre!(
                 "implicit surface radial root is not regular: value={value}, derivative={derivative}, bracket_lower={value_at_lower}"
@@ -2024,12 +2072,12 @@ impl SamplingMapComponent for ImplicitSurfaceRadialMap {
         "implicit_surface"
     }
 
-    fn forward(&self, coordinates: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
-        ImplicitSurfaceRadialMap::forward(self, coordinates)
+    fn forward(&self, coordinates: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+        ImplicitSurfaceRadialMap::forward_with_context(self, coordinates, context)
     }
 
-    fn inverse(&self, point: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
-        ImplicitSurfaceRadialMap::inverse(self, point)
+    fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+        ImplicitSurfaceRadialMap::inverse_with_context(self, point, context)
     }
 }
 
@@ -2299,6 +2347,41 @@ mod tests {
         );
         let inverse = map.inverse(&forward.point).unwrap();
         assert!(inverse.residual < 1.0e-10, "{}", inverse.residual);
+    }
+
+    #[test]
+    fn implicit_surface_map_accepts_conditional_complement_context() {
+        let map = ImplicitSurfaceRadialMap::new(
+            3,
+            vec![0.0; 3],
+            2.0,
+            1.0,
+            Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+        )
+        .unwrap()
+        .with_context_evaluator(Arc::new(|_, radius, context| {
+            let shift = context.first().copied().unwrap_or(0.0);
+            Ok((radius - (1.0 + shift), 1.0))
+        }));
+        assert_eq!(map.contract().support, SamplingSupport::Conditional);
+        let coordinates = [0.2, 0.27, 0.61];
+        let mapped = map.forward_with_context(&coordinates, &[0.5]).unwrap();
+        let radius = mapped
+            .point
+            .iter()
+            .map(|value| value * value)
+            .sum::<f64>()
+            .sqrt();
+        assert!((radius - 0.7).abs() < 1.0e-9);
+        let inverse = map.inverse_with_context(&mapped.point, &[0.5]).unwrap();
+        assert!(inverse.residual < 1.0e-9);
+        assert!(
+            inverse
+                .coordinates
+                .iter()
+                .zip(coordinates)
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-9)
+        );
     }
 
     #[test]
@@ -2576,6 +2659,49 @@ mod tests {
         assert_eq!(mapped.diagnostics, vec!["shift=0", "shift=0.2"]);
         let inverse = composition.inverse(&mapped.point, &[]).unwrap();
         assert_eq!(inverse.coordinates, vec![0.2, 0.4]);
+    }
+
+    #[test]
+    fn then_composition_routes_complement_context_into_implicit_surface_map() {
+        let implicit = ImplicitSurfaceRadialMap::new(
+            3,
+            vec![0.0; 3],
+            1.0,
+            1.0,
+            Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+        )
+        .unwrap()
+        .with_context_evaluator(Arc::new(|_, radius, context| {
+            let shift = context.first().copied().unwrap_or(0.0);
+            Ok((radius - (1.0 + shift), 1.0))
+        }));
+        let composition =
+            SamplingMapComposition::then(vec![Box::new(ContextShiftMap), Box::new(implicit)])
+                .expect("valid conditional surface composition");
+        let coordinates = [0.2, 0.3, 0.27, 0.61];
+        let mapped = composition.forward(&coordinates, &[]).unwrap();
+        let surface_radius = mapped.point[1..]
+            .iter()
+            .map(|value| value * value)
+            .sum::<f64>()
+            .sqrt();
+        assert!((surface_radius - 0.66).abs() < 1.0e-9);
+        assert!(
+            mapped
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic == "implicit_surface:regular_root")
+        );
+        assert_eq!(mapped.support, SamplingSupport::Conditional);
+        let inverse = composition.inverse(&mapped.point, &[]).unwrap();
+        assert!(inverse.residual < 1.0e-10);
+        assert!(
+            inverse
+                .coordinates
+                .iter()
+                .zip(coordinates)
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-10)
+        );
     }
 
     #[test]

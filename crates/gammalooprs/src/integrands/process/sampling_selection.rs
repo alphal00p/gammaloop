@@ -772,6 +772,17 @@ impl SamplingChannelBridge {
         channel_id: SamplingChannelId,
         coordinates: &[f64],
     ) -> Result<SamplingChannelBridgeEvaluation> {
+        self.forward_with_context(channel_id, coordinates, &[])
+    }
+
+    /// Forward a channel while supplying the output of an earlier conditional
+    /// map (for example a sampled complement block) to the selected map.
+    pub fn forward_with_context(
+        &self,
+        channel_id: SamplingChannelId,
+        coordinates: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingChannelBridgeEvaluation> {
         let channel_index = channel_id.0;
         let channel =
             self.channels
@@ -779,7 +790,7 @@ impl SamplingChannelBridge {
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
                     channel: channel_id,
                 })?;
-        let map = channel.forward(coordinates)?;
+        let map = channel.forward_with_context(coordinates, context)?;
         if map.point.len() != self.dimensions {
             return Err(SamplingChannelBridgeError::DimensionMismatch {
                 channel: channel.name.clone(),
@@ -803,6 +814,15 @@ impl SamplingChannelBridge {
         channel_id: SamplingChannelId,
         raw_coordinates: &[f64],
     ) -> Result<SamplingChannelBridgeEvaluation> {
+        self.inverse_with_context(channel_id, raw_coordinates, &[])
+    }
+
+    pub fn inverse_with_context(
+        &self,
+        channel_id: SamplingChannelId,
+        raw_coordinates: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingChannelBridgeEvaluation> {
         let channel_index = channel_id.0;
         let channel =
             self.channels
@@ -810,7 +830,7 @@ impl SamplingChannelBridge {
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
                     channel: channel_id,
                 })?;
-        let map = channel.inverse(raw_coordinates)?;
+        let map = channel.inverse_with_context(raw_coordinates, context)?;
         let partition = self.partition(raw_coordinates)?;
         Ok(SamplingChannelBridgeEvaluation {
             channel_id,
@@ -832,11 +852,27 @@ impl CompiledSamplingChannel {
     }
 
     pub fn forward(&self, coordinates: &[f64]) -> Result<SamplingMapEvaluation> {
-        self.map.forward(coordinates)
+        self.forward_with_context(coordinates, &[])
+    }
+
+    pub fn forward_with_context(
+        &self,
+        coordinates: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingMapEvaluation> {
+        <CompiledSamplingMap as SamplingMapComponent>::forward(&self.map, coordinates, context)
     }
 
     pub fn inverse(&self, point: &[f64]) -> Result<SamplingMapEvaluation> {
-        self.map.inverse(point)
+        self.inverse_with_context(point, &[])
+    }
+
+    pub fn inverse_with_context(
+        &self,
+        point: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingMapEvaluation> {
+        <CompiledSamplingMap as SamplingMapComponent>::inverse(&self.map, point, context)
     }
 }
 
