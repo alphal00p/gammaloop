@@ -46,6 +46,7 @@ pub mod amplitude;
 pub mod cache_debugging;
 pub mod cross_section;
 pub mod gammaloop_sample;
+pub use gammaloop_sample::DeferredCrossSectionSample;
 pub mod ir;
 pub mod sampling_context;
 pub mod sampling_maps;
