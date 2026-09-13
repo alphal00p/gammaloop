@@ -23,6 +23,7 @@ use crate::observables::{
     events::{format_complex_generic, format_optional_real_generic, format_real_generic},
 };
 use crate::{
+    integrands::process::sampling_reference::ReferenceMoments,
     settings::runtime::{IntegrationStatisticsSnapshot, Precision},
     utils::{
         ArbPrec, F, FloatLike, duration_from_secs_f64_saturating, f128, format_evaluation_time,
@@ -33,6 +34,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct GraphEvaluationResult<T: FloatLike> {
     pub integrand_result: Complex<F<T>>,
+    pub reference_moments: Option<ReferenceMoments<T>>,
     pub event_groups: GenericEventGroupList<T>,
     pub event_processing_time: Duration,
     pub generated_event_count: usize,
@@ -43,6 +45,7 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
     pub fn zero(zero: F<T>) -> Self {
         Self {
             integrand_result: Complex::new_re(zero),
+            reference_moments: None,
             event_groups: GenericEventGroupList::default(),
             event_processing_time: Duration::ZERO,
             generated_event_count: 0,
@@ -52,10 +55,32 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
 
     pub fn merge_in_place(&mut self, mut other: Self) {
         self.integrand_result += other.integrand_result;
+        if let Some(moments) = other.reference_moments {
+            if let Some(current) = &mut self.reference_moments {
+                current.merge_in_place(moments);
+            } else {
+                self.reference_moments = Some(moments);
+            }
+        }
         self.event_groups.append(&mut other.event_groups);
         self.event_processing_time += other.event_processing_time;
         self.generated_event_count += other.generated_event_count;
         self.accepted_event_count += other.accepted_event_count;
+    }
+
+    /// Apply one sampling factor to the physical value/events or reference
+    /// value/moments at the same boundary. Channel sums must not reweight a
+    /// moment reconstructed from just one representative momentum point.
+    pub(crate) fn apply_sampling_factor(&mut self, factor: F<T>) {
+        if let Some(moments) = &mut self.reference_moments {
+            moments.rescale(&factor);
+        }
+        let factor = Complex::new_re(factor);
+        self.integrand_result *= &factor;
+        crate::integrands::process::apply_full_event_multiplicative_factor_precise(
+            &mut self.event_groups,
+            &factor,
+        );
     }
 
     pub fn into_f64(self) -> GraphEvaluationResult<f64> {
@@ -64,6 +89,7 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
                 self.integrand_result.re.into_ff64(),
                 self.integrand_result.im.into_ff64(),
             ),
+            reference_moments: self.reference_moments.map(ReferenceMoments::into_f64),
             event_groups: self.event_groups.to_f64(),
             event_processing_time: self.event_processing_time,
             generated_event_count: self.generated_event_count,

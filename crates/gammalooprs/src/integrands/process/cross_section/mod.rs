@@ -1580,6 +1580,10 @@ impl CrossSectionGraphTerm {
 }
 
 impl GraphTerm for CrossSectionGraphTerm {
+    fn sampling_setup(&self) -> &LmbMultiChannelingSetup {
+        &self.multi_channeling_setup
+    }
+
     fn get_mut_param_builder(&mut self) -> &mut ParamBuilder<f64> {
         &mut self.param_builder
     }
@@ -1915,17 +1919,6 @@ impl GraphTerm for CrossSectionGraphTerm {
         let mut differential_result = GraphEvaluationResult::zero(momentum_sample.zero());
         let mut accepted_event_group = GenericEventGroup::default();
 
-        let momentum_sample = if let Some(lmb_basis_id) = context.lmb_basis_id {
-            self.multi_channeling_setup
-                .reinterpret_loop_momenta_for_lmb(
-                    lmb_basis_id,
-                    momentum_sample,
-                    momentum_sample.sample.loop_mom_cache_id,
-                )
-        } else {
-            momentum_sample.clone()
-        };
-
         crate::debug_tags!(#integration, #sample, #inspect;
             "loop moms: {}",
             momentum_sample.loop_moms()
@@ -2059,7 +2052,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                             channel_id: context.sampling_channel,
                         },
                         &solution,
-                        &momentum_sample,
+                        momentum_sample,
                         self.cut_group_data.cut_groups[cut_group_id].cuts[0],
                         &self.cuts[self.cut_group_data.cut_groups[cut_group_id].cuts[0]],
                     )?;

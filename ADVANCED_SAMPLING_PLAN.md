@@ -25,11 +25,13 @@ The map kernels include exact eager/dual Symbolica Jacobians, affine LMB maps,
 regular and implicit radial maps, bounded products and ordered `then` maps.
 A product currently supports disjoint blocks with at most one explicit surface;
 ordered maps derive later centers/root contexts from earlier blocks and their
-inverse. Unresolved numerical roots fail explicitly. The current implicit map
-uses a normalized ordinary fallback when its supplied center is outside or on
-the surface; this does not prove that the surface is absent. Interior-center
-selection and true absent/pinched classification remain required for generic
-surface targeting, especially with boosted external kinematics.
+inverse. Root residuals must be certified; narrow brackets alone do not suffice.
+Inverse maps no longer clip recovered coordinates, and native finiteness checks
+retain arbitrary precision. The implicit kernel has a normalized fallback when
+its supplied center is outside or on the surface; that alone does not establish
+global absence. The amplitude host now classifies existence separately and
+rejects existing surfaces with an unsuitable zero center. Generic interior-center
+selection remains necessary, especially with boosted external kinematics.
 Soft/collinear primitives and general joint normal/star charts remain unfinished.
 
 A standalone `phase_space(cut(...))` channel now uses the actual graph energy
@@ -61,13 +63,14 @@ part of the unfinished generic machinery.
 Production standalone-integrand owners have been removed; a test-only probe
 remains for generic UI/integration tests. The bridge acceptance harness tests
 normalization, moments, partition sums, inverses and Jacobians, including mixed
-named/LMB catalogues. Loaded-process continuous and explicit canonical discrete
-coordinate entry points exist, with saved/reloaded scalar-bubble coverage.
-The summed reference overlay currently errors explicitly because its one-point
-moment record cannot represent several mapped channel points. Moving reference
-substitution and moment accumulation through the shared physical evaluation
-boundary remains a required harness milestone. Actual physical summed-versus-MC
-regressions are separate from this reference-overlay limitation.
+named/LMB catalogues. Physical and Gaussian-reference targets now use the same
+graph traversal and LMB routing boundary. Summed channels retain their separate
+mapped points and weighted moments until per-draw aggregation; statistics average
+once over requested draws. Reference mass accounts for graph and visible
+orientation selection, and shifted references use the original raw frame under
+stability rotations. Invalid contributions fail acceptance. A single explicit
+discrete selection is a partition contribution; unit normalization requires the
+complete summed or correctly probability-weighted Monte Carlo estimator.
 
 The unified-bridge milestone passed 140 isolated sampling tests and the API
 physical summed/MC regression with rotations. This includes actual generated
@@ -75,16 +78,37 @@ massive/massless cut charts, independent shell/determinant checks, four-loop
 Cartesian inverses and canonical Gaussian acceptance. These gates exposed and
 verified corrections to the radial outer-branch `(1-split)` derivative, affine
 inverse coordinates and the massless-origin radial right derivative. Formatting,
-core/API library checks, core test checking and clippy passed; clippy retains
-17 pre-existing style warnings. Extreme-tail validation and final numerical root
-residual certification remain a separate kernel-hardening slice.
+core/API library checks, core test checking and clippy passed. The following
+amplitude/reference/hardening slice has passed all 146 library sampling tests,
+including real kite geometry and unequal-group/orientation weighting. Both API
+regressions pass: saved/reloaded shifted bubble and six-dimensional kite
+normalization/moments, fully subtracted kite summed/MC agreement, and an
+independent default-LMB raw-frame check. Formatting, core/API test checking and
+clippy pass; warnings introduced in this slice were addressed.
+
+The current surface profile concentrates near the threshold only from outside:
+its inner branch powers the radius instead of the distance to the threshold.
+Correct that before claiming two-sided singularity control or running the
+physical variance comparisons; exact Jacobian accounting alone does not certify
+the intended importance density.
+
+The current driver still compiles the bridge while mapping a sample. Reuse the
+existing `RuntimeCache`/warmup ownership to retain compiled map programs before
+performance comparisons; this interim behavior is not the requested warmup-only
+compilation contract. Runtime cut roots and conditional complements remain
+evaluator inputs, not reasons to rebuild a Symbolica program for each point.
+The audited ownership and invalidation design is recorded in
+[WARMUP_CACHE_DESIGN.md](docs/research/advanced_sampling/WARMUP_CACHE_DESIGN.md).
 
 The amplitude candidate study generated a massive two-loop kite in under a
 second, checked its four thresholds and same-orientation intersections, and
-identified a massive planar double box as a second inexpensive topology. Actual
-amplitude surface registration is still missing from the production compile
-context; supplied-geometry map tests and LMB fallback are not evidence that
-graph-derived amplitude surface maps already work.
+identified a massive planar double box as a second inexpensive topology. Explicit
+full-rank amplitude surfaces now use actual catalogue equations, masses and
+externals in the shared implicit kernel, with rank, frame and ambiguity checks.
+The generated kite regression verifies its genuine six-dimensional C/D surfaces;
+physical propagator sets remain distinct from the common output-coordinate
+frame. Proper subspace/complement registration, arbitrary native parents and
+automatic amplitude surface discovery still require work.
 
 LU-h-matched profiles are now part of the goal, with a dedicated independently
 reviewed research note and portable one-dimensional checks. They are proposed
@@ -486,6 +510,17 @@ maps, even if the pinched primitive itself remains deferred.
 
 ### Symbolica evaluators and Jacobians
 
+Regular surface profiles must enhance both signs of the intended normal
+distance. For example, with `s=R/(R+beta)` and `p>1`, use
+`r=R[1-(1-u/s)^p]` for `u<s`, and retain the exterior distance-power branch.
+The inner derivative is `(R p/s)(1-u/s)^(p-1)` and its inverse is
+`u=s[1-(1-r/R)^(1/p)]`. Both sides then have radial density proportional to
+`|r-R|^(1/p-1)`. Implement stable small-coordinate evaluation, independently
+check determinants and inverses, test both signed asymptotic approaches, and
+repeat Gaussian/moment acceptance. Retain separate ordinary soft coverage where
+needed. This concerns proposal densities and never changes the physical CT
+localization function or its PV symmetry.
+
 During warmup, build specialized eager evaluators for forward maps, inverse
 residuals, density factors and support predicates. Seed independent map inputs
 with first-order dual numbers and extract the output derivative matrix. Use a
@@ -498,6 +533,14 @@ The evaluator is specialized to routing, topology, profile and expression shape;
 runtime kinematics, roots, centers and widths remain inputs. Dual evaluation
 does not prove normalization, support, global invertibility or optimizer-active
 set stability, so those are separate contracts.
+
+Retain compiled catalogues/programs in the existing runtime cache owner, with
+explicit invalidation on channel definitions, routing, masses and relevant
+kinematics/profile changes. Do not add a second cached channel enumeration.
+Test that repeated samples reuse the programs and that changed settings rebuild
+the relevant geometry without stale roots or masses. Record compilation/warmup
+cost separately from per-point root, inverse-density and physical evaluation
+cost in the amplitude and GL638 variance benchmarks.
 
 ### Estimator and adaptive grids
 
@@ -552,13 +595,15 @@ finite-difference determinant comparisons at regular points.
 
 Use the reproducible candidates and kinematics in
 [`AMPLITUDE_BENCHMARK_CANDIDATES.md`](docs/research/advanced_sampling/AMPLITUDE_BENCHMARK_CANDIDATES.md).
-The initial fixture is the five-propagator massive scalar two-loop kite, obtained
+The initial fixture is the five-propagator massive scalar two-loop kite, an
+off-shell two-point amplitude obtained
 from `tests/resources/graphs/double_triangle.dot` with every internal mass
 positive. Its overall UV degree is -2 and every loop subgraph is UV finite.
 At masses one and rest-frame energy five, it has both two-particle and
 three-particle thresholds. A boosted configuration supplies a regular
 intersection of the genuinely coupled three-particle surfaces. The massive
-planar double box is a secondary topology; two-loop six-photon production is an
+planar double box supplies a secondary four-point scattering topology;
+two-loop six-photon production is an
 optional later stress test.
 
 Resolve the actual generated thresholds, orientations and requested parent LMB;

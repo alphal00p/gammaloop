@@ -1095,11 +1095,12 @@ fn combine_evaluations(evaluations: Vec<SamplingMapEvaluation>) -> SamplingMapEv
 /// deliberately independent of graph topology: process code supplies the
 /// centre and the classified radius after its kinematics preparation.
 ///
-/// This map is exact for the spherical proxy it defines.  A physical
-/// multi-loop E-surface is generally direction-dependent, so callers must not
-/// use this as an exact map-density channel for a real threshold.  The
-/// contract therefore advertises `ProxyOnly` until an implicit radial-root
-/// kernel supplies the directional derivative of the actual energy equation.
+/// This map has an exact determinant for the spherical proposal it defines,
+/// including its rootless fallback. A physical multi-loop E-surface is
+/// generally direction-dependent, so this proposal does not by itself certify
+/// focusing on that physical threshold. The implicit radial-root kernel
+/// supplies the actual energy equation's directional radius when needed;
+/// physical focusing and exact proposal-density accounting are distinct.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SurfaceRadialMap {
     dimension: usize,
@@ -1322,16 +1323,23 @@ impl ImplicitSurfaceRadialMap {
             .map(|(center, direction)| center + radius * direction)
             .collect::<Vec<_>>();
         let jacobian = radial_jacobian * angular_jacobian * radius.powi(self.dimension as i32 - 1);
-        if !jacobian.is_finite() || jacobian <= 0.0 {
+        let inverse_jacobian = 1.0 / jacobian;
+        if !radius.is_finite()
+            || radius <= 0.0
+            || point.iter().any(|component| !component.is_finite())
+            || [jacobian, inverse_jacobian]
+                .iter()
+                .any(|value| !value.is_finite() || *value <= 0.0)
+        {
             return Err(eyre!(
-                "implicit surface radial-map produced invalid Jacobian {jacobian}"
+                "implicit surface radial-map point or positive Jacobian pair ({jacobian}, {inverse_jacobian}) is not representable at the current precision"
             ));
         }
         Ok(SamplingMapEvaluation {
             coordinates: coordinates.to_vec(),
             point,
             jacobian,
-            inverse_jacobian: 1.0 / jacobian,
+            inverse_jacobian,
             residual: 0.0,
             support: self.contract().support,
             diagnostics: vec![if root.is_some() {
@@ -1356,6 +1364,11 @@ impl ImplicitSurfaceRadialMap {
                 "implicit surface radial-map inverse received dimension {}, expected {}",
                 point.len(),
                 self.dimension
+            ));
+        }
+        if point.iter().any(|component| !component.is_finite()) {
+            return Err(eyre!(
+                "implicit surface radial-map inverse requires finite momenta"
             ));
         }
         let center = self.center_for_context(context)?;
@@ -1383,12 +1396,18 @@ impl ImplicitSurfaceRadialMap {
         let mut coordinates = coordinates_from_direction(&direction)?;
         coordinates[0] = coordinate;
         let mapped = self.forward_with_context(&coordinates, context)?;
+        let residual = max_coordinate_residual_f64(point, &mapped.point);
+        if !residual.is_finite() {
+            return Err(eyre!(
+                "implicit surface radial-map inverse residual is not representable at the current precision"
+            ));
+        }
         Ok(SamplingMapEvaluation {
             coordinates,
             point: point.to_vec(),
             jacobian: mapped.jacobian,
             inverse_jacobian: mapped.inverse_jacobian,
-            residual: max_coordinate_residual_f64(point, &mapped.point),
+            residual,
             support: self.contract().support,
             diagnostics: mapped.diagnostics,
         })
@@ -1429,8 +1448,14 @@ impl ImplicitSurfaceRadialMap {
             ));
         }
         let scale = origin_value.abs().max(1.0);
-        if origin_value >= -self.root_tolerance * scale {
+        let residual_tolerance = self.root_tolerance * scale;
+        if origin_value >= 0.0 {
             return Ok(None);
+        }
+        if origin_value >= -residual_tolerance {
+            return Err(eyre!(
+                "implicit surface interior center is not certified at the current root tolerance: value={origin_value}, tolerance={residual_tolerance}"
+            ));
         }
         let mut lower = 0.0;
         let mut upper = self.beta.max(1.0);
@@ -1467,8 +1492,7 @@ impl ImplicitSurfaceRadialMap {
                     "implicit surface evaluator returned non-finite root data"
                 ));
             }
-            let tolerance = self.root_tolerance * (1.0 + value.abs());
-            if value.abs() <= tolerance {
+            if value.abs() <= residual_tolerance {
                 break;
             }
             if value > 0.0 {
@@ -1487,14 +1511,16 @@ impl ImplicitSurfaceRadialMap {
             } else {
                 0.5 * (lower + upper)
             };
-            if (upper - lower).abs() <= self.root_tolerance * (1.0 + root.abs()) {
-                break;
-            }
         }
         let (value, derivative) = self.evaluate(direction, root, context)?;
         if !value.is_finite() || !derivative.is_finite() || derivative <= 0.0 {
             return Err(eyre!(
                 "implicit surface radial root is not regular: value={value}, derivative={derivative}, bracket_lower={value_at_lower}"
+            ));
+        }
+        if !root.is_finite() || root <= 0.0 || value.abs() > residual_tolerance {
+            return Err(eyre!(
+                "implicit surface radial root failed residual certification: radius={root}, value={value}, tolerance={residual_tolerance}, bracket=[{lower}, {upper}]"
             ));
         }
         Ok(Some((root, derivative)))
@@ -1513,7 +1539,7 @@ impl ImplicitSurfaceRadialMap {
     fn coordinate_from_radius(&self, radius: f64, root: Option<(f64, f64)>) -> f64 {
         let threshold = root.map(|(radius, _)| radius).unwrap_or(0.0);
         let split = threshold / (threshold + self.beta);
-        let coordinate = if split > 0.0 && radius < threshold {
+        if split > 0.0 && radius < threshold {
             split * (radius / threshold).powf(1.0 / self.power)
         } else {
             let z = ((radius - threshold) / self.beta)
@@ -1524,8 +1550,7 @@ impl ImplicitSurfaceRadialMap {
             } else {
                 z / (1.0 + z)
             }
-        };
-        coordinate.clamp(1.0e-15, 1.0 - 1.0e-15)
+        }
     }
 }
 
@@ -1541,7 +1566,12 @@ fn direction_from_coordinates(coordinates: &[f64]) -> Result<(Vec<f64>, f64)> {
     let mut base = 1.0;
     for (i, coordinate) in coordinates[2..].iter().enumerate() {
         let cos_theta = -1.0 + 2.0 * coordinate;
-        let sin_theta = (1.0 - cos_theta * cos_theta).max(0.0).sqrt();
+        if cos_theta <= -1.0 || cos_theta >= 1.0 {
+            return Err(eyre!(
+                "polar coordinate rounds to a singular spherical chart boundary at the current precision"
+            ));
+        }
+        let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
         angular_jacobian *= 2.0;
         let angular_power = dimension - 3 - i;
         if angular_power > 0 {
@@ -1572,14 +1602,24 @@ fn coordinates_from_direction(direction: &[f64]) -> Result<Vec<f64>> {
             ));
         }
         let cos_theta = direction[i] / base;
-        coordinates[2 + i] = ((1.0 + cos_theta) / 2.0).clamp(1.0e-15, 1.0 - 1.0e-15);
-        base *= (1.0 - cos_theta * cos_theta).max(0.0).sqrt();
+        if !cos_theta.is_finite() || cos_theta <= -1.0 || cos_theta >= 1.0 {
+            return Err(eyre!(
+                "direction lies on a singular spherical chart boundary at the current precision"
+            ));
+        }
+        coordinates[2 + i] = (1.0 + cos_theta) / 2.0;
+        base *= (1.0 - cos_theta * cos_theta).sqrt();
     }
     let mut phi = direction[dimension - 1].atan2(direction[dimension - 2]);
     if phi < 0.0 {
         phi += std::f64::consts::TAU;
     }
-    coordinates[1] = (phi / std::f64::consts::TAU).clamp(1.0e-15, 1.0 - 1.0e-15);
+    coordinates[1] = phi / std::f64::consts::TAU;
+    if !coordinates[1].is_finite() || coordinates[1] <= 0.0 || coordinates[1] >= 1.0 {
+        return Err(eyre!(
+            "direction lies on the spherical azimuth seam at the current precision"
+        ));
+    }
     Ok(coordinates)
 }
 
@@ -1674,7 +1714,7 @@ impl SurfaceRadialMap {
     pub fn contract(&self) -> SamplingMapContract {
         SamplingMapContract {
             support: SamplingSupport::Full,
-            jacobian: SamplingJacobian::ProxyOnly,
+            jacobian: SamplingJacobian::ExactForward,
         }
     }
 
@@ -1692,6 +1732,11 @@ impl SurfaceRadialMap {
         let mut base = radius.clone();
         for (i, coordinate) in coordinates[2..].iter().enumerate() {
             let cos_theta = -&one + &two * coordinate;
+            if cos_theta <= -&one || cos_theta >= one {
+                return Err(eyre!(
+                    "polar coordinate rounds to a singular spherical chart boundary at the current precision"
+                ));
+            }
             let sin_theta = (&one - cos_theta.square()).sqrt();
             angular_jacobian *= &two;
             // Coordinates are uniform in cos(theta), so this exponent is one
@@ -1713,6 +1758,17 @@ impl SurfaceRadialMap {
         let jacobian =
             radial_jacobian * angular_jacobian * radius.powi((self.dimension - 1) as i32);
         let inverse_jacobian = jacobian.clone().inv();
+        if !radius.0.is_finite()
+            || radius <= radius.zero()
+            || point.iter().any(|component| !component.0.is_finite())
+            || [&jacobian, &inverse_jacobian]
+                .iter()
+                .any(|value| !value.0.is_finite() || **value <= value.zero())
+        {
+            return Err(eyre!(
+                "surface radial-map point or positive Jacobian pair is not representable at the current precision"
+            ));
+        }
         Ok(SurfaceRadialPoint {
             coordinates: coordinates.to_vec(),
             point,
@@ -1732,6 +1788,9 @@ impl SurfaceRadialMap {
                 self.dimension
             ));
         }
+        if point.iter().any(|component| !component.0.is_finite()) {
+            return Err(eyre!("surface radial-map inverse requires finite momenta"));
+        }
         let mut displacement = Vec::with_capacity(self.dimension);
         for (component, centre) in point.iter().zip(&self.center) {
             displacement.push(component - F::from_f64(*centre));
@@ -1742,9 +1801,9 @@ impl SurfaceRadialMap {
         }
         let radius = radius_squared.sqrt();
         let zero = radius.zero();
-        if radius == zero {
+        if !radius.0.is_finite() || radius <= zero {
             return Err(eyre!(
-                "surface radial-map inverse is undefined at its centre"
+                "surface radial-map inverse radius must be finite and positive; it is undefined at its centre"
             ));
         }
         let (radial_coordinate, _) = self.coordinate_from_radius(&radius);
@@ -1767,6 +1826,11 @@ impl SurfaceRadialMap {
         coordinates[1] = phi / radius.TAU();
         let mapped = self.forward(&coordinates)?;
         let residual = max_coordinate_residual(point, &mapped.point);
+        if !residual.0.is_finite() {
+            return Err(eyre!(
+                "surface radial-map inverse residual is not representable at the current precision"
+            ));
+        }
         Ok(SurfaceRadialPoint {
             coordinates,
             point: point.to_vec(),
@@ -1949,6 +2013,17 @@ impl SamplingMapKernel {
         self.validate_coordinates(coordinates)?;
         let e_cm = F::<T>::from_f64(self.e_cm);
         let (raw, jacobian) = global_parameterize(coordinates, e_cm.clone(), &self.settings);
+        if !jacobian.0.is_finite()
+            || jacobian <= jacobian.zero()
+            || raw
+                .iter()
+                .flatten()
+                .any(|component| !component.0.is_finite())
+        {
+            return Err(eyre!(
+                "sampling-map forward point or positive Jacobian is not representable at the current precision"
+            ));
+        }
         let loop_momenta = LoopMomenta(
             raw.into_iter()
                 .map(|p| ThreeMomentum::new(p[0].clone(), p[1].clone(), p[2].clone()))
@@ -1956,11 +2031,10 @@ impl SamplingMapKernel {
         );
         let (inverse_coordinates, inverse_jacobian) =
             global_inv_parameterize(&loop_momenta.0, e_cm, &self.settings);
-        if inverse_coordinates.len() != self.dimensions {
+        self.validate_coordinates(&inverse_coordinates)?;
+        if !inverse_jacobian.0.is_finite() || inverse_jacobian <= inverse_jacobian.zero() {
             return Err(eyre!(
-                "sampling-map inverse returned {} coordinates, expected {}",
-                inverse_coordinates.len(),
-                self.dimensions
+                "sampling-map inverse Jacobian must be finite and positive at the current precision"
             ));
         }
         let residual = max_coordinate_residual(coordinates, &inverse_coordinates);
@@ -1984,18 +2058,37 @@ impl SamplingMapKernel {
                 self.dimensions / 3
             ));
         }
+        if loop_momenta
+            .0
+            .iter()
+            .flat_map(|momentum| [&momentum.px, &momentum.py, &momentum.pz])
+            .any(|component| !component.0.is_finite())
+        {
+            return Err(eyre!("sampling-map inverse requires finite momenta"));
+        }
         let e_cm = F::<T>::from_f64(self.e_cm);
         let (coordinates, inverse_jacobian) =
             global_inv_parameterize(&loop_momenta.0, e_cm.clone(), &self.settings);
-        if coordinates.len() != self.dimensions {
+        self.validate_coordinates(&coordinates)?;
+        if !inverse_jacobian.0.is_finite() || inverse_jacobian <= inverse_jacobian.zero() {
             return Err(eyre!(
-                "sampling-map inverse returned {} coordinates, expected {}",
-                coordinates.len(),
-                self.dimensions
+                "sampling-map inverse Jacobian must be finite and positive at the current precision"
             ));
         }
         let (mapped, jacobian) = global_parameterize(&coordinates, e_cm, &self.settings);
         let residual = max_momentum_residual(&loop_momenta.0, &mapped);
+        if !jacobian.0.is_finite()
+            || jacobian <= jacobian.zero()
+            || mapped
+                .iter()
+                .flatten()
+                .any(|component| !component.0.is_finite())
+            || !residual.0.is_finite()
+        {
+            return Err(eyre!(
+                "sampling-map inverse point, positive Jacobian or residual is not representable at the current precision"
+            ));
+        }
         Ok(SamplingMapPoint {
             coordinates,
             loop_momenta: loop_momenta.clone(),
@@ -2008,7 +2101,7 @@ impl SamplingMapKernel {
     fn validate_coordinates<T: FloatLike>(&self, coordinates: &[F<T>]) -> Result<()> {
         if coordinates.len() != self.dimensions {
             return Err(eyre!(
-                "sampling-map forward received {} coordinates, expected {}",
+                "sampling-map received {} coordinates, expected {}",
                 coordinates.len(),
                 self.dimensions
             ));
@@ -2020,7 +2113,7 @@ impl SamplingMapKernel {
             .any(|coordinate| coordinate.is_nan() || coordinate <= &zero || coordinate >= &one)
         {
             return Err(eyre!(
-                "sampling-map coordinates must be finite and strictly inside the unit cube"
+                "sampling-map coordinates must be finite and strictly inside the unit cube at the current precision"
             ));
         }
         Ok(())
@@ -2265,6 +2358,33 @@ mod tests {
                         .radius_from_coordinate(coordinate, threshold.map(|radius| (radius, 1.0)));
                     assert!((implicit_radius - radius.0).abs() < 1.0e-12);
                     assert!((implicit_jacobian / finite_difference - 1.0).abs() < 1.0e-8);
+
+                    let map =
+                        SurfaceRadialMap::new(6, vec![0.1; 6], threshold, 2.0, power).unwrap();
+                    assert_eq!(map.contract().jacobian, SamplingJacobian::ExactForward);
+                    let coordinates = [coordinate, 0.27, 0.61, 0.39, 0.72, 0.58].map(F);
+                    let mapped = map.forward(&coordinates).unwrap();
+                    let mut matrix = vec![vec![0.0; 6]; 6];
+                    for axis in 0..6 {
+                        let mut plus = coordinates;
+                        let mut minus = coordinates;
+                        plus[axis].0 += step;
+                        minus[axis].0 -= step;
+                        let plus = map.forward(&plus).unwrap();
+                        let minus = map.forward(&minus).unwrap();
+                        for (component, row) in matrix.iter_mut().enumerate() {
+                            row[axis] =
+                                (plus.point[component].0 - minus.point[component].0) / (2.0 * step);
+                        }
+                    }
+                    let determinant = SamplingMapAffine::new(matrix, vec![0.0; 6])
+                        .unwrap()
+                        .determinant();
+                    assert!((determinant / mapped.jacobian.0 - 1.0).abs() < 1.0e-4);
+                    let inverse = map.inverse(&mapped.point).unwrap();
+                    assert!(
+                        (mapped.jacobian * inverse.inverse_jacobian - F(1.0)).abs() < F(1.0e-10)
+                    );
                 }
             }
         }
@@ -2491,6 +2611,136 @@ mod tests {
                 1,
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn sampling_maps_reject_unrepresentable_tails_without_clipping() {
+        let kernel = SamplingMapKernel::new(
+            SamplingMapDefinition::Lmb(vec![0]),
+            ParameterizationSettings {
+                mode: ParameterizationMode::Cartesian,
+                mapping: ParameterizationMapping::Log,
+                ..Default::default()
+            },
+            42.2,
+            1,
+        )
+        .unwrap();
+        assert!(
+            kernel
+                .forward(&[F(f64::from_bits(1)), F(0.4), F(0.7)])
+                .is_err()
+        );
+        assert!(
+            kernel
+                .inverse(&LoopMomenta::from_iter([ThreeMomentum::new(
+                    F(4220.0),
+                    F(10.0),
+                    F(20.0),
+                )]))
+                .is_err()
+        );
+        let surface = SurfaceRadialMap::new(3, vec![0.0; 3], Some(1.0), 1.0, 1.0).unwrap();
+        assert!(
+            surface
+                .forward(&[F(f64::from_bits(1)), F(0.3), F(0.4)])
+                .is_err()
+        );
+        let implicit = ImplicitSurfaceRadialMap::new(
+            3,
+            vec![0.0; 3],
+            1.0e-104,
+            1.0,
+            Arc::new(|_, radius| Ok((radius + 1.0, 1.0))),
+        )
+        .unwrap();
+        assert!(implicit.forward(&[0.5, 0.3, 0.4]).is_err());
+    }
+
+    #[test]
+    fn implicit_surface_inverse_preserves_resolvable_tail_and_angular_coordinates() {
+        let map = ImplicitSurfaceRadialMap::new(
+            2,
+            vec![0.0; 2],
+            1.0,
+            1.0,
+            Arc::new(|_, radius| Ok((radius + 1.0, 1.0))),
+        )
+        .unwrap();
+        for coordinates in [[1.0e-16, 0.23], [0.3, 1.0e-16]] {
+            let forward = map.forward(&coordinates).unwrap();
+            let inverse = map.inverse(&forward.point).unwrap();
+            for (actual, expected) in inverse.coordinates.iter().zip(coordinates) {
+                assert!((actual / expected - 1.0).abs() < 1.0e-12);
+            }
+            assert!((forward.jacobian * inverse.inverse_jacobian - 1.0).abs() < 1.0e-12);
+        }
+        // The azimuth seam is a measure-zero chart boundary, not a nearby
+        // interior point onto which the inverse may silently move its input.
+        assert!(map.inverse(&[1.0, 0.0]).is_err());
+        let polar_map = ImplicitSurfaceRadialMap::new(
+            3,
+            vec![0.0; 3],
+            1.0,
+            1.0,
+            Arc::new(|_, radius| Ok((radius + 1.0, 1.0))),
+        )
+        .unwrap();
+        assert!(polar_map.forward(&[0.3, 0.4, 1.0e-20]).is_err());
+    }
+
+    #[test]
+    fn ordinary_kernel_preserves_finite_tails_at_native_rescue_precision() {
+        let kernel = SamplingMapKernel::new(
+            SamplingMapDefinition::Lmb(vec![0]),
+            ParameterizationSettings {
+                mode: ParameterizationMode::Cartesian,
+                mapping: ParameterizationMapping::Linear,
+                ..Default::default()
+            },
+            42.2,
+            1,
+        )
+        .unwrap();
+        let one = F::<crate::utils::ArbPrec>::default().one();
+        let tiny = &one / one.from_usize(10).powi(400);
+        let coordinates = [tiny, &one / one.from_usize(3), &one / one.from_usize(2)];
+        let mapped = kernel.forward(&coordinates).unwrap();
+        assert!(mapped.jacobian.into_f64().is_infinite());
+        assert_eq!(mapped.inverse_jacobian.into_f64(), 0.0);
+        let inverse = kernel.inverse(&mapped.loop_momenta).unwrap();
+        assert!(
+            (inverse.coordinates[0].clone() / &coordinates[0] - &one).abs()
+                < &one / one.from_usize(10).powi(12)
+        );
+    }
+
+    #[test]
+    fn implicit_surface_solver_certifies_residual_after_iteration_or_bracket_stop() {
+        let callbacks: [ImplicitSurfaceRadialEvaluator; 2] = [
+            Arc::new(|_, radius| Ok((if radius < 0.7 { -1.0 } else { 1.0 }, 1.0))),
+            Arc::new(|_, radius| Ok((radius - 0.9, 1.0e6))),
+        ];
+        for evaluator in callbacks {
+            let map = ImplicitSurfaceRadialMap::new(2, vec![0.0; 2], 1.0, 1.0, evaluator).unwrap();
+            let error = map.forward(&[0.3, 0.4]).unwrap_err();
+            assert!(error.to_string().contains("residual"), "{error}");
+        }
+        let shallow = ImplicitSurfaceRadialMap::new(
+            2,
+            vec![0.0; 2],
+            1.0,
+            1.0,
+            Arc::new(|_, radius| Ok((radius - 1.0e-14, 1.0))),
+        )
+        .unwrap();
+        assert!(
+            shallow
+                .forward(&[0.3, 0.4])
+                .unwrap_err()
+                .to_string()
+                .contains("interior center is not certified")
         );
     }
 

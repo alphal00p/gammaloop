@@ -2615,9 +2615,12 @@ impl SamplingChannelCatalogue {
                     context.parent_lmb.clone()
                 }
                 _ => match &definition {
-                    SamplingMapDefinition::PhaseSpace(_) => context.parent_lmb.clone(),
+                    // Surface arguments name physical energy edges; the compiled
+                    // chart (including any complement) outputs the parent frame.
+                    SamplingMapDefinition::PhaseSpace(_) | SamplingMapDefinition::Surface(_) => {
+                        context.parent_lmb.clone()
+                    }
                     SamplingMapDefinition::Lmb(edges)
-                    | SamplingMapDefinition::Surface(edges)
                     | SamplingMapDefinition::Complement(edges)
                     | SamplingMapDefinition::Cut(edges) => edges.clone(),
                     _ => Vec::new(),
@@ -4012,6 +4015,24 @@ mod tests {
         assert_eq!(compiled.len(), 2);
         assert_eq!(compiled[0].name, "h");
         assert_eq!(compiled[1].name, "z");
+        assert!(
+            compiled
+                .iter()
+                .all(|channel| channel.embedded_edges == [1, 2])
+        );
+        assert_eq!(
+            compiled[0].definition,
+            SamplingMapDefinition::Surface(vec![2, 4])
+        );
+        assert_eq!(
+            compiled[1].definition,
+            SamplingMapDefinition::Surface(vec![3, 10])
+        );
+        let bridge = SamplingChannelBridge::new(compiled).unwrap();
+        let point = bridge
+            .forward(SamplingChannelId(0), &[0.2, 0.3, 0.4, 0.5, 0.6, 0.7])
+            .unwrap();
+        assert!((point.partition.weight_sum() - 1.0).abs() < 1.0e-13);
     }
 
     #[test]
@@ -4829,30 +4850,41 @@ mod tests {
     }
 
     #[test]
-    fn bridge_acceptance_report_integrates_mixed_named_and_lmb_catalogue() {
-        // A named map and an automatically generated LMB map share the same
+    fn bridge_acceptance_report_integrates_absent_surface_and_lmb_catalogue() {
+        // A named rootless map and an automatically generated LMB map share the same
         // master frame but remain two distinct canonical catalogue entries.
         // The acceptance harness must visit both IDs; silently compacting the
         // generated basis would make the mixed selection under-sample one map.
-        let mut selection = SamplingChannelSelection::default();
-        selection.default_channel_selection = vec!["auto:lmb".into(), "named_lmb".into()];
-        let mut named_lmb = definition("lmb(1)");
-        named_lmb.subspace_lmb = vec![1];
-        named_lmb.parent_lmb = vec![1];
+        let mut selection = SamplingChannelSelection {
+            default_channel_selection: vec!["auto:lmb".into(), "absent".into()],
+            ..Default::default()
+        };
+        let mut absent = definition("surface(2,3)");
+        absent.subspace_lmb = vec![1];
+        absent.parent_lmb = vec![1];
         selection
             .channel_definitions
             .entry("G".into())
             .or_default()
-            .insert("named_lmb".into(), named_lmb);
+            .insert("absent".into(), absent);
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1])], &[0]);
         assert_eq!(catalogue.entries.len(), 2);
-        let context = SamplingChannelCompileContext::new(
+        let mut context = SamplingChannelCompileContext::new(
             "G",
             vec![1],
             ParameterizationSettings::default(),
             2.0,
             1,
+        );
+        context.surfaces.insert(
+            (vec![2, 3], vec![1]),
+            SamplingSurfaceGeometry {
+                center: vec![0.2, -0.3, 0.1],
+                threshold_radius: None,
+                beta: 2.0,
+                power: 1.0,
+            },
         );
         let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
         let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(

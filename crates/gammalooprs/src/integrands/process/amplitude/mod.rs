@@ -24,6 +24,7 @@ use symbolica::{
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
+use three_dimensional_reps::utils::rank_i64;
 use tracing::{debug, info, instrument, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -46,6 +47,7 @@ use crate::{
         evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
             ParamBuilder, SamplingChannelBridge, SamplingChannelCompileContext, SamplingChannelId,
+            SamplingMapDefinition, SamplingSurfaceGeometry,
             evaluators::{ActiveF64Backend, EvaluatorStack},
             graph_to_group_id_for_group_structure, resolve_sampling_channel_selection,
             threshold_multiplier::ThresholdMultiplierEvaluatorCollection,
@@ -53,8 +55,8 @@ use crate::{
     },
     model::Model,
     momentum::{
-        Helicity, Rotation, RotationMethod, SignOrZero, ThreeMomentum,
-        sample::{ExternalIndex, MomentumSample},
+        FourMomentum, Helicity, Rotation, RotationMethod, SignOrZero, ThreeMomentum,
+        sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample},
         signature::SignatureLike,
     },
     observables::{
@@ -80,7 +82,8 @@ use crate::{
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
     utils::{
-        ArbPrec, W_, compute_shift_part, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS,
+        ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, W_, compute_shift_part,
+        serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS,
     },
 };
 
@@ -791,19 +794,7 @@ impl AmplitudeGraphTerm {
         momentum_sample: &MomentumSample<T>,
         context: &mut GraphTermEvaluationContext<'_, '_>,
     ) -> Result<AmplitudeGraphTermEvaluation<T>> {
-        let (momentum_sample, prefactor) = if let Some(lmb_basis_id) = context.lmb_basis_id {
-            (
-                self.multi_channeling_setup
-                    .reinterpret_loop_momenta_for_lmb(
-                        lmb_basis_id,
-                        momentum_sample,
-                        momentum_sample.sample.loop_mom_cache_id,
-                    ),
-                momentum_sample.one(),
-            )
-        } else {
-            (momentum_sample.clone(), momentum_sample.one())
-        };
+        let prefactor = momentum_sample.one();
 
         let hel = context.settings.kinematics.externals.get_helicities();
         let orientations =
@@ -820,7 +811,7 @@ impl AmplitudeGraphTerm {
                 context.settings.general.debug_cache,
             ),
             &self.graph,
-            &momentum_sample,
+            momentum_sample,
             hel,
             &context.settings.additional_params(),
             None,
@@ -841,7 +832,7 @@ impl AmplitudeGraphTerm {
             .unwrap_real();
         // debug!("parambuilder 244: {}", self.param_builder);
         let counterterm_evaluation = self.threshold_counterterm.evaluate(
-            &momentum_sample,
+            momentum_sample,
             &self.graph,
             context.model,
             &self.esurfaces,
@@ -1117,6 +1108,10 @@ impl GraphTerm for AmplitudeGraphTerm {
         &self.graph
     }
 
+    fn sampling_setup(&self) -> &LmbMultiChannelingSetup {
+        &self.multi_channeling_setup
+    }
+
     fn selected_lmb_basis_id(
         &self,
         parameterization_settings: &ParameterizationSettings,
@@ -1154,6 +1149,203 @@ impl GraphTerm for AmplitudeGraphTerm {
             &self.multi_channeling_setup.graph.name,
             &parameterization_settings.sampling_channels,
         )?;
+        let surface_channels = resolved
+            .named_channels
+            .iter()
+            .filter(|channel| matches!(channel.map, SamplingMapDefinition::Surface(_)))
+            .collect_vec();
+        if !surface_channels.is_empty() {
+            let lmb = &self.graph.loop_momentum_basis;
+            let master_lmb = &self.multi_channeling_setup.graph.loop_momentum_basis;
+            if lmb != master_lmb {
+                return Err(eyre!(
+                    "amplitude surface sampling for graph '{}' requires the master's complete loop/external routing; graph parent {:?}, master '{}' parent {:?}; identical edge names alone do not identify the same cycles",
+                    self.graph.name,
+                    lmb.loop_edges,
+                    self.multi_channeling_setup.graph.name,
+                    master_lmb.loop_edges,
+                ));
+            }
+            if external_momenta.len() != lmb.ext_edges.len()
+                || external_momenta
+                    .iter()
+                    .flatten()
+                    .any(|value| !value.is_finite())
+            {
+                return Err(eyre!(
+                    "amplitude surface sampling for graph '{}' needs {} finite external four-momenta (including the dependent momentum), received {:?}",
+                    self.graph.name,
+                    lmb.ext_edges.len(),
+                    external_momenta,
+                ));
+            }
+            let cached_masses = self.real_mass_vec.as_ref().ok_or_else(|| {
+                eyre!(
+                    "amplitude surface sampling for graph '{}' requires warmup mass data",
+                    self.graph.name
+                )
+            })?;
+            let masses = self
+                .graph
+                .new_edgevec(|_, edge, _| cached_masses[edge].unwrap_or(F(0.0)));
+            let externals =
+                ExternalFourMomenta::from_iter(external_momenta.iter().map(|momentum| {
+                    FourMomentum::from_args(
+                        F(momentum[0]),
+                        F(momentum[1]),
+                        F(momentum[2]),
+                        F(momentum[3]),
+                    )
+                }));
+            let origin = LoopMomenta::from_iter(
+                (0..context.n_loop_momenta).map(|_| ThreeMomentum::new(F(0.0), F(0.0), F(0.0))),
+            );
+            for channel in surface_channels {
+                let SamplingMapDefinition::Surface(edges) = &channel.map else {
+                    unreachable!()
+                };
+                if channel.definition.parent_lmb != context.parent_lmb
+                    || channel.definition.subspace_lmb != context.parent_lmb
+                {
+                    return Err(eyre!(
+                        "amplitude surface channel '{}' for graph '{}' currently requires full parent and subspace {:?}, received parent {:?}, subspace {:?}; conditional spectator and alternate-parent maps are not yet supported",
+                        channel.name,
+                        self.graph.name,
+                        context.parent_lmb,
+                        channel.definition.parent_lmb,
+                        channel.definition.subspace_lmb,
+                    ));
+                }
+                let candidates = self
+                    .esurfaces
+                    .iter_enumerated()
+                    .filter(|(_, surface)| {
+                        surface
+                            .energies
+                            .iter()
+                            .map(|edge| edge.0)
+                            .sorted()
+                            .eq(edges.iter().copied())
+                    })
+                    .collect_vec();
+                let Some((_, representative)) = candidates.first() else {
+                    return Err(eyre!(
+                        "amplitude surface channel '{}' for graph '{}' requests unknown energy edges {:?}; catalogue candidates (ID, edges, external shift): {:?}",
+                        channel.name,
+                        self.graph.name,
+                        edges,
+                        self.esurfaces
+                            .iter_enumerated()
+                            .map(|(id, surface)| (id.0, &surface.energies, &surface.external_shift))
+                            .collect_vec(),
+                    ));
+                };
+                let rows = representative
+                    .energies
+                    .iter()
+                    .map(|edge| {
+                        lmb.edge_signatures[*edge]
+                            .internal
+                            .iter()
+                            .map(|sign| match sign {
+                                SignOrZero::Minus => -1_i64,
+                                SignOrZero::Zero => 0,
+                                SignOrZero::Plus => 1,
+                            })
+                            .collect_vec()
+                    })
+                    .collect_vec();
+                let rank = rank_i64(&rows);
+                if rank != context.n_loop_momenta {
+                    return Err(eyre!(
+                        "amplitude surface channel '{}' for graph '{}' has energy edges {:?} with routing rows {:?}, rank {}, but full parent {:?} requires rank {}; use a supported active-subspace chart once conditional spectators are available",
+                        channel.name,
+                        self.graph.name,
+                        edges,
+                        rows,
+                        rank,
+                        context.parent_lmb,
+                        context.n_loop_momenta,
+                    ));
+                }
+                // The catalogue also includes positive-shift counterparts, which
+                // cannot bound a threshold at these kinematics. Keep the named
+                // channel when none is eligible, using a normalized rootless map.
+                let eligible = candidates
+                    .iter()
+                    .copied()
+                    .filter(|(_, surface)| {
+                        surface.compute_shift_part_from_momenta(&externals, lmb) < F(0.0)
+                    })
+                    .unique_by(|(_, surface)| surface.external_shift.iter().sorted().collect_vec())
+                    .collect_vec();
+                if eligible.len() > 1 {
+                    return Err(eyre!(
+                        "amplitude surface channel '{}' for graph '{}' is ambiguous for energy edges {:?}: eligible catalogue candidates (ID, external shift, evaluated shift, equation) {:?}; distinct shifts cannot share an edge-only selector",
+                        channel.name,
+                        self.graph.name,
+                        edges,
+                        eligible
+                            .iter()
+                            .map(|(id, surface)| (
+                                id.0,
+                                &surface.external_shift,
+                                surface.compute_shift_part_from_momenta(&externals, lmb).0,
+                                surface.to_atom(&[]).to_string(),
+                            ))
+                            .collect_vec(),
+                    ));
+                }
+                let existing = eligible.first().filter(|(_, surface)| {
+                    surface
+                        .classify_existence(
+                            &externals,
+                            lmb,
+                            &masses,
+                            &F(e_cm),
+                            &F(DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+                        )
+                        .is_existing()
+                });
+                let beta = e_cm * parameterization_settings.b;
+                if let Some((id, surface)) = existing {
+                    let origin_value =
+                        surface.compute_from_momenta(lmb, &masses, &origin, &externals);
+                    if !origin_value.0.is_finite() || origin_value >= F(0.0) {
+                        return Err(eyre!(
+                            "amplitude surface channel '{}' for graph '{}' targets existing E-surface {} with edges {:?}, but its value at the current zero center is {}; a nonzero interior-center chart is required",
+                            channel.name,
+                            self.graph.name,
+                            id.0,
+                            edges,
+                            origin_value,
+                        ));
+                    }
+                    let map = surface.sampling_radial_map(
+                        lmb,
+                        &masses,
+                        &externals,
+                        beta,
+                        parameterization_settings.power,
+                    )?;
+                    context.insert_implicit_surface(
+                        edges.clone(),
+                        context.parent_lmb.clone(),
+                        map,
+                    )?;
+                } else {
+                    context.surfaces.insert(
+                        (edges.clone(), context.parent_lmb.clone()),
+                        SamplingSurfaceGeometry {
+                            center: vec![0.0; 3 * context.n_loop_momenta],
+                            threshold_radius: None,
+                            beta,
+                            power: parameterization_settings.power,
+                        },
+                    );
+                }
+            }
+        }
         self.multi_channeling_setup
             .compile_sampling_channel_bridge_with_external(&resolved, &context, external_momenta)
     }
@@ -1200,6 +1392,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         )?;
         if !prepared_event.selectors_pass {
             return Ok(GraphEvaluationResult {
+                reference_moments: None,
                 integrand_result: Complex::new_re(momentum_sample.zero()),
                 event_groups: crate::observables::GenericEventGroupList::default(),
                 event_processing_time: prepared_event.event_processing_time,
@@ -1267,6 +1460,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         }
 
         Ok(GraphEvaluationResult {
+            reference_moments: None,
             integrand_result,
             event_groups,
             event_processing_time: prepared_event.event_processing_time,
@@ -2648,5 +2842,524 @@ impl HasIntegrand for AmplitudeIntegrand {
             //let median_dimension = dimensions[dimensions.len() / 2];
             //median_dimension
         }
+    }
+}
+
+#[cfg(test)]
+mod sampling_tests {
+    use super::*;
+    use crate::{
+        initialisation::test_initialise,
+        integrands::process::{CompiledSamplingMap, ProcessIntegrand, SamplingMapAffine},
+        processes::Amplitude,
+        utils::load_generic_model,
+    };
+    use linnet::half_edge::involution::EdgeIndex;
+
+    #[test]
+    fn generated_kite_reference_normalizes_unequal_groups_and_orientations() -> Result<()> {
+        use crate::{
+            integrands::process::{
+                EvaluationTarget, GaussianReferenceFunction, evaluate_single,
+                gammaloop_sample::parameterize,
+            },
+            settings::runtime::{
+                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
+            },
+            utils::QuadFloat,
+        };
+        test_initialise()?;
+        let model = load_generic_model("scalars");
+        let graph = Graph::from_string(
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/resources/graphs/massive_kite.dot"
+            )),
+            &model,
+        )?
+        .remove(0);
+        // These identical graph copies form deliberately unequal groups. This
+        // tests the normalized reference target, not a new physical graph sum.
+        let graphs = (0..3)
+            .map(|index| {
+                let mut graph = graph.clone();
+                graph.name = format!("reference_kite_{index}");
+                graph.group_id = Some(GroupId(usize::from(index > 0)));
+                graph.is_group_master = index != 2;
+                graph
+            })
+            .collect();
+        let mut amplitude = Amplitude::from_graph_list("reference_groups", graphs)?;
+        let global: GlobalSettings = toml::from_str(
+            r#"
+[generation]
+override_lmb_heuristics = true
+[generation.uv]
+subtract_uv = false
+generate_integrated = false
+[generation.threshold_subtraction]
+enable_thresholds = false
+[generation.evaluator]
+compile = false
+summed = false
+summed_function_map = true
+iterative_orientation_optimization = false
+"#,
+        )?;
+        let settings: RuntimeSettings = toml::from_str(
+            r#"
+[general]
+evaluator_method = "SummedFunctionMap"
+[kinematics]
+e_cm = 5.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[5.0, 0.0, 0.0, 0.0], "dependent"]
+helicities = [0, 0]
+[sampling]
+graphs = "summed"
+orientations = "summed"
+sampling_multichanneling = false
+"#,
+        )?;
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .stack_size(256 * 1024 * 1024)
+            .build()?;
+        amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
+        amplitude.build_integrand(
+            &model,
+            "reference_groups",
+            &global,
+            (&settings).into(),
+            &pool,
+        )?;
+        let integrand = amplitude.integrand.as_mut().unwrap();
+        integrand.warm_up(&model)?;
+        assert_eq!(integrand.graph_count(), 3);
+        assert_eq!(integrand.graph_group_count(), 2);
+        let parameterization = settings.sampling.get_parameterization_settings().unwrap();
+        let reference = GaussianReferenceFunction::new(2.0, vec![0.2, -0.1, 0.3, -0.2, 0.1, 0.4])?;
+        let continuous = Sample::Continuous(
+            F(1.0),
+            vec![F(0.31), F(0.27), F(0.61), F(0.39), F(0.72), F(0.58)],
+        );
+        let summed = integrand.evaluate_reference_sample_detailed(&continuous, &reference)?;
+        let expected = summed.evaluation.integrand_result.re.0
+            * summed.evaluation.parameterization_jacobian.unwrap().0;
+        let expected_moment =
+            summed.moments.second_moment.0 * summed.evaluation.parameterization_jacobian.unwrap().0;
+        for select_orientation in [false, true] {
+            integrand.get_mut_settings().general.evaluator_method =
+                crate::integrands::process::evaluators::EvaluatorMethod::SingleParametric;
+            integrand.get_mut_settings().sampling =
+                SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                    sample_orientations: select_orientation,
+                    sampling_type: DiscreteGraphSamplingType::Default(parameterization.clone()),
+                    ..Default::default()
+                });
+            integrand.warm_up(&model)?;
+            let (mut total, mut total_moment) = (0.0, 0.0);
+            for (group_id, group_probability) in [(0, 0.2), (1, 0.8)] {
+                let count = if select_orientation {
+                    integrand
+                        .group_orientation_count(GroupId(group_id))
+                        .unwrap()
+                } else {
+                    1
+                };
+                if select_orientation {
+                    assert!(count > 1);
+                }
+                for orientation in 0..count {
+                    let orientation_probability =
+                        2.0 * (orientation + 1) as f64 / (count * (count + 1)) as f64;
+                    let probability = group_probability * orientation_probability;
+                    let inner = if select_orientation {
+                        Sample::Discrete(F(1.0), orientation, Some(Box::new(continuous.clone())))
+                    } else {
+                        continuous.clone()
+                    };
+                    let sample =
+                        Sample::Discrete(F(1.0 / probability), group_id, Some(Box::new(inner)));
+                    let selected =
+                        integrand.evaluate_reference_sample_detailed(&sample, &reference)?;
+                    let factor = selected.evaluation.parameterization_jacobian.unwrap().0
+                        * selected.evaluation.integrator_weight.0;
+                    let value = selected.evaluation.integrand_result.re.0 * factor;
+                    let group_fraction = if group_id == 0 { 1.0 / 3.0 } else { 2.0 / 3.0 };
+                    assert!(
+                        (value * probability / expected - group_fraction / count as f64).abs()
+                            < 1.0e-12
+                    );
+                    total += probability * value;
+                    total_moment += probability * selected.moments.second_moment.0 * factor;
+                }
+            }
+            assert!((total / expected - 1.0).abs() < 1.0e-12);
+            assert!((total_moment / expected_moment - 1.0).abs() < 1.0e-12);
+        }
+        // Exercise the precision-generic reference owner directly; the public
+        // acceptance API remains f64 and does not run a precision-rescue stack.
+        integrand.get_mut_settings().sampling = settings.sampling;
+        integrand.warm_up(&model)?;
+        let ProcessIntegrand::Amplitude(integrand) = integrand else {
+            unreachable!()
+        };
+        let sample = parameterize::<QuadFloat, _>(&continuous, integrand)?;
+        let rotation = Rotation::new(RotationMethod::Pi2X);
+        let rotated = sample.rotate(&rotation, 100, 101);
+        let result = evaluate_single(
+            integrand,
+            EvaluationTarget::Reference(&reference),
+            &rotated,
+            &rotation,
+            &mut crate::integrands::evaluation::EvaluationMetaData::new_empty(),
+            false,
+        )?;
+        assert!(
+            (result.integrand_result.re.into_ff64().0 / summed.evaluation.integrand_result.re.0
+                - 1.0)
+                .abs()
+                < 1.0e-12
+        );
+        assert!(
+            (result
+                .reference_moments
+                .unwrap()
+                .second_moment
+                .into_ff64()
+                .0
+                / summed.moments.second_moment.0
+                - 1.0)
+                .abs()
+                < 1.0e-12
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn generated_kite_sampling_uses_physical_six_dimensional_surfaces() -> Result<()> {
+        test_initialise()?;
+        let mut model = load_generic_model("scalars");
+        let graphs = Graph::from_string(
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/resources/graphs/massive_kite.dot"
+            )),
+            &model,
+        )?;
+        let mut amplitude = Amplitude::from_graph_list("sampling_kite", graphs)?;
+        let global: GlobalSettings = toml::from_str(
+            r#"
+[generation]
+override_lmb_heuristics = true
+[generation.uv]
+subtract_uv = false
+generate_integrated = false
+[generation.evaluator]
+compile = false
+summed = false
+summed_function_map = true
+iterative_orientation_optimization = false
+"#,
+        )?;
+        let settings: RuntimeSettings = toml::from_str(
+            r#"
+[general]
+evaluator_method = "SummedFunctionMap"
+integral_unit = "none"
+[kinematics]
+e_cm = 5.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[5.0, 0.0, 0.0, 0.0], "dependent"]
+helicities = [0, 0]
+[sampling]
+graphs = "summed"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "summed"
+power = 2.0
+default_channel_selection = ["C", "D", "ordinary"]
+[sampling.channel_definitions.massive_kite.C]
+around = "surface(2,4,6)"
+parent_lmb = [4,6]
+subspace_lmb = [4,6]
+[sampling.channel_definitions.massive_kite.D]
+around = "surface(3,5,6)"
+parent_lmb = [4,6]
+subspace_lmb = [4,6]
+[sampling.channel_definitions.massive_kite.ordinary]
+around = "lmb(4,6)"
+parent_lmb = [4,6]
+"#,
+        )?;
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .stack_size(256 * 1024 * 1024)
+            .build()?;
+        amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
+        amplitude.build_integrand(&model, "sampling_kite", &global, (&settings).into(), &pool)?;
+        let integrand = amplitude.integrand.as_mut().unwrap();
+        integrand.warm_up(&model)?;
+        let ProcessIntegrand::Amplitude(integrand) = integrand else {
+            unreachable!("generated an amplitude")
+        };
+        let term = integrand.data.graph_terms.first_mut().unwrap();
+        let parameterization = settings.sampling.get_parameterization_settings().unwrap();
+        let coordinates = [0.19, 0.27, 0.61, 0.39, 0.72, 0.58];
+        let mut rest_point = Vec::new();
+
+        for external in [[5.0, 0.0, 0.0, 0.0], [26.0_f64.sqrt(), 0.0, 0.0, 1.0]] {
+            let externals = [external; 2];
+            let bridge = term.compile_sampling_bridge(&parameterization, 5.0, &externals, None)?;
+            assert_eq!(
+                bridge
+                    .channels()
+                    .iter()
+                    .map(|channel| channel.name.as_str())
+                    .collect_vec(),
+                ["C", "D", "ordinary"]
+            );
+            assert!(matches!(
+                bridge.channels()[0].map,
+                CompiledSamplingMap::ImplicitSurface(_)
+            ));
+            assert!(matches!(
+                bridge.channels()[1].map,
+                CompiledSamplingMap::ImplicitSurface(_)
+            ));
+            let forward = bridge.forward(SamplingChannelId(0), &coordinates)?;
+            if external[3] == 0.0 {
+                rest_point = forward.raw_coordinates.clone();
+            } else {
+                assert_ne!(
+                    rest_point, forward.raw_coordinates,
+                    "external spatial updates must reach the captured graph equation"
+                );
+            }
+            assert!(forward.map.jacobian.is_finite() && forward.map.jacobian > 0.0);
+            assert!((forward.partition.weights.iter().sum::<f64>() - 1.0).abs() < 1.0e-13);
+            for channel_id in 0..3 {
+                let inverse =
+                    bridge.inverse(SamplingChannelId(channel_id), &forward.raw_coordinates)?;
+                assert_eq!(inverse.partition, forward.partition);
+                let recovered =
+                    bridge.forward(SamplingChannelId(channel_id), &inverse.map.coordinates)?;
+                for (original, recovered) in forward
+                    .raw_coordinates
+                    .iter()
+                    .zip(&recovered.raw_coordinates)
+                {
+                    assert!((original - recovered).abs() < 1.0e-9);
+                }
+            }
+
+            // Independently evaluate C=E(k+l+Q)+E(k)+E(l)-Q0 in the
+            // actual parent [q4=k,q6=l]. Its radius varies with direction.
+            let norm = forward
+                .raw_coordinates
+                .iter()
+                .map(|x| x * x)
+                .sum::<f64>()
+                .sqrt();
+            let direction = forward
+                .raw_coordinates
+                .iter()
+                .map(|x| x / norm)
+                .collect_vec();
+            let physical_surface = |radius: f64| {
+                let k = [
+                    radius * direction[0],
+                    radius * direction[1],
+                    radius * direction[2],
+                ];
+                let l = [
+                    radius * direction[3],
+                    radius * direction[4],
+                    radius * direction[5],
+                ];
+                let energy_k = (1.0 + k.iter().map(|x| x * x).sum::<f64>()).sqrt();
+                let energy_l = (1.0 + l.iter().map(|x| x * x).sum::<f64>()).sqrt();
+                let energy_p = (1.0
+                    + (0..3)
+                        .map(|axis| (k[axis] + l[axis] + external[axis + 1]).powi(2))
+                        .sum::<f64>())
+                .sqrt();
+                energy_k + energy_l + energy_p - external[0]
+            };
+            let (mut lower, mut upper) = (0.0, 16.0);
+            for _ in 0..64 {
+                let midpoint = 0.5 * (lower + upper);
+                if physical_surface(midpoint) < 0.0 {
+                    lower = midpoint;
+                } else {
+                    upper = midpoint;
+                }
+            }
+            let root = 0.5 * (lower + upper);
+            assert!(physical_surface(root).abs() < 1.0e-12);
+            let split = root / (root + 5.0 * parameterization.b);
+            let mut near_shell = coordinates;
+            near_shell[0] = split + 1.0e-5;
+            let mapped = bridge.forward(SamplingChannelId(0), &near_shell)?;
+            let mapped_radius = mapped
+                .raw_coordinates
+                .iter()
+                .map(|x| x * x)
+                .sum::<f64>()
+                .sqrt();
+            assert!(
+                physical_surface(mapped_radius).abs() < 1.0e-7,
+                "production surface profile must focus on the real C equation"
+            );
+
+            let step = 1.0e-5;
+            let mut matrix = vec![vec![0.0; 6]; 6];
+            for axis in 0..6 {
+                let mut plus = coordinates;
+                let mut minus = coordinates;
+                plus[axis] += step;
+                minus[axis] -= step;
+                let plus = bridge.forward(SamplingChannelId(0), &plus)?;
+                let minus = bridge.forward(SamplingChannelId(0), &minus)?;
+                for (component, row) in matrix.iter_mut().enumerate() {
+                    row[axis] = (plus.raw_coordinates[component]
+                        - minus.raw_coordinates[component])
+                        / (2.0 * step);
+                }
+            }
+            let determinant = SamplingMapAffine::new(matrix, vec![0.0; 6])?.determinant();
+            assert!((determinant / forward.map.jacobian - 1.0).abs() < 1.0e-4);
+        }
+
+        // Below threshold, at the pinch, and with no negative-shift member,
+        // the same canonical channel retains its normalized full-space map.
+        for external in [[2.0, 0.0, 0.0, 0.0], [3.0, 0.0, 0.0, 0.0], [0.0; 4]] {
+            let bridge =
+                term.compile_sampling_bridge(&parameterization, 5.0, &[external; 2], None)?;
+            assert!(matches!(
+                bridge.channels()[0].map,
+                CompiledSamplingMap::Surface(_)
+            ));
+            let forward = bridge.forward(SamplingChannelId(0), &coordinates)?;
+            let inverse = bridge.inverse(SamplingChannelId(0), &forward.raw_coordinates)?;
+            for (left, right) in coordinates.iter().zip(&inverse.map.coordinates) {
+                assert!((left - right).abs() < 1.0e-10);
+            }
+        }
+        let externals = [[5.0, 0.0, 0.0, 0.0]; 2];
+        model.get_parameter_mut("mass_scalar_1")?.value = Some(Complex::new_re(F(2.0)));
+        term.warm_up(&settings, &model)?;
+        let bridge = term.compile_sampling_bridge(&parameterization, 5.0, &externals, None)?;
+        assert!(
+            matches!(bridge.channels()[0].map, CompiledSamplingMap::Surface(_)),
+            "rewarming after a mass update must invalidate the old physical surface"
+        );
+        model.get_parameter_mut("mass_scalar_1")?.value = Some(Complex::new_re(F(1.0)));
+        term.warm_up(&settings, &model)?;
+
+        for (momenta, diagnostic) in [
+            (vec![externals[0]], "including the dependent"),
+            (vec![[f64::NAN; 4]; 2], "finite external"),
+        ] {
+            assert!(
+                term.compile_sampling_bridge(&parameterization, 5.0, &momenta, None)
+                    .unwrap_err()
+                    .to_string()
+                    .contains(diagnostic)
+            );
+        }
+        let cached_masses = term.real_mass_vec.take();
+        assert!(
+            term.compile_sampling_bridge(&parameterization, 5.0, &externals, None)
+                .unwrap_err()
+                .to_string()
+                .contains("warmup mass data")
+        );
+        term.real_mass_vec = cached_masses;
+        assert!(
+            term.compile_sampling_bridge(
+                &parameterization,
+                5.0,
+                &[[125.0_f64.sqrt(), 0.0, 0.0, 10.0]; 2],
+                None,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("nonzero interior-center")
+        );
+        let master_lmb = term
+            .multi_channeling_setup
+            .graph
+            .loop_momentum_basis
+            .clone();
+        term.multi_channeling_setup
+            .graph
+            .loop_momentum_basis
+            .edge_signatures[EdgeIndex(6)]
+        .internal = [1_isize, 1].into_iter().collect();
+        assert!(
+            term.compile_sampling_bridge(&parameterization, 5.0, &externals, None)
+                .unwrap_err()
+                .to_string()
+                .contains("same cycles")
+        );
+        term.multi_channeling_setup.graph.loop_momentum_basis = master_lmb;
+        for (around, subspace, diagnostic) in [
+            ("surface(2,4,999)", vec![4, 6], "unknown energy edges"),
+            ("surface(3,4)", vec![4, 6], "rank 1"),
+            ("surface(2,4,6)", vec![4], "conditional spectator"),
+        ] {
+            let mut invalid = parameterization.clone();
+            let definition = invalid
+                .sampling_channels
+                .channel_definitions
+                .get_mut("massive_kite")
+                .unwrap()
+                .get_mut("C")
+                .unwrap();
+            definition.around = around.into();
+            definition.subspace_lmb = subspace;
+            assert!(
+                term.compile_sampling_bridge(&invalid, 5.0, &externals, None)
+                    .unwrap_err()
+                    .to_string()
+                    .contains(diagnostic)
+            );
+        }
+        // The CFF cache includes positive and negative shifts; only conflicting
+        // eligible equations cause an ambiguity. Include both in diagnostics.
+        let mut conflicting = term
+            .esurfaces
+            .iter()
+            .find(|surface| {
+                surface.energies.iter().map(|edge| edge.0).eq([2, 4, 6])
+                    && surface.compute_shift_part_from_momenta(
+                        &ExternalFourMomenta::from_iter(
+                            [FourMomentum::from_args(F(5.0), F(0.0), F(0.0), F(0.0)); 2],
+                        ),
+                        &term.graph.loop_momentum_basis,
+                    ) < F(0.0)
+            })
+            .unwrap()
+            .clone();
+        for (_, coefficient) in &mut conflicting.external_shift {
+            *coefficient *= 2;
+        }
+        term.esurfaces.push(conflicting);
+        let error = term
+            .compile_sampling_bridge(&parameterization, 5.0, &externals, None)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("ambiguous")
+                && error.contains("evaluated shift")
+                && error.contains("equation")
+        );
+        Ok(())
     }
 }
