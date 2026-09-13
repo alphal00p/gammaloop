@@ -39,6 +39,18 @@ canonical catalogue entry through the same bridge, including mixed LMB and
 named entries; cross-section summed graph-aware entries remain guarded until
 their per-sample LU/\(t^\star\) context is available.
 
+The partition also supports the explicit `singularity_proxy` weight. A named
+channel may supply a Symbolica expression in the complete parent-frame raw
+coordinates (`x0`, `x1`, ...); it is compiled eagerly and must be finite, real
+and strictly positive wherever the proxy has support. Every channel must
+provide its own proxy when this mode is selected, and the selected map still
+uses its true forward Jacobian. No proxy is inferred from a map. A typed
+`DeferredCrossSectionSamplingState` carries per-canonical-channel prepared
+cut data and runtime evaluator contexts, while the cross-section evaluator
+currently rejects physical cut/left/right maps at its pre-LU boundary until a
+two-stage carrier can use that state in both the selected map and every
+partition denominator.
+
 The Symbolica evaluator now exposes real map values and the full dual-derived
 Jacobian matrix, including its signed and absolute determinant. Its audit also
 fixed the HyperDual input layout and tests both eager values and derivatives.
