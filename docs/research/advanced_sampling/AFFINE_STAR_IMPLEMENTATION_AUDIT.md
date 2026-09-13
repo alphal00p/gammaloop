@@ -118,8 +118,11 @@ physical-radius oracle and passes higher and mixed-order checks.
 The frozen full-orientation GL638 state has `raising_power=1` for all six cuts,
 as recorded in [the X1 pilot artifact](GL638_X1_PILOT.json). Its generator requests
 zero LU derivative orders and stores no IFT evaluator, so those pilots do not
-dispatch the defective higher-order calculation. The alpha parameterization can
-still change zeroth-order numerical behavior and needs its own physical replay.
+dispatch the defective higher-order calculation. The
+[three-point full-orientation replay](GL638_X4_ALPHA_REPLAY.md) passes for the
+alpha parameterization with unchanged event identities and precision choices.
+It validates the tested zeroth-order physics, without an accuracy or variance
+improvement claim.
 
 ## Per-draw handoff and stability rotations
 
@@ -134,9 +137,25 @@ Even the host root is not an identical numerical calculation today. The
 conditional `SamplingMapContextTransform` uses a certified null-direction
 representative, `Esurface::sampling_evaluate_ray` and fresh root diagnostics;
 physical LU uses the complete sample, `compute_self_and_r_derivative` and the
-evaluation's persistent diagnostics. The sampling ray also supplies a distinct
-massless-origin right derivative. Both call the existing radial solver, but
-this alone proves neither identical inputs nor identical accepted tau.
+evaluation's persistent diagnostics. Both already use `get_radius_guess` and
+the same solver settings: inside zero, tolerance factor 1, 2,000 iterations,
+64 bracket expansions and the native epsilon times Ecm residual budget.
+The sampling ray supplies a distinct massless-origin right derivative, but
+the safeguarded solver ignores the derivative at its inside endpoint. Moving
+that convention into the common `Esurface` energy loop removes duplicate
+routing; it does not reconcile different input points or diagnostic histories.
+Apply the right derivative only when the radius, actual mass and all three
+routed momentum components are exactly zero. A computed energy of zero alone
+can result from underflow and must not be classified as a massless cusp.
+
+Common equation and solve entry points therefore guarantee the same result
+only for the same native inputs and diagnostics. `RadialRootDiagnostics` also
+indexes repeated calls by occurrence within each precision. Giving map forward,
+foreign inverse and physical solves the same text identity would mispair those
+occurrences across precision lanes. Actual reuse must prepare each physical
+root once for the relevant per-draw dependency and reuse its result; preserve
+the existing lower-precision observation owner rather than creating another
+retry history.
 Independent host solving does not itself bias a normalized proposal with its
 own correct inverse density. It limits exact asymptotic-alignment claims about
 the physical singularity; current direct-H acceptance is not invalidated by it.
@@ -144,28 +163,53 @@ the physical singularity; current direct-H acceptance is not invalidated by it.
 The minimum X4 extension is therefore to the existing cross-section cut
 preparation and `LUCounterTerm::prepare_shared_overlaps` owners together:
 
-- Expose the certified cuts' native root results and actual fixed momenta from
-  declared preceding coordinates, using one routed equation and root diagnostic
-  identity. Feed those same zeroth-order data into physical cut construction;
+- Retain a graph-scoped, typed host preparation beside the existing physical
+  cut owner: actual cut/group identity, immutable ordered routing/dependency
+  plan, declared prior coordinates, routed energy velocities and constant
+  offsets, native masses/temporal shift, and the existing
+  `NewtonIterationResult<T>`. This is partial physical data, not a guessed full
+  sample. The common `Esurface` owner supplies the same routed equation and its
+  derivatives. Feed the retained zeroth-order data into physical cut construction;
   keep acceptance, raised packets and residue derivatives on their current
-  physical owners. Prove acceptance is complement-only or reject the chart.
+  owners. Prove acceptance is complement-only or reject the chart.
 - Extend the existing `LUSharedOverlaps` / solve-group result to retain its
   canonical-frame geometry and complement-only alpha. Pass this transient
   preparation through the existing map/evaluation context for one original
   draw and native precision. Every foreign inverse requests the same physical
   group from its own supplied point's certified dependencies; it cannot reuse
-  the selected channel's geometry merely because their names match. Direct
-  structural group/dependency identity can reuse a prepared result; do not key
-  geometry by stringified floats, current center ordinal or cache counters.
+  the selected channel's geometry merely because their names or cut IDs match.
+  Reuse requires the same canonical numerical routing plan and per-draw source
+  lineage, or a certified conversion to them. Substituting a selected root into
+  a foreign map with another routing law can change that map's inverse density.
+  Do not key geometry by stringified floats, current center ordinal or counters.
 - Retain that preparation for primary physical evaluation and all probes. Warm
   bridge caches contain immutable bindings, not this per-point geometry. The
   current scalar-only map contexts/results carry no such handoff: this requires
-  an explicit existing-context API extension, not an opaque global callback
-  cache or a fabricated complete `MomentumSample` with unknown coordinates.
+  extending `SamplingChannelRuntimeContexts<T>` with typed physical data and
+  transporting it through the map/bridge result, selected
+  `DiscreteGraphSample::SamplingChannel` or direct summed branch, and a native
+  borrowed `GraphTermEvaluationContext`. The existing physical `lu_solutions`
+  loop adopts matching preparations before events and raised packets. Local
+  cut IDs from different grouped graphs must remain distinct. This uses the
+  existing evaluation flow, without an opaque global callback cache or a
+  fabricated complete `MomentumSample` with unknown coordinates.
   The actual primary physical owner must adopt and validate these data against
   the completed mapped point, not merely memoize speculative map preparation.
+  In particular, retained native priors do not repair information lost when
+  the completed master point undergoes affine cancellation. Check that it
+  represents those priors within the supported geometry budget; otherwise
+  request native original-draw rescue or report failure.
   Exact group invariance excludes every active or future dependency; construct
   a full physical sample only after its actual coordinates are available.
+
+The first reconciliation class can require one common resolved native
+parent/quotient routing plan, allowing ordered permutations through existing
+frame machinery and certifying every omitted coefficient as zero. A-star map
+certification must reject unsupported reconciliation explicitly. This is a
+restriction on which sampling pullbacks can be certified, not on user threshold
+metadata: physical group membership, solve signatures, centers and their
+evaluation remain unchanged. A general canonical quotient construction needs
+its own existing-owner design; it cannot be assumed by a cache lookup.
 
 Prepare automatic and forced centers once in the identity frame. Convert the
 actual stored f64 center to native arithmetic, then rotate its active vectors
@@ -193,7 +237,10 @@ decisive regression compares host tau, complete group membership, rotated actual
 center and physical A-star point before comparing final values, including a
 foreign-cut raised case, nonidentity-only probes, summed/MC, cache disabled and
 native original-draw rescue. It must also count preparations to exclude one
-SOCP solve per probe or foreign inverse of the same certified dependency data.
+host-root or SOCP solve per probe or foreign inverse of the same certified
+dependency data. The common-equation prerequisite additionally needs exact
+massless and shifted massive endpoint checks, and a nonzero tiny mass whose
+square underflows in Double/Quad but remains representable in Arb.
 
 ## Resolve a star without requiring user threshold directives
 
