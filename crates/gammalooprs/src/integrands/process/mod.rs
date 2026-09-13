@@ -87,11 +87,12 @@ pub use sampling_reference::{
     GaussianReferenceFunction, ReferenceSampleEvaluation, ReferenceSamplingReport,
 };
 pub use sampling_selection::{
-    ResolvedNamedSamplingChannel, ResolvedSamplingChannelSelection, SamplingCatalogueEntry,
-    SamplingChannelCatalogue, SamplingChannelPreset, SamplingChannelSelector,
-    SamplingSelectionError, build_sampling_channel_catalogue, explicitly_selected_graphs,
-    graph_channel_definitions, resolve_sampling_channel_selection,
-    resolve_sampling_channel_selection_replacing_default,
+    CompiledSamplingChannel, CompiledSamplingMap, ResolvedNamedSamplingChannel,
+    ResolvedSamplingChannelSelection, SamplingCatalogueEntry, SamplingChannelCatalogue,
+    SamplingChannelCompileContext, SamplingChannelCompileError, SamplingChannelPreset,
+    SamplingChannelSelector, SamplingSelectionError, SamplingSurfaceGeometry,
+    build_sampling_channel_catalogue, explicitly_selected_graphs, graph_channel_definitions,
+    resolve_sampling_channel_selection, resolve_sampling_channel_selection_replacing_default,
 };
 
 pub mod threshold_multiplier;
