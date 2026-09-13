@@ -1199,6 +1199,10 @@ impl GraphTerm for AmplitudeGraphTerm {
             .compile_sampling_channel_bridge_with_external(&resolved, &context, external_momenta)
     }
 
+    fn supports_canonical_summed_sampling(&self) -> bool {
+        true
+    }
+
     fn sampling_channel_is_lmb(
         &self,
         channel_id: SamplingChannelId,
