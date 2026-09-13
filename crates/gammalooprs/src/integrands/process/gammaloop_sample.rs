@@ -263,6 +263,12 @@ pub enum DiscreteGraphSample<T: FloatLike> {
     /// through an LMB a second time.
     Advanced {
         channel_id: SamplingChannelId,
+        /// Original unit-cube coordinates used by the canonical channel map.
+        /// They are preserved so a future physical channel can run its
+        /// per-sample LU/t* preparation before applying a conditional map.
+        /// Direct momentum evaluations have no such coordinates and store
+        /// `None`.
+        sampling_coordinates: Option<Vec<F<T>>>,
         /// Direct momentum evaluations have no parameterization Jacobian
         /// boundary, so their selected partition factor is applied after the
         /// graph term is evaluated. X-space samples fold this factor into the
@@ -339,10 +345,12 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             )),
             DiscreteGraphSample::Advanced {
                 channel_id,
+                sampling_coordinates,
                 partition_weight,
                 sample,
             } => DiscreteGraphSample::Advanced {
                 channel_id: *channel_id,
+                sampling_coordinates: sampling_coordinates.clone(),
                 partition_weight: partition_weight.clone(),
                 sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
             },
@@ -377,10 +385,14 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             }
             DiscreteGraphSample::Advanced {
                 channel_id,
+                sampling_coordinates,
                 partition_weight,
                 sample,
             } => DiscreteGraphSample::Advanced {
                 channel_id: *channel_id,
+                sampling_coordinates: sampling_coordinates
+                    .as_ref()
+                    .map(|coordinates| coordinates.iter().cloned().map(F::<T2>::from).collect()),
                 partition_weight: partition_weight
                     .as_ref()
                     .map(|weight| F::<T2>::from(weight.clone())),
@@ -416,10 +428,17 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             }
             DiscreteGraphSample::Advanced {
                 channel_id,
+                sampling_coordinates,
                 partition_weight,
                 sample,
             } => DiscreteGraphSample::Advanced {
                 channel_id: *channel_id,
+                sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
+                    coordinates
+                        .iter()
+                        .map(|coordinate| coordinate.higher())
+                        .collect()
+                }),
                 partition_weight: partition_weight.as_ref().map(|weight| weight.higher()),
                 sample: sample.higher_precision(),
             },
@@ -453,10 +472,17 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             }
             DiscreteGraphSample::Advanced {
                 channel_id,
+                sampling_coordinates,
                 partition_weight,
                 sample,
             } => DiscreteGraphSample::Advanced {
                 channel_id: *channel_id,
+                sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
+                    coordinates
+                        .iter()
+                        .map(|coordinate| coordinate.lower())
+                        .collect()
+                }),
                 partition_weight: partition_weight.as_ref().map(|weight| weight.lower()),
                 sample: sample.lower_precision(),
             },
@@ -471,6 +497,20 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::MultiChanneling { sample, .. } => sample,
             DiscreteGraphSample::Tropical(sample) => sample,
             DiscreteGraphSample::Advanced { sample, .. } => sample,
+        }
+    }
+
+    /// Unit-cube coordinates retained for a canonical advanced channel.
+    /// `None` identifies a direct momentum-space sample, which has no
+    /// parameterization coordinates to replay for a deferred physical map.
+    #[allow(dead_code)]
+    pub(crate) fn sampling_coordinates(&self) -> Option<&[F<T>]> {
+        match self {
+            Self::Advanced {
+                sampling_coordinates,
+                ..
+            } => sampling_coordinates.as_deref(),
+            _ => None,
         }
     }
 }
@@ -717,6 +757,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                         group_id,
                         sample: DiscreteGraphSample::Advanced {
                             channel_id,
+                            sampling_coordinates: Some(xs.clone()),
                             partition_weight: None,
                             sample,
                         },
@@ -770,7 +811,12 @@ fn default_parametrize<T: FloatLike>(
 
 #[cfg(test)]
 mod tests {
+    use crate::momentum::sample::{LoopMomenta, MomentumSample};
+    use crate::utils::F;
+    use crate::{DependentMomentaConstructor, settings::runtime::kinematic::Externals};
+
     use super::is_summed_multichanneling;
+    use super::{DiscreteGraphSample, SamplingChannelId};
     use crate::settings::runtime::{
         DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, MultiChannelingSettings,
         ParameterizationSettings, SamplingSettings,
@@ -800,5 +846,71 @@ mod tests {
         assert!(!is_summed_multichanneling(&SamplingSettings::Default(
             ParameterizationSettings::default(),
         )));
+    }
+
+    #[test]
+    fn advanced_sample_coordinates_survive_precision_conversion() {
+        let sample = MomentumSample::new(
+            LoopMomenta::from(vec![]),
+            0,
+            &Externals::default(),
+            0,
+            F(1.0),
+            DependentMomentaConstructor::CrossSection,
+            None,
+        )
+        .expect("empty cross-section sample is valid for metadata test");
+        let coordinates = vec![F(0.125), F(0.625), F(0.875)];
+        let advanced = DiscreteGraphSample::Advanced {
+            channel_id: SamplingChannelId::from(3),
+            sampling_coordinates: Some(coordinates.clone()),
+            partition_weight: None,
+            sample,
+        };
+
+        assert_eq!(
+            advanced.sampling_coordinates(),
+            Some(coordinates.as_slice())
+        );
+        let cast = advanced.cast_sample::<f64>();
+        assert_eq!(cast.sampling_coordinates(), Some(coordinates.as_slice()));
+        let higher = advanced.higher_precision();
+        assert_eq!(
+            higher
+                .sampling_coordinates()
+                .expect("higher precision keeps coordinates")
+                .iter()
+                .map(|coordinate| coordinate.into_f64())
+                .collect::<Vec<_>>(),
+            coordinates
+                .iter()
+                .map(|coordinate| coordinate.into_f64())
+                .collect::<Vec<_>>()
+        );
+        let lower = higher.lower_precision();
+        assert_eq!(lower.sampling_coordinates(), Some(coordinates.as_slice()));
+    }
+
+    #[test]
+    fn direct_momentum_advanced_samples_have_no_replay_coordinates() {
+        // The direct-momentum route intentionally cannot replay a unit-cube
+        // map; a deferred physical channel must reject that route explicitly.
+        let sample = MomentumSample::new(
+            LoopMomenta::from(vec![]),
+            0,
+            &Externals::default(),
+            0,
+            F(1.0),
+            DependentMomentaConstructor::CrossSection,
+            None,
+        )
+        .unwrap();
+        let advanced = DiscreteGraphSample::Advanced {
+            channel_id: SamplingChannelId::from(0),
+            sampling_coordinates: None,
+            partition_weight: None,
+            sample,
+        };
+        assert!(advanced.sampling_coordinates().is_none());
     }
 }
