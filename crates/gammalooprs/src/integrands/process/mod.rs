@@ -2249,8 +2249,48 @@ impl LmbMultiChannelingSetup {
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<usize> {
         Ok(self
-            .effective_channels(graph_name, parameterization_settings)?
+            .canonical_sampling_catalogue(graph_name, parameterization_settings)?
+            .entries
             .len())
+    }
+
+    /// Return the stable IDs from the one canonical catalogue.  Callers that
+    /// need legacy LMB data must still use `effective_channels`, which rejects
+    /// graph-aware entries with an explicit diagnostic.
+    pub fn sampling_channel_ids(
+        &self,
+        graph_name: &str,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<Vec<SamplingChannelId>> {
+        let catalogue = self.canonical_sampling_catalogue(graph_name, parameterization_settings)?;
+        Ok((0..catalogue.entries.len())
+            .map(SamplingChannelId::from)
+            .collect())
+    }
+
+    pub fn sampling_channel_label(
+        &self,
+        channel_id: SamplingChannelId,
+        graph_name: &str,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<String> {
+        let catalogue = self.canonical_sampling_catalogue(graph_name, parameterization_settings)?;
+        let entry = catalogue.entries.get(channel_id.index()).ok_or_else(|| {
+            eyre!(
+                "Requested sampling channel {} is out of range for graph '{}'",
+                channel_id.index(),
+                graph_name
+            )
+        })?;
+        Ok(match entry {
+            SamplingCatalogueEntry::Lmb {
+                basis_id, edges, ..
+            } => {
+                format!("lmb[{basis_id}] {:?}", edges)
+            }
+            SamplingCatalogueEntry::Surface { edges, .. } => format!("surface:{edges:?}"),
+            SamplingCatalogueEntry::Named(channel) => channel.name.clone(),
+        })
     }
 
     pub fn sampling_channel_is_lmb(
@@ -3138,6 +3178,10 @@ pub trait GraphTerm {
         channel_id: SamplingChannelId,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<bool>;
+    fn sampling_channel_ids(
+        &self,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<Vec<SamplingChannelId>>;
 }
 
 struct EvaluationContext<'a, 'm> {
@@ -3296,12 +3340,21 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     .sampling
                     .get_parameterization_settings()
                     .expect("LMB multichanneling requires a parameterization.");
-                let num_channels = integrand
+                let channel_ids = integrand
                     .get_master_graph(group_id)
-                    .get_num_channels(&parameterization_settings)?;
-                (0..num_channels)
-                    .map(SamplingChannelId::from)
+                    .sampling_channel_ids(&parameterization_settings)?;
+                channel_ids
+                    .into_iter()
                     .map(|channel_index| {
+                        if !integrand
+                            .get_master_graph(group_id)
+                            .sampling_channel_is_lmb(channel_index, &parameterization_settings)?
+                        {
+                            return Err(eyre!(
+                                "summed sampling multichanneling cannot evaluate graph-aware channel {}; use discrete multi-channeling",
+                                channel_index.index()
+                            ));
+                        }
                         evaluate_graph_term(
                             integrand,
                             graph_id,
@@ -3772,12 +3825,21 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                         .sampling
                         .get_parameterization_settings()
                         .expect("LMB multichanneling requires a parameterization.");
-                    let num_channels = integrand
+                    let channel_ids = integrand
                         .get_graph(graph_id)
-                        .get_num_channels(&parameterization_settings)?;
-                    let graph_result = (0..num_channels).map(SamplingChannelId::from).try_fold(
+                        .sampling_channel_ids(&parameterization_settings)?;
+                    let graph_result = channel_ids.into_iter().try_fold(
                         GraphEvaluationResult::zero(zero.clone()),
                         |mut channel_sum, channel_index| {
+                            if !integrand
+                                .get_graph(graph_id)
+                                .sampling_channel_is_lmb(channel_index, &parameterization_settings)?
+                            {
+                                return Err(eyre!(
+                                    "summed sampling multichanneling cannot evaluate graph-aware channel {}; use discrete multi-channeling",
+                                    channel_index.index()
+                                ));
+                            }
                             let channel_result = evaluate_graph_term(
                                 integrand,
                                 graph_id,
