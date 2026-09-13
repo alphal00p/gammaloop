@@ -4642,6 +4642,48 @@ mod tests {
     }
 
     #[test]
+    fn bridge_acceptance_report_integrates_mixed_named_and_lmb_catalogue() {
+        // A named map and an automatically generated LMB map share the same
+        // master frame but remain two distinct canonical catalogue entries.
+        // The acceptance harness must visit both IDs; silently compacting the
+        // generated basis would make the mixed selection under-sample one map.
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:lmb".into(), "named_lmb".into()];
+        let mut named_lmb = definition("lmb(1)");
+        named_lmb.subspace_lmb = vec![1];
+        named_lmb.parent_lmb = vec![1];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("named_lmb".into(), named_lmb);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1])], &[0]);
+        assert_eq!(catalogue.entries.len(), 2);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1],
+            ParameterizationSettings::default(),
+            2.0,
+            1,
+        );
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
+            &bridge,
+            512,
+            1.0,
+            &[0.0, 0.0, 0.0],
+        )
+        .unwrap();
+        assert_eq!(report.channel_count, 2);
+        assert_eq!(report.finite_sample_count, 1024);
+        assert!((report.normalization - 1.0).abs() < 5.0e-2);
+        assert!((report.partition_min - 1.0).abs() < 1.0e-12);
+        assert!((report.partition_max - 1.0).abs() < 1.0e-12);
+        assert!(report.round_trip_residual_max < 1.0e-10);
+    }
+
+    #[test]
     fn bridge_acceptance_report_supports_a_single_canonical_channel() {
         let mut selection = SamplingChannelSelection::default();
         selection.default_channel_selection = vec!["auto:lmb".into()];
