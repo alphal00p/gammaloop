@@ -752,8 +752,8 @@ impl AmplitudeGraphTerm {
         } else {
             orientation_id
         };
-        event.cut_info.lmb_channel_id = channel_id.map(usize::from);
-        event.cut_info.lmb_channel_edge_ids = if let Some(channel_id) = channel_id {
+        event.cut_info.sampling_channel_id = channel_id.map(usize::from);
+        event.cut_info.sampling_channel_edge_ids = if let Some(channel_id) = channel_id {
             let parameterization_settings = settings
                 .sampling
                 .get_parameterization_settings()

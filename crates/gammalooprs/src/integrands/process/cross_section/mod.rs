@@ -1462,8 +1462,8 @@ impl CrossSectionGraphTerm {
         } else {
             momentum_sample.sample.orientation
         };
-        new_event.cut_info.lmb_channel_id = event_context.channel_id.map(usize::from);
-        new_event.cut_info.lmb_channel_edge_ids = event_context
+        new_event.cut_info.sampling_channel_id = event_context.channel_id.map(usize::from);
+        new_event.cut_info.sampling_channel_edge_ids = event_context
             .channel_id
             .map(|channel_id| {
                 let parameterization_settings = event_context

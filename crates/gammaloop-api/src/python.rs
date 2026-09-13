@@ -677,8 +677,8 @@ pub struct PyCutInfo {
     pub graph_id: usize,
     pub graph_group_id: Option<usize>,
     pub orientation_id: Option<usize>,
-    pub lmb_channel_id: Option<usize>,
-    pub lmb_channel_edge_ids: Option<Vec<usize>>,
+    pub sampling_channel_id: Option<usize>,
+    pub sampling_channel_edge_ids: Option<Vec<usize>>,
 }
 
 #[pyclass(from_py_object, name = "IntegrandGraph", get_all)]
@@ -1745,10 +1745,10 @@ fn py_event_from_event(event: &Event) -> PyEvent {
             graph_id: event.cut_info.graph_id,
             graph_group_id: event.cut_info.graph_group_id,
             orientation_id: event.cut_info.orientation_id,
-            lmb_channel_id: event.cut_info.lmb_channel_id,
-            lmb_channel_edge_ids: event
+            sampling_channel_id: event.cut_info.sampling_channel_id,
+            sampling_channel_edge_ids: event
                 .cut_info
-                .lmb_channel_edge_ids
+                .sampling_channel_edge_ids
                 .as_ref()
                 .map(|edge_ids| edge_ids.iter().copied().collect()),
         },
@@ -1863,10 +1863,10 @@ fn event_from_py_event(event: &PyEvent) -> Event {
             graph_id: event.cut_info.graph_id,
             graph_group_id: event.cut_info.graph_group_id,
             orientation_id: event.cut_info.orientation_id,
-            lmb_channel_id: event.cut_info.lmb_channel_id,
-            lmb_channel_edge_ids: event
+            sampling_channel_id: event.cut_info.sampling_channel_id,
+            sampling_channel_edge_ids: event
                 .cut_info
-                .lmb_channel_edge_ids
+                .sampling_channel_edge_ids
                 .as_ref()
                 .map(|edge_ids| edge_ids.iter().copied().collect()),
         },
