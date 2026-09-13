@@ -9,8 +9,10 @@ Current implementation status: the canonical `SamplingChannelId` catalogue,
 Symbolica selection parser, explicit parent-LMB validation, prepared cut/side
 guards, exact affine LMB routing, and the discrete map-density bridge are
 implemented and pushed on `advanced_sampling`. The old LMB-only enum variant is
-kept only for direct momentum-space compatibility during migration; x-space
-discrete sampling now enters through the canonical bridge for every channel.
+kept only for direct momentum-space LMB reinterpretation during migration;
+direct named/surface selections are checked against the same catalogue and use
+the parent-frame route, while x-space discrete sampling enters through the
+canonical bridge for every channel.
 Physical directional E-surface maps, prepared cross-section `t*` context
 construction, and final old standalone-integrand removal remain open milestones.
 
