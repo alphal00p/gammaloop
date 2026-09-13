@@ -694,14 +694,14 @@ impl std::fmt::Debug for SamplingMapEmbedding {
 }
 
 impl SamplingMapEmbedding {
-    /// Build an embedded direct product.  `output_indices` must be a complete
-    /// permutation of `0..sum(child.output_dimensions())`; duplicate or
-    /// missing frame coordinates are rejected before any numerical use.
-    pub fn product(
-        children: Vec<Box<dyn SamplingMapComponent>>,
+    /// Build an embedded map from either a direct product or an ordered
+    /// conditional composition.  The latter preserves the block context
+    /// passed by `then(...)` while this wrapper only permutes its complete
+    /// output into the master frame.
+    pub fn from_composition(
+        map: SamplingMapComposition,
         output_indices: Vec<usize>,
     ) -> Result<Self> {
-        let map = SamplingMapComposition::product(children)?;
         if output_indices.len() != map.output_dimensions {
             return Err(eyre!(
                 "sampling-map embedding supplies {} output indices, expected {}",
@@ -728,6 +728,17 @@ impl SamplingMapEmbedding {
             map: Arc::new(map),
             output_indices,
         })
+    }
+
+    /// Build an embedded direct product.  `output_indices` must be a complete
+    /// permutation of `0..sum(child.output_dimensions())`; duplicate or
+    /// missing frame coordinates are rejected before any numerical use.
+    pub fn product(
+        children: Vec<Box<dyn SamplingMapComponent>>,
+        output_indices: Vec<usize>,
+    ) -> Result<Self> {
+        let map = SamplingMapComposition::product(children)?;
+        Self::from_composition(map, output_indices)
     }
 
     pub fn output_indices(&self) -> &[usize] {
