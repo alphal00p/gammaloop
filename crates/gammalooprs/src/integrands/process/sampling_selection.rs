@@ -2633,7 +2633,7 @@ mod tests {
     }
 
     #[test]
-    fn catalogue_compiles_then_with_context_surface_and_rejects_conditional_bridge() {
+    fn catalogue_compiles_then_with_context_surface_and_bridges_full_composition() {
         let mut selection = SamplingChannelSelection::default();
         selection.default_channel_selection = vec!["conditional".into()];
         let mut channel = definition("then(lmb(1),surface(2,4))");
@@ -2674,10 +2674,10 @@ mod tests {
         assert_eq!(compiled.len(), 1);
         let channel = &compiled[0];
         assert_eq!(channel.embedded_edges, vec![1, 2]);
-        assert_eq!(channel.map.contract().support, SamplingSupport::Conditional);
+        assert_eq!(channel.map.contract().support, SamplingSupport::Full);
         let coordinates = [0.31, 0.42, 0.57, 0.23, 0.68, 0.81];
         let mapped = channel.map.forward(&coordinates).unwrap();
-        assert_eq!(mapped.support, SamplingSupport::Conditional);
+        assert_eq!(mapped.support, SamplingSupport::Full);
         let inverse = channel.map.inverse(&mapped.point).unwrap();
         assert!(inverse.residual < 1.0e-9, "{}", inverse.residual);
         assert!(
@@ -2687,10 +2687,11 @@ mod tests {
                 .zip(coordinates)
                 .all(|(actual, expected)| (actual - expected).abs() < 1.0e-9)
         );
-        assert!(matches!(
-            SamplingChannelBridge::new(compiled),
-            Err(SamplingChannelBridgeError::PartialSupport { .. })
-        ));
+        let bridge = SamplingChannelBridge::new(compiled).unwrap();
+        let bridged = bridge
+            .forward(SamplingChannelId::from(0), &coordinates)
+            .unwrap();
+        assert!((bridged.partition.weight_sum() - 1.0).abs() < 1.0e-12);
     }
 
     #[test]

@@ -930,7 +930,9 @@ impl SamplingMapComposition {
             evaluations.push(evaluation);
             offset = end;
         }
-        Ok(combine_evaluations(evaluations))
+        let mut evaluation = combine_evaluations(evaluations);
+        evaluation.support = self.contract().support;
+        Ok(evaluation)
     }
 
     fn evaluate_inverse(
@@ -960,7 +962,9 @@ impl SamplingMapComposition {
             evaluations.push(evaluation);
             offset = end;
         }
-        Ok(combine_evaluations(evaluations))
+        let mut evaluation = combine_evaluations(evaluations);
+        evaluation.support = self.contract().support;
+        Ok(evaluation)
     }
 }
 
@@ -974,13 +978,33 @@ impl SamplingMapComponent for SamplingMapComposition {
     }
 
     fn contract(&self) -> SamplingMapContract {
-        self.children.iter().map(|child| child.contract()).fold(
+        let mut contract = self.children.iter().map(|child| child.contract()).fold(
             SamplingMapContract {
                 support: SamplingSupport::Full,
                 jacobian: SamplingJacobian::ExactForward,
             },
             combine_contracts,
-        )
+        );
+        if self.is_then() {
+            // A conditional child is fully supported once a preceding full
+            // block supplies its context. A conditional first block still
+            // requires external preparation and remains conditional.
+            contract.support = SamplingSupport::Full;
+            for (index, child) in self.children.iter().enumerate() {
+                match child.contract().support {
+                    SamplingSupport::Branched => {
+                        contract.support = SamplingSupport::Branched;
+                    }
+                    SamplingSupport::Conditional
+                        if index == 0 && contract.support == SamplingSupport::Full =>
+                    {
+                        contract.support = SamplingSupport::Conditional;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        contract
     }
 
     fn name(&self) -> &'static str {
