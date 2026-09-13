@@ -1721,7 +1721,7 @@ impl fmt::Display for SamplingSelectionError {
             ),
             Self::MissingSubspaceLmb { graph, channel } => write!(
                 formatter,
-                "sampling channel `{graph}.{channel}` contains a surface map and must declare a non-empty subspace_lmb"
+                "sampling channel `{graph}.{channel}` contains a surface/cut map and must declare a non-empty subspace_lmb"
             ),
             Self::InvalidChannelDefinition {
                 graph,
@@ -1772,7 +1772,7 @@ pub fn resolve_sampling_channel_selection_replacing_default(
 
 fn contains_surface_map(map: &SamplingMapDefinition) -> bool {
     match map {
-        SamplingMapDefinition::Surface(_) => true,
+        SamplingMapDefinition::Surface(_) | SamplingMapDefinition::Cut(_) => true,
         SamplingMapDefinition::Product(maps)
         | SamplingMapDefinition::Intersect(maps)
         | SamplingMapDefinition::Then(maps) => maps.iter().any(contains_surface_map),
