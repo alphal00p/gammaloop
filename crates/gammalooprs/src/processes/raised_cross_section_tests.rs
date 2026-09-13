@@ -1468,7 +1468,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                 integrands::process::{
                     GaussianReferenceFunction, GraphTerm, MomentumSpaceEvaluationInput,
                     SamplingChannelBridge, SamplingChannelBridgeAcceptanceReport, SamplingChannelId,
-                    sampling_maps::{SamplingEvaluationError, SamplingMapAffine, SamplingMapComponent},
+                    sampling_maps::{SamplingEvaluationError, SamplingMapAffine},
                 },
                 momentum::{
                     ThreeMomentum,
@@ -1610,7 +1610,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                             &F(0.0),
                             &guess,
                             |t| {
-                                host.sampling_evaluate_ray(
+                                host.compute_self_and_r_derivative(
                                     t,
                                     &loops,
                                     &zero_loops,
@@ -1698,7 +1698,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                 let master_loops = to_loops(&physical_master);
                 let native_loops = to_loops(&physical_native);
                 let host_value = host
-                    .sampling_evaluate_ray(
+                    .compute_self_and_r_derivative(
                         &F(1.0),
                         &master_loops,
                         &zero_loops,
@@ -1719,7 +1719,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     )
                     .unwrap();
                     let global = surface
-                        .sampling_evaluate_ray(
+                        .compute_self_and_r_derivative(
                             &F(1.0),
                             &master_loops,
                             &zero_loops,
@@ -1730,7 +1730,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                         .0
                         .0;
                     let native_global = surface
-                        .sampling_evaluate_ray(
+                        .compute_self_and_r_derivative(
                             &F(1.0),
                             &native_loops,
                             &zero_loops,
@@ -1846,7 +1846,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                 for id in [SamplingChannelId(0), SamplingChannelId(1)] {
                     let inverse = matched_bridge
                         .inverse(id, &matched_point.raw_coordinates)
-                        .unwrap();
+                        .unwrap().expect("full-support map must contain the supplied point");
                     let recovered = matched_bridge
                         .forward(id, &inverse.map.coordinates)
                         .unwrap();
@@ -1859,7 +1859,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     );
                 }
                 for id in [SamplingChannelId(0), SamplingChannelId(1)] {
-                    let inverse = bridge.inverse(id, &mapped.raw_coordinates).unwrap();
+                    let inverse = bridge.inverse(id, &mapped.raw_coordinates).unwrap().expect("full-support map must contain the supplied point");
                     let recovered = bridge.forward(id, &inverse.map.coordinates).unwrap();
                     assert!(
                         recovered
@@ -1903,7 +1903,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                         .compile_sampling_bridge(&parameterization, &runtime, &native_externals, None)
                         .unwrap();
                     let native_tiny = tiny.map(|v| F::<ArbPrec>::from_f64(v).0);
-                    let recovered = native_bridge.inverse(channel, &native_tiny).unwrap();
+                    let recovered = native_bridge.inverse(channel, &native_tiny).unwrap().expect("full-support map must contain the supplied point");
                     assert!(
                         recovered.map.jacobian.is_finite() && recovered.map.inverse_jacobian.is_finite()
                     );

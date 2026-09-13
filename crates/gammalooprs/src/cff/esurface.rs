@@ -34,8 +34,11 @@ use crate::momentum::sample::{
 };
 use crate::processes::CrossSectionCut;
 use crate::utils::hyperdual_utils::new_constant;
+use crate::utils::newton_solver::{
+    NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity, SafeguardedNewtonError,
+};
 use crate::utils::{
-    DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS,
+    DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS, Length,
     compute_loop_part, compute_loop_part_subspace, compute_shift_part, compute_shift_part_subspace,
     compute_t_part_of_shift_part, cut_energy, external_energy_atom_from_index, ose_atom_from_index,
 };
@@ -169,7 +172,7 @@ impl Esurface {
                     F(components[2].clone()),
                 )
             }));
-            let (value, derivative) = surface.sampling_evaluate_ray(
+            let (value, derivative) = surface.compute_self_and_r_derivative(
                 &radius,
                 &unit_loops,
                 &center,
@@ -360,7 +363,7 @@ impl Esurface {
                             F(unit[2].clone()),
                         );
                     }
-                    let (value, derivative) = surface.sampling_evaluate_ray(
+                    let (value, derivative) = surface.compute_self_and_r_derivative(
                         &F(radius),
                         &velocity,
                         &loops,
@@ -488,7 +491,7 @@ impl Esurface {
                     PreparedSurfaceStatus::absent(format!("positive energy lower bound {lower}"))?
                 } else {
                     let value = surface
-                        .sampling_evaluate_ray(
+                        .compute_self_and_r_derivative(
                             &zero,
                             &zero_velocity,
                             &center,
@@ -549,7 +552,7 @@ impl Esurface {
                         }
                     }
                     let value = surface
-                        .sampling_evaluate_ray(
+                        .compute_self_and_r_derivative(
                             &zero,
                             &zero_velocity,
                             &center,
@@ -576,7 +579,14 @@ impl Esurface {
                 // The analytic minimum does not excuse a rounded minimizing
                 // point: the actual bound center must also be strictly inside.
                 let value = surface
-                    .sampling_evaluate_ray(&zero, &zero_velocity, &center, &externals, &masses, lmb)
+                    .compute_self_and_r_derivative(
+                        &zero,
+                        &zero_velocity,
+                        &center,
+                        &externals,
+                        &masses,
+                        lmb,
+                    )
                     .0;
                 if !esurface_value_is_strictly_inside(
                     &value,
@@ -620,44 +630,6 @@ impl Esurface {
                 Ok(map)
             }
         })
-    }
-
-    /// Shared routed ray evaluation for full-space and proper-fiber charts.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn sampling_evaluate_ray<T: FloatLike>(
-        &self,
-        radius: &F<T>,
-        velocity: &LoopMomenta<F<T>>,
-        center: &LoopMomenta<F<T>>,
-        externals: &ExternalFourMomenta<F<T>>,
-        masses: &EdgeVec<F<T>>,
-        lmb: &LoopMomentumBasis,
-    ) -> (F<T>, F<T>) {
-        let (value, mut derivative) =
-            self.compute_self_and_r_derivative(radius, velocity, center, externals, masses, lmb);
-        if radius == &radius.zero() {
-            // At a massless endpoint E(r)=r|v| the radial right derivative is
-            // |v|, whereas the two-sided formula q.v/E would evaluate 0/0.
-            // Keep this endpoint convention local to the sampling chart.
-            let spatial: ExternalThreeMomenta<F<T>> =
-                externals.iter().map(|p| p.spatial.clone()).collect();
-            derivative = self
-                .energies
-                .iter()
-                .map(|&edge| {
-                    let signature = &lmb.edge_signatures[edge];
-                    let momentum = signature.compute_momentum(center, &spatial);
-                    let velocity = compute_loop_part(&signature.internal, velocity);
-                    let energy = (momentum.norm_squared() + masses[edge].square()).sqrt();
-                    if energy == radius.zero() {
-                        velocity.norm_squared().sqrt()
-                    } else {
-                        momentum * velocity / energy
-                    }
-                })
-                .fold(radius.zero(), |sum, contribution| sum + contribution);
-        }
-        (value, derivative)
     }
 
     pub(crate) fn has_radial_dependence_in_subspace(
@@ -1216,6 +1188,7 @@ impl Esurface {
         (energy_sum + shift, derivative)
     }
 
+    /// Shared routed ray evaluation for physical roots and full-space/proper-fiber charts.
     #[inline]
     pub(crate) fn compute_self_and_r_derivative<T: FloatLike>(
         &self,
@@ -1252,9 +1225,23 @@ impl Esurface {
                     + &real_mass_vector[index] * &real_mass_vector[index])
                     .sqrt();
 
-                let numerator = momentum * &unit_loop_part;
+                // At a massless endpoint E(r)=r|v| the radial right derivative is
+                // |v|, whereas the two-sided formula q.v/E would evaluate 0/0.
+                // Share this convention with sampling charts, using exact source
+                // zeros: a computed E=0 can instead be numerical underflow.
+                let zero = radius.zero();
+                let derivative = if radius == &zero
+                    && real_mass_vector[index] == zero
+                    && momentum.px == zero
+                    && momentum.py == zero
+                    && momentum.pz == zero
+                {
+                    unit_loop_part.norm_squared().sqrt()
+                } else {
+                    momentum * &unit_loop_part / &energy
+                };
 
-                (numerator / &energy, energy)
+                (derivative, energy)
             })
             .fold(
                 (radius.zero(), radius.zero()),
@@ -1262,6 +1249,53 @@ impl Esurface {
             );
 
         (energy_sum + shift, derivative)
+    }
+
+    /// Solve the physical LU scaling about zero generation momentum. Sampling
+    /// hosts use the same equation and policy; the caller owns the identity and
+    /// precision history, so sharing this entry does not imply shared root data.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn solve_lu_cut<T: FloatLike>(
+        &self,
+        loop_momenta: &LoopMomenta<F<T>>,
+        external_momenta: &ExternalFourMomenta<F<T>>,
+        masses: &EdgeVec<F<T>>,
+        lmb: &LoopMomentumBasis,
+        e_cm: &F<T>,
+        diagnostics: &mut RadialRootDiagnostics,
+        identity: &RadialRootIdentity,
+    ) -> std::result::Result<NewtonIterationResult<T>, SafeguardedNewtonError<T>> {
+        let (guess, _) = self.get_radius_guess(loop_momenta, external_momenta, lmb);
+        let zero = guess.zero();
+        let center = LoopMomenta::from_iter(
+            (0..loop_momenta.len())
+                .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+        );
+        crate::debug_tags!(#integration, #cut, #solver;
+            radial_root = %identity,
+            initial_guess = %guess,
+            residual_tolerance = %(e_cm * guess.epsilon()),
+            "LU radial root setup"
+        );
+        diagnostics.solve(
+            identity,
+            &zero,
+            &guess,
+            |t| {
+                self.compute_self_and_r_derivative(
+                    t,
+                    loop_momenta,
+                    &center,
+                    external_momenta,
+                    masses,
+                    lmb,
+                )
+            },
+            &guess.one(),
+            2000,
+            64,
+            e_cm,
+        )
     }
 
     // #[inline]
@@ -1723,8 +1757,12 @@ mod tests {
         cff::{esurface::Esurface, generation::ShiftRewrite},
         dot,
         utils::{
-            DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F,
-            newton_solver::{SafeguardedNewtonError, safeguarded_newton_iteration_and_derivative},
+            ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike,
+            QuadFloat,
+            newton_solver::{
+                RadialRootDiagnostics, RadialRootIdentity, SafeguardedNewtonError,
+                safeguarded_newton_iteration_and_derivative,
+            },
             test_utils::dummy_hedge_graph,
         },
     };
@@ -1820,6 +1858,183 @@ mod tests {
                 }
             }
         }
+
+        fn check_native<T: FloatLike>(graph: &Graph, surface: &Esurface) {
+            let one = F::<T>::default().one();
+            let zero = one.zero();
+            let f = |value| one.from_i64(value);
+            let lmb = &graph.loop_momentum_basis;
+            let mut masses = graph
+                .underlying
+                .new_edgevec_from_iter([0, 173, 173, 125, 0].map(f))
+                .unwrap();
+            let e_cm = f(1000);
+            let externals = ExternalFourMomenta::from_iter((0..2).map(|_| {
+                FourMomentum::from_args(e_cm.clone(), zero.clone(), zero.clone(), zero.clone())
+            }));
+            let zero_vector = ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone());
+            let center = LoopMomenta::from_iter([zero_vector.clone(), zero_vector.clone()]);
+            let perturbation = &one / f(10).powi(25);
+            let p = f(100) + &perturbation;
+            let loops = LoopMomenta::from_iter([
+                ThreeMomentum::new(p.clone(), zero.clone(), zero.clone()),
+                ThreeMomentum::new(-&p, zero.clone(), zero.clone()),
+            ]);
+            let identity = RadialRootIdentity::new("native shared LU host".into());
+            let mut diagnostics = RadialRootDiagnostics::default();
+            let mut prior_policy = diagnostics.clone();
+            let result = surface
+                .solve_lu_cut(
+                    &loops,
+                    &externals,
+                    &masses,
+                    lmb,
+                    &e_cm,
+                    &mut diagnostics,
+                    &identity,
+                )
+                .unwrap();
+            // The extracted entry must preserve the existing physical policy on
+            // identical routed inputs and histories, including diagnostic data.
+            let guess = surface.get_radius_guess(&loops, &externals, lmb).0;
+            let prior = prior_policy
+                .solve(
+                    &identity,
+                    &zero,
+                    &guess,
+                    |t| {
+                        surface.compute_self_and_r_derivative(
+                            t, &loops, &center, &externals, &masses, lmb,
+                        )
+                    },
+                    &one,
+                    2000,
+                    64,
+                    &e_cm,
+                )
+                .unwrap();
+            assert_eq!(result.solution, prior.solution);
+            assert_eq!(result.derivative_at_solution, prior.derivative_at_solution);
+            assert_eq!(result.error_of_function, prior.error_of_function);
+            assert_eq!(result.num_iterations_used, prior.num_iterations_used);
+            let top_energy = (&e_cm - f(125)) / f(2);
+            let radial_momentum = (top_energy.square() - f(173).square()).sqrt();
+            assert!((&result.solution - &radial_momentum / &p).abs() < one.epsilon() * f(128));
+            if perturbation > one.epsilon() * f(1000) {
+                assert!(
+                    (&result.solution - radial_momentum / f(100)).abs() > &one / f(10).powi(28)
+                );
+            }
+
+            // At the origin combine a massless moving energy with a shifted
+            // massive energy E=sqrt(4^2+3^2). Their right derivative is exactly5.
+            let mut endpoint = surface.clone();
+            endpoint.energies = vec![EdgeIndex(1), EdgeIndex(2)];
+            masses[EdgeIndex(1)] = zero.clone();
+            masses[EdgeIndex(2)] = f(3);
+            let velocity = LoopMomenta::from_iter([
+                ThreeMomentum::new(f(3), f(4), zero.clone()),
+                zero_vector.clone(),
+            ]);
+            let mut shifted_center = LoopMomenta::from_iter([
+                zero_vector.clone(),
+                ThreeMomentum::new(f(4), zero.clone(), zero.clone()),
+            ]);
+            let (value, derivative) = endpoint.compute_self_and_r_derivative(
+                &zero,
+                &velocity,
+                &shifted_center,
+                &externals,
+                &masses,
+                lmb,
+            );
+            assert_eq!(value, f(5) - &e_cm);
+            assert_eq!(derivative, f(5));
+            let stationary = LoopMomenta::from_iter([zero_vector.clone(), zero_vector]);
+            assert_eq!(
+                endpoint
+                    .compute_self_and_r_derivative(
+                        &zero,
+                        &stationary,
+                        &shifted_center,
+                        &externals,
+                        &masses,
+                        lmb,
+                    )
+                    .1,
+                zero
+            );
+            assert!(matches!(
+                endpoint.solve_lu_cut(
+                    &stationary,
+                    &externals,
+                    &masses,
+                    lmb,
+                    &e_cm,
+                    &mut diagnostics,
+                    &identity,
+                ),
+                Err(SafeguardedNewtonError::InvalidOutside { .. })
+            ));
+
+            // Squaring a nonzero source can underflow in Double/Quad. It must
+            // never activate the exact massless/zero-momentum endpoint rule.
+            let tiny = &one / f(10).powi(200);
+            masses[EdgeIndex(1)] = tiny.clone();
+            let derivative = endpoint
+                .compute_self_and_r_derivative(
+                    &zero,
+                    &velocity,
+                    &shifted_center,
+                    &externals,
+                    &masses,
+                    lmb,
+                )
+                .1;
+            if tiny.square() == zero {
+                assert!(derivative.is_nan() || derivative.is_infinite());
+            } else {
+                assert_eq!(derivative, zero);
+            }
+            masses[EdgeIndex(1)] = zero.clone();
+            for (axis, expected) in [3, 4, 0].into_iter().enumerate() {
+                shifted_center[crate::momentum::sample::LoopIndex(0)] = ThreeMomentum::new(
+                    if axis == 0 {
+                        tiny.clone()
+                    } else {
+                        zero.clone()
+                    },
+                    if axis == 1 {
+                        tiny.clone()
+                    } else {
+                        zero.clone()
+                    },
+                    if axis == 2 {
+                        tiny.clone()
+                    } else {
+                        zero.clone()
+                    },
+                );
+                let derivative = endpoint
+                    .compute_self_and_r_derivative(
+                        &zero,
+                        &velocity,
+                        &shifted_center,
+                        &externals,
+                        &masses,
+                        lmb,
+                    )
+                    .1;
+                if tiny.square() == zero {
+                    assert!(derivative.is_nan() || derivative.is_infinite());
+                } else {
+                    assert!((derivative - f(expected)).abs() < one.epsilon() * f(128));
+                }
+            }
+        }
+        check_native::<f64>(&graph, &surface);
+        check_native::<QuadFloat>(&graph, &surface);
+        check_native::<ArbPrec>(&graph, &surface);
     }
 
     #[test]

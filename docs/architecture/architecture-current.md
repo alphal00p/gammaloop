@@ -566,6 +566,24 @@ contaminating a valid active derivative. Requested singular derivatives and
 singular intermediates involving active inputs still produce typed numerical
 errors. The constructor change preserves the stored evaluator layout and the
 empty-mask behavior of existing physical evaluators.
+The graph-independent shared-energy joint component supplies a compact
+three-dimensional full-circle map for two energy sums with one common routed
+energy. It uses that eager Jacobian owner, a directed MPFR enclosure certificate
+for the residual disk, and an inverse density evaluated at the supplied point.
+The component's represented-geometry contract does not yet include graph
+matching, run-card binding or physical-host uncertainty transport. Its conditional
+ordinary fallback retains the existing normalized radial map. Compact/fallback
+and dyadic-radius choices need prerequisite-only persistence across native
+retries before production binding; fixed-context tests do not establish that
+property.
+Map coverage is now `Full` or `Restricted`, independently of `requires_context`.
+Certified inverse exclusion propagates through the existing compositions,
+embeddings and affine frames as `None`, becoming zero in the existing partition.
+Numerical uncertainty and underflow remain errors. Exact and proxy partitions
+gate restricted channels by their actual support, and bridge admission requires
+an explicitly selected full-support sibling. A direct-momentum request outside
+its selected channel gives an explicit diagnostic; generated selected points
+must still have positive density and satisfy forward/inverse consistency.
 Typed numerical errors distinguish unrepresentable derived coordinates/scores
 from invalid original inputs. The implicit root uses the existing native
 safeguarded solver, with callback errors preserved. Production retries rebuild

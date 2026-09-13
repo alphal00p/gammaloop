@@ -3615,7 +3615,9 @@ parent_lmb = [4,6]
                 ));
                 let coordinates = [0.19, 0.27, 0.61, 0.39, 0.72, 0.58];
                 let mapped = bridge.forward(SamplingChannelId(0), &coordinates)?;
-                let inverse = bridge.inverse(SamplingChannelId(0), &mapped.raw_coordinates)?;
+                let inverse = bridge
+                    .inverse(SamplingChannelId(0), &mapped.raw_coordinates)?
+                    .expect("full-support map must contain the supplied point");
                 assert!((mapped.map.jacobian * inverse.map.inverse_jacobian - 1.0).abs() < 1.0e-9);
                 for (actual, expected) in inverse.map.coordinates.iter().zip(coordinates) {
                     assert!((actual - expected).abs() < 1.0e-10);
@@ -4024,7 +4026,9 @@ parent_lmb = [4,6]
             let coordinates =
                 [13, 23, 47, 19, 31, 67].map(|value| (one.from_i64(value) / one.from_i64(100)).0);
             let forward = map.forward(&coordinates, &[])?;
-            let inverse = map.inverse(&forward.point, &[])?;
+            let inverse = map
+                .inverse(&forward.point, &[])?
+                .expect("full-support map must contain the supplied point");
             assert!(
                 (F(forward.jacobian.clone()) * F(inverse.inverse_jacobian) - &one).abs()
                     < one.epsilon().sqrt() * one.from_i64(100)
@@ -4228,7 +4232,9 @@ parent_lmb = [4,6]
                 let point = reordered.forward(SamplingChannelId(0), &coordinates)?;
                 assert_eq!(point.raw_coordinates, fresh.raw_coordinates);
                 assert_eq!(point.map.jacobian, fresh.map.jacobian);
-                let inverse = reordered.inverse(SamplingChannelId(0), &point.raw_coordinates)?;
+                let inverse = reordered
+                    .inverse(SamplingChannelId(0), &point.raw_coordinates)?
+                    .expect("full-support map must contain the supplied point");
                 for (actual, expected) in inverse.map.coordinates.iter().zip(coordinates) {
                     assert!((actual - expected).abs() < 1.0e-10);
                 }
@@ -4265,8 +4271,9 @@ parent_lmb = [4,6]
             assert!(forward.map.jacobian.is_finite() && forward.map.jacobian > 0.0);
             assert!((forward.partition.weights.iter().sum::<f64>() - 1.0).abs() < 1.0e-13);
             for channel_id in 0..3 {
-                let inverse =
-                    bridge.inverse(SamplingChannelId(channel_id), &forward.raw_coordinates)?;
+                let inverse = bridge
+                    .inverse(SamplingChannelId(channel_id), &forward.raw_coordinates)?
+                    .expect("full-support map must contain the supplied point");
                 assert_eq!(inverse.partition, forward.partition);
                 let recovered =
                     bridge.forward(SamplingChannelId(channel_id), &inverse.map.coordinates)?;
@@ -4400,7 +4407,9 @@ parent_lmb = [4,6]
                             * (1.0 + (delta / beta).sqrt()).powi(2)
                     };
                     assert!((radial / expected - 1.0).abs() < 1.0e-7);
-                    let inverse = bridge.inverse(SamplingChannelId(0), &point.raw_coordinates)?;
+                    let inverse = bridge
+                        .inverse(SamplingChannelId(0), &point.raw_coordinates)?
+                        .expect("full-support map must contain the supplied point");
                     assert!(
                         (point.map.jacobian * inverse.map.inverse_jacobian - 1.0).abs() < 1.0e-7
                     );
@@ -4436,7 +4445,9 @@ parent_lmb = [4,6]
                 CompiledSamplingMap::Surface(_)
             ));
             let forward = bridge.forward(SamplingChannelId(0), &coordinates)?;
-            let inverse = bridge.inverse(SamplingChannelId(0), &forward.raw_coordinates)?;
+            let inverse = bridge
+                .inverse(SamplingChannelId(0), &forward.raw_coordinates)?
+                .expect("full-support map must contain the supplied point");
             for (left, right) in coordinates.iter().zip(&inverse.map.coordinates) {
                 assert!((left - right).abs() < 1.0e-10);
             }
@@ -4488,7 +4499,9 @@ parent_lmb = [4,6]
         );
         for _ in 0..2 {
             let point = boosted.forward(SamplingChannelId(0), &coordinates)?;
-            let inverse = boosted.inverse(SamplingChannelId(0), &point.raw_coordinates)?;
+            let inverse = boosted
+                .inverse(SamplingChannelId(0), &point.raw_coordinates)?
+                .expect("full-support map must contain the supplied point");
             assert!((point.map.jacobian * inverse.map.inverse_jacobian - 1.0).abs() < 1.0e-8);
         }
         let master_lmb = term
@@ -4740,7 +4753,8 @@ parent_lmb = [4,6]
                 // Quad point, rather than at the nearby Arb forward point.
                 let arb_inverse = setup
                     .sampling_bridge::<ArbPrec>()?
-                    .inverse(SamplingChannelId(0), &quad_point)?;
+                    .inverse(SamplingChannelId(0), &quad_point)?
+                    .expect("full-support map must contain the supplied point");
                 let ratio = F(quad.map.jacobian).higher() * F(arb_inverse.map.inverse_jacobian);
                 assert!((ratio - &one).abs().into_ff64().0 < 1.0e-6);
             }

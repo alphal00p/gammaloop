@@ -61,7 +61,7 @@ use crate::{
         },
     },
     utils::{
-        F, FloatLike, Length, RuntimeCache, h, h_dual,
+        F, FloatLike, RuntimeCache, h, h_dual,
         hyperdual_utils::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape,
@@ -1883,7 +1883,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                                 ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())
                             }));
                         let value = host
-                            .sampling_evaluate_ray(
+                            .compute_self_and_r_derivative(
                                 &zero,
                                 &zero_velocity,
                                 &origin_loops,
@@ -1919,7 +1919,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                                     F(v[2].clone()),
                                 );
                             }
-                            let (value, derivative) = surface.sampling_evaluate_ray(
+                            let (value, derivative) = surface.compute_self_and_r_derivative(
                                 &radius,
                                 &velocity,
                                 &origin_loops,
@@ -2075,25 +2075,15 @@ impl GraphTerm for CrossSectionGraphTerm {
                                 )
                             }));
                             let zero = F(native[0].clone()).zero();
-                            let center =
-                                LoopMomenta::from_iter((0..lmb.loop_edges.len()).map(|_| {
-                                    ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())
-                                }));
-                            let (guess, _) = host.get_radius_guess(&loops, &externals, &lmb);
-                            let solution = RadialRootDiagnostics::default()
-                                .solve(
-                                    &identity,
-                                    &zero,
-                                    &guess,
-                                    |t| {
-                                        host.sampling_evaluate_ray(
-                                            t, &loops, &center, &externals, &masses, &lmb,
-                                        )
-                                    },
-                                    &zero.one(),
-                                    2000,
-                                    64,
+                            let solution = host
+                                .solve_lu_cut(
+                                    &loops,
+                                    &externals,
+                                    &masses,
+                                    &lmb,
                                     &F::from_f64(e_cm),
+                                    &mut RadialRootDiagnostics::default(),
+                                    &identity,
                                 )
                                 .map_err(|error| SamplingEvaluationError::UncertifiedRoot {
                                     detail: format!("{identity:?}: {error:?}"),
@@ -2378,14 +2368,6 @@ impl GraphTerm for CrossSectionGraphTerm {
             momentum_sample.orientations(&self.orientation_filter, &self.orientations);
 
         // let mut all_cut_result = Complex::new_re(momentum_sample.zero());
-        let center = LoopMomenta::from_iter(vec![
-            ThreeMomentum {
-                px: momentum_sample.zero(),
-                py: momentum_sample.zero(),
-                pz: momentum_sample.zero(),
-            };
-            momentum_sample.loop_moms().len()
-        ]);
         let masses = self.graph.get_real_mass_vector(context.model);
         let hel = context.settings.kinematics.externals.get_helicities();
         let mut cut_results: TiVec<CutGroupId, Vec<Complex<F<T>>>> =
@@ -2418,38 +2400,20 @@ impl GraphTerm for CrossSectionGraphTerm {
                 representative_esurface
             );
 
-            let function = |t: &F<T>| {
-                representative_esurface.compute_self_and_r_derivative(
-                    t,
-                    momentum_sample.loop_moms(),
-                    &center,
-                    momentum_sample.external_moms(),
-                    &masses,
-                    &self.graph.loop_momentum_basis,
-                )
-            };
-
-            let (guess, _) = representative_esurface.get_radius_guess(
-                momentum_sample.loop_moms(),
-                momentum_sample.external_moms(),
-                &self.graph.loop_momentum_basis,
-            );
-
             // A physical LU cut needs an isolated positive root with a finite, positive
             // Jacobian. Validate the bracket and root before constructing any cut kinematics.
             let identity = RadialRootIdentity::new(format!(
                 "LU cut graph '{}' cut group {} probe rotation {}",
                 self.graph.name, cut_group_id.0, context.rotation.method,
             ));
-            let solution = match context.evaluation_metadata.radial_root_diagnostics.solve(
-                &identity,
-                &guess.zero(),
-                &guess,
-                function,
-                &guess.one(),
-                2000,
-                64,
+            let solution = match representative_esurface.solve_lu_cut(
+                momentum_sample.loop_moms(),
+                momentum_sample.external_moms(),
+                &masses,
+                &self.graph.loop_momentum_basis,
                 &F::from_f64(context.settings.kinematics.e_cm),
+                &mut context.evaluation_metadata.radial_root_diagnostics,
+                &identity,
             ) {
                 Ok(solution) => solution,
                 Err(error) => {
@@ -2457,7 +2421,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                         graph = %self.graph.name,
                         cut_group_id = cut_group_id.0,
                         edges = ?representative_esurface.energies,
-                        initial_guess = %guess,
                         error = ?error,
                         "LU radial root requires precision escalation"
                     );
@@ -2465,21 +2428,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                     // failure is retried at higher precision and remains fatal at the final
                     // level, without ever exposing invalid cut kinematics to the evaluator.
                     lu_root_errors.push(format!(
-                        "Could not solve LU cut group {} of graph '{}', edges {:?}, initial guess {}: {:?}",
-                        cut_group_id.0,
-                        self.graph.name,
-                        representative_esurface.energies,
-                        guess,
-                        error,
+                        "Could not solve LU cut group {} of graph '{}', edges {:?}: {:?}",
+                        cut_group_id.0, self.graph.name, representative_esurface.energies, error,
                     ));
                     continue;
                 }
             };
-
-            crate::debug_tags!(#integration, #cut, #solver;
-                "tolerance for newton solver: {}",
-                F::from_f64(context.settings.kinematics.e_cm) * guess.epsilon()
-            );
 
             crate::debug_tags!(#integration, #cut, #solver;
                 "solution: {:?}",

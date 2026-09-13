@@ -24,7 +24,7 @@ use linnet::half_edge::involution::EdgeIndex;
 
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
-use rug::float::{Constant, ParseFloatError};
+use rug::float::{Constant, ParseFloatError, Round};
 use rug::ops::{CompleteRound, Pow};
 use rug::{Assign, Float};
 use schemars::JsonSchema;
@@ -306,6 +306,41 @@ pub mod tracing;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_mpfr_enclosures_preserve_separated_limbs_and_signs() {
+        use super::{ArbPrec, FloatLike, QuadFloat};
+        use rug::Float;
+        use symbolica::domains::float::DoubleFloat;
+
+        for sign in [-1.0, 1.0] {
+            let low = sign * 2.0_f64.powi(-400);
+            let quad = QuadFloat(DoubleFloat::from_compensated_sum(sign, low));
+            let exact = Float::with_val(512, sign) + Float::with_val(512, low);
+            for precision in [24, 106, 512] {
+                let (lower, upper) = quad.mpfr_enclosure(precision);
+                assert!(lower <= exact && upper >= exact);
+                if precision == 512 {
+                    assert_eq!(lower, exact);
+                    assert_eq!(upper, exact);
+                } else {
+                    assert!(
+                        lower < upper,
+                        "a separated limb cannot disappear from a certificate"
+                    );
+                }
+                let arb = ArbPrec {
+                    float: exact.clone(),
+                };
+                let (lower, upper) = arb.mpfr_enclosure(precision);
+                assert!(lower <= exact && upper >= exact);
+                let native = sign * 1.23456789012345;
+                let (lower, upper) = native.mpfr_enclosure(precision);
+                let exact_native = Float::with_val(53, native);
+                assert!(lower <= exact_native && upper >= exact_native);
+            }
+        }
+    }
+
     #[test]
     fn debug_tags_macro_supports_tags_and_regular_fields() {
         crate::debug_tags!(#integration, #summary;
@@ -1227,6 +1262,16 @@ impl Real for QuadFloat {
 }
 
 impl FloatLike for f128 {
+    fn mpfr_enclosure(&self, precision: u32) -> (Float, Float) {
+        let limbs = self.0.into_inner();
+        let high = Float::with_val(53, limbs.hi());
+        let low = Float::with_val(53, limbs.lo());
+        (
+            Float::with_val_round(precision, &high + &low, Round::Down).0,
+            Float::with_val_round(precision, &high + &low, Round::Up).0,
+        )
+    }
+
     fn E(&self) -> Self {
         Self::E()
     }
@@ -1324,6 +1369,13 @@ impl FloatLike for f128 {
 }
 
 impl FloatLike for ArbPrec {
+    fn mpfr_enclosure(&self, precision: u32) -> (Float, Float) {
+        (
+            Float::with_val_round(precision, &self.float, Round::Down).0,
+            Float::with_val_round(precision, &self.float, Round::Up).0,
+        )
+    }
+
     fn E(&self) -> Self {
         Self::E()
     }
@@ -1746,6 +1798,11 @@ pub trait FloatLike:
     /// Preserve the exact stored binary64 value of an original Monte Carlo
     /// coordinate. User-authored settings retain the existing decimal policy.
     fn from_f64_exact_binary(x: f64) -> Self;
+
+    /// Enclose the exact represented native value at the requested MPFR
+    /// precision. Directed rounding includes both separated Quad limbs; this
+    /// is a certificate boundary, unlike ordinary nearest-rounded conversion.
+    fn mpfr_enclosure(&self, precision: u32) -> (Float, Float);
 
     /// Runtime stability level represented by this native scalar type.
     fn sampling_precision() -> crate::settings::runtime::Precision;
@@ -2666,6 +2723,13 @@ impl PrecisionUpgradable for f64 {
 }
 
 impl FloatLike for f64 {
+    fn mpfr_enclosure(&self, precision: u32) -> (Float, Float) {
+        (
+            Float::with_val_round(precision, *self, Round::Down).0,
+            Float::with_val_round(precision, *self, Round::Up).0,
+        )
+    }
+
     fn PI(&self) -> Self {
         std::f64::consts::PI
     }

@@ -133,20 +133,22 @@ then the physical sample is rotated. Summed channels replay the identity-frame
 map inside each probe before rotating its output. Each physical cross-section
 probe subsequently solves its own cuts and prepares its own overlap centers.
 
-Even the host root is not an identical numerical calculation today. The
+The common host-root entry is now implemented as `Esurface::solve_lu_cut`,
+preserving `get_radius_guess` and the existing settings: inside zero, tolerance
+factor 1, 2,000 iterations, 64 bracket expansions and native epsilon times Ecm.
+Both callers use `compute_self_and_r_derivative`; the removed sampling-only
+ray wrapper's massless-origin right derivative now lives in that same energy
+loop. It applies only when radius, actual mass and all three routed momentum
+components are exactly zero. A computed energy of zero alone may underflow.
+Native endpoint, shifted massive, underflow and unchanged-policy checks pass.
+
+This consolidation still does not supply identical numerical host data. The
 conditional `SamplingMapContextTransform` uses a certified null-direction
-representative, `Esurface::sampling_evaluate_ray` and fresh root diagnostics;
-physical LU uses the complete sample, `compute_self_and_r_derivative` and the
-evaluation's persistent diagnostics. Both already use `get_radius_guess` and
-the same solver settings: inside zero, tolerance factor 1, 2,000 iterations,
-64 bracket expansions and the native epsilon times Ecm residual budget.
-The sampling ray supplies a distinct massless-origin right derivative, but
-the safeguarded solver ignores the derivative at its inside endpoint. Moving
-that convention into the common `Esurface` energy loop removes duplicate
-routing; it does not reconcile different input points or diagnostic histories.
-Apply the right derivative only when the radius, actual mass and all three
-routed momentum components are exactly zero. A computed energy of zero alone
-can result from underflow and must not be classified as a massless cusp.
+representative and fresh diagnostics; physical LU uses the complete sample
+and the evaluation's persistent diagnostics. The safeguarded solver ignores
+the derivative at its inside endpoint. Sharing its entry therefore removes
+duplicate routing and policy setup without reconciling those different input
+points or diagnostic histories.
 
 Common equation and solve entry points therefore guarantee the same result
 only for the same native inputs and diagnostics. `RadialRootDiagnostics` also
@@ -241,6 +243,56 @@ host-root or SOCP solve per probe or foreign inverse of the same certified
 dependency data. The common-equation prerequisite additionally needs exact
 massless and shifted massive endpoint checks, and a nonzero tiny mass whose
 square underflows in Double/Quad but remains representable in Arb.
+
+### Proposal policy across native retries — unimplemented
+
+For each target block b, define its proposal decision as `P_b(y_b)`, where y_b
+contains only that block's ordered raw prerequisites. The decision may select
+compact focusing or normalized ordinary fallback, plus a radius recipe and
+dyadic exponent. It must exclude the block's active coordinates, the generating
+channel and the physical integrand's stability outcome. Commit a successful
+decision after prerequisite preparation and certification, before it can be
+changed by active-dependent physics. Retain it through subsequent native retries;
+rebuild coefficients, roots and the radius recipe natively from the original
+source, rather than promoting derived lower-precision values. A higher lane may
+recertify the retained choice, but must error if it is invalid or unresolved,
+not silently enlarge/shrink the disk or switch to fallback.
+
+Every foreign inverse needs its own `P_b(y_b)`: reconstruct that target's
+prerequisites from the common raw point through its immutable routing and
+preceding blocks. Do not reuse the selected map's prerequisites. Graph,
+generating-channel/source lineage and resolved target-block identity distinguish
+stored records, especially when summed channels map the same cube to different
+points. They are cache-validity keys, not mathematical policy inputs: the same
+target and prerequisites must choose the same law regardless of how the point
+was generated. Otherwise channel partitions need not be one common function of
+the raw point. Original-point lineage and native representability checks are
+therefore necessary; a mutable cache indexed only by channel is insufficient.
+
+The minimum transport belongs on the existing original-draw source/stability
+owner: retain nonnumeric decisions beside `EvaluationMetaData` root diagnostics,
+and pass them through the existing runtime contexts and planned typed host
+preparation. Native prepared data remain specific to each precision. This needs
+an explicit prerequisite-policy phase with a declared starting proof budget;
+any preparation-only escalation must depend solely on those prerequisites.
+`loop_norm_sum` can currently skip a precision based on the mapped active point,
+and `debug_sample` remaps outside the stability pass. Neither prepass may commit
+policy, nor may a previously unseen foreign policy inherit an incidental lane
+chosen by another map's or the physical evaluator's failure. Reuse the current
+evaluation pipeline; do not add another retry engine. An interval containing
+zero is unresolved, not proof of an invalid domain; more arithmetic precision
+also cannot remove finite-box dependency overestimation.
+
+A decisive regression uses a compact law uniform in `R in (0,rho)` and the
+normalized target `f=q_rho` on that patch, zero outside. Force a physics retry
+only when the original radial cube coordinate is below 1/2. If rescue changes
+rho to 2rho for those draws, their weight is 2 while the unretried half retains
+weight 1: the expectation is 3/2 instead of 1. Freezing the policy gives 1.
+Extend this original-source test to foreign support decisions, nonuniform
+channel probabilities, summed channels and fallback; an invalid retained disk
+must error. This transport is unimplemented and remains a production binding
+gate. It does not block the represented-geometry joint kernel's fixed-context
+normalization, inverse-density or `F=1/R` bounded-weight gates.
 
 ## Resolve a star without requiring user threshold directives
 

@@ -48,6 +48,7 @@ pub mod cross_section;
 pub mod gammaloop_sample;
 pub mod ir;
 pub mod sampling_context;
+pub mod sampling_joint;
 pub mod sampling_maps;
 pub mod sampling_partition;
 pub mod sampling_reference;
@@ -76,6 +77,7 @@ pub use sampling_evaluator::{SamplingDualValue, SamplingExpressionEvaluator};
 pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
 pub use sampling_context::{PreparedSurfaceStatus, SamplingCutSide};
+pub use sampling_joint::{SharedEnergyJointGeometry, SharedEnergyJointMap};
 pub use sampling_maps::{
     ImplicitSurfaceContextPreparer, ImplicitSurfaceRadialContextEvaluator,
     ImplicitSurfaceRadialEvaluator, ImplicitSurfaceRadialMap, SamplingJacobian,
@@ -4330,7 +4332,11 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                                 ]
                             })
                             .collect::<Vec<_>>(),
-                    )?;
+                    )?
+                    .ok_or_else(|| eyre!(
+                        "raw momentum point is outside sampling channel {}; select a full-support sibling for direct-momentum evaluation",
+                        channel_id.0,
+                    ))?;
                     let partition_weight =
                         mapped.partition.weight(channel_id.0).ok_or_else(|| {
                             eyre!(
@@ -5628,7 +5634,8 @@ mod tests {
         for channel_id in 0..bridge.channels().len() {
             let evaluation = bridge
                 .inverse(SamplingChannelId::from(channel_id), &raw)
-                .unwrap();
+                .unwrap()
+                .expect("full-support channel inverse");
             assert!((evaluation.partition.weights.iter().sum::<f64>() - 1.0).abs() < 1.0e-14);
             let actual = evaluation.partition.weight(channel_id).unwrap();
             let expected = scores[channel_id] / total;
