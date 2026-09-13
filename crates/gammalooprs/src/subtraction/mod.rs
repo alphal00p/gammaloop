@@ -459,8 +459,16 @@ mod tests {
                 };
                 for radius_star in [0.3, 3.0] {
                     // The generated helper cancels r^(3L-1) from the measure.
-                    // Both normalized profiles have negligible tails after 8 sigma.
-                    let step = 8.0 * sigma * radius_star / 2048.0;
+                    // Gaussian profiles are negligible after 8 sigma. The
+                    // left/right exponential has only exponential (rather than
+                    // Gaussian) tails, so integrate it over a wider finite
+                    // window before comparing its analytic normalization.
+                    let tail_multiple = if function == HFunction::PolyLeftRightExponential {
+                        64.0
+                    } else {
+                        8.0
+                    };
+                    let step = tail_multiple * sigma * radius_star / 2048.0;
                     let integral: f64 = (0..2048)
                         .map(|i| {
                             evaluate_integrated_ct_normalisation(
