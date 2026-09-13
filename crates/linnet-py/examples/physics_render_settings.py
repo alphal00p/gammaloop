@@ -193,8 +193,9 @@ def _():
       ext [style=invis];
       ext -> 3 [dir=none, particle="a"];
       ext -> 2 [dir=none, particle="a"];
-      5 -> ext [dir=none, particle="a"];
-      4 -> ext [dir=none, particle="a"];
+      // Order the outgoing legs along the outer cycle to avoid a crossing.
+      5:12 -> ext [dir=none, particle="a"];
+      4:15 -> ext [dir=none, particle="a"];
 
       0 -> 1 [particle="t"];
       0 -> 1 [dir=none, particle="g"];

@@ -41,6 +41,11 @@ The initial settings match ordinary `just draw`: 1200 iterations, seed 42, and m
 and labels disabled. The preview draws edited DOT without importing it into a GammaLoop
 calculation, so it does not validate interactions or numerators against the model.
 
+The amplitude assigns half-edge ports `5:12` and `4:15` to put the outgoing leg at vertex `5`
+above the leg at vertex `4`. This external order allows the default layout to draw the internal
+cycle without crossings. The ports are global half-edge indices; the remaining indices are
+inferred. Reordering the DOT statements alone would not establish this order.
+
 == Graph shape and half-edges
 
 // docs-example: syntax
