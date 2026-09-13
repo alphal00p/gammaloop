@@ -1030,13 +1030,7 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                     })
                     .collect::<Vec<_>>();
                 let bridge = term
-                    .compile_sampling_bridge(
-                        &parameterization,
-                        runtime.kinematics.e_cm,
-                        &externals,
-                        &runtime.lu_h_function,
-                        None,
-                    )
+                    .compile_sampling_bridge(&parameterization, &runtime, &externals, None)
                     .unwrap();
                 assert_eq!(bridge.channels().len(), 1);
                 assert_eq!(bridge.channels()[0].name, "physical_cut");
@@ -1357,16 +1351,10 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                     .unwrap()
                     .on_cut = vec![usize::MAX];
                 assert!(
-                    term.compile_sampling_bridge(
-                        &parameterization,
-                        runtime.kinematics.e_cm,
-                        &externals,
-                        &runtime.lu_h_function,
-                        None,
-                    )
-                    .unwrap_err()
-                    .to_string()
-                    .contains("on_cut")
+                    term.compile_sampling_bridge(&parameterization, &runtime, &externals, None,)
+                        .unwrap_err()
+                        .to_string()
+                        .contains("on_cut")
                 );
             }
         })

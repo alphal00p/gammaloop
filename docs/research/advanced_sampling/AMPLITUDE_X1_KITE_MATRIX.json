@@ -1,0 +1,2641 @@
+{
+ "scope": "Frozen X1 checkpoint physical amplitude pilot and saved-state reference acceptance; not current uncommitted proper-fiber/native-reference code, no bounded-weight proof.",
+ "manifest": {
+  "source_commit": "3f9b1a28473f313d6242a556ada2e8dbcd6f6477",
+  "state": "/tmp/advanced-sampling-amplitude-research/state",
+  "profiles": [
+   "optimized_lmb",
+   "all_lmb",
+   "surface",
+   "mixed"
+  ],
+  "expected_orientations": 18,
+  "power": 2,
+  "seeds": [
+   101,
+   202,
+   303
+  ],
+  "n_per_seed": 10000,
+  "n_start": 2000,
+  "cores": 1,
+  "status": "prepared",
+  "training_phase": "real",
+  "weight": "map_density",
+  "reference": {
+   "width": 1.2,
+   "center": [
+    0.4,
+    -0.3,
+    0.2,
+    -0.2,
+    0.1,
+    0.35
+   ],
+   "points_per_channel": 8192,
+   "normalization_absolute_tolerance": 0.02,
+   "second_moment_absolute_tolerance": 0.2,
+   "method": "existing process reference APIs; Halton quadrature; per-channel dispersions are not independent-MC errors"
+  },
+  "state_hashes": {
+   "default_runtime_settings.toml": "ca587329d8aac386dd0454e7e0cb3a54ddc8e2fed72d1c743d17c0bc83442f94",
+   "global_settings.toml": "214891db5fe78b8eae4ae5116e64329e120d6cf838260e6f8115142e177b99e9",
+   "model.json": "f77f42cf6f424b1296db36c9492de41bedba519ea0deb3f3813f025aaecd8b94",
+   "model_parameters.json": "4e0f746e2bad41c02a83239013f896735305c86b8dc10e1c05b609a65620d3e7",
+   "processes/amplitudes/massive_kite/def.bin": "1fd264a786ae277bd40c4f32353bf272e205615203dfa4101ef3624a0a58fcef",
+   "processes/amplitudes/massive_kite/default/amp.bin": "738838fafcf73349d62b722de8d1307042170b6bb2b3d360afcaa62428da887c",
+   "processes/amplitudes/massive_kite/default/generation_summary.json": "281705b63b368f3466ed7a4788809b657f2a9be329319abfd5a02c4f9512151c",
+   "processes/amplitudes/massive_kite/default/integrand/integrand.bin": "526980b22c3b07887991d1a63474a4d3651752062448ce213cc98e0cc2377293",
+   "processes/amplitudes/massive_kite/default/integrand/settings.toml": "62e820e2e3998999b494bc7fde039fe250a69290bdb8f0a8ed5c9806bd557163",
+   "processes/amplitudes/massive_kite/settings_history.toml": "c8239156bc91388f66a07d76eafc7bff6a9550c4735ee41cf1b6daef8c5a0836",
+   "run.toml": "9ffb06d05a68dfa98ced9dad5a7e9ab140a2a74a4cfdd2734b63415aac66157e",
+   "state_manifest.toml": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8",
+   "symbolica_state.bin": "6dce48b8ae93a07961e8348746a408487de6fb704cf06799c55a91dc15ad6670"
+  },
+  "cards": {
+   "optimized_lmb": {
+    "path": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_optimized_lmb.toml",
+    "sha256": "0d35e93789c43182d23992be61ac9706cedcc93684a42b06dcff89df30f0c8e2",
+    "overlay_sha256": "10151d156e110b27957428e1611a44e3071b01cd33f1f70cc7227e27fd03e280"
+   },
+   "all_lmb": {
+    "path": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_all_lmb.toml",
+    "sha256": "0e82d44956d304ff35d6c8f150ef9e24f2ab29d5289b3f7a12d683feb8bf9a7e",
+    "overlay_sha256": "e5d6895a5be695f93a4fbc7cddb3371b32fc4dc477711d88641a7c309283a7a9"
+   },
+   "surface": {
+    "path": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_surface.toml",
+    "sha256": "b137e09dfbb7b47f086103416a650e8f861d8d19b59fa27d03442611c51f4a5b",
+    "overlay_sha256": "54b22946667b8092b6e58c4c82430164c09231399efd3d79b7eea54e9b491c44"
+   },
+   "mixed": {
+    "path": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_mixed.toml",
+    "sha256": "eb3ef6a3e48bd7235b7b9cbbae3ef65bb9d166ef700d4522be087a3c3c345e62",
+    "overlay_sha256": "8d8bc8beb6a0dd95ca4f430e807e6b9310a9ca5171a2039aaca38aef09df8fb1"
+   }
+  }
+ },
+ "phases": {
+  "load": {
+   "phase": "load",
+   "binary": "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+   "binary_sha256": "f700ee575153067ccc77894ea776a96f139105812a15014d094dd67ba7db6d61",
+   "source_commit": "3f9b1a28473f313d6242a556ada2e8dbcd6f6477",
+   "runs": [
+    {
+     "name": "load_optimized_lmb",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_optimized_lmb.toml",
+      "display",
+      "integrand",
+      "-p",
+      "massive_kite",
+      "-i",
+      "default",
+      "--category",
+      "orientation"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 0.47378806094639003,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/load_optimized_lmb.log",
+     "log_sha256": "216f2f84d8f2a2296fd7c249323c034d2cbcd72a4b332f28964c905ff7778807"
+    },
+    {
+     "name": "load_all_lmb",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_all_lmb.toml",
+      "display",
+      "integrand",
+      "-p",
+      "massive_kite",
+      "-i",
+      "default",
+      "--category",
+      "orientation"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 0.4716273139929399,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/load_all_lmb.log",
+     "log_sha256": "4316009a47aa2b141f96ba0350b5a5b12a9cda709f28a5c3f9b221d0dff6528d"
+    },
+    {
+     "name": "load_surface",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_surface.toml",
+      "display",
+      "integrand",
+      "-p",
+      "massive_kite",
+      "-i",
+      "default",
+      "--category",
+      "orientation"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 0.47172047395724803,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/load_surface.log",
+     "log_sha256": "eb0a477ce2dd5d7d25e90ccf844857a4144603f0b962ee04b487e49908a5ba8d"
+    },
+    {
+     "name": "load_mixed",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_mixed.toml",
+      "display",
+      "integrand",
+      "-p",
+      "massive_kite",
+      "-i",
+      "default",
+      "--category",
+      "orientation"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 0.4738332809647545,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/load_mixed.log",
+     "log_sha256": "6c4a35a07e5a0b457310990593ee1d904b1cd2ceb55a3385feac34398aa8b1a7"
+    }
+   ],
+   "passed": true,
+   "changed_state_files": [],
+   "state_unchanged": true
+  },
+  "smoke": {
+   "phase": "smoke",
+   "binary": "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+   "binary_sha256": "f700ee575153067ccc77894ea776a96f139105812a15014d094dd67ba7db6d61",
+   "source_commit": "3f9b1a28473f313d6242a556ada2e8dbcd6f6477",
+   "runs": [
+    {
+     "name": "smoke_optimized_lmb_seed101",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_optimized_lmb.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=101",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=64",
+      "-D",
+      "n_max=64",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/smoke_optimized_lmb_seed101"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 0.5181257100775838,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/smoke_optimized_lmb_seed101.log",
+     "log_sha256": "b37310401ddc01bb1d85d302239014c3cae8c2d139615f0767b88e294b56da86"
+    },
+    {
+     "name": "smoke_all_lmb_seed101",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_all_lmb.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=101",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=64",
+      "-D",
+      "n_max=64",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/smoke_all_lmb_seed101"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 0.5049996690358967,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/smoke_all_lmb_seed101.log",
+     "log_sha256": "bb705e4ec7ebd4897c5a380028c4980bd012919f378c7581dd4ff8c4001844ce"
+    },
+    {
+     "name": "smoke_surface_seed101",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_surface.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=101",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=64",
+      "-D",
+      "n_max=64",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/smoke_surface_seed101"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 0.5019486090168357,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/smoke_surface_seed101.log",
+     "log_sha256": "c1a316e128a4702cb38147fcdfffce2ea90cea5777bf288b39adf224d1ed6bf9"
+    },
+    {
+     "name": "smoke_mixed_seed101",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_mixed.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=101",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=64",
+      "-D",
+      "n_max=64",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/smoke_mixed_seed101"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 0.5117326700128615,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/smoke_mixed_seed101.log",
+     "log_sha256": "99fef7be83654bec1d1ba7d1d111b6ee3fab177a4438377a2e38187a031fa25d"
+    }
+   ],
+   "passed": true,
+   "changed_state_files": [],
+   "state_unchanged": true
+  },
+  "reference": {
+   "phase": "reference",
+   "binary": "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+   "binary_sha256": "f700ee575153067ccc77894ea776a96f139105812a15014d094dd67ba7db6d61",
+   "source_commit": "3f9b1a28473f313d6242a556ada2e8dbcd6f6477",
+   "runs": [
+    {
+     "name": "reference_optimized_lmb",
+     "argv": [
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/reference_driver",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/optimized_lmb.runtime-overlay.toml",
+      "8192",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/reference_optimized_lmb"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.2985139379743487,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/reference_optimized_lmb.log",
+     "log_sha256": "aaa14ed99efecb4f77f3764d493a27ba11f99bfc21ecf4b3bba4dc40c3b54d14"
+    },
+    {
+     "name": "reference_all_lmb",
+     "argv": [
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/reference_driver",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/all_lmb.runtime-overlay.toml",
+      "8192",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/reference_all_lmb"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.285704706911929,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/reference_all_lmb.log",
+     "log_sha256": "aaa14ed99efecb4f77f3764d493a27ba11f99bfc21ecf4b3bba4dc40c3b54d14"
+    },
+    {
+     "name": "reference_surface",
+     "argv": [
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/reference_driver",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/surface.runtime-overlay.toml",
+      "8192",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/reference_surface"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 0.559896100894548,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/reference_surface.log",
+     "log_sha256": "f17b37ba81a21bbbcb96a9bef2ae25cd7f4cb2313a8b3830705a50287559c14e"
+    },
+    {
+     "name": "reference_mixed",
+     "argv": [
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/reference_driver",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/mixed.runtime-overlay.toml",
+      "8192",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/reference_mixed"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.6530914190225303,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/reference_mixed.log",
+     "log_sha256": "57b97b96a15697c02c05c0d353f6cd3176fedcf61292fd73eac984c2838e15c8"
+    }
+   ],
+   "passed": true,
+   "changed_state_files": [],
+   "state_unchanged": true
+  },
+  "matrix": {
+   "phase": "matrix",
+   "binary": "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+   "binary_sha256": "f700ee575153067ccc77894ea776a96f139105812a15014d094dd67ba7db6d61",
+   "source_commit": "3f9b1a28473f313d6242a556ada2e8dbcd6f6477",
+   "runs": [
+    {
+     "name": "matrix_optimized_lmb_seed101",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_optimized_lmb.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=101",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=2000",
+      "-D",
+      "n_max=10000",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_optimized_lmb_seed101"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.3616560230730101,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_optimized_lmb_seed101.log",
+     "log_sha256": "63a0031460028b0d2e1d3871e49c999a7d79978ba612342df735ba59a0d941ba"
+    },
+    {
+     "name": "matrix_optimized_lmb_seed202",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_optimized_lmb.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=202",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=2000",
+      "-D",
+      "n_max=10000",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_optimized_lmb_seed202"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.3850707350065932,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_optimized_lmb_seed202.log",
+     "log_sha256": "6fcdef7bc00e1547b30efd75d5341700dbce8cb52eb93ef28fc8506b40a75279"
+    },
+    {
+     "name": "matrix_optimized_lmb_seed303",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_optimized_lmb.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=303",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=2000",
+      "-D",
+      "n_max=10000",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_optimized_lmb_seed303"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.376408378011547,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_optimized_lmb_seed303.log",
+     "log_sha256": "e33bde5e1a0670e757a7fc1ac817b8e9492814b37bba964dd46f407a8680dcf4"
+    },
+    {
+     "name": "matrix_all_lmb_seed101",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_all_lmb.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=101",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=2000",
+      "-D",
+      "n_max=10000",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_all_lmb_seed101"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.3750622839434072,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_all_lmb_seed101.log",
+     "log_sha256": "1b85016a55b08e7beb9cbd7c84ca82624eed5a87c88d4908fad3453182f6475d"
+    },
+    {
+     "name": "matrix_all_lmb_seed202",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_all_lmb.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=202",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=2000",
+      "-D",
+      "n_max=10000",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_all_lmb_seed202"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.386903171078302,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_all_lmb_seed202.log",
+     "log_sha256": "b73a20081cd9c03eb7abba8f56c28c428cd37f0ae6d19bcf0e5a1b9dde6ae422"
+    },
+    {
+     "name": "matrix_all_lmb_seed303",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_all_lmb.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=303",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=2000",
+      "-D",
+      "n_max=10000",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_all_lmb_seed303"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.3789030159823596,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_all_lmb_seed303.log",
+     "log_sha256": "a94339129a13e8a3e1e1d96f04ab38abcea17c6677fcfdbc9fc6489d3a941b10"
+    },
+    {
+     "name": "matrix_surface_seed101",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_surface.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=101",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=2000",
+      "-D",
+      "n_max=10000",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_surface_seed101"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.2881015839520842,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_surface_seed101.log",
+     "log_sha256": "4b7eecaae29e071f93da29267c027ece5e9659ca5da47f37ee502e513d256dbb"
+    },
+    {
+     "name": "matrix_surface_seed202",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_surface.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=202",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=2000",
+      "-D",
+      "n_max=10000",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_surface_seed202"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.2931254690047354,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_surface_seed202.log",
+     "log_sha256": "4bd4088bd2242879f045f9c90911bd7fbd6a74d56d2a1d360309a3fab3069384"
+    },
+    {
+     "name": "matrix_surface_seed303",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_surface.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=303",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=2000",
+      "-D",
+      "n_max=10000",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_surface_seed303"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.2935553200077266,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_surface_seed303.log",
+     "log_sha256": "9061eaae54fc17f7ba86dccfe4666e5c3383951d432f6e8d667b5354b61e2638"
+    },
+    {
+     "name": "matrix_mixed_seed101",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_mixed.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=101",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=2000",
+      "-D",
+      "n_max=10000",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_mixed_seed101"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.409069248009473,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_mixed_seed101.log",
+     "log_sha256": "7ec19db76574260591ce8b44066e047bd832f71206d5f201983a9a9bb2768ac6"
+    },
+    {
+     "name": "matrix_mixed_seed202",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_mixed.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=202",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=2000",
+      "-D",
+      "n_max=10000",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_mixed_seed202"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.4037995609687641,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_mixed_seed202.log",
+     "log_sha256": "8b08f74cc03575aa6d624dcb15b330f460ea3b15083e7470ac31f562df73ef22"
+    },
+    {
+     "name": "matrix_mixed_seed303",
+     "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "--read-only-state",
+      "--no-save-state",
+      "-s",
+      "/tmp/advanced-sampling-amplitude-research/state",
+      "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_mixed.toml",
+      "run",
+      "integrate",
+      "-D",
+      "seed=303",
+      "-D",
+      "power=2.0",
+      "-D",
+      "n_start=2000",
+      "-D",
+      "n_max=10000",
+      "-D",
+      "cores=1",
+      "-D",
+      "workspace=/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_mixed_seed303"
+     ],
+     "exit_code": 0,
+     "wall_seconds": 1.3902055389480665,
+     "log": "/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/matrix_mixed_seed303.log",
+     "log_sha256": "ea481963a1c336c54d7877a7dc73ac753b64382a49a2a2848c9a2a7c6745af67"
+    }
+   ],
+   "passed": true,
+   "changed_state_files": [],
+   "state_unchanged": true
+  }
+ },
+ "inputs": {
+  "run.py": {
+   "sha256": "5cbd9ad9e76eceb8abcd4acd2955348a41b90ac57a527fc679448c7cd233ae84",
+   "text": "#!/usr/bin/env python3\n\"\"\"Run existing CLI/API owners, preserving exact provenance and failed results.\"\"\"\nimport argparse, hashlib, json, os, pathlib, subprocess, time\nroot = pathlib.Path(__file__).resolve().parent\nparser = argparse.ArgumentParser()\nparser.add_argument('phase', choices=['load', 'smoke', 'reference', 'matrix'])\nparser.add_argument('--binary', type=pathlib.Path, required=True)\nparser.add_argument('--sha256', required=True)\nargs = parser.parse_args()\nmanifest = json.loads((root/'manifest.json').read_text())\nstate = pathlib.Path(manifest['state'])\nbinary = args.binary.resolve()\nactual_hash = hashlib.sha256(binary.read_bytes()).hexdigest()\nassert actual_hash == args.sha256, 'wrong checkpoint binary'\nassert os.environ.get('SYMBOLICA_LICENSE'), 'supply SYMBOLICA_LICENSE explicitly'\nrecord = {'phase': args.phase, 'binary': str(binary), 'binary_sha256': actual_hash,\n          'source_commit': manifest['source_commit'], 'runs': []}\nresult_path = root/f'{args.phase}.results.json'\nassert not result_path.exists(), 'refusing to overwrite existing evidence'\nif args.phase in ['reference','matrix']:\n    for prerequisite in (['load','smoke'] if args.phase == 'reference' else ['load','smoke','reference']):\n        prior = json.loads((root/f'{prerequisite}.results.json').read_text())\n        assert prior['binary_sha256'] == actual_hash and prior['passed'], prerequisite+' gate did not pass for this binary'\n\ndef invoke(name, command):\n    log = root/f'{name}.log'\n    assert not log.exists(), 'refusing to overwrite '+str(log)\n    started = time.monotonic()\n    with log.open('w') as output:\n        process = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT)\n    run = {'name':name,'argv':command,'exit_code':process.returncode,\n           'wall_seconds':time.monotonic()-started,'log':str(log),\n           'log_sha256':hashlib.sha256(log.read_bytes()).hexdigest()}\n    record['runs'].append(run)\n    record['passed'] = all(item['exit_code']==0 for item in record['runs'])\n    result_path.write_text(json.dumps(record,indent=2)+'\\n')\n    print(json.dumps(run), flush=True)\n    if process.returncode:\n        raise SystemExit('failed; exact evidence retained: '+str(log))\n\nfor profile in manifest['profiles']:\n    card = manifest['cards'][profile]['path']\n    assert hashlib.sha256(pathlib.Path(card).read_bytes()).hexdigest() == manifest['cards'][profile]['sha256'], 'card differs from prepared manifest'\n    boot = [str(binary),'--read-only-state','--no-save-state','-s',str(state),card]\n    if args.phase == 'load':\n        invoke(f'load_{profile}',boot+['display','integrand','-p','massive_kite','-i','default','--category','orientation'])\n    elif args.phase == 'reference':\n        invoke(f'reference_{profile}',[str(root/'reference_driver'),str(state),str(root/f'{profile}.runtime-overlay.toml'),'8192',str(root/f'reference_{profile}')])\n        assert json.loads((root/f'reference_{profile}.json').read_text())['passed']\n    else:\n        seeds = [101] if args.phase == 'smoke' else manifest['seeds']\n        for seed in seeds:\n            name = f'{args.phase}_{profile}_seed{seed}'\n            workspace = root/name\n            assert not workspace.exists(), 'require a fresh workspace'\n            n = 64 if args.phase == 'smoke' else 10000\n            start = 64 if args.phase == 'smoke' else 2000\n            invoke(name,boot+['run','integrate','-D',f'seed={seed}','-D','power=2.0','-D',f'n_start={start}','-D',f'n_max={n}','-D','cores=1','-D',f'workspace={workspace}'])\nrecord['changed_state_files'] = [relative for relative, expected in manifest['state_hashes'].items()\n    if hashlib.sha256((state/relative).read_bytes()).hexdigest() != expected]\nrecord['state_unchanged'] = not record['changed_state_files']\nrecord['passed'] = record['state_unchanged']\nresult_path.write_text(json.dumps(record,indent=2)+'\\n')\n\nassert record['passed'], 'input state changed; evidence retained'\n"
+  },
+  "reference_driver.rs": {
+   "sha256": "24a3d824384b7cc40bc58c3047f33415372d6c29a0fa142d50bd17b89b38f113",
+   "text": "use std::{env, fs, path::PathBuf};\nuse gammaloop_api::{commands::set::SetArgs, state::State};\nuse gammalooprs::{graph::GroupId, initialisation::initialise,\n    integrands::process::GaussianReferenceFunction};\nuse figment::{Figment, providers::Serialized};\n\nfn main() -> color_eyre::Result<()> {\n    initialise()?;\n    let args = env::args().skip(1).collect::<Vec<_>>();\n    assert_eq!(args.len(), 4, \"state overlay points_per_channel output_prefix\");\n    let mut state = State::load(PathBuf::from(&args[0]), None, None)?;\n    state.activate_loaded_integrand_backends(false)?;\n    let integrand = state.process_list.get_integrand_mut(0, \"default\")?;\n    let input = SetArgs::String { string: fs::read_to_string(&args[1])? };\n    let settings = input.merge_figment(Figment::from(Serialized::defaults(integrand.get_settings())))?.extract()?;\n    *integrand.get_mut_settings() = settings;\n    std::thread::scope(|scope| -> color_eyre::Result<()> {\n        std::thread::Builder::new().stack_size(64*1024*1024)\n            .spawn_scoped(scope, || integrand.warm_up(&state.model))?.join().unwrap()\n    })?;\n    fs::write(format!(\"{}.settings.toml\", args[3]), toml::to_string_pretty(integrand.get_settings())?)?;\n    assert_eq!(integrand.group_orientation_count(GroupId(0)), Some(18));\n    let parameterization = integrand.get_settings().sampling.get_parameterization_settings().unwrap();\n    let ids = integrand.group_sampling_channel_ids(GroupId(0), &parameterization)?;\n    let n: usize = args[2].parse()?;\n    // Same deterministic quadrature as the saved-state acceptance regression.\n    let coordinates = (1..=n).map(|index| [2,3,5,7,11,13].map(|base| {\n        let (mut index, mut fraction, mut value) = (index, 1.0, 0.0);\n        while index > 0 { fraction /= base as f64; value += (index % base) as f64 * fraction; index /= base; }\n        value\n    }).to_vec()).collect::<Vec<_>>();\n    let reference = GaussianReferenceFunction::new(1.2, vec![0.4,-0.3,0.2,-0.2,0.1,0.35])?;\n    let (mut normalization, mut moment, mut expected_moment) = (0.0,0.0,0.0);\n    let mut reports = Vec::new();\n    for id in ids {\n        let report = integrand.evaluate_reference_discrete_coordinates(&[0,id.0], &coordinates, &reference)?;\n        assert_eq!(report.finite_sample_count, n);\n        normalization += report.normalization;\n        moment += report.second_moment;\n        expected_moment = report.expected_second_moment;\n        reports.push(format!(\"{{\\\"channel\\\":{},\\\"normalization\\\":{},\\\"second_moment\\\":{},\\\"finite_samples\\\":{},\\\"dispersion\\\":{}}}\",\n            id.0, report.normalization, report.second_moment, report.finite_sample_count, report.normalization_stderr));\n    }\n    // Per-channel unit-weight contributions sum to the full integral. No\n    // addition of their correlated per-draw dispersions is interpreted as MC error.\n    let passed = (normalization-1.0).abs() < 0.02 && (moment-expected_moment).abs() < 0.2;\n    let report = format!(\"{{\\\"passed\\\":{passed},\\\"orientation_count\\\":18,\\\"points_per_channel\\\":{n},\\\"normalization\\\":{normalization},\\\"second_moment\\\":{moment},\\\"expected_second_moment\\\":{expected_moment},\\\"channels\\\":[{}]}}\\n\", reports.join(\",\"));\n    fs::write(format!(\"{}.json\", args[3]), &report)?;\n    print!(\"{report}\");\n    assert!(passed, \"existing normalized-reference acceptance tolerances failed\");\n    Ok(())\n}\n"
+  },
+  "compile_reference.sh": {
+   "sha256": "22fc6435cdf50028122a3091c8a9af2ee5931ee57ae4676167ed2715c52847f7",
+   "text": "#!/usr/bin/env bash\nset -euo pipefail\n: \"${X1_TARGET:?Set exact3f9 dev-optim target directory}\"\ncd /tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284\n# Reuse the exact gated libraries from the CLI build; no Cargo or new evaluator.\nargs=()\n: > reference_libraries.sha256\nfor crate in gammaloop_api gammalooprs figment toml color_eyre; do\n    lib=$(find \"$X1_TARGET/deps\" -maxdepth 1 -name \"lib${crate}*.rlib\" -printf \"%T@ %p\\n\" | sort -nr | head -1 | cut -d\" \" -f2-)\n    args+=(--extern \"$crate=$lib\")\n    sha256sum \"$lib\" >> reference_libraries.sha256\ndone\nrustc --edition=2021 -C opt-level=1 -C debuginfo=0 -L \"dependency=$X1_TARGET/deps\" \"${args[@]}\" reference_driver.rs -o reference_driver\nsha256sum reference_driver reference_driver.rs > reference_driver.sha256\n"
+  },
+  "reference_libraries.sha256": {
+   "sha256": "a579c00e2036a202b2ff008f9ab03d69833c74178a6b3a0e3611abffa6bc3a94",
+   "text": "7253fccff76a66bb7e04bfde09145ba9abcf71ef4f7db06e5862a1dd1d8fdaed  /common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/deps/libgammaloop_api.rlib\nc40dd2116627a65feb3479a879936efa17cfdc617516189fa4e30928b96f2f90  /common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/deps/libgammalooprs-0618db2a28011153.rlib\n44fa838627b5d56bba6565fdb26d92318780d54ef2d0ecd6143d6d9bcbecee40  /common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/deps/libfigment-3ebdff869cec9c6f.rlib\ndb08e7081763ada7f71952a30055aea701b5831a03558745c1710538e6e0f41a  /common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/deps/libtoml-653cd84a2ec19d53.rlib\n4a0cc480fdae0ad65cabb3ca24e88f1bc71fb0d465033938350de2fc396ebf67  /common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/deps/libcolor_eyre-821e98309b993482.rlib\n"
+  },
+  "reference_driver.sha256": {
+   "sha256": "ee68971c5af0fa7db5a37da5cde951086d3d60da0cf4e23f14c10c69a2c0d765",
+   "text": "efb6a6f91f0db76d4b67942e16a952512a9240e467cb88404db9d9c46cd2c8b3  reference_driver\n24a3d824384b7cc40bc58c3047f33415372d6c29a0fa142d50bd17b89b38f113  reference_driver.rs\n"
+  },
+  "generation_card": {
+   "text": "commands = [\n  \"import model scalars-default.json\",\n  \"set model mass_scalar_1=1.0\",\n  \"import graphs /tmp/advanced-sampling-amplitude-research/kite.dot -p massive_kite -i default -o\",\n  \"generate existing -p massive_kite -i default\",\n  \"display integrand -p massive_kite -i default\",\n]\n[cli_settings.global.generation]\noverride_lmb_heuristics=true\n[cli_settings.global.generation.uv]\nsubtract_uv=false\ngenerate_integrated=false\n[cli_settings.global.generation.threshold_subtraction]\nenable_thresholds=true\ncheck_esurface_at_generation=true\n[cli_settings.global.generation.evaluator]\ncompile=false\nstore_atom=true\nsummed=false\nsummed_function_map=true\niterative_orientation_optimization=false\n[default_runtime_settings.general]\nevaluator_method=\"SummedFunctionMap\"\nintegral_unit=\"none\"\n[default_runtime_settings.kinematics]\ne_cm=5.0\n[default_runtime_settings.kinematics.externals]\ntype=\"constant\"\n[default_runtime_settings.kinematics.externals.data]\nmomenta=[[5.0,0.0,0.0,0.0],\"dependent\"]\nhelicities=[0,0]\n[default_runtime_settings.subtraction]\ndisable_threshold_subtraction=false\n[default_runtime_settings.sampling]\ngraphs=\"summed\"\norientations=\"summed\"\nsampling_multichanneling=false\nsampling_channels=\"summed\"\ncoordinate_system=\"spherical\"\nmapping=\"linear\"\nb=1.0\n"
+  },
+  "graph": {
+   "repository_path": "tests/resources/graphs/massive_kite.dot",
+   "sha256": "b230cd731776df1324240a79f42bef124e58e48334683151d58b64f4d2378472",
+   "original_sha256": "4dba9513cbd37adcc920746a0dca29abca23220d9d12f85e6769097eb1167f32",
+   "original_text": "digraph massive_kite {\nnum=1;\noverall_factor=1;\nnode [num=1];\nedge [num=1];\next_in [style=invis];\next_out [style=invis];\next_in -> A:0 [id=0, particle=scalar_0];\nC:1 -> ext_out [id=1, particle=scalar_0];\nA -> B [id=2, particle=scalar_1];\nB -> C [id=3, particle=scalar_1];\nC -> D [id=4, particle=scalar_1, lmb_id=0];\nD -> A [id=5, particle=scalar_1];\nB -> D [id=6, particle=scalar_1, lmb_id=1];\n}\n",
+   "equivalence": "Whitespace-only difference from committed fixture."
+  }
+ },
+ "profiles": {
+  "optimized_lmb": {
+   "card_text": "# X1 checkpoint3f9b1a284 benchmark; preserve all18 physical orientations.\n# Practical native density/localization gates passed; no formal root-enclosure claim.\ncommands = [\"run configure\"]\n\n[[command_blocks]]\nname = \"configure\"\ncommands = [\"\"\"set process -p massive_kite -i default string '\n[general]\nevaluator_method = \"SummedFunctionMap\"\n[subtraction]\ndisable_threshold_subtraction = false\n[sampling]\ngraphs = \"monte_carlo\"\norientations = \"summed\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\nb = 1.0\npower = $(power:2.0)\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nparent_lmb = [4, 6]\nsubspace_lmb = [4, 6]\n[integrator]\nintegrated_phase = \"real\"\nn_start = $(n_start:2000)\nn_increase = 0\nn_max = $(n_max:10000)\nseed = $(seed:101)\nn_bins = 16\nmin_samples_for_update = 64\ncontinuous_dim_learning_rate = 0.25\ndiscrete_dim_learning_rate = 0.25\ntrain_on_avg = false\n[integrator.observables_output]\nformat = [\"json\"]\n[stability]\ncheck_on_norm = true\nrotation_axis = [{ type = \"euler_angles\", alpha = 0.1, beta = 0.2, gamma = 0.3 }]\nlevels = [\n { precision = \"Double\", required_precision_for_re = 1e-6, required_precision_for_im = 1e-6, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Quad\", required_precision_for_re = 1e-10, required_precision_for_im = 1e-10, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Arb\", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 },\n]\n'\"\"\"]\n\n[[command_blocks]]\nname = \"integrate\"\ncommands = [\n \"run configure\",\n \"\"\"integrate -p massive_kite -i default --n-cores $(cores:1)\n --workspace-path $(workspace:/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_optimized_lmb_seed101)\n --restart --renderer tabled --show-phase both\n --show-max-weight-info --show-max-weight-info-for-discrete-bins\n --show-top-discrete-grid --show-discrete-contributions-sum\n --write-results-for-each-iteration --batch-timing 2\"\"\",\n]\n",
+   "runtime_overlay_text": "[general]\nevaluator_method = \"SummedFunctionMap\"\n[subtraction]\ndisable_threshold_subtraction = false\n[sampling]\ngraphs = \"monte_carlo\"\norientations = \"summed\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\nb = 1.0\npower = 2.0\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nparent_lmb = [4, 6]\nsubspace_lmb = [4, 6]\n[integrator]\nintegrated_phase = \"real\"\nn_start = 2000\nn_increase = 0\nn_max = 10000\nseed = 101\nn_bins = 16\nmin_samples_for_update = 64\ncontinuous_dim_learning_rate = 0.25\ndiscrete_dim_learning_rate = 0.25\ntrain_on_avg = false\n[integrator.observables_output]\nformat = [\"json\"]\n[stability]\ncheck_on_norm = true\nrotation_axis = [{ type = \"euler_angles\", alpha = 0.1, beta = 0.2, gamma = 0.3 }]\nlevels = [\n { precision = \"Double\", required_precision_for_re = 1e-6, required_precision_for_im = 1e-6, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Quad\", required_precision_for_re = 1e-10, required_precision_for_im = 1e-10, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Arb\", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 },\n]\n",
+   "orientation_keys": [
+    {
+     "id": 0,
+     "orientation": "0 0 - + + + +"
+    },
+    {
+     "id": 1,
+     "orientation": "0 0 - - + + +"
+    },
+    {
+     "id": 2,
+     "orientation": "0 0 - + - + +"
+    },
+    {
+     "id": 3,
+     "orientation": "0 0 + + + - +"
+    },
+    {
+     "id": 4,
+     "orientation": "0 0 - + + - +"
+    },
+    {
+     "id": 5,
+     "orientation": "0 0 + - + - +"
+    },
+    {
+     "id": 6,
+     "orientation": "0 0 - - + - +"
+    },
+    {
+     "id": 7,
+     "orientation": "0 0 + + - - +"
+    },
+    {
+     "id": 8,
+     "orientation": "0 0 - + - - +"
+    },
+    {
+     "id": 9,
+     "orientation": "0 0 + - + + -"
+    },
+    {
+     "id": 10,
+     "orientation": "0 0 - - + + -"
+    },
+    {
+     "id": 11,
+     "orientation": "0 0 + + - + -"
+    },
+    {
+     "id": 12,
+     "orientation": "0 0 - + - + -"
+    },
+    {
+     "id": 13,
+     "orientation": "0 0 + - - + -"
+    },
+    {
+     "id": 14,
+     "orientation": "0 0 - - - + -"
+    },
+    {
+     "id": 15,
+     "orientation": "0 0 + - + - -"
+    },
+    {
+     "id": 16,
+     "orientation": "0 0 + + - - -"
+    },
+    {
+     "id": 17,
+     "orientation": "0 0 + - - - -"
+    }
+   ],
+   "reference": {
+    "passed": true,
+    "orientation_count": 18,
+    "points_per_channel": 8192,
+    "normalization": 0.9834113108658861,
+    "second_moment": 8.976102986451295,
+    "expected_second_moment": 9.102500000000001,
+    "channels": [
+     {
+      "channel": 0,
+      "normalization": 0.09236748691186998,
+      "second_moment": 0.8439079266705417,
+      "finite_samples": 8192,
+      "dispersion": 0.005203009021598562
+     },
+     {
+      "channel": 1,
+      "normalization": 0.102065462098719,
+      "second_moment": 0.9414067791464851,
+      "finite_samples": 8192,
+      "dispersion": 0.005062675480815654
+     },
+     {
+      "channel": 2,
+      "normalization": 0.20362105784948836,
+      "second_moment": 1.870266556144841,
+      "finite_samples": 8192,
+      "dispersion": 0.008757712721518193
+     },
+     {
+      "channel": 3,
+      "normalization": 0.09236748691186998,
+      "second_moment": 0.8439079266705417,
+      "finite_samples": 8192,
+      "dispersion": 0.005203009021598562
+     },
+     {
+      "channel": 4,
+      "normalization": 0.20832308172876468,
+      "second_moment": 1.9044948345964137,
+      "finite_samples": 8192,
+      "dispersion": 0.00917197981860688
+     },
+     {
+      "channel": 5,
+      "normalization": 0.08919355776003814,
+      "second_moment": 0.8089806533833,
+      "finite_samples": 8192,
+      "dispersion": 0.004774703400352028
+     },
+     {
+      "channel": 6,
+      "normalization": 0.10627961984509786,
+      "second_moment": 0.9541576564558706,
+      "finite_samples": 8192,
+      "dispersion": 0.005589069085231632
+     },
+     {
+      "channel": 7,
+      "normalization": 0.08919355776003814,
+      "second_moment": 0.8089806533833,
+      "finite_samples": 8192,
+      "dispersion": 0.004774703400352028
+     }
+    ],
+    "aggregate_stderr_policy": "Channel contributions share Halton draws. Per-channel normalization dispersion is retained, but errors are not added as independent Monte Carlo errors. Moment dispersion was not collected by this original driver."
+   },
+   "runs": [
+    {
+     "seed": 101,
+     "resolved_settings_sha256": "cdf1c0725414f259bb03b3c743e165f9e39b275e0e4a528826f7d477a584accf",
+     "resolved_settings": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2000\nn_increase = 0\nn_max = 10000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 101\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\npower = 2.0\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+     "result": {
+      "integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 300,
+       "result": {
+        "re": -1.4118629477419089e-05,
+        "im": 6.567002748276665e-06
+       },
+       "error": {
+        "re": 3.7109061210022726e-07,
+        "im": 1.0332053329299231e-06
+       },
+       "real_chisq": 1.5176438940412247,
+       "im_chisq": 3.103078674153176
+      },
+      "integration_statistics": {
+       "num_evals": 10000,
+       "average_total_time_seconds": 7.5403e-05,
+       "average_parameterization_time_seconds": 8.226e-06,
+       "average_integrand_time_seconds": 2.7074e-05,
+       "average_evaluator_time_seconds": 3.21e-06,
+       "average_observable_time_seconds": 0.0,
+       "average_integrator_time_seconds": 5.83e-06,
+       "f64_percentage": 99.66000000000001,
+       "f128_percentage": 0.33999999999999997,
+       "arb_percentage": 0.0,
+       "nan_percentage": 0.0,
+       "nan_or_unstable_percentage": 0.0,
+       "generated_event_count": 0,
+       "accepted_event_count": 0,
+       "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+       {
+        "component": "re",
+        "sign": "+",
+        "max_eval": 4.802638819392977e-05,
+        "coordinates": "graph: 0, sampling channel: 4, xs: [\n5.8221389452326144e-01 3.7393221857384340e-01 5.9333046057976402e-01\n7.4936114088699024e-01 9.8521696420346905e-01 7.4688200801629212e-01 ]"
+       },
+       {
+        "component": "re",
+        "sign": "-",
+        "max_eval": -0.0022966802129666215,
+        "coordinates": "graph: 0, sampling channel: 6, xs: [\n2.5305027438484503e-03 4.5785837956048653e-01 5.6210332214646785e-01\n5.1568510017428416e-03 7.2856434791878211e-01 4.1194605337688017e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "+",
+        "max_eval": 0.0007373414684231509,
+        "coordinates": "graph: 0, sampling channel: 2, xs: [\n4.9049916059607890e-01 4.8149636050582290e-01 8.5102361389370085e-01\n4.2755660978915189e-01 1.1130514186433599e-01 4.0490523229345726e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "-",
+        "max_eval": -0.0007654603762513806,
+        "coordinates": "graph: 0, sampling channel: 7, xs: [\n2.8444201262511359e-01 9.3631384239880600e-02 4.5853814281317073e-01\n2.6510995812799221e-01 9.2339105656984055e-01 5.7005251464168283e-01 ]"
+       }
+      ],
+      "table_results": [
+       {
+        "component": "re",
+        "value": -1.4118629477419089e-05,
+        "error": 3.7109061210022726e-07,
+        "relative_error_percent": 2.6283755990178683,
+        "chi_sq_per_dof": 0.3035287788082449,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.01626701951942193
+       },
+       {
+        "component": "im",
+        "value": 6.567002748276665e-06,
+        "error": 1.0332053329299231e-06,
+        "relative_error_percent": 15.733286135765063,
+        "chi_sq_per_dof": 0.6206157348306351,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.011656160437153087
+       }
+      ],
+      "absolute_integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 300,
+       "result": {
+        "re": 1.855013698840199e-05,
+        "im": 4.641464293045157e-05
+       },
+       "error": {
+        "re": 3.510407471056772e-07,
+        "im": 9.254041228681399e-07
+       },
+       "real_chisq": 2.025525327740425,
+       "im_chisq": 2.5536237877789976
+      },
+      "internal_cost_seconds": 0.75403
+     },
+     "integration_result_sha256": "28b173dfe615136ca67db25a0054e56df6f22dd1c74aaa4b1485ff1789f99cf8"
+    },
+    {
+     "seed": 202,
+     "resolved_settings_sha256": "e21caf8593adec42a9c5314a1fac6c02c5d7302b69fe90d0106d6c3e7bb3834e",
+     "resolved_settings": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2000\nn_increase = 0\nn_max = 10000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 202\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\npower = 2.0\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+     "result": {
+      "integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 260,
+       "result": {
+        "re": -1.382564215615118e-05,
+        "im": 7.2128094931116205e-06
+       },
+       "error": {
+        "re": 3.2589678956194196e-07,
+        "im": 1.0363131216983363e-06
+       },
+       "real_chisq": 0.7589530995957325,
+       "im_chisq": 4.734497673450392
+      },
+      "integration_statistics": {
+       "num_evals": 10000,
+       "average_total_time_seconds": 7.7295e-05,
+       "average_parameterization_time_seconds": 8.415e-06,
+       "average_integrand_time_seconds": 2.7549e-05,
+       "average_evaluator_time_seconds": 3.261e-06,
+       "average_observable_time_seconds": 0.0,
+       "average_integrator_time_seconds": 6.227e-06,
+       "f64_percentage": 99.57000000000001,
+       "f128_percentage": 0.43,
+       "arb_percentage": 0.0,
+       "nan_percentage": 0.0,
+       "nan_or_unstable_percentage": 0.0,
+       "generated_event_count": 0,
+       "accepted_event_count": 0,
+       "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+       {
+        "component": "re",
+        "sign": "+",
+        "max_eval": 5.7563479699300875e-05,
+        "coordinates": "graph: 0, sampling channel: 2, xs: [\n7.2099985466783789e-01 5.9086049478764657e-01 4.3905899290813782e-01\n7.1664627746786114e-01 4.7784887346003654e-02 7.1771470160921624e-01 ]"
+       },
+       {
+        "component": "re",
+        "sign": "-",
+        "max_eval": -0.0014533296727810058,
+        "coordinates": "graph: 0, sampling channel: 3, xs: [\n4.0945920037361036e-03 8.0856655986616910e-01 3.3845919782055817e-01\n7.9097789081035465e-03 8.3619616128587160e-01 6.3167879476016861e-02 ]"
+       },
+       {
+        "component": "im",
+        "sign": "+",
+        "max_eval": 0.0007429399610933579,
+        "coordinates": "graph: 0, sampling channel: 1, xs: [\n4.6728799609319821e-01 7.4666776981902405e-01 7.9157430163356346e-01\n4.4860142372084671e-01 5.5393713478501849e-01 9.9801743105780893e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "-",
+        "max_eval": -0.0007591450022119379,
+        "coordinates": "graph: 0, sampling channel: 4, xs: [\n2.9684787957308800e-01 9.3097082121829633e-01 9.9116714885162926e-01\n2.7006341086348762e-01 7.7014562230014183e-01 1.7047399759105775e-01 ]"
+       }
+      ],
+      "table_results": [
+       {
+        "component": "re",
+        "value": -1.382564215615118e-05,
+        "error": 3.2589678956194196e-07,
+        "relative_error_percent": 2.3571909780476052,
+        "chi_sq_per_dof": 0.1517906199191465,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.010511842100111085
+       },
+       {
+        "component": "im",
+        "value": 7.2128094931116205e-06,
+        "error": 1.0363131216983363e-06,
+        "relative_error_percent": 14.367676322077221,
+        "chi_sq_per_dof": 0.9468995346900784,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.010524955676937493
+       }
+      ],
+      "absolute_integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 260,
+       "result": {
+        "re": 1.861648424535386e-05,
+        "im": 4.655374128964464e-05
+       },
+       "error": {
+        "re": 3.011057166138454e-07,
+        "im": 9.286555395294403e-07
+       },
+       "real_chisq": 0.9074031606224509,
+       "im_chisq": 1.2571957869669177
+      },
+      "internal_cost_seconds": 0.77295
+     },
+     "integration_result_sha256": "050f4edad1e86d8d5b83e1d6bce265609b363a9a3f6f005ab5d1d2d7c4870279"
+    },
+    {
+     "seed": 303,
+     "resolved_settings_sha256": "68b9c0e6f9bcaf7ba5bdc7eb2750ac8790eb7c3fb0c098538dd2fd4a5a0a0fa8",
+     "resolved_settings": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2000\nn_increase = 0\nn_max = 10000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 303\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\npower = 2.0\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+     "result": {
+      "integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 300,
+       "result": {
+        "re": -1.33735849876914e-05,
+        "im": 6.043601057747689e-06
+       },
+       "error": {
+        "re": 2.794732053515685e-07,
+        "im": 9.748394725483664e-07
+       },
+       "real_chisq": 4.590230260027834,
+       "im_chisq": 1.755104606815137
+      },
+      "integration_statistics": {
+       "num_evals": 10000,
+       "average_total_time_seconds": 7.6893e-05,
+       "average_parameterization_time_seconds": 8.417e-06,
+       "average_integrand_time_seconds": 2.7215e-05,
+       "average_evaluator_time_seconds": 3.214e-06,
+       "average_observable_time_seconds": 0.0,
+       "average_integrator_time_seconds": 5.894e-06,
+       "f64_percentage": 99.53,
+       "f128_percentage": 0.47000000000000003,
+       "arb_percentage": 0.0,
+       "nan_percentage": 0.0,
+       "nan_or_unstable_percentage": 0.0,
+       "generated_event_count": 0,
+       "accepted_event_count": 0,
+       "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+       {
+        "component": "re",
+        "sign": "+",
+        "max_eval": 4.307436940266028e-05,
+        "coordinates": "graph: 0, sampling channel: 6, xs: [\n6.6314021997988026e-01 3.7053897680877537e-02 4.0444686130131846e-01\n7.5981170135738296e-01 1.6077935060458512e-01 5.4154933034640884e-01 ]"
+       },
+       {
+        "component": "re",
+        "sign": "-",
+        "max_eval": -0.000464351521291808,
+        "coordinates": "graph: 0, sampling channel: 2, xs: [\n1.3306022960677837e-02 9.7948163904192243e-01 4.7360895777088358e-01\n2.2766331964010310e-02 3.8760122839471112e-01 3.4443041775252892e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "+",
+        "max_eval": 0.0005966474649965453,
+        "coordinates": "graph: 0, sampling channel: 3, xs: [\n4.4393367748243656e-01 6.3612827999587918e-01 7.4113289093330281e-01\n4.4391611043480295e-01 2.9160352326198086e-01 9.6423924183479393e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "-",
+        "max_eval": -0.0007693609221432048,
+        "coordinates": "graph: 0, sampling channel: 3, xs: [\n2.6898326994378119e-01 8.7293324494030156e-02 2.8292669820606153e-01\n2.5351701852253450e-01 8.6008148069529478e-01 1.0160305433717820e-02 ]"
+       }
+      ],
+      "table_results": [
+       {
+        "component": "re",
+        "value": -1.33735849876914e-05,
+        "error": 2.794732053515685e-07,
+        "relative_error_percent": 2.0897403770850245,
+        "chi_sq_per_dof": 0.9180460520055668,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.003472154412741098
+       },
+       {
+        "component": "im",
+        "value": 6.043601057747689e-06,
+        "error": 9.748394725483664e-07,
+        "relative_error_percent": 16.1301095693379,
+        "chi_sq_per_dof": 0.3510209213630274,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.012730173861441608
+       }
+      ],
+      "absolute_integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 300,
+       "result": {
+        "re": 1.817196339435497e-05,
+        "im": 4.465398045277312e-05
+       },
+       "error": {
+        "re": 2.5093228342530647e-07,
+        "im": 8.68646726292697e-07
+       },
+       "real_chisq": 7.060867283856261,
+       "im_chisq": 4.191911028195733
+      },
+      "internal_cost_seconds": 0.76893
+     },
+     "integration_result_sha256": "1a665f08771fdbe9e3d584e782d5740cf17a4a0fa7ad37a6a849e00b00c30ade"
+    }
+   ],
+   "summary": {
+    "re": {
+     "mean": -1.377261887375389e-05,
+     "seed_standard_deviation": 3.7534174331605435e-07,
+     "rms_reported_error": 3.2762897325337493e-07,
+     "maximum_absolute_weight": 0.0022966802129666215,
+     "reported_variance_ratio_to_lmb": 1.0,
+     "mean_difference_vs_lmb_in_combined_standard_errors": 0.0
+    },
+    "im": {
+     "mean": 6.607804433045325e-06,
+     "seed_standard_deviation": 5.856711316442994e-07,
+     "rms_reported_error": 1.0151798105815805e-06,
+     "maximum_absolute_weight": 0.0007693609221432048,
+     "reported_variance_ratio_to_lmb": 1.0,
+     "mean_difference_vs_lmb_in_combined_standard_errors": 0.0
+    },
+    "mean_core_evaluation_seconds": 7.653033333333333e-05
+   }
+  },
+  "all_lmb": {
+   "card_text": "# X1 checkpoint3f9b1a284 benchmark; preserve all18 physical orientations.\n# Practical native density/localization gates passed; no formal root-enclosure claim.\ncommands = [\"run configure\"]\n\n[[command_blocks]]\nname = \"configure\"\ncommands = [\"\"\"set process -p massive_kite -i default string '\n[general]\nevaluator_method = \"SummedFunctionMap\"\n[subtraction]\ndisable_threshold_subtraction = false\n[sampling]\ngraphs = \"monte_carlo\"\norientations = \"summed\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\nb = 1.0\npower = $(power:2.0)\ndefault_channel_selection = [\"auto:lmb\"]\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nparent_lmb = [4, 6]\nsubspace_lmb = [4, 6]\n[integrator]\nintegrated_phase = \"real\"\nn_start = $(n_start:2000)\nn_increase = 0\nn_max = $(n_max:10000)\nseed = $(seed:101)\nn_bins = 16\nmin_samples_for_update = 64\ncontinuous_dim_learning_rate = 0.25\ndiscrete_dim_learning_rate = 0.25\ntrain_on_avg = false\n[integrator.observables_output]\nformat = [\"json\"]\n[stability]\ncheck_on_norm = true\nrotation_axis = [{ type = \"euler_angles\", alpha = 0.1, beta = 0.2, gamma = 0.3 }]\nlevels = [\n { precision = \"Double\", required_precision_for_re = 1e-6, required_precision_for_im = 1e-6, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Quad\", required_precision_for_re = 1e-10, required_precision_for_im = 1e-10, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Arb\", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 },\n]\n'\"\"\"]\n\n[[command_blocks]]\nname = \"integrate\"\ncommands = [\n \"run configure\",\n \"\"\"integrate -p massive_kite -i default --n-cores $(cores:1)\n --workspace-path $(workspace:/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_all_lmb_seed101)\n --restart --renderer tabled --show-phase both\n --show-max-weight-info --show-max-weight-info-for-discrete-bins\n --show-top-discrete-grid --show-discrete-contributions-sum\n --write-results-for-each-iteration --batch-timing 2\"\"\",\n]\n",
+   "runtime_overlay_text": "[general]\nevaluator_method = \"SummedFunctionMap\"\n[subtraction]\ndisable_threshold_subtraction = false\n[sampling]\ngraphs = \"monte_carlo\"\norientations = \"summed\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\nb = 1.0\npower = 2.0\ndefault_channel_selection = [\"auto:lmb\"]\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nparent_lmb = [4, 6]\nsubspace_lmb = [4, 6]\n[integrator]\nintegrated_phase = \"real\"\nn_start = 2000\nn_increase = 0\nn_max = 10000\nseed = 101\nn_bins = 16\nmin_samples_for_update = 64\ncontinuous_dim_learning_rate = 0.25\ndiscrete_dim_learning_rate = 0.25\ntrain_on_avg = false\n[integrator.observables_output]\nformat = [\"json\"]\n[stability]\ncheck_on_norm = true\nrotation_axis = [{ type = \"euler_angles\", alpha = 0.1, beta = 0.2, gamma = 0.3 }]\nlevels = [\n { precision = \"Double\", required_precision_for_re = 1e-6, required_precision_for_im = 1e-6, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Quad\", required_precision_for_re = 1e-10, required_precision_for_im = 1e-10, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Arb\", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 },\n]\n",
+   "orientation_keys": [
+    {
+     "id": 0,
+     "orientation": "0 0 - + + + +"
+    },
+    {
+     "id": 1,
+     "orientation": "0 0 - - + + +"
+    },
+    {
+     "id": 2,
+     "orientation": "0 0 - + - + +"
+    },
+    {
+     "id": 3,
+     "orientation": "0 0 + + + - +"
+    },
+    {
+     "id": 4,
+     "orientation": "0 0 - + + - +"
+    },
+    {
+     "id": 5,
+     "orientation": "0 0 + - + - +"
+    },
+    {
+     "id": 6,
+     "orientation": "0 0 - - + - +"
+    },
+    {
+     "id": 7,
+     "orientation": "0 0 + + - - +"
+    },
+    {
+     "id": 8,
+     "orientation": "0 0 - + - - +"
+    },
+    {
+     "id": 9,
+     "orientation": "0 0 + - + + -"
+    },
+    {
+     "id": 10,
+     "orientation": "0 0 - - + + -"
+    },
+    {
+     "id": 11,
+     "orientation": "0 0 + + - + -"
+    },
+    {
+     "id": 12,
+     "orientation": "0 0 - + - + -"
+    },
+    {
+     "id": 13,
+     "orientation": "0 0 + - - + -"
+    },
+    {
+     "id": 14,
+     "orientation": "0 0 - - - + -"
+    },
+    {
+     "id": 15,
+     "orientation": "0 0 + - + - -"
+    },
+    {
+     "id": 16,
+     "orientation": "0 0 + + - - -"
+    },
+    {
+     "id": 17,
+     "orientation": "0 0 + - - - -"
+    }
+   ],
+   "reference": {
+    "passed": true,
+    "orientation_count": 18,
+    "points_per_channel": 8192,
+    "normalization": 0.9834113108658861,
+    "second_moment": 8.976102986451295,
+    "expected_second_moment": 9.102500000000001,
+    "channels": [
+     {
+      "channel": 0,
+      "normalization": 0.09236748691186998,
+      "second_moment": 0.8439079266705417,
+      "finite_samples": 8192,
+      "dispersion": 0.005203009021598562
+     },
+     {
+      "channel": 1,
+      "normalization": 0.102065462098719,
+      "second_moment": 0.9414067791464851,
+      "finite_samples": 8192,
+      "dispersion": 0.005062675480815654
+     },
+     {
+      "channel": 2,
+      "normalization": 0.20362105784948836,
+      "second_moment": 1.870266556144841,
+      "finite_samples": 8192,
+      "dispersion": 0.008757712721518193
+     },
+     {
+      "channel": 3,
+      "normalization": 0.09236748691186998,
+      "second_moment": 0.8439079266705417,
+      "finite_samples": 8192,
+      "dispersion": 0.005203009021598562
+     },
+     {
+      "channel": 4,
+      "normalization": 0.20832308172876468,
+      "second_moment": 1.9044948345964137,
+      "finite_samples": 8192,
+      "dispersion": 0.00917197981860688
+     },
+     {
+      "channel": 5,
+      "normalization": 0.08919355776003814,
+      "second_moment": 0.8089806533833,
+      "finite_samples": 8192,
+      "dispersion": 0.004774703400352028
+     },
+     {
+      "channel": 6,
+      "normalization": 0.10627961984509786,
+      "second_moment": 0.9541576564558706,
+      "finite_samples": 8192,
+      "dispersion": 0.005589069085231632
+     },
+     {
+      "channel": 7,
+      "normalization": 0.08919355776003814,
+      "second_moment": 0.8089806533833,
+      "finite_samples": 8192,
+      "dispersion": 0.004774703400352028
+     }
+    ],
+    "aggregate_stderr_policy": "Channel contributions share Halton draws. Per-channel normalization dispersion is retained, but errors are not added as independent Monte Carlo errors. Moment dispersion was not collected by this original driver."
+   },
+   "runs": [
+    {
+     "seed": 101,
+     "resolved_settings_sha256": "6a361905c826649c4925c7d74f70c92e960ae8da23ce66d8ce72443f091cf150",
+     "resolved_settings": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2000\nn_increase = 0\nn_max = 10000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 101\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\npower = 2.0\ndefault_channel_selection = [\"auto:lmb\"]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+     "result": {
+      "integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 300,
+       "result": {
+        "re": -1.4118629477419089e-05,
+        "im": 6.567002748276665e-06
+       },
+       "error": {
+        "re": 3.7109061210022726e-07,
+        "im": 1.0332053329299231e-06
+       },
+       "real_chisq": 1.5176438940412247,
+       "im_chisq": 3.103078674153176
+      },
+      "integration_statistics": {
+       "num_evals": 10000,
+       "average_total_time_seconds": 7.5763e-05,
+       "average_parameterization_time_seconds": 8.237e-06,
+       "average_integrand_time_seconds": 2.724e-05,
+       "average_evaluator_time_seconds": 3.37e-06,
+       "average_observable_time_seconds": 0.0,
+       "average_integrator_time_seconds": 5.941e-06,
+       "f64_percentage": 99.66000000000001,
+       "f128_percentage": 0.33999999999999997,
+       "arb_percentage": 0.0,
+       "nan_percentage": 0.0,
+       "nan_or_unstable_percentage": 0.0,
+       "generated_event_count": 0,
+       "accepted_event_count": 0,
+       "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+       {
+        "component": "re",
+        "sign": "+",
+        "max_eval": 4.802638819392977e-05,
+        "coordinates": "graph: 0, sampling channel: 4, xs: [\n5.8221389452326144e-01 3.7393221857384340e-01 5.9333046057976402e-01\n7.4936114088699024e-01 9.8521696420346905e-01 7.4688200801629212e-01 ]"
+       },
+       {
+        "component": "re",
+        "sign": "-",
+        "max_eval": -0.0022966802129666215,
+        "coordinates": "graph: 0, sampling channel: 6, xs: [\n2.5305027438484503e-03 4.5785837956048653e-01 5.6210332214646785e-01\n5.1568510017428416e-03 7.2856434791878211e-01 4.1194605337688017e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "+",
+        "max_eval": 0.0007373414684231509,
+        "coordinates": "graph: 0, sampling channel: 2, xs: [\n4.9049916059607890e-01 4.8149636050582290e-01 8.5102361389370085e-01\n4.2755660978915189e-01 1.1130514186433599e-01 4.0490523229345726e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "-",
+        "max_eval": -0.0007654603762513806,
+        "coordinates": "graph: 0, sampling channel: 7, xs: [\n2.8444201262511359e-01 9.3631384239880600e-02 4.5853814281317073e-01\n2.6510995812799221e-01 9.2339105656984055e-01 5.7005251464168283e-01 ]"
+       }
+      ],
+      "table_results": [
+       {
+        "component": "re",
+        "value": -1.4118629477419089e-05,
+        "error": 3.7109061210022726e-07,
+        "relative_error_percent": 2.6283755990178683,
+        "chi_sq_per_dof": 0.3035287788082449,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.01626701951942193
+       },
+       {
+        "component": "im",
+        "value": 6.567002748276665e-06,
+        "error": 1.0332053329299231e-06,
+        "relative_error_percent": 15.733286135765063,
+        "chi_sq_per_dof": 0.6206157348306351,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.011656160437153087
+       }
+      ],
+      "absolute_integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 300,
+       "result": {
+        "re": 1.855013698840199e-05,
+        "im": 4.641464293045157e-05
+       },
+       "error": {
+        "re": 3.510407471056772e-07,
+        "im": 9.254041228681399e-07
+       },
+       "real_chisq": 2.025525327740425,
+       "im_chisq": 2.5536237877789976
+      },
+      "internal_cost_seconds": 0.75763
+     },
+     "integration_result_sha256": "c2bda7df92323870f8f78b141d1dd579ae7e071281a106403fc1044e55713689"
+    },
+    {
+     "seed": 202,
+     "resolved_settings_sha256": "f0c32d5def55e7da84824f7cb708543815dbe230497f3e99d03bc8cebf56cabd",
+     "resolved_settings": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2000\nn_increase = 0\nn_max = 10000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 202\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\npower = 2.0\ndefault_channel_selection = [\"auto:lmb\"]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+     "result": {
+      "integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 260,
+       "result": {
+        "re": -1.382564215615118e-05,
+        "im": 7.2128094931116205e-06
+       },
+       "error": {
+        "re": 3.2589678956194196e-07,
+        "im": 1.0363131216983363e-06
+       },
+       "real_chisq": 0.7589530995957325,
+       "im_chisq": 4.734497673450392
+      },
+      "integration_statistics": {
+       "num_evals": 10000,
+       "average_total_time_seconds": 7.656e-05,
+       "average_parameterization_time_seconds": 8.496e-06,
+       "average_integrand_time_seconds": 2.7229e-05,
+       "average_evaluator_time_seconds": 3.248e-06,
+       "average_observable_time_seconds": 0.0,
+       "average_integrator_time_seconds": 6.622e-06,
+       "f64_percentage": 99.57000000000001,
+       "f128_percentage": 0.43,
+       "arb_percentage": 0.0,
+       "nan_percentage": 0.0,
+       "nan_or_unstable_percentage": 0.0,
+       "generated_event_count": 0,
+       "accepted_event_count": 0,
+       "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+       {
+        "component": "re",
+        "sign": "+",
+        "max_eval": 5.7563479699300875e-05,
+        "coordinates": "graph: 0, sampling channel: 2, xs: [\n7.2099985466783789e-01 5.9086049478764657e-01 4.3905899290813782e-01\n7.1664627746786114e-01 4.7784887346003654e-02 7.1771470160921624e-01 ]"
+       },
+       {
+        "component": "re",
+        "sign": "-",
+        "max_eval": -0.0014533296727810058,
+        "coordinates": "graph: 0, sampling channel: 3, xs: [\n4.0945920037361036e-03 8.0856655986616910e-01 3.3845919782055817e-01\n7.9097789081035465e-03 8.3619616128587160e-01 6.3167879476016861e-02 ]"
+       },
+       {
+        "component": "im",
+        "sign": "+",
+        "max_eval": 0.0007429399610933579,
+        "coordinates": "graph: 0, sampling channel: 1, xs: [\n4.6728799609319821e-01 7.4666776981902405e-01 7.9157430163356346e-01\n4.4860142372084671e-01 5.5393713478501849e-01 9.9801743105780893e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "-",
+        "max_eval": -0.0007591450022119379,
+        "coordinates": "graph: 0, sampling channel: 4, xs: [\n2.9684787957308800e-01 9.3097082121829633e-01 9.9116714885162926e-01\n2.7006341086348762e-01 7.7014562230014183e-01 1.7047399759105775e-01 ]"
+       }
+      ],
+      "table_results": [
+       {
+        "component": "re",
+        "value": -1.382564215615118e-05,
+        "error": 3.2589678956194196e-07,
+        "relative_error_percent": 2.3571909780476052,
+        "chi_sq_per_dof": 0.1517906199191465,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.010511842100111085
+       },
+       {
+        "component": "im",
+        "value": 7.2128094931116205e-06,
+        "error": 1.0363131216983363e-06,
+        "relative_error_percent": 14.367676322077221,
+        "chi_sq_per_dof": 0.9468995346900784,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.010524955676937493
+       }
+      ],
+      "absolute_integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 260,
+       "result": {
+        "re": 1.861648424535386e-05,
+        "im": 4.655374128964464e-05
+       },
+       "error": {
+        "re": 3.011057166138454e-07,
+        "im": 9.286555395294403e-07
+       },
+       "real_chisq": 0.9074031606224509,
+       "im_chisq": 1.2571957869669177
+      },
+      "internal_cost_seconds": 0.7656
+     },
+     "integration_result_sha256": "a91c544d3ade20effa88abb4f07096321626201d07ea2e7bf93508ef6ab2b14d"
+    },
+    {
+     "seed": 303,
+     "resolved_settings_sha256": "7f3d4c930e47bc9fb3a42c775d4b992b6895059e9e145adca55cddaa54e44e5e",
+     "resolved_settings": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2000\nn_increase = 0\nn_max = 10000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 303\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\npower = 2.0\ndefault_channel_selection = [\"auto:lmb\"]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+     "result": {
+      "integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 300,
+       "result": {
+        "re": -1.33735849876914e-05,
+        "im": 6.043601057747689e-06
+       },
+       "error": {
+        "re": 2.794732053515685e-07,
+        "im": 9.748394725483664e-07
+       },
+       "real_chisq": 4.590230260027834,
+       "im_chisq": 1.755104606815137
+      },
+      "integration_statistics": {
+       "num_evals": 10000,
+       "average_total_time_seconds": 7.645e-05,
+       "average_parameterization_time_seconds": 8.526e-06,
+       "average_integrand_time_seconds": 2.7105e-05,
+       "average_evaluator_time_seconds": 3.218e-06,
+       "average_observable_time_seconds": 0.0,
+       "average_integrator_time_seconds": 6.103e-06,
+       "f64_percentage": 99.53,
+       "f128_percentage": 0.47000000000000003,
+       "arb_percentage": 0.0,
+       "nan_percentage": 0.0,
+       "nan_or_unstable_percentage": 0.0,
+       "generated_event_count": 0,
+       "accepted_event_count": 0,
+       "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+       {
+        "component": "re",
+        "sign": "+",
+        "max_eval": 4.307436940266028e-05,
+        "coordinates": "graph: 0, sampling channel: 6, xs: [\n6.6314021997988026e-01 3.7053897680877537e-02 4.0444686130131846e-01\n7.5981170135738296e-01 1.6077935060458512e-01 5.4154933034640884e-01 ]"
+       },
+       {
+        "component": "re",
+        "sign": "-",
+        "max_eval": -0.000464351521291808,
+        "coordinates": "graph: 0, sampling channel: 2, xs: [\n1.3306022960677837e-02 9.7948163904192243e-01 4.7360895777088358e-01\n2.2766331964010310e-02 3.8760122839471112e-01 3.4443041775252892e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "+",
+        "max_eval": 0.0005966474649965453,
+        "coordinates": "graph: 0, sampling channel: 3, xs: [\n4.4393367748243656e-01 6.3612827999587918e-01 7.4113289093330281e-01\n4.4391611043480295e-01 2.9160352326198086e-01 9.6423924183479393e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "-",
+        "max_eval": -0.0007693609221432048,
+        "coordinates": "graph: 0, sampling channel: 3, xs: [\n2.6898326994378119e-01 8.7293324494030156e-02 2.8292669820606153e-01\n2.5351701852253450e-01 8.6008148069529478e-01 1.0160305433717820e-02 ]"
+       }
+      ],
+      "table_results": [
+       {
+        "component": "re",
+        "value": -1.33735849876914e-05,
+        "error": 2.794732053515685e-07,
+        "relative_error_percent": 2.0897403770850245,
+        "chi_sq_per_dof": 0.9180460520055668,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.003472154412741098
+       },
+       {
+        "component": "im",
+        "value": 6.043601057747689e-06,
+        "error": 9.748394725483664e-07,
+        "relative_error_percent": 16.1301095693379,
+        "chi_sq_per_dof": 0.3510209213630274,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.012730173861441608
+       }
+      ],
+      "absolute_integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 300,
+       "result": {
+        "re": 1.817196339435497e-05,
+        "im": 4.465398045277312e-05
+       },
+       "error": {
+        "re": 2.5093228342530647e-07,
+        "im": 8.68646726292697e-07
+       },
+       "real_chisq": 7.060867283856261,
+       "im_chisq": 4.191911028195733
+      },
+      "internal_cost_seconds": 0.7645000000000001
+     },
+     "integration_result_sha256": "75b6432450d6444d2041ada4c294b8b29da28fc9ab71d541eae29ff8be9b0836"
+    }
+   ],
+   "summary": {
+    "re": {
+     "mean": -1.377261887375389e-05,
+     "seed_standard_deviation": 3.7534174331605435e-07,
+     "rms_reported_error": 3.2762897325337493e-07,
+     "maximum_absolute_weight": 0.0022966802129666215,
+     "reported_variance_ratio_to_lmb": 1.0,
+     "mean_difference_vs_lmb_in_combined_standard_errors": 0.0
+    },
+    "im": {
+     "mean": 6.607804433045325e-06,
+     "seed_standard_deviation": 5.856711316442994e-07,
+     "rms_reported_error": 1.0151798105815805e-06,
+     "maximum_absolute_weight": 0.0007693609221432048,
+     "reported_variance_ratio_to_lmb": 1.0,
+     "mean_difference_vs_lmb_in_combined_standard_errors": 0.0
+    },
+    "mean_core_evaluation_seconds": 7.625766666666667e-05
+   }
+  },
+  "surface": {
+   "card_text": "# X1 checkpoint3f9b1a284 benchmark; preserve all18 physical orientations.\n# Practical native density/localization gates passed; no formal root-enclosure claim.\ncommands = [\"run configure\"]\n\n[[command_blocks]]\nname = \"configure\"\ncommands = [\"\"\"set process -p massive_kite -i default string '\n[general]\nevaluator_method = \"SummedFunctionMap\"\n[subtraction]\ndisable_threshold_subtraction = false\n[sampling]\ngraphs = \"monte_carlo\"\norientations = \"summed\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\nb = 1.0\npower = $(power:2.0)\ndefault_channel_selection = [\"C\"]\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nparent_lmb = [4, 6]\nsubspace_lmb = [4, 6]\n[integrator]\nintegrated_phase = \"real\"\nn_start = $(n_start:2000)\nn_increase = 0\nn_max = $(n_max:10000)\nseed = $(seed:101)\nn_bins = 16\nmin_samples_for_update = 64\ncontinuous_dim_learning_rate = 0.25\ndiscrete_dim_learning_rate = 0.25\ntrain_on_avg = false\n[integrator.observables_output]\nformat = [\"json\"]\n[stability]\ncheck_on_norm = true\nrotation_axis = [{ type = \"euler_angles\", alpha = 0.1, beta = 0.2, gamma = 0.3 }]\nlevels = [\n { precision = \"Double\", required_precision_for_re = 1e-6, required_precision_for_im = 1e-6, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Quad\", required_precision_for_re = 1e-10, required_precision_for_im = 1e-10, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Arb\", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 },\n]\n'\"\"\"]\n\n[[command_blocks]]\nname = \"integrate\"\ncommands = [\n \"run configure\",\n \"\"\"integrate -p massive_kite -i default --n-cores $(cores:1)\n --workspace-path $(workspace:/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_surface_seed101)\n --restart --renderer tabled --show-phase both\n --show-max-weight-info --show-max-weight-info-for-discrete-bins\n --show-top-discrete-grid --show-discrete-contributions-sum\n --write-results-for-each-iteration --batch-timing 2\"\"\",\n]\n",
+   "runtime_overlay_text": "[general]\nevaluator_method = \"SummedFunctionMap\"\n[subtraction]\ndisable_threshold_subtraction = false\n[sampling]\ngraphs = \"monte_carlo\"\norientations = \"summed\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\nb = 1.0\npower = 2.0\ndefault_channel_selection = [\"C\"]\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nparent_lmb = [4, 6]\nsubspace_lmb = [4, 6]\n[integrator]\nintegrated_phase = \"real\"\nn_start = 2000\nn_increase = 0\nn_max = 10000\nseed = 101\nn_bins = 16\nmin_samples_for_update = 64\ncontinuous_dim_learning_rate = 0.25\ndiscrete_dim_learning_rate = 0.25\ntrain_on_avg = false\n[integrator.observables_output]\nformat = [\"json\"]\n[stability]\ncheck_on_norm = true\nrotation_axis = [{ type = \"euler_angles\", alpha = 0.1, beta = 0.2, gamma = 0.3 }]\nlevels = [\n { precision = \"Double\", required_precision_for_re = 1e-6, required_precision_for_im = 1e-6, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Quad\", required_precision_for_re = 1e-10, required_precision_for_im = 1e-10, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Arb\", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 },\n]\n",
+   "orientation_keys": [
+    {
+     "id": 0,
+     "orientation": "0 0 - + + + +"
+    },
+    {
+     "id": 1,
+     "orientation": "0 0 - - + + +"
+    },
+    {
+     "id": 2,
+     "orientation": "0 0 - + - + +"
+    },
+    {
+     "id": 3,
+     "orientation": "0 0 + + + - +"
+    },
+    {
+     "id": 4,
+     "orientation": "0 0 - + + - +"
+    },
+    {
+     "id": 5,
+     "orientation": "0 0 + - + - +"
+    },
+    {
+     "id": 6,
+     "orientation": "0 0 - - + - +"
+    },
+    {
+     "id": 7,
+     "orientation": "0 0 + + - - +"
+    },
+    {
+     "id": 8,
+     "orientation": "0 0 - + - - +"
+    },
+    {
+     "id": 9,
+     "orientation": "0 0 + - + + -"
+    },
+    {
+     "id": 10,
+     "orientation": "0 0 - - + + -"
+    },
+    {
+     "id": 11,
+     "orientation": "0 0 + + - + -"
+    },
+    {
+     "id": 12,
+     "orientation": "0 0 - + - + -"
+    },
+    {
+     "id": 13,
+     "orientation": "0 0 + - - + -"
+    },
+    {
+     "id": 14,
+     "orientation": "0 0 - - - + -"
+    },
+    {
+     "id": 15,
+     "orientation": "0 0 + - + - -"
+    },
+    {
+     "id": 16,
+     "orientation": "0 0 + + - - -"
+    },
+    {
+     "id": 17,
+     "orientation": "0 0 + - - - -"
+    }
+   ],
+   "reference": {
+    "passed": true,
+    "orientation_count": 18,
+    "points_per_channel": 8192,
+    "normalization": 0.9870520980685361,
+    "second_moment": 8.98678016328296,
+    "expected_second_moment": 9.102500000000001,
+    "channels": [
+     {
+      "channel": 0,
+      "normalization": 0.9870520980685361,
+      "second_moment": 8.98678016328296,
+      "finite_samples": 8192,
+      "dispersion": 0.032661169222700785
+     }
+    ],
+    "aggregate_stderr_policy": "Channel contributions share Halton draws. Per-channel normalization dispersion is retained, but errors are not added as independent Monte Carlo errors. Moment dispersion was not collected by this original driver."
+   },
+   "runs": [
+    {
+     "seed": 101,
+     "resolved_settings_sha256": "4c1271a30c38b72b253bce27aad723349061822bffe2ce9794d831ad74cd5511",
+     "resolved_settings": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2000\nn_increase = 0\nn_max = 10000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 101\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\npower = 2.0\ndefault_channel_selection = [\"C\"]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+     "result": {
+      "integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 1241,
+       "result": {
+        "re": -1.4469684575100164e-05,
+        "im": 5.69518082919947e-06
+       },
+       "error": {
+        "re": 9.516859402961856e-07,
+        "im": 1.7992307401749902e-06
+       },
+       "real_chisq": 1.538562696283016,
+       "im_chisq": 2.9474203645146506
+      },
+      "integration_statistics": {
+       "num_evals": 10000,
+       "average_total_time_seconds": 6.9858e-05,
+       "average_parameterization_time_seconds": 5.33e-06,
+       "average_integrand_time_seconds": 2.6716e-05,
+       "average_evaluator_time_seconds": 3.213e-06,
+       "average_observable_time_seconds": 0.0,
+       "average_integrator_time_seconds": 5.491e-06,
+       "f64_percentage": 99.92999999999999,
+       "f128_percentage": 0.06999999999999999,
+       "arb_percentage": 0.0,
+       "nan_percentage": 0.0,
+       "nan_or_unstable_percentage": 0.0,
+       "generated_event_count": 0,
+       "accepted_event_count": 0,
+       "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+       {
+        "component": "re",
+        "sign": "+",
+        "max_eval": 0.0009103835268925685,
+        "coordinates": "graph: 0, sampling channel: 0, xs: [\n7.4505766336575041e-01 2.8070970153129371e-01 6.0832671025479512e-01\n5.0118815879556966e-01 1.5601877027176037e-01 2.3379244307529523e-01 ]"
+       },
+       {
+        "component": "re",
+        "sign": "-",
+        "max_eval": -0.006351990486326625,
+        "coordinates": "graph: 0, sampling channel: 0, xs: [\n7.6047011771088091e-01 7.0613657088942017e-01 3.3006633236812422e-01\n5.6739645108814174e-01 8.4547170889872714e-01 7.7416206299849266e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "+",
+        "max_eval": 0.006705037899213204,
+        "coordinates": "graph: 0, sampling channel: 0, xs: [\n7.6047011771088091e-01 7.0613657088942017e-01 3.3006633236812422e-01\n5.6739645108814174e-01 8.4547170889872714e-01 7.7416206299849266e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "-",
+        "max_eval": -0.0025628198923512892,
+        "coordinates": "graph: 0, sampling channel: 0, xs: [\n5.8300156823513238e-01 6.6219262975359594e-01 6.1863810772724359e-01\n7.1956630164996593e-01 7.5176985077277103e-01 4.2292299481219908e-01 ]"
+       }
+      ],
+      "table_results": [
+       {
+        "component": "re",
+        "value": -1.4469684575100164e-05,
+        "error": 9.516859402961856e-07,
+        "relative_error_percent": 6.577102184617578,
+        "chi_sq_per_dof": 0.3077125392566032,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.04389861059761667
+       },
+       {
+        "component": "im",
+        "value": 5.69518082919947e-06,
+        "error": 1.7992307401749902e-06,
+        "relative_error_percent": 31.59216176157649,
+        "chi_sq_per_dof": 0.5894840729029301,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.11773178236652553
+       }
+      ],
+      "absolute_integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 1241,
+       "result": {
+        "re": 1.871299549675814e-05,
+        "im": 4.597419116231113e-05
+       },
+       "error": {
+        "re": 9.442585863503964e-07,
+        "im": 1.7404284890688316e-06
+       },
+       "real_chisq": 2.0206103215641065,
+       "im_chisq": 6.817905721054075
+      },
+      "internal_cost_seconds": 0.69858
+     },
+     "integration_result_sha256": "8e62e0e629ec6393b3c150ff0d9c75c5164e9d3528b9c2d25feba63e9b651dbc"
+    },
+    {
+     "seed": 202,
+     "resolved_settings_sha256": "80924113cadee08fc220a788c9be1cf564bb8e4847cabe661a06112f3314e8a5",
+     "resolved_settings": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2000\nn_increase = 0\nn_max = 10000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 202\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\npower = 2.0\ndefault_channel_selection = [\"C\"]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+     "result": {
+      "integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 1213,
+       "result": {
+        "re": -1.3245465993601038e-05,
+        "im": 8.028896090504403e-06
+       },
+       "error": {
+        "re": 7.175624535305087e-07,
+        "im": 1.5811886312577495e-06
+       },
+       "real_chisq": 1.7041634384242528,
+       "im_chisq": 1.1056096034693317
+      },
+      "integration_statistics": {
+       "num_evals": 10000,
+       "average_total_time_seconds": 6.9523e-05,
+       "average_parameterization_time_seconds": 5.287e-06,
+       "average_integrand_time_seconds": 2.6466e-05,
+       "average_evaluator_time_seconds": 3.202e-06,
+       "average_observable_time_seconds": 0.0,
+       "average_integrator_time_seconds": 6.266e-06,
+       "f64_percentage": 99.91,
+       "f128_percentage": 0.09,
+       "arb_percentage": 0.0,
+       "nan_percentage": 0.0,
+       "nan_or_unstable_percentage": 0.0,
+       "generated_event_count": 0,
+       "accepted_event_count": 0,
+       "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+       {
+        "component": "re",
+        "sign": "+",
+        "max_eval": 0.0010753173729779184,
+        "coordinates": "graph: 0, sampling channel: 0, xs: [\n7.6126521316685847e-01 3.9491966168475612e-01 2.0406315659510038e-01\n6.8535542284719053e-01 4.5773025768796022e-01 9.7552546212843982e-01 ]"
+       },
+       {
+        "component": "re",
+        "sign": "-",
+        "max_eval": -0.004339174968686568,
+        "coordinates": "graph: 0, sampling channel: 0, xs: [\n7.2667772052304147e-01 7.2683546057869330e-01 7.7686000229264218e-01\n5.9798562992827398e-01 7.5613076099985765e-01 1.3188545987672026e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "+",
+        "max_eval": 0.0030722525553973337,
+        "coordinates": "graph: 0, sampling channel: 0, xs: [\n6.6802071779993499e-01 8.2694335527732532e-02 5.8076322452980722e-01\n3.0324321534762122e-01 3.6358236120025222e-01 1.1134227900845128e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "-",
+        "max_eval": -0.0025360759885200575,
+        "coordinates": "graph: 0, sampling channel: 0, xs: [\n5.6838856792418146e-01 3.7109122827449337e-01 3.7421799972192532e-01\n6.6194705053353742e-01 3.3187235812207944e-01 7.5291408373974256e-01 ]"
+       }
+      ],
+      "table_results": [
+       {
+        "component": "re",
+        "value": -1.3245465993601038e-05,
+        "error": 7.175624535305087e-07,
+        "relative_error_percent": 5.417419469252099,
+        "chi_sq_per_dof": 0.34083268768485053,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.03275970034412416
+       },
+       {
+        "component": "im",
+        "value": 8.028896090504403e-06,
+        "error": 1.5811886312577495e-06,
+        "relative_error_percent": 19.6937239370651,
+        "chi_sq_per_dof": 0.22112192069386633,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.038264943533530334
+       }
+      ],
+      "absolute_integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 1213,
+       "result": {
+        "re": 1.753870827341379e-05,
+        "im": 4.471007976547237e-05
+       },
+       "error": {
+        "re": 7.082924262577808e-07,
+        "im": 1.5187775789703882e-06
+       },
+       "real_chisq": 2.0589065688351837,
+       "im_chisq": 3.86823597649029
+      },
+      "internal_cost_seconds": 0.69523
+     },
+     "integration_result_sha256": "ac282a64a31868047691351e91ce7f73ad030946eb3223f45e40c76e8be5976b"
+    },
+    {
+     "seed": 303,
+     "resolved_settings_sha256": "0652a4ed4e9c113c5762b4e70b0d0363d4c723d493428172961dfa54ad8f582a",
+     "resolved_settings": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2000\nn_increase = 0\nn_max = 10000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 303\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\npower = 2.0\ndefault_channel_selection = [\"C\"]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+     "result": {
+      "integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 1208,
+       "result": {
+        "re": -1.4989486472265418e-05,
+        "im": 9.29017654430837e-06
+       },
+       "error": {
+        "re": 9.176978087204612e-07,
+        "im": 1.864321397521714e-06
+       },
+       "real_chisq": 0.3612301665956963,
+       "im_chisq": 4.138121224305882
+      },
+      "integration_statistics": {
+       "num_evals": 10000,
+       "average_total_time_seconds": 6.946e-05,
+       "average_parameterization_time_seconds": 5.361e-06,
+       "average_integrand_time_seconds": 2.6613e-05,
+       "average_evaluator_time_seconds": 3.219e-06,
+       "average_observable_time_seconds": 0.0,
+       "average_integrator_time_seconds": 6.072e-06,
+       "f64_percentage": 99.94,
+       "f128_percentage": 0.06,
+       "arb_percentage": 0.0,
+       "nan_percentage": 0.0,
+       "nan_or_unstable_percentage": 0.0,
+       "generated_event_count": 0,
+       "accepted_event_count": 0,
+       "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+       {
+        "component": "re",
+        "sign": "+",
+        "max_eval": 0.001517106164055624,
+        "coordinates": "graph: 0, sampling channel: 0, xs: [\n8.5097116060376865e-01 7.0143795288214994e-01 4.9134090445836098e-01\n4.8292854124348139e-01 4.8462768043992699e-01 6.3529868859903704e-01 ]"
+       },
+       {
+        "component": "re",
+        "sign": "-",
+        "max_eval": -0.00471009179783713,
+        "coordinates": "graph: 0, sampling channel: 0, xs: [\n7.3074673998769701e-01 2.7168936561677903e-01 4.3710506918516945e-01\n6.1422880134729907e-01 1.4883326558129761e-01 6.1848660001312306e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "+",
+        "max_eval": 0.004874375867374133,
+        "coordinates": "graph: 0, sampling channel: 0, xs: [\n7.3074673998769701e-01 2.7168936561677903e-01 4.3710506918516945e-01\n6.1422880134729907e-01 1.4883326558129761e-01 6.1848660001312306e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "-",
+        "max_eval": -0.0027120383759318923,
+        "coordinates": "graph: 0, sampling channel: 0, xs: [\n5.7299996673082898e-01 4.8080369146080171e-01 4.0464066119796538e-01\n6.7000206075984226e-01 5.2202421604549332e-01 8.0246586027479183e-01 ]"
+       }
+      ],
+      "table_results": [
+       {
+        "component": "re",
+        "value": -1.4989486472265418e-05,
+        "error": 9.176978087204612e-07,
+        "relative_error_percent": 6.122276506392991,
+        "chi_sq_per_dof": 0.07224603331913926,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.03142263616937156
+       },
+       {
+        "component": "im",
+        "value": 9.29017654430837e-06,
+        "error": 1.864321397521714e-06,
+        "relative_error_percent": 20.06766382350281,
+        "chi_sq_per_dof": 0.8276242448611765,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.05246806499452823
+       }
+      ],
+      "absolute_integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 1208,
+       "result": {
+        "re": 1.9135897467303546e-05,
+        "im": 4.761029503972954e-05
+       },
+       "error": {
+        "re": 9.099549803657651e-07,
+        "im": 1.804890352734471e-06
+       },
+       "real_chisq": 1.583323873403753,
+       "im_chisq": 0.7255762378663633
+      },
+      "internal_cost_seconds": 0.6946
+     },
+     "integration_result_sha256": "6d44ed6ed0b3b7a6688d6249bf291acbdd1604cedd3ee6eefd19c96d23e3eae4"
+    }
+   ],
+   "summary": {
+    "re": {
+     "mean": -1.423487901365554e-05,
+     "seed_standard_deviation": 8.954061068946187e-07,
+     "rms_reported_error": 8.68479758314204e-07,
+     "maximum_absolute_weight": 0.006351990486326625,
+     "reported_variance_ratio_to_lmb": 7.02675481542214,
+     "mean_difference_vs_lmb_in_combined_standard_errors": -0.8625708439532347
+    },
+    "im": {
+     "mean": 7.671417821337414e-06,
+     "seed_standard_deviation": 1.8239631527549581e-06,
+     "rms_reported_error": 1.752434784071076e-06,
+     "maximum_absolute_weight": 0.006705037899213204,
+     "reported_variance_ratio_to_lmb": 2.9798732084991983,
+     "mean_difference_vs_lmb_in_combined_standard_errors": 0.9096343089403988
+    },
+    "mean_core_evaluation_seconds": 6.961366666666667e-05
+   }
+  },
+  "mixed": {
+   "card_text": "# X1 checkpoint3f9b1a284 benchmark; preserve all18 physical orientations.\n# Practical native density/localization gates passed; no formal root-enclosure claim.\ncommands = [\"run configure\"]\n\n[[command_blocks]]\nname = \"configure\"\ncommands = [\"\"\"set process -p massive_kite -i default string '\n[general]\nevaluator_method = \"SummedFunctionMap\"\n[subtraction]\ndisable_threshold_subtraction = false\n[sampling]\ngraphs = \"monte_carlo\"\norientations = \"summed\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\nb = 1.0\npower = $(power:2.0)\ndefault_channel_selection = [\"auto:optimized_lmb\", \"C\"]\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nparent_lmb = [4, 6]\nsubspace_lmb = [4, 6]\n[integrator]\nintegrated_phase = \"real\"\nn_start = $(n_start:2000)\nn_increase = 0\nn_max = $(n_max:10000)\nseed = $(seed:101)\nn_bins = 16\nmin_samples_for_update = 64\ncontinuous_dim_learning_rate = 0.25\ndiscrete_dim_learning_rate = 0.25\ntrain_on_avg = false\n[integrator.observables_output]\nformat = [\"json\"]\n[stability]\ncheck_on_norm = true\nrotation_axis = [{ type = \"euler_angles\", alpha = 0.1, beta = 0.2, gamma = 0.3 }]\nlevels = [\n { precision = \"Double\", required_precision_for_re = 1e-6, required_precision_for_im = 1e-6, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Quad\", required_precision_for_re = 1e-10, required_precision_for_im = 1e-10, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Arb\", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 },\n]\n'\"\"\"]\n\n[[command_blocks]]\nname = \"integrate\"\ncommands = [\n \"run configure\",\n \"\"\"integrate -p massive_kite -i default --n-cores $(cores:1)\n --workspace-path $(workspace:/tmp/advanced-sampling-amplitude-matrix/x1_3f9b1a284/kite_rest_mixed_seed101)\n --restart --renderer tabled --show-phase both\n --show-max-weight-info --show-max-weight-info-for-discrete-bins\n --show-top-discrete-grid --show-discrete-contributions-sum\n --write-results-for-each-iteration --batch-timing 2\"\"\",\n]\n",
+   "runtime_overlay_text": "[general]\nevaluator_method = \"SummedFunctionMap\"\n[subtraction]\ndisable_threshold_subtraction = false\n[sampling]\ngraphs = \"monte_carlo\"\norientations = \"summed\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\nb = 1.0\npower = 2.0\ndefault_channel_selection = [\"auto:optimized_lmb\", \"C\"]\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nparent_lmb = [4, 6]\nsubspace_lmb = [4, 6]\n[integrator]\nintegrated_phase = \"real\"\nn_start = 2000\nn_increase = 0\nn_max = 10000\nseed = 101\nn_bins = 16\nmin_samples_for_update = 64\ncontinuous_dim_learning_rate = 0.25\ndiscrete_dim_learning_rate = 0.25\ntrain_on_avg = false\n[integrator.observables_output]\nformat = [\"json\"]\n[stability]\ncheck_on_norm = true\nrotation_axis = [{ type = \"euler_angles\", alpha = 0.1, beta = 0.2, gamma = 0.3 }]\nlevels = [\n { precision = \"Double\", required_precision_for_re = 1e-6, required_precision_for_im = 1e-6, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Quad\", required_precision_for_re = 1e-10, required_precision_for_im = 1e-10, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Arb\", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 },\n]\n",
+   "orientation_keys": [
+    {
+     "id": 0,
+     "orientation": "0 0 - + + + +"
+    },
+    {
+     "id": 1,
+     "orientation": "0 0 - - + + +"
+    },
+    {
+     "id": 2,
+     "orientation": "0 0 - + - + +"
+    },
+    {
+     "id": 3,
+     "orientation": "0 0 + + + - +"
+    },
+    {
+     "id": 4,
+     "orientation": "0 0 - + + - +"
+    },
+    {
+     "id": 5,
+     "orientation": "0 0 + - + - +"
+    },
+    {
+     "id": 6,
+     "orientation": "0 0 - - + - +"
+    },
+    {
+     "id": 7,
+     "orientation": "0 0 + + - - +"
+    },
+    {
+     "id": 8,
+     "orientation": "0 0 - + - - +"
+    },
+    {
+     "id": 9,
+     "orientation": "0 0 + - + + -"
+    },
+    {
+     "id": 10,
+     "orientation": "0 0 - - + + -"
+    },
+    {
+     "id": 11,
+     "orientation": "0 0 + + - + -"
+    },
+    {
+     "id": 12,
+     "orientation": "0 0 - + - + -"
+    },
+    {
+     "id": 13,
+     "orientation": "0 0 + - - + -"
+    },
+    {
+     "id": 14,
+     "orientation": "0 0 - - - + -"
+    },
+    {
+     "id": 15,
+     "orientation": "0 0 + - + - -"
+    },
+    {
+     "id": 16,
+     "orientation": "0 0 + + - - -"
+    },
+    {
+     "id": 17,
+     "orientation": "0 0 + - - - -"
+    }
+   ],
+   "reference": {
+    "passed": true,
+    "orientation_count": 18,
+    "points_per_channel": 8192,
+    "normalization": 0.9874046570026644,
+    "second_moment": 9.011052460528546,
+    "expected_second_moment": 9.102500000000001,
+    "channels": [
+     {
+      "channel": 0,
+      "normalization": 0.07225897802249195,
+      "second_moment": 0.700280253239187,
+      "finite_samples": 8192,
+      "dispersion": 0.0038781232848579964
+     },
+     {
+      "channel": 1,
+      "normalization": 0.070631917769423,
+      "second_moment": 0.7106792553545259,
+      "finite_samples": 8192,
+      "dispersion": 0.003504271492057489
+     },
+     {
+      "channel": 2,
+      "normalization": 0.1399234449977933,
+      "second_moment": 1.3875608724769297,
+      "finite_samples": 8192,
+      "dispersion": 0.00602349515491764
+     },
+     {
+      "channel": 3,
+      "normalization": 0.07225897802249195,
+      "second_moment": 0.700280253239187,
+      "finite_samples": 8192,
+      "dispersion": 0.0038781232848579964
+     },
+     {
+      "channel": 4,
+      "normalization": 0.1428632536734589,
+      "second_moment": 1.4083978745619192,
+      "finite_samples": 8192,
+      "dispersion": 0.006301144672648793
+     },
+     {
+      "channel": 5,
+      "normalization": 0.0708520427207353,
+      "second_moment": 0.6770059984932748,
+      "finite_samples": 8192,
+      "dispersion": 0.0036391431168850915
+     },
+     {
+      "channel": 6,
+      "normalization": 0.07298334034421801,
+      "second_moment": 0.7090713323233716,
+      "finite_samples": 8192,
+      "dispersion": 0.003830904919415528
+     },
+     {
+      "channel": 7,
+      "normalization": 0.0708520427207353,
+      "second_moment": 0.6770059984932748,
+      "finite_samples": 8192,
+      "dispersion": 0.0036391431168850915
+     },
+     {
+      "channel": 8,
+      "normalization": 0.2747806587313167,
+      "second_moment": 2.0407706223468747,
+      "finite_samples": 8192,
+      "dispersion": 0.007447853350355824
+     }
+    ],
+    "aggregate_stderr_policy": "Channel contributions share Halton draws. Per-channel normalization dispersion is retained, but errors are not added as independent Monte Carlo errors. Moment dispersion was not collected by this original driver."
+   },
+   "runs": [
+    {
+     "seed": 101,
+     "resolved_settings_sha256": "7da48214db47d988e52b6110fe9e1d39130f09b595042e4ef588412d46a2ae30",
+     "resolved_settings": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2000\nn_increase = 0\nn_max = 10000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 101\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\npower = 2.0\ndefault_channel_selection = [\n    \"auto:optimized_lmb\",\n    \"C\",\n]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+     "result": {
+      "integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 346,
+       "result": {
+        "re": -1.4098895251606691e-05,
+        "im": 5.988566823466934e-06
+       },
+       "error": {
+        "re": 2.956068930870528e-07,
+        "im": 9.98339045858262e-07
+       },
+       "real_chisq": 1.2906426042691628,
+       "im_chisq": 2.6776445329211995
+      },
+      "integration_statistics": {
+       "num_evals": 10000,
+       "average_total_time_seconds": 7.9428e-05,
+       "average_parameterization_time_seconds": 1.1906e-05,
+       "average_integrand_time_seconds": 2.7056e-05,
+       "average_evaluator_time_seconds": 3.266e-06,
+       "average_observable_time_seconds": 0.0,
+       "average_integrator_time_seconds": 6.176e-06,
+       "f64_percentage": 99.59,
+       "f128_percentage": 0.41000000000000003,
+       "arb_percentage": 0.0,
+       "nan_percentage": 0.0,
+       "nan_or_unstable_percentage": 0.0,
+       "generated_event_count": 0,
+       "accepted_event_count": 0,
+       "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+       {
+        "component": "re",
+        "sign": "+",
+        "max_eval": 7.017539819116748e-05,
+        "coordinates": "graph: 0, sampling channel: 4, xs: [\n6.4495887802821572e-01 4.2148079091343649e-01 6.9108216386603727e-01\n7.5040929013867785e-01 8.1941601223719258e-03 2.1775480750794532e-01 ]"
+       },
+       {
+        "component": "re",
+        "sign": "-",
+        "max_eval": -0.0012046082438350583,
+        "coordinates": "graph: 0, sampling channel: 7, xs: [\n2.5786188355040015e-03 4.5889053177264938e-01 5.5615379569298584e-01\n5.2385705812827534e-03 7.2878850288531738e-01 4.0731708866058985e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "+",
+        "max_eval": 0.0006512734685644322,
+        "coordinates": "graph: 0, sampling channel: 2, xs: [\n3.9571796043794411e-01 7.6865776976971179e-01 1.4029674494551753e-01\n4.2564956155289591e-01 8.1661021681694243e-02 7.3710005854456817e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "-",
+        "max_eval": -0.0006739842311338107,
+        "coordinates": "graph: 0, sampling channel: 2, xs: [\n2.6885769919083558e-01 1.2605569016197016e-01 3.1195503636047855e-01\n2.5294644594216875e-01 8.6395295757267598e-01 9.3161827136844355e-01 ]"
+       }
+      ],
+      "table_results": [
+       {
+        "component": "re",
+        "value": -1.4098895251606691e-05,
+        "error": 2.956068930870528e-07,
+        "relative_error_percent": 2.096667063707462,
+        "chi_sq_per_dof": 0.25812852085383253,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.008543990308019224
+       },
+       {
+        "component": "im",
+        "value": 5.988566823466934e-06,
+        "error": 9.98339045858262e-07,
+        "relative_error_percent": 16.670750703593185,
+        "chi_sq_per_dof": 0.5355289065842399,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.011254516330897751
+       }
+      ],
+      "absolute_integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 346,
+       "result": {
+        "re": 1.8635164193996202e-05,
+        "im": 4.7076978618164824e-05
+       },
+       "error": {
+        "re": 2.693193280567896e-07,
+        "im": 8.823951190896024e-07
+       },
+       "real_chisq": 1.0552474556465725,
+       "im_chisq": 3.8532827093090916
+      },
+      "internal_cost_seconds": 0.79428
+     },
+     "integration_result_sha256": "95254adb786c71394bac3da97897feba6fced0610dc88303376a8cb2dec86aa7"
+    },
+    {
+     "seed": 202,
+     "resolved_settings_sha256": "b39f2123e67950e5bcabc1534569b1c35f79ffde6ccc3c26d0be2dbf642837f7",
+     "resolved_settings": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2000\nn_increase = 0\nn_max = 10000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 202\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\npower = 2.0\ndefault_channel_selection = [\n    \"auto:optimized_lmb\",\n    \"C\",\n]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+     "result": {
+      "integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 401,
+       "result": {
+        "re": -1.3748291255359346e-05,
+        "im": 6.065664463798013e-06
+       },
+       "error": {
+        "re": 2.7323303103845445e-07,
+        "im": 9.719716568298512e-07
+       },
+       "real_chisq": 3.933473475018097,
+       "im_chisq": 3.7785007904395687
+      },
+      "integration_statistics": {
+       "num_evals": 10000,
+       "average_total_time_seconds": 7.9413e-05,
+       "average_parameterization_time_seconds": 1.1954e-05,
+       "average_integrand_time_seconds": 2.7002e-05,
+       "average_evaluator_time_seconds": 3.298e-06,
+       "average_observable_time_seconds": 0.0,
+       "average_integrator_time_seconds": 6.167e-06,
+       "f64_percentage": 99.56,
+       "f128_percentage": 0.44,
+       "arb_percentage": 0.0,
+       "nan_percentage": 0.0,
+       "nan_or_unstable_percentage": 0.0,
+       "generated_event_count": 0,
+       "accepted_event_count": 0,
+       "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+       {
+        "component": "re",
+        "sign": "+",
+        "max_eval": 6.098011081086006e-05,
+        "coordinates": "graph: 0, sampling channel: 2, xs: [\n7.3279722742827702e-01 6.0947121313277197e-01 4.5132315320893068e-01\n7.1882736981681339e-01 4.6351684750587173e-02 7.3061274855548652e-01 ]"
+       },
+       {
+        "component": "re",
+        "sign": "-",
+        "max_eval": -0.0003429684375786542,
+        "coordinates": "graph: 0, sampling channel: 7, xs: [\n2.7540727389676944e-02 7.8715243385671818e-01 1.8884742983164016e-01\n1.7565103637182555e-02 3.8155803527139043e-01 4.5552102392720228e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "+",
+        "max_eval": 0.0007171371950915837,
+        "coordinates": "graph: 0, sampling channel: 2, xs: [\n4.0383639833479729e-01 2.8293232544644142e-01 7.6958930102392153e-01\n4.1825112743805104e-01 3.8216076776173342e-02 1.5555948759466312e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "-",
+        "max_eval": -0.0008323672498600573,
+        "coordinates": "graph: 0, sampling channel: 2, xs: [\n2.9763796942631598e-01 5.0532148124622589e-01 6.1338799954635304e-01\n2.6548895307538184e-01 1.4553982558346326e-02 3.2498682123176803e-02 ]"
+       }
+      ],
+      "table_results": [
+       {
+        "component": "re",
+        "value": -1.3748291255359346e-05,
+        "error": 2.7323303103845445e-07,
+        "relative_error_percent": 1.987396295026431,
+        "chi_sq_per_dof": 0.7866946950036194,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.002494625922657542
+       },
+       {
+        "component": "im",
+        "value": 6.065664463798013e-06,
+        "error": 9.719716568298512e-07,
+        "relative_error_percent": 16.02415799012482,
+        "chi_sq_per_dof": 0.7557001580879137,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.013722606234286672
+       }
+      ],
+      "absolute_integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 401,
+       "result": {
+        "re": 1.8587893606044565e-05,
+        "im": 4.567906733849072e-05
+       },
+       "error": {
+        "re": 2.4291005850817334e-07,
+        "im": 8.600755263514955e-07
+       },
+       "real_chisq": 4.89970895448587,
+       "im_chisq": 1.8749487729557757
+      },
+      "internal_cost_seconds": 0.7941299999999999
+     },
+     "integration_result_sha256": "52b973bb509263f844dcf5fec1d13229313f243d4dea11426522eb2bdf373898"
+    },
+    {
+     "seed": 303,
+     "resolved_settings_sha256": "5087a8a40ca82f1846fa0ce104421a7dcf7404d5fd4cf6068f046856918f09bf",
+     "resolved_settings": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2000\nn_increase = 0\nn_max = 10000\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 303\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\npower = 2.0\ndefault_channel_selection = [\n    \"auto:optimized_lmb\",\n    \"C\",\n]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+     "result": {
+      "integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 363,
+       "result": {
+        "re": -1.3535249494608458e-05,
+        "im": 5.9230754447821845e-06
+       },
+       "error": {
+        "re": 2.6869369905258627e-07,
+        "im": 9.474833289496292e-07
+       },
+       "real_chisq": 7.899777933464833,
+       "im_chisq": 0.7460978113587462
+      },
+      "integration_statistics": {
+       "num_evals": 10000,
+       "average_total_time_seconds": 7.8628e-05,
+       "average_parameterization_time_seconds": 1.1796e-05,
+       "average_integrand_time_seconds": 2.6791e-05,
+       "average_evaluator_time_seconds": 3.243e-06,
+       "average_observable_time_seconds": 0.0,
+       "average_integrator_time_seconds": 5.5e-06,
+       "f64_percentage": 99.59,
+       "f128_percentage": 0.41000000000000003,
+       "arb_percentage": 0.0,
+       "nan_percentage": 0.0,
+       "nan_or_unstable_percentage": 0.0,
+       "generated_event_count": 0,
+       "accepted_event_count": 0,
+       "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+       {
+        "component": "re",
+        "sign": "+",
+        "max_eval": 5.0069730189813654e-05,
+        "coordinates": "graph: 0, sampling channel: 4, xs: [\n6.6312445868972159e-01 6.4819181001725601e-01 8.0324404857794085e-01\n7.0967144331634391e-01 7.1523207813826914e-02 7.3299064131620328e-01 ]"
+       },
+       {
+        "component": "re",
+        "sign": "-",
+        "max_eval": -0.0006680701029792967,
+        "coordinates": "graph: 0, sampling channel: 8, xs: [\n3.1246641901796282e-03 1.2505452037118089e-01 4.6326142733957498e-01\n2.3954574869672221e-01 4.1188736112676277e-01 5.4442691752780148e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "+",
+        "max_eval": 0.0006435861747790052,
+        "coordinates": "graph: 0, sampling channel: 2, xs: [\n4.5879316068580578e-01 7.1036521867873426e-01 8.9223171879343510e-01\n4.5710769344652663e-01 3.5984764758402443e-01 4.2024520902707913e-01 ]"
+       },
+       {
+        "component": "im",
+        "sign": "-",
+        "max_eval": -0.0006290193285908626,
+        "coordinates": "graph: 0, sampling channel: 8, xs: [\n5.0617232404183743e-01 4.7057462502368641e-02 6.7523842447729021e-01\n2.8680938172416348e-01 7.6075974617001119e-01 3.4416604860051936e-01 ]"
+       }
+      ],
+      "table_results": [
+       {
+        "component": "re",
+        "value": -1.3535249494608458e-05,
+        "error": 2.6869369905258627e-07,
+        "relative_error_percent": 1.9851403489800166,
+        "chi_sq_per_dof": 1.5799555866929667,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.00493577974492019
+       },
+       {
+        "component": "im",
+        "value": 5.9230754447821845e-06,
+        "error": 9.474833289496292e-07,
+        "relative_error_percent": 15.996475779897345,
+        "chi_sq_per_dof": 0.14921956227174923,
+        "target_delta_sigma": null,
+        "target_delta_percent": null,
+        "max_weight_impact": 0.01086574332504847
+       }
+      ],
+      "absolute_integral": {
+       "neval": 10000,
+       "real_zero": 0,
+       "im_zero": 363,
+       "result": {
+        "re": 1.838579749145694e-05,
+        "im": 4.487308892218902e-05
+       },
+       "error": {
+        "re": 2.3814134113683418e-07,
+        "im": 8.365726166188353e-07
+       },
+       "real_chisq": 9.21024402474157,
+       "im_chisq": 8.082199557276681
+      },
+      "internal_cost_seconds": 0.78628
+     },
+     "integration_result_sha256": "f14d47bafb51a7af79901c31b811153aabc232512abd82322d172dea6f5a131b"
+    }
+   ],
+   "summary": {
+    "re": {
+     "mean": -1.3794145333858165e-05,
+     "seed_standard_deviation": 2.8460689069620163e-07,
+     "rms_reported_error": 2.794256182490569e-07,
+     "maximum_absolute_weight": 0.0012046082438350583,
+     "reported_variance_ratio_to_lmb": 0.7273908596177943,
+     "mean_difference_vs_lmb_in_combined_standard_errors": -0.08658758690787503
+    },
+    "im": {
+     "mean": 5.992435577349044e-06,
+     "seed_standard_deviation": 7.137319194504577e-08,
+     "rms_reported_error": 9.728196836692847e-07,
+     "maximum_absolute_weight": 0.0008323672498600573,
+     "reported_variance_ratio_to_lmb": 0.9182876731084333,
+     "mean_difference_vs_lmb_in_combined_standard_errors": -0.7580472903567851
+    },
+    "mean_core_evaluation_seconds": 7.915633333333333e-05
+   }
+  }
+ },
+ "interpretation": "Both LMB selectors give identical sampled results for this saved kite. C-only is worse in errors and maxima. Mixed C+LMB reduces RMS reported real error from 3.2763e-7 to 2.7943e-7 and real maximum from 2.2967e-3 to 1.2046e-3, with a smaller imaginary-error reduction and slightly larger imaginary maximum. Three seeds at 10000 draws are preliminary empirical evidence, not a finite-variance or bounded-tail proof. Paired wall-time study remains pending."
+}

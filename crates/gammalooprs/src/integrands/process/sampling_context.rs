@@ -139,7 +139,7 @@ impl<T: FloatLike> PreparedCrossSectionMapEvaluation<T> {
     }
 }
 
-/// Pointwise classification of an energy surface for the prepared cut data.
+/// Pointwise classification of an energy surface for prepared complement or cut data.
 ///
 /// `Absent` is a normal branch for cross-section kinematics.  Callers should
 /// use the full-support fallback map in that branch rather than dropping the
@@ -147,28 +147,17 @@ impl<T: FloatLike> PreparedCrossSectionMapEvaluation<T> {
 /// and may require a dedicated local map in a later implementation.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum PreparedSurfaceStatus<T: FloatLike = f64> {
-    Existing {
-        threshold_radius: T,
-        normalized_margin: Option<T>,
-    },
-    Pinched {
-        normalized_margin: T,
-    },
-    Absent {
-        reason: String,
-    },
+    Existing { normalized_margin: Option<T> },
+    Pinched { normalized_margin: T },
+    Absent { reason: String },
 }
 
 impl<T: FloatLike> PreparedSurfaceStatus<T> {
-    pub fn existing(threshold_radius: T, normalized_margin: Option<T>) -> Result<Self> {
-        validate_finite_non_negative(&threshold_radius, "threshold radius")?;
+    pub fn existing(normalized_margin: Option<T>) -> Result<Self> {
         if let Some(margin) = &normalized_margin {
             validate_finite(margin, "normalized surface margin")?;
         }
-        Ok(Self::Existing {
-            threshold_radius,
-            normalized_margin,
-        })
+        Ok(Self::Existing { normalized_margin })
     }
 
     pub fn pinched(normalized_margin: T) -> Result<Self> {
@@ -186,22 +175,14 @@ impl<T: FloatLike> PreparedSurfaceStatus<T> {
         Ok(Self::Absent { reason })
     }
 
-    /// Radius to use for a regular threshold shell, if one exists.
-    pub fn threshold_radius(&self) -> Option<T> {
-        match self {
-            Self::Existing {
-                threshold_radius, ..
-            } => Some(threshold_radius.clone()),
-            Self::Pinched { .. } | Self::Absent { .. } => None,
-        }
-    }
-
+    /// A regular threshold radius is direction dependent and belongs to the
+    /// radial map evaluation, not to this complement-only classification.
     pub fn is_existing(&self) -> bool {
         matches!(self, Self::Existing { .. })
     }
 
     pub fn uses_full_support_fallback(&self) -> bool {
-        matches!(self, Self::Absent { .. })
+        matches!(self, Self::Absent { .. } | Self::Pinched { .. })
     }
 }
 
@@ -231,7 +212,7 @@ impl<T: FloatLike> PreparedSamplingSurface<T> {
     }
 }
 
-/// Kinematic host prepared for one side of one Cutkosky cut.
+/// Kinematic host prepared for one Cutkosky cut, optionally restricted to a side.
 ///
 /// `rescaling_t_star`, `loop_momenta`, and `external_momenta` must all come
 /// from the same solved cut point.  Keeping them together prevents a channel
@@ -245,7 +226,7 @@ pub struct PreparedCutSamplingContext<T: FloatLike = f64> {
     pub graph_id: usize,
     pub cut_id: usize,
     pub orientation: Option<usize>,
-    pub side: SamplingCutSide,
+    pub side: Option<SamplingCutSide>,
     /// Complete parent LMB edge list used to interpret all surface data.
     pub parent_lmb: Vec<usize>,
     pub rescaling_t_star: T,
@@ -261,7 +242,7 @@ impl<T: FloatLike> PreparedCutSamplingContext<T> {
         graph_id: usize,
         cut_id: usize,
         orientation: Option<usize>,
-        side: SamplingCutSide,
+        side: Option<SamplingCutSide>,
         parent_lmb: Vec<usize>,
         rescaling_t_star: T,
         loop_momenta: Vec<[T; 3]>,
@@ -322,7 +303,7 @@ impl<T: FloatLike> PreparedCutSamplingContext<T> {
         graph_id: usize,
         cut_id: usize,
         orientation: Option<usize>,
-        side: SamplingCutSide,
+        side: Option<SamplingCutSide>,
         parent_lmb: Vec<usize>,
         rescaling_t_star: &F<T>,
         unrescaled_loop_momenta: &LoopMomenta<F<T>>,
@@ -435,13 +416,11 @@ impl<T: FloatLike> PreparedCutSamplingContext<T> {
                     edge_ids: surface.edge_ids.clone(),
                     subspace_edges: surface.subspace_edges.clone(),
                     status: match &surface.status {
-                        PreparedSurfaceStatus::Existing {
-                            threshold_radius,
-                            normalized_margin,
-                        } => PreparedSurfaceStatus::Existing {
-                            threshold_radius: cast(threshold_radius),
-                            normalized_margin: normalized_margin.as_ref().map(cast),
-                        },
+                        PreparedSurfaceStatus::Existing { normalized_margin } => {
+                            PreparedSurfaceStatus::Existing {
+                                normalized_margin: normalized_margin.as_ref().map(cast),
+                            }
+                        }
                         PreparedSurfaceStatus::Pinched { normalized_margin } => {
                             PreparedSurfaceStatus::Pinched {
                                 normalized_margin: cast(normalized_margin),
@@ -482,16 +461,10 @@ impl<T: FloatLike> PreparedCutSamplingContext<T> {
         self.surfaces.get(index)
     }
 
-    pub fn regular_surface_radii(&self) -> impl Iterator<Item = T> + '_ {
-        self.surfaces
-            .iter()
-            .filter_map(|surface| surface.status.threshold_radius())
-    }
-
     pub fn has_absent_surface(&self) -> bool {
         self.surfaces
             .iter()
-            .any(|surface| surface.status.uses_full_support_fallback())
+            .any(|surface| matches!(surface.status, PreparedSurfaceStatus::Absent { .. }))
     }
 }
 
@@ -513,14 +486,6 @@ fn validate_finite<T: FloatLike>(value: &T, label: &str) -> Result<()> {
     Ok(())
 }
 
-fn validate_finite_non_negative<T: FloatLike>(value: &T, label: &str) -> Result<()> {
-    validate_finite(value, label)?;
-    if value < &value.zero() {
-        return Err(eyre!("{label} must be non-negative, got {value}"));
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -536,14 +501,12 @@ mod tests {
             12,
             4,
             Some(2),
-            side,
+            Some(side),
             vec![3, 7, 11],
             0.83,
             vec![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]],
             vec![[10.0, 0.0, 0.0, 10.0]],
-            vec![surface(
-                PreparedSurfaceStatus::existing(2.5, Some(0.1)).unwrap(),
-            )],
+            vec![surface(PreparedSurfaceStatus::existing(Some(0.1)).unwrap())],
         )
         .unwrap()
     }
@@ -556,10 +519,10 @@ mod tests {
         assert_eq!(left.rescaling_t_star, right.rescaling_t_star);
         assert_eq!(left.external_momenta, right.external_momenta);
         assert_ne!(left.side, right.side);
-        assert_eq!(
-            left.surface(0).unwrap().status.threshold_radius(),
-            Some(2.5)
-        );
+        assert!(left.surface(0).unwrap().status.is_existing());
+        let mut host = left.clone();
+        host.side = None;
+        assert_eq!(host.cut_id, left.cut_id);
     }
 
     #[test]
@@ -572,7 +535,7 @@ mod tests {
             0,
             0,
             None,
-            SamplingCutSide::Left,
+            Some(SamplingCutSide::Left),
             vec![0],
             1.0,
             vec![[0.0, 0.0, 0.0]],
@@ -581,12 +544,17 @@ mod tests {
         )
         .unwrap();
         assert!(context.has_absent_surface());
-        assert_eq!(context.regular_surface_radii().count(), 0);
+        assert!(!context.surface(0).unwrap().status.is_existing());
+        assert!(
+            PreparedSurfaceStatus::pinched(0.0)
+                .unwrap()
+                .uses_full_support_fallback()
+        );
     }
 
     #[test]
     fn parent_lmb_and_surface_data_are_validated() {
-        assert!(PreparedSurfaceStatus::existing(-1.0, None).is_err());
+        assert!(PreparedSurfaceStatus::existing(Some(f64::NAN)).is_err());
         assert!(
             PreparedSamplingSurface::new(
                 vec![1, 2, 1],
@@ -601,7 +569,7 @@ mod tests {
                 0,
                 0,
                 None,
-                SamplingCutSide::Left,
+                Some(SamplingCutSide::Left),
                 vec![],
                 1.0,
                 vec![],
@@ -627,7 +595,7 @@ mod tests {
                     0,
                     0,
                     Some(0),
-                    SamplingCutSide::Left,
+                    Some(SamplingCutSide::Left),
                     vec![0],
                     &F(t_star),
                     &loop_momenta,
@@ -643,7 +611,7 @@ mod tests {
             0,
             0,
             Some(0),
-            SamplingCutSide::Left,
+            Some(SamplingCutSide::Left),
             vec![0],
             &F(0.5),
             &loop_momenta,
@@ -661,7 +629,7 @@ mod tests {
             0,
             0,
             Some(0),
-            SamplingCutSide::Left,
+            Some(SamplingCutSide::Left),
             vec![0, 1],
             &F(0.5),
             &loop_momenta,
@@ -696,7 +664,7 @@ mod tests {
             2,
             3,
             Some(4),
-            SamplingCutSide::Right,
+            Some(SamplingCutSide::Right),
             vec![7],
             &t_star,
             &loops,
@@ -705,7 +673,7 @@ mod tests {
                 PreparedSamplingSurface::new(
                     vec![2, 7],
                     vec![7],
-                    PreparedSurfaceStatus::existing(t_star.0, Some((-t_star).0)).unwrap(),
+                    PreparedSurfaceStatus::existing(Some((-t_star).0)).unwrap(),
                 )
                 .unwrap(),
             ],
@@ -714,10 +682,7 @@ mod tests {
         assert_eq!(prepared.rescaling_t_star, t_star.0);
         assert_eq!(prepared.loop_momenta[0][0], t_star.square().0);
         assert_eq!(prepared.external_momenta[0][0], t_star.0);
-        assert_eq!(
-            prepared.regular_surface_radii().collect::<Vec<_>>(),
-            vec![t_star.0]
-        );
+        assert!(prepared.surface(0).unwrap().status.is_existing());
         let restored: PreparedCutSamplingContext<f128> =
             serde_json::from_str(&serde_json::to_string(&prepared).unwrap()).unwrap();
         assert_eq!(restored, prepared);
@@ -759,7 +724,7 @@ mod tests {
             0,
             0,
             None,
-            SamplingCutSide::Left,
+            Some(SamplingCutSide::Left),
             vec![0],
             &small,
             &loops,
@@ -768,8 +733,7 @@ mod tests {
                 PreparedSamplingSurface::new(
                     vec![0, 1],
                     vec![0],
-                    PreparedSurfaceStatus::existing(large.0.clone(), Some(small.0.clone()))
-                        .unwrap(),
+                    PreparedSurfaceStatus::existing(Some(small.0.clone())).unwrap(),
                 )
                 .unwrap(),
             ],
@@ -779,8 +743,8 @@ mod tests {
         assert_eq!(prepared.loop_momenta[0][0], (&large * &small).0);
         assert_eq!(prepared.external_momenta[0][0], large.0);
         assert_eq!(
-            prepared.surface(0).unwrap().status.threshold_radius(),
-            Some(large.0)
+            prepared.surface(0).unwrap().status,
+            PreparedSurfaceStatus::existing(Some(small.0)).unwrap()
         );
     }
 

@@ -58,7 +58,6 @@ use crate::{
     settings::RuntimeSettings,
     settings::runtime::DiscreteGraphSamplingSettings,
     settings::runtime::DiscreteGraphSamplingType,
-    settings::runtime::HFunctionSettings,
     settings::runtime::IntegratorSettings,
     settings::runtime::ParameterizationSettings,
     settings::runtime::Precision,
@@ -82,7 +81,7 @@ pub use sampling_context::{
     PreparedSurfaceStatus, SamplingCutSide,
 };
 pub use sampling_maps::{
-    ImplicitSurfaceCenterEvaluator, ImplicitSurfaceRadialContextEvaluator,
+    ImplicitSurfaceContextPreparer, ImplicitSurfaceRadialContextEvaluator,
     ImplicitSurfaceRadialEvaluator, ImplicitSurfaceRadialMap, SamplingJacobian,
     SamplingMapAcceptanceReport, SamplingMapAffine, SamplingMapComponent, SamplingMapComposition,
     SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding, SamplingMapEvaluation,
@@ -2691,7 +2690,6 @@ pub trait ProcessIntegrandImpl {
             .sampling
             .get_parameterization_settings()
             .expect("sampling channels require a parameterization");
-        let e_cm = self.get_settings().kinematics.e_cm;
         let externals = self
             .get_settings()
             .kinematics
@@ -2734,7 +2732,7 @@ pub trait ProcessIntegrandImpl {
             let programs = setup.sampling_programs.as_ref().ok_or_else(|| eyre!(
                 "sampling programs for graph '{}' are not initialized; call warm_up", graph.name()
             ))?;
-            let bridge = graph.bind_sampling_bridge(catalogue, programs, &parameterization, e_cm, &external_momenta, None)?;
+            let bridge = graph.bind_sampling_bridge(catalogue, programs, &parameterization, self.get_settings(), &external_momenta, None)?;
             match density_tolerance {
                 Some(tolerance) => bridge.with_relative_density_tolerance(tolerance).map(Some),
                 None => Ok(Some(bridge)),
@@ -3101,9 +3099,8 @@ pub trait GraphTerm {
     fn compile_sampling_bridge<T: FloatLike>(
         &self,
         parameterization_settings: &ParameterizationSettings,
-        e_cm: f64,
+        settings: &RuntimeSettings,
         external_momenta: &[[T; 4]],
-        lu_h_function: &HFunctionSettings,
         orientation: Option<usize>,
     ) -> Result<SamplingChannelBridge<T>> {
         let resolved = resolve_sampling_channel_selection(
@@ -3113,13 +3110,15 @@ pub trait GraphTerm {
         let catalogue = self
             .sampling_setup()
             .sampling_channel_catalogue(&resolved, parameterization_settings)?;
-        let programs =
-            catalogue.compile_programs(3 * self.get_graph().get_loop_number(), lu_h_function)?;
+        let programs = catalogue.compile_programs(
+            3 * self.get_graph().get_loop_number(),
+            &settings.lu_h_function,
+        )?;
         self.bind_sampling_bridge(
             &catalogue,
             &programs,
             parameterization_settings,
-            e_cm,
+            settings,
             external_momenta,
             orientation,
         )
@@ -3132,7 +3131,7 @@ pub trait GraphTerm {
         catalogue: &SamplingChannelCatalogue,
         programs: &[SamplingChannelPrograms],
         parameterization_settings: &ParameterizationSettings,
-        e_cm: f64,
+        settings: &RuntimeSettings,
         external_momenta: &[[T; 4]],
         orientation: Option<usize>,
     ) -> Result<SamplingChannelBridge<T>>;
@@ -3561,7 +3560,7 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
 }
 
 struct StabilityEvaluationContext<'a, 'm> {
-    model: &'a Model,
+    target: EvaluationTarget<'a>,
     source: &'a EvaluationSource<'a>,
     stability_level: &'a StabilityLevelSetting,
     max_eval: &'a Complex<F<f64>>,
@@ -3590,7 +3589,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
 
     let (graph_results, primary_rotation_index, rotated_results) = evaluate_all_rotations(
         integrand,
-        EvaluationTarget::Physical(context.model),
+        context.target,
         &gammaloop_sample,
         context.evaluation_metadata,
         context.is_primary_stability_level,
@@ -3617,7 +3616,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
     let max_eval = complex_from_f64::<T>(context.max_eval);
     let wgt = F::<T>::from_ff64(context.wgt);
 
-    let (average_result, estimated_relative_accuracy, is_stable, _instability_reason) =
+    let (average_result, mut estimated_relative_accuracy, mut is_stable, _instability_reason) =
         if context.check_on_norm {
             stability_check_on_norm(
                 integrand.get_settings(),
@@ -3642,6 +3641,45 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
 
     let mut graph_result = graph_results[primary_rotation_index].clone();
     graph_result.integrand_result = average_result.clone();
+    if matches!(context.target, EvaluationTarget::Reference(_)) {
+        // The Gaussian value and its raw-momentum moment are independent
+        // observables. Reuse the scalar stability owner for the moment too;
+        // agreement of the value alone cannot certify rotation invariance.
+        let moments = graph_results
+            .iter()
+            .map(|result| {
+                result
+                    .reference_moments
+                    .as_ref()
+                    .map(|moments| Complex::new_re(moments.second_moment.clone()))
+                    .ok_or_else(|| eyre!("reference acceptance produced no mapped moment"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let mut moment_level = *context.stability_level;
+        moment_level.required_precision_for_re = moment_level
+            .required_precision_for_re
+            .min(moment_level.required_precision_for_im);
+        moment_level.required_precision_for_im = moment_level.required_precision_for_re;
+        let (moment, accuracy, stable, _) = stability_check(
+            integrand.get_settings(),
+            &moments,
+            &moment_level,
+            Complex::new_re(average_result.re.zero()),
+            F::<T>::from_ff64(context.wgt),
+            context.is_final_level,
+            context.escalate_if_exact_zero,
+        );
+        graph_result
+            .reference_moments
+            .as_mut()
+            .unwrap()
+            .second_moment = moment.re;
+        estimated_relative_accuracy = estimated_relative_accuracy
+            .into_iter()
+            .chain(accuracy)
+            .reduce(|left, right| left.max(right));
+        is_stable &= stable;
+    }
 
     Ok(PreciseStabilityLevelResult {
         result: average_result,
@@ -4317,7 +4355,7 @@ fn log_rotated_samples<I: ProcessIntegrandImpl>(
 
 fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
     integrand: &mut I,
-    model: &Model,
+    target: EvaluationTarget<'_>,
     source: EvaluationSource<'_>,
     wgt: F<f64>,
     use_arb_prec: bool,
@@ -4355,7 +4393,7 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
             .unwrap_or(false);
         let is_primary_stability_level = level_index == 0;
         let mut context = StabilityEvaluationContext {
-            model,
+            target,
             source: &source,
             stability_level: &stability_level,
             max_eval: &max_eval,
@@ -4451,6 +4489,12 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
             Err(error) => return Err(error),
         };
 
+        if matches!(target, EvaluationTarget::Reference(_)) && is_final_level && !is_stable {
+            return Err(eyre!(
+                "reference value or moment remained unstable after the final {} precision level",
+                stability_level.precision
+            ));
+        }
         final_result = Some(result_of_level);
 
         if is_stable {
@@ -4485,8 +4529,15 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
     use_arb_prec: bool,
     max_eval: Complex<F<f64>>,
 ) -> Result<EvaluationResult> {
-    evaluate_from_source_precise(integrand, model, source, wgt, use_arb_prec, max_eval)?
-        .try_into_f64()
+    evaluate_from_source_precise(
+        integrand,
+        EvaluationTarget::Physical(model),
+        source,
+        wgt,
+        use_arb_prec,
+        max_eval,
+    )?
+    .try_into_f64()
 }
 
 fn stability_iterator_for_source<I: ProcessIntegrandImpl>(
@@ -4577,6 +4628,7 @@ fn finalize_precise_evaluation_result<T: FloatLike>(
     apply_full_event_multiplicative_factor_precise(&mut event_groups, &full_factor);
 
     GenericEvaluationResult {
+        reference_moments: result.graph_result.reference_moments,
         integrand_result: nanless_result,
         parameterization_jacobian,
         integrator_weight,
@@ -4618,53 +4670,40 @@ fn evaluate_reference_sample<I: ProcessIntegrandImpl>(
     sample: &Sample<F<f64>>,
     reference: &GaussianReferenceFunction,
 ) -> Result<ReferenceSampleEvaluation> {
-    let source = EvaluationSource::XSpace(sample);
-    let (gamma_sample, parameterization_time) = source.build_gamma_sample::<f64, I>(integrand)?;
-    let mut metadata = EvaluationMetaData::new_empty();
-    let (mut results, primary, _) = evaluate_all_rotations(
+    let result = evaluate_from_source_precise(
         integrand,
         EvaluationTarget::Reference(reference),
-        &gamma_sample,
-        &mut metadata,
-        true,
+        EvaluationSource::XSpace(sample),
+        sample.get_weight(),
         false,
+        Complex::new_zero(),
     )?;
-    let graph_result = results.swap_remove(primary);
-    let moments = graph_result
-        .reference_moments
-        .ok_or_else(|| eyre!("reference acceptance produced no mapped reference contributions"))?;
-    for rotated in results {
-        let rotated_moments = rotated.reference_moments.ok_or_else(|| {
-            eyre!("rotated reference acceptance produced no mapped reference contributions")
-        })?;
-        for (original, rotated) in [
-            (
-                graph_result.integrand_result.re.0,
-                rotated.integrand_result.re.0,
-            ),
-            (moments.second_moment.0, rotated_moments.second_moment.0),
-        ] {
-            let scale = original.abs().max(rotated.abs());
-            if !original.is_finite()
-                || !rotated.is_finite()
-                || (original - rotated).abs() > 1.0e-9 * scale
-            {
+    // Select precision once in the common loop, then narrow its value and
+    // moment together at the existing f64 acceptance reporting boundary.
+    macro_rules! report {
+        ($result:expr) => {{
+            let mut result = $result;
+            if result.evaluation_metadata.is_nan {
                 return Err(eyre!(
-                    "reference sampling is not rotation invariant: {original} versus {rotated}"
+                    "reference acceptance cannot report a nonfinite finalized value"
                 ));
             }
-        }
+            let moments = result
+                .reference_moments
+                .take()
+                .ok_or_else(|| eyre!("reference acceptance produced no mapped moment"))?
+                .try_into_f64()?;
+            Ok(ReferenceSampleEvaluation {
+                evaluation: result.try_into_f64()?,
+                moments,
+            })
+        }};
     }
-    let mut result = EvaluationResult::zero();
-    result.integrand_result = graph_result.integrand_result;
-    result.parameterization_jacobian = Some(gamma_sample.get_default_sample().one());
-    result.integrator_weight = sample.get_weight();
-    metadata.parameterization_time = parameterization_time;
-    result.evaluation_metadata = metadata;
-    Ok(ReferenceSampleEvaluation {
-        evaluation: result,
-        moments,
-    })
+    match result {
+        PreciseEvaluationResult::Double(result) => report!(result),
+        PreciseEvaluationResult::Quad(result) => report!(result),
+        PreciseEvaluationResult::Arb(result) => report!(result),
+    }
 }
 
 fn evaluate_sample_precise<I: ProcessIntegrandImpl>(
@@ -4677,7 +4716,7 @@ fn evaluate_sample_precise<I: ProcessIntegrandImpl>(
 ) -> Result<crate::integrands::evaluation::PreciseEvaluationResult> {
     evaluate_from_source_precise(
         integrand,
-        model,
+        EvaluationTarget::Physical(model),
         EvaluationSource::XSpace(sample),
         wgt,
         use_arb_prec,
@@ -4713,7 +4752,7 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 ) -> Result<crate::integrands::evaluation::PreciseEvaluationResult> {
     evaluate_from_source_precise(
         integrand,
-        model,
+        EvaluationTarget::Physical(model),
         EvaluationSource::Momentum(input),
         wgt,
         use_arb_prec,
@@ -4724,8 +4763,8 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 #[cfg(test)]
 mod tests {
     use super::{
-        HFunctionSettings, LmbMultiChannelingSetup, RuntimeCache, SamplingChannelCompileContext,
-        SamplingChannelId, filtered_orientation_count, resolve_sampling_channel_selection,
+        LmbMultiChannelingSetup, RuntimeCache, SamplingChannelCompileContext, SamplingChannelId,
+        filtered_orientation_count, resolve_sampling_channel_selection,
         resolve_visible_orientation_id, validate_orientation_catalog_group,
         validate_process_runtime_settings,
     };
@@ -4743,9 +4782,9 @@ mod tests {
             RuntimeSettings,
             global::OrientationPattern,
             runtime::{
-                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, MultiChannelingSettings,
-                ParameterizationSettings, SamplingChannelDefinition, SamplingChannelSelection,
-                SamplingSettings,
+                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, HFunctionSettings,
+                MultiChannelingSettings, ParameterizationSettings, SamplingChannelDefinition,
+                SamplingChannelSelection, SamplingSettings,
             },
         },
         utils::F,

@@ -8,6 +8,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use super::sampling_context::PreparedSurfaceStatus;
 use super::sampling_evaluator::{SamplingDualValue, SamplingExpressionEvaluator};
 use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::LoopMomenta;
@@ -1222,18 +1223,19 @@ pub type ImplicitSurfaceRadialEvaluator<T = f64> =
 /// the output of an earlier `then(...)`/complement map and may contain the
 /// sampled spectator loop momenta needed to solve a partial-subspace surface.
 pub type ImplicitSurfaceRadialContextEvaluator<T = f64> =
-    Arc<dyn Fn(&[T], T, &[T]) -> Result<(T, T)> + Send + Sync + 'static>;
+    Arc<dyn Fn(&[T], T, &[T], &[T]) -> Result<(T, T)> + Send + Sync + 'static>;
 
-/// Context-dependent centre of a directional energy-surface chart.
+/// Complement-only centre and existence classification of a directional chart.
 ///
 /// The context is the output of an earlier ordered map (typically a sampled
-/// complement block).  Keeping the centre evaluator separate from the scalar
+/// complement block). Keeping this preparation separate from the scalar
 /// surface evaluator makes the dependency explicit: derivatives with respect
 /// to the active radial coordinates remain block diagonal, while centre and
 /// root changes with the complement occupy only the off-diagonal Jacobian
-/// block.  The returned vector must have the map's active dimension.
-pub type ImplicitSurfaceCenterEvaluator<T = f64> =
-    Arc<dyn Fn(&[T]) -> Result<Vec<T>> + Send + Sync + 'static>;
+/// block. The vector has the active dimension and is passed to each radial
+/// equation evaluation, so an optimizer is never invoked inside the root solve.
+pub type ImplicitSurfaceContextPreparer<T = f64> =
+    Arc<dyn Fn(&[T]) -> Result<(Vec<T>, PreparedSurfaceStatus<T>)> + Send + Sync + 'static>;
 
 /// Native fit and worker-local buffers for the optional LU-scale proposal.
 /// The physical surface and the scalar inversion remain owned by the same
@@ -1271,7 +1273,8 @@ pub struct ImplicitSurfaceRadialMap<T: FloatLike = f64> {
     power: f64,
     evaluator: ImplicitSurfaceRadialEvaluator<T>,
     context_evaluator: Option<ImplicitSurfaceRadialContextEvaluator<T>>,
-    center_evaluator: Option<ImplicitSurfaceCenterEvaluator<T>>,
+    context_preparer: Option<ImplicitSurfaceContextPreparer<T>>,
+    prepared_status: Option<PreparedSurfaceStatus<T>>,
     root_tolerance: f64,
     lu_h_profile: Option<LuHProfile<T>>,
 }
@@ -1285,7 +1288,7 @@ impl<T: FloatLike> std::fmt::Debug for ImplicitSurfaceRadialMap<T> {
             .field("beta", &self.beta)
             .field("power", &self.power)
             .field("context_dependent", &self.context_evaluator.is_some())
-            .field("center_context_dependent", &self.center_evaluator.is_some())
+            .field("center_context_dependent", &self.context_preparer.is_some())
             .field("root_tolerance", &self.root_tolerance)
             .finish_non_exhaustive()
     }
@@ -1330,7 +1333,8 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
             power,
             evaluator,
             context_evaluator: None,
-            center_evaluator: None,
+            context_preparer: None,
+            prepared_status: None,
             root_tolerance: 1.0e-11,
             lu_h_profile: None,
         })
@@ -1347,7 +1351,7 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
     ) -> Result<Self> {
         if self.center.iter().any(|value| *value != value.zero())
             || self.context_evaluator.is_some()
-            || self.center_evaluator.is_some()
+            || self.context_preparer.is_some()
             || max_occurrence == 0
         {
             return Err(eyre!(
@@ -1408,12 +1412,26 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
     /// exact in its active coordinates because the centre depends only on
     /// already sampled context, and therefore contributes no extra diagonal
     /// determinant factor in an ordered composition.
-    pub fn with_context_center_evaluator(
-        mut self,
-        evaluator: ImplicitSurfaceCenterEvaluator<T>,
-    ) -> Self {
-        self.center_evaluator = Some(evaluator);
+    pub fn with_context_preparer(mut self, evaluator: ImplicitSurfaceContextPreparer<T>) -> Self {
+        self.context_preparer = Some(evaluator);
         self
+    }
+
+    /// Freeze a prepared complement at binding time. This is useful for a
+    /// full-active graph surface: center finding runs once during warmup,
+    /// while the same scalar radial engine retains its explicit classification.
+    pub(crate) fn freeze_context(mut self, context: &[T]) -> Result<Self> {
+        let (center, status) = self.prepare_context(context)?;
+        if let Some(evaluator) = self.context_evaluator.take() {
+            let center = center.clone();
+            let context = context.to_vec();
+            self.evaluator =
+                Arc::new(move |direction, radius| evaluator(direction, radius, &center, &context));
+        }
+        self.center = center;
+        self.prepared_status = status;
+        self.context_preparer = None;
+        Ok(self)
     }
 
     pub fn dimension(&self) -> usize {
@@ -1432,11 +1450,27 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
         self.power
     }
 
-    fn center_for_context(&self, context: &[T]) -> Result<Vec<T>> {
-        let center = if let Some(evaluator) = &self.center_evaluator {
-            evaluator(context)?
+    pub(crate) fn prepare_context(
+        &self,
+        context: &[T],
+    ) -> Result<(Vec<T>, Option<PreparedSurfaceStatus<T>>)> {
+        if context.iter().any(|value| !value.is_finite()) {
+            return Err(eyre!("implicit surface context must contain finite values"));
+        }
+        let (center, status) = if let Some(evaluator) = &self.context_preparer {
+            let (center, status) = evaluator(context)?;
+            let status = match status {
+                PreparedSurfaceStatus::Existing { normalized_margin } => {
+                    PreparedSurfaceStatus::existing(normalized_margin)?
+                }
+                PreparedSurfaceStatus::Pinched { normalized_margin } => {
+                    PreparedSurfaceStatus::pinched(normalized_margin)?
+                }
+                PreparedSurfaceStatus::Absent { reason } => PreparedSurfaceStatus::absent(reason)?,
+            };
+            (center, Some(status))
         } else {
-            self.center.clone()
+            (self.center.clone(), self.prepared_status.clone())
         };
         if center.len() != self.dimension {
             return Err(eyre!(
@@ -1450,12 +1484,12 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
                 "implicit surface radial-map context centre must contain only finite values"
             ));
         }
-        Ok(center)
+        Ok((center, status))
     }
 
     pub fn contract(&self) -> SamplingMapContract {
         SamplingMapContract {
-            support: if self.context_evaluator.is_some() || self.center_evaluator.is_some() {
+            support: if self.context_evaluator.is_some() || self.context_preparer.is_some() {
                 SamplingSupport::Conditional
             } else {
                 SamplingSupport::Full
@@ -1475,8 +1509,8 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
     ) -> Result<SamplingMapEvaluation<T>> {
         self.validate_coordinates(coordinates)?;
         let (direction, angular_jacobian) = direction_from_coordinates(coordinates)?;
-        let center = self.center_for_context(context)?;
-        let root = self.root_for_direction(&direction, context)?;
+        let (center, status) = self.prepare_context(context)?;
+        let root = self.root_for_direction(&direction, &center, context, status.as_ref())?;
         let (radius, radial_jacobian) =
             self.radius_from_coordinate(coordinates[0].clone(), root.clone())?;
         let radius = F(radius);
@@ -1529,6 +1563,8 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
                     "lu_h:broad_only_root_not_required".to_owned()
                 } else if root.is_some() {
                     "implicit_surface:regular_root".to_owned()
+                } else if matches!(status, Some(PreparedSurfaceStatus::Pinched { .. })) {
+                    "implicit_surface:pinched_fallback".to_owned()
                 } else {
                     "implicit_surface:absent_fallback".to_owned()
                 }];
@@ -1567,7 +1603,7 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
                 "implicit surface radial-map inverse requires finite momenta"
             ));
         }
-        let center = self.center_for_context(context)?;
+        let (center, status) = self.prepare_context(context)?;
         let displacement = point
             .iter()
             .zip(&center)
@@ -1589,8 +1625,9 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
             .iter()
             .map(|value| (value / &radius).0)
             .collect::<Vec<_>>();
-        let root = self.root_for_direction(&direction, context)?;
-        let (coordinate, radial_jacobian) = self.coordinate_from_radius(radius.0.clone(), root)?;
+        let root = self.root_for_direction(&direction, &center, context, status.as_ref())?;
+        let (coordinate, radial_jacobian) =
+            self.coordinate_from_radius(radius.0.clone(), root.clone())?;
         let mut coordinates = coordinates_from_direction(&direction)?;
         coordinates[0] = coordinate;
         self.validate_coordinates(&coordinates).map_err(|error| {
@@ -1599,14 +1636,23 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
                 detail: error.to_string(),
             }
         })?;
-        let mapped = self.forward_with_context(&coordinates, context)?;
-        let residual = max_coordinate_residual_scalar(point, &mapped.point);
+        // Reuse the prepared fiber and root for the roundtrip diagnostic;
+        // re-entering forward would repeat its complement-only optimization.
+        let (recovered_direction, angular) = direction_from_coordinates(&coordinates)?;
+        let (recovered_radius, _) = self.radius_from_coordinate(coordinates[0].clone(), root)?;
+        let reconstructed = center
+            .iter()
+            .zip(&recovered_direction)
+            .map(|(center, direction)| {
+                (F(center.clone()) + F(recovered_radius.clone()) * F(direction.clone())).0
+            })
+            .collect::<Vec<_>>();
+        let residual = max_coordinate_residual_scalar(point, &reconstructed);
         if !residual.is_finite() {
             return Err(SamplingEvaluationError::Unrepresentable { operation: "radial map", detail: "implicit surface radial-map inverse residual is not representable at the current precision".to_owned() }.into());
         }
         // Evaluate the density at the supplied momentum. Reprojecting its
         // recovered cube coordinate can move it on a sharply varying map.
-        let (_, angular) = direction_from_coordinates(&coordinates)?;
         let jacobian = F(radial_jacobian) * F(angular) * radius.powi(self.dimension as i32 - 1);
         let inverse_jacobian = jacobian.inv();
         if [&jacobian, &inverse_jacobian]
@@ -1627,7 +1673,7 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
             inverse_jacobian: inverse_jacobian.0,
             residual,
             support: self.contract().support,
-            diagnostics: mapped.diagnostics,
+            diagnostics: vec!["implicit_surface:inverse_supplied_radius".to_owned()],
         })
     }
 
@@ -1651,15 +1697,21 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
         Ok(())
     }
 
-    fn evaluate(&self, direction: &[T], radius: T, context: &[T]) -> Result<(T, T)> {
+    fn evaluate(&self, direction: &[T], radius: T, center: &[T], context: &[T]) -> Result<(T, T)> {
         if let Some(evaluator) = &self.context_evaluator {
-            evaluator(direction, radius, context)
+            evaluator(direction, radius, center, context)
         } else {
             (self.evaluator)(direction, radius)
         }
     }
 
-    fn root_for_direction(&self, direction: &[T], context: &[T]) -> Result<Option<(T, T)>> {
+    fn root_for_direction(
+        &self,
+        direction: &[T],
+        center: &[T],
+        context: &[T],
+        status: Option<&PreparedSurfaceStatus<T>>,
+    ) -> Result<Option<(T, T)>> {
         if self
             .lu_h_profile
             .as_ref()
@@ -1668,9 +1720,12 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
             // The normalized raw broad law has no R dependence at all.
             return Ok(None);
         }
+        if status.is_some_and(PreparedSurfaceStatus::uses_full_support_fallback) {
+            return Ok(None);
+        }
         let zero = F(direction[0].zero());
         let (origin_value, origin_derivative) =
-            self.evaluate(direction, zero.0.clone(), context)?;
+            self.evaluate(direction, zero.0.clone(), center, context)?;
         let origin_value = F(origin_value);
         if !origin_value.0.is_finite() || !origin_derivative.is_finite() {
             return Err(SamplingEvaluationError::Unrepresentable {
@@ -1694,6 +1749,12 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
             }.into());
         }
         if origin_value > zero {
+            if status.is_some_and(PreparedSurfaceStatus::is_existing) {
+                return Err(SamplingEvaluationError::UncertainGeometry {
+                    detail: "prepared existing fiber center is not strictly interior".to_owned(),
+                }
+                .into());
+            }
             return Ok(None);
         }
         // Reuse the native bracket-preserving solver. Callback failures keep
@@ -1703,7 +1764,7 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
         let result = safeguarded_newton_iteration_and_derivative(
             &zero,
             &F::<T>::from_f64(self.beta.max(1.0)),
-            |radius| match self.evaluate(direction, radius.0.clone(), context) {
+            |radius| match self.evaluate(direction, radius.0.clone(), center, context) {
                 Ok((value, derivative)) => (F(value), F(derivative)),
                 Err(error) => {
                     *callback_error.borrow_mut() = Some(error);
@@ -3771,6 +3832,63 @@ mod tests {
     }
 
     #[test]
+    fn implicit_fiber_prepares_once_and_preserves_certified_fallbacks() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let preparations = Arc::new(AtomicUsize::new(0));
+        let calls = preparations.clone();
+        let map = ImplicitSurfaceRadialMap::new(
+            3,
+            vec![0.0; 3],
+            2.0,
+            1.0,
+            Arc::new(|_, _| panic!("conditional evaluator required")),
+        )
+        .unwrap()
+        .with_context_preparer(Arc::new(move |context| {
+            calls.fetch_add(1, Ordering::Relaxed);
+            let status = match context[0] {
+                0.0 => PreparedSurfaceStatus::pinched(0.0)?,
+                1.0 => PreparedSurfaceStatus::absent("certified empty fiber")?,
+                _ => PreparedSurfaceStatus::existing(Some(1.0))?,
+            };
+            Ok((vec![context[0], 0.0, 0.0], status))
+        }))
+        .with_context_evaluator(Arc::new(|_, radius, center, context| {
+            assert_eq!(center[0], context[0]);
+            assert!(
+                context[0] > 1.0,
+                "certified fallback must not evaluate a root"
+            );
+            Ok((radius - 1.0, 1.0))
+        }));
+        for context in [0.0, 1.0, 2.0] {
+            let count = preparations.load(Ordering::Relaxed);
+            let forward = map
+                .forward_with_context(&[0.2, 0.3, 0.7], &[context])
+                .unwrap();
+            assert_eq!(preparations.load(Ordering::Relaxed), count + 1);
+            let inverse = map
+                .inverse_with_context(&forward.point, &[context])
+                .unwrap();
+            assert_eq!(preparations.load(Ordering::Relaxed), count + 2);
+            assert!((forward.jacobian * inverse.inverse_jacobian - 1.0).abs() < 1.0e-12);
+            if context < 2.0 {
+                let ordinary = SurfaceRadialMap::new(3, vec![context, 0.0, 0.0], None, 2.0, 1.0)
+                    .unwrap()
+                    .forward(&[F(0.2), F(0.3), F(0.7)])
+                    .unwrap();
+                assert!((forward.jacobian - ordinary.jacobian.0).abs() < 1.0e-12);
+            }
+        }
+        let before = preparations.load(Ordering::Relaxed);
+        let frozen = map.freeze_context(&[2.0]).unwrap();
+        assert_eq!(frozen.contract().support, SamplingSupport::Full);
+        let forward = frozen.forward(&[0.2, 0.3, 0.7]).unwrap();
+        frozen.inverse(&forward.point).unwrap();
+        assert_eq!(preparations.load(Ordering::Relaxed), before + 1);
+    }
+
+    #[test]
     fn implicit_surface_map_accepts_conditional_complement_context() {
         let map = ImplicitSurfaceRadialMap::new(
             3,
@@ -3780,7 +3898,7 @@ mod tests {
             Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
         )
         .unwrap()
-        .with_context_evaluator(Arc::new(|_, radius, context| {
+        .with_context_evaluator(Arc::new(|_, radius, _, context| {
             let shift = context.first().copied().unwrap_or(0.0);
             Ok((radius - (1.0 + shift), 1.0))
         }));
@@ -3815,11 +3933,14 @@ mod tests {
             Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
         )
         .unwrap()
-        .with_context_center_evaluator(Arc::new(|context| {
+        .with_context_preparer(Arc::new(|context| {
             let shift = context.first().copied().unwrap_or(0.0);
-            Ok(vec![shift, 0.0, 0.0])
+            Ok((
+                vec![shift, 0.0, 0.0],
+                PreparedSurfaceStatus::existing(None)?,
+            ))
         }))
-        .with_context_evaluator(Arc::new(|_, radius, context| {
+        .with_context_evaluator(Arc::new(|_, radius, _, context| {
             let shift = context.first().copied().unwrap_or(0.0);
             Ok((radius - (1.0 + shift), 1.0))
         }));
@@ -3864,7 +3985,9 @@ mod tests {
             Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
         )
         .unwrap()
-        .with_context_center_evaluator(Arc::new(|_| Ok(vec![0.0, 0.0])));
+        .with_context_preparer(Arc::new(|_| {
+            Ok((vec![0.0, 0.0], PreparedSurfaceStatus::existing(None)?))
+        }));
         let error = wrong_dimension
             .forward_with_context(&[0.2, 0.3, 0.7], &[])
             .expect_err("wrong-dimensional context centre must fail");
@@ -3882,7 +4005,12 @@ mod tests {
             Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
         )
         .unwrap()
-        .with_context_center_evaluator(Arc::new(|_| Ok(vec![f64::NAN, 0.0, 0.0])));
+        .with_context_preparer(Arc::new(|_| {
+            Ok((
+                vec![f64::NAN, 0.0, 0.0],
+                PreparedSurfaceStatus::existing(None)?,
+            ))
+        }));
         let error = nonfinite
             .forward_with_context(&[0.2, 0.3, 0.7], &[])
             .expect_err("non-finite context centre must fail");
@@ -3903,10 +4031,13 @@ mod tests {
             Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
         )
         .unwrap()
-        .with_context_center_evaluator(Arc::new(|context| {
-            Ok(vec![context.first().copied().unwrap_or(0.0), 0.0, 0.0])
+        .with_context_preparer(Arc::new(|context| {
+            Ok((
+                vec![context.first().copied().unwrap_or(0.0), 0.0, 0.0],
+                PreparedSurfaceStatus::existing(None)?,
+            ))
         }))
-        .with_context_evaluator(Arc::new(|_, radius, context| {
+        .with_context_evaluator(Arc::new(|_, radius, _, context| {
             Ok((
                 radius - (1.0 + context.first().copied().unwrap_or(0.0)),
                 1.0,
@@ -4258,7 +4389,7 @@ mod tests {
             Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
         )
         .unwrap()
-        .with_context_evaluator(Arc::new(|_, radius, context| {
+        .with_context_evaluator(Arc::new(|_, radius, _, context| {
             let shift = context.first().copied().unwrap_or(0.0);
             Ok((radius - (1.0 + shift), 1.0))
         }));

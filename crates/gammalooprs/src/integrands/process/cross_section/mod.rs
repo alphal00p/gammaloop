@@ -1634,10 +1634,11 @@ impl GraphTerm for CrossSectionGraphTerm {
         catalogue: &super::SamplingChannelCatalogue,
         programs: &[super::sampling_selection::SamplingChannelPrograms],
         parameterization_settings: &ParameterizationSettings,
-        e_cm: f64,
+        settings: &RuntimeSettings,
         external_momenta: &[[T; 4]],
         orientation: Option<usize>,
     ) -> Result<SamplingChannelBridge<T>> {
+        let e_cm = settings.kinematics.e_cm;
         let parent_lmb = self
             .multi_channeling_setup
             .graph

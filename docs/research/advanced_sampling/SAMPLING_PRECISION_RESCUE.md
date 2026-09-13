@@ -346,3 +346,34 @@ Newton accuracy handoff. Agree the generic signatures, cache lookup and typed
 error first; complete the first two interfaces before activating native physics.
 Preserve borrowed per-point map/proxy evaluation; only worker ownership clones
 stateful eager storage, never the partition loop.
+
+### Reference-target range remains a separate obligation
+
+Routing the normalized reference through the production native stability loop
+must preserve both its value and moment until the successful precision is
+selected, then check their reporting conversions. This does not by itself fix
+the existing Gaussian body: `exp(-distance_squared/(2*width_squared))` can
+underflow before the map factor is applied. Strictly rejecting every such tail
+would also make the current infinite-volume Gaussian acceptance fixtures fail.
+Retain that limitation explicitly while migrating the shared retry boundary;
+do not call the Gaussian body fully certified merely because map rescue passes.
+
+The accepted plan already requires heavier-tailed normalized references and
+anisotropic/cross-loop probes through the same acceptance owner. Complete those
+probes and address log-domain reference weighting before claiming the entire
+acceptance harness is finished. A numerical error, an unresolved geometry, and
+a deliberately quantified negligible tail are distinct outcomes; a future
+tail policy must not hide an invalid Jacobian or a representable weighted
+contribution lost before multiplication.
+
+### Frozen geometry and the warmup boundary
+
+The conditional-fiber factory freezes empty-complement geometry at binding time.
+A typed numerical failure there, or while checking a derived external shift for
+eligibility, currently aborts transactional warmup and invalidates its partial
+precision caches. The per-draw stability loop cannot rescue an error that occurs
+before evaluation starts. Proper-fiber preparation errors during evaluation do
+enter the existing native retry loop. This is a capability limit, not permission
+to substitute an absent-surface fallback. Extend the existing cache/preparation
+owner to retain retryable precision failures or defer their evaluation while
+preserving one-time successful preparation; do not add a second retry engine.

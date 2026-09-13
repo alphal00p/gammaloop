@@ -32,9 +32,15 @@ retain arbitrary precision. The implicit kernel has a normalized fallback for
 a clearly positive origin residual under its increasing-root contract; that
 alone does not establish global absence. Numerically uncertain origin signs
 raise a precision error, while explicitly classified pinched/absent surfaces
-retain their fallback. The amplitude host classifies existence separately and
-rejects existing surfaces with an unsuitable zero center. Generic interior-center
-selection remains necessary, especially with boosted external kinematics.
+retain their fallback. The amplitude host classifies existence separately. Proper fibers prepare an
+interior center from the sampled complement; full-space maps freeze that
+preparation at warmup. Two-energy rank-one fibers use their analytic convex
+minimum, while general fibers can reuse the existing SOCP center solver. An
+SOCP result is only a candidate: its actual native energy residual must be
+strictly negative. Failed solves or ambiguous minimum signs produce typed
+numerical errors rather than certifying absence. Per-draw errors enter precision
+rescue; errors while binding frozen geometry currently abort transactional
+warmup, so that boundary still needs retry support.
 Soft/collinear primitives and general joint normal/star charts remain unfinished.
 
 A standalone `phase_space(cut(...))` channel now uses the actual graph energy
@@ -134,7 +140,7 @@ gates and independent physical kite/cut localization checks, proceed with the
 bounded power-2 amplitude measurements and report their focusing accuracy.
 Do not delay those numerical measurements for a formal global enclosure proof,
 or describe them as such a proof. Rigorous true-surface asymptotic claims still
-need a justified physical-root enclosure. Native retry in the reference harness
+need a justified physical-root enclosure. Native retry now also covers the reference harness. Gaussian-body underflow
 and final adaptive-grid range handling remain separate acceptance requirements.
 Structural map errors still fail immediately rather than retrying as numerical
 instability.
@@ -153,8 +159,9 @@ warmup publishes the complete set transactionally after improved external data
 are ready. Worker clones own their mutable eager score buffers, and partition
 evaluation borrows those buffers without cloning them per draw. The milestone
 passes all 154 library sampling tests, both saved-state/summed API regressions,
-core/API test checking and clippy; no warnings remain on changed lines. Physical
-variance and throughput measurements remain open.
+core/API test checking and clippy; no warnings remain on changed lines. The bounded frozen-X1 amplitude and GL638 pilots below supply initial physical
+variance and evaluation-cost measurements; equal-time convergence studies remain
+open.
 Runtime cut roots and conditional complements remain
 evaluator inputs, not reasons to rebuild a Symbolica program for each point.
 The audited ownership and invalidation design is recorded in
@@ -167,8 +174,10 @@ full-rank amplitude surfaces now use actual catalogue equations, masses and
 externals in the shared implicit kernel, with rank, frame and ambiguity checks.
 The generated kite regression verifies its genuine six-dimensional C/D surfaces;
 physical propagator sets remain distinct from the common output-coordinate
-frame. Proper subspace/complement registration, arbitrary native parents and
-automatic amplitude surface discovery still require work.
+frame. Explicit proper subspace/complement registration now works in the master parent
+LMB, with active cube axes in canonical parent order. A surface shorthand orders
+the complement first; explicit dependent products are rejected in favor of
+`then`. Arbitrary native parents and automatic amplitude discovery remain open.
 
 Named standalone cut channels now accept `radial_profile="lu_h"` and its expert
 table. They inherit actual runtime h settings, compile the fitted log-logistic
@@ -195,7 +204,58 @@ The saved-state reference test includes two LU-h profiles on the same cut and
 8192 points per fixture. The detailed evidence and reproduction commands are in
 [the X1 ledger](docs/research/advanced_sampling/LU_H_MATCHED_SAMPLING.md#x1-validation-milestone).
 
-These source changes do not establish a GL638 sampling improvement. Conditional
+The conditional-fiber milestone extends the existing implicit map and native
+stability driver. Complement preparation happens once per forward or foreign
+inverse, outside radial root iteration. Analytic minima account for fixed-energy
+terms, boosts and unequal or zero masses; conservative native sign checks include
+large cancelling routing inputs. General centers use the existing SOCP owner and
+native recertification. Only certified absence receives a full-support fallback.
+Known pinched status is supported by the kernel; ambiguous host geometry still
+requires rescue. No separate map engine or channel enumeration is introduced.
+
+Validation for this milestone passes the three focused conditional/native tests,
+the broader 139-test core gate, both saved-state/physical API regressions and all
+11 differential tests. Core/API and Python-feature test checking pass. The final
+lint cleanup replaces two clones of Copy values with copies and uses an iterator
+for the finite-difference test matrix. Formatting and clippy pass with no warnings
+on changed lines.
+
+Gaussian reference values and their raw-frame moments now share the physical
+original-draw precision retry loop. Both observables must pass stability checks;
+reporting rejects nonfinite or unrepresentable native results. This does not yet
+solve underflow inside the Gaussian body: log-domain weighting and heavier-tailed
+normalized probes remain acceptance work.
+
+The frozen X1 all-orientation kite pilot compares 8 LMB channels, one genuine
+six-dimensional surface channel and their union, after Gaussian acceptance.
+The union reduced the pooled reported real-part variance by 27% and largest
+real weight by 48% in three 10,000-draw runs, at about 3% more evaluation time.
+The surface alone worsened both variances; this is bounded pilot evidence, not a
+bounded-weight or asymptotic-convergence claim. Inputs, settings, maxima and
+limitations are retained in
+[the kite matrix](docs/research/advanced_sampling/AMPLITUDE_X1_KITE_MATRIX.md). The corresponding
+[all-98-orientation double-box matrix](docs/research/advanced_sampling/AMPLITUDE_X1_DOUBLE_BOX_MATRIX.md)
+also passes its reference gates and all twelve physical runs. There, the single
+surface reduces reported real variance to 0.346 times the LMB value, while the
+mixture reduces imaginary variance to 0.793 times baseline. Neither channel list
+wins on both components; the reported maxima and cost limits remain part of the
+evidence rather than an automatic-selection prescription. The same frozen binary
+also completes the boosted-kite matrix with all 18 orientations: the mixture's
+reported variance ratios are 0.736 (real) and 0.864 (imaginary), with maxima down
+52% and 25%, at 3.1% more evaluation time. The three prepared graph/frame cases
+now have twelve profile-specific reference checks and 36 physical pilot runs.
+The follow-up uses these existing cases for proper-subspace and equal-time
+comparisons; it does not add more amplitude topologies before cross-section work.
+
+The frozen X1 GL638 pilot retained all 936 orientations and full local/integrated
+UV. Four proposals each ran three paired 2,048-draw seeds on 20 cores with no
+final invalid samples. LU-h reduced one large ordinary-cut excursion, but its
+errors worsened in the other two seeds. Cut-only absolute estimates remain
+strongly undersampled; no reliable efficiency or convergence gain is established.
+[The GL638 pilot](docs/research/advanced_sampling/GL638_X1_PILOT.md) retains exact
+settings, maxima, state hashes and the limitations of this comparison.
+
+These source changes and bounded pilots do not establish a GL638 sampling improvement. Conditional
 sides, physical pinched-root classification, automatic channel construction,
 the complete saved-state acceptance harness and all-orientation GL638 improvement
 remain open. See the independently reviewed
@@ -389,6 +449,29 @@ The detailed cross-section owners, host/block syntax and delivery gates are in
 [CROSS_SECTION_DELIVERY_PATH.md](docs/research/advanced_sampling/CROSS_SECTION_DELIVERY_PATH.md).
 Direct-H pilots begin after one host-bound conditional block works; they do not
 wait for both-side composition or the joint/star infrastructure.
+
+Following the X1 commit `3f9b1a284`, freeze that binary for the first matched
+LU-h/ordinary-cut/LMB comparison and the bounded power-2 amplitude matrix. Build
+it in an isolated checkout while developing the shared conditional-fiber owner
+and native reference retry in the main worktree. Keep the three responsibilities
+separate: cross-section build/pilot, amplitude/reference acceptance, and shared
+fiber geometry. Root integrates and audits their interfaces before the next
+source milestone. Experiments record the frozen source and binary hashes;
+subsequent source edits must not silently change a running comparison.
+
+The next fiber slice reuses `Esurface`, `SubspaceData`, the current implicit
+radial kernel and the existing overlap center solver. The solver may propose a
+center in binary64, but native evaluation must certify it strictly interior.
+Solver failure is not an absence certificate. The current invariant-margin
+classification is not sufficient for every constrained routing; certify its
+applicability or use a justified lower bound. A two-varying-energy fiber provides
+a generic exact-minimum case with complete existing/absent coverage and an
+independent kite/direct-H oracle. More general unresolved cases remain explicit
+until certified. Prepare the center and classification once per complement,
+before directional root iteration. A prepared host's side is optional, and an
+existing surface's radius belongs to the sampled direction, not to a universal
+host record. These are upcoming implementation requirements, not completed
+conditional-cut support.
 
 Production and diagnostic map preparation must use the same dependency graph.
 The current typed prepared-cut records are constructed only in tests: wiring

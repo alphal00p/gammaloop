@@ -1,0 +1,2726 @@
+{
+  "scope": "GL638 X1 pilot; all936 production orientations summed, same complete cut/CT/UV result for every proposal; no finite-variance, convergence or bounded-weight claim",
+  "source_build": {
+    "status": "complete",
+    "source_worktree": "/common/dev/gammaloop_advanced_sampling_x1",
+    "preparation_commit": "882f80eb025a2aa807219cff35cbd70349e28440",
+    "cache_seed": "reflink/copy of main target/dev-optim; distinct inodes; no hardlinks",
+    "target_directory": "/common/dev/gammaloop_advanced_sampling_x1/target",
+    "command": [
+      "cargo",
+      "build",
+      "--profile",
+      "dev-optim",
+      "--locked",
+      "-p",
+      "gammaloop-api",
+      "--bin",
+      "gammaloop",
+      "--features",
+      "ufo_support"
+    ],
+    "jobs": 2,
+    "source_environment": "/tmp/gammaloop-rebase-dev-env.sh",
+    "profile": "dev-optim: core/API opt2, dependencies opt3, no fatLTO",
+    "frozen_checkpoint_unchanged": true,
+    "source_commit": "3f9b1a28473f313d6242a556ada2e8dbcd6f6477",
+    "source_tracked_status_before": "",
+    "started_utc": "2026-09-13T15:58:03.659796+00:00",
+    "returncode": 0,
+    "elapsed_seconds": 1816.0597323189722,
+    "finished_utc": "2026-09-13T16:28:19.719554+00:00",
+    "source_tracked_status_after": "",
+    "binary": "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+    "binary_sha256": "f700ee575153067ccc77894ea776a96f139105812a15014d094dd67ba7db6d61"
+  },
+  "saved_state": {
+    "baseline_artifact": "GL638_CHECKPOINT06D_BASELINE.json",
+    "baseline_sha256": "42037ff35291906be30031fd2b5e5a8a4fc39ff065e11eece2f86702b9608255",
+    "generation_source_commit": "06d470409cd34d8d57afa11b04a3fb208ca20890",
+    "generation_argv": [
+      "/common/dev/gammaloop_advanced_sampling_checkpoint/target/release/gammaloop",
+      "-s",
+      "/common/dev/gl638_checkpoint_06d470409/all/state",
+      "-n",
+      "-l",
+      "info",
+      "-L",
+      "off",
+      "-p",
+      "none",
+      "/common/dev/gammaloop_advanced_sampling_checkpoint/examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO_test_GL638.toml",
+      "run",
+      "-c",
+      "run generate -D generate_cores=20 -D lmb_channel_weight=map_density; display integrand -p epem_a_tth -i NNLO --category orientation; inspect -p epem_a_tth -i NNLO --discrete-dim 0 0 --point 0.23 0.37 0.41 0.29 0.53 0.67 0.43 0.61 0.71 0.31 0.59 0.79 --json-output /common/dev/gl638_checkpoint_06d470409/all/live-xspace.json"
+    ],
+    "input_file_sha256": {
+      "/common/dev/gammaloop_advanced_sampling_checkpoint/examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO_test_GL638.toml": "ab14fb4767e723a737dbca58de438df9e06e22a364c1cec0484951888ff665fe",
+      "/common/dev/gammaloop_advanced_sampling_checkpoint/examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot": "1354c6d854ea66a6298eb1ac9eaad31c3bf8744f0033e83b6e510d0f64602279",
+      "/common/dev/gammaloop_advanced_sampling_checkpoint/assets/models/json/sm/sm.json": "e2d605720392666345939f283b54b0527ddf68890898136f73d27dd976900ed1",
+      "/common/dev/gammaloop_advanced_sampling_checkpoint/assets/models/json/sm/restrict_default.json": "9d357d17c254595dbf612b66d6b531c982eefb71432835360bbfd8b21dcf454b",
+      "/common/dev/gammaloop_advanced_sampling_checkpoint/Cargo.lock": "b61a47c74debca9bfdea2dd5347bd19264bbd0971cb0dba8dfa7298fd1c4da0d"
+    },
+    "final_state_sha256": {
+      "model_parameters.json": "5cf4b422cfe328559dd3cc9322e5e66c264faba54d5d44b4f5772c3a53a43572",
+      "state_manifest.toml": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8",
+      "global_settings.toml": "95f980a1be61490c716972f0ce6abbc681b99f1308fb675b6e07e64d8cef5a94",
+      "justfile": "49ce845fc918f10f5e41e7d3e13bf8ac862707fdd7144db1221167375556d65c",
+      "model.json": "73bd6a7f4ed3c2a6f5ef35520fd39152483e77d947852ca9d02e913c0296395a",
+      "symbolica_state.bin": "202e160c0e5942aed0ee3679d05d558860cdabe88d24e9b8136405d94a179a6a",
+      "default_runtime_settings.toml": "c233c8791f3745ea736f3643dec6366dd67d8ca561e57356f789dbd272c28eb9",
+      "run.toml": "e874689cffe889735e8454bdb77bb7748b7fda091a46a6d9a3fac0b7e160eeab",
+      "processes/cross_sections/epem_a_tth/settings_history.toml": "cb94f2b51e2ab3b7b586268284dc6076bcc370fc1055956439d7782733104163",
+      "processes/cross_sections/epem_a_tth/def.bin": "0fffb787dcb4198728500a56df9c62f3d625766f3e928e012b9685a3a5a974a3",
+      "processes/cross_sections/epem_a_tth/NNLO/cs.bin": "a843eba496ea639d171b1fa5a14284103dd2e6604ca3ccad320014ede23aeda2",
+      "processes/cross_sections/epem_a_tth/NNLO/GL638.dot": "7fd875ea567fa04e009f20015b14ddaea1f89b3915294858313abc3b062e0942",
+      "processes/cross_sections/epem_a_tth/NNLO/generation_summary.json": "66396569b2ebd19988b3a22a55f3f711803478eb254dbd86a58718843fe1a370",
+      "processes/cross_sections/epem_a_tth/NNLO/integrand/settings.toml": "cdb28893b036e54f3a36b5ce18c1b58caa3ecc92525a2a9794153ee39ed4f022",
+      "processes/cross_sections/epem_a_tth/NNLO/integrand/integrand.bin": "a33d3408acb7a2c5b553bd9fb9669061169f23272b9745009d02a28f65d92c7c",
+      "drawings/templates/figure.typ": "4ab1913e6476ef9f49b4a4bdc07d44589124e5030168fb853963990d7b164672",
+      "drawings/templates/edge-style.typ": "0e961db4de2d939cc0bee8fc59fe82850e220cb96a1fe4d7e938bbbd7e9e0789",
+      "drawings/templates/layout.typ": "069a852cd32f4cb519cbd6eebcc94338ca23e561ad59cee454c89a769ea3568e",
+      "drawings/templates/grid.typ": "a2aea8505809f39564ff2d0ebb1a1c9ac9ee3b46b211d57c72e32c1f1f0ca11d",
+      "drawings/templates/crates/linnest/typst/typst.toml": "899f5436fa4211c3e98fe022a7968623782a5648980ade9d0c8c0e6cf6ecdfa0",
+      "drawings/templates/crates/linnest/typst/linnest.wasm": "655d6c2f3dbdac1d6c8ead2113d0cb576a026e3b9e1bc66b7a6c41439e16cd9d",
+      "drawings/templates/crates/linnest/typst/src/lib.typ": "85d9ce54cad4251140acdea0a153a737b465d346b9668665f53c1db2fa6eb200",
+      "drawings/templates/crates/linnest/typst/src/draw.typ": "7029235345346572dcf7dcd26cf947c9516efdd9828a183d8613b60c6ad8e22f",
+      "drawings/templates/crates/linnest/typst/src/graph.typ": "3b332b75f3212458ef4815010f5ff645c762d09a1fd9798c9637636590f0f392",
+      "drawings/templates/crates/linnest/typst/src/physics-edge-style.typ": "854530edde9152b8adb01cf8e097c4107f0277ac175f6e47c37df97ada735cd7",
+      "drawings/templates/crates/linnest/typst/src/subgraph.typ": "d318d5e98e902e06f412cd8a1f45ebc6f6c8218a7c4063bf3582333616122c53",
+      "drawings/templates/crates/linnest/typst/src/layout.typ": "3c06a8413a62fe124c0731fcb6e0ad354051214d055a682520df5c4186d8301c",
+      "drawings/templates/crates/linnest/typst/src/curve.typ": "4350dfbe4a8e825396e4f476731b9862935d87fb6630c24425350f4071b9e590",
+      "drawings/templates/crates/linnest/typst/src/impl/physics-edge-style.typ": "1e13992babc10e7310fe24bfe0e4f4f67c5ea51afaf08b413418f4d88d269965",
+      "drawings/templates/crates/linnest/typst/src/impl/graph.typ": "1dc82dd0099c0810036992a378042a33f5c162fd919d08d79cf218b8716c08dd",
+      "drawings/templates/crates/linnest/typst/src/impl/draw.typ": "0acb9d50e9f6ac24dbe5b3c9727e3ec4c65843d4dbce57ba5c4f973a0b75f682",
+      "drawings/templates/crates/kurvst/typst/kurvst.wasm": "50619c0dbe6ec78538f9e8a8587b5b8ad33d464672dec974c2c53ab93f7ebd15",
+      "drawings/templates/crates/kurvst/typst/typst.toml": "0d7eec512c399c0beeee8402393b32e489856fbdeb30945feff0ed298dd8bbbd",
+      "drawings/templates/crates/kurvst/typst/src/impl.typ": "0feab4012862ea5020e4bc833861f333d0f68ea2fc3b5420af5709edeaaf10d8",
+      "drawings/templates/crates/kurvst/typst/src/lib.typ": "90fd7952020cb3162f95acb47389e1dafc0516d03d085fa780b084904e9ad636"
+    },
+    "state_unchanged": true,
+    "orientations": 936,
+    "orientation_filter": null,
+    "cut_ids_and_edges": [
+      {
+        "cut_id": 0,
+        "edges": [
+          2,
+          6,
+          12,
+          13
+        ],
+        "max_occurrence": 1
+      },
+      {
+        "cut_id": 1,
+        "edges": [
+          2,
+          6,
+          10
+        ],
+        "max_occurrence": 1
+      },
+      {
+        "cut_id": 2,
+        "edges": [
+          2,
+          6,
+          7,
+          13,
+          14
+        ],
+        "max_occurrence": 1
+      },
+      {
+        "cut_id": 3,
+        "edges": [
+          2,
+          4,
+          12
+        ],
+        "max_occurrence": 1
+      },
+      {
+        "cut_id": 4,
+        "edges": [
+          2,
+          4,
+          10,
+          13
+        ],
+        "max_occurrence": 1
+      },
+      {
+        "cut_id": 5,
+        "edges": [
+          2,
+          4,
+          7,
+          14
+        ],
+        "max_occurrence": 1
+      }
+    ],
+    "parent_lmb": [
+      3,
+      4,
+      7,
+      10
+    ],
+    "threshold_counts": {
+      "explicit_directive_count": 9,
+      "resolved_variant_count": 19,
+      "component_count": 54,
+      "evaluator_count": 4,
+      "all_generated": true,
+      "all_active": true
+    },
+    "local_uv_route": "3D",
+    "integrated_uv": true
+  },
+  "configuration": {
+    "cores": 20,
+    "seeds": [
+      1337,
+      7331,
+      424242
+    ],
+    "samples_per_run": 2048,
+    "iterations": 1,
+    "fresh_uniform_grids": true,
+    "total_draws": 24576,
+    "explicit_six_equals_optimized_basis_ids": [
+      1,
+      2,
+      13,
+      14,
+      21,
+      22
+    ],
+    "cards": {
+      "canonical_six_lmb": {
+        "toml": "# Prepared X1 pilot. Same full physical cut and threshold-CT sum in every mode.\n[general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\ngenerate_events = false\nstore_additional_weights_in_event = false\n\n[kinematics]\ne_cm = 1000.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]\nhelicities = [\"summed_averaged\", \"summed_averaged\"]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2048\nn_increase = 0\nn_max = 2048\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\nintegrated_phase = \"real\"\ntrain_on_avg = false\n\n[stability]\nescalate_if_exact_zero = false\ncheck_on_norm = true\n\n[[stability.rotation_axis]]\ntype = \"euler_angles\"\nalpha = 0.1\nbeta = 0.2\ngamma = 0.3\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 1e-06\nrequired_precision_for_im = 1e-06\nescalate_for_large_weight_threshold = 0.9\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 1e-10\nrequired_precision_for_im = 1e-10\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 1e-12\nrequired_precision_for_im = 1e-12\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ndefault_channel_selection = []\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\nb = 0.3\norientations = \"summed\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\npower = 1.0\n\n[sampling.channel_selection]\nGL638 = [\"soft_6_12\", \"soft_4_12\", \"soft_6_7\", \"soft_4_7\", \"soft_6_10\", \"soft_4_10\"]\n\n[subtraction]\nesurface_existence_threshold = 1e-14\ndisable_threshold_subtraction = false\n\n[subtraction.local_ct_settings]\n\n[subtraction.local_ct_settings.uv_localisation]\ngaussian_width = 1.0\nsliver_width = 10.0\nsmooth_sliver = false\ndynamic_width = false\nforce_uv_dampers_to_one = false\n\n[h_function]\nfunction = \"poly_exponential\"\nsigma = 1.0\npower = 3\n\n[sampling.channel_definitions.GL638.soft_6_12]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,12,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_12]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,12,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_6_7]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,7,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_7]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,7,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_6_10]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,10,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_10]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,10,13,14)\"\n\n[sampling.channel_definitions.GL638.lu_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [0]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [1]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [2]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [3]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [4]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [5]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n",
+        "sha256": "05fe413521bc1b5efb94bb8996d8c518d50fac5ed77b37b22708d3c648c6387d"
+      },
+      "optimized_lmb": {
+        "toml": "# Prepared X1 pilot. Same full physical cut and threshold-CT sum in every mode.\n[general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\ngenerate_events = false\nstore_additional_weights_in_event = false\n\n[kinematics]\ne_cm = 1000.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]\nhelicities = [\"summed_averaged\", \"summed_averaged\"]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2048\nn_increase = 0\nn_max = 2048\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\nintegrated_phase = \"real\"\ntrain_on_avg = false\n\n[stability]\nescalate_if_exact_zero = false\ncheck_on_norm = true\n\n[[stability.rotation_axis]]\ntype = \"euler_angles\"\nalpha = 0.1\nbeta = 0.2\ngamma = 0.3\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 1e-06\nrequired_precision_for_im = 1e-06\nescalate_for_large_weight_threshold = 0.9\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 1e-10\nrequired_precision_for_im = 1e-10\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 1e-12\nrequired_precision_for_im = 1e-12\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ndefault_channel_selection = []\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\nb = 0.3\norientations = \"summed\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\npower = 1.0\n\n[sampling.channel_selection]\nGL638 = [\"auto:optimized_lmb\"]\n\n[subtraction]\nesurface_existence_threshold = 1e-14\ndisable_threshold_subtraction = false\n\n[subtraction.local_ct_settings]\n\n[subtraction.local_ct_settings.uv_localisation]\ngaussian_width = 1.0\nsliver_width = 10.0\nsmooth_sliver = false\ndynamic_width = false\nforce_uv_dampers_to_one = false\n\n[h_function]\nfunction = \"poly_exponential\"\nsigma = 1.0\npower = 3\n\n[sampling.channel_definitions.GL638.soft_6_12]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,12,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_12]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,12,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_6_7]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,7,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_7]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,7,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_6_10]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,10,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_10]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,10,13,14)\"\n\n[sampling.channel_definitions.GL638.lu_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [0]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [1]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [2]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [3]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [4]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [5]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n",
+        "sha256": "751b9049534d7854390d51fa8d7d66886bd2c615b56a5f624ecc98718a62305c"
+      },
+      "cut_radial_power_one": {
+        "toml": "# Prepared X1 pilot. Same full physical cut and threshold-CT sum in every mode.\n[general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\ngenerate_events = false\nstore_additional_weights_in_event = false\n\n[kinematics]\ne_cm = 1000.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]\nhelicities = [\"summed_averaged\", \"summed_averaged\"]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2048\nn_increase = 0\nn_max = 2048\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\nintegrated_phase = \"real\"\ntrain_on_avg = false\n\n[stability]\nescalate_if_exact_zero = false\ncheck_on_norm = true\n\n[[stability.rotation_axis]]\ntype = \"euler_angles\"\nalpha = 0.1\nbeta = 0.2\ngamma = 0.3\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 1e-06\nrequired_precision_for_im = 1e-06\nescalate_for_large_weight_threshold = 0.9\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 1e-10\nrequired_precision_for_im = 1e-10\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 1e-12\nrequired_precision_for_im = 1e-12\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ndefault_channel_selection = []\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\nb = 0.3\norientations = \"summed\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\npower = 1.0\n\n[sampling.channel_selection]\nGL638 = [\"radial_cut_0\", \"radial_cut_1\", \"radial_cut_2\", \"radial_cut_3\", \"radial_cut_4\", \"radial_cut_5\"]\n\n[subtraction]\nesurface_existence_threshold = 1e-14\ndisable_threshold_subtraction = false\n\n[subtraction.local_ct_settings]\n\n[subtraction.local_ct_settings.uv_localisation]\ngaussian_width = 1.0\nsliver_width = 10.0\nsmooth_sliver = false\ndynamic_width = false\nforce_uv_dampers_to_one = false\n\n[h_function]\nfunction = \"poly_exponential\"\nsigma = 1.0\npower = 3\n\n[sampling.channel_definitions.GL638.soft_6_12]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,12,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_12]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,12,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_6_7]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,7,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_7]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,7,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_6_10]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,10,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_10]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,10,13,14)\"\n\n[sampling.channel_definitions.GL638.radial_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [0]\n\n[sampling.channel_definitions.GL638.radial_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [1]\n\n[sampling.channel_definitions.GL638.radial_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [2]\n\n[sampling.channel_definitions.GL638.radial_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [3]\n\n[sampling.channel_definitions.GL638.radial_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [4]\n\n[sampling.channel_definitions.GL638.radial_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [5]\n",
+        "sha256": "f2765ca0e4e92d48438e41e9eb871125d9f5468adf67ba16152e9935f72ca559"
+      },
+      "lu_h_six_cuts": {
+        "toml": "# Prepared X1 pilot. Same full physical cut and threshold-CT sum in every mode.\n[general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\ngenerate_events = false\nstore_additional_weights_in_event = false\n\n[kinematics]\ne_cm = 1000.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]\nhelicities = [\"summed_averaged\", \"summed_averaged\"]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2048\nn_increase = 0\nn_max = 2048\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\nintegrated_phase = \"real\"\ntrain_on_avg = false\n\n[stability]\nescalate_if_exact_zero = false\ncheck_on_norm = true\n\n[[stability.rotation_axis]]\ntype = \"euler_angles\"\nalpha = 0.1\nbeta = 0.2\ngamma = 0.3\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 1e-06\nrequired_precision_for_im = 1e-06\nescalate_for_large_weight_threshold = 0.9\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 1e-10\nrequired_precision_for_im = 1e-10\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 1e-12\nrequired_precision_for_im = 1e-12\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ndefault_channel_selection = []\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\nb = 0.3\norientations = \"summed\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\npower = 1.0\n\n[sampling.channel_selection]\nGL638 = [\"lu_cut_0\", \"lu_cut_1\", \"lu_cut_2\", \"lu_cut_3\", \"lu_cut_4\", \"lu_cut_5\"]\n\n[subtraction]\nesurface_existence_threshold = 1e-14\ndisable_threshold_subtraction = false\n\n[subtraction.local_ct_settings]\n\n[subtraction.local_ct_settings.uv_localisation]\ngaussian_width = 1.0\nsliver_width = 10.0\nsmooth_sliver = false\ndynamic_width = false\nforce_uv_dampers_to_one = false\n\n[h_function]\nfunction = \"poly_exponential\"\nsigma = 1.0\npower = 3\n\n[sampling.channel_definitions.GL638.soft_6_12]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,12,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_12]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,12,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_6_7]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,7,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_7]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,7,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_6_10]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,10,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_10]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,10,13,14)\"\n\n[sampling.channel_definitions.GL638.lu_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [0]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [1]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [2]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [3]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [4]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [5]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n",
+        "sha256": "cb262fb7a03db170d872418622dfbddcfb7667db6f8d9b1ff402405157cd4c8d"
+      },
+      "lu_h_plus_optimized": {
+        "toml": "# Prepared X1 pilot. Same full physical cut and threshold-CT sum in every mode.\n[general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\ngenerate_events = false\nstore_additional_weights_in_event = false\n\n[kinematics]\ne_cm = 1000.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]\nhelicities = [\"summed_averaged\", \"summed_averaged\"]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2048\nn_increase = 0\nn_max = 2048\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\nintegrated_phase = \"real\"\ntrain_on_avg = false\n\n[stability]\nescalate_if_exact_zero = false\ncheck_on_norm = true\n\n[[stability.rotation_axis]]\ntype = \"euler_angles\"\nalpha = 0.1\nbeta = 0.2\ngamma = 0.3\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 1e-06\nrequired_precision_for_im = 1e-06\nescalate_for_large_weight_threshold = 0.9\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 1e-10\nrequired_precision_for_im = 1e-10\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 1e-12\nrequired_precision_for_im = 1e-12\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ndefault_channel_selection = []\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\nb = 0.3\norientations = \"summed\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\npower = 1.0\n\n[sampling.channel_selection]\nGL638 = [\"lu_cut_0\", \"lu_cut_1\", \"lu_cut_2\", \"lu_cut_3\", \"lu_cut_4\", \"lu_cut_5\", \"auto:optimized_lmb\"]\n\n[subtraction]\nesurface_existence_threshold = 1e-14\ndisable_threshold_subtraction = false\n\n[subtraction.local_ct_settings]\n\n[subtraction.local_ct_settings.uv_localisation]\ngaussian_width = 1.0\nsliver_width = 10.0\nsmooth_sliver = false\ndynamic_width = false\nforce_uv_dampers_to_one = false\n\n[h_function]\nfunction = \"poly_exponential\"\nsigma = 1.0\npower = 3\n\n[sampling.channel_definitions.GL638.soft_6_12]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,12,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_12]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,12,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_6_7]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,7,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_7]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,7,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_6_10]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(6,10,13,14)\"\n\n[sampling.channel_definitions.GL638.soft_4_10]\nparent_lmb = [3, 4, 7, 10]\naround = \"lmb(4,10,13,14)\"\n\n[sampling.channel_definitions.GL638.lu_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [0]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [1]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [2]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [3]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [4]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n\n[sampling.channel_definitions.GL638.lu_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nparent_lmb = [3, 4, 7, 10]\nsubspace_lmb = [3, 4, 7, 10]\non_cut = [5]\nradial_profile = { kind = \"lu_h\", approximation = \"log_logistic\", broad_fraction = 0.02 }\n",
+        "sha256": "ebc8460b2391c7120501b17ef6cdba8c62f824042d3f113df4849afdef6f1a04"
+      }
+    },
+    "resolved_settings_by_mode": {
+      "canonical_six_lmb": {
+        "saved_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\n\n[kinematics]\ne_cm = 1000.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    500.0,\n    0.0,\n    0.0,\n    500.0,\n],\n    [\n    500.0,\n    0.0,\n    0.0,\n    -500.0,\n],\n]\nhelicities = [\n    \"summed_averaged\",\n    \"summed_averaged\",\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2048\nn_increase = 0\nn_max = 2048\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = 0.9\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nb = 0.3\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[sampling.channel_selection]\nGL638 = [\n    \"soft_6_12\",\n    \"soft_4_12\",\n    \"soft_6_7\",\n    \"soft_4_7\",\n    \"soft_6_10\",\n    \"soft_4_10\",\n]\n\n[sampling.channel_definitions.GL638.lu_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [0]\n\n[sampling.channel_definitions.GL638.lu_cut_0.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [1]\n\n[sampling.channel_definitions.GL638.lu_cut_1.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [2]\n\n[sampling.channel_definitions.GL638.lu_cut_2.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [3]\n\n[sampling.channel_definitions.GL638.lu_cut_3.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [4]\n\n[sampling.channel_definitions.GL638.lu_cut_4.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [5]\n\n[sampling.channel_definitions.GL638.lu_cut_5.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.radial_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [0]\n\n[sampling.channel_definitions.GL638.radial_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [1]\n\n[sampling.channel_definitions.GL638.radial_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [2]\n\n[sampling.channel_definitions.GL638.radial_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [3]\n\n[sampling.channel_definitions.GL638.radial_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [4]\n\n[sampling.channel_definitions.GL638.radial_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [5]\n\n[sampling.channel_definitions.GL638.soft_4_10]\naround = \"lmb(4,10,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_4_12]\naround = \"lmb(4,12,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_4_7]\naround = \"lmb(4,7,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_6_10]\naround = \"lmb(6,10,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_6_12]\naround = \"lmb(6,12,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_6_7]\naround = \"lmb(6,7,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[subtraction]\nesurface_existence_threshold = 0.00000000000001\n\n[h_function]\npower = 3\n",
+        "saved_default_elision": "GammaLoop omits runtime defaults in these files; full effective settings are printed before each integration in the retained CLI log. Explicit input cards retain every steered sampling/physics option.",
+        "active_channels": [
+          {
+            "name": "soft_6_12",
+            "around": "lmb(6,12,13,14)",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [],
+            "on_cut": [],
+            "radial_profile": null
+          },
+          {
+            "name": "soft_4_12",
+            "around": "lmb(4,12,13,14)",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [],
+            "on_cut": [],
+            "radial_profile": null
+          },
+          {
+            "name": "soft_6_7",
+            "around": "lmb(6,7,13,14)",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [],
+            "on_cut": [],
+            "radial_profile": null
+          },
+          {
+            "name": "soft_4_7",
+            "around": "lmb(4,7,13,14)",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [],
+            "on_cut": [],
+            "radial_profile": null
+          },
+          {
+            "name": "soft_6_10",
+            "around": "lmb(6,10,13,14)",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [],
+            "on_cut": [],
+            "radial_profile": null
+          },
+          {
+            "name": "soft_4_10",
+            "around": "lmb(4,10,13,14)",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [],
+            "on_cut": [],
+            "radial_profile": null
+          }
+        ]
+      },
+      "cut_radial_power_one": {
+        "saved_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\n\n[kinematics]\ne_cm = 1000.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    500.0,\n    0.0,\n    0.0,\n    500.0,\n],\n    [\n    500.0,\n    0.0,\n    0.0,\n    -500.0,\n],\n]\nhelicities = [\n    \"summed_averaged\",\n    \"summed_averaged\",\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2048\nn_increase = 0\nn_max = 2048\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = 0.9\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nb = 0.3\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[sampling.channel_selection]\nGL638 = [\n    \"radial_cut_0\",\n    \"radial_cut_1\",\n    \"radial_cut_2\",\n    \"radial_cut_3\",\n    \"radial_cut_4\",\n    \"radial_cut_5\",\n]\n\n[sampling.channel_definitions.GL638.lu_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [0]\n\n[sampling.channel_definitions.GL638.lu_cut_0.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [1]\n\n[sampling.channel_definitions.GL638.lu_cut_1.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [2]\n\n[sampling.channel_definitions.GL638.lu_cut_2.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [3]\n\n[sampling.channel_definitions.GL638.lu_cut_3.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [4]\n\n[sampling.channel_definitions.GL638.lu_cut_4.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [5]\n\n[sampling.channel_definitions.GL638.lu_cut_5.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.radial_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [0]\n\n[sampling.channel_definitions.GL638.radial_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [1]\n\n[sampling.channel_definitions.GL638.radial_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [2]\n\n[sampling.channel_definitions.GL638.radial_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [3]\n\n[sampling.channel_definitions.GL638.radial_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [4]\n\n[sampling.channel_definitions.GL638.radial_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [5]\n\n[sampling.channel_definitions.GL638.soft_4_10]\naround = \"lmb(4,10,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_4_12]\naround = \"lmb(4,12,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_4_7]\naround = \"lmb(4,7,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_6_10]\naround = \"lmb(6,10,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_6_12]\naround = \"lmb(6,12,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_6_7]\naround = \"lmb(6,7,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[subtraction]\nesurface_existence_threshold = 0.00000000000001\n\n[h_function]\npower = 3\n",
+        "saved_default_elision": "GammaLoop omits runtime defaults in these files; full effective settings are printed before each integration in the retained CLI log. Explicit input cards retain every steered sampling/physics option.",
+        "active_channels": [
+          {
+            "name": "radial_cut_0",
+            "around": "phase_space(cut(2,6,12,13))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              0
+            ],
+            "radial_profile": null
+          },
+          {
+            "name": "radial_cut_1",
+            "around": "phase_space(cut(2,6,10))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              1
+            ],
+            "radial_profile": null
+          },
+          {
+            "name": "radial_cut_2",
+            "around": "phase_space(cut(2,6,7,13,14))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              2
+            ],
+            "radial_profile": null
+          },
+          {
+            "name": "radial_cut_3",
+            "around": "phase_space(cut(2,4,12))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              3
+            ],
+            "radial_profile": null
+          },
+          {
+            "name": "radial_cut_4",
+            "around": "phase_space(cut(2,4,10,13))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              4
+            ],
+            "radial_profile": null
+          },
+          {
+            "name": "radial_cut_5",
+            "around": "phase_space(cut(2,4,7,14))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              5
+            ],
+            "radial_profile": null
+          }
+        ]
+      },
+      "lu_h_six_cuts": {
+        "saved_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\n\n[kinematics]\ne_cm = 1000.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    500.0,\n    0.0,\n    0.0,\n    500.0,\n],\n    [\n    500.0,\n    0.0,\n    0.0,\n    -500.0,\n],\n]\nhelicities = [\n    \"summed_averaged\",\n    \"summed_averaged\",\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2048\nn_increase = 0\nn_max = 2048\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = 0.9\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nb = 0.3\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[sampling.channel_selection]\nGL638 = [\n    \"lu_cut_0\",\n    \"lu_cut_1\",\n    \"lu_cut_2\",\n    \"lu_cut_3\",\n    \"lu_cut_4\",\n    \"lu_cut_5\",\n]\n\n[sampling.channel_definitions.GL638.lu_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [0]\n\n[sampling.channel_definitions.GL638.lu_cut_0.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [1]\n\n[sampling.channel_definitions.GL638.lu_cut_1.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [2]\n\n[sampling.channel_definitions.GL638.lu_cut_2.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [3]\n\n[sampling.channel_definitions.GL638.lu_cut_3.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [4]\n\n[sampling.channel_definitions.GL638.lu_cut_4.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [5]\n\n[sampling.channel_definitions.GL638.lu_cut_5.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.radial_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [0]\n\n[sampling.channel_definitions.GL638.radial_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [1]\n\n[sampling.channel_definitions.GL638.radial_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [2]\n\n[sampling.channel_definitions.GL638.radial_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [3]\n\n[sampling.channel_definitions.GL638.radial_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [4]\n\n[sampling.channel_definitions.GL638.radial_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [5]\n\n[sampling.channel_definitions.GL638.soft_4_10]\naround = \"lmb(4,10,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_4_12]\naround = \"lmb(4,12,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_4_7]\naround = \"lmb(4,7,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_6_10]\naround = \"lmb(6,10,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_6_12]\naround = \"lmb(6,12,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_6_7]\naround = \"lmb(6,7,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[subtraction]\nesurface_existence_threshold = 0.00000000000001\n\n[h_function]\npower = 3\n",
+        "saved_default_elision": "GammaLoop omits runtime defaults in these files; full effective settings are printed before each integration in the retained CLI log. Explicit input cards retain every steered sampling/physics option.",
+        "active_channels": [
+          {
+            "name": "lu_cut_0",
+            "around": "phase_space(cut(2,6,12,13))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              0
+            ],
+            "radial_profile": {
+              "kind": "lu_h",
+              "broad_fraction": 0.02
+            }
+          },
+          {
+            "name": "lu_cut_1",
+            "around": "phase_space(cut(2,6,10))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              1
+            ],
+            "radial_profile": {
+              "kind": "lu_h",
+              "broad_fraction": 0.02
+            }
+          },
+          {
+            "name": "lu_cut_2",
+            "around": "phase_space(cut(2,6,7,13,14))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              2
+            ],
+            "radial_profile": {
+              "kind": "lu_h",
+              "broad_fraction": 0.02
+            }
+          },
+          {
+            "name": "lu_cut_3",
+            "around": "phase_space(cut(2,4,12))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              3
+            ],
+            "radial_profile": {
+              "kind": "lu_h",
+              "broad_fraction": 0.02
+            }
+          },
+          {
+            "name": "lu_cut_4",
+            "around": "phase_space(cut(2,4,10,13))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              4
+            ],
+            "radial_profile": {
+              "kind": "lu_h",
+              "broad_fraction": 0.02
+            }
+          },
+          {
+            "name": "lu_cut_5",
+            "around": "phase_space(cut(2,4,7,14))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              5
+            ],
+            "radial_profile": {
+              "kind": "lu_h",
+              "broad_fraction": 0.02
+            }
+          }
+        ]
+      },
+      "lu_h_plus_optimized": {
+        "saved_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/3f9b1a28473f313d6242a556ada2e8dbcd6f6477/assets/schemas/runtime.json\n[general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\n\n[kinematics]\ne_cm = 1000.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    500.0,\n    0.0,\n    0.0,\n    500.0,\n],\n    [\n    500.0,\n    0.0,\n    0.0,\n    -500.0,\n],\n]\nhelicities = [\n    \"summed_averaged\",\n    \"summed_averaged\",\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2048\nn_increase = 0\nn_max = 2048\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = 0.9\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nb = 0.3\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[sampling.channel_selection]\nGL638 = [\n    \"lu_cut_0\",\n    \"lu_cut_1\",\n    \"lu_cut_2\",\n    \"lu_cut_3\",\n    \"lu_cut_4\",\n    \"lu_cut_5\",\n    \"auto:optimized_lmb\",\n]\n\n[sampling.channel_definitions.GL638.lu_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [0]\n\n[sampling.channel_definitions.GL638.lu_cut_0.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [1]\n\n[sampling.channel_definitions.GL638.lu_cut_1.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [2]\n\n[sampling.channel_definitions.GL638.lu_cut_2.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [3]\n\n[sampling.channel_definitions.GL638.lu_cut_3.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [4]\n\n[sampling.channel_definitions.GL638.lu_cut_4.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.lu_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [5]\n\n[sampling.channel_definitions.GL638.lu_cut_5.radial_profile]\nkind = \"lu_h\"\nbroad_fraction = 0.02\n\n[sampling.channel_definitions.GL638.radial_cut_0]\naround = \"phase_space(cut(2,6,12,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [0]\n\n[sampling.channel_definitions.GL638.radial_cut_1]\naround = \"phase_space(cut(2,6,10))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [1]\n\n[sampling.channel_definitions.GL638.radial_cut_2]\naround = \"phase_space(cut(2,6,7,13,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [2]\n\n[sampling.channel_definitions.GL638.radial_cut_3]\naround = \"phase_space(cut(2,4,12))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [3]\n\n[sampling.channel_definitions.GL638.radial_cut_4]\naround = \"phase_space(cut(2,4,10,13))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [4]\n\n[sampling.channel_definitions.GL638.radial_cut_5]\naround = \"phase_space(cut(2,4,7,14))\"\nsubspace_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = [5]\n\n[sampling.channel_definitions.GL638.soft_4_10]\naround = \"lmb(4,10,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_4_12]\naround = \"lmb(4,12,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_4_7]\naround = \"lmb(4,7,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_6_10]\naround = \"lmb(6,10,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_6_12]\naround = \"lmb(6,12,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[sampling.channel_definitions.GL638.soft_6_7]\naround = \"lmb(6,7,13,14)\"\nsubspace_lmb = []\nparent_lmb = [\n    3,\n    4,\n    7,\n    10,\n]\non_cut = []\n\n[subtraction]\nesurface_existence_threshold = 0.00000000000001\n\n[h_function]\npower = 3\n",
+        "saved_default_elision": "GammaLoop omits runtime defaults in these files; full effective settings are printed before each integration in the retained CLI log. Explicit input cards retain every steered sampling/physics option.",
+        "active_channels": [
+          {
+            "name": "lu_cut_0",
+            "around": "phase_space(cut(2,6,12,13))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              0
+            ],
+            "radial_profile": {
+              "kind": "lu_h",
+              "broad_fraction": 0.02
+            }
+          },
+          {
+            "name": "lu_cut_1",
+            "around": "phase_space(cut(2,6,10))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              1
+            ],
+            "radial_profile": {
+              "kind": "lu_h",
+              "broad_fraction": 0.02
+            }
+          },
+          {
+            "name": "lu_cut_2",
+            "around": "phase_space(cut(2,6,7,13,14))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              2
+            ],
+            "radial_profile": {
+              "kind": "lu_h",
+              "broad_fraction": 0.02
+            }
+          },
+          {
+            "name": "lu_cut_3",
+            "around": "phase_space(cut(2,4,12))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              3
+            ],
+            "radial_profile": {
+              "kind": "lu_h",
+              "broad_fraction": 0.02
+            }
+          },
+          {
+            "name": "lu_cut_4",
+            "around": "phase_space(cut(2,4,10,13))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              4
+            ],
+            "radial_profile": {
+              "kind": "lu_h",
+              "broad_fraction": 0.02
+            }
+          },
+          {
+            "name": "lu_cut_5",
+            "around": "phase_space(cut(2,4,7,14))",
+            "parent_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "subspace_lmb": [
+              3,
+              4,
+              7,
+              10
+            ],
+            "on_cut": [
+              5
+            ],
+            "radial_profile": {
+              "kind": "lu_h",
+              "broad_fraction": 0.02
+            }
+          },
+          {
+            "name": "auto:optimized_lmb",
+            "resolved_basis_ids": [
+              1,
+              2,
+              13,
+              14,
+              21,
+              22
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "execution": {
+    "argv": [
+      "/common/dev/gammaloop_advanced_sampling_x1/target/dev-optim/gammaloop",
+      "-s",
+      "/common/dev/gl638_checkpoint_06d470409/all/state",
+      "--read-only-state",
+      "-n",
+      "-l",
+      "info",
+      "-L",
+      "off",
+      "-p",
+      "none",
+      "run",
+      "-c",
+      "display integrand -p epem_a_tth -i NNLO --category generation orientation cuts --show-threshold-functions; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/canonical_six_lmb.toml; display settings process -p epem_a_tth -i NNLO sampling; inspect -p epem_a_tth -i NNLO --discrete-dim 0 0 --point 0.23 0.37 0.41 0.29 0.53 0.67 0.43 0.61 0.71 0.31 0.59 0.79 --json-output /tmp/gl638-x1-pilot/pilot/full_smoke_canonical_six_lmb.json; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/optimized_lmb.toml; display settings process -p epem_a_tth -i NNLO sampling; inspect -p epem_a_tth -i NNLO --discrete-dim 0 0 --point 0.23 0.37 0.41 0.29 0.53 0.67 0.43 0.61 0.71 0.31 0.59 0.79 --json-output /tmp/gl638-x1-pilot/pilot/full_smoke_optimized_lmb.json; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/cut_radial_power_one.toml; display settings process -p epem_a_tth -i NNLO sampling; inspect -p epem_a_tth -i NNLO --discrete-dim 0 0 --point 0.23 0.37 0.41 0.29 0.53 0.67 0.43 0.61 0.71 0.31 0.59 0.79 --json-output /tmp/gl638-x1-pilot/pilot/full_smoke_cut_radial_power_one.json; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/lu_h_six_cuts.toml; display settings process -p epem_a_tth -i NNLO sampling; inspect -p epem_a_tth -i NNLO --discrete-dim 0 0 --point 0.23 0.37 0.41 0.29 0.53 0.67 0.43 0.61 0.71 0.31 0.59 0.79 --json-output /tmp/gl638-x1-pilot/pilot/full_smoke_lu_h_six_cuts.json; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/lu_h_plus_optimized.toml; display settings process -p epem_a_tth -i NNLO sampling; inspect -p epem_a_tth -i NNLO --discrete-dim 0 0 --point 0.23 0.37 0.41 0.29 0.53 0.67 0.43 0.61 0.71 0.31 0.59 0.79 --json-output /tmp/gl638-x1-pilot/pilot/full_smoke_lu_h_plus_optimized.json; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/canonical_six_lmb.toml; set process -p epem_a_tth -i NNLO kv integrator.seed=1337; display settings process -p epem_a_tth -i NNLO; integrate -p epem_a_tth -i NNLO --n-cores 20 --workspace-path /tmp/gl638-x1-pilot/pilot/canonical_six_lmb_seed1337/workspace --renderer tabled --show-phase both --show-max-weight-info --show-max-weight-info-for-discrete-bins --write-results-for-each-iteration --batch-size 256 --batch-timing 0; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/cut_radial_power_one.toml; set process -p epem_a_tth -i NNLO kv integrator.seed=1337; display settings process -p epem_a_tth -i NNLO; integrate -p epem_a_tth -i NNLO --n-cores 20 --workspace-path /tmp/gl638-x1-pilot/pilot/cut_radial_power_one_seed1337/workspace --renderer tabled --show-phase both --show-max-weight-info --show-max-weight-info-for-discrete-bins --write-results-for-each-iteration --batch-size 256 --batch-timing 0; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/lu_h_six_cuts.toml; set process -p epem_a_tth -i NNLO kv integrator.seed=1337; display settings process -p epem_a_tth -i NNLO; integrate -p epem_a_tth -i NNLO --n-cores 20 --workspace-path /tmp/gl638-x1-pilot/pilot/lu_h_six_cuts_seed1337/workspace --renderer tabled --show-phase both --show-max-weight-info --show-max-weight-info-for-discrete-bins --write-results-for-each-iteration --batch-size 256 --batch-timing 0; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/lu_h_plus_optimized.toml; set process -p epem_a_tth -i NNLO kv integrator.seed=1337; display settings process -p epem_a_tth -i NNLO; integrate -p epem_a_tth -i NNLO --n-cores 20 --workspace-path /tmp/gl638-x1-pilot/pilot/lu_h_plus_optimized_seed1337/workspace --renderer tabled --show-phase both --show-max-weight-info --show-max-weight-info-for-discrete-bins --write-results-for-each-iteration --batch-size 256 --batch-timing 0; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/canonical_six_lmb.toml; set process -p epem_a_tth -i NNLO kv integrator.seed=7331; display settings process -p epem_a_tth -i NNLO; integrate -p epem_a_tth -i NNLO --n-cores 20 --workspace-path /tmp/gl638-x1-pilot/pilot/canonical_six_lmb_seed7331/workspace --renderer tabled --show-phase both --show-max-weight-info --show-max-weight-info-for-discrete-bins --write-results-for-each-iteration --batch-size 256 --batch-timing 0; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/cut_radial_power_one.toml; set process -p epem_a_tth -i NNLO kv integrator.seed=7331; display settings process -p epem_a_tth -i NNLO; integrate -p epem_a_tth -i NNLO --n-cores 20 --workspace-path /tmp/gl638-x1-pilot/pilot/cut_radial_power_one_seed7331/workspace --renderer tabled --show-phase both --show-max-weight-info --show-max-weight-info-for-discrete-bins --write-results-for-each-iteration --batch-size 256 --batch-timing 0; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/lu_h_six_cuts.toml; set process -p epem_a_tth -i NNLO kv integrator.seed=7331; display settings process -p epem_a_tth -i NNLO; integrate -p epem_a_tth -i NNLO --n-cores 20 --workspace-path /tmp/gl638-x1-pilot/pilot/lu_h_six_cuts_seed7331/workspace --renderer tabled --show-phase both --show-max-weight-info --show-max-weight-info-for-discrete-bins --write-results-for-each-iteration --batch-size 256 --batch-timing 0; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/lu_h_plus_optimized.toml; set process -p epem_a_tth -i NNLO kv integrator.seed=7331; display settings process -p epem_a_tth -i NNLO; integrate -p epem_a_tth -i NNLO --n-cores 20 --workspace-path /tmp/gl638-x1-pilot/pilot/lu_h_plus_optimized_seed7331/workspace --renderer tabled --show-phase both --show-max-weight-info --show-max-weight-info-for-discrete-bins --write-results-for-each-iteration --batch-size 256 --batch-timing 0; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/canonical_six_lmb.toml; set process -p epem_a_tth -i NNLO kv integrator.seed=424242; display settings process -p epem_a_tth -i NNLO; integrate -p epem_a_tth -i NNLO --n-cores 20 --workspace-path /tmp/gl638-x1-pilot/pilot/canonical_six_lmb_seed424242/workspace --renderer tabled --show-phase both --show-max-weight-info --show-max-weight-info-for-discrete-bins --write-results-for-each-iteration --batch-size 256 --batch-timing 0; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/cut_radial_power_one.toml; set process -p epem_a_tth -i NNLO kv integrator.seed=424242; display settings process -p epem_a_tth -i NNLO; integrate -p epem_a_tth -i NNLO --n-cores 20 --workspace-path /tmp/gl638-x1-pilot/pilot/cut_radial_power_one_seed424242/workspace --renderer tabled --show-phase both --show-max-weight-info --show-max-weight-info-for-discrete-bins --write-results-for-each-iteration --batch-size 256 --batch-timing 0; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/lu_h_six_cuts.toml; set process -p epem_a_tth -i NNLO kv integrator.seed=424242; display settings process -p epem_a_tth -i NNLO; integrate -p epem_a_tth -i NNLO --n-cores 20 --workspace-path /tmp/gl638-x1-pilot/pilot/lu_h_six_cuts_seed424242/workspace --renderer tabled --show-phase both --show-max-weight-info --show-max-weight-info-for-discrete-bins --write-results-for-each-iteration --batch-size 256 --batch-timing 0; set process -p epem_a_tth -i NNLO file /tmp/gl638-x1-pilot/lu_h_plus_optimized.toml; set process -p epem_a_tth -i NNLO kv integrator.seed=424242; display settings process -p epem_a_tth -i NNLO; integrate -p epem_a_tth -i NNLO --n-cores 20 --workspace-path /tmp/gl638-x1-pilot/pilot/lu_h_plus_optimized_seed424242/workspace --renderer tabled --show-phase both --show-max-weight-info --show-max-weight-info-for-discrete-bins --write-results-for-each-iteration --batch-size 256 --batch-timing 0"
+    ],
+    "returncode": 0,
+    "elapsed_seconds": 586.7543806949398,
+    "start_utc": "2026-09-13 16:39:01 UTC",
+    "log_sha256": "f594db71521b30cc74ef46c8bdb5c950694fff5056117de818c0941ed1bda007",
+    "log_path": "/tmp/gl638-x1-pilot/pilot/run.log",
+    "successful_smoke": {
+      "full_smoke_canonical_six_lmb": {
+        "evaluation": {
+          "integrand_result": {
+            "re": 3.99617069058037e-06,
+            "im": -2.226640188718099e-06
+          },
+          "parameterization_jacobian": 1.0,
+          "integrator_weight": 1.0,
+          "event_groups": [],
+          "evaluation_metadata": null
+        }
+      },
+      "full_smoke_cut_radial_power_one": {
+        "evaluation": {
+          "integrand_result": {
+            "re": 2.2839535011556364e-08,
+            "im": 1.1685474913277646e-07
+          },
+          "parameterization_jacobian": 1.0,
+          "integrator_weight": 1.0,
+          "event_groups": [],
+          "evaluation_metadata": null
+        }
+      },
+      "full_smoke_lu_h_plus_optimized": {
+        "evaluation": {
+          "integrand_result": {
+            "re": 1.1281992685742266e-05,
+            "im": 8.673655320270988e-05
+          },
+          "parameterization_jacobian": 1.0,
+          "integrator_weight": 1.0,
+          "event_groups": [],
+          "evaluation_metadata": null
+        }
+      },
+      "full_smoke_lu_h_six_cuts": {
+        "evaluation": {
+          "integrand_result": {
+            "re": 1.4841290589354568e-05,
+            "im": 0.00011410062270535295
+          },
+          "parameterization_jacobian": 1.0,
+          "integrator_weight": 1.0,
+          "event_groups": [],
+          "evaluation_metadata": null
+        }
+      },
+      "full_smoke_optimized_lmb": {
+        "evaluation": {
+          "integrand_result": {
+            "re": 3.99617069058037e-06,
+            "im": -2.226640188718099e-06
+          },
+          "parameterization_jacobian": 1.0,
+          "integrator_weight": 1.0,
+          "event_groups": [],
+          "evaluation_metadata": null
+        }
+      }
+    },
+    "setup_failures": [
+      {
+        "cause": "Reduced o0 state has active CutIds0,1,3, but initial smoke selected allsix. Corrected smoke-only selections; full936 selector unchanged.",
+        "path": "/tmp/gl638-x1-pilot/smoke-inactive-selector-failure"
+      },
+      {
+        "cause": "CLI nested settings merge retained optional lu_h field for shared channel name. Corrected distinct radial_cut_N names before integration.",
+        "path": "/tmp/gl638-x1-pilot/smoke-profile-merge-failure"
+      }
+    ],
+    "runs": [
+      {
+        "mode": "canonical_six_lmb",
+        "seed": 1337,
+        "status": "completed",
+        "samples": 2048,
+        "settings_sha256": "30dfdc0499f79c59cf689e50693c5a1d3651722c6f0263399942e6da7ef2839b",
+        "result_sha256": "c103b16447740379510fb2088f8520da148b9c9c985b70f12511a6c40ddc3e45",
+        "statistics": {
+          "num_evals": 2048,
+          "average_total_time_seconds": 0.076616767,
+          "average_parameterization_time_seconds": 7.8164e-05,
+          "average_integrand_time_seconds": 0.036080153,
+          "average_evaluator_time_seconds": 0.033853759,
+          "average_observable_time_seconds": 0.0,
+          "average_integrator_time_seconds": 5.521e-05,
+          "f64_percentage": 98.53515625,
+          "f128_percentage": 1.46484375,
+          "arb_percentage": 0.0,
+          "nan_percentage": 0.0,
+          "nan_or_unstable_percentage": 0.0,
+          "generated_event_count": 0,
+          "accepted_event_count": 0,
+          "selection_efficiency_percentage": null
+        }
+      },
+      {
+        "mode": "cut_radial_power_one",
+        "seed": 1337,
+        "status": "completed",
+        "samples": 2048,
+        "settings_sha256": "da4838b8f115f2c4b12a8400036f8d43fe85ff3280d590d33447a73fa5f4ecaa",
+        "result_sha256": "242301a65494258e15e8255584d4b5be7498a22f38f3e9ca81ddd7614fc0d1a4",
+        "statistics": {
+          "num_evals": 2048,
+          "average_total_time_seconds": 0.078786409,
+          "average_parameterization_time_seconds": 0.000108363,
+          "average_integrand_time_seconds": 0.03932102,
+          "average_evaluator_time_seconds": 0.03698323,
+          "average_observable_time_seconds": 0.0,
+          "average_integrator_time_seconds": 6.1573e-05,
+          "f64_percentage": 100.0,
+          "f128_percentage": 0.0,
+          "arb_percentage": 0.0,
+          "nan_percentage": 0.0,
+          "nan_or_unstable_percentage": 0.0,
+          "generated_event_count": 0,
+          "accepted_event_count": 0,
+          "selection_efficiency_percentage": null
+        }
+      },
+      {
+        "mode": "lu_h_six_cuts",
+        "seed": 1337,
+        "status": "completed",
+        "samples": 2048,
+        "settings_sha256": "2e4b6b479f2108be0b8e9d53e62e58ce23dbf39f969a4ba8d87ebc81ad6fe7d2",
+        "result_sha256": "4d66a9f22a07638014ea00c86b8a4e06d03a61042fd1e7f02e5796eb96a90243",
+        "statistics": {
+          "num_evals": 2048,
+          "average_total_time_seconds": 0.083794943,
+          "average_parameterization_time_seconds": 0.000613423,
+          "average_integrand_time_seconds": 0.041482742,
+          "average_evaluator_time_seconds": 0.03895579,
+          "average_observable_time_seconds": 0.0,
+          "average_integrator_time_seconds": 8.4643e-05,
+          "f64_percentage": 100.0,
+          "f128_percentage": 0.0,
+          "arb_percentage": 0.0,
+          "nan_percentage": 0.0,
+          "nan_or_unstable_percentage": 0.0,
+          "generated_event_count": 0,
+          "accepted_event_count": 0,
+          "selection_efficiency_percentage": null
+        }
+      },
+      {
+        "mode": "lu_h_plus_optimized",
+        "seed": 1337,
+        "status": "completed",
+        "samples": 2048,
+        "settings_sha256": "20b48532f9652c57c38aa8e3667675dea87f42901a87c4178cdc9a027a4d98e1",
+        "result_sha256": "b8763ea3c7a030d3488ca48fdf22ee0a6d0497adb067d37663b5cb836202d515",
+        "statistics": {
+          "num_evals": 2048,
+          "average_total_time_seconds": 0.07954695,
+          "average_parameterization_time_seconds": 0.000661978,
+          "average_integrand_time_seconds": 0.038152642,
+          "average_evaluator_time_seconds": 0.035897192,
+          "average_observable_time_seconds": 0.0,
+          "average_integrator_time_seconds": 7.4212e-05,
+          "f64_percentage": 99.267578125,
+          "f128_percentage": 0.732421875,
+          "arb_percentage": 0.0,
+          "nan_percentage": 0.0,
+          "nan_or_unstable_percentage": 0.0,
+          "generated_event_count": 0,
+          "accepted_event_count": 0,
+          "selection_efficiency_percentage": null
+        }
+      },
+      {
+        "mode": "canonical_six_lmb",
+        "seed": 7331,
+        "status": "completed",
+        "samples": 2048,
+        "settings_sha256": "b4db426a17599432b31f4d09aa24faa43495c7c49932b3fa6ba8da5bdd7aa948",
+        "result_sha256": "5f20299941707810fd4a49a4074aa9e1cc62d19e71085b34f6d903544ba3117f",
+        "statistics": {
+          "num_evals": 2048,
+          "average_total_time_seconds": 0.08459464,
+          "average_parameterization_time_seconds": 7.8007e-05,
+          "average_integrand_time_seconds": 0.040318288,
+          "average_evaluator_time_seconds": 0.038052696,
+          "average_observable_time_seconds": 0.0,
+          "average_integrator_time_seconds": 6.6548e-05,
+          "f64_percentage": 98.6328125,
+          "f128_percentage": 1.3671875,
+          "arb_percentage": 0.0,
+          "nan_percentage": 0.0,
+          "nan_or_unstable_percentage": 0.0,
+          "generated_event_count": 0,
+          "accepted_event_count": 0,
+          "selection_efficiency_percentage": null
+        }
+      },
+      {
+        "mode": "cut_radial_power_one",
+        "seed": 7331,
+        "status": "completed",
+        "samples": 2048,
+        "settings_sha256": "4da07042e22e0f3ad6489d5b541ef994c2c6d486129a4ceb25549d01d97061b2",
+        "result_sha256": "afd5d5233afcef2e22250d749d480f97ff3539a6102123a7b65f3700c7ba8df6",
+        "statistics": {
+          "num_evals": 2048,
+          "average_total_time_seconds": 0.079211886,
+          "average_parameterization_time_seconds": 0.000110135,
+          "average_integrand_time_seconds": 0.039599489,
+          "average_evaluator_time_seconds": 0.037224642,
+          "average_observable_time_seconds": 0.0,
+          "average_integrator_time_seconds": 7.8141e-05,
+          "f64_percentage": 100.0,
+          "f128_percentage": 0.0,
+          "arb_percentage": 0.0,
+          "nan_percentage": 0.0,
+          "nan_or_unstable_percentage": 0.0,
+          "generated_event_count": 0,
+          "accepted_event_count": 0,
+          "selection_efficiency_percentage": null
+        }
+      },
+      {
+        "mode": "lu_h_six_cuts",
+        "seed": 7331,
+        "status": "completed",
+        "samples": 2048,
+        "settings_sha256": "ef84c4a19f7162f3250fe62b6ee1da4bb0c413662241d3279401465934086988",
+        "result_sha256": "7ed0fd4b3f4179d0b04ae7cc139cf6ea4a91125137901afbd84545972bf0bd5e",
+        "statistics": {
+          "num_evals": 2048,
+          "average_total_time_seconds": 0.092509449,
+          "average_parameterization_time_seconds": 0.000692849,
+          "average_integrand_time_seconds": 0.045762458,
+          "average_evaluator_time_seconds": 0.043009095,
+          "average_observable_time_seconds": 0.0,
+          "average_integrator_time_seconds": 7.6642e-05,
+          "f64_percentage": 100.0,
+          "f128_percentage": 0.0,
+          "arb_percentage": 0.0,
+          "nan_percentage": 0.0,
+          "nan_or_unstable_percentage": 0.0,
+          "generated_event_count": 0,
+          "accepted_event_count": 0,
+          "selection_efficiency_percentage": null
+        }
+      },
+      {
+        "mode": "lu_h_plus_optimized",
+        "seed": 7331,
+        "status": "completed",
+        "samples": 2048,
+        "settings_sha256": "1b9926b98ae05f3d8a40a47f5e5c2d2d0d4987976e88e722cede66f62ced84b7",
+        "result_sha256": "10efda2e3e353ba15f334705011b4ad2037444114e86a4076be0eab3e71d619e",
+        "statistics": {
+          "num_evals": 2048,
+          "average_total_time_seconds": 0.074253431,
+          "average_parameterization_time_seconds": 0.000597218,
+          "average_integrand_time_seconds": 0.036140476,
+          "average_evaluator_time_seconds": 0.034015439,
+          "average_observable_time_seconds": 0.0,
+          "average_integrator_time_seconds": 5.8792e-05,
+          "f64_percentage": 99.560546875,
+          "f128_percentage": 0.439453125,
+          "arb_percentage": 0.0,
+          "nan_percentage": 0.0,
+          "nan_or_unstable_percentage": 0.0,
+          "generated_event_count": 0,
+          "accepted_event_count": 0,
+          "selection_efficiency_percentage": null
+        }
+      },
+      {
+        "mode": "canonical_six_lmb",
+        "seed": 424242,
+        "status": "completed",
+        "samples": 2048,
+        "settings_sha256": "a6c3b15d44e0c241691bb46da08575f890d37c04ee24cb8eaa52f7b84debc386",
+        "result_sha256": "7583dc8c6668413785ece71fe8e1ba0750f4dca8a75bd8028a4aefe5f15283a2",
+        "statistics": {
+          "num_evals": 2048,
+          "average_total_time_seconds": 0.074913649,
+          "average_parameterization_time_seconds": 7.683e-05,
+          "average_integrand_time_seconds": 0.036434686,
+          "average_evaluator_time_seconds": 0.034419667,
+          "average_observable_time_seconds": 0.0,
+          "average_integrator_time_seconds": 5.7341e-05,
+          "f64_percentage": 99.169921875,
+          "f128_percentage": 0.830078125,
+          "arb_percentage": 0.0,
+          "nan_percentage": 0.0,
+          "nan_or_unstable_percentage": 0.0,
+          "generated_event_count": 0,
+          "accepted_event_count": 0,
+          "selection_efficiency_percentage": null
+        }
+      },
+      {
+        "mode": "cut_radial_power_one",
+        "seed": 424242,
+        "status": "completed",
+        "samples": 2048,
+        "settings_sha256": "91fe40c329b8a3ec205fed3f39ee0214f1081dd442bed45be8772421103fa9eb",
+        "result_sha256": "6ae6ab702ce80ad05e042364994063e0b82ab1fff5efed8c9d6d0706d83e7366",
+        "statistics": {
+          "num_evals": 2048,
+          "average_total_time_seconds": 0.079025574,
+          "average_parameterization_time_seconds": 0.000112418,
+          "average_integrand_time_seconds": 0.039493471,
+          "average_evaluator_time_seconds": 0.037118168,
+          "average_observable_time_seconds": 0.0,
+          "average_integrator_time_seconds": 5.9695e-05,
+          "f64_percentage": 100.0,
+          "f128_percentage": 0.0,
+          "arb_percentage": 0.0,
+          "nan_percentage": 0.0,
+          "nan_or_unstable_percentage": 0.0,
+          "generated_event_count": 0,
+          "accepted_event_count": 0,
+          "selection_efficiency_percentage": null
+        }
+      },
+      {
+        "mode": "lu_h_six_cuts",
+        "seed": 424242,
+        "status": "completed",
+        "samples": 2048,
+        "settings_sha256": "543d4ee7489512883bfb63e5942544ed910d1dd606d5015aa4de7dbb5e4afcfc",
+        "result_sha256": "94fdcc5f55a749c15fcfe15a726cccd7c20957237d970bc3796b3d63fdbe7ab3",
+        "statistics": {
+          "num_evals": 2048,
+          "average_total_time_seconds": 0.082090847,
+          "average_parameterization_time_seconds": 0.000598582,
+          "average_integrand_time_seconds": 0.040793277,
+          "average_evaluator_time_seconds": 0.038314018,
+          "average_observable_time_seconds": 0.0,
+          "average_integrator_time_seconds": 6.2191e-05,
+          "f64_percentage": 100.0,
+          "f128_percentage": 0.0,
+          "arb_percentage": 0.0,
+          "nan_percentage": 0.0,
+          "nan_or_unstable_percentage": 0.0,
+          "generated_event_count": 0,
+          "accepted_event_count": 0,
+          "selection_efficiency_percentage": null
+        }
+      },
+      {
+        "mode": "lu_h_plus_optimized",
+        "seed": 424242,
+        "status": "completed",
+        "samples": 2048,
+        "settings_sha256": "4d5ee36055672ed70c45b2f2e8775332cdc1340c7ec773f2436216cf958c4a7c",
+        "result_sha256": "bc5aeeb671567d6b0058bda080a4b0527cd978ce018975210d681fa59ce5868d",
+        "statistics": {
+          "num_evals": 2048,
+          "average_total_time_seconds": 0.07703113,
+          "average_parameterization_time_seconds": 0.000592466,
+          "average_integrand_time_seconds": 0.037699557,
+          "average_evaluator_time_seconds": 0.035662018,
+          "average_observable_time_seconds": 0.0,
+          "average_integrator_time_seconds": 5.5951e-05,
+          "f64_percentage": 99.462890625,
+          "f128_percentage": 0.537109375,
+          "arb_percentage": 0.0,
+          "nan_percentage": 0.0,
+          "nan_or_unstable_percentage": 0.0,
+          "generated_event_count": 0,
+          "accepted_event_count": 0,
+          "selection_efficiency_percentage": null
+        }
+      }
+    ]
+  },
+  "per_seed_results": [
+    {
+      "run": "canonical_six_lmb_seed1337",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "re",
+      "result": 1.7805614570511448e-05,
+      "error": 6.36926313995915e-05,
+      "absolute_result": 0.00019413060016221462,
+      "absolute_error": 6.354915798981398e-05,
+      "absolute_estimator_variance": 4.038495481214338e-09,
+      "absolute_error_sqrt_n": 0.002875906595410735,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 2.6624583251382687,
+      "absolute_max_weight_impact": 0.24420007308404054,
+      "largest_weight": 0.09708893541880108,
+      "absolute_to_signed_ratio": 10.902774481242655,
+      "evaluation_count": 2048,
+      "f64_percent": 98.53515625,
+      "quad_percent": 1.46484375,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.076616767,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/canonical_six_lmb_seed1337/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "canonical_six_lmb_seed1337",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "im",
+      "result": 7.168451203594011e-05,
+      "error": 0.00016902050791777205,
+      "absolute_result": 0.00048792739743944895,
+      "absolute_error": 0.00016868354690568048,
+      "absolute_estimator_variance": 2.8454138996680904e-08,
+      "absolute_error_sqrt_n": 0.007633745913062768,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 1.8351575234888218,
+      "absolute_max_weight_impact": 0.26961464404487745,
+      "largest_weight": 0.2694192569966192,
+      "absolute_to_signed_ratio": 6.806594389521954,
+      "evaluation_count": 2048,
+      "f64_percent": 98.53515625,
+      "quad_percent": 1.46484375,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.076616767,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/canonical_six_lmb_seed1337/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "canonical_six_lmb_seed424242",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "re",
+      "result": 0.0008275645220840966,
+      "error": 0.000760610717379485,
+      "absolute_result": 0.0013845851071763449,
+      "absolute_error": 0.0007602149058133943,
+      "absolute_estimator_variance": 5.779267030208679e-07,
+      "absolute_error_sqrt_n": 0.0344033993638236,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.8583993749637866,
+      "absolute_max_weight_impact": 0.5130640686637958,
+      "largest_weight": 1.4548600186863478,
+      "absolute_to_signed_ratio": 1.6730841767956361,
+      "evaluation_count": 2048,
+      "f64_percent": 99.169921875,
+      "quad_percent": 0.830078125,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.074913649,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/canonical_six_lmb_seed424242/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "canonical_six_lmb_seed424242",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "im",
+      "result": 0.0005532914909489824,
+      "error": 0.0009297851342239544,
+      "absolute_result": 0.002288694223132127,
+      "absolute_error": 0.00092848856817952,
+      "absolute_estimator_variance": 8.620910212400552e-07,
+      "absolute_error_sqrt_n": 0.04201859602009131,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 1.09891255593034,
+      "absolute_max_weight_impact": 0.2656619483493815,
+      "largest_weight": 1.245222843378186,
+      "absolute_to_signed_ratio": 4.13650717672642,
+      "evaluation_count": 2048,
+      "f64_percent": 99.169921875,
+      "quad_percent": 0.830078125,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.074913649,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/canonical_six_lmb_seed424242/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "canonical_six_lmb_seed7331",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "re",
+      "result": 0.0004091177385174645,
+      "error": 0.00023656346154914086,
+      "absolute_result": 0.0006081684374431871,
+      "absolute_error": 0.00023635428962506743,
+      "absolute_estimator_variance": 5.5863350224170255e-08,
+      "absolute_error_sqrt_n": 0.010696174141210525,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.5137142061839876,
+      "absolute_max_weight_impact": 0.3455779375231401,
+      "largest_weight": 0.4304273290819327,
+      "absolute_to_signed_ratio": 1.4865364666099061,
+      "evaluation_count": 2048,
+      "f64_percent": 98.6328125,
+      "quad_percent": 1.3671875,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.08459464,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/canonical_six_lmb_seed7331/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "canonical_six_lmb_seed7331",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "im",
+      "result": -0.0001893744064094606,
+      "error": 0.000231686091528256,
+      "absolute_result": 0.0008213009040357395,
+      "absolute_error": 0.00023101177643302732,
+      "absolute_estimator_variance": 5.3366440850742995e-08,
+      "absolute_error_sqrt_n": 0.010454399593583635,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.8233889820090409,
+      "absolute_max_weight_impact": 0.18985587248941685,
+      "largest_weight": -0.3193421818102828,
+      "absolute_to_signed_ratio": 4.336916057494819,
+      "evaluation_count": 2048,
+      "f64_percent": 98.6328125,
+      "quad_percent": 1.3671875,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.08459464,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/canonical_six_lmb_seed7331/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "cut_radial_power_one_seed1337",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "re",
+      "result": 3.582721349549348e-05,
+      "error": 6.872483317275024e-05,
+      "absolute_result": 0.00011667886167535456,
+      "absolute_error": 6.868099494128303e-05,
+      "absolute_estimator_variance": 4.717079066124546e-09,
+      "absolute_error_sqrt_n": 0.003108147024743693,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 1.8186302855280867,
+      "absolute_max_weight_impact": 0.5584255328979412,
+      "largest_weight": 0.13344042088240135,
+      "absolute_to_signed_ratio": 3.2567104804293803,
+      "evaluation_count": 2048,
+      "f64_percent": 100.0,
+      "quad_percent": 0.0,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.078786409,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/cut_radial_power_one_seed1337/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "cut_radial_power_one_seed1337",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "im",
+      "result": -0.0010747495871963144,
+      "error": 0.0009503724053300674,
+      "absolute_result": 0.0010852101759688529,
+      "absolute_error": 0.0009503665982012343,
+      "absolute_estimator_variance": 9.031966709765864e-07,
+      "absolute_error_sqrt_n": 0.043008682636882165,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.8799400773492633,
+      "absolute_max_weight_impact": 0.8714581339456193,
+      "largest_weight": -1.936824801051881,
+      "absolute_to_signed_ratio": 1.0097330474904642,
+      "evaluation_count": 2048,
+      "f64_percent": 100.0,
+      "quad_percent": 0.0,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.078786409,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/cut_radial_power_one_seed1337/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "cut_radial_power_one_seed424242",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "re",
+      "result": 4.23349205818273e-06,
+      "error": 2.4674078867755987e-06,
+      "absolute_result": 6.3502444869269645e-06,
+      "absolute_error": 2.465189099781567e-06,
+      "absolute_estimator_variance": 6.077157297681853e-12,
+      "absolute_error_sqrt_n": 0.00011156172347921324,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.3936531922983395,
+      "absolute_max_weight_impact": 0.2624351970548731,
+      "largest_weight": 0.0034130486543837175,
+      "absolute_to_signed_ratio": 1.5000015116723455,
+      "evaluation_count": 2048,
+      "f64_percent": 100.0,
+      "quad_percent": 0.0,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.079025574,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/cut_radial_power_one_seed424242/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "cut_radial_power_one_seed424242",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "im",
+      "result": -4.131784450006175e-06,
+      "error": 3.9007323032040915e-06,
+      "absolute_result": 1.138179263444437e-05,
+      "absolute_error": 3.893682953387218e-06,
+      "absolute_estimator_variance": 1.5160766941498206e-11,
+      "absolute_error_sqrt_n": 0.0001762079756883562,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.6919390037652982,
+      "absolute_max_weight_impact": 0.25118563550861855,
+      "largest_weight": -0.005855114887393736,
+      "absolute_to_signed_ratio": 2.754691773533191,
+      "evaluation_count": 2048,
+      "f64_percent": 100.0,
+      "quad_percent": 0.0,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.079025574,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/cut_radial_power_one_seed424242/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "cut_radial_power_one_seed7331",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "re",
+      "result": 1.2198939799190512e-05,
+      "error": 1.2960451846400375e-05,
+      "absolute_result": 2.754274435357689e-05,
+      "absolute_error": 1.294895433038154e-05,
+      "absolute_estimator_variance": 1.6767541825030683e-10,
+      "absolute_error_sqrt_n": 0.0005860027786424127,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.8299908935010251,
+      "absolute_max_weight_impact": 0.367610751264169,
+      "largest_weight": 0.020736018316688073,
+      "absolute_to_signed_ratio": 2.2577982027097594,
+      "evaluation_count": 2048,
+      "f64_percent": 100.0,
+      "quad_percent": 0.0,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.079211886,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/cut_radial_power_one_seed7331/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "cut_radial_power_one_seed7331",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "im",
+      "result": 2.9441113313912044e-05,
+      "error": 2.0764302037618697e-05,
+      "absolute_result": 4.2933323551748975e-05,
+      "absolute_error": 2.0752811951115643e-05,
+      "absolute_estimator_variance": 4.306792038783683e-10,
+      "absolute_error_sqrt_n": 0.0009391650597966783,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.5227978134519093,
+      "absolute_max_weight_impact": 0.3585035676902796,
+      "largest_weight": 0.031522303316179175,
+      "absolute_to_signed_ratio": 1.4582778543045567,
+      "evaluation_count": 2048,
+      "f64_percent": 100.0,
+      "quad_percent": 0.0,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.079211886,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/cut_radial_power_one_seed7331/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "lu_h_plus_optimized_seed1337",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "re",
+      "result": 0.0001110329696651586,
+      "error": 0.00012460904139453328,
+      "absolute_result": 0.000300345083236112,
+      "absolute_error": 0.00012445628886822673,
+      "absolute_estimator_variance": 1.5489367838851497e-08,
+      "absolute_error_sqrt_n": 0.005632248692482237,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 1.0090538361081438,
+      "absolute_max_weight_impact": 0.3730317232695638,
+      "largest_weight": 0.22945432366102003,
+      "absolute_to_signed_ratio": 2.705008108329091,
+      "evaluation_count": 2048,
+      "f64_percent": 99.267578125,
+      "quad_percent": 0.732421875,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.07954695,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/lu_h_plus_optimized_seed1337/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "lu_h_plus_optimized_seed1337",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "im",
+      "result": 0.00016520977445671063,
+      "error": 0.00042507149012856345,
+      "absolute_result": 0.000950457448168605,
+      "absolute_error": 0.0004245677704499884,
+      "absolute_estimator_variance": 1.8025779170487404e-07,
+      "absolute_error_sqrt_n": 0.01921374397174018,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 2.2570640486921585,
+      "absolute_max_weight_impact": 0.3923258670204387,
+      "largest_weight": 0.7636767588736648,
+      "absolute_to_signed_ratio": 5.753033991446131,
+      "evaluation_count": 2048,
+      "f64_percent": 99.267578125,
+      "quad_percent": 0.732421875,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.07954695,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/lu_h_plus_optimized_seed1337/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "lu_h_plus_optimized_seed424242",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "re",
+      "result": 0.0013807814905611197,
+      "error": 0.0014183674771215695,
+      "absolute_result": 0.0016578588230310685,
+      "absolute_error": 0.0014182224778268228,
+      "absolute_estimator_variance": 2.011354996613253e-06,
+      "absolute_error_sqrt_n": 0.06418142280336221,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 1.0257285488533645,
+      "absolute_max_weight_impact": 0.8542989155176702,
+      "largest_weight": 2.9005967249343345,
+      "absolute_to_signed_ratio": 1.2006670384590328,
+      "evaluation_count": 2048,
+      "f64_percent": 99.462890625,
+      "quad_percent": 0.537109375,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.07703113,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/lu_h_plus_optimized_seed424242/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "lu_h_plus_optimized_seed424242",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "im",
+      "result": 0.0012862046901679993,
+      "error": 0.0012203581903523126,
+      "absolute_result": 0.0016386672833136847,
+      "absolute_error": 0.0012201518322834878,
+      "absolute_estimator_variance": 1.4887704938247526e-06,
+      "absolute_error_sqrt_n": 0.055217768619830104,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.9424822528374135,
+      "absolute_max_weight_impact": 0.739762797697555,
+      "largest_weight": 2.482636992511147,
+      "absolute_to_signed_ratio": 1.2740330492028045,
+      "evaluation_count": 2048,
+      "f64_percent": 99.462890625,
+      "quad_percent": 0.537109375,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.07703113,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/lu_h_plus_optimized_seed424242/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "lu_h_plus_optimized_seed7331",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "re",
+      "result": -8.396915444306589e-05,
+      "error": 0.00010648505818955137,
+      "absolute_result": 0.00033810460926135815,
+      "absolute_error": 0.00010623872682029936,
+      "absolute_estimator_variance": 1.1286667076398195e-08,
+      "absolute_error_sqrt_n": 0.004807815946192564,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.8495078117538093,
+      "absolute_max_weight_impact": 0.21097746286743424,
+      "largest_weight": -0.14608886301848895,
+      "absolute_to_signed_ratio": 4.026533451526004,
+      "evaluation_count": 2048,
+      "f64_percent": 99.560546875,
+      "quad_percent": 0.439453125,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.074253431,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/lu_h_plus_optimized_seed7331/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "lu_h_plus_optimized_seed7331",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "im",
+      "result": 0.00017325783576260098,
+      "error": 0.000385414694226382,
+      "absolute_result": 0.0009491330150946846,
+      "absolute_error": 0.00038486239917609835,
+      "absolute_estimator_variance": 1.4811906629958246e-07,
+      "absolute_error_sqrt_n": 0.01741688398599316,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 1.6905237143924556,
+      "absolute_max_weight_impact": 0.3085937117378339,
+      "largest_weight": 0.5998519911649081,
+      "absolute_to_signed_ratio": 5.478153475235561,
+      "evaluation_count": 2048,
+      "f64_percent": 99.560546875,
+      "quad_percent": 0.439453125,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.074253431,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/lu_h_plus_optimized_seed7331/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "lu_h_six_cuts_seed1337",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "re",
+      "result": -4.292764655124752e-07,
+      "error": 5.2624251802453084e-05,
+      "absolute_result": 0.00011079413377086066,
+      "absolute_error": 5.256724475655179e-05,
+      "absolute_estimator_variance": 2.763315221295222e-09,
+      "absolute_error_sqrt_n": 0.0023789219350816484,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 90.43701105332067,
+      "absolute_max_weight_impact": 0.35040194940982183,
+      "largest_weight": 0.07950843997487544,
+      "absolute_to_signed_ratio": 258.09505685011953,
+      "evaluation_count": 2048,
+      "f64_percent": 100.0,
+      "quad_percent": 0.0,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.083794943,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/lu_h_six_cuts_seed1337/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "lu_h_six_cuts_seed1337",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "im",
+      "result": -0.0006276249960767683,
+      "error": 0.0005669211201274911,
+      "absolute_result": 0.0007031610151162925,
+      "absolute_error": 0.0005668778081079046,
+      "absolute_estimator_variance": 3.213504493252223e-07,
+      "absolute_error_sqrt_n": 0.02565396110190501,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.8973519577497358,
+      "absolute_max_weight_impact": 0.8009552675058543,
+      "largest_weight": -1.1534346628345,
+      "absolute_to_signed_ratio": 1.1203521521795556,
+      "evaluation_count": 2048,
+      "f64_percent": 100.0,
+      "quad_percent": 0.0,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.083794943,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/lu_h_six_cuts_seed1337/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "lu_h_six_cuts_seed424242",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "re",
+      "result": 1.1881077655882142e-05,
+      "error": 1.04723056409092e-05,
+      "absolute_result": 2.2499060779863943e-05,
+      "absolute_error": 1.0463787669776504e-05,
+      "absolute_estimator_variance": 1.0949085239816681e-10,
+      "absolute_error_sqrt_n": 0.00047353697396448956,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.8105698358859289,
+      "absolute_max_weight_impact": 0.42803756387445974,
+      "largest_weight": 0.019723147603305194,
+      "absolute_to_signed_ratio": 1.8936885551560214,
+      "evaluation_count": 2048,
+      "f64_percent": 100.0,
+      "quad_percent": 0.0,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.082090847,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/lu_h_six_cuts_seed424242/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "lu_h_six_cuts_seed424242",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "im",
+      "result": -8.633171306469322e-06,
+      "error": 6.797902821521354e-06,
+      "absolute_result": 2.2687133360663073e-05,
+      "absolute_error": 6.782068186077884e-06,
+      "absolute_estimator_variance": 4.599644888060976e-11,
+      "absolute_error_sqrt_n": 0.0003069213699100941,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.4162562123460361,
+      "absolute_max_weight_impact": 0.15839864523370398,
+      "largest_weight": -0.0073597157141819395,
+      "absolute_to_signed_ratio": 2.627902604418648,
+      "evaluation_count": 2048,
+      "f64_percent": 100.0,
+      "quad_percent": 0.0,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.082090847,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/lu_h_six_cuts_seed424242/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "lu_h_six_cuts_seed7331",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "re",
+      "result": -1.429391003329618e-05,
+      "error": 2.586513838341693e-05,
+      "absolute_result": 4.147287800018611e-05,
+      "absolute_error": 2.5850820917249652e-05,
+      "absolute_estimator_variance": 6.682649420957121e-10,
+      "absolute_error_sqrt_n": 0.0011698746092688817,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 1.7512125983570117,
+      "absolute_max_weight_impact": 0.6035673562364694,
+      "largest_weight": -0.051264871076024246,
+      "absolute_to_signed_ratio": 2.9014368989016543,
+      "evaluation_count": 2048,
+      "f64_percent": 100.0,
+      "quad_percent": 0.0,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.092509449,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/lu_h_six_cuts_seed7331/workspace/results/integration_result_iter_0001.json"
+    },
+    {
+      "run": "lu_h_six_cuts_seed7331",
+      "slot": "epem_a_tth@NNLO",
+      "iteration": 1,
+      "samples_total": 2048,
+      "samples_new": 2048,
+      "phase": "im",
+      "result": 0.00010680253010670565,
+      "error": 9.997176785576752e-05,
+      "absolute_result": 0.00012362532771488006,
+      "absolute_error": 9.99622961419862e-05,
+      "absolute_estimator_variance": 9.992460649978147e-09,
+      "absolute_error_sqrt_n": 0.004523777117758483,
+      "chi_sq_per_dof_reported": 0.0,
+      "absolute_chi_sq_per_dof_reported": 0.0,
+      "max_weight_impact": 0.9330046979901984,
+      "absolute_max_weight_impact": 0.8060424525354122,
+      "largest_weight": 0.20407759328623817,
+      "absolute_to_signed_ratio": 1.1575131000301853,
+      "evaluation_count": 2048,
+      "f64_percent": 100.0,
+      "quad_percent": 0.0,
+      "arb_percent": 0.0,
+      "nan_percent": 0.0,
+      "nan_or_unstable_percent": 0.0,
+      "average_evaluation_seconds": 0.092509449,
+      "snapshot": "/tmp/gl638-x1-pilot/pilot/lu_h_six_cuts_seed7331/workspace/results/integration_result_iter_0001.json"
+    }
+  ],
+  "pooled_results": {
+    "method": "Equal-N independent untrained draws pooled from within-run sample variance inferred as N*SE^2 plus between-seed means; no finite-variance/convergence inference. Reported sample time is evaluator-side average, not walltime.",
+    "rows": [
+      {
+        "mode": "canonical_six_lmb",
+        "phase": "re",
+        "samples": 6144,
+        "signed": 0.0004181626250573575,
+        "signed_se": 0.0002663539756140409,
+        "absolute": 0.0007289613815939155,
+        "absolute_se": 0.00026624500515135566,
+        "largest_abs_weight": 1.4548600186863478,
+        "mean_sample_ms": 78.708352,
+        "quad_percent": 1.220703125,
+        "arb_percent": 0.0,
+        "final_invalid_percent": 0.0,
+        "seed_absolute_results": [
+          0.00019413060016221462,
+          0.0013845851071763449,
+          0.0006081684374431871
+        ],
+        "seed_absolute_errors": [
+          6.354915798981398e-05,
+          0.0007602149058133943,
+          0.00023635428962506743
+        ]
+      },
+      {
+        "mode": "canonical_six_lmb",
+        "phase": "im",
+        "samples": 6144,
+        "signed": 0.00014520053219182065,
+        "signed_se": 0.00032430732584695215,
+        "absolute": 0.0011993075082024384,
+        "absolute_se": 0.0003239514330629398,
+        "largest_abs_weight": 1.245222843378186,
+        "mean_sample_ms": 78.708352,
+        "quad_percent": 1.220703125,
+        "arb_percent": 0.0,
+        "final_invalid_percent": 0.0,
+        "seed_absolute_results": [
+          0.00048792739743944895,
+          0.002288694223132127,
+          0.0008213009040357395
+        ],
+        "seed_absolute_errors": [
+          0.00016868354690568048,
+          0.00092848856817952,
+          0.00023101177643302732
+        ]
+      },
+      {
+        "mode": "cut_radial_power_one",
+        "phase": "re",
+        "samples": 6144,
+        "signed": 1.7419881784288908e-05,
+        "signed_se": 2.3323410793934432e-05,
+        "absolute": 5.019061683861947e-05,
+        "absolute_se": 2.3315677406738843e-05,
+        "largest_abs_weight": 0.13344042088240135,
+        "mean_sample_ms": 79.00795633333333,
+        "quad_percent": 0.0,
+        "arb_percent": 0.0,
+        "final_invalid_percent": 0.0,
+        "seed_absolute_results": [
+          0.00011667886167535456,
+          6.3502444869269645e-06,
+          2.754274435357689e-05
+        ],
+        "seed_absolute_errors": [
+          6.868099494128303e-05,
+          2.465189099781567e-06,
+          1.294895433038154e-05
+        ]
+      },
+      {
+        "mode": "cut_radial_power_one",
+        "phase": "im",
+        "samples": 6144,
+        "signed": -0.0003498134194441362,
+        "signed_se": 0.00031688503418156354,
+        "absolute": 0.00037984176405168207,
+        "absolute_se": 0.0003168794063553249,
+        "largest_abs_weight": 1.936824801051881,
+        "mean_sample_ms": 79.00795633333333,
+        "quad_percent": 0.0,
+        "arb_percent": 0.0,
+        "final_invalid_percent": 0.0,
+        "seed_absolute_results": [
+          0.0010852101759688529,
+          1.138179263444437e-05,
+          4.2933323551748975e-05
+        ],
+        "seed_absolute_errors": [
+          0.0009503665982012343,
+          3.893682953387218e-06,
+          2.0752811951115643e-05
+        ]
+      },
+      {
+        "mode": "lu_h_six_cuts",
+        "phase": "re",
+        "samples": 6144,
+        "signed": -9.473696143088378e-07,
+        "signed_se": 1.9852228554450253e-05,
+        "absolute": 5.825535751697024e-05,
+        "absolute_se": 1.9838313358404965e-05,
+        "largest_abs_weight": 0.07950843997487544,
+        "mean_sample_ms": 86.13174633333334,
+        "quad_percent": 0.0,
+        "arb_percent": 0.0,
+        "final_invalid_percent": 0.0,
+        "seed_absolute_results": [
+          0.00011079413377086066,
+          2.2499060779863943e-05,
+          4.147287800018611e-05
+        ],
+        "seed_absolute_errors": [
+          5.256724475655179e-05,
+          1.0463787669776504e-05,
+          2.5850820917249652e-05
+        ]
+      },
+      {
+        "mode": "lu_h_six_cuts",
+        "phase": "im",
+        "samples": 6144,
+        "signed": -0.00017648521242551066,
+        "signed_se": 0.00019191565272293472,
+        "absolute": 0.00028315782539727855,
+        "absolute_se": 0.00019189485689373722,
+        "largest_abs_weight": 1.1534346628345,
+        "mean_sample_ms": 86.13174633333334,
+        "quad_percent": 0.0,
+        "arb_percent": 0.0,
+        "final_invalid_percent": 0.0,
+        "seed_absolute_results": [
+          0.0007031610151162925,
+          2.2687133360663073e-05,
+          0.00012362532771488006
+        ],
+        "seed_absolute_errors": [
+          0.0005668778081079046,
+          6.782068186077884e-06,
+          9.99622961419862e-05
+        ]
+      },
+      {
+        "mode": "lu_h_plus_optimized",
+        "phase": "re",
+        "samples": 6144,
+        "signed": 0.0004692817685944041,
+        "signed_se": 0.00047593031224983456,
+        "absolute": 0.0007654361718428462,
+        "absolute_se": 0.0004758677718561062,
+        "largest_abs_weight": 2.9005967249343345,
+        "mean_sample_ms": 76.94383699999999,
+        "quad_percent": 0.5696614583333334,
+        "arb_percent": 0.0,
+        "final_invalid_percent": 0.0,
+        "seed_absolute_results": [
+          0.000300345083236112,
+          0.0016578588230310685,
+          0.00033810460926135815
+        ],
+        "seed_absolute_errors": [
+          0.00012445628886822673,
+          0.0014182224778268228,
+          0.00010623872682029936
+        ]
+      },
+      {
+        "mode": "lu_h_plus_optimized",
+        "phase": "im",
+        "samples": 6144,
+        "signed": 0.000541557433462437,
+        "signed_se": 0.0004494834718383328,
+        "absolute": 0.0011794192488589915,
+        "absolute_se": 0.0004492846457276294,
+        "largest_abs_weight": 2.482636992511147,
+        "mean_sample_ms": 76.94383699999999,
+        "quad_percent": 0.5696614583333334,
+        "arb_percent": 0.0,
+        "final_invalid_percent": 0.0,
+        "seed_absolute_results": [
+          0.000950457448168605,
+          0.0016386672833136847,
+          0.0009491330150946846
+        ],
+        "seed_absolute_errors": [
+          0.0004245677704499884,
+          0.0012201518322834878,
+          0.00038486239917609835
+        ]
+      }
+    ]
+  },
+  "retained_maxima": [
+    {
+      "run": "canonical_six_lmb_seed1337",
+      "component": "re",
+      "sign": "+",
+      "max_eval": 0.09708893541880108,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 4
+        }
+      ],
+      "xs": [
+        0.6102639700607709,
+        0.3717254910445168,
+        0.34361429438819446,
+        0.6217002724834676,
+        0.4150806774879249,
+        0.12345706452217875,
+        0.3296528900323098,
+        0.49936189917327534,
+        0.13141123761450324,
+        0.3489199804867221,
+        0.748245447946496,
+        0.4414924346244571
+      ]
+    },
+    {
+      "run": "canonical_six_lmb_seed1337",
+      "component": "im",
+      "sign": "+",
+      "max_eval": 0.2694192569966192,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 4
+        }
+      ],
+      "xs": [
+        0.6102639700607709,
+        0.3717254910445168,
+        0.34361429438819446,
+        0.6217002724834676,
+        0.4150806774879249,
+        0.12345706452217875,
+        0.3296528900323098,
+        0.49936189917327534,
+        0.13141123761450324,
+        0.3489199804867221,
+        0.748245447946496,
+        0.4414924346244571
+      ]
+    },
+    {
+      "run": "cut_radial_power_one_seed1337",
+      "component": "re",
+      "sign": "+",
+      "max_eval": 0.13344042088240135,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 1
+        }
+      ],
+      "xs": [
+        0.64525863424404,
+        0.3492885597237897,
+        0.4162582482340439,
+        0.4443639158308361,
+        0.575926219594791,
+        0.24827205737634106,
+        0.35850043495155803,
+        0.49389638181351336,
+        0.327868334016551,
+        0.3820185262037378,
+        0.7385489480860477,
+        0.11256222120460835
+      ]
+    },
+    {
+      "run": "cut_radial_power_one_seed1337",
+      "component": "im",
+      "sign": "-",
+      "max_eval": -1.936824801051881,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 1
+        }
+      ],
+      "xs": [
+        0.64525863424404,
+        0.3492885597237897,
+        0.4162582482340439,
+        0.4443639158308361,
+        0.575926219594791,
+        0.24827205737634106,
+        0.35850043495155803,
+        0.49389638181351336,
+        0.327868334016551,
+        0.3820185262037378,
+        0.7385489480860477,
+        0.11256222120460835
+      ]
+    },
+    {
+      "run": "lu_h_six_cuts_seed1337",
+      "component": "re",
+      "sign": "+",
+      "max_eval": 0.07950843997487544,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 1
+        }
+      ],
+      "xs": [
+        0.64525863424404,
+        0.3492885597237897,
+        0.4162582482340439,
+        0.4443639158308361,
+        0.575926219594791,
+        0.24827205737634106,
+        0.35850043495155803,
+        0.49389638181351336,
+        0.327868334016551,
+        0.3820185262037378,
+        0.7385489480860477,
+        0.11256222120460835
+      ]
+    },
+    {
+      "run": "lu_h_six_cuts_seed1337",
+      "component": "im",
+      "sign": "-",
+      "max_eval": -1.1534346628345,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 1
+        }
+      ],
+      "xs": [
+        0.64525863424404,
+        0.3492885597237897,
+        0.4162582482340439,
+        0.4443639158308361,
+        0.575926219594791,
+        0.24827205737634106,
+        0.35850043495155803,
+        0.49389638181351336,
+        0.327868334016551,
+        0.3820185262037378,
+        0.7385489480860477,
+        0.11256222120460835
+      ]
+    },
+    {
+      "run": "lu_h_plus_optimized_seed1337",
+      "component": "re",
+      "sign": "+",
+      "max_eval": 0.22945432366102003,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 7
+        }
+      ],
+      "xs": [
+        0.44857849544297435,
+        0.45055682594346835,
+        0.9256843614341775,
+        0.662616077705924,
+        0.27281760527175336,
+        0.9544934940656129,
+        0.38812561636583165,
+        0.03954850643413088,
+        0.8623672639166368,
+        0.29604559853444223,
+        0.500004803379991,
+        0.5699602516815503
+      ]
+    },
+    {
+      "run": "lu_h_plus_optimized_seed1337",
+      "component": "im",
+      "sign": "+",
+      "max_eval": 0.7636767588736648,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 7
+        }
+      ],
+      "xs": [
+        0.44857849544297435,
+        0.45055682594346835,
+        0.9256843614341775,
+        0.662616077705924,
+        0.27281760527175336,
+        0.9544934940656129,
+        0.38812561636583165,
+        0.03954850643413088,
+        0.8623672639166368,
+        0.29604559853444223,
+        0.500004803379991,
+        0.5699602516815503
+      ]
+    },
+    {
+      "run": "canonical_six_lmb_seed7331",
+      "component": "re",
+      "sign": "+",
+      "max_eval": 0.4304273290819327,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 0
+        }
+      ],
+      "xs": [
+        0.5106149926523926,
+        0.8254226410223504,
+        0.40098955144039927,
+        0.6959709409296017,
+        0.8534484158656008,
+        0.5422832473579025,
+        0.46947353836303996,
+        0.9688592745810751,
+        0.9343822967758202,
+        0.6788477369012813,
+        0.9239494153609776,
+        0.8357470093228285
+      ]
+    },
+    {
+      "run": "canonical_six_lmb_seed7331",
+      "component": "im",
+      "sign": "-",
+      "max_eval": -0.3193421818102828,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 4
+        }
+      ],
+      "xs": [
+        0.36018107953753187,
+        0.606774499152152,
+        0.85369065951996,
+        0.5728350325584739,
+        0.585012834087939,
+        0.9192874962410779,
+        0.3254047113865862,
+        0.7997177159359073,
+        0.4140849551902972,
+        0.7306449511170212,
+        0.25349411326500104,
+        0.7243122298707206
+      ]
+    },
+    {
+      "run": "cut_radial_power_one_seed7331",
+      "component": "re",
+      "sign": "+",
+      "max_eval": 0.020736018316688073,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 3
+        }
+      ],
+      "xs": [
+        0.7289468158588194,
+        0.643313177152876,
+        0.3030059718611706,
+        0.634543541023287,
+        0.32239851042873546,
+        0.4357638013425714,
+        0.4911639248794599,
+        0.23775920172438714,
+        0.048116869538014195,
+        0.5329658769958829,
+        0.15392110858512398,
+        0.7604347629553847
+      ]
+    },
+    {
+      "run": "cut_radial_power_one_seed7331",
+      "component": "im",
+      "sign": "+",
+      "max_eval": 0.031522303316179175,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 3
+        }
+      ],
+      "xs": [
+        0.7289468158588194,
+        0.643313177152876,
+        0.3030059718611706,
+        0.634543541023287,
+        0.32239851042873546,
+        0.4357638013425714,
+        0.4911639248794599,
+        0.23775920172438714,
+        0.048116869538014195,
+        0.5329658769958829,
+        0.15392110858512398,
+        0.7604347629553847
+      ]
+    },
+    {
+      "run": "lu_h_six_cuts_seed7331",
+      "component": "re",
+      "sign": "-",
+      "max_eval": -0.051264871076024246,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 5
+        }
+      ],
+      "xs": [
+        0.10193946054217784,
+        0.617630123305078,
+        0.4380605912906256,
+        0.44473244834022585,
+        0.3556899461906381,
+        0.4581677824767745,
+        0.6737244828978063,
+        0.579787130104565,
+        0.2477704540966047,
+        0.4434355364159076,
+        0.1456156314513769,
+        0.3900141357709015
+      ]
+    },
+    {
+      "run": "lu_h_six_cuts_seed7331",
+      "component": "im",
+      "sign": "+",
+      "max_eval": 0.20407759328623817,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 5
+        }
+      ],
+      "xs": [
+        0.10193946054217784,
+        0.617630123305078,
+        0.4380605912906256,
+        0.44473244834022585,
+        0.3556899461906381,
+        0.4581677824767745,
+        0.6737244828978063,
+        0.579787130104565,
+        0.2477704540966047,
+        0.4434355364159076,
+        0.1456156314513769,
+        0.3900141357709015
+      ]
+    },
+    {
+      "run": "lu_h_plus_optimized_seed7331",
+      "component": "re",
+      "sign": "-",
+      "max_eval": -0.14608886301848895,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 10
+        }
+      ],
+      "xs": [
+        0.4898608072079611,
+        0.8225722066722913,
+        0.07598738157481455,
+        0.6292017091663635,
+        0.595005408980773,
+        0.1624921564036489,
+        0.3324094250619377,
+        0.6263354786645629,
+        0.8406698629711871,
+        0.2862376969537789,
+        0.2743655214197587,
+        0.1012942577570437
+      ]
+    },
+    {
+      "run": "lu_h_plus_optimized_seed7331",
+      "component": "im",
+      "sign": "+",
+      "max_eval": 0.5998519911649081,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 8
+        }
+      ],
+      "xs": [
+        0.47039176753796186,
+        0.1438030638646074,
+        0.7662917940812044,
+        0.4362824297328609,
+        0.1173961389877698,
+        0.7913810952320101,
+        0.5283671979666666,
+        0.7965105116839059,
+        0.38633305594025547,
+        0.255391201861521,
+        0.9994631670060642,
+        0.8459984202825878
+      ]
+    },
+    {
+      "run": "canonical_six_lmb_seed424242",
+      "component": "re",
+      "sign": "+",
+      "max_eval": 1.4548600186863478,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 5
+        }
+      ],
+      "xs": [
+        0.6468513008491709,
+        0.49506089239388884,
+        0.5255018132488607,
+        0.625241287490841,
+        0.5144315754737837,
+        0.5042486311385092,
+        0.23076601160118437,
+        0.43242218079271033,
+        0.9745130945047329,
+        0.42937882758314094,
+        0.50572963171858,
+        0.0667141688865408
+      ]
+    },
+    {
+      "run": "canonical_six_lmb_seed424242",
+      "component": "im",
+      "sign": "+",
+      "max_eval": 1.245222843378186,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 5
+        }
+      ],
+      "xs": [
+        0.6468513008491709,
+        0.49506089239388884,
+        0.5255018132488607,
+        0.625241287490841,
+        0.5144315754737837,
+        0.5042486311385092,
+        0.23076601160118437,
+        0.43242218079271033,
+        0.9745130945047329,
+        0.42937882758314094,
+        0.50572963171858,
+        0.0667141688865408
+      ]
+    },
+    {
+      "run": "cut_radial_power_one_seed424242",
+      "component": "re",
+      "sign": "+",
+      "max_eval": 0.0034130486543837175,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 1
+        }
+      ],
+      "xs": [
+        0.544412640050479,
+        0.9030055659334191,
+        0.41402974210293075,
+        0.5610292512158586,
+        0.42416134313938547,
+        0.7287579716832543,
+        0.4880524828094239,
+        0.503070730656175,
+        0.17078150651432134,
+        0.31925270695229235,
+        0.6989871390833465,
+        0.23866181815656473
+      ]
+    },
+    {
+      "run": "cut_radial_power_one_seed424242",
+      "component": "im",
+      "sign": "-",
+      "max_eval": -0.005855114887393736,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 1
+        }
+      ],
+      "xs": [
+        0.616088496014066,
+        0.9370747523383917,
+        0.41370179534914875,
+        0.7759414542678947,
+        0.36362857349476363,
+        0.7051350328914003,
+        0.7944481072918234,
+        0.5737265772456409,
+        0.5372268170366454,
+        0.44936107894564536,
+        0.3748600248485954,
+        0.40499310353876694
+      ]
+    },
+    {
+      "run": "lu_h_six_cuts_seed424242",
+      "component": "re",
+      "sign": "+",
+      "max_eval": 0.019723147603305194,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 5
+        }
+      ],
+      "xs": [
+        0.05250484138037459,
+        0.4197225117699791,
+        0.5287460671338364,
+        0.39140240019774664,
+        0.41119650529021046,
+        0.4600542041780584,
+        0.5362730490222892,
+        0.2585088428444824,
+        0.5109071694758492,
+        0.7548016471356074,
+        0.4205178685526042,
+        0.5609832880867838
+      ]
+    },
+    {
+      "run": "lu_h_six_cuts_seed424242",
+      "component": "im",
+      "sign": "-",
+      "max_eval": -0.0073597157141819395,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 1
+        }
+      ],
+      "xs": [
+        0.26766542678068417,
+        0.34856975206844554,
+        0.5003490777463839,
+        0.1546388815921671,
+        0.5214273818167321,
+        0.4386912526308412,
+        0.0756437802222254,
+        0.5319240839989978,
+        0.4261676813149048,
+        0.9027835818903586,
+        0.8436476218388467,
+        0.5805147058265733
+      ]
+    },
+    {
+      "run": "lu_h_plus_optimized_seed424242",
+      "component": "re",
+      "sign": "+",
+      "max_eval": 2.9005967249343345,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 11
+        }
+      ],
+      "xs": [
+        0.6468513008491709,
+        0.49506089239388884,
+        0.5255018132488607,
+        0.625241287490841,
+        0.5144315754737837,
+        0.5042486311385092,
+        0.23076601160118437,
+        0.43242218079271033,
+        0.9745130945047329,
+        0.42937882758314094,
+        0.50572963171858,
+        0.0667141688865408
+      ]
+    },
+    {
+      "run": "lu_h_plus_optimized_seed424242",
+      "component": "im",
+      "sign": "+",
+      "max_eval": 2.482636992511147,
+      "discrete_axes": [
+        {
+          "label": "graph",
+          "index": 0
+        },
+        {
+          "label": "sampling channel",
+          "index": 11
+        }
+      ],
+      "xs": [
+        0.6468513008491709,
+        0.49506089239388884,
+        0.5255018132488607,
+        0.625241287490841,
+        0.5144315754737837,
+        0.5042486311385092,
+        0.23076601160118437,
+        0.43242218079271033,
+        0.9745130945047329,
+        0.42937882758314094,
+        0.50572963171858,
+        0.0667141688865408
+      ]
+    }
+  ],
+  "maximum_replay_contract": "Largest |weight| per run/component retained:24 records. Inspect uses the recorded cube/discrete point and the matching embedded card. Its unit discrete convenience weight differs from integration reciprocal discrete/grid probabilities; original adaptive PDF is not recorded in printed coordinates. No replay has been executed yet.",
+  "reproduction": "At the exact source hash build the recorded profile. Regenerate/read the state with the baseline input card and unchanged graph/model hashes; extract configuration.cards TOML strings to fresh files; substitute binary/state/card/workspace paths in execution.argv. Each workspace must be new. Scratch absolute paths are provenance, not mandatory locations."
+}

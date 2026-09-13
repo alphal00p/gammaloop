@@ -515,17 +515,29 @@ is collected before equivalent cut geometries are deduplicated; this initial
 fit does not optimize derivative envelopes. Physical h and all residue/CT
 derivatives remain unchanged. The profile is rejected on amplitude channels.
 
-Explicit full-rank amplitude E-surfaces populate the production compile context
-from real catalogue equations, masses and external momenta. Ambiguous shifts,
-unsupported frames and rank-deficient full-space requests fail clearly. Known
-absent/pinched targets retain normalized exact fallback maps. The selected
-UV-finite two-loop amplitude benchmarks and remaining subspace/automatic work
-are recorded in
+Explicit amplitude E-surfaces populate the production compile context from real
+catalogue equations, masses and external momenta. The master parent LMB supports
+both full-space and proper-fiber charts. Active axes follow canonical parent
+order; an explicit surface shorthand samples its complement first, then the
+conditional active block. Dependent products are rejected. Ambiguous shifts,
+unsupported frames and rank-deficient requests fail clearly.
+
+The same implicit map prepares a center and existence status once per forward
+or foreign inverse, outside root iteration. Two-energy rank-one fibers use an
+analytic minimum including fixed energies, boosts and unequal/zero masses.
+General fibers use the existing SOCP center solver only as a candidate source;
+the actual native energy residual must certify an interior point. Conservative
+sign tolerances include cancelling routed inputs. Empty-complement preparation
+is frozen at warmup. Certified absence or explicit pinched status retains a
+normalized full-support fallback; a failed solve or numerically ambiguous sign
+requires a typed numerical error. Per-draw preparation participates in precision
+rescue; frozen-geometry binding errors currently abort transactional warmup and
+need a follow-up in that existing owner. This is not an interval certificate. Arbitrary
+parents, automatic discovery and production cut/left/right preparation remain
+unfinished. The selected UV-finite two-loop amplitude benchmarks are recorded in
 [the amplitude study](../research/advanced_sampling/AMPLITUDE_BENCHMARK_CANDIDATES.md).
-The amplitude host distinguishes existence from the implicit kernel's rootless
-branch and rejects existing surfaces with an unsuitable zero center. The kernel
-certifies residuals and rejects unrepresentable inverse points without clipping.
-Generic geometry preparation still needs suitable interior-center selection.
+The kernel certifies residuals and rejects unrepresentable inverse points without
+clipping.
 The shared radial profile focuses on both signed distances to the threshold
 with a common analytic inverse. Native kernel tests cover Quad and arbitrary
 precision. Components, affine/composed maps, prepared cut records, eager/dual
@@ -539,7 +551,7 @@ map failure discards partial values and events before retry. Precise output
 retains native values; ordinary output rejects unrepresentable finite values
 instead of silently zeroing them. Root uncertainty relative to the sampled
 threshold distance and density accuracy still needs its stronger certificate.
-Native reference retry, derived-expression mass evaluation and final outer-grid
+Derived-expression mass evaluation, Gaussian-body underflow and final outer-grid
 range handling remain separate precision limits.
 The bridge checks the selected forward determinant against its inverse density
 at the actual mapped point. It reuses the selected exact partition score, or
@@ -549,8 +561,10 @@ standalone constructors use native square-root epsilon. Failure is a typed
 precision-retry condition. This is numerical proposal consistency, not a
 rigorous enclosure of the physical surface or of floating-point errors.
 
-Physical and Gaussian-reference targets share graph traversal and default-LMB
-routing. Summed reference evaluation aggregates values and raw-frame moments
+Physical and Gaussian-reference targets share graph traversal, default-LMB
+routing and original-draw native precision retries. Reference values and raw-frame
+moments each pass the existing scalar stability check before joint reporting;
+unresolved or unrepresentable results fail acceptance. Summed reference evaluation aggregates values and raw-frame moments
 across mapped points before statistical squaring. Graph/orientation probabilities
 and outer map/grid factors are applied once; invalid draws fail acceptance.
 Explicit discrete coordinate selections expose partial partition contributions,

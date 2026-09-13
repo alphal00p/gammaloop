@@ -83,8 +83,8 @@ fn make_multi_event(
             graph_id: 0,
             graph_group_id: None,
             orientation_id: None,
-            lmb_channel_id: None,
-            lmb_channel_edge_ids: None,
+            sampling_channel_id: None,
+            sampling_channel_edge_ids: None,
         },
         weight: Complex::new(F(weight.0), F(weight.1)),
         additional_weights: gammalooprs::observables::GenericAdditionalWeightInfo {
@@ -503,7 +503,7 @@ fn assert_close(lhs: f64, rhs: f64) {
 }
 
 #[test]
-fn graph_evaluation_result_merges_groups_and_downcasts() {
+fn graph_evaluation_result_merges_native_groups() {
     let first_event = make_event(
         0.25,
         0.0,
@@ -531,6 +531,7 @@ fn graph_evaluation_result_merges_groups_and_downcasts() {
 
     let mut lhs = GraphEvaluationResult {
         integrand_result: Complex::new(F::<f128>::from_f64(1.0), F::<f128>::from_f64(2.0)),
+        reference_moments: None,
         event_groups: GenericEventGroupList::<f128>::from_f64(&singleton_groups(first_event)),
         event_processing_time: Duration::from_millis(5),
         generated_event_count: 1,
@@ -538,6 +539,7 @@ fn graph_evaluation_result_merges_groups_and_downcasts() {
     };
     let rhs = GraphEvaluationResult {
         integrand_result: Complex::new(F::<f128>::from_f64(3.0), F::<f128>::from_f64(-4.0)),
+        reference_moments: None,
         event_groups: GenericEventGroupList::<f128>::from_f64(&singleton_groups(second_event)),
         event_processing_time: Duration::from_millis(7),
         generated_event_count: 2,
@@ -545,10 +547,10 @@ fn graph_evaluation_result_merges_groups_and_downcasts() {
     };
 
     lhs.merge_in_place(rhs);
-    let merged = lhs.into_f64();
+    let merged = lhs;
 
-    assert_close(merged.integrand_result.re.0, 4.0);
-    assert_close(merged.integrand_result.im.0, -2.0);
+    assert_eq!(merged.integrand_result.re, F::<f128>::from_f64(4.0));
+    assert_eq!(merged.integrand_result.im, F::<f128>::from_f64(-2.0));
     assert_eq!(merged.event_groups.len(), 2);
     assert_eq!(merged.generated_event_count, 3);
     assert_eq!(merged.accepted_event_count, 2);
