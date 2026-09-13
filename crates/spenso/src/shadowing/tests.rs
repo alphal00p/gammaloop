@@ -155,6 +155,27 @@ fn collect_rep_callback_receives_complete_unaliased_tensor_payload() {
 }
 
 #[test]
+fn collect_rep_callback_receives_complete_compressed_tensor_powers() {
+    use crate::shadowing::Collectable;
+
+    let (a, b) = symbol!("powered_coefficient_a", "powered_coefficient_b");
+    let coefficient = (Atom::var(a) + Atom::var(b)).pow(9);
+    let tensor = p!(mink!(4, mu));
+    let power = tensor.pow(3);
+    let mut visits = 0;
+    let result = (coefficient.clone() * &power).collect_rep_with_map(
+        LibraryRep::from(Minkowski {}),
+        |wrapped, _, out| {
+            visits += 1;
+            assert_eq!(wrapped, power.clone().wrap_in_collect().as_view());
+            **out = Atom::num(7);
+        },
+    );
+    assert_eq!(visits, 1);
+    assert_eq!(result, Atom::num(7) * coefficient);
+}
+
+#[test]
 fn collect_tensors_marks_chain_like_forms_as_maximal_factors() {
     let (a, b) = symbol!("a", "b");
     let mu = mink!(4, mu);

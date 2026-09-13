@@ -305,6 +305,107 @@ fn cof_dimension_simplification_preserves_factorized_spectators() {
 }
 
 #[test]
+fn color_collection_preserves_powered_noncolor_trace_sums() {
+    test_initialize();
+    let traces = parse_lit!(
+        (trace(bis(4), opaque_trace_a(1, 2)) + trace(bis(4), opaque_trace_b(1, 2))) ^ 5,
+        default_namespace = "spenso"
+    );
+    let color = parse_lit!(
+        f(coad(8, a), coad(8, b), coad(8, c)) ^ 2,
+        default_namespace = "spenso"
+    );
+    for settings in [
+        ColorSimplifySettings::default().with_cof_dimension_invariants(),
+        ColorSimplifySettings::default()
+            .with_cof_dimension_invariants()
+            .without_trace_evaluation(),
+    ] {
+        // Non-color traces are opaque numerator factors. Collecting them as
+        // polynomial variables would distribute this power of a sum.
+        assert_eq!(traces.simplify_color_with(settings), traces);
+        assert_eq!(
+            (&traces * &color).simplify_color_with(settings),
+            Atom::num(24) * &traces
+        );
+    }
+}
+
+#[test]
+fn color_collection_closes_generic_chains_after_metric_reduction() {
+    test_initialize();
+    let chains = parse!(
+        "spenso::chain(spenso::mink(4,spenso::i),spenso::mink(4,spenso::j),spenso::g(spenso::in,spenso::out))*spenso::chain(spenso::mink(4,spenso::j),spenso::mink(4,spenso::i),spenso::opaque_matrix(1,2))"
+    );
+    let trace = parse_lit!(
+        trace(mink(4), cyclic(opaque_matrix(1, 2))),
+        default_namespace = "spenso"
+    );
+    let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 3);
+    // The identity chain first becomes a metric. Contracting that metric then
+    // closes the other chain, so one pass of independent node rewrites is not enough.
+    let expected = &spectator * trace;
+    assert_eq!((spectator * chains).simplify_color(), expected);
+    assert_eq!(expected.simplify_color(), expected);
+}
+
+#[test]
+fn color_collection_preserves_generic_chain_normalization() {
+    test_initialize();
+    let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 5);
+    let chain = parse_lit!(
+        chain(mink(4, i), mink(4, i), spectator_tensor(1, 2)),
+        default_namespace = "spenso"
+    );
+    let expected = parse_lit!(
+        trace(mink(4), cyclic(spectator_tensor(1, 2))),
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        (spectator.clone() * chain).simplify_color(),
+        spectator * expected
+    );
+    let identity = parse!(
+        "spenso::chain(spenso::mink(4,spenso::i),spenso::mink(4,spenso::j),spenso::g(spenso::in,spenso::out))"
+    );
+    assert_eq!(
+        identity.simplify_color(),
+        parse_lit!(g(mink(4, i), mink(4, j)), default_namespace = "spenso")
+    );
+}
+
+#[test]
+fn color_collection_preserves_wrappers_and_mixed_tensor_slots() {
+    test_initialize();
+    let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
+    let color = parse_lit!(
+        f(coad(8, a), coad(8, b), coad(8, c)) ^ 2,
+        default_namespace = "spenso"
+    );
+    let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 3);
+    for wrapper in [
+        SPENSO_TAG.pure_scalar,
+        SPENSO_TAG.bracket,
+        symbol!("color_wrapper"),
+    ] {
+        let input = function!(wrapper, &color * &spectator);
+        let expected = function!(wrapper, Atom::num(24) * &spectator);
+        assert_eq!(input.simplify_color_with(settings), expected);
+    }
+    let mixed = parse_lit!(
+        mixed_tensor(cof(3, i), mink(4, mu)) * g(mink(4, mu), mink(4, nu)),
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        mixed.simplify_color_with(settings),
+        parse_lit!(
+            mixed_tensor(cof(3, i), mink(4, nu)),
+            default_namespace = "spenso"
+        )
+    );
+}
+
+#[test]
 fn cof_dimension_simplification_resolves_new_color_invariants() {
     test_initialize();
     let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
@@ -506,7 +607,7 @@ fn three_loop_pole_part_color() {
 
     let color_zero_candidate = input.cook_indices().simplify_color().collect_color();
 
-    assert_snapshot!(&color_zero_candidate.collect_symbol::<i16>(SPENSO_TAG.dot).to_bare_ordered_string(),@"(((-16+-26*eps^2+-8/3*eps^2*𝜋^2+56/3*eps)*1/128*CA*eps^(-3)*gs^6+(-88/3*eps+16+26*eps^2+8/3*eps^2*𝜋^2)*-1/128*CA*eps^(-3)*gs^6)*16+(-16+-26*eps^2+-8/3*eps^2*𝜋^2+88/3*eps)*1/8*CA*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+176/3*eps)*1/8*CA*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+48*eps)*1/4*CA*eps^(-3)*gs^6)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))");
+    assert_snapshot!(&color_zero_candidate.collect_symbol::<i16>(SPENSO_TAG.dot).to_bare_ordered_string(),@"((-16+-26*eps^2+-8/3*eps^2*𝜋^2+56/3*eps)*1/8*CA*eps^(-3)*gs^6+(-16+-26*eps^2+-8/3*eps^2*𝜋^2+88/3*eps)*1/8*CA*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+176/3*eps)*1/8*CA*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+48*eps)*1/4*CA*eps^(-3)*gs^6+(-88/3*eps+16+26*eps^2+8/3*eps^2*𝜋^2)*-1/8*CA*eps^(-3)*gs^6)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))");
 
     let input = parse_lit!(
         ((8 * eps + 8 / 3) * 1 / 64

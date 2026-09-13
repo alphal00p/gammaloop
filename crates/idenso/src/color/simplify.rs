@@ -5,7 +5,7 @@ use spenso::{
     chain,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
     rep_,
-    shadowing::{self, TensorCollectExt},
+    shadowing::{self, Collectable, TensorCollectExt, TensorCollectFilter},
     structure::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         representation::RepName,
@@ -23,7 +23,7 @@ use symbolica_utils::PatternReplacement;
 
 use crate::{
     W_, color_f, color_t,
-    representations::{ColorAdjoint, ColorFundamental},
+    representations::{ColorAdjoint, ColorFundamental, ColorSextet},
     shorthands::{chain::Chain, metric::MetricSimplifier},
     tensor::remove_antisymmetric_zero_terms,
 };
@@ -45,9 +45,71 @@ pub(crate) struct ColorAlgebraSimplifier {
 impl ColorAlgebraSimplifier {
     pub(crate) fn run(&self, expression: AtomView<'_>) -> Atom {
         let mut current = expression.simplify_metrics();
+        if self.settings.substitute_cof_dimension_invariants {
+            current = current.to_cof_dimension_invariants();
+        }
+        // Retain generic chain/trace normalization: the existing rules also
+        // normalize closed or identity chains in other representations. Reduce
+        // those nodes without collecting their surrounding non-color sums.
+        let normalize_generic = |mut current: Atom| loop {
+            let next = current
+                .replace_map(|atom, _context, out| {
+                    let AtomView::Fun(fun) = atom else { return };
+                    if (fun.get_symbol() == T.chain || shadowing::trace_parts(fun).is_some())
+                        && !atom_contains_color_node(atom)
+                    {
+                        **out = self.reduce_payload(atom);
+                    }
+                })
+                .simplify_metrics();
+            if next == current {
+                break next;
+            }
+            current = next;
+        };
+        current = normalize_generic(current);
+        // Isolate complete color networks once. Fixed-point chain rewrites must
+        // not repeatedly traverse the factorized momentum coefficients that
+        // accompany each collected color payload.
+        let simplified = current
+            .collect_with_map(
+                |atom| matches!(atom, AtomView::Fun(_) if atom_contains_color_node(atom)),
+            )
+            .map_collects(|factor, _context, out| {
+                let AtomView::Fun(collected) = factor else {
+                    return;
+                };
+                if let Some(color) = collected.iter().next() {
+                    **out = self.reduce_payload(color);
+                }
+            })
+            .unwrap_collect();
+        // Mixed tensors can expose metric contractions with factors outside
+        // the color network, so retain the global normalization boundary.
+        // A resulting metric can close another generic chain; iterate those
+        // local rewrites without collecting its surrounding momentum factors.
+        let simplified = normalize_generic(simplified);
+        if self.settings.substitute_cof_dimension_invariants {
+            simplified.to_cof_dimension_invariants()
+        } else {
+            simplified
+        }
+    }
 
+    fn reduce_payload(&self, expression: AtomView<'_>) -> Atom {
+        let mut current = expression.to_owned();
         loop {
-            let next = self.apply_once(current.as_view());
+            let collected = self.collect_lines(current.as_view());
+            let rewritten = self.rewrite_terms(collected.as_view());
+            // Resolve scalar invariants before their representation labels trigger
+            // tensor collection over the accompanying factorized numerator. Include
+            // invariants produced by this pass, as well as those already present.
+            let rewritten = if self.settings.substitute_cof_dimension_invariants {
+                rewritten.to_cof_dimension_invariants()
+            } else {
+                rewritten
+            };
+            let next = rewritten.collect_color().simplify_metrics();
             if next == current {
                 // Every antisymmetric color tensor carries adjoint slots, so this
                 // isolates its complete network without expanding other sectors.
@@ -78,20 +140,6 @@ impl ColorAlgebraSimplifier {
             }
             current = next;
         }
-    }
-
-    fn apply_once(&self, expression: AtomView<'_>) -> Atom {
-        let collected = self.collect_lines(expression);
-        let rewritten = self.rewrite_terms(collected.as_view());
-        // Resolve scalar invariants before their representation labels trigger
-        // tensor collection over the accompanying factorized numerator. Include
-        // invariants produced by this pass, as well as those already present.
-        let rewritten = if self.settings.substitute_cof_dimension_invariants {
-            rewritten.to_cof_dimension_invariants()
-        } else {
-            rewritten
-        };
-        rewritten.collect_color().simplify_metrics()
     }
 
     fn rewrite_terms(&self, expr: AtomView<'_>) -> Atom {
@@ -1643,14 +1691,18 @@ fn atom_contains_color_node(expr: AtomView<'_>) -> bool {
     match expr {
         AtomView::Fun(f) => {
             let symbol = f.get_symbol();
-            symbol == CS.f
+            TensorCollectFilter::Reps([
+                ColorAdjoint {}.into(),
+                ColorFundamental {}.into(),
+                ColorSextet {}.into(),
+            ])
+            .matches(expr)
+                || symbol == CS.f
                 || symbol == CS.d
                 || symbol == CS.t
                 || symbol == CS.gram
                 || symbol == CS.cas
                 || symbol == CS.idx
-                || symbol == T.chain
-                || shadowing::trace_parts(f).is_some()
                 || f.iter().any(atom_contains_color_node)
         }
         AtomView::Add(add) => add.iter().any(atom_contains_color_node),

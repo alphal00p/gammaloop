@@ -983,6 +983,7 @@ impl Graph {
         options: &Generate3DExpressionOptions,
         analysis_numerator: Option<&Atom>,
     ) -> Result<GeneratedThreeDExpression> {
+        let request_started = Instant::now();
         let initial_state_cut_edges = self
             .iter_edges_of(&self.initial_state_cut)
             .map(|(_, edge_id, _)| edge_id)
@@ -995,7 +996,9 @@ impl Graph {
                 source_contract_edges.len()
             );
         }
+        let reconstruction_started = Instant::now();
         let source = GraphThreeDSource::new(self, &source_contract_edges)?;
+        let reconstruction_time = reconstruction_started.elapsed();
         let bridge_edges = self
             .iter_edges_of(&self.tree_edges)
             .map(|(_, edge_id, _)| edge_id)
@@ -1068,6 +1071,10 @@ impl Graph {
                 usize::from(edge_id),
             ));
         }
+        let preparation_time = request_started
+            .elapsed()
+            .saturating_sub(reconstruction_time);
+        let native_started = Instant::now();
         let mut generated = {
             let result = three_dimensional_reps::generate_3d_expression(&source, &source_options);
             result.map_err(|error| {
@@ -1084,6 +1091,7 @@ impl Graph {
                     )
                 })
         }?;
+        let native_time = native_started.elapsed();
 
         // Generic edge-index remapping leaves omitted parent edges at zero. A
         // contracted edge can still have an exact outer-energy map when its
@@ -1137,6 +1145,18 @@ impl Graph {
             }
         }
 
+        let elapsed = request_started.elapsed();
+        crate::debug_tags!(#generation, #cff, #profile;
+            stage = "raw_cff_generation",
+            graph = %self.name,
+            native_source_maps = generated.expression.orientations.len(),
+            elapsed_ms = elapsed.as_secs_f64() * 1000.0,
+            source_reconstruction_ms = reconstruction_time.as_secs_f64() * 1000.0,
+            preparation_ms = preparation_time.as_secs_f64() * 1000.0,
+            native_generation_ms = native_time.as_secs_f64() * 1000.0,
+            postprocessing_ms = elapsed.saturating_sub(reconstruction_time + preparation_time + native_time).as_secs_f64() * 1000.0,
+            "Generated a raw CFF request before surface conversion"
+        );
         Ok(generated)
     }
 

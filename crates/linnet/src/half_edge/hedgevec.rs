@@ -471,22 +471,6 @@ impl<T> SmartEdgeVec<T> {
         )
     }
 
-    fn update_edge_references(&mut self, old_edge_id: EdgeIndex, new_edge_id: EdgeIndex) {
-        for (_, d) in self.involution.iter_mut() {
-            match d {
-                InvolutiveMapping::Source { data, .. } if data.data == old_edge_id => {
-                    data.data = new_edge_id;
-                }
-
-                InvolutiveMapping::Identity { data, .. } if data.data == old_edge_id => {
-                    data.data = new_edge_id;
-                }
-
-                _ => {}
-            }
-        }
-    }
-
     /// The first two arguments of the merge function correspond to the source hedge, and the second two to the sink hedge.
     pub(crate) fn connect_identities(
         &mut self,
@@ -511,9 +495,9 @@ impl<T> SmartEdgeVec<T> {
 
         // At most one swap: move the edge to be removed to the end
         if remove_edge_id != last {
-            g.data.swap(remove_edge_id, last);
-            // Update references to 'last' -> 'remove_edge_id'
-            g.update_edge_references(last, remove_edge_id);
+            // Update references to 'last' -> 'remove_edge_id' through the
+            // existing edge swap, which visits only the two data owners.
+            g.swap(remove_edge_id, last);
         }
 
         // Extract data by popping from end and swapping to avoid Clone requirement
@@ -1308,7 +1292,64 @@ impl<T> Swap<EdgeIndex> for SmartEdgeVec<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Flow, Involution, SmartEdgeVec};
+    use super::{Accessors, EdgeData, Flow, Involution, SmartEdgeVec};
+
+    #[test]
+    fn connect_identities_preserves_swapped_edge_owners_and_merge_order() {
+        for paired_last in [false, true] {
+            let mut involution = Involution::new();
+            if !paired_last {
+                involution.add_pair(17_u64, true);
+            }
+            let dangling = (0..4)
+                .map(|index| {
+                    involution.add_identity(
+                        21 + index,
+                        index % 2 == 0,
+                        if index % 2 == 0 {
+                            Flow::Source
+                        } else {
+                            Flow::Sink
+                        },
+                    )
+                })
+                .collect::<Vec<_>>();
+            if paired_last {
+                involution.add_pair(17, true);
+            }
+            for &source in &dangling {
+                for &sink in &dangling {
+                    if source == sink {
+                        continue;
+                    }
+                    for merge_flow in [Flow::Source, Flow::Sink] {
+                        let merge =
+                            |source_flow, source: EdgeData<u64>, sink_flow, sink: EdgeData<u64>| {
+                                let payload = source.data * 100
+                                    + sink.data
+                                    + u64::from(source_flow == Flow::Source) * 10_000
+                                    + u64::from(sink_flow == Flow::Source) * 20_000;
+                                (merge_flow, EdgeData::new(payload, source.orientation))
+                            };
+                        // The direct involution operation has no dense edge
+                        // swap/pop bookkeeping and supplies an independent oracle.
+                        let mut expected = involution.clone();
+                        expected.connect_identities(source, sink, merge).unwrap();
+                        let expected = SmartEdgeVec::new(expected);
+                        let mut actual = SmartEdgeVec::new(involution.clone());
+                        actual.connect_identities(source, sink, merge);
+                        for hedge in actual.involution.iter_idx() {
+                            assert_eq!(actual.data(hedge), expected.data(hedge));
+                            assert_eq!(actual.flow(hedge), expected.flow(hedge));
+                            assert_eq!(actual.orientation(hedge), expected.orientation(hedge));
+                            assert_eq!(actual.pair(hedge), expected.pair(hedge));
+                            assert_eq!(actual.pair(hedge), actual.involution.hedge_pair(hedge));
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn set_flow_updates_dangling_and_paired_endpoints_consistently() {

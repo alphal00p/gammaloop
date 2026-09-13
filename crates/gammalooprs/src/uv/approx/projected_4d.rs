@@ -200,6 +200,7 @@ impl Localizer<'_> {
             // Raw physical ownership is diagnostic provenance, separate from
             // canonical class algebra and the selected native capacities.
             // Compute it once, before residue states multiply across waves.
+            let raw_degree_started = Instant::now();
             let raw_reports = sector
                 .active_components
                 .iter()
@@ -216,6 +217,12 @@ impl Localizer<'_> {
                         .analyze_atom(&term.source_numerator)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
+            debug_tags!(#generation, #profile, #uv, #local, #four_d;
+                stage = "raw_physical_degree_report",
+                components = raw_reports.len(),
+                elapsed_ms = raw_degree_started.elapsed().as_secs_f64() * 1000.0,
+                "Analyzed raw physical ownership for degree reporting"
+            );
             let mut component_denominators = vec![Vec::new(); sector.active_components.len()];
             let mut residual_factor = Atom::one();
             for (denominator, class) in term.source_witness.iter().zip(&term.source_classes) {

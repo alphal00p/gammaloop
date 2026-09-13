@@ -1103,3 +1103,103 @@ If a gate fails, use the measurements to continue the generic implementation, in
   tuple-complexity warnings in existing assignment/source preparation code.
   Formatting and integration check54 pass; the four updated integration
   executables will be rebuilt and frozen before broader execution.
+
+### 2026-09-13 — Complete dispatch accounting and color payload isolation
+
+- Bulk assembly is committed and pushed as `d5938769c`. Integration build6
+  passes in 4m35s. Four assertion-enabled executables from that clean source
+  are frozen in `validation_candidate_d593`; seven boundary checks are queued
+  behind CLI11 under the common benchmark lock.
+- CLI11's ten-minute stack sample has 107 user-CPU samples and zero lost.
+  Color simplification accounts for 90.65% inclusive, with chain collection
+  53.27%, chain normalization 26.17%, identity-chain collapse 18.69% and
+  trace closure 17.76%. These overlap. The previous bulk-addition and
+  polynomial-zero-test hotspots do not appear in this sample. The full
+  generation remains pending; no overall speedup is inferred from one window.
+- A shared color refinement uses the existing tensor collector to isolate
+  complete color payloads before the existing fixed-point rewrite loop. The
+  selector also retains generic chain/trace normalization, accepted untyped
+  color heads and wrappers. Global metric normalization remains before and
+  after that boundary for mixed tensors. The existing collector now presents
+  positive integer powers as complete compressed monomials to callbacks;
+  numerator powers are not expanded. New regressions cover generic chains,
+  wrappers, mixed slots and complete powered callback payloads.
+- Checks55/56 caught ordinary new-test parsing and AtomView conversion errors;
+  check57 passes after those corrections. Focused nextest19 is running.
+  Existing physics expectations and tolerances are unchanged.
+- The previous dispatch subtotal omits unconditional raw physical-degree
+  reporting and outer soft-routing preparation. Added timing events cover
+  those boundaries and separate each raw CFF request into source rebuilding,
+  degree/preparation, native generation and postprocessing. Outer selection
+  records its complete elapsed time and winning proposal; all losing work
+  remains charged. This changes telemetry only, not admission or selection.
+- For a complete local-only run, the full dispatch denominator is the sum of
+  completed nonroot forest-node times, which includes child projection and
+  outer assembly but excludes root production CFF and subsequent amplitude
+  evaluator work. The old construction-plus-projection denominator remains
+  a separately labelled child-only diagnostic. Nested structural-certificate
+  time is already part of allocation and must not be added again. Interrupted
+  or dump-contaminated prefixes cannot certify the complete overhead gate.
+- Nextest19 completes 650 tests in 57.472 s: 648 pass and two representation
+  assertions fail. The new generic-chain fixture omitted the canonical cyclic
+  wrapper. The existing three-loop color snapshot differs only by moving a
+  numerical factor 16 into two coefficients (`16/128 = 1/8`), without changing
+  their scalar polynomials. These routine assertions are corrected under the
+  user's standing authorization; no physical expectation or tolerance changes.
+- Further review identifies a factorization hazard in selecting all generic
+  traces as collector variables: a power of a sum of color-free traces could
+  distribute. The refinement separates factor-preserving generic chain/metric
+  normalization from actual color collection, reusing the existing fixed-point
+  reducer. A new exact no-op regression covers this boundary. Check58 passes
+  in 3m17s, but its idenso-only package selection unnecessarily rebuilt a
+  different dependency feature set; subsequent checks retain the full set.
+- CLI11 advances from color rewriting to tensor construction. A second
+  six-second profile has 129 samples and zero lost: 88.37% inclusive and
+  78.29% self are in Linnet's `SmartEdgeVec::connect_identities`. Its sole-use
+  edge-reference helper scans the entire involution after each join. The
+  existing `Swap<EdgeIndex>` already updates the two exact owning half-edges
+  in constant time, so that operation replaces the scan without adding a
+  helper or changing merge flow. A new 48-case test compares every half-edge
+  against the independent direct-involution operation, including paired and
+  dangling moved edges and both merge-flow/source-order choices.
+- The corrected color boundary now runs the same reducer on generic nodes
+  separately, reaching a fixed point with metric normalization before and after
+  actual-color collection. This also handles an identity chain whose resulting
+  metric closes another chain. The new tests preserve a powered non-color trace
+  sum both alone and alongside a color square, with trace evaluation on and off.
+  Check59 exposed reserved-keyword parsing in the new fixtures; check60 passes
+  in 1.98 s after that routine correction. Nextest20 is running with the new
+  graph-join oracle included.
+- Nextest20 completes 653 tests in 58.017 s: 652 pass, including the powered
+  trace-sum and generic chain-closure regressions and the graph-join oracle.
+  The remaining new fixture compares identical metrics with differently
+  qualified index symbols; its input namespaces are corrected. Targeted
+  nextest21 passes that check. Clippy8 passes in 26.88 s with the same three
+  tuple-complexity warnings. The complete dispatch parser passes fifteen
+  synthetic controls and documents exact stage/overlap accounting in
+  `projection_profile_validation/README.md`.
+- Targeted nextest22 also passes the metric-driven chain-closure fixture after
+  index qualification. CLI check62 passes in 13.21 s; build12 is running.
+- CLI11 reaches its unchanged 2,400 s cap. SIGTERM is requested at
+  2,400.0830 s; final outer wall is 2,401.9509 s, exit -15, and peak RSS is
+  20,023,398,400 bytes. It produces no saved state, evaluator or forest export.
+  A separately recorded 30 GiB RSS guard was armed late in this diagnostic
+  and exits without intervention. The earlier reference to a preexisting
+  external diagnostic RAM guard was incorrect: the existing 30 GiB watchdog
+  belonged to the correctness harness. Both supervisor and RSS-guard receipts
+  remain preserved. This is another incomplete diagnostic, not a timing ratio.
+- All seven frozen `d593` boundary checks pass: four UV composition checks in
+  21.827 s, two API cut/threshold checks in 4.783 s and analytic renormalization
+  in 0.393 s. This validates bulk residue assembly, before the subsequent
+  color-payload and graph-join changes. Counter11 reproduces every recorded
+  evaluator count in the known GL00 saved state exactly and leaves all state
+  hashes unchanged; its validation runs after those checks under the same lock.
+- CLI12 build passes in 3m30s. The immutable executable in
+  `diagnostic_collected_color_payloads/immutable_binary/gammaloop` has SHA-256
+  `bcc1f87e946ad77fed108fdb64704b638dd3d83f4793ac7f5c246c53063e6c03`.
+  Its manifest binds revision `d5938769c`, source patch
+  `c2b9f0b1efdffb9a5c6e96885ada136317d3c2ffed779ad3f40f2b0de0ae9ba6`,
+  assertion-enabled build settings and compiler identity. The next GL262
+  diagnostic uses the corrected minimal log filter, explicit cold-start
+  attestation, a 2,400 s cap and a 30 GiB guard from launch. Its completion,
+  actual forest export, pointwise checks and repeated timing gates remain pending.

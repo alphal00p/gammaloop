@@ -11,6 +11,7 @@ use crate::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
+    coefficient::CoefficientView,
     id::{AliasedAtom, Context},
     symbol,
     utils::Settable,
@@ -70,9 +71,36 @@ impl Collectable for Atom {
 }
 impl Collectable for AtomView<'_> {
     fn collect_collects(self) -> Atom {
-        self.replace(COLLECT.call(W_.a_) * COLLECT.call(W_.b_))
-            .repeat()
-            .with(COLLECT.call(W_.a_ * W_.b_))
+        // A repeated tensor belongs to the complete collected monomial. Keep
+        // its power compressed while exposing all copies to mapping callbacks.
+        self.replace_map(|arg, _context, out| {
+            let AtomView::Pow(power) = arg else { return };
+            let (AtomView::Fun(base), AtomView::Num(exponent)) = power.get_base_exp() else {
+                return;
+            };
+            let coefficient = exponent.get_coeff_view();
+            if base.get_symbol() != *COLLECT
+                || base.get_nargs() != 1
+                || !matches!(
+                    coefficient,
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                )
+                || !coefficient.is_integer()
+                || coefficient.to_owned().is_negative()
+                || coefficient.to_owned().is_zero()
+            {
+                return;
+            }
+            **out = base
+                .iter()
+                .next()
+                .unwrap()
+                .pow(AtomView::Num(exponent))
+                .wrap_in_collect();
+        })
+        .replace(COLLECT.call(W_.a_) * COLLECT.call(W_.b_))
+        .repeat()
+        .with(COLLECT.call(W_.a_ * W_.b_))
     }
 
     fn map_collects<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
@@ -217,7 +245,8 @@ impl<const N: usize> TensorCollectFilter<N> {
             .unwrap_collect()
     }
 
-    fn matches(self, arg: AtomView<'_>) -> bool {
+    /// Match one complete tensor leaf for composition with custom collectors.
+    pub fn matches(self, arg: AtomView<'_>) -> bool {
         let AtomView::Fun(fun) = arg else {
             return false;
         };

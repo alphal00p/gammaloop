@@ -177,6 +177,13 @@ collection call and are never serialized or retained in generation caches.
 Chain composition uses this same collector before applying its existing
 composition and normalization rules, including when color simplification
 encounters chain factors in a mapped numerator.
+Positive integer powers of collected tensors stay compressed inside the complete
+payload passed to callbacks. The color simplifier runs its fixed-point rewrite
+loop on these collected payloads, keeping unrelated momentum coefficients
+outside repeated chain traversal. Untyped color heads follow the same selection.
+Generic non-color chain/trace and metric rewrites reach their own fixed point
+before and after color collection, without making non-color trace sums into
+polynomial variables. This preserves factorized powers and mixed contractions.
 
 Final residue assembly validates the complete cut-key shape of every summand,
 then uses Symbolica's native bulk addition once per cut order. Projected sectors
@@ -184,6 +191,10 @@ and direct-route selector materialization retain their already mapped branch
 values until this merge. This avoids repeatedly copying the growing numerator;
 it merges existing top-level sums without distributing product factors or
 constructing common denominators.
+
+Tensor-network edge joins use Linnet's existing dense edge swap, which updates
+the moved edges through their owning half-edges. Each join therefore avoids a
+scan over the growing graph while preserving its edge payloads and merge flow.
 
 Rational-shell extraction groups equal denominator multisets through sums,
 products and powers while leaving denominator-free numerator subtrees opaque.
@@ -239,6 +250,14 @@ selection cost. Soft routing retains its existing exact-basis/Pareto frontier
 for off-shell proposals, including every fixed external shift. Its at-most-three
 native generation trials do not bound that separate frontier's preparation cost.
 Root-expression reuse retains its established capacities.
+
+Generation profiling includes raw physical-degree reports and the complete outer
+routing selection interval. Raw CFF requests separate source reconstruction,
+degree/preparation, native generation and postprocessing, and selection records
+the winner explicitly. This keeps winning generation separate while charging
+every losing proposal, its preparation and destruction to dispatch. Full local
+UV accounting uses completed nonroot forest nodes; child projection timers alone
+do not include the outer routing and assembly boundary.
 
 One nonserialized `Local4dProjectionContext` spans each graph's complete UV
 computation in both forest orchestrators. Its deterministic LRU caches retain
