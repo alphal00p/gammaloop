@@ -203,6 +203,12 @@ remain inspection/replay data only. Update all UnitVolume test callers and
 settings arms while preserving their validation purpose. No saved-state
 compatibility shim is required.
 
+`ChannelIndex` and the current LMB-only discrete enumeration are migration
+scaffolding, not a second production channel model. New catalogue, map-density,
+grid and evaluator work must use the resolved `SamplingChannelId` catalogue;
+once that driver covers the existing sampling modes, remove the legacy index
+and its parallel enumeration path rather than expanding both systems.
+
 ## 3. Engine contracts
 
 ### Geometry and composition
