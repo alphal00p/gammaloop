@@ -73,6 +73,7 @@ The small records included here are:
 | [AMPLITUDE_X1_DOUBLE_BOX_MATRIX.md](AMPLITUDE_X1_DOUBLE_BOX_MATRIX.md), [data](AMPLITUDE_X1_DOUBLE_BOX_MATRIX.json) | All-98-orientation reference and three-seed physical comparison; gains depend on the selected complex component |
 | [GL638_X1_PILOT.md](GL638_X1_PILOT.md), [data](GL638_X1_PILOT.json) | All-936-orientation, full-UV, 20-core matched radial pilot; no consistent three-seed LU-h gain |
 | [GL638_X2_DIRECT_H.md](GL638_X2_DIRECT_H.md), [data](GL638_X2_DIRECT_H.json) | Actual selected/full936-catalogue conditional-H reference, native inverse rays and full12D determinant; physical comparisons remain separate |
+| [GL638_X2_PHYSICAL_PILOT.md](GL638_X2_PHYSICAL_PILOT.md), [data](GL638_X2_PHYSICAL_PILOT.json) | All-936-orientation full-UV pilot, native physical rays and 48 exact maximum replays; direct H remains unbounded and global efficiency is inconclusive |
 
 The frozen inputs and equations preserve the numerical setup without requiring
 the original machine. They are not executable acceptance tests. The original

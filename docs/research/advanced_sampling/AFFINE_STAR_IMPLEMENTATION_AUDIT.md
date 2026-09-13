@@ -87,6 +87,80 @@ either path would defeat the shared numerical definition. This remains a
 separate implementation and regression gate after the representative-data
 extraction.
 
+## Per-draw handoff and stability rotations
+
+The current routes first diverge before subtraction. In
+[`evaluate_stability_level_precise` / `evaluate_all_rotations`](../../../crates/gammalooprs/src/integrands/process/mod.rs),
+selected-channel mapping and its foreign inverses run in the identity frame,
+then the physical sample is rotated. Summed channels replay the identity-frame
+map inside each probe before rotating its output. Each physical cross-section
+probe subsequently solves its own cuts and prepares its own overlap centers.
+
+Even the host root is not an identical numerical calculation today. The
+conditional `SamplingMapContextTransform` uses a certified null-direction
+representative, `Esurface::sampling_evaluate_ray` and fresh root diagnostics;
+physical LU uses the complete sample, `compute_self_and_r_derivative` and the
+evaluation's persistent diagnostics. The sampling ray also supplies a distinct
+massless-origin right derivative. Both call the existing radial solver, but
+this alone proves neither identical inputs nor identical accepted tau.
+Independent host solving does not itself bias a normalized proposal with its
+own correct inverse density. It limits exact asymptotic-alignment claims about
+the physical singularity; current direct-H acceptance is not invalidated by it.
+
+The minimum X4 extension is therefore to the existing cross-section cut
+preparation and `LUCounterTerm::prepare_shared_overlaps` owners together:
+
+- Expose the certified cuts' native root results and actual fixed momenta from
+  declared preceding coordinates, using one routed equation and root diagnostic
+  identity. Feed those same zeroth-order data into physical cut construction;
+  keep acceptance, raised packets and residue derivatives on their current
+  physical owners. Prove acceptance is complement-only or reject the chart.
+- Extend the existing `LUSharedOverlaps` / solve-group result to retain its
+  canonical-frame geometry and complement-only alpha. Pass this transient
+  preparation through the existing map/evaluation context for one original
+  draw and native precision. Every foreign inverse requests the same physical
+  group from its own supplied point's certified dependencies; it cannot reuse
+  the selected channel's geometry merely because their names match. Direct
+  structural group/dependency identity can reuse a prepared result; do not key
+  geometry by stringified floats, current center ordinal or cache counters.
+- Retain that preparation for primary physical evaluation and all probes. Warm
+  bridge caches contain immutable bindings, not this per-point geometry. The
+  current scalar-only map contexts/results carry no such handoff: this requires
+  an explicit existing-context API extension, not an opaque global callback
+  cache or a fabricated complete `MomentumSample` with unknown coordinates.
+  The actual primary physical owner must adopt and validate these data against
+  the completed mapped point, not merely memoize speculative map preparation.
+  Exact group invariance excludes every active or future dependency; construct
+  a full physical sample only after its actual coordinates are available.
+
+Prepare automatic and forced centers once in the identity frame. Convert the
+actual stored f64 center to native arithmetic, then rotate its active vectors
+once together with the group's fixed data and correctly routed externals.
+Preserve the complete membership identities; reuse the scalars tau and alpha,
+and certify the rotated cut/projection residuals and every participating
+surface's strict interior margin in native arithmetic. A failed certificate
+requests original-draw rescue/error, not a different SOCP center for that probe.
+Forced centers retain their existing identity-master-to-native routing rule.
+This changes the physical owner convention: the current `OverlapGroup.center`
+comment explicitly describes a center already solved in the current probe, so
+blindly rotating today's result would rotate it twice. No such change is made
+by this audit. Higher-precision replay must rebuild native dependencies and
+certificates, rather than promote a lower-precision prepared result.
+
+Independent rotated SOCP solves can choose different approximate centers or
+near-boundary memberships. For a corner target the induced shift of H(A-star)
+can exceed the intended normal distance and appear as failed rotation stability;
+f64 center differences are not repaired merely by evaluating residues in Quad
+or Arb. This is a source-level risk, not a measured failure here. Sharing the
+actual geometry removes that avoidable divergence, but does not prove bitwise
+rotation covariance or a rigorous true-root enclosure. Require native residual,
+signed-distance/localization and selected/foreign density-budget checks. The
+decisive regression compares host tau, complete group membership, rotated actual
+center and physical A-star point before comparing final values, including a
+foreign-cut raised case, nonidentity-only probes, summed/MC, cache disabled and
+native original-draw rescue. It must also count preparations to exclude one
+SOCP solve per probe or foreign inverse of the same certified dependency data.
+
 ## Resolve a star without requiring user threshold directives
 
 A proposed structural descriptor, inside the existing host and active block, is
