@@ -286,6 +286,14 @@ impl SamplingChannelCompileContext {
         prepared: PreparedCutSamplingContext,
     ) -> std::result::Result<(), SamplingChannelCompileError> {
         validate_prepared_context_identity(self, &prepared, "<prepared-context>")?;
+        prepared
+            .validate_loop_dimension(self.n_loop_momenta)
+            .map_err(
+                |error| SamplingChannelCompileError::InvalidPreparedCutContext {
+                    channel: "<prepared-context>".to_owned(),
+                    error: error.to_string(),
+                },
+            )?;
         self.graph_id = Some(prepared.graph_id);
         self.cut_id = Some(prepared.cut_id);
         self.orientation = prepared.orientation;
@@ -2599,6 +2607,7 @@ mod tests {
         orientation: Option<usize>,
         parent_lmb: Vec<usize>,
     ) -> PreparedCutSamplingContext {
+        let n_loop_momenta = parent_lmb.len();
         PreparedCutSamplingContext::new(
             "G",
             17,
@@ -2607,7 +2616,7 @@ mod tests {
             side,
             parent_lmb,
             0.75,
-            vec![[0.0, 0.0, 0.0]],
+            vec![[0.0, 0.0, 0.0]; n_loop_momenta],
             vec![[100.0, 0.0, 0.0, 100.0]],
             vec![],
         )
@@ -3451,6 +3460,34 @@ mod tests {
         ))
         .unwrap_err();
         assert!(mismatch.to_string().contains("parent LMB"));
+    }
+
+    #[test]
+    fn prepared_cut_context_rejects_loop_frame_dimension_mismatch() {
+        let prepared = PreparedCutSamplingContext::new(
+            "G",
+            17,
+            3,
+            Some(2),
+            SamplingCutSide::Left,
+            vec![1, 2],
+            0.75,
+            vec![[0.0, 0.0, 0.0]; 2],
+            vec![[100.0, 0.0, 0.0, 100.0]],
+            vec![],
+        )
+        .unwrap();
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            1,
+        );
+        let error = context.set_prepared_cut_context(prepared).unwrap_err();
+        assert!(error.to_string().contains("expected 1 loop momenta"));
+        assert!(context.prepared_cut_context.is_none());
+        assert!(context.graph_id.is_none());
     }
 
     #[test]
