@@ -51,7 +51,8 @@ full-support only inside an ordered composition whose earlier blocks provide
 the context; invalid centres and unbracketed roots are hard errors. The bridge
 acceptance harness now integrates a normalized Gaussian through every selected
 canonical channel with the exact `N J_i w_i` estimator and reports finite
-counts, normalization error, partition and Jacobian ranges. Cross-section
+counts, normalization and second-moment errors, partition and Jacobian ranges,
+and round-trip residuals. Cross-section
 event metadata also preserves the canonical advanced channel id while physical
 cut maps remain guarded until their per-sample LU density is complete.
 
