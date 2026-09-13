@@ -4910,7 +4910,10 @@ mod tests {
         settings::{
             RuntimeSettings,
             global::OrientationPattern,
-            runtime::{LmbChannelWeight, ParameterizationSettings, SamplingChannelSelection},
+            runtime::{
+                LmbChannelWeight, ParameterizationSettings, SamplingChannelDefinition,
+                SamplingChannelSelection,
+            },
         },
         utils::{F, load_generic_model},
     };
@@ -5291,6 +5294,58 @@ mod tests {
             setup
                 .selected_lmb_basis_id(&setup.graph.name, &out_of_range_settings)
                 .is_err()
+        );
+
+        // Graph-aware entries occupy the same canonical channel axis as LMB
+        // entries.  In particular, inserting a named channel before the
+        // generated LMBs must not make channel id 1 resolve as basis 1 by
+        // positional filtering.
+        let mut mixed_settings = ParameterizationSettings::default();
+        mixed_settings.sampling_channels.default_channel_selection =
+            vec!["named".into(), "auto:lmb".into()];
+        mixed_settings
+            .sampling_channels
+            .channel_definitions
+            .entry(setup.graph.name.clone())
+            .or_default()
+            .insert(
+                "named".into(),
+                SamplingChannelDefinition {
+                    around: "lmb(0)".into(),
+                    subspace_lmb: Vec::new(),
+                    parent_lmb: vec![0],
+                    on_cut: Vec::new(),
+                },
+            );
+        assert_eq!(
+            setup
+                .sampling_channel_ids(&setup.graph.name, &mixed_settings)
+                .unwrap(),
+            vec![
+                SamplingChannelId::from(0),
+                SamplingChannelId::from(1),
+                SamplingChannelId::from(2),
+                SamplingChannelId::from(3),
+            ]
+        );
+        assert!(
+            setup
+                .effective_channel_lmb_id(
+                    SamplingChannelId::from(0),
+                    &setup.graph.name,
+                    &mixed_settings,
+                )
+                .is_err()
+        );
+        assert_eq!(
+            setup
+                .sampling_channel_lmb_id(
+                    SamplingChannelId::from(1),
+                    &setup.graph.name,
+                    &mixed_settings,
+                )
+                .unwrap(),
+            Some(LmbIndex::from(0))
         );
     }
 
