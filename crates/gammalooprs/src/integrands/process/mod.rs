@@ -640,25 +640,27 @@ impl ProcessIntegrand {
                 let Some(graph_term) = integrand.data.graph_terms.get(graph_id) else {
                     return Ok(None);
                 };
-                Ok(Some(usize::from(
-                    graph_term.multi_channeling_setup.effective_channel_lmb_id(
+                Ok(graph_term
+                    .multi_channeling_setup
+                    .sampling_channel_lmb_id(
                         SamplingChannelId::from(lmb_channel_id),
                         &graph_term.multi_channeling_setup.graph.name,
                         parameterization_settings,
-                    )?,
-                )))
+                    )?
+                    .map(usize::from))
             }
             ProcessIntegrand::CrossSection(integrand) => {
                 let Some(graph_term) = integrand.data.graph_terms.get(graph_id) else {
                     return Ok(None);
                 };
-                Ok(Some(usize::from(
-                    graph_term.multi_channeling_setup.effective_channel_lmb_id(
+                Ok(graph_term
+                    .multi_channeling_setup
+                    .sampling_channel_lmb_id(
                         SamplingChannelId::from(lmb_channel_id),
                         &graph_term.multi_channeling_setup.graph.name,
                         parameterization_settings,
-                    )?,
-                )))
+                    )?
+                    .map(usize::from))
             }
         }
     }
