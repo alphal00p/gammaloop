@@ -4,6 +4,7 @@ use spenso::{
     chain, dualizable_, dualizable_dual_,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
     self_dual_,
+    shadowing::Collectable,
     structure::representation::{LibraryRep, RepName},
     trace,
 };
@@ -147,8 +148,10 @@ impl<'a> Chain for AtomView<'a> {
         );
         // println!("{}", collected);
 
-        self.to_owned()
-            .collect_symbol::<i16>(T.chain)
+        // Use the shared collector's opaque coefficients here as well: chain
+        // composition must not statistically simplify the momentum numerator.
+        self.collect_with_map(|atom| atom.get_symbol() == Some(T.chain))
+            .unwrap_collect()
             .replace(product)
             .repeat()
             .with(collected)
@@ -248,6 +251,37 @@ mod tests {
         let rep = Bispinor {}.into();
 
         assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)),gamma(in,out,p(1,mink(4))))");
+    }
+
+    #[test]
+    fn collect_chains_preserves_opaque_factorized_spectators() {
+        let r = TestReps::new();
+        let first = chain!(
+            slot!(r.bis4, a),
+            slot!(r.bis4, b),
+            gamma!(slot!(r.mink4, mu)),
+        );
+        let second = chain!(
+            slot!(r.bis4, b),
+            slot!(r.bis4, c),
+            gamma!(slot!(r.mink4, nu)),
+        );
+        let composed = chain!(
+            slot!(r.bis4, a),
+            slot!(r.bis4, c),
+            gamma!(slot!(r.mink4, mu)),
+            gamma!(slot!(r.mink4, nu)),
+        );
+        let spectator = parse_lit!((x + y) ^ 8 * (u + v) ^ n / (1 + x * u + y * v));
+        let input = &spectator * first * second;
+
+        // Exact Atom equality retains the coefficient's sums and powers while
+        // checking the ordered chain payload independently of scalar algebra.
+        assert_eq!(
+            input.collect_chains(Bispinor {}.into()),
+            &spectator * composed
+        );
+        assert_eq!(input.collect_chains(ColorFundamental {}.into()), input);
     }
 
     #[test]

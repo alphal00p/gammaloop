@@ -174,6 +174,9 @@ avoids statistical zero tests on large momentum coefficients. Collection does
 not promise polynomial simplification of those opaque coefficients; structural
 cancellations and tensor-algebra zeros still apply. Aliases live only for the
 collection call and are never serialized or retained in generation caches.
+Chain composition uses this same collector before applying its existing
+composition and normalization rules, including when color simplification
+encounters chain factors in a mapped numerator.
 
 Rational-shell extraction groups equal denominator multisets through sums,
 products and powers while leaving denominator-free numerator subtrees opaque.

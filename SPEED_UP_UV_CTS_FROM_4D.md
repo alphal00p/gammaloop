@@ -948,3 +948,39 @@ If a gate fails, use the measurements to continue the generic implementation, in
   49 labels, GL00–GL48, plus one standalone sampling-scale test. This matches
   `test_LU_scalar_xs` and the historical suite inventory. It must not be reported
   as 167 distinct topologies. The complete existing suite remains required.
+
+### 2026-09-13 — Route chain composition through the shared collector
+
+- Milestone `89cda93ffce3ef4325e43e4143abd2d91b0b4958` is committed and pushed
+  as ValentinHirschi. A later CLI9 sample, taken after the DOD1 pre-color event,
+  differs from its earlier substitutions/addition sample: **94.07%** is in
+  `Chain::collect_chains`' direct polynomial collector and **89.83%** in
+  statistical zero tests (118 samples, zero lost). This caller bypassed the
+  protected shared collector. The captured DOD1 input contains 14,608 chains
+  and 29,216 color generators. CLI9 was deliberately stopped after 484.549 s
+  without a complete evaluator or production forest export.
+- Chain composition now collects its existing selected chain heads through
+  `Collectable::collect_with_map`, unwraps them, and applies exactly the existing
+  composition and normalization rules. This reuses coefficient protection
+  without another engine, policy or setting. Check46 passes in 9.60 s.
+- CLI10 builds in 59.30 s and is frozen with SHA-256
+  `da042ba03c784fb3a66746c4d1acb6aae64e21f976655164822160c280cc6e85`,
+  based on `89cda93ffce3ef4325e43e4143abd2d91b0b4958` plus patch
+  `eb4d93a78761a4e017e521a7d43a25e8a03b2b34913dfa9ea5a603a7fb24f80b`.
+  The next diagnostic allows 1,200 s for ordinary assembly/evaluator progress
+  while retaining early termination on another conclusively profiled stall.
+  Focused chain checks and completed physical timings remain pending.
+- The original no-assertion GL262 localized-3D baseline was capped after
+  **21,702.392314 s** (6h01m42s), exit -15, without a generation summary,
+  evaluator or production forest export. Its loaded executable hash matched
+  the immutable original `45df452b7c1069e51c1b39547572bd7add9244accda55b68cdbbf8565b54d911`.
+  Final RSS was 3,213,508 KiB and peak RSS 4,787,520 KiB. Original cards,
+  binary and termination receipts remain preserved; this is a lower bound on
+  an incomplete attempt, not a completed baseline or a successful timing ratio.
+  No persistent original-baseline process remains to compete with final runs.
+- Check47 passes in 9.43 s; nextest17 passes **645/645 tests** in 58.450 s
+  after a 49.79 s build. The added chain regression verifies ordered Dirac
+  composition with an intact factorized/symbolic-power spectator, and unchanged
+  Dirac payload when collecting the unrelated color representation. Existing
+  snapshots and zero checks pass unchanged. Clippy6 succeeds in 21.88 s with
+  the same three type-complexity warnings.
