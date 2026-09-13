@@ -837,13 +837,15 @@ impl ProcessIntegrand {
         match self {
             ProcessIntegrand::Amplitude(integrand) => Some(
                 integrand.data.graph_terms[integrand.data.graph_group_structure[group_id].master()]
-                    .get_num_channels(&parameterization_settings)
-                    .ok()?,
+                    .sampling_channel_ids(&parameterization_settings)
+                    .ok()?
+                    .len(),
             ),
             ProcessIntegrand::CrossSection(integrand) => Some(
                 integrand.data.graph_terms[integrand.data.graph_group_structure[group_id].master()]
-                    .get_num_channels(&parameterization_settings)
-                    .ok()?,
+                    .sampling_channel_ids(&parameterization_settings)
+                    .ok()?
+                    .len(),
             ),
         }
     }
@@ -1414,15 +1416,13 @@ pub(crate) fn histogram_process_info_for_integrand<I: ProcessIntegrandImpl>(
         .iter_enumerated()
         .map(|(group_id, _)| {
             let master = integrand.get_master_graph(group_id);
-            let channel_count = master.get_num_channels(&parameterization_settings)?;
-            (0..channel_count)
+            let channel_ids = master.sampling_channel_ids(&parameterization_settings)?;
+            channel_ids
+                .into_iter()
                 .map(|channel_id| {
                     Ok(master
-                        .sampling_channel_label(
-                            SamplingChannelId::from(channel_id),
-                            &parameterization_settings,
-                        )?
-                        .unwrap_or_else(|| format!("#{}", channel_id)))
+                        .sampling_channel_label(channel_id, &parameterization_settings)?
+                        .unwrap_or_else(|| format!("#{}", channel_id.index())))
                 })
                 .collect::<Result<Vec<_>>>()
         })
@@ -2289,17 +2289,6 @@ impl LmbMultiChannelingSetup {
         }
         let resolved = resolve_sampling_channel_selection(graph_name, &selection)?;
         self.sampling_channel_catalogue(&resolved, parameterization_settings)
-    }
-
-    pub fn effective_channel_count(
-        &self,
-        graph_name: &str,
-        parameterization_settings: &ParameterizationSettings,
-    ) -> Result<usize> {
-        Ok(self
-            .canonical_sampling_catalogue(graph_name, parameterization_settings)?
-            .entries
-            .len())
     }
 
     /// Return the stable IDs from the one canonical catalogue.  Callers that
@@ -3222,10 +3211,6 @@ pub trait GraphTerm {
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()>;
     fn get_graph(&self) -> &Graph;
-    fn get_num_channels(
-        &self,
-        parameterization_settings: &ParameterizationSettings,
-    ) -> Result<usize>;
     fn get_num_orientations(&self) -> usize;
     fn production_orientation_keys(&self) -> &[String];
     fn selected_production_orientation_keys(&self) -> Vec<&str>;
@@ -3985,7 +3970,8 @@ fn create_grid_for_graph<G: GraphTerm>(
         DiscreteGraphSamplingType::DiscreteMultiChanneling(multichanneling_settings) => {
             let continuous_grid = create_default_continous_grid(graph_term, integrator_settings);
             let channel_count = graph_term
-                .get_num_channels(&multichanneling_settings.parameterization_settings)
+                .sampling_channel_ids(&multichanneling_settings.parameterization_settings)
+                .map(|channel_ids| channel_ids.len())
                 .unwrap_or_else(|error| panic!("cannot build the sampling channel grid: {error}"));
             let lmb_channel_grid = Grid::Discrete(
                 DiscreteGrid::new(
@@ -5308,9 +5294,9 @@ mod tests {
         );
         assert_eq!(
             setup
-                .effective_channel_count(&setup.graph.name, &override_settings)
+                .sampling_channel_ids(&setup.graph.name, &override_settings)
                 .unwrap(),
-            1
+            vec![SamplingChannelId::from(0)]
         );
         assert_eq!(
             setup
