@@ -27,11 +27,11 @@ use symbolica::numerical_integration::{
 };
 
 use crate::Integrand;
-use crate::graph::{GroupId, LoopMomentumBasis};
+use crate::graph::GroupId;
 use crate::integrands::HasIntegrand;
 use crate::integrands::evaluation::EvaluationResult;
 use crate::integrands::evaluation::StatisticsCounter;
-use crate::integrands::process::ProcessIntegrand;
+use crate::integrands::process::{GraphTerm, ProcessIntegrand};
 use crate::model::{Model, SerializableInputParamCard};
 use crate::observables::{
     EventGroupList, ObservableAccumulatorBundle, ObservableFileFormat, ObservableSnapshotBundle,
@@ -842,7 +842,7 @@ fn discrete_axis_labels(sampling: &SamplingSettings) -> Vec<&'static str> {
                     if settings.sample_orientations {
                         labels.push("orientation");
                     }
-                    labels.push("LMB channel");
+                    labels.push("sampling channel");
                 }
             }
             labels
@@ -871,16 +871,6 @@ where
     }
 
     format!("[{}]", graph_names.join(","))
-}
-
-fn lmb_channel_description(lmb: &LoopMomentumBasis) -> String {
-    format!(
-        "({})",
-        lmb.loop_edges
-            .iter()
-            .map(|edge_id| edge_id.0.to_string())
-            .join(",")
-    )
 }
 
 fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
@@ -941,7 +931,7 @@ fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
                     .collect(),
             )
         }
-        (ProcessIntegrand::Amplitude(integrand), "LMB channel") => {
+        (ProcessIntegrand::Amplitude(integrand), "sampling channel") => {
             let group_id = GroupId(*path.first()?);
             let group = integrand.data.graph_group_structure.get(group_id)?;
             let master = group.master();
@@ -951,22 +941,23 @@ fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
                 .sampling
                 .get_parameterization_settings()
                 .unwrap_or_default();
-            let effective_channels = graph_term
-                .multi_channeling_setup
-                .effective_channels(&graph_term.graph.name, &parameterization_settings)
+            let channel_ids = graph_term
+                .sampling_channel_ids(&parameterization_settings)
                 .ok()?;
             Some(
-                effective_channels
+                channel_ids
                     .iter()
-                    .map(|&channel_lmb| {
-                        lmb_channel_description(
-                            &graph_term.multi_channeling_setup.all_bases[channel_lmb],
-                        )
+                    .map(|&channel_id| {
+                        graph_term
+                            .lmb_channel_label(channel_id, &parameterization_settings)
+                            .ok()
+                            .flatten()
+                            .unwrap_or_else(|| format!("#{}", channel_id.index()))
                     })
                     .collect(),
             )
         }
-        (ProcessIntegrand::CrossSection(integrand), "LMB channel") => {
+        (ProcessIntegrand::CrossSection(integrand), "sampling channel") => {
             let group_id = GroupId(*path.first()?);
             let group = integrand.data.graph_group_structure.get(group_id)?;
             let master = group.master();
@@ -976,17 +967,18 @@ fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
                 .sampling
                 .get_parameterization_settings()
                 .unwrap_or_default();
-            let effective_channels = graph_term
-                .multi_channeling_setup
-                .effective_channels(&graph_term.graph.name, &parameterization_settings)
+            let channel_ids = graph_term
+                .sampling_channel_ids(&parameterization_settings)
                 .ok()?;
             Some(
-                effective_channels
+                channel_ids
                     .iter()
-                    .map(|&channel_lmb| {
-                        lmb_channel_description(
-                            &graph_term.multi_channeling_setup.all_bases[channel_lmb],
-                        )
+                    .map(|&channel_id| {
+                        graph_term
+                            .lmb_channel_label(channel_id, &parameterization_settings)
+                            .ok()
+                            .flatten()
+                            .unwrap_or_else(|| format!("#{}", channel_id.index()))
                     })
                     .collect(),
             )
@@ -5699,7 +5691,7 @@ mod tests {
 
     #[test]
     fn format_max_eval_sample_keeps_full_discrete_coordinates() {
-        let axis_labels = vec!["graph".to_string(), "LMB channel".to_string()];
+        let axis_labels = vec!["graph".to_string(), "sampling channel".to_string()];
         let full_sample = Sample::Discrete(
             F(1.0),
             0,
@@ -5717,11 +5709,11 @@ mod tests {
 
         assert_eq!(
             display::format_max_eval_sample(&full_sample, &axis_labels, &[]),
-            "graph: 0, LMB channel: 1, xs: [ 2.5000000000000000e-01 ]"
+            "graph: 0, sampling channel: 1, xs: [ 2.5000000000000000e-01 ]"
         );
         assert_eq!(
             display::format_max_eval_sample(&nested_sample, &axis_labels, &[0]),
-            "graph: 0, LMB channel: 1, xs: [ 7.5000000000000000e-01 ]"
+            "graph: 0, sampling channel: 1, xs: [ 7.5000000000000000e-01 ]"
         );
     }
 

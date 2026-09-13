@@ -507,12 +507,16 @@ fn lmb_channel_ids(
     parameterization_settings: &ParameterizationSettings,
 ) -> Result<Vec<Option<usize>>> {
     let mut channel_ids = vec![None; lmbs.len()];
-    for (channel_id, lmb_index) in multi_channeling_setup
-        .effective_channels(graph_name, parameterization_settings)?
-        .into_iter()
-        .enumerate()
+    for channel_id in
+        multi_channeling_setup.sampling_channel_ids(graph_name, parameterization_settings)?
     {
-        channel_ids[usize::from(lmb_index)] = Some(channel_id);
+        if let Some(lmb_index) = multi_channeling_setup.sampling_channel_lmb_id(
+            channel_id,
+            graph_name,
+            parameterization_settings,
+        )? {
+            channel_ids[usize::from(lmb_index)] = Some(channel_id.index());
+        }
     }
     Ok(channel_ids)
 }
