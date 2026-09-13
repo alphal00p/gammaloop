@@ -99,9 +99,10 @@ pub use sampling_selection::{
     SamplingChannelBridgeAcceptanceReport, SamplingChannelBridgeError,
     SamplingChannelBridgeEvaluation, SamplingChannelCatalogue, SamplingChannelCompileContext,
     SamplingChannelCompileError, SamplingChannelId, SamplingChannelInspection,
-    SamplingChannelPreset, SamplingChannelSelector, SamplingCoverageReport,
-    SamplingMomentumSampleContext, SamplingSelectionError, SamplingSurfaceGeometry,
-    build_sampling_channel_catalogue, build_sampling_channel_catalogue_with_surfaces,
+    SamplingChannelPreset, SamplingChannelRuntimeContexts, SamplingChannelSelector,
+    SamplingCoverageReport, SamplingMomentumSampleContext, SamplingSelectionError,
+    SamplingSurfaceGeometry, build_sampling_channel_catalogue,
+    build_sampling_channel_catalogue_with_surfaces,
     build_sampling_channel_catalogue_with_surfaces_and_coverage, explicitly_selected_graphs,
     graph_channel_definitions, resolve_sampling_channel_selection,
     resolve_sampling_channel_selection_replacing_default,
@@ -2390,28 +2391,6 @@ impl LmbMultiChannelingSetup {
         Ok(LmbIndex::from(basis_id))
     }
 
-    pub fn effective_channels(
-        &self,
-        graph_name: &str,
-        parameterization_settings: &ParameterizationSettings,
-    ) -> Result<Vec<LmbIndex>> {
-        let catalogue = self.canonical_sampling_catalogue(graph_name, parameterization_settings)?;
-        let mut lmbs = Vec::new();
-        for entry in &catalogue.entries {
-            match entry {
-                SamplingCatalogueEntry::Lmb { basis_id, .. } => {
-                    lmbs.push(self.validate_lmb_basis_id(*basis_id, graph_name)?);
-                }
-                SamplingCatalogueEntry::Surface { .. } | SamplingCatalogueEntry::Named(_) => {
-                    return Err(eyre!(
-                        "LMB-only weighting was requested for graph '{graph_name}', but its canonical sampling catalogue contains a graph-aware channel; use the advanced discrete sampling route for this selection"
-                    ));
-                }
-            }
-        }
-        Ok(lmbs)
-    }
-
     /// Build the one canonical catalogue used by all channel-count and LMB
     /// lookup helpers during the runtime migration.  The old generated basis
     /// list is only input data for this catalogue; it is never enumerated as a
@@ -2431,9 +2410,7 @@ impl LmbMultiChannelingSetup {
         self.sampling_channel_catalogue(&resolved, parameterization_settings)
     }
 
-    /// Return the stable IDs from the one canonical catalogue.  Callers that
-    /// need legacy LMB data must still use `effective_channels`, which rejects
-    /// graph-aware entries with an explicit diagnostic.
+    /// Return the stable IDs from the one canonical catalogue.
     pub fn sampling_channel_ids(
         &self,
         graph_name: &str,
@@ -2559,13 +2536,42 @@ impl LmbMultiChannelingSetup {
         graph_name: &str,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<LmbIndex> {
-        let effective_channels = self.effective_channels(graph_name, parameterization_settings)?;
-        effective_channels.first().copied().ok_or_else(|| {
+        let channels = self.lmb_channel_entries(graph_name, parameterization_settings)?;
+        channels.first().map(|(_, basis_id)| *basis_id).ok_or_else(|| {
             eyre!(
                 "Could not select a default LMB basis for graph '{}'; the optimized LMB subset is empty.",
                 graph_name
             )
         })
+    }
+
+    /// Resolve the canonical channel IDs that can still be evaluated by the
+    /// transitional LMB weighting path.  The IDs are retained alongside their
+    /// generated basis instead of compacting into a second positional LMB
+    /// enumeration; this keeps legacy callers aligned with the canonical
+    /// channel axis until the per-sample graph-aware route is complete.
+    fn lmb_channel_entries(
+        &self,
+        graph_name: &str,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<Vec<(SamplingChannelId, LmbIndex)>> {
+        let catalogue = self.canonical_sampling_catalogue(graph_name, parameterization_settings)?;
+        let mut channels = Vec::with_capacity(catalogue.entries.len());
+        for (index, entry) in catalogue.entries.iter().enumerate() {
+            match entry {
+                SamplingCatalogueEntry::Lmb { basis_id, .. } => channels.push((
+                    SamplingChannelId::from(index),
+                    self.validate_lmb_basis_id(*basis_id, graph_name)?,
+                )),
+                SamplingCatalogueEntry::Surface { .. } | SamplingCatalogueEntry::Named(_) => {
+                    return Err(eyre!(
+                        "LMB-only weighting was requested for graph '{graph_name}', but canonical sampling channel {} is graph-aware; use the advanced discrete sampling route for this selection",
+                        index
+                    ));
+                }
+            }
+        }
+        Ok(channels)
     }
 
     /// Build the exact affine routing from one generated LMB into this setup's
@@ -2726,18 +2732,33 @@ impl LmbMultiChannelingSetup {
         momentum_sample: &MomentumSample<T>,
         weighting_settings: LmbChannelWeightingSettings<'_, T>,
     ) -> Result<F<T>> {
-        let effective_channels = self.effective_channels(
+        let channel_entries = self.lmb_channel_entries(
             weighting_settings.graph_name,
             weighting_settings.parameterization_settings,
         )?;
-        if usize::from(channel_index) >= effective_channels.len() {
+        let Some((_, selected_channel_lmb)) = channel_entries
+            .iter()
+            .find(|(channel_id, _)| *channel_id == channel_index)
+        else {
             return Err(eyre!(
-                "Requested LMB channel {} is out of range for graph '{}'; the graph has {} effective LMB channels.",
+                "Requested LMB channel {} is not an LMB entry in the canonical sampling catalogue for graph '{}'; the catalogue has {} channels.",
                 usize::from(channel_index),
                 weighting_settings.graph_name,
-                effective_channels.len()
+                channel_entries.len()
+            ));
+        };
+        if *selected_channel_lmb != selected_lmb {
+            return Err(eyre!(
+                "Canonical sampling channel {} resolves to LMB basis {}, but weighting requested basis {}",
+                channel_index.index(),
+                usize::from(*selected_channel_lmb),
+                usize::from(selected_lmb)
             ));
         }
+        let effective_channels = channel_entries
+            .iter()
+            .map(|(_, lmb_index)| *lmb_index)
+            .collect::<Vec<_>>();
 
         match weighting_settings.channel_weight {
             LmbChannelWeight::Ose => Ok(self.compute_ose_prefactor_impl(
@@ -2912,25 +2933,37 @@ impl LmbMultiChannelingSetup {
         e_cm: f64,
         selected_channels: Option<&[SamplingChannelId]>,
     ) -> Result<SamplingPartition> {
-        let effective_channels = match selected_channels {
+        let channel_entries = match selected_channels {
             Some(channel_indices) => channel_indices
                 .iter()
-                .map(|&channel_index| {
-                    self.effective_channel_lmb_id(
-                        channel_index,
+                .copied()
+                .map(|channel_id| {
+                    self.sampling_channel_lmb_id(
+                        channel_id,
                         graph_name,
                         parameterization_settings,
-                    )
+                    )?
+                    .map(|basis_id| (channel_id, basis_id))
+                    .ok_or_else(|| {
+                        eyre!(
+                            "LMB inverse-Jacobian partition cannot evaluate graph-aware sampling channel {} for graph '{}'",
+                            channel_id.index(), graph_name
+                        )
+                    })
                 })
                 .collect::<Result<Vec<_>>>()?,
-            None => self.effective_channels(graph_name, parameterization_settings)?,
+            None => self.lmb_channel_entries(graph_name, parameterization_settings)?,
         };
-        if effective_channels.is_empty() {
+        if channel_entries.is_empty() {
             return Err(eyre!(
                 "cannot build an LMB sampling partition for graph '{graph_name}': no channels selected"
             ));
         }
 
+        let effective_channels = channel_entries
+            .iter()
+            .map(|(_, lmb_index)| *lmb_index)
+            .collect::<Vec<_>>();
         let scores = self.compute_inverse_jacobian_scores_impl(
             &effective_channels,
             momentum_sample,
@@ -2939,24 +2972,26 @@ impl LmbMultiChannelingSetup {
         );
         let channels = scores
             .into_iter()
-            .zip(effective_channels.iter().copied())
-            .enumerate()
-            .map(|(channel_index, (score, lmb_index))| {
+            .zip(channel_entries.iter().copied())
+            .map(|(score, (channel_id, lmb_index))| {
                 let value = score.into_ff64().0;
                 SamplingChannelScore::map_density(
                     format!(
-                        "lmb:{channel_index}:basis={}",
+                        "lmb:{}:basis={}",
+                        channel_id.index(),
                         usize::from(lmb_index)
                     ),
                     SamplingScoreFunction::from_positive_function(move |_| {
                         if !value.is_finite() {
                             Err(eyre!(
-                                "LMB channel {channel_index} (basis {}) returned a non-finite inverse-Jacobian score {value}",
+                                "LMB channel {} (basis {}) returned a non-finite inverse-Jacobian score {value}",
+                                channel_id.index(),
                                 usize::from(lmb_index)
                             ))
                         } else if value < 0.0 {
                             Err(eyre!(
-                                "LMB channel {channel_index} (basis {}) returned a negative inverse-Jacobian score {value}",
+                                "LMB channel {} (basis {}) returned a negative inverse-Jacobian score {value}",
+                                channel_id.index(),
                                 usize::from(lmb_index)
                             ))
                         } else if value == 0.0 {
@@ -5588,21 +5623,33 @@ mod tests {
         );
         assert_eq!(
             setup
-                .effective_channels(&setup.graph.name, &override_settings)
-                .unwrap(),
-            // The automatic optimized preset retains the requested basis and
-            // adds the smallest ordinary channels needed to cover the other
-            // massless loop edges.
-            vec![LmbIndex::from(1), LmbIndex::from(0), LmbIndex::from(2)]
-        );
-        assert_eq!(
-            setup
                 .sampling_channel_ids(&setup.graph.name, &override_settings)
                 .unwrap(),
             vec![
                 SamplingChannelId::from(0),
                 SamplingChannelId::from(1),
                 SamplingChannelId::from(2)
+            ]
+        );
+        // The canonical IDs retain their one-domain ordering while resolving
+        // to the generated LMB basis used by legacy diagnostics.
+        assert_eq!(
+            [
+                SamplingChannelId::from(0),
+                SamplingChannelId::from(1),
+                SamplingChannelId::from(2),
+            ]
+            .into_iter()
+            .map(|channel_id| {
+                setup
+                    .sampling_channel_lmb_id(channel_id, &setup.graph.name, &override_settings)
+                    .unwrap()
+            })
+            .collect::<Vec<_>>(),
+            vec![
+                Some(LmbIndex::from(1)),
+                Some(LmbIndex::from(0)),
+                Some(LmbIndex::from(2)),
             ]
         );
         assert_eq!(
