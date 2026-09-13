@@ -370,6 +370,134 @@ fn lazy_scalar_tensors_add_scalars_in_either_order() {
 
 #[cfg(feature = "shadowing")]
 #[test]
+fn bulk_atom_sum_accepts_closed_tensor_leaves_and_preserves_aliases() {
+    use std::collections::HashMap;
+    use symbolica::{atom::Atom, parse};
+
+    use super::{
+        NetworkLeaf, NodeIndex, ScaledTensorRef,
+        graph::ScalarRef,
+        store::{NetworkStore, TensorScalarStore},
+        tags::scalar_store_alias,
+        try_atom_scalar_sum, try_balanced_scalar_sum,
+    };
+    use crate::{
+        structure::{
+            OrderedStructure, ScalarTensor,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::{DataTensor, DenseTensor, SparseTensor},
+    };
+
+    type Tensor = DataTensor<Atom, OrderedStructure<Euclidean>>;
+    let mut initial: NetworkStore<Tensor, Atom> = NetworkStore::default();
+    let value = parse!("(x+y)^3*(z+w)^2");
+    let positive = initial.add_scalar(value.clone());
+    let negative = initial.add_scalar(-&value);
+    let factor = initial.add_scalar(parse!("(a+b)^2"));
+    let zero = initial.add_scalar(Atom::Zero);
+    initial
+        .scalar_aliases
+        .resize_with(initial.scalar.len(), || None);
+    initial.scalar_aliases[factor] = Some(scalar_store_alias(factor));
+    let tensor = initial.add_tensor(Tensor::new_scalar(value.clone()));
+    let opposite = initial.add_tensor(Tensor::new_scalar(-value));
+    let sparse_zero = initial.add_tensor(DataTensor::Sparse(SparseTensor {
+        elements: HashMap::new(),
+        zero: Atom::Zero,
+        structure: OrderedStructure::new(vec![]).structure,
+    }));
+    let aliased_scale = ScaledTensorRef {
+        tensor,
+        scale: Some(ScalarRef::Alias(factor)),
+    };
+    let leaves: Vec<NetworkLeaf<DummyKey>> = vec![
+        NetworkLeaf::Scalar(positive.into()),
+        NetworkLeaf::Scalar(negative.into()),
+        NetworkLeaf::LocalTensor(tensor),
+        NetworkLeaf::LocalTensor(sparse_zero),
+        NetworkLeaf::TensorSum(vec![tensor, opposite]),
+        NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled(tensor, factor)),
+        NetworkLeaf::ScaledTensor(aliased_scale.clone()),
+        NetworkLeaf::ScaledTensorSum(vec![
+            aliased_scale,
+            ScaledTensorRef::scaled(opposite, factor),
+        ]),
+        NetworkLeaf::ScaledTensorSum(vec![]),
+        NetworkLeaf::Scalar(ScalarRef::Alias(factor)),
+    ];
+
+    // Cross both dispatch gates, including scalar aliases, exact cancellation,
+    // sparse zeros and factored scales. The existing balanced path is the oracle.
+    for count in [3, 4, 31, 32] {
+        for reversed in [false, true] {
+            let mut targets = (0..count)
+                .map(|index| (NodeIndex(index), &leaves[index % leaves.len()]))
+                .collect::<Vec<_>>();
+            if reversed {
+                targets.reverse();
+            }
+            let mut store = initial.clone();
+            let result = try_atom_scalar_sum(&mut store, &targets);
+            if count < 4 {
+                assert!(result.is_none());
+                assert_eq!(store.scalar, initial.scalar);
+                continue;
+            }
+            let mut reference = initial.clone();
+            let Some(NetworkLeaf::Scalar(expected)) =
+                try_balanced_scalar_sum(&mut reference, &targets, None)
+            else {
+                panic!("closed leaves must have a scalar sum");
+            };
+            let Some(NetworkLeaf::Scalar(actual)) = result else {
+                panic!("closed Atom leaves must use the bulk sum");
+            };
+            assert_eq!(
+                store.get_scalar_ref(actual),
+                reference.get_scalar_ref(expected)
+            );
+            assert_eq!(store.scalar.len(), initial.scalar.len() + 1);
+        }
+    }
+
+    // Even a zero-scaled open tensor remains ineligible. Failed conversion
+    // must not append partially converted scalar results to the store.
+    let open = initial.add_tensor(DataTensor::Dense(
+        DenseTensor::from_data(
+            vec![Atom::Zero; 2],
+            OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure,
+        )
+        .unwrap(),
+    ));
+    let open = NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled(open, zero));
+    let targets = [
+        (NodeIndex(0), &leaves[0]),
+        (NodeIndex(1), &leaves[1]),
+        (NodeIndex(2), &leaves[2]),
+        (NodeIndex(3), &open),
+    ];
+    let counts = (initial.scalar.len(), initial.tensors.len());
+    assert!(try_atom_scalar_sum(&mut initial, &targets).is_none());
+    assert_eq!((initial.scalar.len(), initial.tensors.len()), counts);
+
+    let empty = NetworkLeaf::<DummyKey>::TensorSum(vec![]);
+    for count in [4, 32] {
+        for zero_leaves in [[&empty, &empty], [&leaves[0], &leaves[1]]] {
+            let targets = (0..count)
+                .map(|index| (NodeIndex(index), zero_leaves[index % 2]))
+                .collect::<Vec<_>>();
+            let Some(NetworkLeaf::Scalar(result)) = try_atom_scalar_sum(&mut initial, &targets)
+            else {
+                panic!("empty and cancelling closed leaves sum to scalar zero");
+            };
+            assert_eq!(initial.get_scalar_ref(result), &Atom::Zero);
+        }
+    }
+}
+
+#[cfg(feature = "shadowing")]
+#[test]
 fn large_scaled_tensor_sum_preserves_results_across_strategies() {
     use std::collections::HashMap;
 

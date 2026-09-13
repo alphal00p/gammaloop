@@ -2071,3 +2071,63 @@ If a gate fails, use the measurements to continue the generic implementation, in
   acquiring the common measurement lock and refuses launch if it is below
   the requested 500 GB guard. A small generic alias A/B and exact-equality
   probe is prepared separately; its compilation and execution remain pending.
+
+### 2026-09-13 — Closed-tensor bulk sums and separate memory stages
+
+- Milestone 23 is committed and pushed as
+  `6efe16006e3ada28dd6362b222df949838f20c87`. Immutable CLI20 has SHA256
+  `21eda4e1c2a21715cbff70823a10c2389bc31b217ed5cd5a50447efa22271aad`;
+  its matching counter has SHA256
+  `6dcac4b16fe9bc525a64f69bc5a93af251257d7692e0ddf3154ca2bd923fa793`.
+  Integration check92/build15 pass and all four executables are frozen under
+  `validation_candidate_6efe1`. The generic typed-alias probe also passes its
+  metadata/link checks. These builds do not establish runtime correctness or
+  performance; their workloads have not run yet.
+- The immutable erased-3D CLI18 run subsequently reached 326,512,156,672 bytes
+  VmHWM after term 4 contraction, still before evaluator construction. Its
+  earlier low forest-stage RSS does not describe preprocessing memory. Direct
+  4D's observed preprocessing peak remains 68,568,248,320 bytes. The approved
+  500 GB guard and original two-hour cap remain in force for erased 3D.
+- A separate sample during term 4 contraction contains 790 samples with no lost
+  records. About 74.3% inclusive lies in the balanced scalar-sum path, including
+  repeated Atom addition and copying; memory copying is about 24.65% self time.
+  The raw profile is `tensor_sample_3.perf` in the erased case. This interval
+  measures contraction, separately from the previous alias-resolution profile.
+  Unresolved kernel samples are not attributed to paging without evidence.
+- The existing bulk Atom-sum helper previously admitted literal scalar leaves
+  only. Rank-zero tensor results and lazy closed sums instead reached pairwise
+  scalar addition. It now uses the same existing scalar conversion as that
+  fallback, retaining scales, sparse zeros and typed aliases. Owned results
+  move into the existing bulk/streaming sum. Open tensors still reject the
+  optimization before any scalar-store insertion. Dispatch thresholds and
+  factorization remain unchanged; no new production helper or setting is added.
+- The first exact test exposed explicit zero terms retained by the pinned
+  streaming implementation as an unnormalized `9*0`. The sum boundary now
+  omits explicit zero inputs and represents an empty streamed result by exact
+  scalar zero. The test's equality expectation is unchanged; added cases cover
+  all-zero and cancelling sums on both sides of the streaming threshold.
+  The initial format91/check93 passed and nextest38 ran eleven passing tests
+  plus this failure. The corrected implementation is being checked again.
+- An isolated public-network A/B probe is prepared for rank-zero tensor sums.
+  CLI20 dependencies were copied and hash-verified before later compilation.
+  Its first metadata check caught an artifact import path; the corrected probe
+  passes metadata/link with the same frozen dependencies. Execution has not
+  started. It retains powers of sums and checks exact equality against bulk
+  addition of the original factorized inputs outside the execution timer.
+- Profiling receipts now validate and report typed-alias resolution separately
+  as a subset of scalar finalization, avoiding double counting. Seventy-one
+  parser controls pass; old logs retain an unobserved alias interval rather
+  than claiming zero cost. Reprocessing the failed CLI18 direct run preserves
+  its previous phase totals and failed eligibility.
+- The final physical benchmark harness now supports the explicit 500 GB RSS
+  guard and checks available memory after acquiring the measurement lock.
+  A guard-triggered attempt is ineligible even when its child handles SIGTERM
+  and exits zero. Twenty-nine isolated guard/status controls, twelve existing
+  Horner-setting controls and fifteen receipt controls pass. Prepared physical
+  cards remain byte-identical. All final generation/runtime gates remain open.
+- Format92/check94 pass for the corrected sum boundary. Nextest40 passes all
+  twelve selected network tests; nextest41 passes all nineteen selected
+  evaluator/symbol tests. Clippy20 passes with the same three existing
+  type-complexity warnings. Exact zero, scale, alias and open-tensor assertions
+  remain intact. The original plan prefix is unchanged. These checks overlap
+  the old diagnostic and are correctness evidence only.

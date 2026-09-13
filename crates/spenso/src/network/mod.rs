@@ -3683,7 +3683,13 @@ fn try_atom_scalar_sum<K, Aind, Store>(
 ) -> Option<NetworkLeaf<K, Aind>>
 where
     Store: NetworkStoreAccess,
-    Store::Scalar: 'static,
+    Store::Tensor: Clone + HasStructure,
+    <Store::Tensor as HasStructure>::Scalar: Into<Store::Scalar>,
+    Store::Scalar: Clone
+        + Ref
+        + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>
+        + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>
+        + 'static,
 {
     use std::{
         any::{Any, TypeId},
@@ -3709,12 +3715,22 @@ where
     let atoms = targets
         .iter()
         .map(|(_, leaf)| {
-            let NetworkLeaf::Scalar(index) = leaf else {
-                return None;
-            };
-            (store.scalar_ref(*index) as &dyn Any)
-                .downcast_ref::<Atom>()
-                .cloned()
+            // Closed tensor and lazy leaves have the same scalar meaning as
+            // literal scalar leaves. Keep their scales and alias handles, and
+            // move owned results into the bulk sum without another Atom clone.
+            match leaf.result_scalar(
+                |tensor| store.tensor(tensor),
+                |scalar| store.scalar_ref(scalar),
+            )? {
+                ExecutionResult::Val(value) => {
+                    let scalar: Box<dyn Any> = Box::new(value.into_owned());
+                    scalar.downcast::<Atom>().ok().map(|atom| *atom)
+                }
+                ExecutionResult::Zero => Some(Atom::Zero),
+                ExecutionResult::One => {
+                    unreachable!("leaf conversion does not produce implicit one")
+                }
+            }
         })
         .collect::<Option<Vec<_>>>()?;
 
@@ -3735,10 +3751,16 @@ where
         );
 
         for atom in atoms {
-            stream.push(atom);
+            // Explicit zero leaves must not become terms in the stream.
+            if !atom.is_zero() {
+                stream.push(atom);
+            }
         }
 
-        let result = stream.to_expression();
+        let mut result = stream.to_expression();
+        if result.nterms() == 0 {
+            result = Atom::Zero;
+        }
         if let Some(start) = start {
             eprintln!(
                 "spenso_profile execute.sum_term_stream_done leaves={} terms={} bytes={} elapsed_ms={:.3}",
@@ -3757,7 +3779,7 @@ where
             );
         }
 
-        let result = Atom::add_many(&atoms);
+        let result = Atom::add_many(atoms);
         if profile::verbose()
             && let Some(start) = start
         {

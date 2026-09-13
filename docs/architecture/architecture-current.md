@@ -466,6 +466,11 @@ before resolving its own aliases. Typed scalar-store handles are substituted
 directly from their definitions.
 Resolution retains its exact fixed point for nested or newly exposed handles;
 it avoids hashing unrelated subexpressions and copying alias-free results.
+Within a network, bulk Atom addition accepts every leaf whose existing scalar
+conversion succeeds, including rank-zero tensors and lazy sums with scales.
+The conversion preserves alias handles and rejects open tensors before the
+store changes. Owned scalar results move into the existing bulk or streaming
+sum, avoiding repeated pairwise addition of large closed-tensor results.
 Scalar results are combined in one bulk sum
 before global evaluator optimization; open tensors, including open zero tensors,
 remain invalid scalar outputs. Optional evaluator variants borrow these scalars
