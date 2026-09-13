@@ -2284,7 +2284,7 @@ impl LmbMultiChannelingSetup {
         let mut context = context.clone();
         let catalogue =
             self.sampling_channel_catalogue(resolved, &context.parameterization_settings)?;
-        for (basis_id, edges) in catalogue.lmb_entries() {
+        for (basis_id, edges) in catalogue.lmb_basis_entries() {
             if edges != context.parent_lmb.as_slice() {
                 context.lmb_frame_maps.insert(
                     basis_id,
@@ -2542,7 +2542,7 @@ impl LmbMultiChannelingSetup {
         graph_name: &str,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<LmbIndex> {
-        let channels = self.lmb_channel_entries(graph_name, parameterization_settings)?;
+        let channels = self.canonical_lmb_basis_entries(graph_name, parameterization_settings)?;
         channels.first().map(|(_, basis_id)| *basis_id).ok_or_else(|| {
             eyre!(
                 "Could not select a default LMB basis for graph '{}'; the optimized LMB subset is empty.",
@@ -2552,11 +2552,12 @@ impl LmbMultiChannelingSetup {
     }
 
     /// Resolve the canonical channel IDs that can still be evaluated by the
-    /// transitional LMB weighting path.  The IDs are retained alongside their
+    /// transitional LMB weighting path. The IDs are retained alongside their
     /// generated basis instead of compacting into a second positional LMB
-    /// enumeration; this keeps legacy callers aligned with the canonical
-    /// channel axis until the per-sample graph-aware route is complete.
-    fn lmb_channel_entries(
+    /// enumeration; this keeps compatibility callers aligned with the one
+    /// canonical channel axis until the per-sample graph-aware route is
+    /// complete.
+    fn canonical_lmb_basis_entries(
         &self,
         graph_name: &str,
         parameterization_settings: &ParameterizationSettings,
@@ -2738,7 +2739,7 @@ impl LmbMultiChannelingSetup {
         momentum_sample: &MomentumSample<T>,
         weighting_settings: LmbChannelWeightingSettings<'_, T>,
     ) -> Result<F<T>> {
-        let channel_entries = self.lmb_channel_entries(
+        let channel_entries = self.canonical_lmb_basis_entries(
             weighting_settings.graph_name,
             weighting_settings.parameterization_settings,
         )?;
@@ -2958,7 +2959,7 @@ impl LmbMultiChannelingSetup {
                     })
                 })
                 .collect::<Result<Vec<_>>>()?,
-            None => self.lmb_channel_entries(graph_name, parameterization_settings)?,
+            None => self.canonical_lmb_basis_entries(graph_name, parameterization_settings)?,
         };
         if channel_entries.is_empty() {
             return Err(eyre!(
