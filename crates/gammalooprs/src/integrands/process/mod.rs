@@ -2020,7 +2020,7 @@ type LmbChannelSamples<T> = TiVec<SamplingChannelId, (MomentumSample<T>, F<T>)>;
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct LmbMultiChannelingSetup {
-    pub channels: TiVec<SamplingChannelId, LmbIndex>,
+    pub lmb_basis_ids: TiVec<SamplingChannelId, LmbIndex>,
     /// Canonical group-master graph used to resolve group-level channel overrides.
     pub graph: Graph,
     pub all_bases: TiVec<LmbIndex, LoopMomentumBasis>,
@@ -2168,7 +2168,7 @@ impl LmbMultiChannelingSetup {
                 .map(|basis_id| self.validate_lmb_basis_id(basis_id, graph_name))
                 .collect()
         } else {
-            Ok(self.channels.iter().copied().collect())
+            Ok(self.lmb_basis_ids.iter().copied().collect())
         }
     }
 
@@ -2180,7 +2180,7 @@ impl LmbMultiChannelingSetup {
         parameterization_settings
             .lmb_basis_ids
             .get(graph_name)
-            .map_or_else(|| self.channels.len(), Vec::len)
+            .map_or_else(|| self.lmb_basis_ids.len(), Vec::len)
     }
 
     pub fn effective_channel_lmb_id(
@@ -2200,12 +2200,12 @@ impl LmbMultiChannelingSetup {
             })?;
             self.validate_lmb_basis_id(*basis_id, graph_name)
         } else {
-            self.channels.get(channel_index).copied().ok_or_else(|| {
+            self.lmb_basis_ids.get(channel_index).copied().ok_or_else(|| {
                 eyre!(
                     "Requested LMB channel {} is out of range for graph '{}'; the graph has {} effective LMB channels.",
                     channel_index.0,
                     graph_name,
-                    self.channels.len()
+                    self.lmb_basis_ids.len()
                 )
             })
         }
@@ -4935,7 +4935,7 @@ mod tests {
         };
         let all_bases = vec![lmb(0), lmb(1), lmb(2)].into();
         let setup = LmbMultiChannelingSetup {
-            channels: vec![LmbIndex::from(2), LmbIndex::from(0)].into(),
+            lmb_basis_ids: vec![LmbIndex::from(2), LmbIndex::from(0)].into(),
             graph,
             all_bases,
         };
@@ -5003,7 +5003,7 @@ mod tests {
         assert!(all_bases.len() >= 2);
         graph.loop_momentum_basis = all_bases[LmbIndex::from(0)].clone();
         let setup = LmbMultiChannelingSetup {
-            channels: vec![LmbIndex::from(0), LmbIndex::from(1)].into(),
+            lmb_basis_ids: vec![LmbIndex::from(0), LmbIndex::from(1)].into(),
             graph: graph.clone(),
             all_bases,
         };
