@@ -584,6 +584,26 @@ across mapped points before statistical squaring. Graph/orientation probabilitie
 and outer map/grid factors are applied once; invalid draws fail acceptance.
 Explicit discrete coordinate selections expose partial partition contributions,
 which require summation or inverse-selection probabilities for unit normalization.
+The ordinary `integrate` workflow also accepts a `reference_gaussian` descriptor.
+CLI syntax is `--reference-gaussian '{"width":300}'`; the Python argument is
+`reference_gaussian=(300.0, [])`, with the second tuple item an optional shift.
+Its existing complex accumulators report Gaussian normalization in Re and
+`|K|²` times the Gaussian, divided by the known raw second moment, in Im. Both
+expectations are one. This is acceptance output, not a physical imaginary part;
+the raw moment scale is reported separately. An omitted center is resolved to
+zero in the loaded process's spatial dimension. Physical selectors and
+observables must be disabled for this substitution.
+The initial binding requires one common nonzero loop count across each slot's
+loaded graphs; it does not infer a smaller dimensional scope from graph filters.
+
+The reference stays on the existing integration slot and is passed explicitly
+to worker evaluations. The same native stability loop checks its value and raw
+moment before reporting. No second integrand, grid or statistics engine is
+introduced. Workspace manifest version 2 records each resolved descriptor and
+the observable convention; resume requires the same reference request and checks
+it before restoring runtime settings. Older integration workspaces require
+`--restart`. Generated `gammaloop_state/` data and the binary integration
+checkpoint layout are unchanged by this reporting extension.
 See [the implementation plan](../../ADVANCED_SAMPLING_PLAN.md) for the remaining
 harness and channel milestones, and
 [the LU localization study](../research/advanced_sampling/LU_H_MATCHED_SAMPLING.md)

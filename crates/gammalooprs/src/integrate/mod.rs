@@ -10,6 +10,7 @@ mod render_ratatui;
 mod render_tabled;
 mod status_update;
 
+use crate::integrands::process::EvaluationTarget;
 use bincode::Decode;
 use bincode::Encode;
 use color_eyre::{Report, Result};
@@ -31,6 +32,7 @@ use crate::graph::GroupId;
 use crate::integrands::HasIntegrand;
 use crate::integrands::evaluation::EvaluationResult;
 use crate::integrands::evaluation::StatisticsCounter;
+use crate::integrands::process::GaussianReferenceFunction;
 use crate::integrands::process::{GraphTerm, ProcessIntegrand};
 use crate::model::{Model, SerializableInputParamCard};
 use crate::observables::{
@@ -110,6 +112,8 @@ pub struct IntegrationSlot {
     pub model: Model,
     pub integrand: Integrand,
     pub target: Option<Complex<F<f64>>>,
+    /// Acceptance target retained independently of worker-local process clones.
+    pub reference_gaussian: Option<GaussianReferenceFunction>,
 }
 
 impl IntegrationSlot {
@@ -126,6 +130,7 @@ impl IntegrationSlot {
             model,
             integrand,
             target,
+            reference_gaussian: None,
         }
     }
 }
@@ -163,13 +168,56 @@ pub struct IntegrationWorkspaceManifest {
     pub targets: Vec<Option<Complex<F<f64>>>>,
     pub effective_model_parameters: Vec<SerializableInputParamCard<F<f64>>>,
     pub integrand_fingerprints: Vec<String>,
+    /// Empty for physical workspaces; otherwise one resolved descriptor per slot.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reference_gaussians: Vec<Option<GaussianReferenceFunction>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference_observable_convention: Option<String>,
     pub training_slot: usize,
     pub integrator_settings_slot: usize,
     pub sampling_correlation_mode: SamplingCorrelationMode,
 }
 
 impl IntegrationWorkspaceManifest {
-    pub const CURRENT_VERSION: u32 = 1;
+    pub const CURRENT_VERSION: u32 = 2;
+
+    /// A missing descriptor requests physics. Resume never silently changes that
+    /// request into acceptance, and an unknown reporting convention cannot reuse grids.
+    pub fn validate_reference_config(
+        &self,
+        requested: &[Option<GaussianReferenceFunction>],
+    ) -> Result<()> {
+        if !self.reference_gaussians.is_empty()
+            && self.reference_gaussians.len() != self.slots.len()
+        {
+            return Err(Report::msg(
+                "Workspace reference descriptors must match its slots",
+            ));
+        }
+        for reference in self.reference_gaussians.iter().flatten() {
+            let scale = reference.expected_second_moment::<f64>().0;
+            if reference.center().is_empty() || !scale.is_finite() || scale <= 0.0 {
+                return Err(Report::msg(
+                    "Workspace reference descriptor must contain a resolved center and finite positive moment scale",
+                ));
+            }
+        }
+        let has_reference = requested.iter().any(Option::is_some);
+        let expected_convention =
+            has_reference.then_some(GaussianReferenceFunction::INTEGRATION_CONVENTION);
+        let same_config = if self.reference_gaussians.is_empty() {
+            !has_reference
+        } else {
+            self.reference_gaussians == requested
+        };
+        if !same_config || self.reference_observable_convention.as_deref() != expected_convention {
+            return Err(Report::msg(format!(
+                "Workspace physical/reference configuration does not match the request. Repeat the same --reference-gaussian descriptor to resume acceptance, or use --restart for a different target. Saved descriptors: {}",
+                serde_json::to_string(&self.reference_gaussians)?
+            )));
+        }
+        Ok(())
+    }
 
     pub fn validate_version(&self) -> Result<()> {
         if self.version == Self::CURRENT_VERSION {
@@ -2021,7 +2069,7 @@ impl CoreIterationState {
     fn evaluate_chunk(
         &mut self,
         slot_settings: &[&RuntimeSettings],
-        slot_models: &[&Model],
+        slot_targets: &[EvaluationTarget<'_>],
         iter: usize,
         current_max_evals: &[Complex<F<f64>>],
         chunk_size: usize,
@@ -2065,7 +2113,7 @@ impl CoreIterationState {
                     let evaluation_start = Instant::now();
                     let raw_batch = integrand.evaluate_samples_raw(
                         &samples,
-                        slot_models[slot_index],
+                        slot_targets[slot_index],
                         iter,
                         false,
                         true,
@@ -2178,7 +2226,7 @@ impl CoreIterationState {
                     let evaluation_start = Instant::now();
                     let raw_batch = self.slot_integrands[slot_index].evaluate_samples_raw(
                         &samples,
-                        slot_models[slot_index],
+                        slot_targets[slot_index],
                         iter,
                         false,
                         true,
@@ -2818,14 +2866,22 @@ where
             let round_started_at = Instant::now();
             let processed_per_core: Vec<Result<usize>> = {
                 let slot_settings = slots.iter().map(|slot| &slot.settings).collect_vec();
-                let slot_models = slots.iter().map(|slot| &slot.model).collect_vec();
+                let slot_targets = slots
+                    .iter()
+                    .map(|slot| {
+                        slot.reference_gaussian
+                            .as_ref()
+                            .map(EvaluationTarget::Reference)
+                            .unwrap_or(EvaluationTarget::Physical(&slot.model))
+                    })
+                    .collect_vec();
                 pool.install(|| {
                     worker_states
                         .par_iter_mut()
                         .map(|worker_state| {
                             worker_state.evaluate_chunk(
                                 &slot_settings,
-                                &slot_models,
+                                &slot_targets,
                                 integration_state.iter,
                                 &current_max_evals,
                                 current_batch_size,
@@ -3698,8 +3754,14 @@ fn evaluate_sample_list(
     > = sample_chunks
         .zip(integrands)
         .map(|(chunk, mut integrand)| {
-            let raw_batch =
-                integrand.evaluate_samples_raw(chunk, model, iter, false, false, max_eval)?;
+            let raw_batch = integrand.evaluate_samples_raw(
+                chunk,
+                EvaluationTarget::Physical(model),
+                iter,
+                false,
+                false,
+                max_eval,
+            )?;
             Ok((raw_batch.samples, raw_batch.statistics, integrand))
         })
         .collect();
@@ -4857,11 +4919,11 @@ mod tests {
         );
         let model = Model::default();
         let slot_settings = [&settings_a, &settings_b];
-        let slot_models = [&model, &model];
+        let slot_targets = [EvaluationTarget::Physical(&model); 2];
         let current_max_evals = [Complex::new(F(0.0), F(0.0)), Complex::new(F(0.0), F(0.0))];
 
         let processed = core_state
-            .evaluate_chunk(&slot_settings, &slot_models, 0, &current_max_evals, 8)
+            .evaluate_chunk(&slot_settings, &slot_targets, 0, &current_max_evals, 8)
             .expect("correlated chunk evaluation should succeed");
 
         assert_eq!(processed, 8);

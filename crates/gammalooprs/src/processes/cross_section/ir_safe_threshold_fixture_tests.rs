@@ -1,3 +1,4 @@
+use crate::integrands::process::EvaluationTarget;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -1722,7 +1723,7 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
             }
             let before_save = integrand
                 .evaluate_samples_raw(
-                    &model,
+                    EvaluationTarget::Physical(&model),
                     &samples,
                     0,
                     false,
@@ -1851,7 +1852,7 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
             loaded_integrand.warm_up(&model).unwrap();
             let after_load = loaded_integrand
                 .evaluate_samples_raw(
-                    &model,
+                    EvaluationTarget::Physical(&model),
                     &samples,
                     0,
                     false,

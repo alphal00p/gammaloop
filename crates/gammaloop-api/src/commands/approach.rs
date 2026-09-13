@@ -1,3 +1,4 @@
+use gammalooprs::integrands::process::EvaluationTarget;
 use std::{
     collections::{BTreeMap, BTreeSet},
     env, fs,
@@ -926,7 +927,7 @@ impl Approach {
             let sample = build_havana_sample(integrand, &job.point, &self.discrete_dim, 1.0)?;
             integrand
                 .evaluate_samples_raw(
-                    model,
+                    EvaluationTarget::Physical(model),
                     &[sample],
                     1,
                     self.use_arb_prec,

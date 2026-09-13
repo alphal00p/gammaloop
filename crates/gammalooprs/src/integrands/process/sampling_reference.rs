@@ -4,11 +4,15 @@
 //! acceptance run can replace the physical graph value while retaining the real
 //! graph routing, parameterization and Jacobian.
 
-use crate::integrands::evaluation::EvaluationResult;
+use super::ProcessIntegrand;
+use crate::graph::FeynmanGraph;
+use crate::integrands::evaluation::{EvaluationResult, PreciseEvaluationResult};
 use crate::momentum::sample::LoopMomenta;
 use crate::utils::{F, FloatLike};
 use color_eyre::Result;
 use eyre::eyre;
+use schemars::JsonSchema;
+use serde::{Deserialize, Deserializer, Serialize};
 use symbolica::numerical_integration::StatisticsAccumulator;
 
 /// The result of evaluating a reference function through a process map,
@@ -21,7 +25,8 @@ pub struct ReferenceSampleEvaluation {
     pub moments: ReferenceMoments<f64>,
 }
 
-/// Reference contributions before the outer parameterization/grid weights.
+/// Reference contributions carry the same factors as the scalar; any remaining
+/// parameterization Jacobian and the outer grid weight are still outside.
 /// Jacobian extrema describe the effective sampling factors at the individual
 /// mapped points, since an explicit channel sum has no single map Jacobian.
 #[derive(Clone, Debug)]
@@ -187,13 +192,146 @@ impl ReferenceSamplingReport {
 /// normalized with respect to the unconstrained spatial loop-momentum volume,
 /// making it suitable for testing a real process parameterization independently
 /// of its physical numerator and denominator.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct GaussianReferenceFunction {
     width: f64,
+    #[schemars(default)]
     center: Vec<f64>,
 }
 
+impl<'de> Deserialize<'de> for GaussianReferenceFunction {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Input {
+            width: f64,
+            #[serde(default)]
+            center: Vec<f64>,
+        }
+        let input = Input::deserialize(deserializer)?;
+        Self::new(input.width, input.center).map_err(serde::de::Error::custom)
+    }
+}
+
+impl std::str::FromStr for GaussianReferenceFunction {
+    type Err = serde_json::Error;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        serde_json::from_str(value)
+    }
+}
+
 impl GaussianReferenceFunction {
+    /// Workspace reporting uses two dimensionless observables, both of mean one.
+    pub const INTEGRATION_CONVENTION: &str = "gaussian_and_normalized_raw_second_moment_v1";
+
+    /// Resolve centered shorthand against the actual generated process. A single
+    /// raw-frame Gaussian cannot describe graph groups of different dimensions.
+    pub fn for_integrand(&self, integrand: &ProcessIntegrand) -> Result<Self> {
+        let loops = match integrand {
+            ProcessIntegrand::Amplitude(integrand) => integrand
+                .data
+                .graph_terms
+                .iter()
+                .map(|term| term.graph.get_loop_number())
+                .collect::<std::collections::BTreeSet<_>>(),
+            ProcessIntegrand::CrossSection(integrand) => integrand
+                .data
+                .graph_terms
+                .iter()
+                .map(|term| term.graph.get_loop_number())
+                .collect::<std::collections::BTreeSet<_>>(),
+        };
+        if loops.len() != 1 || loops.contains(&0) {
+            return Err(eyre!(
+                "reference integration requires one nonzero loop dimension per process slot; found {loops:?}"
+            ));
+        }
+        let n_loops = *loops.first().unwrap();
+        let reference = if self.center.is_empty() {
+            Self::centered(self.width, n_loops)?
+        } else {
+            self.clone()
+        };
+        if reference.center.len() != 3 * n_loops {
+            return Err(eyre!(
+                "reference center has {} coordinates, but the process has {}",
+                reference.center.len(),
+                3 * n_loops
+            ));
+        }
+        // This is the f64 CLI/statistics metadata boundary; native reference APIs
+        // retain their wider-range input and moment contracts.
+        let scale = reference.expected_second_moment::<f64>().0;
+        if !scale.is_finite() || scale <= 0.0 {
+            return Err(eyre!(
+                "reference integration requires a finite positive raw second-moment scale for f64 reporting"
+            ));
+        }
+        let settings = integrand.get_settings();
+        if settings.selectors.values().any(|selector| selector.active)
+            || !settings.observables.is_empty()
+        {
+            return Err(eyre!(
+                "reference integration substitutes the physical event value; disable physical selectors and observables for this acceptance run"
+            ));
+        }
+        Ok(reference)
+    }
+
+    /// Construct the known raw moment in the active precision from input settings.
+    /// An empty center is only a CLI descriptor shorthand, resolved before evaluation.
+    pub fn expected_second_moment<T: FloatLike>(&self) -> F<T> {
+        let width = F::<T>::from_f64(self.width);
+        self.center.iter().fold(width.zero(), |sum, value| {
+            sum + F::<T>::from_f64(*value).square()
+        }) + width.square() * width.from_usize(self.center.len())
+    }
+
+    /// Report the reference through the ordinary integrator's existing complex
+    /// accumulators: Re is normalization and Im is the normalized raw moment.
+    /// Both have already received native map factors; the grid weight stays outside.
+    pub(crate) fn integration_report(
+        &self,
+        result: PreciseEvaluationResult,
+    ) -> Result<EvaluationResult> {
+        macro_rules! report {
+            ($result:expr) => {{
+                let mut result = $result;
+                if result.evaluation_metadata.is_nan {
+                    return Err(eyre!(
+                        "reference integration cannot report a nonfinite finalized value"
+                    ));
+                }
+                let moment = result
+                    .reference_moments
+                    .take()
+                    .ok_or_else(|| eyre!("reference integration produced no mapped moment"))?;
+                let scale = self.expected_second_moment();
+                let normalized = &moment.second_moment / &scale;
+                if scale.is_nan()
+                    || scale.is_infinite()
+                    || scale <= scale.zero()
+                    || normalized.is_nan()
+                    || normalized.is_infinite()
+                    || (normalized == normalized.zero()
+                        && moment.second_moment != moment.second_moment.zero())
+                {
+                    return Err(eyre!(
+                        "native normalized reference moment is not representable"
+                    ));
+                }
+                result.integrand_result.im = normalized;
+                result.try_into_f64()
+            }};
+        }
+        match result {
+            PreciseEvaluationResult::Double(result) => report!(result),
+            PreciseEvaluationResult::Quad(result) => report!(result),
+            PreciseEvaluationResult::Arb(result) => report!(result),
+        }
+    }
+
     /// Construct a Gaussian with a positive width and a center of the given dimension.
     pub fn new(width: f64, center: Vec<f64>) -> Result<Self> {
         if !width.is_finite() || width <= 0.0 {
@@ -264,7 +402,7 @@ impl GaussianReferenceFunction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::integrands::evaluation::EvaluationResult;
+    use crate::integrands::evaluation::{EvaluationResult, PreciseEvaluationResult};
     use crate::momentum::ThreeMomentum;
     use spenso::algebra::complex::Complex;
 
@@ -297,6 +435,56 @@ mod tests {
             .unwrap();
             assert_eq!(moments.second_moment, second_moment.into_ff64());
         }
+    }
+
+    #[test]
+    fn reference_descriptor_validates_serde_and_normalizes_native_moment_before_reporting() {
+        use crate::integrands::evaluation::{EvaluationMetaData, GenericEvaluationResult};
+        use crate::utils::ArbPrec;
+        let shorthand: GaussianReferenceFunction = serde_json::from_str(r#"{"width":2}"#).unwrap();
+        assert!(shorthand.center().is_empty());
+        for invalid in [
+            r#"{"width":0}"#,
+            r#"{"width":-2}"#,
+            r#"{"width":2,"center":[1]}"#,
+            r#"{"width":2,"centre":[0,0,0]}"#,
+        ] {
+            assert!(serde_json::from_str::<GaussianReferenceFunction>(invalid).is_err());
+        }
+        assert!(toml::from_str::<GaussianReferenceFunction>("width=2\ncenter=[inf,0,0]").is_err());
+        let schema = schemars::schema_for!(GaussianReferenceFunction);
+        assert_eq!(schema.as_value()["required"], serde_json::json!(["width"]));
+
+        // The raw moment is outside binary64 range, but the normalized
+        // observable is finite. Narrow only after native normalization.
+        let reference = GaussianReferenceFunction::centered(5.0e153, 1).unwrap();
+        let one = F::<ArbPrec>::default().one();
+        let moment = reference.expected_second_moment::<ArbPrec>() * one.from_usize(4);
+        assert!(moment.into_ff64().0.is_infinite());
+        let native = GenericEvaluationResult {
+            reference_moments: Some(ReferenceMoments {
+                second_moment: moment,
+                jacobian_min: 1.0,
+                jacobian_max: 1.0,
+            }),
+            integrand_result: Complex::new_re(one.clone()),
+            parameterization_jacobian: Some(one.clone()),
+            integrator_weight: one.from_usize(7),
+            event_groups: Default::default(),
+            evaluation_metadata: EvaluationMetaData::new_empty(),
+        };
+        let output = reference
+            .integration_report(PreciseEvaluationResult::Arb(native.clone()))
+            .unwrap();
+        assert_eq!(output.integrand_result, Complex::new(F(1.0), F(4.0)));
+        assert_eq!(output.integrator_weight, F(7.0));
+        let mut failed = native;
+        failed.evaluation_metadata.is_nan = true;
+        assert!(
+            reference
+                .integration_report(PreciseEvaluationResult::Arb(failed))
+                .is_err()
+        );
     }
 
     #[test]

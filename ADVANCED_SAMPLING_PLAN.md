@@ -500,8 +500,17 @@ confused one exposed summed selector with the production orientation count. The
 corrected optimized run verifies all 936 production keys, 32768 finite reference
 draws, the twelve-dimensional determinant and native ray inverses; its moments
 match the reduced-state run at the same cubes. Reference substitution bypasses
-physical orientation evaluation. All-orientation physical comparisons, star
-images and joint normal maps still remain to establish GL638 improvement.
+physical orientation evaluation. The subsequent
+[physical pilot](docs/research/advanced_sampling/GL638_X2_PHYSICAL_PILOT.md)
+evaluates all 936 orientations with full UV. All 24,576 draws are valid, and all
+48 saved extrema replay exactly with their historical nested sample weights.
+Native physical H/Z rays and soft controls pass the precision and unchanged-physics
+gates. The power-2 direct-H proposal shows a smaller pooled imaginary error,
+dominated by one power-1 excursion, with more Quad rescue and essentially
+unchanged real error; this does not establish a reliable global efficiency gain.
+The actual fixed-ray weights grow approximately as `R^-0.498`, reaching complex
+magnitudes 230 and 265 pb at `R=0.0002 GeV`. Joint normal maps and star images
+remain necessary for the intended corner treatment.
 
 The next projected-target boundary is recorded in the
 [affine-star implementation audit](docs/research/advanced_sampling/AFFINE_STAR_IMPLEMENTATION_AUDIT.md).
@@ -514,25 +523,44 @@ Represent stable overlap-membership branches in the same canonical catalogue,
 with a finite expansion cap and normalized fallback for absent branches. This
 is an unimplemented X4 requirement; direct-H validation does not cover it.
 
-The next bounded allocation keeps physical measurements and shared source work
-moving together. The GL638 owner uses the frozen optimized `f2f64fb17` binary
-for reference gates, saved physical H/Z and soft replays, then a fresh-grid
-comparison of optimized LMB, direct-H powers 1 and 2, and power 2 mixed with
-optimized LMB. Begin with three seeds and 2048 draws each on 20 cores; expand
-only after the reference and physical gates pass. Preserve each maximum's full
-stored integration `Sample`, including its historical grid weight, for exact
-replay. Printed coordinates alone are insufficient. All these physical runs use
-the compatible unrestricted state with 936 production orientations and full UV.
+The bounded direct-H allocation is complete using frozen optimized `f2f64fb17`:
+reference gates, physical H/Z and soft replays, then optimized LMB, direct-H
+powers 1 and 2, and power 2 mixed with optimized LMB. Each uses three seeds and
+2048 draws on 20 cores. The artifact preserves each maximum's full stored
+integration `Sample`, including its historical grid weight; printed coordinates
+alone are insufficient. Do not extend these runs before the missing geometry
+is ready. The next sequence is shared physical CT-star preparation and
+complement-only projection scale, followed by the generic rank-two H/Z chart
+and its certified star pullbacks. The joint chart must certify the feasible
+normal domain, rank, inverse branches and normalized absent/degenerate fallback
+before physical comparisons. Its generic kernel/domain work can proceed
+alongside CT-star preparation: a direct joint chart needs shared host tau but
+does not depend on CT centers or alpha. Only its star pullback adds those
+dependencies. Automatic channel discovery and long adaptive runs are not
+prerequisites for this explicit-chart implementation.
 
 In parallel, the subtraction owner has separated representative overlap
 kinematics from the raised derivative packets, using the existing sample and
 group types. The foreign-cut/radial-derivative regression and generated raised
 component/roundtrip fixture pass. The acceptance owner exposes the existing
-reference target through the normal loaded-state integration workflow, retaining its grids, workspaces,
-statistics and resume checks. Root audits these boundaries and the eventual
+reference target through the normal loaded-state integration workflow, retaining
+its grids, workspaces, statistics and resume checks. Root audits these boundaries and the eventual
 star selector before assigning further map changes. Neither this overlap
 extraction nor a reference-only full-state run establishes star alignment or
 all-orientation physical improvement.
+
+The ordinary reference-workflow gate passes all 43 focused core/API checks,
+including the reloaded bubble, two-loop kite and conditional-cut fixture,
+two-worker Monte Carlo integration, exact completed-iteration resume and an
+actual trained-grid sample with unequal probabilities. All 53 normal core
+integration-owner checks also pass. An exploratory run additionally includes
+the pre-existing `failing::target_accuracy_status_treats_zero_relative_reference_as_inactive`
+ETA test and fails its unchanged expectation; the repository's curated profiles
+already exclude it. Python-feature checks and all-target clippy pass, with
+pre-existing warnings recorded separately. All eleven differential regressions
+and six physical multi-integrand/model/batching/workspace-resume checks pass.
+Building that test target also exposed two stale event channel field accesses;
+they now use the existing canonical `sampling_channel_id`.
 
 
 The shared fiber slice reuses `Esurface`, `SubspaceData`, the current implicit
@@ -947,6 +975,29 @@ retain a second standalone integrand owner. The new path loads a real saved
 state in an isolated workspace and substitutes a known raw-frame reference
 function at the physical-integrand boundary while retaining the actual map,
 Jacobian, channel partition, branch decisions and outer weights.
+
+The first ordinary-workflow interface is:
+
+```text
+integrate -p MyProcess -i MyIntegrand --reference-gaussian '{"width":300}' -w reference_check --n-cores 20 --show-phase both --restart
+```
+
+An optional `center` array supplies a shift in the generation-parent raw
+spatial coordinates; omission means zero at the resolved loop dimension.
+Python's `integrate(..., reference_gaussian=(300.0, []))` selects the same
+centered descriptor; a nonempty second tuple item supplies the shifted center.
+Each selected process slot currently requires one common nonzero loop count
+across its loaded graphs, even if a graph filter selects a smaller subset.
+The integration accumulators report normalization in Re and the raw
+momentum-squared moment divided by its known expectation in Im, both with
+target one. These are explicitly labeled acceptance observables. This lets
+ordinary adaptation, Monte Carlo channels, worker clones and completed-iteration
+statistics exercise the real maps. Resume repeats the same descriptor; omission
+requests physics and cannot silently resume an acceptance workspace. The
+workspace manifest is versioned for these new semantics; prior integration
+workspaces need `--restart`, while generated states keep their binary layout.
+This initial interface does not yet supply anisotropic or heavy-tail probes,
+and the documented Gaussian-body underflow limit remains.
 
 Required probes include normalized Gaussian, shifted anisotropic Gaussian with
 cross-loop covariance, several widths, known first/second moments and a

@@ -1,3 +1,4 @@
+use crate::integrands::process::EvaluationTarget;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -663,7 +664,7 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                 integrand.warm_up(&model).unwrap();
                 let results = integrand
                     .evaluate_samples_raw(
-                        &model,
+                        EvaluationTarget::Physical(&model),
                         &samples,
                         0,
                         false,
@@ -808,7 +809,7 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                             .unwrap();
                         let mapped = matched
                             .evaluate_samples_raw(
-                                &model,
+                                EvaluationTarget::Physical(&model),
                                 std::slice::from_ref(sample),
                                 0,
                                 false,
@@ -906,7 +907,7 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
             loaded_integrand.warm_up(&model).unwrap();
             let after_load = loaded_integrand
                 .evaluate_samples_raw(
-                    &model,
+                    EvaluationTarget::Physical(&model),
                     &samples,
                     0,
                     false,
@@ -1203,7 +1204,7 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                                         + profile.broad_fraction * a / (a + t).powi(2);
                                     let value = matched
                                         .evaluate_samples_raw(
-                                            &model,
+                                            EvaluationTarget::Physical(&model),
                                             &[Sample::Continuous(
                                                 F(1.0),
                                                 coordinates.into_iter().map(F).collect(),
@@ -1926,7 +1927,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     .unwrap();
                 let summed = integrand
                     .evaluate_samples_raw(
-                        &model,
+                        EvaluationTarget::Physical(&model),
                         std::slice::from_ref(&sample),
                         0,
                         false,
@@ -2010,7 +2011,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     moment_sum += reference.moments.second_moment.0;
                     let selected = integrand
                         .evaluate_samples_raw(
-                            &model,
+                            EvaluationTarget::Physical(&model),
                             &[discrete],
                             0,
                             false,

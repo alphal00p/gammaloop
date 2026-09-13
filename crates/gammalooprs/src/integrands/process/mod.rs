@@ -1051,9 +1051,9 @@ impl ProcessIntegrand {
 
     pub fn evaluate_samples_raw(
         &mut self,
-        model: &Model,
+        target: EvaluationTarget<'_>,
         samples: &[Sample<F<f64>>],
-        iter: usize,
+        _iter: usize,
         use_arb_prec: bool,
         stop_on_interrupt: bool,
         max_eval: Complex<F<f64>>,
@@ -1063,26 +1063,26 @@ impl ProcessIntegrand {
             if stop_on_interrupt && crate::is_interrupted() {
                 break;
             }
-            let mut result = match self {
-                ProcessIntegrand::Amplitude(integrand) => evaluate_sample(
-                    integrand,
-                    model,
-                    sample,
-                    sample.get_weight(),
-                    iter,
-                    use_arb_prec,
-                    max_eval,
-                ),
-                ProcessIntegrand::CrossSection(integrand) => evaluate_sample(
-                    integrand,
-                    model,
-                    sample,
-                    sample.get_weight(),
-                    iter,
-                    use_arb_prec,
-                    max_eval,
-                ),
+            macro_rules! evaluate {
+                ($integrand:expr) => {
+                    evaluate_from_source_precise(
+                        $integrand,
+                        target,
+                        EvaluationSource::XSpace(sample),
+                        sample.get_weight(),
+                        use_arb_prec,
+                        max_eval,
+                    )
+                };
+            }
+            let precise = match self {
+                ProcessIntegrand::Amplitude(integrand) => evaluate!(integrand),
+                ProcessIntegrand::CrossSection(integrand) => evaluate!(integrand),
             }?;
+            let mut result = match target {
+                EvaluationTarget::Reference(reference) => reference.integration_report(precise)?,
+                EvaluationTarget::Physical(_) => precise.try_into_f64()?,
+            };
 
             self.process_evaluation_result(&result);
             maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
@@ -3206,7 +3206,7 @@ pub trait GraphTerm {
 }
 
 #[derive(Clone, Copy)]
-enum EvaluationTarget<'a> {
+pub enum EvaluationTarget<'a> {
     Physical(&'a Model),
     Reference(&'a GaussianReferenceFunction),
 }
@@ -3655,7 +3655,12 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
         .map(|result| result.integrand_result.clone())
         .collect_vec();
 
-    let max_eval = complex_from_f64::<T>(context.max_eval);
+    let mut max_eval = complex_from_f64::<T>(context.max_eval);
+    if matches!(context.target, EvaluationTarget::Reference(_)) {
+        // Integration reports a second observable in Im. Its scale must not
+        // alter the Gaussian value's existing independent stability check.
+        max_eval.im = max_eval.im.zero();
+    }
     let wgt = F::<T>::from_ff64(context.wgt);
 
     let (average_result, mut estimated_relative_accuracy, mut is_stable, _instability_reason) =
