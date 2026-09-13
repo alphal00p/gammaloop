@@ -2080,6 +2080,19 @@ impl LmbMultiChannelingSetup {
         catalogue.compile(context).map_err(Into::into)
     }
 
+    /// Compile the selected channels and bind them to the opt-in raw-frame
+    /// bridge used by callers that want advanced map-density multichanneling.
+    /// The ordinary LMB sampler does not call this method and therefore keeps
+    /// its existing channel-index semantics unchanged.
+    pub fn compile_sampling_channel_bridge(
+        &self,
+        resolved: &ResolvedSamplingChannelSelection,
+        context: &SamplingChannelCompileContext,
+    ) -> Result<SamplingChannelBridge> {
+        let channels = self.compile_sampling_channels(resolved, context)?;
+        SamplingChannelBridge::new(channels).map_err(Into::into)
+    }
+
     fn validate_lmb_basis_id(&self, basis_id: usize, graph_name: &str) -> Result<LmbIndex> {
         if basis_id >= self.all_bases.len() {
             return Err(eyre!(
