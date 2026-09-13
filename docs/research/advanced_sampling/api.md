@@ -67,6 +67,7 @@ sampling_channel_weight = "map_density"
 
 [sampling.channels.GL638.H_shell]
 parent_lmb = [3, 6, 7, 10]
+subspace_lmb = [3]
 map = "radial"
 lmb = [3]
 target = { kind = "energy_surface", edges = [2, 4, 12], at = "lu_cut", host_cut = [2, 6, 10] }
