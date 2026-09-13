@@ -1989,10 +1989,15 @@ impl GraphTerm for CrossSectionGraphTerm {
                         CutEventGenerationContext {
                             settings: context.settings,
                             model: context.model,
+                            // Advanced channels have already been mapped into the
+                            // parent frame; preserve their canonical id in event
+                            // metadata without routing the momenta through the
+                            // legacy LMB reinterpretation path.
                             channel_id: context
                                 .channel_id
                                 .as_ref()
-                                .map(|(channel_id, _, _)| *channel_id),
+                                .map(|(channel_id, _, _)| *channel_id)
+                                .or(context.advanced_channel_id),
                         },
                         &solution,
                         &momentum_sample,
