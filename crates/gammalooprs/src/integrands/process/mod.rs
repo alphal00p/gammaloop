@@ -959,6 +959,51 @@ impl ProcessIntegrand {
         self.evaluate_reference_samples(&samples, reference)
     }
 
+    /// Evaluate deterministic coordinates under one explicit discrete
+    /// selection path. `discrete_indices` is ordered from the outermost
+    /// `Sample::Discrete` selector to the innermost one, matching the
+    /// canonical graph/orientation/channel order used by the process sampler.
+    /// The selection itself is never re-enumerated or filtered here; callers
+    /// must supply IDs obtained from the loaded process' canonical catalogue.
+    pub fn evaluate_reference_discrete_coordinates(
+        &mut self,
+        discrete_indices: &[usize],
+        coordinates: &[Vec<f64>],
+        reference: &GaussianReferenceFunction,
+    ) -> Result<ReferenceSamplingReport> {
+        if coordinates.is_empty() {
+            return Err(eyre!(
+                "reference acceptance coordinate batch needs at least one sample"
+            ));
+        }
+        let sample_weight = 1.0 / coordinates.len() as f64;
+        let samples = coordinates
+            .iter()
+            .enumerate()
+            .map(|(sample_index, coordinate)| {
+                if coordinate.iter().any(|value| !value.is_finite()) {
+                    return Err(eyre!(
+                        "reference acceptance sample {sample_index} contains a non-finite coordinate"
+                    ));
+                }
+                let mut sample = Sample::Continuous(
+                    F(sample_weight),
+                    coordinate.iter().copied().map(F).collect(),
+                );
+                for (depth, index) in discrete_indices.iter().rev().enumerate() {
+                    let weight = if depth + 1 == discrete_indices.len() {
+                        F(sample_weight)
+                    } else {
+                        F(1.0)
+                    };
+                    sample = Sample::Discrete(weight, *index, Some(Box::new(sample)));
+                }
+                Ok(sample)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        self.evaluate_reference_samples(&samples, reference)
+    }
+
     /// Evaluate a batch of samples with a normalized reference function while
     /// retaining the process maps, Jacobians and sampling-grid weights.
     pub fn evaluate_reference_samples(
@@ -4911,8 +4956,9 @@ mod tests {
             RuntimeSettings,
             global::OrientationPattern,
             runtime::{
-                LmbChannelWeight, ParameterizationSettings, SamplingChannelDefinition,
-                SamplingChannelSelection,
+                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, LmbChannelWeight,
+                MultiChannelingSettings, ParameterizationSettings, SamplingChannelDefinition,
+                SamplingChannelSelection, SamplingSettings,
             },
         },
         utils::{F, load_generic_model},
@@ -5194,6 +5240,39 @@ mod tests {
             Some(OrientationID(3))
         );
         assert_eq!(resolve_visible_orientation_id(&filter, 2), None);
+    }
+
+    #[test]
+    fn discrete_acceptance_selection_decodes_canonical_channel_id() {
+        let settings = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            sample_orientations: true,
+            sampling_type: DiscreteGraphSamplingType::DiscreteMultiChanneling(
+                MultiChannelingSettings::default(),
+            ),
+            ..Default::default()
+        });
+
+        let selected = super::resolve_discrete_selection_for_sampling(
+            &settings,
+            &[2, 5, 7],
+            3,
+            |_| Some(6),
+            |_| Ok::<Option<usize>, eyre::Report>(Some(8)),
+        )
+        .unwrap();
+        assert_eq!(selected.0, Some(GroupId(2)));
+        assert_eq!(selected.1, Some(5));
+        assert_eq!(selected.2, Some(SamplingChannelId::from(7)));
+
+        let error = super::resolve_discrete_selection_for_sampling(
+            &settings,
+            &[2, 5, 8],
+            3,
+            |_| Some(6),
+            |_| Ok::<Option<usize>, eyre::Report>(Some(8)),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("Channel 8 is out of range"));
     }
 
     #[test]

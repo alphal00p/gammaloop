@@ -1190,6 +1190,7 @@ mod tests {
     use crate::cff::VertexSet;
     use crate::graph::{Graph, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph};
     use crate::initialisation::test_initialise;
+    use crate::integrands::process::ImplicitSurfaceRadialMap;
     use crate::momentum::{
         FourMomentum, ThreeMomentum,
         sample::{ExternalFourMomenta, LoopMomenta, SubspaceData},
@@ -1296,6 +1297,77 @@ mod tests {
                     assert!(result.error_of_function.0.abs() < 1.0e-12);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn implicit_sampling_map_uses_graph_esurface_root_and_roundtrips() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph implicit_sampling_esurface {
+            ext [style=invis]
+            node [num=1]
+            edge [num=1 mass=0]
+            ext -> a:0 [id=0]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2 lmb_id=1]
+            a -> b [id=3]
+            b:1 -> ext [id=4]
+        })
+        .unwrap();
+        let lmb = graph.loop_momentum_basis.clone();
+        let surface = Esurface {
+            energies: vec![EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let masses = graph
+            .underlying
+            .new_edgevec_from_iter([F(0.0), F(173.0), F(173.0), F(125.0), F(0.0)])
+            .unwrap();
+        let externals = ExternalFourMomenta::from_iter(
+            [FourMomentum::from_args(F(1000.0), F(0.0), F(0.0), F(0.0)); 2],
+        );
+        let center = LoopMomenta::from_iter([
+            ThreeMomentum::new(F(0.0), F(0.0), F(0.0)),
+            ThreeMomentum::new(F(0.0), F(0.0), F(0.0)),
+        ]);
+        let center_components = center
+            .iter()
+            .flat_map(|momentum| [momentum.px.0, momentum.py.0, momentum.pz.0])
+            .collect::<Vec<_>>();
+        let evaluator_surface = surface.clone();
+        let evaluator_lmb = lmb.clone();
+        let evaluator_masses = masses.clone();
+        let evaluator_externals = externals.clone();
+        let evaluator_center = center.clone();
+        let evaluator = std::sync::Arc::new(move |direction: &[f64], radius: f64| {
+            let unit_loops = LoopMomenta::from_iter(direction.chunks_exact(3).map(|components| {
+                ThreeMomentum::new(F(components[0]), F(components[1]), F(components[2]))
+            }));
+            let (value, derivative) = evaluator_surface.compute_self_and_r_derivative(
+                &F(radius),
+                &unit_loops,
+                &evaluator_center,
+                &evaluator_externals,
+                &evaluator_masses,
+                &evaluator_lmb,
+            );
+            Ok((value.0, derivative.0))
+        });
+        let map = ImplicitSurfaceRadialMap::new(6, center_components, 4.0, 2.0, evaluator).unwrap();
+        let coordinates = [0.41, 0.27, 0.61, 0.39, 0.72, 0.58];
+        let forward = map.forward(&coordinates).unwrap();
+        assert!(
+            forward
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic == "implicit_surface:regular_root")
+        );
+        assert!(forward.jacobian.is_finite() && forward.jacobian > 0.0);
+        let inverse = map.inverse(&forward.point).unwrap();
+        assert!(inverse.residual < 1.0e-9, "{}", inverse.residual);
+        for (actual, expected) in inverse.coordinates.iter().zip(coordinates) {
+            assert!((actual - expected).abs() < 1.0e-9);
         }
     }
 

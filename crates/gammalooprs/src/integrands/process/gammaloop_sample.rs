@@ -816,7 +816,7 @@ mod tests {
     use crate::{DependentMomentaConstructor, settings::runtime::kinematic::Externals};
 
     use super::is_summed_multichanneling;
-    use super::{DiscreteGraphSample, SamplingChannelId};
+    use super::{DiscreteGraphSample, SamplingChannelId, unwrap_sample};
     use crate::settings::runtime::{
         DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, MultiChannelingSettings,
         ParameterizationSettings, SamplingSettings,
@@ -846,6 +846,22 @@ mod tests {
         assert!(!is_summed_multichanneling(&SamplingSettings::Default(
             ParameterizationSettings::default(),
         )));
+    }
+
+    #[test]
+    fn uniform_acceptance_samples_preserve_canonical_discrete_selection_order() {
+        // The saved-state acceptance harness uses `Sample::Uniform` so all
+        // discrete axes remain attached to one continuous point.  Verify the
+        // decoder preserves the graph/orientation/channel order consumed by
+        // `resolve_discrete_selection_for_sampling`.
+        let sample = symbolica::numerical_integration::Sample::Uniform(
+            F(1.0),
+            vec![4, 2, 7],
+            vec![F(0.25), F(0.75)],
+        );
+        let (discrete, continuous) = unwrap_sample::<f64>(&sample);
+        assert_eq!(discrete, vec![4, 2, 7]);
+        assert_eq!(continuous, vec![F(0.25), F(0.75)]);
     }
 
     #[test]
