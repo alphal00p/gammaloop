@@ -507,9 +507,18 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
         // This turns unsupported named/surface channels into a diagnostic
         // instead of silently treating them as an empty legacy channel axis.
         for group_id in 0..integrand.get_group_structure().len() {
-            integrand
-                .get_master_graph(GroupId(group_id))
-                .get_num_channels(parameterization_settings)?;
+            let graph = integrand.get_master_graph(GroupId(group_id));
+            graph.get_num_channels(parameterization_settings)?;
+            if matches!(&settings.sampling, SamplingSettings::MultiChanneling(_)) {
+                for channel_id in graph.sampling_channel_ids(parameterization_settings)? {
+                    if !graph.sampling_channel_is_lmb(channel_id, parameterization_settings)? {
+                        return Err(eyre!(
+                            "summed sampling multichanneling cannot use graph-aware channel {}; use discrete multi-channeling",
+                            channel_id.index()
+                        ));
+                    }
+                }
+            }
         }
     }
     let (group_id, orientation_id, channel_id) = resolve_discrete_selection_for_sampling(
@@ -670,70 +679,48 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                     let parameterization_settings =
                         &multichanneling_settings.parameterization_settings;
                     let graph = integrand.get_master_graph(group_id);
-                    let advanced =
-                        !graph.sampling_channel_is_lmb(channel_id, parameterization_settings)?;
-                    if advanced {
-                        let externals = settings
-                            .kinematics
-                            .externals
-                            .get_dependent_externals::<f64>(dependent_momenta_constructor)?;
-                        let external_momenta = externals
-                            .iter()
-                            .map(|momentum| {
-                                [
-                                    momentum.temporal.value.0,
-                                    momentum.spatial.px.0,
-                                    momentum.spatial.py.0,
-                                    momentum.spatial.pz.0,
-                                ]
-                            })
-                            .collect::<Vec<_>>();
-                        let bridge = graph.compile_sampling_bridge(
-                            parameterization_settings,
-                            settings.kinematics.e_cm,
-                            &external_momenta,
-                            orientation_id,
-                        )?;
-                        let coordinates = xs.iter().map(|x| x.clone().into_ff64().0).collect_vec();
-                        let mapped = bridge.forward(channel_id, &coordinates)?;
-                        let mut sample =
-                            mapped.to_momentum_sample::<T>(SamplingMomentumSampleContext {
-                                loop_mom_cache_id,
-                                external_moms: &settings.kinematics.externals,
-                                external_mom_cache_id,
-                                dependent_momenta_constructor,
-                                orientation: orientation_id,
-                            })?;
-                        let density = mapped.partition.log_denominator.exp();
-                        if !density.is_finite() || density <= 0.0 {
-                            return Err(eyre!(
-                                "advanced sampling channel partition has invalid density {density}"
-                            ));
-                        }
-                        sample.sample.jacobian = sample.sample.jacobian / F::from_f64(density);
-                        Ok(GammaLoopSample::DiscreteGraph {
-                            group_id,
-                            sample: DiscreteGraphSample::Advanced { channel_id, sample },
+                    let externals = settings
+                        .kinematics
+                        .externals
+                        .get_dependent_externals::<f64>(dependent_momenta_constructor)?;
+                    let external_momenta = externals
+                        .iter()
+                        .map(|momentum| {
+                            [
+                                momentum.temporal.value.0,
+                                momentum.spatial.px.0,
+                                momentum.spatial.py.0,
+                                momentum.spatial.pz.0,
+                            ]
                         })
-                    } else {
-                        Ok(GammaLoopSample::DiscreteGraph {
-                            group_id,
-                            sample: DiscreteGraphSample::DiscreteMultiChanneling {
-                                alpha: F::from_f64(multichanneling_settings.alpha),
-                                channel_weight: multichanneling_settings.channel_weight,
-                                channel_id,
-                                sample: default_parametrize(
-                                    &xs,
-                                    dependent_momenta_constructor,
-                                    parameterization_settings,
-                                    &settings.kinematics,
-                                    orientation_id,
-                                    loop_mom_cache_id,
-                                    external_mom_cache_id,
-                                ),
-                            },
-                        })
+                        .collect::<Vec<_>>();
+                    let bridge = graph.compile_sampling_bridge(
+                        parameterization_settings,
+                        settings.kinematics.e_cm,
+                        &external_momenta,
+                        orientation_id,
+                    )?;
+                    let coordinates = xs.iter().map(|x| x.clone().into_ff64().0).collect_vec();
+                    let mapped = bridge.forward(channel_id, &coordinates)?;
+                    let mut sample =
+                        mapped.to_momentum_sample::<T>(SamplingMomentumSampleContext {
+                            loop_mom_cache_id,
+                            external_moms: &settings.kinematics.externals,
+                            external_mom_cache_id,
+                            dependent_momenta_constructor,
+                            orientation: orientation_id,
+                        })?;
+                    let density = mapped.partition.log_denominator.exp();
+                    if !density.is_finite() || density <= 0.0 {
+                        return Err(eyre!(
+                            "sampling channel partition has invalid density {density}"
+                        ));
                     }
+                    sample.sample.jacobian = sample.sample.jacobian / F::from_f64(density);
+                    Ok(GammaLoopSample::DiscreteGraph {
+                        group_id,
+                        sample: DiscreteGraphSample::Advanced { channel_id, sample },
+                    })
                 }
             }
         }

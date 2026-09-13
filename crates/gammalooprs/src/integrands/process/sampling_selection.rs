@@ -2029,6 +2029,58 @@ mod tests {
     }
 
     #[test]
+    fn canonical_lmb_bridge_integrates_normalized_gaussian_with_map_partition() {
+        // Build both channels through the canonical catalogue.  The selected
+        // map is sampled uniformly in channel space; multiplying by
+        // `n_channels * J_i * w_i` converts that sample to the exact
+        // map-density mixture estimator, where w_i = rho_i / sum_j rho_j.
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![1])], &[0, 1]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1],
+            ParameterizationSettings::default(),
+            2.0,
+            1,
+        );
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+
+        let bins = 24usize;
+        let normalisation = (2.0 * std::f64::consts::PI).powf(-1.5);
+        let channel_count = bridge.channels().len() as f64;
+        let mut integral = 0.0;
+        for i in 0..bins {
+            for j in 0..bins {
+                for k in 0..bins {
+                    let coordinates = [
+                        (i as f64 + 0.5) / bins as f64,
+                        (j as f64 + 0.5) / bins as f64,
+                        (k as f64 + 0.5) / bins as f64,
+                    ];
+                    let channel = SamplingChannelId::from((i + j + k) % bridge.channels().len());
+                    let evaluation = bridge.forward(channel, &coordinates).unwrap();
+                    let radius_squared = evaluation
+                        .raw_coordinates
+                        .iter()
+                        .map(|component| component.powi(2))
+                        .sum::<f64>();
+                    let target = normalisation * (-0.5 * radius_squared).exp();
+                    let partition_weight = evaluation.partition.weight(channel.index()).unwrap();
+                    integral += target * evaluation.map.jacobian * channel_count * partition_weight;
+                }
+            }
+        }
+        integral /= bins.pow(3) as f64;
+        assert!(
+            (integral - 1.0).abs() < 2.0e-2,
+            "canonical map-density mixture integral = {integral}"
+        );
+    }
+
+    #[test]
     fn bridge_rejects_partial_or_mismatched_channels() {
         let settings = ParameterizationSettings::default();
         let map = SamplingMapKernel::new(SamplingMapDefinition::Lmb(vec![1]), settings, 100.0, 1)
