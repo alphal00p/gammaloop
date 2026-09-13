@@ -747,30 +747,45 @@ impl PlannedEnergyExpression {
                             .missing_candidates(base.family_degrees()?.degrees[family]));
                     }
                 }
-                let mut contexts = BTreeMap::new();
+                // A doubling checkpoint detects cycles after arbitrarily long
+                // transients while retaining one offset context. Keeping only
+                // the first contexts would miss a packed tail that starts
+                // after their retention limit.
+                let mut checkpoint = None;
+                let mut checkpoint_span = 1usize;
                 let mut factors = Vec::new();
                 let mut repetition = 0;
                 while repetition < *exponent {
                     let key = state.cycle_key(candidates, packed, &dependencies);
-                    if let Some((previous_repetition, start, previous_state)) = contexts.get(&key) {
+                    if let Some((previous_key, previous_repetition, start, previous_state)) =
+                        &checkpoint
+                    {
                         let period = repetition - previous_repetition;
-                        let extra_cycles = (*exponent - repetition) / period;
-                        if extra_cycles > 0 {
-                            // Equal cyclic offsets and relative greedy loads
-                            // determine the same next assignment. Whole cycles
-                            // can therefore retain a factorized integer power.
-                            let cycle = factors.split_off(*start);
-                            factors.push(Self::Repeat {
-                                base: Box::new(Self::Mul(cycle)),
-                                exponent: extra_cycles + 1,
-                            });
-                            state.advance_cycles(previous_state, extra_cycles)?;
-                            repetition += extra_cycles * period;
-                            contexts.clear();
-                            continue;
+                        if previous_key == &key {
+                            let extra_cycles = (*exponent - repetition) / period;
+                            if extra_cycles > 0 {
+                                // Equal cyclic offsets and relative greedy loads
+                                // determine the same next assignment. Whole cycles
+                                // can therefore retain a factorized integer power.
+                                let cycle = factors.split_off(*start);
+                                factors.push(Self::Repeat {
+                                    base: Box::new(Self::Mul(cycle)),
+                                    exponent: extra_cycles + 1,
+                                });
+                                state.advance_cycles(previous_state, extra_cycles)?;
+                                repetition += extra_cycles * period;
+                                checkpoint = None;
+                                checkpoint_span = 1;
+                                continue;
+                            }
                         }
-                    } else if contexts.len() < 64 {
-                        contexts.insert(key, (repetition, factors.len(), state.clone()));
+                        if period >= checkpoint_span {
+                            checkpoint = None;
+                            checkpoint_span = checkpoint_span.saturating_mul(2);
+                        }
+                    }
+                    if checkpoint.is_none() {
+                        checkpoint = Some((key, repetition, factors.len(), state.clone()));
                     }
                     factors.push(base.allocate(candidates, state, packed)?);
                     repetition += 1;
@@ -2896,39 +2911,66 @@ mod tests {
     #[test]
     fn canonical_large_powers_keep_assignment_cycles_compressed() {
         let class = UvDenominatorClassId(2);
+        let reference = EnergyReference::UvClass(class);
         let q = function!(GS.emr_mom, GS.uv_class_ref(class), GS.cind(0));
-        let mut candidates = EquivalentEnergyCandidates::try_from_source_occurrences([]).unwrap();
-        candidates
-            .add_uv_classes([(class, (0..5).collect())])
-            .unwrap();
-        let plans = EnergyPowerAnalyzer::for_physical_emr_edges([])
-            .plan_atom_assignment_proposals(&q.pow(500_000), &candidates)
-            .unwrap();
-        assert_eq!(
-            plans[0].energy_degree_bounds(),
-            &[
-                (0, 100_000),
-                (1, 100_000),
-                (2, 100_000),
-                (3, 100_000),
-                (4, 100_000)
-            ]
-        );
-        assert_eq!(
-            plans[1].energy_degree_bounds(),
-            &[(0, 499_996), (1, 1), (2, 1), (3, 1), (4, 1)]
-        );
-        for plan in plans {
-            let mut leaves = 0;
-            plan.prepare_factors(|factor, _| {
-                leaves += 1;
-                Ok::<_, ()>(factor.clone())
-            })
-            .unwrap();
-            assert!(
-                leaves <= 12,
-                "cycles must not instantiate half a million factor assignments"
-            );
+        let degree = 500_000usize;
+        let expression = q.pow(degree as u64);
+        for occurrence_count in [5, 64, 65, 128, 257] {
+            let mut candidates =
+                EquivalentEnergyCandidates::try_from_source_occurrences([]).unwrap();
+            candidates
+                .add_uv_classes([(class, (0..occurrence_count).collect())])
+                .unwrap();
+            let plans = EnergyPowerAnalyzer::for_physical_emr_edges([])
+                .plan_atom_assignment_proposals(&expression, &candidates)
+                .unwrap();
+            assert_eq!(plans.len(), 2);
+            for (packed, plan) in plans.iter().enumerate() {
+                let expected = (0..occurrence_count)
+                    .map(|occurrence| {
+                        let bound = if packed == 0 {
+                            degree / occurrence_count
+                                + usize::from(occurrence < degree % occurrence_count)
+                        } else if occurrence == 0 {
+                            degree - occurrence_count + 1
+                        } else {
+                            1
+                        };
+                        (occurrence, bound)
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(plan.energy_degree_bounds(), expected);
+                let mut leaves = 0;
+                let prepared = plan
+                    .prepare_factors(|factor, assignments| {
+                        leaves += 1;
+                        Ok::<_, ()>(
+                            factor
+                                .replace(q.clone())
+                                .with(GS.emr_mom(EdgeIndex(assignments[&reference]), GS.cind(0))),
+                        )
+                    })
+                    .unwrap();
+                assert!(
+                    leaves <= 4 * occurrence_count,
+                    "cycles must not instantiate half a million factor assignments: \
+                     occurrences={occurrence_count}, packed={packed}, leaves={leaves}"
+                );
+                let mapped = prepared
+                    .map(&mut |_, factor, _| Ok::<_, ()>(factor.clone()))
+                    .unwrap();
+                assert_eq!(
+                    EnergyPowerAnalyzer::new([])
+                        .analyze_atom(&mapped)
+                        .unwrap()
+                        .into_generation_bounds(),
+                    expected
+                );
+                let collapsed = plan
+                    .map_factors(|factor, _| Ok::<_, ()>(factor.clone()))
+                    .unwrap();
+                assert_eq!(collapsed, expression);
+            }
         }
     }
 

@@ -1542,3 +1542,111 @@ If a gate fails, use the measurements to continue the generic implementation, in
   CLI/counter are ready; erased 3D will then be remeasured at that revision.
   No ratio will mix CLI15 and the following binary. The current erased run
   and its queued snapshot-specific boundary checks continue unchanged.
+
+
+- The guarded-normalization milestone is committed and pushed as
+  `e69f6153d8f991af85b3f83d479be9a750a9e6be`. CLI16 check passes in
+  10.285 s and build in 144.180 s. Its immutable binary has SHA-256
+  `65e0576e6a7e3d61c1af3eb21c15c1407cf9211e4c5e1ef8b61983214b84f485`,
+  1,576,695,904 bytes. Counter16 links in 22.743 s with unchanged dependency
+  hashes, reproduces every known GL00 evaluator count and preserves its state
+  hashes. Counter SHA-256 is
+  `45f3c8c51a57978920b888fa2b2ce4c78cde113fbbdc5fac1bf38cae2b4e94f6`,
+  1,575,041,864 bytes. Artifacts are in `diagnostic_root_guarded_metrics`.
+- CLI15 erased 3D completes all ten GL262 forest nodes in 2,328.309505 s;
+  the final node takes 650.886710 s. Evaluator parsing begins at
+  08:48:54.650 UTC, eight seconds before the unchanged cap. The run terminates
+  with exit -15 at 2,400.536083 s and peak RSS 4,628,992,000 bytes. No saved
+  evaluator, state, forest export or runtime measurement is produced. The
+  historical CLI14-direct/CLI15-erased semantic forest paths all match, but
+  their separate revisions, compilation overlap and capped outcomes preclude
+  any final generation or runtime ratio.
+- All fourteen frozen ee235 boundary checks pass: UV composition four in
+  22.481 s, cut/threshold seven in 18.184 s, API two in 4.465 s and analytic
+  one in 0.409 s. Guarded-normalization integration check74 passes in 9.93 s
+  and build11 in 151.671653 s. Four immutable executables are bound in
+  `validation_candidate_e69f/final_build_manifest.json`; their fourteen checks
+  are queued after CLI16 direct under the measurement lock.
+- CLI16 direct begins at 08:52:04.791648 UTC with the same 2,400 s cap and
+  30 GiB guard. Its validated selective input capture is diagnostic only.
+  Integration build11 and subsequent checks overlap this run explicitly;
+  no final timing or dispatch gate is inferred from it. Nine forest nodes
+  are complete by 09:02:12.373 UTC, with evaluator construction still pending.
+- Successful benchmark-receipt reuse now requires exact command, card hash,
+  complete provenance, worker limits and measurement-lock identity. Fifteen
+  synthetic controls pass without launching subprocesses, including missing
+  identity fields and preserved failed/interrupted receipts. Ruff and Python
+  compilation pass. The ignored helper SHA-256 is
+  `c700369d89e5669a2e455ff0aa3b3bdbf1c84af2536fdde54f953543019728fa`;
+  the exact patch and controls are in `receipt_resume_validation`.
+
+### 2026-09-13 — Audit of compressed powers and certificate ordering
+
+- Independent source review confirms the separate cache identities, exact signed
+  bindings, graph-wide lifetime, retention limits and deterministic candidate
+  policy. It finds two requirements that need correction before final gates.
+  First, the initial 64 remembered offset contexts miss a packed repetition
+  tail whose transient fills that table. A half-million power with 64 eligible
+  occurrences consequently materializes nearly all factors. Second, the complete
+  mapper diagonal certificate currently follows native candidate generation,
+  although canonical source equality, signed occurrence eligibility and bound
+  checks precede it. Existing winning outputs fail closed, but this ordering
+  does not meet the plan.
+- Repeat allocation now uses one deterministic checkpoint with a doubling
+  interval. It finds cycles after long transients without increasing retention
+  or changing assignment choices. The existing large-power test now covers
+  5, 64, 65, 128 and 257 occurrences, exact ordered capacities for both policies,
+  independent mapped-degree analysis, diagonal collapse and an O(p) prepared
+  leaf bound. Graph numerators remain factorized.
+- Every exact CFF candidate now prepares or reuses its certified immutable
+  mapping template before native generation. The winner carries that same
+  template into row mapping; no second preparation occurs afterwards. Existing
+  cache/oracle callers migrate to the graph projection context. Selection
+  records winning and losing template build times separately, and excludes
+  already-accounted template build/cache costs from its residual interval.
+  All losing preparation remains dispatch overhead. The parser is being updated
+  to reconcile both this ordering and preserved historical logs.
+- Check75 catches one unmigrated paired-mapper test binding before compilation;
+  that mechanical caller correction changes no assertion. Check76 passes in
+  10.87 s. Further accounting/readability refinements, focused nextest coverage
+  and clippy are pending. The frozen CLI16 run is unaffected by these edits.
+  Complete physical/scalar acceptance, final repeated generation/runtime gates,
+  production GL262 forest export and final documentation remain required.
+
+
+- Check78 passes in 9.94 s. Nextest30 builds in 2m58s and passes all 289
+  selected CFF, UV, energy-degree and exact-source reconstruction checks in
+  47.146 s, including the expanded compressed-power cases. Independent review
+  confirms the full diagonal certificate now precedes native generation, that
+  retention cannot affect candidate admission, and that the timing partition
+  charges discarded work once. The template mapper remains private: external
+  test oracles obtain their independent mapper through the existing source API.
+  Check79 passes in 9.18 s; nextest31 builds in 2m50s and passes the 39 affected
+  source tests in 2.253 s. Clippy14 passes in 20.66 s with the same three existing
+  tuple-complexity warnings. Formatting and diff whitespace checks pass.
+- The profiling parser now reconciles one template/score pair per admitted
+  candidate before selection, exact winning/losing build totals, and zero-row
+  discarded winners. Fifty-six controls pass, with Ruff and Python compilation.
+  Completed CLI14 and actual CLI16 prefixes reproduce the old parser's dispatch,
+  count and evaluator semantics. Parser SHA-256:
+  `aa73853fb322125c2f2a00906d1b9cbdd1049e1d0c7c67a3e9ee7349ef6b24e5`.
+  Evidence is in `projection_profile_validation/candidate_template_schema_final`.
+- All fourteen e69f boundary checks pass: UV composition 22.352 s, cut/threshold
+  18.459 s, API 4.507 s and analytic renormalization 0.390 s. These remain
+  snapshot-specific boundary results; the full scalar/physical matrix is pending.
+- CLI16 completes its ten-node forest in 920.816712 s, with final node
+  314.133087 s, then evaluator normalization in 4.655648 s. Its factorized input
+  capture is 678,173,112 JSONL bytes and contains 3,050 top-level summands; the
+  exact offset/hash manifest is `normalized_input_capture.json`. Term zero closes
+  sixteen boundaries in 72.227 ms, parses/prepares in 269.323 ms and executes
+  in 3.200217 s. Term one closes 15,904 boundaries in 33.481867 s and completes
+  parsing/preparation in 61.401224 s, passing the previous stalled stage.
+- Term-one execution then reaches the existing 30 GiB guard. It requests SIGTERM
+  at 09:10:25.334 UTC after observing RSS 35,930,345,472 bytes; two-second sampling
+  permits that overshoot. The driver reports peak RSS 35,785,789,440 bytes,
+  elapsed 1,103.731767 s and exit -15. No completed evaluator, state, production
+  forest export or runtime exists. These are separate observed peaks, not a
+  claimed hard RSS ceiling. The next investigation replays the preserved input
+  through existing tensor APIs under the common lock, rather than repeating
+  the forest. The planned CLI16 erased generation is held; all final gates
+  and matching-revision measurements remain open.

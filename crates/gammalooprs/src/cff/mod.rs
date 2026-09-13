@@ -137,11 +137,13 @@ pub(crate) struct PlannedExactSourceNumerator {
 }
 
 impl PlannedExactSourceNumerator {
+    /// Return the certified template and its separate build/cache costs so
+    /// candidate selection can charge discarded preparation without duplication.
     fn prepare(
         mapper: Arc<ExactSourceEnergyMapper>,
         assignment: Arc<EnergyPowerAssignmentPlan>,
         context: Option<&mut Local4dProjectionContext>,
-    ) -> Result<Arc<Self>> {
+    ) -> Result<(Arc<Self>, Duration, Duration)> {
         let started = Instant::now();
         let binding = ExactNumeratorTemplateBinding {
             context: mapper.mapping_context()?,
@@ -172,7 +174,7 @@ impl PlannedExactSourceNumerator {
                 template_build_ms = 0.0,
                 "Reused immutable exact-source numerator template"
             );
-            return Ok(template);
+            return Ok((template, Duration::ZERO, cache_time));
         }
         let build_started = Instant::now();
         let (template, parameters) = mapper.prepare_numerator(&key.binding.assignment)?;
@@ -220,7 +222,7 @@ impl PlannedExactSourceNumerator {
             template_build_ms = build_time.as_secs_f64() * 1000.0,
             "Prepared immutable exact-source numerator template"
         );
-        Ok(prepared)
+        Ok((prepared, build_time, cache_time))
     }
 
     fn parameter_dependencies(
@@ -1075,17 +1077,8 @@ impl Graph {
                 cache_work_ms = cache_time.as_secs_f64() * 1000.0,
                 "Prepared certified exact denominator source incidence and numerator analysis"
             );
-            let (
-                generated,
-                exact_source_energy_mapper,
-                energy_assignment,
-                energy_degree_bound_report,
-            ) = self.generate_3d_expression_for_4d_term(
-                &preparation,
-                context
-                    .as_deref_mut()
-                    .map(|context| &mut context.generation_cache),
-            )?;
+            let (generated, exact_source_numerator, _, energy_degree_bound_report) =
+                self.generate_3d_expression_for_4d_term(&preparation, context)?;
             let physical_surfaces = generated
                 .expression
                 .surfaces
@@ -1117,11 +1110,7 @@ impl Graph {
                 generated,
                 physical_surfaces,
                 physical_energy_edges,
-                PlannedExactSourceNumerator::prepare(
-                    exact_source_energy_mapper,
-                    energy_assignment,
-                    context,
-                )?,
+                exact_source_numerator,
                 preparation.inverse_energy_product.clone(),
                 preparation.active_loop_count,
                 preparation.contract_subgraph.clone(),
@@ -1518,7 +1507,7 @@ mod tests {
                 context.preparations = generation::GenerationCache::new(48 * 1024 * 1024, 1);
                 context.numerator_rows = generation::GenerationCache::new(16 * 1024 * 1024, 1);
             }
-            let template = PlannedExactSourceNumerator::prepare(
+            let (template, _, _) = PlannedExactSourceNumerator::prepare(
                 prepared.mapper.clone(),
                 prepared.binding.binding.assignment.clone(),
                 Some(&mut context),
@@ -2032,6 +2021,7 @@ mod tests {
             )?;
             let (generated, mapper, plan, report) =
                 graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+            let mapper = &mapper.mapper;
             assert_eq!(report.physical_parent_bounds, vec![(1, 1)]);
             assert_eq!(
                 report.assigned_cff_source_bounds,

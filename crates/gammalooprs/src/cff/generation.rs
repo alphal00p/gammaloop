@@ -21,7 +21,10 @@ use crate::{
     },
     numerator::energy_degree::EnergyPowerAssignmentPlan,
     settings::global::{GenerationSettings, UniformNumeratorSamplingScale},
-    uv::approx::local_4d::{CanonicalUvDenominatorClass, CanonicalUvSector, FourDSector},
+    uv::approx::{
+        local_4d::{CanonicalUvDenominatorClass, CanonicalUvSector, FourDSector},
+        projected_4d::Local4dProjectionContext,
+    },
 };
 use ahash::{AHashMap, HashSet};
 use color_eyre::Result;
@@ -43,7 +46,7 @@ use three_dimensional_reps::{
 use tracing::debug;
 
 use super::{
-    CffEnergyBoundSourceKind, CffEnergyDegreeBoundReport,
+    CffEnergyBoundSourceKind, CffEnergyDegreeBoundReport, PlannedExactSourceNumerator,
     esurface::{Esurface, EsurfaceID, ExternalShift},
     expression::CFFExpression,
 };
@@ -759,10 +762,10 @@ impl Graph {
     pub(crate) fn generate_3d_expression_for_4d_term(
         &self,
         preparation: &ExactCffGenerationPreparation,
-        mut cache: Option<&mut ExactCffGenerationCache>,
+        mut context: Option<&mut Local4dProjectionContext>,
     ) -> Result<(
         GeneratedThreeDExpression,
-        Arc<crate::graph::three_d_source::ExactSourceEnergyMapper>,
+        Arc<PlannedExactSourceNumerator>,
         Arc<EnergyPowerAssignmentPlan>,
         CffEnergyDegreeBoundReport,
     )> {
@@ -779,6 +782,8 @@ impl Graph {
         let selection_started = std::time::Instant::now();
         let mut certificate_time = std::time::Duration::ZERO;
         let mut native_times = BTreeMap::new();
+        let mut template_build_times = BTreeMap::new();
+        let mut template_time = Duration::ZERO;
         let generate = |source_options: &Generate3DExpressionOptions| {
             crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #profile;
                 graph = %self.name,
@@ -801,7 +806,7 @@ impl Graph {
         let mut selected: Option<(
             usize,
             Vec<usize>,
-            Arc<EnergyPowerAssignmentPlan>,
+            Arc<PlannedExactSourceNumerator>,
             Option<GeneratedThreeDExpression>,
         )> = None;
         let mut pending = VecDeque::from(energy_assignment_plans.clone());
@@ -811,7 +816,11 @@ impl Graph {
             if pending.is_empty() && !challenged {
                 challenged = true;
                 if let Some((_, _, best, _)) = &selected
-                    && let Some(challenger) = best.placement_challenger(&seen_bounds)?
+                    && let Some(challenger) = best
+                        .binding
+                        .binding
+                        .assignment
+                        .placement_challenger(&seen_bounds)?
                 {
                     pending.push_back(Arc::new(challenger));
                 }
@@ -823,6 +832,16 @@ impl Graph {
             let certificate_started = std::time::Instant::now();
             exact_source_energy_mapper.certify_assignment(&plan)?;
             certificate_time += certificate_started.elapsed();
+            // Preparing the immutable mapper also certifies its exact signed
+            // diagonal, including affine shifts, before any native CFF trial.
+            // A complete binding cache hit reuses that same certified template.
+            let (numerator, build_time, cache_time) = PlannedExactSourceNumerator::prepare(
+                Arc::clone(exact_source_energy_mapper),
+                Arc::clone(&plan),
+                context.as_deref_mut(),
+            )?;
+            template_time += build_time + cache_time;
+            template_build_times.insert(plan.energy_degree_bounds().to_vec(), build_time);
             seen_bounds.push(plan.energy_degree_bounds().to_vec());
             let mut rank_envelope = plan
                 .energy_degree_bounds()
@@ -833,7 +852,10 @@ impl Graph {
             source_options.energy_degree_bounds = Some(plan.energy_degree_bounds().to_vec());
             let key =
                 ExactCffGenerationCache::generation_key(parsed, energy_edges, &source_options);
-            let known_count = cache.as_deref_mut().and_then(|cache| cache.count(&key));
+            let known_count = context
+                .as_deref_mut()
+                .map(|context| &mut context.generation_cache)
+                .and_then(|cache| cache.count(&key));
             let started = std::time::Instant::now();
             // A known contender needs no expression until it wins. Generated
             // expressions clone their tree containers; count-only loser records
@@ -841,7 +863,10 @@ impl Graph {
             let generated = if known_count.is_some() {
                 None
             } else {
-                if let Some(cache) = cache.as_deref_mut() {
+                if let Some(cache) = context
+                    .as_deref_mut()
+                    .map(|context| &mut context.generation_cache)
+                {
                     cache.native_generations += 1;
                 }
                 let native_started = std::time::Instant::now();
@@ -861,7 +886,9 @@ impl Graph {
                     .len()
             });
             if known_count.is_none()
-                && let Some(cache) = cache.as_deref_mut()
+                && let Some(cache) = context
+                    .as_deref_mut()
+                    .map(|context| &mut context.generation_cache)
             {
                 cache.record_count(key, map_count);
             }
@@ -884,16 +911,18 @@ impl Graph {
                     (map_count, &rank_envelope) < (*best_count, best_envelope)
                 })
             {
-                selected = Some((map_count, rank_envelope, plan, generated));
+                selected = Some((map_count, rank_envelope, numerator, generated));
             }
         }
-        let (selected_count, _, energy_assignment_plan, generated) =
+        let (selected_count, _, numerator, generated) =
             selected.expect("rank planning always provides a baseline assignment");
+        let energy_assignment_plan = Arc::clone(&numerator.binding.binding.assignment);
         source_options.energy_degree_bounds =
             Some(energy_assignment_plan.energy_degree_bounds().to_vec());
         let key = ExactCffGenerationCache::generation_key(parsed, energy_edges, &source_options);
-        let cached = cache
+        let cached = context
             .as_deref_mut()
+            .map(|context| &mut context.generation_cache)
             .and_then(|cache| cache.entries.get(&key))
             .and_then(|entry| entry.payload.as_ref());
         let cache_hit = cached.is_some();
@@ -904,7 +933,10 @@ impl Graph {
         } else {
             // A previous losing key can win against a different proposal set.
             // Its count was enough to select it; obtain its payload only now.
-            if let Some(cache) = cache.as_deref_mut() {
+            if let Some(cache) = context
+                .as_deref_mut()
+                .map(|context| &mut context.generation_cache)
+            {
                 cache.native_generations += 1;
             }
             let native_started = std::time::Instant::now();
@@ -915,10 +947,12 @@ impl Graph {
             generated
         };
         debug_assert_eq!(generated.expression.orientations.len(), selected_count);
-        if !cache_hit && let Some(cache) = cache {
+        if !cache_hit && let Some(context) = context {
+            let cache = &mut context.generation_cache;
             // Reuse requires both canonical topology and identical occurrence
             // capacity; keep the term's assignment plan unchanged. Retain
-            // only the winner: trial losers never enter the shared cache.
+            // only the winning native payload. Losing counts and certified
+            // templates have their own bounded retention.
             cache.record_payload(key, &generated);
         }
         let winning_native_time = native_times
@@ -926,6 +960,11 @@ impl Graph {
             .copied()
             .unwrap_or_default();
         let native_time = native_times.values().copied().sum::<std::time::Duration>();
+        let winning_template_build_time = template_build_times
+            .get(energy_assignment_plan.energy_degree_bounds())
+            .copied()
+            .unwrap_or_default();
+        let template_build_time = template_build_times.values().copied().sum::<Duration>();
         let selection_time = selection_started.elapsed();
         crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #profile;
             stage = "exact_cff_assignment_selection",
@@ -935,7 +974,9 @@ impl Graph {
             candidate_certificate_ms = certificate_time.as_secs_f64() * 1000.0,
             winning_native_ms = winning_native_time.as_secs_f64() * 1000.0,
             losing_native_ms = (native_time - winning_native_time).as_secs_f64() * 1000.0,
-            selection_overhead_ms = selection_time.saturating_sub(winning_native_time).saturating_sub(certificate_time).as_secs_f64() * 1000.0,
+            winning_template_build_ms = winning_template_build_time.as_secs_f64() * 1000.0,
+            losing_template_build_ms = (template_build_time - winning_template_build_time).as_secs_f64() * 1000.0,
+            selection_overhead_ms = selection_time.saturating_sub(winning_native_time).saturating_sub(certificate_time).saturating_sub(template_time).as_secs_f64() * 1000.0,
             native_payload_cache_hit = cache_hit,
             "Selected a certified exact CFF assignment; losing trials count as selection overhead"
         );
@@ -946,7 +987,7 @@ impl Graph {
         };
         Ok((
             generated,
-            Arc::clone(exact_source_energy_mapper),
+            numerator,
             energy_assignment_plan,
             energy_degree_bound_report,
         ))
@@ -2056,7 +2097,7 @@ mod tests {
         let left = GS.emr_mom(owners[0], GS.cind(0));
         let right = GS.emr_mom(owners[1], GS.cind(0));
         let numerators = [left.clone().pow(2), right.clone().pow(2), left * right];
-        let mut cache = ExactCffGenerationCache::default();
+        let mut cache = Local4dProjectionContext::default();
         for numerator in numerators.iter().cycle().take(2 * numerators.len()) {
             let mut values = Vec::new();
             for generation_cache in [Some(&mut cache), None] {
@@ -2064,6 +2105,7 @@ mod tests {
                     graph.prepare_3d_expression_for_4d_term(&source, &options, numerator, &[])?;
                 let (generated, mapper, plan, _) =
                     graph.generate_3d_expression_for_4d_term(&preparation, generation_cache)?;
+                let mapper = &mapper.mapper;
                 let surfaces = generated.expression.surfaces.get_all_replacements_gs(&[]);
                 let mut value = Atom::Zero;
                 for orientation in &generated.expression.orientations {
@@ -2241,14 +2283,14 @@ mod tests {
             // Exercise both source topologies without constraining tie resolution.
             // Compare their complete contours against the independent analytic
             // residues below, rather than mock costs or an envelope formula.
-            let mut cache = ExactCffGenerationCache::default();
+            let mut cache = Local4dProjectionContext::default();
             let mut selected_plan = None;
             let mut selected_count = None;
             for phase in ["fresh", "cached", "uncached", "disabled", "evicted"] {
                 if phase == "disabled" {
-                    cache.entries = GenerationCache::new(0, 0);
+                    cache.generation_cache.entries = GenerationCache::new(0, 0);
                 } else if phase == "evicted" {
-                    cache.entries = GenerationCache::new(64 * 1024 * 1024, 1);
+                    cache.generation_cache.entries = GenerationCache::new(64 * 1024 * 1024, 1);
                     let parsed = source.to_three_d_parsed_graph()?;
                     let key = ExactCffGenerationCache::generation_key(
                         &parsed,
@@ -2257,18 +2299,19 @@ mod tests {
                     );
                     // A different, denominator-only request occupies the sole
                     // retention slot; the tested bounded request must evict it.
-                    cache.record_count(key, 0);
+                    cache.generation_cache.record_count(key, 0);
                 }
-                let generation_calls_before = cache.native_generations;
+                let generation_calls_before = cache.generation_cache.native_generations;
                 let preparation =
                     graph.prepare_3d_expression_for_4d_term(&source, &options, &numerator, &[])?;
                 let (generated, mapper, plan, _) = graph.generate_3d_expression_for_4d_term(
                     &preparation,
                     (phase != "uncached").then_some(&mut cache),
                 )?;
+                let mapper = &mapper.mapper;
                 if phase == "cached" {
                     assert_eq!(
-                        cache.native_generations, generation_calls_before,
+                        cache.generation_cache.native_generations, generation_calls_before,
                         "warm count lookups must retain the winning payload"
                     );
                 }
@@ -2284,7 +2327,7 @@ mod tests {
                     "retention must not change the native row objective in {phase}"
                 );
                 if phase == "evicted" {
-                    assert!(cache.entries.evictions > 0);
+                    assert!(cache.generation_cache.entries.evictions > 0);
                 }
 
                 let replacements = generated.expression.surfaces.get_all_replacements_gs(&[]);

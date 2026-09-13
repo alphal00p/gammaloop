@@ -4159,8 +4159,9 @@ mod tests {
         let options = graph.denominator_only_cff_3d_expression_options();
         let preparation =
             graph.prepare_3d_expression_for_4d_term(&source, &options, &Atom::one(), &[])?;
-        let (generated, mapper, plan, _) =
+        let (generated, _, plan, _) =
             graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = source.exact_source_energy_mapper(&[])?;
         let surfaces = generated.expression.surfaces.get_all_replacements_gs(&[]);
         let mut contour = Atom::Zero;
         for orientation in &generated.expression.orientations {
@@ -4762,8 +4763,9 @@ mod tests {
             &numerator,
             &[],
         )?;
-        let (generated, mapper, plan, _) =
+        let (generated, _, plan, _) =
             graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = exact.exact_source_energy_mapper(&[])?;
         assert!(!generated.expression.orientations.is_empty());
         for orientation in &generated.expression.orientations {
             let expected = numerator
@@ -5046,8 +5048,9 @@ mod tests {
             &factorized_numerator,
             &[],
         )?;
-        let (generated, mapper, plan, _) =
+        let (generated, _, plan, _) =
             graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = exact_source.exact_source_energy_mapper(&[])?;
         assert!(!generated.expression.orientations.is_empty());
         for orientation in &generated.expression.orientations {
             let production_mapped = factorized_numerator
@@ -5109,8 +5112,9 @@ mod tests {
             &Atom::one(),
             &[],
         )?;
-        let (generated, mapper, plan, _) =
+        let (generated, _, plan, _) =
             graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = source.exact_source_energy_mapper(&[])?;
         let surfaces = generated.expression.surfaces.get_all_replacements_gs(&[]);
         let mut contour = Atom::Zero;
         for orientation in &generated.expression.orientations {
@@ -6891,7 +6895,7 @@ mod tests {
         }));
 
         let options = graph.denominator_only_cff_3d_expression_options();
-        let mut cache = crate::cff::generation::ExactCffGenerationCache::default();
+        let mut cache = crate::uv::approx::projected_4d::Local4dProjectionContext::default();
         for denominators in terms {
             let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
                 &graph,
@@ -6906,8 +6910,9 @@ mod tests {
                     &Atom::one(),
                     &[],
                 )?;
-                let (generated, mapper, plan, _) =
+                let (generated, _, plan, _) =
                     graph.generate_3d_expression_for_4d_term(&preparation, generation_cache)?;
+                let mapper = source.exact_source_energy_mapper(&[])?;
                 let surfaces = generated.expression.surfaces.get_all_replacements_gs(&[]);
                 let mut value = Atom::Zero;
                 for orientation in &generated.expression.orientations {
@@ -7025,8 +7030,8 @@ mod tests {
             &exact_numerator,
             &[],
         )?;
-        let (exact, mapper, plan, _) =
-            graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let (exact, _, plan, _) = graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = exact_source.exact_source_energy_mapper(&[])?;
         let owner_occurrences = owners.map(|owner| &mapper.source_edge_occurrences[&owner][0]);
         let direct_energy_relabels = direct_owners
             .iter()
@@ -7284,8 +7289,8 @@ mod tests {
         let options = graph.denominator_only_cff_3d_expression_options();
         let preparation =
             graph.prepare_3d_expression_for_4d_term(&source, &options, &analysis_numerator, &[])?;
-        let (generated, mapper, _, _) =
-            graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let (generated, _, _, _) = graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = source.exact_source_energy_mapper(&[])?;
         let left_occurrence = &mapper.source_edge_occurrences[&uv_edges[0]][0];
         let right_occurrence = &mapper.source_edge_occurrences[&uv_edges[1]][0];
         let abstract_index = LibraryRep::from(Minkowski {}).to_symbolic([Atom::num(2)]);
@@ -7307,8 +7312,9 @@ mod tests {
         let fixed_pair = &left_fixed * &right_fixed;
         let preparation =
             graph.prepare_3d_expression_for_4d_term(&source, &options, &fixed_pair, &[])?;
-        let (pair_generated, pair_mapper, pair_plan, _) =
+        let (pair_generated, _, pair_plan, _) =
             graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let pair_mapper = source.exact_source_energy_mapper(&[])?;
         let temporal_plan = EnergyPowerAnalyzer::for_physical_emr_edges(uv_edges)
             .plan_atom_assignment(
                 &(&left_temporal * &right_temporal),
@@ -7719,8 +7725,9 @@ mod tests {
         let options = graph.denominator_only_cff_3d_expression_options();
         let preparation =
             graph.prepare_3d_expression_for_4d_term(&source, &options, &physical_numerator, &[])?;
-        let (generated, mapper, plan, _) =
+        let (generated, _, plan, _) =
             graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = source.exact_source_energy_mapper(&[])?;
         assert!(!mapper.source_edge_occurrences.contains_key(&EdgeIndex(2)));
         let surfaces = generated.expression.surfaces.get_all_replacements_gs(&[]);
         let mut occurrence_contour = Atom::Zero;

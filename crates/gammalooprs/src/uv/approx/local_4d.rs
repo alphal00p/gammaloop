@@ -3260,10 +3260,7 @@ mod tests {
         for (source, term) in sources.iter().zip(&terms) {
             let preparation =
                 graph.prepare_3d_expression_for_4d_term(source, &options, &term.numerator, &[])?;
-            graph.generate_3d_expression_for_4d_term(
-                &preparation,
-                Some(&mut context.generation_cache),
-            )?;
+            graph.generate_3d_expression_for_4d_term(&preparation, Some(&mut context))?;
         }
         // Undotted and dotted sources have different occurrence counts;
         // compatible dotted owner relabellings may share a canonical CFF.

@@ -234,7 +234,10 @@ boundary payload rather than inferred attachments.
 
 The immutable CFF assignment is constructed compositionally. Sums take the
 componentwise maximum, products and registered multilinear arguments add degrees,
-and positive integer powers retain compressed repetitions. The inert cyclic,
+and positive integer powers retain compressed repetitions. A deterministic
+checkpoint with a doubling interval detects assignment cycles after a transient
+while retaining one offset context, including packed tails beyond 64 occurrences.
+The inert cyclic,
 symmetric and antisymmetric tensor projectors use the same slotwise degree rule
 while keeping their symbolic heads intact. Freely assignable
 leaves use cyclic offsets within each class; opaque blocks use deterministic
@@ -284,8 +287,12 @@ inactive-energy elimination are preserved. Mutable row caches live outside the
 immutable template and are cleared after each component wave. No graph-specific
 tables, global caches or serialized caches are involved.
 
-Preparation certifies the occurrence diagonal in a formal spatial/temporal
-frame, including fixed external four-vectors. Its only distribution is the
+Each candidate prepares or reuses its exact immutable template before native
+CFF generation. Preparation certifies the occurrence diagonal in a formal
+spatial/temporal frame, including fixed external four-vectors. The selected
+payload carries this same certified template into row mapping. Profiling separates
+winning template construction from discarded candidate construction; all discarded
+preparation and cache work count toward dispatch overhead. Its only distribution is the
 finite projector action on an affine energy sum; numerator products and powers
 remain intact. A positive denominator block with a pinched hard carrier keeps
 its whole polynomial and an exact source-owned affine-rewrite witness. Only
