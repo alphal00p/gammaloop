@@ -19,7 +19,10 @@ ordered `then` composition passes that context and has focused forward/inverse
 coverage. A prepared cross-section context can now be constructed from one
 solved LU sample, with positive `t*` and frame validation. Physical directional
 E-surface maps, connecting that context to the per-sample conditional density,
-and final old standalone-integrand removal remain open milestones. The
+and the saved-state replacement harness remain open milestones. Production
+standalone-integrand owners have already been removed; the test-only probe is
+only a temporary fixture for generic integration/UI tests and is not a second
+physical parameterization. The
 discrete graph sampler now carries the selected canonical partition factor
 with the parent-frame map Jacobian, including for the direct momentum route;
 the obsolete `DiscreteGraphSample::DiscreteMultiChanneling` representation has
@@ -56,8 +59,9 @@ partition-density contracts are complete.
 The first process-level acceptance probe now integrates a normalized Gaussian
 through the canonical compiled bridge and checks the map partition. The full
 amplitude/cross-section saved-state harness, moments, absent/pinched branches,
-and multi-channel grid checks remain to be added before the old standalone
-integrands can be deleted.
+and multi-channel grid checks remain to be added. They validate the production
+replacement for the deleted standalone tests; they must not recreate a second
+standalone integrand owner.
 
 The current cross-section and conditional-channel bridge is intentionally a
 safe boundary: it is compiled before the per-sample LU root and `t*` solve, so
@@ -291,11 +295,15 @@ remain inspection/replay data only. Update all UnitVolume test callers and
 settings arms while preserving their validation purpose. No saved-state
 compatibility shim is required.
 
-`ChannelIndex` and the current LMB-only discrete enumeration are migration
-scaffolding, not a second production channel model. New catalogue, map-density,
-grid and evaluator work must use the resolved `SamplingChannelId` catalogue;
-once that driver covers the existing sampling modes, remove the legacy index
-and its parallel enumeration path rather than expanding both systems.
+The former `ChannelIndex` and the current LMB-only discrete enumeration are
+migration scaffolding, not a second production channel model. There must never
+be two channel enumeration techniques in the final implementation. New
+catalogue, map-density, grid and evaluator work must use the resolved
+`SamplingChannelId` catalogue. Once that driver covers the existing sampling
+modes and the summed/Monte-Carlo equivalence gate passes, remove the remaining
+LMB-only index/reinterpretation path, its prefactor helpers and its settings
+labels rather than expanding both systems. The canonical catalogue is the
+only long-term source of channel identity.
 
 ## 3. Engine contracts
 
