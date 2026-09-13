@@ -818,26 +818,46 @@ impl ProcessIntegrand {
         }
     }
 
+    /// Return the canonical sampling-channel IDs for a graph group.
+    ///
+    /// The IDs come directly from the master graph's single catalogue. This
+    /// helper is intended for saved-state acceptance callers constructing
+    /// explicit `(group, orientation, channel)` selections; callers must pass
+    /// the same parameterization settings used by the loaded state.
+    pub fn group_sampling_channel_ids(
+        &self,
+        group_id: GroupId,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<Vec<SamplingChannelId>> {
+        let group = match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                integrand.data.graph_group_structure.get(group_id)
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                integrand.data.graph_group_structure.get(group_id)
+            }
+        }
+        .ok_or_else(|| eyre!("Unknown graph group {}.", group_id.0))?;
+        let master = group.master();
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                integrand.data.graph_terms[master].sampling_channel_ids(parameterization_settings)
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                integrand.data.graph_terms[master].sampling_channel_ids(parameterization_settings)
+            }
+        }
+    }
+
     pub fn group_channel_count(&self, group_id: GroupId) -> Option<usize> {
         let parameterization_settings = self
             .get_settings()
             .sampling
             .get_parameterization_settings()
             .unwrap_or_default();
-        match self {
-            ProcessIntegrand::Amplitude(integrand) => Some(
-                integrand.data.graph_terms[integrand.data.graph_group_structure[group_id].master()]
-                    .sampling_channel_ids(&parameterization_settings)
-                    .ok()?
-                    .len(),
-            ),
-            ProcessIntegrand::CrossSection(integrand) => Some(
-                integrand.data.graph_terms[integrand.data.graph_group_structure[group_id].master()]
-                    .sampling_channel_ids(&parameterization_settings)
-                    .ok()?
-                    .len(),
-            ),
-        }
+        self.group_sampling_channel_ids(group_id, &parameterization_settings)
+            .ok()
+            .map(|channel_ids| channel_ids.len())
     }
 
     pub fn graph_orientation_count(&self, graph_id: usize) -> Option<usize> {
