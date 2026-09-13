@@ -2,9 +2,12 @@
 
 **X4 map proposal; the star chart is unimplemented.** Initially audited after X2
 commit `f2f64fb17`, without new numerical runs or literature searches. The first
-source extraction now separates representative overlap kinematics from raised
-derivative packets. Its foreign-cut/radial-derivative and generated raised-cut
-regressions pass; it does not yet implement the shared scale or a star map.
+source extraction separates representative overlap kinematics from raised
+derivative packets. The physical projection owner now solves an unnormalized
+dimensionless alpha and derives physical radial quantities from it, including
+raised and mixed derivatives. Its focused regressions pass in Double, Quad and
+Arb. Sharing those actual data with sampling and constructing a star map remain
+unimplemented.
 This proposes a generic certified affine class, not a GL638 equation engine or
 a claim that projected singularities are already covered by direct-H sampling.
 
@@ -66,13 +69,13 @@ complete per-cut derivative ownership in `LUCTKinematicPoint`; do not fabricate
 a complete sample with guessed active coordinates. Group-scoped preparation
 should require only the participating cuts whose dependencies were certified.
 
-There is also a numerical projection boundary: the physical code normalizes
-the full V-direction, solves r*, and uses r*/r. That ratio is mathematically
-independent of p for A, but the normalized numerical solve still sees p. Extend
-the existing projection/root owner to expose a complement-only scale alpha for
-certified null directions; physical reconstruction and sampling must use the
-same definition. Retain r*=alpha*r and the existing raised-residue derivative
-calculation. Do not introduce another approximate projection solver.
+The physical projection previously normalized the full V-direction, solved r*,
+and used r*/r. That ratio is mathematically independent of p for A, but the
+normalized numerical solve still saw p. The existing projection/root owner now
+solves alpha directly on the unnormalized displacement. Physical reconstruction
+uses `c+alpha*Delta`; sampling must consume this same definition when the full
+dependency certificate permits it. No second approximate projection solver is
+introduced.
 
 The existing `Esurface::compute_self_and_r_derivative_subspace` and radial-guess
 algebra already accept an unnormalized displacement, despite their unit-ray
@@ -80,12 +83,43 @@ argument names. The existing `RadialRootDiagnostics` budget bounds the energy
 residual, so it can solve the dimensionless scale with the same tolerance and
 precision diagnostics. Convert its result using `r*=alpha*r` and
 `d eta/dr=(d eta/d alpha)/r`, retaining the residual and iteration count. The
-physical base star point must then use `c+alpha*Delta` directly. Both raised
-geometry paths must retain this same zeroth-order point while preserving the
-existing higher derivatives; leaving a normalized-direction reconstruction in
-either path would defeat the shared numerical definition. This remains a
-separate implementation and regression gate after the representative-data
-extraction.
+physical base star point and both raised geometry paths now use the same
+alpha reconstruction. Their common owner derives physical radius derivatives
+from the alpha packet; the existing IFT evaluator differentiates the
+unnormalized equation at the actual native representative. Mixed threshold
+variations remain physical radial variations, inserted as `delta_r/r(t)` in
+alpha. Three focused regressions pass, including the independent closed-form
+radius coefficients, native null-direction/affine-frame and mixed-derivative
+checks, generated raised-component roundtrips and conditional cut sampling.
+Quad and Arb derivative coefficients are checked at `1e-27`, with native inputs
+perturbed below binary64 resolution. This validates the physical projection
+foundation, not the still-missing sampling handoff.
+
+### Existing higher-order derivative regression
+
+Before applying the alpha refactor, an independent analytic case reproduces a
+defect in the current `RstarTDependenceEvaluator`. With selected energy `|q0|`,
+threshold energy 4, raw normal component `3t`, and a null-coordinate center of
+2, the physical radial root is
+
+```
+r*(t) = 4 sqrt(9t^2 + 4) / (3t).
+```
+
+At t=1 its value and first Taylor coefficient pass, but the existing evaluator
+returns second coefficient `2.4463700961728048` instead of
+`1.9912314736290266`. This was executed against the unchanged projection owner,
+before the proposed normalization correction; the regression remains in the
+existing shared-group fixture. Source inspection identified two conversions
+now corrected: HyperDual supplies Taylor coefficients while the generated IFT
+program expects raw partial derivatives, and its order-n output needs division
+by n!, rather than (n-1)!. The corrected implementation retains this independent
+physical-radius oracle and passes higher and mixed-order checks.
+The frozen full-orientation GL638 state has `raising_power=1` for all six cuts,
+as recorded in [the X1 pilot artifact](GL638_X1_PILOT.json). Its generator requests
+zero LU derivative orders and stores no IFT evaluator, so those pilots do not
+dispatch the defective higher-order calculation. The alpha parameterization can
+still change zeroth-order numerical behavior and needs its own physical replay.
 
 ## Per-draw handoff and stability rotations
 

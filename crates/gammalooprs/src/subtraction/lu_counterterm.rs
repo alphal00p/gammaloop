@@ -3309,13 +3309,11 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         let radius = shifted_loop_momenta
             .hyper_radius_squared(subspace.as_subspace_simple())
             .sqrt();
-        let unit_shifted_momenta =
-            shifted_loop_momenta.rescale(&radius.inv(), subspace.as_subspace_simple());
         OverlapBuilder {
             counterterm_builder: self,
             subspace,
             center,
-            unit_shifted_momenta,
+            shifted_loop_momenta,
             radius,
             transformed_kinematic_point,
             shared_group,
@@ -3330,7 +3328,7 @@ struct OverlapBuilder<'a, T: FloatLike> {
     /// Solver-derived centers already belong to the current probe; only active
     /// coordinates are transferred to this threshold's native parent LMB.
     center: LoopMomenta<F<T>>,
-    unit_shifted_momenta: LoopMomenta<F<T>>,
+    shifted_loop_momenta: LoopMomenta<F<T>>,
     radius: F<T>,
     transformed_kinematic_point: LUCTKinematicPoint<T>,
     shared_group: &'a ThresholdSolveGroup<T>,
@@ -3379,6 +3377,11 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 
         debug!("subspace: {:?}", subspace);
 
+        let radius = &self.overlap_builder.radius;
+        if radius.is_nan() || radius.is_infinite() || radius <= &radius.zero() {
+            warn!(%radius, "threshold projection requires a finite positive active displacement");
+            return None;
+        }
         let representative_sample = self
             .overlap_builder
             .transformed_kinematic_point
@@ -3463,8 +3466,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             return None;
         }
 
-        let (raw_radius_guess, _) = self.esurface.get_radius_guess_subspace(
-            &self.overlap_builder.unit_shifted_momenta,
+        let (raw_alpha_guess, _) = self.esurface.get_radius_guess_subspace(
+            &self.overlap_builder.shifted_loop_momenta,
             self.overlap_builder
                 .transformed_kinematic_point
                 .representative_sample()
@@ -3475,10 +3478,10 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             masses,
         );
 
-        let function = |r: &_| {
+        let function = |alpha: &_| {
             self.esurface.compute_self_and_r_derivative_subspace(
-                r,
-                &self.overlap_builder.unit_shifted_momenta,
+                alpha,
+                &self.overlap_builder.shifted_loop_momenta,
                 &self.overlap_builder.center,
                 self.overlap_builder
                     .transformed_kinematic_point
@@ -3491,13 +3494,15 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             )
         };
 
-        let zero = raw_radius_guess.zero();
-        let mut radius_guess = raw_radius_guess.clone();
-        if radius_guess.is_nan() || radius_guess.is_infinite() || radius_guess <= zero {
-            radius_guess = self.overlap_builder.counterterm_builder.e_cm.clone();
+        let zero = raw_alpha_guess.zero();
+        let mut alpha_guess = raw_alpha_guess.clone();
+        if alpha_guess.is_nan() || alpha_guess.is_infinite() || alpha_guess <= zero {
+            // The existing ray guess now uses the unnormalized displacement,
+            // so its root coordinate and this fallback are dimensionless.
+            alpha_guess = zero.one();
         }
 
-        debug!("initial radius guess: {:?}", radius_guess);
+        debug!("initial alpha guess: {:?}", alpha_guess);
 
         // Some residual is expected when Newton stagnates at the representable value nearest the
         // root. Direct convergence uses the active precision; the shared diagnostics may also
@@ -3509,10 +3514,10 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 .subtraction
                 .radial_root_residual_tolerance,
         );
-        let solution = match radial_root_diagnostics.solve(
+        let mut solution = match radial_root_diagnostics.solve(
             radial_root_identity,
             &zero,
-            &radius_guess,
+            &alpha_guess,
             function,
             &tolerance,
             MAX_ITERATIONS,
@@ -3526,18 +3531,30 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                     esurface_id = self.esurface_id.0,
                     rotation_id = %self.overlap_builder.counterterm_builder.probe_rotation.method,
                     center_provenance = "current_probe_cut_lmb_frame",
-                    raw_radius_guess = %raw_radius_guess,
-                    radius_guess = %radius_guess,
+                    raw_alpha_guess = %raw_alpha_guess,
+                    alpha_guess = %alpha_guess,
                     error = %error,
-                    "refusing to evaluate a threshold counterterm with an invalid radial solution"
+                    "refusing to evaluate a threshold counterterm with an invalid alpha solution"
                 );
                 return None;
             }
         };
 
-        debug!("r* solution: {:?}", solution);
+        debug!("alpha solution: {:?}", solution);
+        let alpha = solution.solution.clone();
+        // Diagnostics retain the dimensionless solve and its energy residual.
+        // Physical residue interfaces still consume r* and d eta / d r.
+        solution.solution *= radius;
+        solution.derivative_at_solution /= radius;
+        if [&solution.solution, &solution.derivative_at_solution]
+            .iter()
+            .any(|value| value.is_nan() || value.is_infinite() || **value <= zero)
+        {
+            warn!(%alpha, %radius, "threshold radial solution is not representable");
+            return None;
+        }
 
-        let t_dependent_solution = if rstar_t_dependence_evaluator.supports_t_derivatives() {
+        let alpha_t_dependence = if rstar_t_dependence_evaluator.supports_t_derivatives() {
             let t_star = match &self
                 .overlap_builder
                 .transformed_kinematic_point
@@ -3551,15 +3568,16 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             };
 
             Some(
-                rstar_t_dependence_evaluator.evaluate(RstarTDependenceInput {
+                rstar_t_dependence_evaluator.evaluate_alpha(RstarTDependenceInput {
                     t_star: &t_star,
-                    radius_star: &solution.solution,
+                    alpha: &alpha,
                     overlap_center: &self.overlap_builder.center,
                     subspace,
                     unrescaled_momentum_sample: self
                         .overlap_builder
                         .transformed_kinematic_point
                         .unrescaled_sample(),
+                    representative_sample,
                     masses,
                     threshold_esurface: self.esurface,
                     lmb: &self
@@ -3577,7 +3595,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
         Some(RstarSolution {
             esurface_ct_builder: self,
             solution,
-            t_dependent_solution,
+            alpha,
+            alpha_t_dependence,
         })
     }
 }
@@ -3585,7 +3604,9 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 struct RstarSolution<'a, T: FloatLike> {
     esurface_ct_builder: EsurfaceCTBuilder<'a, T>,
     solution: NewtonIterationResult<T>,
-    t_dependent_solution: Option<HyperDual<F<T>>>,
+    /// Authoritative dimensionless projection; physical radii are derived from it.
+    alpha: F<T>,
+    alpha_t_dependence: Option<HyperDual<F<T>>>,
 }
 
 struct DualRstarGeometry<T: FloatLike> {
@@ -3602,7 +3623,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
     }
 
     fn max_supported_order(&self) -> usize {
-        self.t_dependent_solution
+        self.alpha_t_dependence
             .as_ref()
             .map(|dual| dual.values.len().saturating_sub(1))
             .unwrap_or(0)
@@ -3614,23 +3635,23 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         &self
             .esurface_ct_builder
             .overlap_builder
-            .unit_shifted_momenta
-            .rescale(&self.solution.solution, subspace.as_subspace_simple())
+            .shifted_loop_momenta
+            .rescale(&self.alpha, subspace.as_subspace_simple())
             + &self.esurface_ct_builder.overlap_builder.center
     }
 
-    fn truncated_rstar_solution(&self, order: usize) -> HyperDual<F<T>> {
+    fn truncated_alpha_solution(&self, order: usize) -> HyperDual<F<T>> {
         let dual_solution = self
-            .t_dependent_solution
+            .alpha_t_dependence
             .as_ref()
-            .expect("higher-order LU threshold evaluation requires cached r_star(t)");
+            .expect("higher-order LU threshold evaluation requires cached alpha(t)");
         HyperDual::from_values(
             simple_n_deriv_shape(order),
             dual_solution.values[..=order].to_vec(),
         )
     }
 
-    fn embedded_truncated_rstar_solution(&self, cut_cff_index: &CutCFFIndex) -> HyperDual<F<T>> {
+    fn embedded_truncated_alpha_solution(&self, cut_cff_index: &CutCFFIndex) -> HyperDual<F<T>> {
         let lu_order = cut_cff_index
             .lu_cut_order
             .expect("mixed LU geometry requires lu_cut_order")
@@ -3640,12 +3661,9 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .expect("mixed LU geometry requires a dual shape");
         let t_variable = variable_indices_from_cut_cff_index(cut_cff_index).lu_cut;
         let t_dual = if lu_order == 0 {
-            HyperDual::from_values(
-                simple_n_deriv_shape(0),
-                vec![self.solution.solution.clone()],
-            )
+            HyperDual::from_values(simple_n_deriv_shape(0), vec![self.alpha.clone()])
         } else {
-            self.truncated_rstar_solution(lu_order)
+            self.truncated_alpha_solution(lu_order)
         };
 
         embed_t_dual_in_target_shape(&t_dual, &target_shape, t_variable)
@@ -3664,59 +3682,12 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .expect("higher-order LU threshold evaluation requires dual loop momenta")
             .clone();
 
-        let radius_star = self.truncated_rstar_solution(order);
-        let center = dualize_loop_momenta(
-            &radius_star,
-            &self.esurface_ct_builder.overlap_builder.center,
-        );
-        let external_moms = dualize_external_momenta(&radius_star, source_sample.external_moms());
-
-        let shifted_momenta = dual_loop_momenta
-            .iter()
-            .zip(center.iter())
-            .map(|(momentum, center)| momentum.clone() - center.clone())
-            .collect::<LoopMomenta<_>>();
-
-        let radius = dual_shifted_radius(&shifted_momenta, self.subspace());
-        let inverse_radius = new_constant(&radius, &radius.values[0].one()) / radius.clone();
-        let unit_shifted_momenta =
-            shifted_momenta.rescale(&inverse_radius, self.subspace().as_subspace_simple());
-
-        let rstar_loop_momenta = unit_shifted_momenta
-            .rescale(&radius_star, self.subspace().as_subspace_simple())
-            .iter()
-            .zip(center.iter())
-            .map(|(momentum, center)| momentum.clone() + center.clone())
-            .collect();
-
-        let (_, esurface_derivative) = compute_self_and_r_derivative_subspace_dual(
-            self.esurface_ct_builder.esurface,
-            &radius_star,
-            &unit_shifted_momenta,
-            &center,
-            &external_moms,
-            self.esurface_ct_builder
-                .overlap_builder
-                .counterterm_builder
-                .real_mass_vector,
-            self.subspace(),
-            self.esurface_ct_builder
-                .overlap_builder
-                .counterterm_builder
-                .all_lmbs,
-            self.esurface_ct_builder
-                .overlap_builder
-                .counterterm_builder
-                .graph,
-        );
-
-        DualRstarGeometry {
-            radius,
-            radius_star,
-            esurface_derivative,
-            rstar_loop_momenta,
-            external_moms,
-        }
+        self.dual_geometry(
+            dual_loop_momenta,
+            self.truncated_alpha_solution(order),
+            source_sample.external_moms(),
+            None,
+        )
     }
 
     fn dual_geometry_for_cut_cff_index(
@@ -3744,36 +3715,64 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         )
         .expect("mixed LU geometry requires dual loop momenta");
 
-        let mut radius_star = self.embedded_truncated_rstar_solution(cut_cff_index);
-        activate_threshold_variable_in_target_shape(&mut radius_star, threshold_variable);
-        let center = dualize_loop_momenta(
-            &radius_star,
-            &self.esurface_ct_builder.overlap_builder.center,
-        );
-        let external_moms = dualize_external_momenta(&radius_star, source_sample.external_moms());
+        self.dual_geometry(
+            dual_loop_momenta,
+            self.embedded_truncated_alpha_solution(cut_cff_index),
+            source_sample.external_moms(),
+            threshold_variable,
+        )
+    }
 
+    fn dual_geometry(
+        &self,
+        mut dual_loop_momenta: LoopMomenta<HyperDual<F<T>>>,
+        mut alpha: HyperDual<F<T>>,
+        source_externals: &ExternalFourMomenta<F<T>>,
+        threshold_variable: Option<usize>,
+    ) -> DualRstarGeometry<T> {
+        let representative = self
+            .esurface_ct_builder
+            .overlap_builder
+            .transformed_kinematic_point
+            .representative_sample();
+        // Higher-order packets retain their derivatives at the exact physical
+        // base already used by the alpha solve and implicit-function evaluator.
+        for (momentum, base) in dual_loop_momenta
+            .0
+            .iter_mut()
+            .zip(representative.loop_moms().iter())
+        {
+            momentum.px.values[0] = base.px.clone();
+            momentum.py.values[0] = base.py.clone();
+            momentum.pz.values[0] = base.pz.clone();
+        }
+        let center = dualize_loop_momenta(&alpha, &self.esurface_ct_builder.overlap_builder.center);
+        let external_moms = dualize_external_momenta(&alpha, source_externals);
         let shifted_momenta = dual_loop_momenta
             .iter()
             .zip(center.iter())
             .map(|(momentum, center)| momentum.clone() - center.clone())
             .collect::<LoopMomenta<_>>();
-
         let radius = dual_shifted_radius(&shifted_momenta, self.subspace());
-        let inverse_radius = new_constant(&radius, &radius.values[0].one()) / radius.clone();
-        let unit_shifted_momenta =
-            shifted_momenta.rescale(&inverse_radius, self.subspace().as_subspace_simple());
-
-        let rstar_loop_momenta = unit_shifted_momenta
-            .rescale(&radius_star, self.subspace().as_subspace_simple())
+        let mut radius_star = alpha.clone() * &radius;
+        // Threshold derivatives remain derivatives in physical r*, not alpha.
+        // This zero-based variation preserves the authoritative projection base.
+        if threshold_variable.is_some() {
+            let mut radial_variation = new_constant(&alpha, &self.alpha.zero());
+            activate_threshold_variable_in_target_shape(&mut radial_variation, threshold_variable);
+            radius_star += &radial_variation;
+            alpha += radial_variation / &radius;
+        }
+        let rstar_loop_momenta = shifted_momenta
+            .rescale(&alpha, self.subspace().as_subspace_simple())
             .iter()
             .zip(center.iter())
             .map(|(momentum, center)| momentum.clone() + center.clone())
             .collect();
-
-        let (_, esurface_derivative) = compute_self_and_r_derivative_subspace_dual(
+        let (_, alpha_derivative) = compute_self_and_r_derivative_subspace_dual(
             self.esurface_ct_builder.esurface,
-            &radius_star,
-            &unit_shifted_momenta,
+            &alpha,
+            &shifted_momenta,
             &center,
             &external_moms,
             self.esurface_ct_builder
@@ -3790,6 +3789,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                 .counterterm_builder
                 .graph,
         );
+        let esurface_derivative = alpha_derivative / &radius;
 
         DualRstarGeometry {
             radius,

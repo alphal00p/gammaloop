@@ -523,6 +523,17 @@ Represent stable overlap-membership branches in the same canonical catalogue,
 with a finite expansion cap and normalized fallback for absent branches. This
 is an unimplemented X4 requirement; direct-H validation does not cover it.
 
+The physical alpha foundation now passes its focused gates. The existing root
+owner solves on the unnormalized displacement, and both raised geometry paths
+derive physical radial quantities from the same alpha packet. An independent
+pre-change regression exposed higher-order IFT factorial conversions; these
+are corrected and covered in Double, Quad and Arb, including mixed derivatives
+and a shifted native parent. Generated raised-component and conditional-cut
+regressions pass. The complete sampling/physical cut, center and alpha handoff
+and stable star branches remain unimplemented. The six simple GL638 cuts do
+not dispatch the higher-order IFT; the new zeroth-order parameterization still
+requires the planned physical replay.
+
 The bounded direct-H allocation is complete using frozen optimized `f2f64fb17`:
 reference gates, physical H/Z and soft replays, then optimized LMB, direct-H
 powers 1 and 2, and power 2 mixed with optimized LMB. Each uses three seeds and
