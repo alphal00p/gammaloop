@@ -17,6 +17,13 @@ parent-frame maps. Physical directional E-surface maps, prepared cross-section
 `t*` context construction, and final old standalone-integrand removal remain
 open milestones.
 
+The current cross-section bridge is intentionally a safe boundary: it is
+compiled before the per-sample LU root and `t*` solve, so it must reject
+cut/phase-space/left/right maps rather than attach stale global kinematics.
+Full cross-section support requires a two-stage conditional map (or an
+equivalent composite proposal) whose implicit root and `t*` Jacobian are part
+of the same canonical channel density.
+
 The portable research bundle is in
 [`docs/research/advanced_sampling/README.md`](docs/research/advanced_sampling/README.md).
 Its latest detailed companion is
