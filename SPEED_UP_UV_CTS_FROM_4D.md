@@ -1650,3 +1650,52 @@ If a gate fails, use the measurements to continue the generic implementation, in
   through existing tensor APIs under the common lock, rather than repeating
   the forest. The planned CLI16 erased generation is held; all final gates
   and matching-revision measurements remain open.
+
+
+### 2026-09-13 — Compact ready-operation membership
+
+- The exact CLI16 normalized Atom was replayed through the existing public
+  tensor pipeline, without redoing its forest or expanding numerators. The
+  generic largest-summand selector chose reparsed index 4 (127,033,485 Atom
+  bytes); this is not asserted to be original CLI term one because canonical
+  parser ordering can change. Its prepared network contains 4,317,091 nodes,
+  13,662,997 half-edges and 779,720 ready Products, with leaf slot ranks at most
+  three. The complete input still has 3,050 existing top-level summands.
+- Parsing the selected network takes 60.033 s; 29,920 closed tensor boundaries
+  take 48.831 s. At primary execution, RSS rises from 6.44 GiB to 30.16 GiB and
+  the 0.2-second RSS supervisor terminates the process with exit -15. Its 740
+  user-CPU profile samples end with 180 consecutive samples in ready-operation
+  enumeration, including `BitVec::repeat` allocation frames. No initial batch
+  completion or tensor execution is reached. Using pre-execution counts,
+  retaining a dense graph mask for every ready Product would require about
+  1.211 TiB; this is a scale estimate, since initial operator merging can change
+  those counts, not an observed complete allocation.
+- Raw stacks, sampled resources, receipt, exact input/binary/library hashes and
+  analysis are retained in `captured_tensor_replay/largest_cli16`. Version two
+  of the standalone probe reuses one empty mask during diagnostic inventory,
+  removing its two approximately 79-second inventory overheads; its tensor
+  smoke passes. Neither capped replay establishes acceptance timing.
+- The shared operation payload now retains sorted visible half-edge lists.
+  All batch admission, profiling counts, sequential/parallel consumers and
+  partial rewrite callers migrate together. Existing node identification is
+  generalized to an ordered iterator and membership predicate, so collapsing
+  each operation also avoids constructing a dense temporary mask. Extraction
+  alone constructs one complete-extent subset. Sorted half-edge order preserves
+  node representative selection; hidden-edge filtering and self-edge marking
+  retain their previous semantics. No contraction policy or physical expression
+  changes. Focused checks, replay and broader acceptance remain pending.
+
+- Check80 detects missing `Inclusion` imports in the migrated test modules before
+  compilation; those routine imports are corrected without changing assertions.
+  Check81 passes in 18.21 s. The first nextest command is rejected for an
+  incorrectly joined CLI flag before compiling or running tests; the corrected
+  nextest33 invocation builds in 3m58s and passes all 603 selected tests across
+  Linnet, Spenso and GammaLoop in 56.927 s. This includes the 4,096-operation
+  storage bound, dense/compact hidden-edge and representative-node oracles,
+  existing tensor strategy checks and 289 UV/CFF/source/allocation checks.
+- Clippy15 passes in 33.88 s with the same three existing tuple-complexity
+  warnings. Formatting, diff whitespace and the verbatim plan-prefix hash pass.
+  Independent review finds no change to visible incidence, operation admission,
+  traversal order or the existing deferred-deletion lifetime. CLI17 and a new
+  provenance-bound replay are prepared next; no successful large-summand result
+  or final performance ratio is claimed at this milestone.

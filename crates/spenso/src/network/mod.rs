@@ -2990,7 +2990,7 @@ where
     let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
     graph
         .identify_subgraph_nodes_without_deleting_self_edges(
-            operation.subgraph(),
+            operation.hedges(),
             NetworkNode::Leaf(replacement),
             &mut ignored,
         )
@@ -3029,7 +3029,7 @@ where
     let replacement = executor.execute::<C>(graph, operation, lib, fnlib)?;
     graph
         .identify_subgraph_nodes_without_deleting_self_edges(
-            operation.subgraph(),
+            operation.hedges(),
             NetworkNode::Leaf(replacement),
             ignored,
         )
@@ -3060,10 +3060,7 @@ where
     };
     let batch_len = planned.len();
     let batch_subgraph_hedges = if profile::enabled() {
-        planned
-            .iter()
-            .map(|op| op.subgraph().n_included())
-            .sum::<usize>()
+        planned.iter().map(|op| op.hedges().len()).sum::<usize>()
     } else {
         0
     };
@@ -4135,7 +4132,7 @@ where
                             planned.len(),
                             planned_op.op().display_with(|fun| fun.to_string()),
                             planned_op.leaf_count(),
-                            planned_op.subgraph().n_included(),
+                            planned_op.hedges().len(),
                         );
                     }
                     Some(std::time::Instant::now())
@@ -4153,7 +4150,7 @@ where
                             elapsed.as_secs_f64() * 1000.0,
                             planned_op.op().display_with(|fun| fun.to_string()),
                             planned_op.leaf_count(),
-                            planned_op.subgraph().n_included(),
+                            planned_op.hedges().len(),
                         );
                     }
                     if planned.len() <= 1024 && (op_index + 1) % 64 == 0 {
@@ -4181,7 +4178,7 @@ where
             for (planned_op, replacement) in planned.into_iter().zip(replacements) {
                 graph
                     .identify_subgraph_nodes_without_deleting_self_edges(
-                        planned_op.subgraph(),
+                        planned_op.hedges(),
                         NetworkNode::Leaf(replacement),
                         &mut ignored,
                     )
@@ -4352,7 +4349,7 @@ impl Parallel {
             for (planned_op, replacement) in planned.into_iter().zip(replacements) {
                 graph
                     .identify_subgraph_nodes_without_deleting_self_edges(
-                        planned_op.subgraph(),
+                        planned_op.hedges(),
                         NetworkNode::Leaf(replacement),
                         &mut ignored,
                     )
@@ -4886,7 +4883,7 @@ where
                         "spenso_profile execute.sum_start leaves={} children={} subgraph_hedges={}",
                         operation.leaf_count(),
                         operation.children().len(),
-                        operation.subgraph().n_included(),
+                        operation.hedges().len(),
                     );
                 }
 

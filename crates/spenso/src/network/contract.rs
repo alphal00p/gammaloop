@@ -377,7 +377,7 @@ pub trait ContractionStrategy<E, L, K, FK, Aind>: Sized {
         let replacement = Self::contract(executor, graph, operation, lib)?;
         graph
             .identify_subgraph_nodes_without_deleting_self_edges(
-                operation.subgraph(),
+                operation.hedges(),
                 NetworkNode::Leaf(replacement),
                 ignored,
             )
@@ -862,7 +862,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
          -> Result<(), TensorNetworkError<K, FK>> {
             graph
                 .identify_subgraph_nodes_without_deleting_self_edges(
-                    operation.subgraph(),
+                    operation.hedges(),
                     NetworkNode::Leaf(leaf),
                     ignored,
                 )

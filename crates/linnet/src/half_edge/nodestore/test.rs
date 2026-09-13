@@ -4,7 +4,7 @@ use crate::{
         builder::HedgeGraphBuilder,
         involution::{Flow, Hedge},
         nodestore::NodeStorageOps,
-        subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
+        subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike},
         HedgeGraph, NodeIndex,
     },
     parser::{DotGraph, DotVertexData},
@@ -289,7 +289,8 @@ fn identify_nodes_of_subgraph_marks_same_self_edges() {
     let mut marked_self_edges: SuBitGraph = marked.empty_subgraph();
     marked
         .identify_nodes_of_subgraph_marking_self_edges(
-            &subgraph,
+            subgraph.included_iter(),
+            |hedge| subgraph.includes(&hedge),
             DotVertexData::empty(),
             &mut marked_self_edges,
         )
@@ -298,6 +299,63 @@ fn identify_nodes_of_subgraph_marks_same_self_edges() {
         old_self_edges.included_iter().collect::<Vec<_>>(),
         marked_self_edges.included_iter().collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn identify_compact_subgraph_preserves_hidden_edges_and_root_order() {
+    let mut builder = HedgeGraphBuilder::<(), (), ()>::new();
+    let n0 = builder.add_node(());
+    let n1 = builder.add_node(());
+    builder.add_edge(n1, n0, (), false);
+    builder.add_edge(n0, n1, (), false);
+    builder.add_edge(n1, n1, (), false);
+    builder.add_external_edge(n0, (), false, Flow::Sink);
+    let graph: HedgeGraph<(), (), (), Forest<(), ChildVecStore<()>>> = builder.build();
+
+    for (visible, expected_marks, expected_root) in [
+        (vec![0, 1, 2, 3, 4, 5, 6], vec![0, 1, 2, 3, 6], Some(n1)),
+        (vec![0, 1, 2, 4, 5, 6], vec![0, 1, 6], Some(n1)),
+        (vec![2, 3, 4, 5, 6], vec![2, 3, 6], Some(n0)),
+        (vec![], vec![6], None),
+    ] {
+        let hedges = visible.into_iter().map(Hedge).collect::<Vec<_>>();
+        let mut subgraph: SuBitGraph = graph.empty_subgraph();
+        for &hedge in &hedges {
+            subgraph.add(hedge);
+        }
+
+        let mut dense = graph.clone();
+        let dense_result =
+            dense.identify_nodes_of_subgraph_without_self_edges::<_, SuBitGraph>(&subgraph, ());
+        assert_eq!(dense_result.as_ref().map(|(root, _)| *root), expected_root);
+
+        let mut compact = graph.clone();
+        let mut marked: SuBitGraph = compact.empty_subgraph();
+        // Existing marks survive; hidden mates, existing loops and dangling
+        // edges must not acquire new marks when the visible island collapses.
+        marked.add(Hedge(6));
+        let compact_root = compact.identify_nodes_of_subgraph_marking_self_edges(
+            hedges.iter().copied(),
+            |hedge| hedges.binary_search(&hedge).is_ok(),
+            (),
+            &mut marked,
+        );
+        assert_eq!(compact_root, expected_root);
+        assert_eq!(
+            marked.included_iter().collect::<Vec<_>>(),
+            expected_marks.into_iter().map(Hedge).collect::<Vec<_>>()
+        );
+        if let Some((_, mut dense_marks)) = dense_result {
+            dense_marks.add(Hedge(6));
+            assert_eq!(
+                marked.included_iter().collect::<Vec<_>>(),
+                dense_marks.included_iter().collect::<Vec<_>>()
+            );
+        }
+        for hedge in 0..7 {
+            assert_eq!(dense.node_id(Hedge(hedge)), compact.node_id(Hedge(hedge)));
+        }
+    }
 }
 
 #[test]

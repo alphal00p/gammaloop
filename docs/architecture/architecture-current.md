@@ -200,6 +200,16 @@ half-edges directly from each group's node crowns. One shared deletion set
 preserves original self-loops, dangling slots and edges between groups without
 allocating and combining graph-sized masks for each operator island.
 
+Ready-operation batches likewise retain sorted visible half-edge lists per
+operation. Disjointness checks and the optional batch union visit these lists;
+counts use their lengths. Node identification consumes the same ordered list
+and its exact membership predicate, preserving the dense subset's representative
+node and newly internal edge marks, including partially hidden edges. Sequential,
+parallel and partial-rewrite strategies use this common payload. Only extraction
+materializes a dense subset for an individual operation, with the complete graph
+extent. Retained batch membership therefore scales with touched incidence rather
+than the product of graph size and ready-operation count.
+
 Rational-shell extraction groups equal denominator multisets through sums,
 products and powers while leaving denominator-free numerator subtrees opaque.
 It adds powers and numerators, prunes exact zeros, and never constructs a global
