@@ -23,6 +23,10 @@ and the saved-state replacement harness remain open milestones. Production
 standalone-integrand owners have already been removed; the test-only probe is
 only a temporary fixture for generic integration/UI tests and is not a second
 physical parameterization. The
+`ProcessIntegrand::evaluate_reference_coordinates` entry point now provides a
+loaded-process coordinate-batch hook with exact `1/N` weights and diagnostics;
+discrete graph/channel fixture coverage and the full saved-state assertions
+remain open.
 discrete graph sampler now carries the selected canonical partition factor
 with the parent-frame map Jacobian, including for the direct momentum route;
 the obsolete `DiscreteGraphSample::DiscreteMultiChanneling` representation has
