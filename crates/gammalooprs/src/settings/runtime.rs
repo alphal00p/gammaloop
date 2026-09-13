@@ -1254,6 +1254,14 @@ pub struct SamplingChannelDefinition {
     pub subspace_lmb: Vec<usize>,
     pub parent_lmb: Vec<usize>,
     pub on_cut: Vec<usize>,
+    /// Optional positive singularity proxy used when
+    /// `sampling_channel_weight = "singularity_proxy"`.  The expression is
+    /// parsed by Symbolica and evaluated in the complete master raw frame;
+    /// its variables are `x0`, `x1`, ... in coordinate order.  A proxy is
+    /// never inferred from the map, since doing so could hide an incomplete
+    /// singularity model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub singularity_proxy: Option<String>,
 }
 
 impl Default for SamplingChannelDefinition {
@@ -1263,6 +1271,7 @@ impl Default for SamplingChannelDefinition {
             subspace_lmb: Vec::new(),
             parent_lmb: Vec::new(),
             on_cut: Vec::new(),
+            singularity_proxy: None,
         }
     }
 }

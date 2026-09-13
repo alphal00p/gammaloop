@@ -2327,16 +2327,14 @@ impl LmbMultiChannelingSetup {
         resolved: &ResolvedSamplingChannelSelection,
         context: &SamplingChannelCompileContext,
     ) -> Result<SamplingChannelBridge> {
-        if matches!(
-            context.parameterization_settings.sampling_channels.weight,
-            SamplingChannelWeight::SingularityProxy
-        ) {
-            return Err(eyre!(
-                "sampling channel bridge requires an exact map-density weight; singularity_proxy is not implemented for compiled maps"
-            ));
-        }
         let channels = self.compile_sampling_channels(resolved, context)?;
-        SamplingChannelBridge::new(channels).map_err(Into::into)
+        let mode = match context.parameterization_settings.sampling_channels.weight {
+            SamplingChannelWeight::MapDensity | SamplingChannelWeight::InverseJacobian => {
+                SamplingPartitionMode::MapDensity
+            }
+            SamplingChannelWeight::SingularityProxy => SamplingPartitionMode::SingularityProxy,
+        };
+        SamplingChannelBridge::new_with_partition_mode(channels, mode).map_err(Into::into)
     }
 
     /// External-data variant of [`Self::compile_sampling_channel_bridge`].
@@ -2346,17 +2344,15 @@ impl LmbMultiChannelingSetup {
         context: &SamplingChannelCompileContext,
         external_momenta: &[[f64; 4]],
     ) -> Result<SamplingChannelBridge> {
-        if matches!(
-            context.parameterization_settings.sampling_channels.weight,
-            SamplingChannelWeight::SingularityProxy
-        ) {
-            return Err(eyre!(
-                "sampling channel bridge requires an exact map-density weight; singularity_proxy is not implemented for compiled maps"
-            ));
-        }
         let channels =
             self.compile_sampling_channels_with_external(resolved, context, external_momenta)?;
-        SamplingChannelBridge::new(channels).map_err(Into::into)
+        let mode = match context.parameterization_settings.sampling_channels.weight {
+            SamplingChannelWeight::MapDensity | SamplingChannelWeight::InverseJacobian => {
+                SamplingPartitionMode::MapDensity
+            }
+            SamplingChannelWeight::SingularityProxy => SamplingPartitionMode::SingularityProxy,
+        };
+        SamplingChannelBridge::new_with_partition_mode(channels, mode).map_err(Into::into)
     }
 
     fn validate_lmb_basis_id(&self, basis_id: usize, graph_name: &str) -> Result<LmbIndex> {
@@ -2442,6 +2438,36 @@ impl LmbMultiChannelingSetup {
             )
         })?;
         Ok(matches!(entry, SamplingCatalogueEntry::Lmb { .. }))
+    }
+
+    /// Return whether this canonical channel needs solved physical-cut data
+    /// before its map can be evaluated.  Ordinary LMB, surface, and their
+    /// validated conditional compositions are immediately evaluable; maps
+    /// involving `cut`, `phase_space`, `left`, or `right` belong to the
+    /// deferred cross-section boundary and must not be treated as plain
+    /// parent-frame coordinates.
+    pub fn sampling_channel_requires_deferred_cut_context(
+        &self,
+        channel_id: SamplingChannelId,
+        graph_name: &str,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<bool> {
+        let catalogue = self.canonical_sampling_catalogue(graph_name, parameterization_settings)?;
+        let entry = catalogue.entries.get(channel_id.index()).ok_or_else(|| {
+            eyre!(
+                "Requested sampling channel {} is out of range for graph '{}'",
+                channel_id.index(),
+                graph_name
+            )
+        })?;
+        Ok(match entry {
+            SamplingCatalogueEntry::Named(channel) => {
+                crate::integrands::process::sampling_selection::sampling_map_requires_deferred_cut_context(
+                    &channel.map,
+                )
+            }
+            SamplingCatalogueEntry::Lmb { .. } | SamplingCatalogueEntry::Surface { .. } => false,
+        })
     }
 
     /// Return the generated LMB behind a canonical channel when that channel
@@ -3375,6 +3401,18 @@ pub trait GraphTerm {
         channel_id: SamplingChannelId,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<bool>;
+    /// Whether this channel is a physical-cut map whose evaluation must be
+    /// deferred until its host cut has solved LU/t*.  The evaluator boundary
+    /// checks this before handing a mapped sample to the graph term, avoiding
+    /// accidental use of stale or absent cut context.
+    fn sampling_channel_requires_deferred_cut_context(
+        &self,
+        channel_id: SamplingChannelId,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<bool> {
+        let _ = (channel_id, parameterization_settings);
+        Ok(false)
+    }
     fn sampling_channel_ids(
         &self,
         parameterization_settings: &ParameterizationSettings,
@@ -3435,6 +3473,23 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     sampling_channel: Option<SamplingChannelEvaluation<T>>,
     lmb_basis_id: Option<LmbIndex>,
 ) -> Result<GraphEvaluationResult<T>> {
+    if let Some(channel) = sampling_channel.as_ref() {
+        if let Some(parameterization_settings) =
+            context.settings.sampling.get_parameterization_settings()
+            && integrand
+                .get_graph(graph_id)
+                .sampling_channel_requires_deferred_cut_context(
+                    channel.id(),
+                    &parameterization_settings,
+                )?
+        {
+            return Err(eyre!(
+                "sampling channel {} for graph '{}' requires a deferred physical-cut context (solved LU/t* and unit-cube coordinates); the cross-section evaluator boundary cannot evaluate it from a pre-mapped sample",
+                channel.id().index(),
+                integrand.get_graph(graph_id).name(),
+            ));
+        }
+    }
     let mut event_processing_runtime = integrand.take_event_processing_runtime();
     let result = {
         let graph_context = GraphTermEvaluationContext {
@@ -5653,6 +5708,42 @@ mod tests {
                 .is_err()
         );
 
+        let mut deferred_settings = ParameterizationSettings::default();
+        let parent_lmb = setup
+            .graph
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .map(|edge| edge.0)
+            .collect::<Vec<_>>();
+        deferred_settings
+            .sampling_channels
+            .default_channel_selection = vec!["cut".into()];
+        deferred_settings
+            .sampling_channels
+            .channel_definitions
+            .entry(setup.graph.name.clone())
+            .or_default()
+            .insert(
+                "cut".into(),
+                SamplingChannelDefinition {
+                    around: "phase_space(cut(0))".into(),
+                    subspace_lmb: parent_lmb.clone(),
+                    parent_lmb,
+                    on_cut: vec![],
+                    singularity_proxy: None,
+                },
+            );
+        assert!(
+            setup
+                .sampling_channel_requires_deferred_cut_context(
+                    SamplingChannelId::from(0),
+                    &setup.graph.name,
+                    &deferred_settings,
+                )
+                .unwrap()
+        );
+
         // Graph-aware entries occupy the same canonical channel axis as LMB
         // entries.  In particular, inserting a named channel before the
         // generated LMBs must not make channel id 1 resolve as basis 1 by
@@ -5672,6 +5763,7 @@ mod tests {
                     subspace_lmb: Vec::new(),
                     parent_lmb: vec![0],
                     on_cut: Vec::new(),
+                    singularity_proxy: None,
                 },
             );
         assert_eq!(

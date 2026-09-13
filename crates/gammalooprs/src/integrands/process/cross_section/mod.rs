@@ -1644,6 +1644,19 @@ impl GraphTerm for CrossSectionGraphTerm {
         )
     }
 
+    fn sampling_channel_requires_deferred_cut_context(
+        &self,
+        channel_id: SamplingChannelId,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<bool> {
+        self.multi_channeling_setup
+            .sampling_channel_requires_deferred_cut_context(
+                channel_id,
+                &self.multi_channeling_setup.graph.name,
+                parameterization_settings,
+            )
+    }
+
     fn sampling_channel_ids(
         &self,
         parameterization_settings: &ParameterizationSettings,
