@@ -1841,6 +1841,21 @@ fn resolve_selection(
                 channel: name.clone(),
             });
         }
+        let mut parent_seen = BTreeSet::new();
+        if definition
+            .parent_lmb
+            .iter()
+            .any(|edge| !parent_seen.insert(*edge))
+        {
+            return Err(SamplingSelectionError::InvalidChannelDefinition {
+                graph: graph_name.to_owned(),
+                channel: name.clone(),
+                error: format!(
+                    "parent_lmb {:?} must contain unique ordered edge ids",
+                    definition.parent_lmb
+                ),
+            });
+        }
         let map = SamplingMapDefinition::parse(&definition.around).map_err(|error| {
             SamplingSelectionError::InvalidChannelDefinition {
                 graph: graph_name.to_owned(),
