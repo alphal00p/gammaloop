@@ -17,6 +17,12 @@ parent-frame maps. Physical directional E-surface maps, prepared cross-section
 `t*` context construction, and final old standalone-integrand removal remain
 open milestones.
 
+The first process-level acceptance probe now integrates a normalized Gaussian
+through the canonical compiled bridge and checks the map partition. The full
+amplitude/cross-section saved-state harness, moments, absent/pinched branches,
+and multi-channel grid checks remain to be added before the old standalone
+integrands can be deleted.
+
 The current cross-section bridge is intentionally a safe boundary: it is
 compiled before the per-sample LU root and `t*` solve, so it must reject
 cut/phase-space/left/right maps rather than attach stale global kinematics.
