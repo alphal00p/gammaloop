@@ -130,6 +130,12 @@ pub enum SamplingCatalogueEntry {
         edges: Vec<usize>,
         preset: SamplingChannelPreset,
     },
+    /// An automatically enumerated E-surface candidate. Its geometry is
+    /// prepared later from the current cut/orientation kinematics.
+    Surface {
+        edges: Vec<usize>,
+        parent_lmb: Vec<usize>,
+    },
     Named(ResolvedNamedSamplingChannel),
 }
 
@@ -280,6 +286,11 @@ pub enum SamplingChannelBridgeError {
         edges: Vec<usize>,
         expected: Vec<usize>,
     },
+    MasterGraphMismatch {
+        channel: String,
+        graph: String,
+        expected: String,
+    },
     PartialSupport {
         channel: String,
         support: super::SamplingSupport,
@@ -319,6 +330,14 @@ impl fmt::Display for SamplingChannelBridgeError {
                 formatter,
                 "sampling channel `{channel}` uses master-frame edges {edges:?}, incompatible with bridge frame {expected:?}"
             ),
+            Self::MasterGraphMismatch {
+                channel,
+                graph,
+                expected,
+            } => write!(
+                formatter,
+                "sampling channel `{channel}` belongs to master graph `{graph}`, but the bridge frame is `{expected}`"
+            ),
             Self::PartialSupport { channel, support } => write!(
                 formatter,
                 "sampling channel `{channel}` has {support:?} support; partial/conditional surface maps cannot be passed to the graph evaluator"
@@ -357,8 +376,16 @@ impl SamplingChannelBridge {
         };
         let dimensions = first.dimensions();
         let frame = &first.embedded_edges;
+        let master_graph = &first.master_graph;
         let mut scores = Vec::with_capacity(channels.len());
         for channel in &channels {
+            if channel.master_graph != *master_graph {
+                return Err(SamplingChannelBridgeError::MasterGraphMismatch {
+                    channel: channel.name.clone(),
+                    graph: channel.master_graph.clone(),
+                    expected: master_graph.clone(),
+                });
+            }
             if channel.embedded_edges != *frame {
                 return Err(SamplingChannelBridgeError::IncompatibleFrames {
                     channel: channel.name.clone(),
@@ -542,6 +569,7 @@ impl SamplingChannelCatalogue {
                 basis_id, edges, ..
             } => Some((*basis_id, edges.as_slice())),
             SamplingCatalogueEntry::Named(_) => None,
+            SamplingCatalogueEntry::Surface { .. } => None,
         })
     }
 
@@ -549,6 +577,7 @@ impl SamplingChannelCatalogue {
         self.entries.iter().filter_map(|entry| match entry {
             SamplingCatalogueEntry::Named(channel) => Some(channel),
             SamplingCatalogueEntry::Lmb { .. } => None,
+            SamplingCatalogueEntry::Surface { .. } => None,
         })
     }
 
@@ -737,6 +766,19 @@ pub fn build_sampling_channel_catalogue(
     all_lmbs: &[(usize, Vec<usize>)],
     optimized_lmbs: &[usize],
 ) -> SamplingChannelCatalogue {
+    build_sampling_channel_catalogue_with_surfaces(resolved, all_lmbs, optimized_lmbs, &[], &[])
+}
+
+/// Expand a selection and append automatically enumerated surface candidates.
+/// `surface_edges` and `parent_lmb` are already resolved in the master graph
+/// frame; no graph mapping is inferred here.
+pub fn build_sampling_channel_catalogue_with_surfaces(
+    resolved: &ResolvedSamplingChannelSelection,
+    all_lmbs: &[(usize, Vec<usize>)],
+    optimized_lmbs: &[usize],
+    surface_edges: &[Vec<usize>],
+    parent_lmb: &[usize],
+) -> SamplingChannelCatalogue {
     let mut entries = Vec::new();
     for selector in &resolved.selectors {
         let Some(preset) = selector.preset() else {
@@ -777,6 +819,22 @@ pub fn build_sampling_channel_catalogue(
             });
             if !duplicate {
                 entries.push(entry);
+            }
+        }
+        if preset == SamplingChannelPreset::Surfaces {
+            for edges in surface_edges {
+                if !edges.is_empty()
+                    && !entries.iter().any(|entry| {
+                        matches!(entry, SamplingCatalogueEntry::Surface {
+                            edges: existing, parent_lmb: parent
+                        } if existing == edges && parent == parent_lmb)
+                    })
+                {
+                    entries.push(SamplingCatalogueEntry::Surface {
+                        edges: edges.clone(),
+                        parent_lmb: parent_lmb.clone(),
+                    });
+                }
             }
         }
     }
