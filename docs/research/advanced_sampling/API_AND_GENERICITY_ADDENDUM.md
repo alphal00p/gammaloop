@@ -155,6 +155,8 @@ Using schematic catalogue labels C, T_L and T_R, propose:
 ```toml
 [sampling.channel_definitions.G.cut_and_thresholds]
 around = "phase_space(C) -> (left(T_L) x right(T_R))"
+parent_lmb = [1, 2, 4, 7]
+subspace_lmb = [1, 2]
 ```
 
 The host cut is constructed first. At fixed physical cut data, choose internal
