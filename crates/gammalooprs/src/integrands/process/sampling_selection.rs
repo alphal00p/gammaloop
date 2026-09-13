@@ -275,8 +275,7 @@ pub struct CompiledSamplingChannel {
 /// Canonical identifier for a compiled sampling channel.
 ///
 /// The same id is used by the graph evaluator and by the sampling catalogue;
-/// no second legacy channel-index domain is maintained.  The deprecated
-/// `integrands::process::ChannelIndex` name is only a compatibility alias.
+/// no second legacy channel-index domain is maintained.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct SamplingChannelId(pub usize);
 
@@ -979,11 +978,7 @@ impl SamplingChannelCatalogue {
     pub fn inspection(&self) -> SamplingChannelInspection {
         SamplingChannelInspection {
             graph_name: self.graph_name.clone(),
-            selectors: self
-                .selectors
-                .iter()
-                .map(ToString::to_string)
-                .collect(),
+            selectors: self.selectors.iter().map(ToString::to_string).collect(),
             entries: self.inspection_rows(),
         }
     }
@@ -1431,14 +1426,16 @@ mod tests {
         let mut selection = SamplingChannelSelection::default();
         selection.default_channel_selection = vec!["auto:optimized_lmb".into()];
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue =
-            build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2])], &[0]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2])], &[0]);
 
         let report = catalogue.inspection();
         assert_eq!(report.graph_name, "G");
         assert_eq!(report.selectors, vec!["auto:optimized_lmb"]);
         assert_eq!(report.entries, catalogue.inspection_rows());
-        assert_eq!(report.entries, vec!["0: lmb basis=0 edges=[1, 2] source=auto:optimized_lmb"]);
+        assert_eq!(
+            report.entries,
+            vec!["0: lmb basis=0 edges=[1, 2] source=auto:optimized_lmb"]
+        );
     }
 
     #[test]
