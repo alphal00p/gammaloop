@@ -2701,37 +2701,6 @@ impl LmbMultiChannelingSetup {
         }
     }
 
-    /// This function is used to do do LMB multi-channeling without fully switching to a different lmb
-    /// for each channel. The momenta provided are reinterpreted as loop momenta of the LMB corresponding to the channel ID.
-    /// Then we transform these loop momenta to the fixed lmb of the graph. The prefactor is immediately computed for the requested channel
-    ///
-    /// Note this increments the loop_mom_cache_id of the returned BareMomentumSample
-    pub(crate) fn reinterpret_loop_momenta_and_compute_prefactor<T: FloatLike>(
-        &self,
-        channel_id: SamplingChannelId,
-        momentum_sample: &MomentumSample<T>,
-        loop_mom_cache_id: usize,
-        weighting_settings: LmbChannelWeightingSettings<'_, T>,
-    ) -> Result<(MomentumSample<T>, F<T>)> {
-        let lmb_index = self.sampling_channel_lmb_basis_id(
-            channel_id,
-            weighting_settings.graph_name,
-            weighting_settings.parameterization_settings,
-        )?;
-        let sample = MomentumSample {
-            sample: self.reinterpret_loop_momenta_for_lmb_impl(
-                lmb_index,
-                &momentum_sample.sample,
-                loop_mom_cache_id,
-            ), // uuid: momentum_sample.uuid,
-        };
-
-        let prefactor =
-            self.compute_prefactor_impl(channel_id, lmb_index, &sample, weighting_settings)?;
-
-        Ok((sample, prefactor))
-    }
-
     /// Computes the prefactor for the given canonical channel ID and momentum sample.
     pub(crate) fn compute_prefactor_impl<T: FloatLike>(
         &self,

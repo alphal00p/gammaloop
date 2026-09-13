@@ -633,9 +633,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
     /// intentionally reported as an error when they claim a physical channel:
     /// they have no coordinates from which a cut-dependent map can be
     /// replayed.
-    pub(crate) fn deferred_cross_section_sample(
-        &self,
-    ) -> Result<Option<DeferredCrossSectionSample<T>>> {
+    pub fn deferred_cross_section_sample(&self) -> Result<Option<DeferredCrossSectionSample<T>>> {
         match self {
             Self::SamplingChannel {
                 channel_id,
