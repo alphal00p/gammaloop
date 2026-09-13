@@ -101,6 +101,8 @@ channel_selection = { GL638 = ["auto:surfaces", "auto:optimized_lmb", "hard_inte
 
 [sampling.channel_definitions.GL638.hard_intersection]
 around = "intersect(surface(2,4,12), surface(3,10,13))"
+subspace_lmb = [3]
+parent_lmb = [3, 4, 7, 10]
 on_cut = [2,6,10]
 ```
 
