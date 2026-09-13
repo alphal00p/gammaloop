@@ -57,7 +57,9 @@ pub struct RuntimeSettings {
     /// Per-integrand overrides for external model parameters.
     #[serde(rename = "model", skip_serializing_if = "IsDefault::is_default")]
     pub model: RuntimeModelSettings,
-    /// Optional built-in test integrand used instead of a generated process integrand.
+    /// Optional legacy built-in integrand override used by historical normalization
+    /// tests. New validation should load a process and use the process-level
+    /// sampling acceptance harness instead.
     #[serde(rename = "integrand", skip_serializing_if = "IsDefault::is_default")]
     pub hard_coded_integrand: Option<IntegrandSettings>,
     /// Center-of-mass energy, external momenta, helicities, and phase-space improvement.

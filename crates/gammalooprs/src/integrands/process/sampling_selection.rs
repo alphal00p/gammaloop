@@ -1889,6 +1889,33 @@ mod tests {
     }
 
     #[test]
+    fn side_qualified_channel_requires_matching_prepared_side() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["right_channel".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("right_channel".into(), definition("right(lmb(1,2))"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        let error = catalogue.compile(&context).unwrap_err();
+        assert!(error.to_string().contains("requires prepared side Right"));
+
+        let mut left = context.clone();
+        left.side = Some(crate::integrands::process::SamplingCutSide::Left);
+        let error = catalogue.compile(&left).unwrap_err();
+        assert!(error.to_string().contains("requires prepared side Right"));
+    }
+
+    #[test]
     fn surface_compilation_requires_prepared_geometry() {
         let mut selection = SamplingChannelSelection::default();
         selection.default_channel_selection = vec!["threshold".into()];
