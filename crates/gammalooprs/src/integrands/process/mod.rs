@@ -2029,8 +2029,6 @@ impl<T: FloatLike> PreciseStabilityLevelResult<T> {
     }
 }
 
-type LmbChannelSamples<T> = TiVec<SamplingChannelId, (MomentumSample<T>, F<T>)>;
-
 /// Helper struct for the LMB multi-channeling setup
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -2583,36 +2581,6 @@ impl LmbMultiChannelingSetup {
                 loop_mom_cache_id,
             ),
         }
-    }
-
-    /// Note this increments the loop_mom_cache_id of all of the returned BareMomentumSample
-    #[allow(dead_code)]
-    pub(crate) fn reinterpret_loop_momenta_and_compute_prefactor_all_channels<T: FloatLike>(
-        &self,
-        momentum_sample: &MomentumSample<T>,
-        weighting_settings: LmbChannelWeightingSettings<'_, T>,
-        cache: bool,
-    ) -> Result<LmbChannelSamples<T>> {
-        let mut loop_mom_cache_id = momentum_sample.sample.loop_mom_cache_id;
-        let effective_channels = self.effective_channels(
-            weighting_settings.graph_name,
-            weighting_settings.parameterization_settings,
-        )?;
-        effective_channels
-            .iter()
-            .enumerate()
-            .map(|(channel_index, _)| {
-                if cache {
-                    loop_mom_cache_id += 1;
-                }
-                self.reinterpret_loop_momenta_and_compute_prefactor(
-                    SamplingChannelId::from(channel_index),
-                    momentum_sample,
-                    loop_mom_cache_id,
-                    weighting_settings,
-                )
-            })
-            .collect()
     }
 
     /// This function is used to do do LMB multi-channeling without fully switching to a different lmb
