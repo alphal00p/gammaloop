@@ -53,8 +53,9 @@ slow-timeout = { period = "5m", terminate-after = 2 }
 
 [[profile.default.overrides]]
 # Saved-state acceptance evaluates 8192 points per fixture, including two LU-h
-# mixture inverses. The unoptimized build takes about two minutes locally.
-filter = "test(=state::tests::saved_generated_process_runs_reference_acceptance_after_reload)"
+# mixture inverses. The conditional nine-dimensional cut fixture also evaluates
+# 8192 points in each native frame. These exceed the generic one-minute timeout.
+filter = "test(=state::tests::saved_generated_process_runs_reference_acceptance_after_reload) or test(=processes::raised_cross_section_tests::conditional_cut_sampling_preserves_both_sides_and_raised_sum)"
 slow-timeout = { period = "1m", terminate-after = 5 }
 
 [profile.default.junit]

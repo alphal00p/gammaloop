@@ -25,7 +25,7 @@ use symbolica::{
 };
 
 /// The geometric role of a resolved sampling map.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum SamplingMapDefinition {
     /// A loop-momentum basis channel, identified by its ordered edge list.
     Lmb(Vec<usize>),
@@ -51,6 +51,10 @@ pub enum SamplingMapDefinition {
     Left(Box<Self>),
     /// Resolve a target on the right side of a prepared cut.
     Right(Box<Self>),
+    /// Resolve a target in the kinematics of an explicit physical host cut.
+    AtCut { cut: Vec<usize>, map: Box<Self> },
+    /// Assign coordinates to a child; its LMB descriptor consumes no dimensions.
+    Block { edges: Vec<usize>, map: Box<Self> },
 }
 
 impl SamplingMapDefinition {
@@ -102,8 +106,27 @@ impl SamplingMapDefinition {
             }
             "left" => Self::one_map(arguments, "left").map(|map| Self::Left(Box::new(map))),
             "right" => Self::one_map(arguments, "right").map(|map| Self::Right(Box::new(map))),
+            "at_cut" | "block" => {
+                let [descriptor, map] = arguments.as_slice() else {
+                    return Err(eyre!("{short_name} expects exactly a descriptor and a map"));
+                };
+                let descriptor = Self::from_atom(*descriptor)?;
+                let map = Box::new(Self::from_atom(*map)?);
+                match (short_name, descriptor) {
+                    ("at_cut", Self::Cut(cut)) => Ok(Self::AtCut { cut, map }),
+                    ("block", Self::Lmb(edges)) => Ok(Self::Block { edges, map }),
+                    _ => Err(eyre!(
+                        "{short_name} requires {} as its first argument",
+                        if short_name == "at_cut" {
+                            "cut(...)"
+                        } else {
+                            "lmb(...)"
+                        }
+                    )),
+                }
+            }
             _ => Err(eyre!(
-                "unknown sampling-map constructor `{name}`; expected lmb, surface, cut, soft, collinear, complement, product, intersect, then, phase_space, left or right"
+                "unknown sampling-map constructor `{name}`; expected lmb, surface, cut, soft, collinear, complement, product, intersect, then, phase_space, left, right, at_cut or block"
             )),
         }
     }
@@ -137,6 +160,54 @@ impl SamplingMapDefinition {
             Self::PhaseSpace(map) => call("phase_space", [map.to_atom()]),
             Self::Left(map) => call("left", [map.to_atom()]),
             Self::Right(map) => call("right", [map.to_atom()]),
+            Self::AtCut { cut, map } => {
+                call("at_cut", [Self::Cut(cut.clone()).to_atom(), map.to_atom()])
+            }
+            Self::Block { edges, map } => {
+                call("block", [Self::Lmb(edges.clone()).to_atom(), map.to_atom()])
+            }
+        }
+    }
+
+    /// Physical energy edges are distinct from the active coordinate block.
+    pub fn energy_edges(&self) -> Option<&[usize]> {
+        match self {
+            Self::Surface(edges) | Self::Cut(edges) => Some(edges),
+            Self::PhaseSpace(map)
+            | Self::Left(map)
+            | Self::Right(map)
+            | Self::AtCut { map, .. }
+            | Self::Block { map, .. } => map.energy_edges(),
+            _ => None,
+        }
+    }
+
+    pub fn host_cut(&self) -> Option<&[usize]> {
+        match self {
+            Self::AtCut { cut, .. } => Some(cut),
+            Self::PhaseSpace(map) => match map.as_ref() {
+                Self::Cut(edges) => Some(edges),
+                _ => None,
+            },
+            Self::Left(map) | Self::Right(map) | Self::Block { map, .. } => map.host_cut(),
+            _ => None,
+        }
+    }
+
+    pub fn cut_side(&self) -> Option<super::SamplingCutSide> {
+        match self {
+            Self::Left(_) => Some(super::SamplingCutSide::Left),
+            Self::Right(_) => Some(super::SamplingCutSide::Right),
+            Self::AtCut { map, .. } | Self::Block { map, .. } => map.cut_side(),
+            _ => None,
+        }
+    }
+
+    pub fn is_phase_space(&self) -> bool {
+        match self {
+            Self::PhaseSpace(map) => matches!(map.as_ref(), Self::Cut(_)),
+            Self::AtCut { map, .. } | Self::Block { map, .. } => map.is_phase_space(),
+            _ => false,
         }
     }
 
@@ -751,17 +822,23 @@ pub struct SamplingMapComposition<T: FloatLike = f64> {
     output_dimensions: usize,
 }
 
-/// A direct-product map whose child output blocks are embedded into an
+/// A product or ordered map whose child output blocks are embedded into an
 /// explicitly supplied master-frame permutation.  This is the exact generic
 /// construction used for a surface subspace together with its complement:
 /// each child remains in its native coordinates, while this wrapper only
 /// permutes complete three-momentum blocks.  The permutation has unit
-/// absolute determinant, so the product Jacobian is unchanged.
+/// absolute determinant, so the product Jacobian is unchanged. A conditional
+/// frame transform first prepares the actual preceding outputs, then converts
+/// the active physical output back to raw coordinates with its exact determinant.
+pub type SamplingMapContextTransform<T> =
+    Arc<dyn Fn(&[T]) -> Result<(Vec<T>, SamplingMapAffine<T>)> + Send + Sync + 'static>;
+
 #[derive(Clone)]
 pub struct SamplingMapEmbedding<T: FloatLike = f64> {
     map: Arc<SamplingMapComposition<T>>,
     /// Product-output index -> master-frame output index.
     output_indices: Vec<usize>,
+    context_transform: Option<SamplingMapContextTransform<T>>,
 }
 
 impl<T: FloatLike> std::fmt::Debug for SamplingMapEmbedding<T> {
@@ -770,6 +847,7 @@ impl<T: FloatLike> std::fmt::Debug for SamplingMapEmbedding<T> {
             .debug_struct("SamplingMapEmbedding")
             .field("map", &self.map)
             .field("output_indices", &self.output_indices)
+            .field("conditional_frame", &self.context_transform.is_some())
             .finish()
     }
 }
@@ -808,7 +886,44 @@ impl<T: FloatLike> SamplingMapEmbedding<T> {
         Ok(Self {
             map: Arc::new(map),
             output_indices,
+            context_transform: None,
         })
+    }
+
+    /// Prepare only declared prior coordinates. The host must certify that
+    /// omitted later coordinates cannot change this cut or target equation.
+    pub fn with_context_transform(mut self, transform: SamplingMapContextTransform<T>) -> Self {
+        self.context_transform = Some(transform);
+        self
+    }
+
+    fn transformed_context(&self, context: &[T]) -> Result<Option<(Vec<T>, SamplingMapAffine<T>)>> {
+        self.context_transform
+            .as_ref()
+            .map(|transform| {
+                if context.iter().any(|value| !value.is_finite()) {
+                    return Err(eyre!(
+                        "conditional frame needs finite raw prerequisite coordinates"
+                    ));
+                }
+                let (physical, frame) = transform(context)?;
+                if physical.iter().any(|value| !value.is_finite()) {
+                    return Err(SamplingEvaluationError::Unrepresentable {
+                        operation: "conditional physical prerequisites",
+                        detail: "native frame preparation produced nonfinite coordinates"
+                            .to_owned(),
+                    }
+                    .into());
+                }
+                if frame.dimension() != self.output_dimensions() {
+                    return Err(eyre!(
+                        "conditional frame must supply an active affine map of dimension {}",
+                        self.output_dimensions()
+                    ));
+                }
+                Ok((physical, frame))
+            })
+            .transpose()
     }
 
     /// Build an embedded direct product.  `output_indices` must be a complete
@@ -852,7 +967,11 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapEmbedding<T> {
     }
 
     fn contract(&self) -> SamplingMapContract {
-        self.map.contract()
+        let mut contract = self.map.contract();
+        if self.context_transform.is_some() && contract.support == SamplingSupport::Full {
+            contract.support = SamplingSupport::Conditional;
+        }
+        contract
     }
 
     fn name(&self) -> &'static str {
@@ -860,12 +979,26 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapEmbedding<T> {
     }
 
     fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
-        let mut evaluation = self.map.forward(coordinates, context)?;
+        let prepared = self.transformed_context(context)?;
+        let mut evaluation = self.map.forward(
+            coordinates,
+            prepared.as_ref().map_or(context, |(physical, _)| physical),
+        )?;
+        if let Some((_, frame)) = prepared {
+            let transformed = frame.forward(&evaluation.point, &[])?;
+            evaluation.point = transformed.point;
+            evaluation.jacobian = (F(evaluation.jacobian) * F(transformed.jacobian)).0;
+            evaluation.inverse_jacobian =
+                (F(evaluation.inverse_jacobian) * F(transformed.inverse_jacobian)).0;
+            evaluation.residual = F(evaluation.residual).max(F(transformed.residual)).0;
+            evaluation.diagnostics.extend(transformed.diagnostics);
+        }
         evaluation.point = self.embed_point(&evaluation.point);
+        evaluation.support = self.contract().support;
         evaluation
             .diagnostics
             .push("unit-determinant master-frame embedding".to_owned());
-        Ok(evaluation)
+        evaluation.validate("embedded conditional map")
     }
 
     fn inverse(&self, point: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
@@ -876,13 +1009,32 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapEmbedding<T> {
                 self.output_dimensions()
             ));
         }
-        let mut evaluation = self.map.inverse(&self.unembed_point(point), context)?;
+        let raw = self.unembed_point(point);
+        let prepared = self.transformed_context(context)?;
+        let transformed = prepared
+            .as_ref()
+            .map(|(_, frame)| frame.inverse(&raw, &[]))
+            .transpose()?;
+        let mut evaluation = self.map.inverse(
+            transformed
+                .as_ref()
+                .map_or(raw.as_slice(), |mapped| &mapped.coordinates),
+            prepared.as_ref().map_or(context, |(physical, _)| physical),
+        )?;
+        if let Some(transformed) = transformed {
+            evaluation.jacobian = (F(evaluation.jacobian) * F(transformed.jacobian)).0;
+            evaluation.inverse_jacobian =
+                (F(evaluation.inverse_jacobian) * F(transformed.inverse_jacobian)).0;
+            evaluation.residual = F(evaluation.residual).max(F(transformed.residual)).0;
+            evaluation.diagnostics.extend(transformed.diagnostics);
+        }
         // The inverse's point is the user-supplied master-frame point.
         evaluation.point = point.to_vec();
+        evaluation.support = self.contract().support;
         evaluation
             .diagnostics
             .push("unit-determinant master-frame embedding".to_owned());
-        Ok(evaluation)
+        evaluation.validate("embedded conditional inverse")
     }
 }
 
@@ -1369,7 +1521,12 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
         let log_scale = fit[0].re.clone();
         let shape = fit[1].re.clone();
         if !log_scale.0.is_finite() || !shape.0.is_finite() || shape <= shape.zero() {
-            return Err(eyre!("LU-h profile fit is not finite with positive shape"));
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "native LU h profile fit",
+                detail: "finite log-scale and strictly positive shape cannot be represented"
+                    .to_owned(),
+            }
+            .into());
         }
         self.lu_h_profile = Some(LuHProfile {
             settings: settings.clone(),
@@ -1480,9 +1637,11 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
             ));
         }
         if center.iter().any(|value| !value.is_finite()) {
-            return Err(eyre!(
-                "implicit surface radial-map context centre must contain only finite values"
-            ));
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "implicit surface context centre",
+                detail: "derived centre contains nonfinite values".to_owned(),
+            }
+            .into());
         }
         Ok((center, status))
     }
@@ -3395,6 +3554,206 @@ mod tests {
     }
 
     #[test]
+    fn conditional_affine_embedding_uses_native_prerequisites_and_supplied_inverse_point() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        fn check<T: FloatLike>() -> Result<()> {
+            let one = F::<T>::default().one();
+            let zero = one.zero();
+            let physical = ImplicitSurfaceRadialMap::new(
+                3,
+                vec![zero.0.clone(); 3],
+                2.0,
+                1.0,
+                Arc::new(|_, r: T| {
+                    let r = F(r);
+                    Ok(((&r - r.from_i64(2)).0, r.one().0))
+                }),
+            )?
+            .with_context_preparer(Arc::new(|prior: &[T]| {
+                if prior.len() != 3 {
+                    return Err(eyre!("test fiber requires three fixed coordinates"));
+                }
+                Ok((prior.to_vec(), PreparedSurfaceStatus::existing(None)?))
+            }));
+            let calls = Arc::new(AtomicUsize::new(0));
+            let transform: SamplingMapContextTransform<T> = Arc::new({
+                let calls = calls.clone();
+                move |prior: &[T]| {
+                    calls.fetch_add(1, Ordering::Relaxed);
+                    if prior.len() != 3 {
+                        return Err(eyre!("missing prior block"));
+                    }
+                    let x = F(prior[0].clone());
+                    let tau = x.one() + x.square();
+                    let inverse = tau.one() / &tau;
+                    let matrix = (0..3)
+                        .map(|i| {
+                            (0..3)
+                                .map(|j| {
+                                    if i == j {
+                                        inverse.0.clone()
+                                    } else {
+                                        inverse.zero().0
+                                    }
+                                })
+                                .collect()
+                        })
+                        .collect();
+                    let shift = (&inverse.one() - &inverse) / inverse.from_i64(3);
+                    Ok((
+                        prior.iter().map(|x| (F(x.clone()) * &tau).0).collect(),
+                        SamplingMapAffine::new(matrix, vec![shift.0; 3])?,
+                    ))
+                }
+            });
+            let active = SamplingMapEmbedding::from_composition(
+                SamplingMapComposition::then(vec![Box::new(physical.clone())])?,
+                (0..3).collect(),
+            )?
+            .with_context_transform(transform.clone());
+            let prior = SurfaceRadialMap::new(3, vec![zero.0.clone(); 3], None, 2.0, 1.0)?;
+            let full = SamplingMapEmbedding::from_composition(
+                SamplingMapComposition::then(vec![Box::new(prior), Box::new(active.clone())])?,
+                (0..6).collect(),
+            )?;
+            let cube = [17, 31, 63, 29, 43, 71].map(|n| (one.from_i64(n) / one.from_i64(100)).0);
+            let mapped = full.forward(&cube, &[])?;
+            assert_eq!(calls.load(Ordering::Relaxed), 1);
+            let inverse = full.inverse(&mapped.point, &[])?;
+            assert_eq!(calls.load(Ordering::Relaxed), 2);
+            let tolerance = one.epsilon().sqrt() * one.from_i64(64);
+            assert!(
+                (F(mapped.jacobian.clone()) * F(inverse.inverse_jacobian) - &one).abs() < tolerance
+            );
+            for (actual, expected) in inverse.coordinates.iter().zip(&cube) {
+                assert!((F(actual.clone()) - F(expected.clone())).abs() < tolerance);
+            }
+            // A foreign supplied point is pulled back using its own prior
+            // block, not the selected map's scale or a reconstructed point.
+            let foreign_prior = mapped.point[..3]
+                .iter()
+                .map(|x| (F(x.clone()) / one.from_i64(2)).0)
+                .collect::<Vec<_>>();
+            let foreign = active.inverse(&mapped.point[3..], &foreign_prior)?;
+            let (fixed, frame) = transform(&foreign_prior)?;
+            let pullback = frame.inverse(&mapped.point[3..], &[])?;
+            let expected = physical.inverse_with_context(&pullback.coordinates, &fixed)?;
+            assert!(
+                (F(foreign.inverse_jacobian)
+                    / (F(expected.inverse_jacobian) * F(pullback.inverse_jacobian))
+                    - &one)
+                    .abs()
+                    < tolerance
+            );
+            let step = &one / one.from_i64(1000000);
+            let mut matrix = vec![vec![0.0; 6]; 6];
+            for column in 0..6 {
+                let mut plus = cube.clone();
+                let mut minus = cube.clone();
+                plus[column] = (F(plus[column].clone()) + &step).0;
+                minus[column] = (F(minus[column].clone()) - &step).0;
+                let plus = full.forward(&plus, &[])?;
+                let minus = full.forward(&minus, &[])?;
+                for (row, values) in matrix.iter_mut().enumerate() {
+                    values[column] = ((F(plus.point[row].clone()) - F(minus.point[row].clone()))
+                        / (&step * step.from_i64(2)))
+                    .into_f64();
+                }
+            }
+            assert!(
+                (SamplingMapAffine::new(matrix, vec![0.0; 6])?.determinant()
+                    / F(mapped.jacobian).into_f64()
+                    - 1.0)
+                    .abs()
+                    < 2.0e-6
+            );
+            Ok(())
+        }
+        check::<f64>().unwrap();
+        check::<crate::utils::QuadFloat>().unwrap();
+        check::<crate::utils::ArbPrec>().unwrap();
+    }
+
+    #[test]
+    fn conditional_affine_embedding_distinguishes_numeric_and_structural_context_failure() {
+        let make = || {
+            SamplingMapEmbedding::product(
+                vec![Box::new(
+                    SurfaceRadialMap::new(3, vec![0.0; 3], None, 2.0, 1.0).unwrap(),
+                )],
+                (0..3).collect(),
+            )
+            .unwrap()
+        };
+        let numerical = make().with_context_transform(Arc::new(|_| {
+            Ok((
+                vec![f64::INFINITY],
+                SamplingMapAffine::new(
+                    vec![
+                        vec![1.0, 0.0, 0.0],
+                        vec![0.0, 1.0, 0.0],
+                        vec![0.0, 0.0, 1.0],
+                    ],
+                    vec![0.0; 3],
+                )?,
+            ))
+        }));
+        let error = numerical.forward(&[0.2, 0.3, 0.6], &[1.0]).unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<SamplingEvaluationError>(),
+            Some(SamplingEvaluationError::Unrepresentable { .. })
+        ));
+        let structural = make().with_context_transform(Arc::new(|_| {
+            Ok((
+                vec![1.0],
+                SamplingMapAffine::new(vec![vec![1.0, 0.0], vec![0.0, 1.0]], vec![0.0; 2])?,
+            ))
+        }));
+        let error = structural.forward(&[0.2, 0.3, 0.6], &[1.0]).unwrap_err();
+        assert!(error.downcast_ref::<SamplingEvaluationError>().is_none());
+        assert!(error.to_string().contains("dimension 3"));
+        for (center, numeric) in [(vec![f64::INFINITY; 3], true), (vec![0.0; 2], false)] {
+            let map = ImplicitSurfaceRadialMap::new(
+                3,
+                vec![0.0; 3],
+                2.0,
+                1.0,
+                Arc::new(|_, r| Ok((r - 2.0, 1.0))),
+            )
+            .unwrap()
+            .with_context_preparer(Arc::new(move |_| {
+                Ok((center.clone(), PreparedSurfaceStatus::existing(None)?))
+            }));
+            let error = map.forward(&[0.2, 0.3, 0.6]).unwrap_err();
+            assert_eq!(
+                error.downcast_ref::<SamplingEvaluationError>().is_some(),
+                numeric
+            );
+        }
+    }
+
+    #[test]
+    fn parses_host_and_block_descriptors_with_symbolica() {
+        let map =
+            SamplingMapDefinition::parse("block(lmb(7,3),at_cut(cut(9,2),left(surface(6,4))))")
+                .unwrap();
+        assert_eq!(
+            SamplingMapDefinition::from_atom(map.to_atom().as_view()).unwrap(),
+            map
+        );
+        assert_eq!(map.host_cut(), Some([2, 9].as_slice()));
+        assert_eq!(map.energy_edges(), Some([4, 6].as_slice()));
+        for invalid in [
+            "block(surface(1),surface(2))",
+            "at_cut(lmb(1),surface(2))",
+            "block(lmb(1,1),surface(2))",
+            "at_cut(cut(1))",
+        ] {
+            assert!(SamplingMapDefinition::parse(invalid).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
     fn parses_nested_definition_and_round_trips() {
         let source =
             "then(phase_space(cut(10, 2)), product(left(surface(12, 4)), right(complement(7, 8))))";
@@ -4014,11 +4373,13 @@ mod tests {
         let error = nonfinite
             .forward_with_context(&[0.2, 0.3, 0.7], &[])
             .expect_err("non-finite context centre must fail");
-        assert!(
-            error
-                .to_string()
-                .contains("must contain only finite values")
-        );
+        assert!(matches!(
+            error.downcast_ref::<SamplingEvaluationError>(),
+            Some(SamplingEvaluationError::Unrepresentable {
+                operation: "implicit surface context centre",
+                ..
+            })
+        ));
     }
 
     #[test]

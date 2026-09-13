@@ -7,9 +7,11 @@ precise API range. The broader 169-test core suite, both saved-state/summed API
 regressions and six precise/event/histogram integration API tests also pass.
 Formatting, core/API and integration-test checking pass; clippy reports no
 warnings on changed lines.
-Root-distance
-density certification, native reference-harness retry, derived-expression mass
-precision and the final adaptive-grid range boundary remain open.
+The subsequent `f89addb17` milestone also routes reference normalization and
+moments through the same native stability loop, including rotation checks and
+checked public narrowing. Gaussian-body underflow, stronger root-localization
+certification, derived-expression mass precision and the final adaptive-grid
+range boundary remain open.
 This note complements [ADVANCED_SAMPLING_PLAN.md](../../../ADVANCED_SAMPLING_PLAN.md)
 and [LU_H_MATCHED_SAMPLING.md](LU_H_MATCHED_SAMPLING.md).
 
@@ -96,15 +98,17 @@ sampling binding agrees with the physical evaluator's mass cache. Generalizing
 that existing expression evaluator is a remaining precision requirement for
 derived-expression masses, separate from native kinematics and map rescue.
 
-Generalize `PreparedCutSamplingContext`, `PreparedSurfaceStatus`, prepared
-surfaces and `DeferredCrossSectionSamplingState`: their current f64 `t*`, roots,
-loop/external momenta cannot be inputs to native rescue. Retain graph/cut/side,
-complete parent frame, branch and root identity with native values. Build each
-cut's LU rescaling and threshold external data anew at T before conditional
-left/right maps. `cast_sample` is not rescue for derived contexts/Jacobians.
-Rebuild or rotate typed native contexts consistently with the mapped point;
-copying opaque vectors cannot rotate their hidden momentum/basis entries.
-Serialized diagnostic views may convert after computation.
+The X2 implementation removes the former complete-LU handoff records. Immutable
+resolved blocks retain target/cut/side, complete parent frame, active directions
+and the exact preceding-coordinate layout. Native callbacks prepare a cut's LU
+rescaling and threshold data from those preceding coordinates at the active T;
+the compiled triangular map owns this dependency and its Jacobian. They must
+never promote a previously rounded `t*`, center or momentum context during
+rescue. `PreparedSurfaceStatus` retains the geometry classification; conditional
+centers and branch data stay local to one forward/inverse evaluation. Rebuild
+native bindings and prepared data consistently with the mapped point rather
+than copying opaque vectors across frames. Serialized diagnostic views may
+convert after computation.
 
 Generalize `SamplingExpressionEvaluator` values, inputs, dual seeds, real-part
 checks and determinant calculation. `FloatLike` already includes
@@ -368,12 +372,26 @@ contribution lost before multiplication.
 
 ### Frozen geometry and the warmup boundary
 
-The conditional-fiber factory freezes empty-complement geometry at binding time.
-A typed numerical failure there, or while checking a derived external shift for
-eligibility, currently aborts transactional warmup and invalidates its partial
-precision caches. The per-draw stability loop cannot rescue an error that occurs
-before evaluation starts. Proper-fiber preparation errors during evaluation do
-enter the existing native retry loop. This is a capability limit, not permission
-to substitute an absent-surface fallback. Extend the existing cache/preparation
-owner to retain retryable precision failures or defer their evaluation while
-preserving one-time successful preparation; do not add a second retry engine.
+The conditional-fiber factory freezes geometry without prerequisites at binding
+time. The existing native binding caches now retain either a compiled bridge or
+its typed numerical preparation failure. Warmup tries every configured precision
+and succeeds only if at least one precision has every graph usable. Structural
+errors, or no wholly usable configured precision, invalidate the entire epoch;
+the latter reports the failed precisions and graph-specific numerical causes.
+
+During evaluation, requesting a failed binding returns that same typed error to
+the existing source/stability loop, which reconstructs the original draw at the
+next precision. Repeated draws do not repeat a failed center solve. Unconfigured
+precisions still bind lazily through the same owner. A warmup after changes to
+model, externals, settings or routing clears successes and failures together.
+The canonical catalogue and eager programs remain shared across precisions;
+there is no alternate channel enumeration, solver or retry loop.
+
+The focused acceptance fixture uses the existing kite's independent A block:
+`product(block(lmb(4),surface(3,4)),complement(6))`. Its boosted two-energy
+minimum is analytically resolved in Quad while Double's native cancellation
+budget cannot certify the interior. The original-draw reference replay must
+remain positive, report the failed Double attempt, and agree with Quad-only
+replay. Cache reuse, invalidation, all-failed precision and structural-error
+checks accompany it; the consolidated gates must pass before claiming this
+warmup boundary solved in a released milestone.
