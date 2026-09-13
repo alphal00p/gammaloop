@@ -2078,6 +2078,27 @@ impl LmbMultiChannelingSetup {
         ))
     }
 
+    /// Compile the selected catalogue against prepared master-graph
+    /// kinematics.  The context is explicit because surface centres and
+    /// radii may only be known after cut kinematics (including any `t*`
+    /// rescaling) has been solved.
+    pub fn compile_sampling_channels(
+        &self,
+        resolved: &ResolvedSamplingChannelSelection,
+        context: &SamplingChannelCompileContext,
+    ) -> Result<Vec<CompiledSamplingChannel>> {
+        if context.master_graph != self.graph.name {
+            return Err(eyre!(
+                "sampling channel master graph `{}` does not match LMB setup graph `{}`",
+                context.master_graph,
+                self.graph.name
+            ));
+        }
+        let catalogue =
+            self.sampling_channel_catalogue(resolved, &context.parameterization_settings)?;
+        catalogue.compile(context).map_err(Into::into)
+    }
+
     fn validate_lmb_basis_id(&self, basis_id: usize, graph_name: &str) -> Result<LmbIndex> {
         if basis_id >= self.all_bases.len() {
             return Err(eyre!(
