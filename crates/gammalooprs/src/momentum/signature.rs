@@ -95,8 +95,19 @@ impl LoopExtSignature {
     }
 
     pub(crate) fn equality_up_to_sign(&self, other: &Self) -> bool {
-        self.internal.first_abs() == other.internal.first_abs()
-            && self.external.first_abs() == other.external.first_abs()
+        self == other
+            || (self.internal.len() == other.internal.len()
+                && self.external.len() == other.external.len()
+                && self
+                    .internal
+                    .iter()
+                    .zip(other.internal.iter())
+                    .all(|(a, b)| *a == -*b)
+                && self
+                    .external
+                    .iter()
+                    .zip(other.external.iter())
+                    .all(|(a, b)| *a == -*b))
     }
 }
 
@@ -604,5 +615,72 @@ impl LoopExtSignature {
         let external_moms: ExternalThreeMomenta<F<T>> =
             external_moms.iter().map(|m| m.spatial.clone()).collect();
         self.compute_momentum(loop_moms, &external_moms)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LoopExtSignature;
+
+    #[test]
+    fn affine_signature_equality_uses_one_global_sign() {
+        let a = LoopExtSignature::from((vec![1], vec![1]));
+        let independent_reversal = LoopExtSignature::from((vec![-1], vec![1]));
+        assert!(!a.equality_up_to_sign(&independent_reversal));
+        assert!(a.equality_up_to_sign(&LoopExtSignature::from((vec![-1], vec![-1]))));
+        for (internal, external) in [
+            (vec![0, 1], vec![0, 0]),
+            (vec![0, 0], vec![-1, 1]),
+            (vec![0, 0], vec![0, 0]),
+            (vec![], vec![]),
+        ] {
+            let reversed = LoopExtSignature::from((
+                internal.iter().map(|value| -*value).collect(),
+                external.iter().map(|value| -*value).collect(),
+            ));
+            assert!(LoopExtSignature::from((internal, external)).equality_up_to_sign(&reversed));
+        }
+        assert!(
+            !LoopExtSignature::from((vec![1], vec![]))
+                .equality_up_to_sign(&LoopExtSignature::from((vec![], vec![1])))
+        );
+        assert!(!a.equality_up_to_sign(&LoopExtSignature::from((vec![1, 0], vec![1]))));
+    }
+
+    #[test]
+    fn raised_edge_comparison_preserves_complete_affine_routing() {
+        use crate::{
+            dot,
+            graph::{Graph, parse::from_dot::IntoGraph},
+            initialisation::test_initialise,
+        };
+        use linnet::half_edge::involution::EdgeIndex;
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph raised_affine_signature {
+            ext [style=invis]
+            edge [num=1 mass=0]
+            node [num=1]
+            ext -> a [id=0]
+            a -> b [id=1]
+            b -> c [id=2]
+            c -> a [id=3]
+            ext -> c [id=4]
+        })
+        .unwrap();
+        let groups = graph.get_raised_edge_groups();
+        assert!(groups.iter().any(|group| group.len() >= 2));
+        for group in groups {
+            for pair in group.windows(2) {
+                assert!(graph.loop_momentum_basis.edges_are_raised(pair[0], pair[1]));
+            }
+        }
+        // Deliberately supplied affine rows isolate the caller contract; they
+        // are not a new physical routing assignment for this graph.
+        let mut basis = graph.loop_momentum_basis.clone();
+        basis.edge_signatures[EdgeIndex(1)] = LoopExtSignature::from((vec![1], vec![1, 0]));
+        basis.edge_signatures[EdgeIndex(2)] = LoopExtSignature::from((vec![-1], vec![1, 0]));
+        assert!(!basis.edges_are_raised(EdgeIndex(1), EdgeIndex(2)));
+        basis.edge_signatures[EdgeIndex(2)] = LoopExtSignature::from((vec![-1], vec![-1, 0]));
+        assert!(basis.edges_are_raised(EdgeIndex(1), EdgeIndex(2)));
     }
 }

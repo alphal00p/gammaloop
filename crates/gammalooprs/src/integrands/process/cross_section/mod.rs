@@ -1669,7 +1669,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             channel
                 .blocks
                 .iter()
-                .any(|block| block.target.energy_edges().is_some())
+                .any(|block| !block.target.energy_edge_sets().is_empty())
         }) {
             if self.graph.loop_momentum_basis
                 != self.multi_channeling_setup.graph.loop_momentum_basis
@@ -1785,11 +1785,18 @@ impl GraphTerm for CrossSectionGraphTerm {
                     ThreeMomentum::new(F(v[0].clone()), F(v[1].clone()), F(v[2].clone()))
                 }));
                 for block in &channel.blocks {
-                    let Some(edges) = block.target.energy_edges() else {
+                    let energy_sets = block.target.energy_edge_sets();
+                    if energy_sets.is_empty() {
                         continue;
+                    }
+                    let [edges] = energy_sets.as_slice() else {
+                        return Err(eyre!(
+                            "cross-section joint sampling channel '{}' is not enabled: routed-energy matching, physical host reconciliation and proposal-policy retention across native retries must be bound before production intersect targets can be used",
+                            channel.name
+                        ));
                     };
                     if context
-                        .surface_maps
+                        .geometry_maps
                         .contains_key(&block.geometry_key(parent))
                     {
                         continue;
@@ -2162,7 +2169,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                             .with_context_transform(transform),
                         )
                     };
-                    context.insert_surface_map(
+                    context.insert_geometry_map(
                         block.target.clone(),
                         parent.clone(),
                         block.active_lmb.clone(),

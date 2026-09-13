@@ -250,49 +250,86 @@ For each target block b, define its proposal decision as `P_b(y_b)`, where y_b
 contains only that block's ordered raw prerequisites. The decision may select
 compact focusing or normalized ordinary fallback, plus a radius recipe and
 dyadic exponent. It must exclude the block's active coordinates, the generating
-channel and the physical integrand's stability outcome. Commit a successful
-decision after prerequisite preparation and certification, before it can be
-changed by active-dependent physics. Retain it through subsequent native retries;
-rebuild coefficients, roots and the radius recipe natively from the original
-source, rather than promoting derived lower-precision values. A higher lane may
-recertify the retained choice, but must error if it is invalid or unresolved,
-not silently enlarge/shrink the disk or switch to fallback.
+channel and the physical integrand's stability outcome. Retain the discrete
+decision through native retries; rebuild coefficients, roots and the radius
+recipe from the original source, without promoting derived lower-precision data.
 
 Every foreign inverse needs its own `P_b(y_b)`: reconstruct that target's
 prerequisites from the common raw point through its immutable routing and
 preceding blocks. Do not reuse the selected map's prerequisites. Graph,
 generating-channel/source lineage and resolved target-block identity distinguish
-stored records, especially when summed channels map the same cube to different
-points. They are cache-validity keys, not mathematical policy inputs: the same
-target and prerequisites must choose the same law regardless of how the point
-was generated. Otherwise channel partitions need not be one common function of
-the raw point. Original-point lineage and native representability checks are
-therefore necessary; a mutable cache indexed only by channel is insufficient.
+stored records when summed channels map the same cube to different points.
+These validate storage, not mathematical policy inputs: the same target and
+prerequisites must choose the same law regardless of the generating channel.
+Use canonical graph/channel identities and compiled-tree block paths, not
+floating-coordinate hashes or mutable occurrence counters.
 
-The minimum transport belongs on the existing original-draw source/stability
-owner: retain nonnumeric decisions beside `EvaluationMetaData` root diagnostics,
-and pass them through the existing runtime contexts and planned typed host
-preparation. Native prepared data remain specific to each precision. This needs
-an explicit prerequisite-policy phase with a declared starting proof budget;
-any preparation-only escalation must depend solely on those prerequisites.
-`loop_norm_sum` can currently skip a precision based on the mapped active point,
-and `debug_sample` remaps outside the stability pass. Neither prepass may commit
-policy, nor may a previously unseen foreign policy inherit an incidental lane
-chosen by another map's or the physical evaluator's failure. Reuse the current
-evaluation pipeline; do not add another retry engine. An interval containing
-zero is unresolved, not proof of an invalid domain; more arithmetic precision
-also cannot remove finite-box dependency overestimation.
+The accepted next implementation uses one fixed preparation phase in
+[`evaluate_from_source_precise`](../../../crates/gammalooprs/src/integrands/process/mod.rs),
+before norm-based lane selection. It reconstructs participating generator rows
+at the existing [`ArbPrec = VarFloat<1000>`](../../../crates/gammalooprs/src/utils/mod.rs)
+budget through the same bridge forward and common partition. Reuse
+`evaluate_single`/`evaluate_graph_group` traversal, skipping final targets,
+physics, rotations, events and the physical shared-overlap pipeline. Existing
+map-required roots/centers still run: an implicit surface may call
+[`find_center`](../../../crates/gammalooprs/src/cff/esurface.rs) for an approximate
+SOCP seed, then validate it natively. A preparation failure aborts explicitly
+at this budget; it does not select another proposal or introduce a second retry
+loop. Then seal the decisions and enter the existing stability loop.
+
+Store only nonnumeric decisions beside
+[`EvaluationMetaData`](../../../crates/gammalooprs/src/integrands/evaluation.rs)
+root diagnostics. Extend the existing
+[`SamplingChannelRuntimeContexts`](../../../crates/gammalooprs/src/integrands/process/sampling_selection.rs)
+owner with borrowed policy access, and replace
+[`SamplingMapComponent`](../../../crates/gammalooprs/src/integrands/process/sampling_maps.rs)
+forward/inverse context slices with its typed borrowed component view.
+Composition and embedding preserve lineage while supplying their existing
+ordered numerical prerequisites. There is no mutable warm-bridge cache or
+separate policy evaluator: the existing
+[`SharedEnergyJointMap::prepare`](../../../crates/gammalooprs/src/integrands/process/sampling_joint.rs)
+algorithm resolves the native decision. Compare its **complete choice** with
+the sealed canonical entry, including ordinary fallback. Merely certifying that
+a retained disk is valid is insufficient: two valid radii can have different
+densities. Missing entries, mismatches or unresolved certificates request the
+existing native retry/error; they never insert records or change the law.
+Diagnostics identify graph, generator, target block, native precision and both
+choices.
+
+Thread the same access through `EvaluationSource::build_gamma_sample`,
+[`parameterize`](../../../crates/gammalooprs/src/integrands/process/gammaloop_sample.rs),
+direct-channel inverses and summed mapping. `loop_norm_sum` and `debug_sample`
+only read sealed decisions. A previously unseen foreign policy cannot inherit
+a lane chosen by another active map or physics failure; missing-record replay
+errors, including a later block newly reached near a support boundary.
+
+For N channels, preparation adds one forward plus N inverse scores in MC, or
+N forwards plus N² inverse scores for summed sampling, once per original draw.
+It visits participating rows, not every MC generator or every orientation.
+Ordinary catalogues need no extra phase; Arb bindings reuse warmed programs.
+Measure this overhead. Lazy preparation still needs canonical original-source
+reconstruction, not incidental native values.
+The 1000-bit source and 2048-bit predicates certify represented inputs, not
+exact physical host roots. Original-source/native representability and actual
+host authority remain separate gates. An interval containing zero is unresolved;
+more precision cannot remove finite-box dependency overestimation. Persistent
+disagreement near a true policy boundary must fail explicitly.
 
 A decisive regression uses a compact law uniform in `R in (0,rho)` and the
 normalized target `f=q_rho` on that patch, zero outside. Force a physics retry
 only when the original radial cube coordinate is below 1/2. If rescue changes
 rho to 2rho for those draws, their weight is 2 while the unretried half retains
 weight 1: the expectation is 3/2 instead of 1. Freezing the policy gives 1.
+That is the compact-generator oracle. With an equally selected full-support
+sibling and constant positive support-gated proxies, changing only that
+generator gives the complete estimator mean 5/4 instead of 1. Keep this
+partition-aware process check distinct from the component oracle.
 Extend this original-source test to foreign support decisions, nonuniform
-channel probabilities, summed channels and fallback; an invalid retained disk
-must error. This transport is unimplemented and remains a production binding
-gate. It does not block the represented-geometry joint kernel's fixed-context
-normalization, inverse-density or `F=1/R` bounded-weight gates.
+channel probabilities, summed channels, fallback and norm/debug prepasses;
+count collection separately from native rebuilds. Invalid retained disks and
+native-choice mismatches must error. This transport remains unimplemented and
+gates production binding, independently of the represented-geometry kernel's
+fixed-context normalization, inverse-density and `F=1/R` bounded-weight tests.
 
 ## Resolve a star without requiring user threshold directives
 

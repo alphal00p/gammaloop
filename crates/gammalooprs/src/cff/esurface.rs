@@ -141,6 +141,251 @@ impl PartialEq for Esurface {
 impl Eq for Esurface {}
 
 impl Esurface {
+    /// Match two energy sums on one active spatial momentum. Their shared
+    /// energy is identified by a single sign of the complete affine routing
+    /// and the mass expression, never by edge identity or rounded momenta.
+    /// The returned common route has active coefficient +1: the kernel uses
+    /// x=L+c0, so the existing affine embedding must return L=x-c0.
+    // Staged with the component tests until the physical binder transports
+    // one prerequisite-only disk policy through native precision retries.
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn sampling_joint_geometry_in_subspace<T: FloatLike>(
+        &self,
+        other: &Self,
+        subspace: &SubspaceData,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        graph: &Graph,
+        masses: &EdgeVec<F<T>>,
+        external_momenta: &ExternalFourMomenta<F<T>>,
+        complement: &[LoopIndex],
+    ) -> Result<(
+        crate::integrands::process::sampling_joint::SharedEnergyJointGeometryEvaluator<T>,
+        crate::momentum::signature::LoopExtSignature,
+    )> {
+        use crate::integrands::process::{
+            SharedEnergyJointGeometry, sampling_maps::SamplingEvaluationError,
+        };
+        use crate::momentum::{SignOrZero, signature::LoopExtSignature};
+        use std::sync::Arc;
+
+        let lmb = subspace.get_lmb(all_lmbs);
+        let active = subspace.iter_lmb_indices().collect_vec();
+        let [active] = active.as_slice() else {
+            return Err(eyre!(
+                "joint energy sampling requires exactly one active loop cycle"
+            ));
+        };
+        let active = *active;
+        let mut covered = complement.iter().copied().chain([active]).collect_vec();
+        covered.sort();
+        if covered.iter().any(|index| index.0 >= lmb.loop_edges.len())
+            || covered.windows(2).any(|pair| pair[0] == pair[1])
+        {
+            return Err(eyre!(
+                "joint energy sampling has repeated or invalid active/prior loop indices"
+            ));
+        }
+        if external_momenta.is_empty() || external_momenta.len() != lmb.ext_edges.len() {
+            return Err(eyre!(
+                "joint energy sampling requires all {} external ports, received {}",
+                lmb.ext_edges.len(),
+                external_momenta.len()
+            ));
+        }
+        let surfaces = [self, other];
+        for &surface in &surfaces {
+            for &edge in &surface.energies {
+                let signature = &lmb.edge_signatures[edge];
+                for index in (0..lmb.loop_edges.len())
+                    .map(LoopIndex)
+                    .filter(|index| !covered.contains(index))
+                {
+                    if signature.internal[index] != SignOrZero::Zero {
+                        return Err(eyre!(
+                            "joint energy surface {:?} depends on unsampled parent edge {}",
+                            surface.energies,
+                            lmb.loop_edges[index]
+                        ));
+                    }
+                }
+                if !masses[edge].0.is_finite() {
+                    return Err(SamplingEvaluationError::Unrepresentable {
+                        operation: "joint energy mass",
+                        detail: format!("non-finite mass on edge {edge}"),
+                    }
+                    .into());
+                }
+                if masses[edge] < masses[edge].zero() {
+                    return Err(eyre!(
+                        "joint energy edge {edge} requires a nonnegative mass"
+                    ));
+                }
+            }
+        }
+        let varying = surfaces.map(|surface| {
+            surface
+                .energies
+                .iter()
+                .copied()
+                .filter(|edge| lmb.edge_signatures[*edge].internal[active] != SignOrZero::Zero)
+                .sorted_by_key(|edge| edge.0)
+                .collect_vec()
+        });
+        if varying.iter().any(|edges| edges.len() != 2) {
+            return Err(eyre!(
+                "joint energy sampling requires exactly two varying energy occurrences per equation, got {:?}",
+                varying
+            ));
+        }
+        for (surface, varying) in surfaces.iter().zip(&varying) {
+            let contained = subspace.contains(&surface.energies, graph).collect_vec();
+            if varying.iter().any(|edge| !contained.contains(edge)) {
+                return Err(eyre!(
+                    "joint varying energy routing is inconsistent with its selected cycle subgraph"
+                ));
+            }
+        }
+        let shared = varying[0]
+            .iter()
+            .enumerate()
+            .flat_map(|(left, &a)| {
+                varying[1]
+                    .iter()
+                    .enumerate()
+                    .filter_map(move |(right, &b)| {
+                        (lmb.edge_signatures[a].equality_up_to_sign(&lmb.edge_signatures[b])
+                            && graph[a].mass_atom() == graph[b].mass_atom())
+                        .then_some((left, right))
+                    })
+            })
+            .collect_vec();
+        let [(left, right)] = shared.as_slice() else {
+            return Err(eyre!(
+                "joint energy sampling requires exactly one common full signed routing and mass expression; found {} candidates for {:?}. Distinct external shifts, including fixed-kinematics spatial specializations, are not supported",
+                shared.len(),
+                varying
+            ));
+        };
+        let edges = [
+            varying[0][*left],
+            varying[0][1 - *left],
+            varying[1][1 - *right],
+        ];
+        if masses[edges[0]] != masses[varying[1][*right]] {
+            return Err(eyre!(
+                "joint shared mass expression has inconsistent native values on edges {} and {}",
+                edges[0],
+                varying[1][*right]
+            ));
+        }
+        let canonical = |edge| {
+            let signature = &lmb.edge_signatures[edge];
+            if signature.internal[active] == SignOrZero::Minus {
+                LoopExtSignature {
+                    internal: signature.internal.iter().map(|sign| -*sign).collect(),
+                    external: signature.external.iter().map(|sign| -*sign).collect(),
+                }
+            } else {
+                signature.clone()
+            }
+        };
+        let routes = edges.map(canonical);
+        let common = routes[0].clone();
+        let fixed = surfaces.map(|surface| {
+            surface
+                .energies
+                .iter()
+                .copied()
+                .filter(|edge| lmb.edge_signatures[*edge].internal[active] == SignOrZero::Zero)
+                .collect_vec()
+        });
+        // Keep the original global equations. Replacing this shift by a
+        // cut-eliminated identity would move the target by a finite LU residual.
+        let shifts =
+            surfaces.map(|surface| surface.compute_shift_part_from_momenta(external_momenta, lmb));
+        let externals: ExternalThreeMomenta<F<T>> =
+            external_momenta.iter().map(|p| p.spatial.clone()).collect();
+        if shifts
+            .iter()
+            .chain(externals.iter().flat_map(|p| [&p.px, &p.py, &p.pz]))
+            .any(|value| !value.0.is_finite())
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "joint external data",
+                detail: "non-finite external spatial vector or original energy shift".into(),
+            }
+            .into());
+        }
+        let lmb = lmb.clone();
+        let masses = masses.clone();
+        let complement = complement.to_vec();
+        let geometry = Arc::new(move |context: &[T]| {
+            if context.len() != 3 * complement.len() {
+                return Err(eyre!(
+                    "joint energy context has {} components, expected {}",
+                    context.len(),
+                    3 * complement.len()
+                ));
+            }
+            if context.iter().any(|x| !x.is_finite()) {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "joint energy context",
+                    detail: "non-finite declared prerequisite".into(),
+                }
+                .into());
+            }
+            let zero = masses[edges[0]].zero();
+            let mut loops = LoopMomenta::from_iter(
+                (0..lmb.loop_edges.len())
+                    .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+            );
+            for (&index, point) in complement.iter().zip(context.chunks_exact(3)) {
+                loops[index] = ThreeMomentum::new(
+                    F(point[0].clone()),
+                    F(point[1].clone()),
+                    F(point[2].clone()),
+                );
+            }
+            let offsets: [ThreeMomentum<F<T>>; 3] = routes
+                .each_ref()
+                .map(|route| route.compute_momentum(&loops, &externals));
+            let differences = [&offsets[1] - &offsets[0], &offsets[2] - &offsets[0]];
+            let sums = fixed.iter().enumerate().map(|(index, fixed)| {
+                let fixed_sum = fixed.iter().try_fold(zero.clone(), |sum, &edge| -> Result<F<T>> {
+                    let momentum: ThreeMomentum<F<T>> = lmb.edge_signatures[edge].compute_momentum(&loops, &externals);
+                    let energy = (momentum.norm_squared()+masses[edge].square()).sqrt();
+                    if energy == zero && (masses[edge] != zero || momentum.px != zero || momentum.py != zero || momentum.pz != zero) {
+                        return Err(SamplingEvaluationError::Unrepresentable { operation: "joint fixed energy", detail: format!("nonzero mass or momentum on edge {edge} produced zero energy") }.into());
+                    }
+                    Ok(sum+energy)
+                })?;
+                Ok((-(&shifts[index]+fixed_sum)).0)
+            }).collect::<Result<Vec<T>>>()?;
+            let energy_sums = [sums[0].clone(), sums[1].clone()];
+            let geometry = SharedEnergyJointGeometry {
+                shifts: differences.map(|v| [v.px.0, v.py.0, v.pz.0]),
+                masses: edges.map(|edge| masses[edge].0.clone()),
+                energy_sums,
+            };
+            if geometry
+                .shifts
+                .iter()
+                .flatten()
+                .chain(&geometry.energy_sums)
+                .any(|x| !x.is_finite())
+            {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "joint prepared energies",
+                    detail: "non-finite routed offset or fixed energy sum".into(),
+                }
+                .into());
+            }
+            Ok(geometry)
+        });
+        Ok((geometry, common))
+    }
+
     /// Compile an exact radial chart around this graph-routed energy surface.
     /// The callback retains the complete parent frame, masses and external
     /// data in the evaluation precision; its ray root is the same cut equation
@@ -1769,6 +2014,158 @@ mod tests {
     use typed_index_collections::ti_vec;
 
     use super::{EsurfaceExistence, add_external_shifts};
+
+    #[test]
+    fn joint_sampling_matches_distinct_reversed_edges_and_unequal_masses() {
+        test_initialise().unwrap();
+        // Splitting the kite's common line through E gives distinct edge IDs
+        // with opposite complete affine routes, without altering its two cycles.
+        let graph: Graph = dot!(digraph joint_serial_energy {
+            ext_in [style=invis]
+            ext_out [style=invis]
+            node [num=1]
+            edge [num=1 mass=1]
+            ext_in -> A:0 [id=0 mass=0]
+            C:1 -> ext_out [id=1 mass=0]
+            A -> B [id=2 mass=2]
+            B -> C [id=3]
+            C -> D [id=4 lmb_id=0]
+            D -> A [id=5 mass=3]
+            B -> E [id=6 lmb_id=1]
+            D -> E [id=7]
+        })
+        .unwrap();
+        let lmbs = ti_vec![graph.loop_momentum_basis.clone()];
+        let id = LmbIndex::from(0);
+        let lmb = &lmbs[id];
+        let subspace = SubspaceData::new_from_parent_basis_edges(
+            &[EdgeIndex(6)],
+            &graph.full_filter(),
+            id,
+            &graph,
+            &lmbs,
+        )
+        .unwrap();
+        let active = subspace.iter_lmb_indices().next().unwrap();
+        let prior = lmb
+            .loop_edges
+            .iter_enumerated()
+            .find_map(|(index, edge)| (*edge == EdgeIndex(4)).then_some(index))
+            .unwrap();
+        let left = Esurface {
+            energies: vec![EdgeIndex(2), EdgeIndex(4), EdgeIndex(6)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let right = Esurface {
+            energies: vec![EdgeIndex(3), EdgeIndex(5), EdgeIndex(7)],
+            ..left.clone()
+        };
+        let masses = graph
+            .underlying
+            .new_edgevec_from_iter([0., 0., 2., 1., 1., 3., 1., 1.].map(F))
+            .unwrap();
+        let externals = ExternalFourMomenta::from_iter(
+            [FourMomentum::from_args(F(26_f64.sqrt()), F(0.), F(0.), F(1.)); 2],
+        );
+        let (prepare, common) = left
+            .sampling_joint_geometry_in_subspace(
+                &right,
+                &subspace,
+                &lmbs,
+                &graph,
+                &masses,
+                &externals,
+                &[prior],
+            )
+            .unwrap();
+        let geometry = prepare(&[1., 0., -0.5]).unwrap();
+        assert_eq!(geometry.masses, [1., 2., 3.]);
+        assert_eq!(geometry.shifts, [[1., 0., 0.5], [1., 0., -0.5]]);
+        assert_ne!(
+            lmb.edge_signatures[EdgeIndex(6)],
+            lmb.edge_signatures[EdgeIndex(7)]
+        );
+        assert!(lmb.edges_are_raised(EdgeIndex(6), EdgeIndex(7)));
+        assert_eq!(common, lmb.edge_signatures[EdgeIndex(6)]);
+        let mut loops = LoopMomenta::from_iter([ThreeMomentum::new(F(0.), F(0.), F(0.)); 2]);
+        loops[prior] = ThreeMomentum::new(F(1.), F(0.), F(-0.5));
+        for components in [[0.5, -1., 1.], [-0.7, 0.3, -0.4]] {
+            let x = ThreeMomentum::new(F(components[0]), F(components[1]), F(components[2]));
+            loops[active] = x;
+            let common_energy = (x.norm_squared() + F(1.)).sqrt();
+            for (i, surface) in [&left, &right].into_iter().enumerate() {
+                let [a, b, c] = geometry.shifts[i];
+                let partner = x + ThreeMomentum::new(F(a), F(b), F(c));
+                let expected = common_energy
+                    + (partner.norm_squared() + F(geometry.masses[i + 1]).square()).sqrt()
+                    - F(geometry.energy_sums[i]);
+                assert!(
+                    (surface.compute_from_momenta(lmb, &masses, &loops, &externals) - expected)
+                        .abs()
+                        < F(1e-12)
+                );
+            }
+        }
+        // Fixed energy multiplicities remain part of the original equation.
+        let mut repeated = left.clone();
+        repeated.energies.push(EdgeIndex(4));
+        let (prepare_repeated, _) = repeated
+            .sampling_joint_geometry_in_subspace(
+                &right,
+                &subspace,
+                &lmbs,
+                &graph,
+                &masses,
+                &externals,
+                &[prior],
+            )
+            .unwrap();
+        assert!(
+            (prepare_repeated(&[1., 0., -0.5]).unwrap().energy_sums[0]
+                - (geometry.energy_sums[0] - 1.5))
+                .abs()
+                < 1e-12
+        );
+
+        let mut inconsistent_masses = masses.clone();
+        inconsistent_masses[EdgeIndex(7)] = F(2.);
+        assert!(
+            left.sampling_joint_geometry_in_subspace(
+                &right,
+                &subspace,
+                &lmbs,
+                &graph,
+                &inconsistent_masses,
+                &externals,
+                &[prior],
+            )
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("inconsistent native values")
+        );
+        // Changing only the symbolic mass distinguishes formal identity from
+        // accidentally equal numeric values in a supplied mass cache.
+        let mut different_mass_graph = graph.clone();
+        different_mass_graph.underlying[EdgeIndex(7)].particle =
+            crate::graph::edge::PossibleParticle::JustMass { expr: parse!("2") };
+        assert!(
+            left.sampling_joint_geometry_in_subspace(
+                &right,
+                &subspace,
+                &lmbs,
+                &different_mass_graph,
+                &masses,
+                &externals,
+                &[prior],
+            )
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("found 0 candidates")
+        );
+    }
 
     #[test]
     fn radial_guesses_and_lu_roots_handle_constant_massive_energies() {

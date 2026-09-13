@@ -546,9 +546,10 @@ powers 1 and 2, and power 2 mixed with optimized LMB. Each uses three seeds and
 2048 draws on 20 cores. The artifact preserves each maximum's full stored
 integration `Sample`, including its historical grid weight; printed coordinates
 alone are insufficient. Do not extend these runs before the missing geometry
-is ready. The next sequence is shared physical CT-star preparation and
-complement-only projection scale, followed by the generic rank-two H/Z chart
-and its certified star pullbacks. The joint chart must certify the feasible
+is ready. The next work proceeds in parallel: shared physical CT-star
+preparation and complement-only projection scale, and graph binding of the
+generic rank-two H/Z chart. Certified star pullbacks join these two paths.
+The joint chart must certify the feasible
 normal domain, rank, inverse branches and normalized absent/degenerate fallback
 before physical comparisons. Its generic kernel/domain work can proceed
 alongside CT-star preparation: a direct joint chart needs shared host tau but
@@ -594,6 +595,23 @@ the existing joint and shared-preparation audits. No GL638 bounded-weight or
 variance-improvement claim follows from the fixed-context component tests.
 The final nine joint/enclosure tests and two saved-state/canonical-channel API
 regressions also pass; core/API checking and changed-line clippy gates are clear.
+
+The graph-expression and factory groundwork now passes 168 selected core tests:
+one `intersect` AST block and geometry registry, a shared routed-energy matcher,
+and actual two-loop kite equations in Double, Quad and Arb. The kite uses a
+boosted external momentum and checks a parent with nonzero affine translation;
+a serial-edge fixture checks distinct shared edges and unequal partner masses.
+Production joint binding remains disabled. Its next prerequisite is the
+original-source proposal preparation phase, followed by graph-level Gaussian
+acceptance with a full-support sibling and retained choices during rescue.
+GL638 additionally needs certified equality of the
+shared spatial energy routing in the specified external frame and authoritative
+cut kinematics. A centre-of-mass identity must not be assumed for arbitrary
+boosted data. Neither automatic channel discovery nor completed CT-star maps
+blocks the direct joint witness. Final physical validation still covers all
+orientations and tests the previously unbounded corner explicitly.
+The two saved-state/canonical-channel API regressions also pass after this
+groundwork, along with core/API checking and changed-line clippy gates.
 
 In parallel, the subtraction owner has separated representative overlap
 kinematics from the raised derivative packets, using the existing sample and
