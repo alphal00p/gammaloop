@@ -2989,15 +2989,17 @@ pub struct GraphTermEvaluationContext<'a, 'm, T: FloatLike> {
     pub rotation: &'a Rotation,
     pub evaluation_metadata: &'m mut EvaluationMetaData,
     pub record_primary_timing: bool,
-    /// Legacy LMB channel selection. This remains the only field consulted by
-    /// the existing amplitude and cross-section evaluators.
+    /// Canonical sampling-channel selection. The current amplitude and
+    /// cross-section evaluators still use this field for their LMB prefactor
+    /// path while the advanced map result below is migrated into the same
+    /// estimator.
     pub channel_id: Option<(ChannelIndex, F<T>, LmbChannelWeight)>,
     pub lmb_basis_id: Option<LmbIndex>,
-    /// Optional advanced sampling metadata supplied by a future sampling
-    /// driver. It is deliberately separate from [`ChannelIndex`]: advanced
-    /// map channels may be surface/cut compositions and therefore cannot be
-    /// represented by an LMB index. The current graph evaluators only inspect
-    /// `channel_id`, so leaving this as `None` preserves the legacy path.
+    /// Optional advanced sampling result supplied by the sampling driver. The
+    /// channel identity is the same canonical `SamplingChannelId` domain; this
+    /// payload additionally carries the master-frame point, exact map
+    /// Jacobian and partition needed by surface/cut compositions. The current
+    /// graph evaluators do not yet consume those fields.
     pub advanced_sampling_channel: Option<SamplingChannelBridgeEvaluation>,
 }
 
@@ -3029,7 +3031,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
 ///
 /// This is an opt-in bridge for the eventual advanced sampler. It carries the
 /// complete master-frame point, exact map Jacobian and positive multichannel
-/// partition into the graph context without changing legacy `ChannelIndex`
+/// partition into the graph context without changing the current evaluator
 /// semantics. No caller currently selects this path automatically: prepared
 /// cut kinematics and conversion to a `MomentumSample` must be supplied by the
 /// advanced sampling driver before this entry point is used.
