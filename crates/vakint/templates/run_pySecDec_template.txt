@@ -107,6 +107,7 @@ def generate(graph_name, quiet=False, draw_graph=False):
         )
 
     real_parameters = {real_parameters}
+    complex_parameters = {complex_parameters}
     n_loops = {n_loops}
     loop_additional_prefactor = '{loop_additional_prefactor}'
     # Note that the factor above is essentially the conversion from pySecDec normalisation conventions to those of alphaLoop, i.e.
@@ -122,7 +123,10 @@ def generate(graph_name, quiet=False, draw_graph=False):
             name = graph_name,
             loop_integral = loop_integral,
             real_parameters = real_parameters,
-            complex_parameters = [],
+            complex_parameters = complex_parameters,
+            # Literal complex coefficients also require a complex return type,
+            # even when no complex parameter symbols remain in the numerator.
+            enforce_complex = loop_integral.numerator_input.has(sp.I),
             # the highest order of the final epsilon expansion --> change this value to whatever you think is appropriate
             requested_orders = [{max_epsilon_order}],
             contour_deformation = {contour_deformation},
@@ -164,7 +168,7 @@ def generate(graph_name, quiet=False, draw_graph=False):
     if quiet:
         logger.setLevel(old_level)
 
-def run(graph_name, p_externals, masses, quiet=True, eps_rel = 0.01, max_eval=1000000, min_n=10000, integrator='vegas'):
+def run(graph_name, p_externals, real_parameters, complex_parameters, quiet=True, eps_rel = 0.01, max_eval=1000000, min_n=10000, integrator='vegas'):
 
     start_time = time.time()
     old_level = logger.level
@@ -190,10 +194,8 @@ def run(graph_name, p_externals, masses, quiet=True, eps_rel = 0.01, max_eval=10
 
     def dot(v1,v2):
         return v1[0]*v2[0]-v1[1]*v2[1]-v1[2]*v2[2]-v1[3]*v2[3]
-    complex_parameters_input = {complex_parameters_input}
-    real_parameters_input = {real_parameters_input}
-    for m in masses:
-        real_parameters_input.append(m)
+    complex_parameters_input = list(complex_parameters)
+    real_parameters_input = list(real_parameters)
     for i in range(len(p_externals)):
         for j in range(i, len(p_externals)):
             real_parameters_input.append(dot(p_externals[i],p_externals[j]))
@@ -309,8 +311,12 @@ if __name__ == '__main__':
         help='Mute pySecDec output.')
 
     parser.add_argument(
-        '--masses', dest='masses', type=str, default='{default_masses}',
-        help='Specify numerical values of masses (sorted in alphabetical order of their name) in Python-formatted list. (default: %(default)s).')
+        '--real-parameters', dest='real_parameters', type=str, default='{default_real_parameters}',
+        help='Real mass and numerator parameter values in the displayed declaration order, as a Python list. (default: %(default)s).')
+
+    parser.add_argument(
+        '--complex-parameters', dest='complex_parameters', type=str, default='{default_complex_parameters}',
+        help='Complex numerator parameter values in the displayed declaration order, as a Python list. (default: %(default)s).')
 
     parser.add_argument(
         '-e', '--externals', dest='externals', type=str, default='{default_externals}',
@@ -329,10 +335,10 @@ if __name__ == '__main__':
         raise Exception(e)
 
     try:
-        parsed_masses = eval(args.masses)
-        args.masses = parsed_masses
+        args.real_parameters = eval(args.real_parameters)
+        args.complex_parameters = eval(args.complex_parameters)
     except Exception as e:
-        logger.critical('The numerical value specified for masses ("%s") cannot be parsed by Python. Error: %s'%(args.masses,str(e)))
+        logger.critical('The numerical parameter values cannot be parsed by Python. Error: %s'%str(e))
         raise Exception(e)
     
     graph_name = '{graph_name}'
@@ -354,7 +360,7 @@ if __name__ == '__main__':
     
     if args.mode in ['run','generate_and_run']:
 
-        final_res = run(graph_name, args.externals, args.masses, quiet=args.quiet, eps_rel=args.eps_rel, max_eval=int(args.max_eval), integrator=args.integrator)
+        final_res = run(graph_name, args.externals, args.real_parameters, args.complex_parameters, quiet=args.quiet, eps_rel=args.eps_rel, max_eval=int(args.max_eval), integrator=args.integrator)
 
     if args.dump is not None:
         if not args.quiet: logger.info('Dumping final result into file "%s".'%args.dump)

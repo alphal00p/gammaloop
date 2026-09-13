@@ -72,9 +72,10 @@ which = "8.0.0"
 # graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
+# Preserve the existing upstream revision plus the nested tensor-sum counter fix.
+graphica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f" }
+numerica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f" }
+symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "4d0a833eb8e059d1f95bdae5abed2559830b235f" }
 # graphica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 # numerica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }

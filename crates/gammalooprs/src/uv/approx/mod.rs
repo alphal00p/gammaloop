@@ -524,7 +524,7 @@ impl Approximation {
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
-    use super::*;
+    use super::{local_4d::FourDTerm, *};
     use crate::{
         cff::CutCFFIndex,
         dot,
@@ -541,10 +541,11 @@ mod tests {
             ThreeMomentum,
             sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample},
         },
+        numerator::symbolica_ext::NumeratorAtomExt,
         processes::{EvaluatorSettings, cross_section::build_derivative_structure},
         settings::RuntimeSettings,
         utils::{
-            ArbPrec, F, FloatLike, W_, cut_energy,
+            ArbPrec, F, FUN_LIB, FloatLike, TENSORLIB, W_, cut_energy,
             hyperdual_utils::{DualOrNot, extract_t_derivatives_complex, simple_n_deriv_shape},
         },
         uv::UltravioletGraph,
@@ -553,11 +554,11 @@ mod tests {
     use linnet::half_edge::subgraph::subset::SubSet;
     use spenso::{
         algebra::{algebraic_traits::IsZero, complex::Complex},
+        network::{ExecutionResult, Sequential, SmallestDegree},
         structure::representation::{Minkowski, RepName},
     };
     use symbolica::domains::dual::HyperDual;
     use symbolica::{
-        atom::AtomView,
         domains::{
             float::{Complex as SymComplex, Real},
             integer::IntegerRing,
@@ -1108,7 +1109,7 @@ mod tests {
             ))
             .with(Atom::one());
         assert!(
-            (ordinary_sum - explicit_integrand).expand().is_zero(),
+            (ordinary_sum.collect_factors() - explicit_integrand.collect_factors()).is_zero(),
             "summing the orientation-local final integrand must recover the explicit final integrand"
         );
 
@@ -2411,17 +2412,15 @@ mod tests {
                     .to_dots()
                     .normalize_dots();
                 let local_atom = child.local(&route_graph)?.atom();
-                let explicit_taylor_sum = explicit_taylor_sum.expand();
-                let explicit_taylor_leaves = match explicit_taylor_sum.as_view() {
-                    AtomView::Add(add) => add.iter().count(),
-                    _ => 1,
-                };
+                let explicit_taylor_leaves =
+                    FourDTerm::from_view(explicit_taylor_sum.as_view())?.len();
                 assert_eq!(
                     explicit_taylor_leaves, 2,
                     "the test-only Taylor expansion must retain its simple and raised contributions"
                 );
                 assert!(
-                    (local_atom + explicit_taylor_sum).together().is_zero(),
+                    (local_atom.collect_factors() + explicit_taylor_sum.collect_factors())
+                        .is_zero(),
                     "the local counterterm must equal the negative independently reconstructed Taylor sum"
                 );
                 child.compute_3d(&root, &mut route_graph, localizer, &settings)?;
@@ -2476,11 +2475,26 @@ mod tests {
                 .external_momentum_edge_order()
                 .into_iter()
                 .collect::<BTreeSet<_>>();
+            let scalarize = |expression: Atom| -> Result<Atom> {
+                // Contract finite tensor components, including products of indexed
+                // sums, without distributing the numerator. The independent oracle
+                // below supplies its own coordinates and Arb jets; it shares tensor
+                // contraction, but not EvaluatorStack lowering or parameter layout.
+                let mut network = expression.parse_into_net()?;
+                network.execute::<Sequential, SmallestDegree, _, _, _>(
+                    &*TENSORLIB.read().unwrap(),
+                    &*FUN_LIB,
+                )?;
+                Ok(match network.result_scalar()? {
+                    ExecutionResult::One => Atom::one(),
+                    ExecutionResult::Zero => Atom::Zero,
+                    ExecutionResult::Val(value) => value.into_owned(),
+                })
+            };
             let rescale_expression = |mut expression: Atom| -> Result<Atom> {
                 expression = expression
                     .replace(GS.dim)
                     .with(4)
-                    .expand()
                     .simplify_metrics()
                     .to_dots()
                     .normalize_dots()
@@ -2537,6 +2551,7 @@ mod tests {
                     .with(W_.x_)
                     .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
                     .with(W_.d_);
+                expression = scalarize(expression)?;
                 for edge in 0..graph.underlying.n_edges() {
                     let edge = EdgeIndex(edge);
                     expression = expression
@@ -2698,9 +2713,8 @@ mod tests {
                 expression = expression
                     .replace(GS.dim)
                     .with(4)
-                    // Scalarize only the independent test oracle. The generated production
-                    // numerator above and the EvaluatorStack input remain factorized.
-                    .expand()
+                    // Scalarize the independent test oracle while retaining the same
+                    // factorization as the production numerator and EvaluatorStack input.
                     .simplify_metrics()
                     .to_dots()
                     .normalize_dots()
@@ -2717,6 +2731,7 @@ mod tests {
                     .replace(function!(GS.ose, W_.mass_, W_.prop_))
                     .with(W_.prop_)
                     .expand_dots()?;
+                expression = scalarize(expression)?;
                 let t = Atom::var(GS.rescale);
                 let loop_components = (0..3)
                     .map(|component| {

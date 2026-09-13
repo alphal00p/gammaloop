@@ -884,7 +884,9 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                         })?;
 
                 let external_cover = subgraph_tree.covers(&externals);
+                let subgraph_cover = subgraph_tree.covers(subgraph);
 
+                // Select the last half edge in this external cover as the dependent one.
                 root = external_cover.included_iter().next_back().ok_or_else(|| {
                     LmbError::EmptyExternalCover {
                         externals_dot: self.dot(&externals),
@@ -892,15 +894,21 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                     }
                 })?;
                 let root_node = self.node_id(root);
-                let tree =
+                let tree = if subgraph_tree.tree_subgraph.is_empty() {
+                    // A singleton component has an empty spanning forest after external
+                    // hairs are stripped. Retain its root, including for contact graphs
+                    // and tadpoles, so its external flows still conserve momentum.
+                    subgraph_tree
+                } else {
                     SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
                         .map_err(|_| LmbError::ForestGuideMismatch {
                             forest_guide_dot: self.dot(forest_guide),
                             subgraph_dot: self.dot(subgraph),
-                        })?; //select the last half edge in the external cover of this tree as the dependent one
+                        })?
+                };
 
                 debug_assert_eq!(
-                    subgraph_tree.covers(subgraph),
+                    subgraph_cover,
                     tree.covers(subgraph),
                     "Forest guide \n{}\n,does not cover the same nodes as subgraph \n{}\n",
                     self.dot(forest_guide),
@@ -1793,7 +1801,9 @@ pub mod test {
     use linnet::{
         half_edge::{
             involution::{EdgeIndex, Hedge},
-            subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetOps},
+            subgraph::{
+                Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
+            },
         },
         parser::DotGraph,
     };
@@ -1807,6 +1817,74 @@ pub mod test {
 
     static SHRUNKEN_LMB_TEST_INIT: std::sync::Once = std::sync::Once::new();
     static SHRUNKEN_LMB_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn generated_singleton_lmbs_conserve_external_momentum() {
+        test_initialise().unwrap();
+        let graphs: Vec<Graph> = dot!(
+            digraph contact {
+                ext [style=invis]
+                node[num=1]
+                ext->v:0[id=0]
+                ext->v:1[id=1]
+                v:2->ext[id=2]
+                v:3->ext[id=3]
+            }
+            digraph tadpole {
+                ext [style=invis]
+                node[num=1]
+                ext->v:0[id=0]
+                ext->v:1[id=1]
+                v:2->ext[id=2]
+                v:3->ext[id=3]
+                v->v[id=4 num=1 mass=1]
+            }
+        )
+        .unwrap();
+
+        for (loops, graph) in graphs.iter().enumerate() {
+            let lmbs = graph.generate_loop_momentum_bases();
+            assert_eq!(lmbs.len(), 1);
+            let lmb = lmbs.first().unwrap();
+            assert!(lmb.tree.is_empty());
+            assert_eq!(lmb.loop_edges.len(), loops);
+            assert_eq!(lmb.ext_edges.raw, [0, 1, 2, 3].map(EdgeIndex::from));
+            // The outgoing dependent leg carries p3 = p0 + p1 - p2.
+            for (edge, expected) in [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [1, 1, -1, 0]]
+                .into_iter()
+                .enumerate()
+            {
+                let signature = &lmb.edge_signatures[EdgeIndex::from(edge)];
+                assert!(
+                    signature
+                        .internal
+                        .iter()
+                        .all(|sign| *sign == SignOrZero::Zero)
+                );
+                assert_eq!(
+                    signature
+                        .external
+                        .iter()
+                        .map(|sign| *sign * 1_i32)
+                        .collect::<Vec<_>>(),
+                    expected
+                );
+            }
+            if loops == 1 {
+                let signature = &lmb.edge_signatures[EdgeIndex::from(4)];
+                assert_eq!(
+                    signature.internal.iter().copied().collect::<Vec<_>>(),
+                    [SignOrZero::Plus]
+                );
+                assert!(
+                    signature
+                        .external
+                        .iter()
+                        .all(|sign| *sign == SignOrZero::Zero)
+                );
+            }
+        }
+    }
 
     #[test]
     fn lmb_for_dummy() {

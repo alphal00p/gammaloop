@@ -79,9 +79,10 @@ as a problem in shared algebra or physics.
    once. Do not investigate contour, residue, reconstruction, or numerator
    machinery until this shallow partition-of-unity comparison passes.
 
-Diagnostic normalization or expansion may be used in a test harness to compare
-two artifacts, but it must not migrate into a production path that is required
-to preserve a factorized numerator. Each progress report for a discrepancy
+Diagnostic normalization must preserve the factorization of graph numerators,
+including test-only copies. Denominator-only algebra and finite tensor-component
+contraction are distinct from distributing a graph numerator. Each progress
+report for a discrepancy
 should state: what is shared, what first differs, what has been excluded, the
 smallest current reproducer, and the single next comparison that will reduce it.
 
@@ -120,8 +121,9 @@ certified proposals by their actual native generated source-map row count,
 before surface conversion or cut/host selection. Rank orders the proposals and
 breaks count ties; it is not a substitute for that count or a proof of global
 optimality. The selected payload and its exact assignment must stay together.
-Production numerators remain factorized; test-only copies may be expanded
-solely to establish the identity.
+Graph numerators remain factorized, including diagnostic copies. Establish the
+identity with factor-preserving rewrites and exact cancellation; evaluations at
+explicit coordinates provide additional checks, not a general symbolic proof.
 The worked GL04 `1zs/T2` certificate is maintained in
 [`docs/architecture/exact-powered-denominator-cff-lifting.md`](docs/architecture/exact-powered-denominator-cff-lifting.md#worked-live-reproducer-gl04-temporal-square-1zst2).
 
@@ -285,6 +287,10 @@ from the rendered PDF.
 - If you run into a macOS linking issue complaining about a missing `__emul...`
   symbol, try building with `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T`; see `build.rs`
   for the impact of this setting.
+- macOS Rust targets use Apple clang even when `cc` resolves to GCC. GCC's
+  `-no_compact_unwind` linker flag can make Rust panic handling abort. Keep any
+  required GNU library search paths and runtime rpaths in `RUSTFLAGS`; selecting
+  Apple clang does not remove the Fortran/GCC runtime dependencies.
 
 ## Version Control Workflow
 

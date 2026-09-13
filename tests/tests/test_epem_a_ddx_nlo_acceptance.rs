@@ -83,6 +83,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         uv.renormalization_prescription.massive_power_divergent = ApproximationType::MUV;
         uv.renormalization_prescription.massless_power_divergent = ApproximationType::MUV;
         uv.renormalization_prescription.overrides.clear();
+        uv.vakint.additional_normalization = "1".to_string();
     }
     cli.default_runtime_settings
         .subtraction
@@ -108,7 +109,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
                 r#"generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p {process} -i NLO --global-prefactor-num "-1𝑖" --only-diagrams"#,
+                -p {process} -i NLO --only-diagrams"#,
             ),
         )?;
         cli.run_command(&format!("generate existing -p {process} -i NLO"))?;
@@ -252,6 +253,14 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         2.0 * (4.0 * PI / alpha_qed_inverse_re.0) / (3.0 * E_CM.powi(3)) * GEV_SQUARED_TO_PICOBARN;
     let published_lo_pb = PUBLISHED_GAMMA_STAR_LO * gamma_star_to_epem_pb;
     let published_nlo_pb = PUBLISHED_GAMMA_STAR_NLO * gamma_star_to_epem_pb;
+    let alpha_qed = alpha_qed_inverse_re.0.recip();
+    let analytic_lo_pb = 4.0 * PI * alpha_qed.powi(2) * 3.0 * (1.0 / 3.0_f64).powi(2)
+        / (3.0 * E_CM.powi(2))
+        * GEV_SQUARED_TO_PICOBARN;
+    assert!(
+        (published_lo_pb - analytic_lo_pb).abs() <= 5.0e-5 * analytic_lo_pb,
+        "the published LO conversion disagrees with the massless tree oracle: published={published_lo_pb:e} pb, analytic={analytic_lo_pb:e} pb",
+    );
 
     // Keep this representation in a separate process. Integrand generation
     // annotates the processed graph, so regenerating the orientation-local
@@ -265,7 +274,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         r#"generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
             --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
             --symmetrize-left-right-states true
-            -p {EXPLICIT_3D_PROCESS} -i NLO --global-prefactor-num "-1𝑖" --only-diagrams"#,
+            -p {EXPLICIT_3D_PROCESS} -i NLO --only-diagrams"#,
     ))?;
     cli.run_command(&format!(
         "generate existing -p {EXPLICIT_3D_PROCESS} -i NLO"
@@ -285,7 +294,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
             r#"generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p {process} -i NLO --global-prefactor-num "-1𝑖" --only-diagrams"#,
+                -p {process} -i NLO --only-diagrams"#,
         ))?;
         cli.run_command(&format!("generate existing -p {process} -i NLO"))?;
 
@@ -468,7 +477,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         ))?;
     }
 
-    // A cheap f64 probe selects the integrated phase. Route equivalence and
+    // A cheap f64 probe certifies the physical real phase. Route equivalence and
     // every scale variant are compared graph by graph in Arb below.
     let (_, nlo_probe) = Inspect {
         process: Some(ProcessRef::Unqualified(EXPLICIT_3D_PROCESS.to_string())),
@@ -481,19 +490,10 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
     assert!(
         nlo_probe.re.is_finite()
             && nlo_probe.im.is_finite()
-            && nlo_probe.re.abs().max(nlo_probe.im.abs()) > 0.0,
-        "the explicit-local-3D NLO pointwise probe must be finite and nonzero, got {nlo_probe:e}",
+            && nlo_probe.re.abs() > 0.0
+            && nlo_probe.im.abs() <= 1.0e-8 * nlo_probe.re.abs(),
+        "the NLO probe must be finite, nonzero and real, got {nlo_probe:e}",
     );
-    assert!(
-        nlo_probe.re.abs().min(nlo_probe.im.abs())
-            <= 1.0e-8 * nlo_probe.re.abs().max(nlo_probe.im.abs()),
-        "the explicit-local-3D NLO probe is not phase-pure enough for a single-phase magnitude acceptance: {nlo_probe:e}",
-    );
-    let nlo_phase = if nlo_probe.re.abs() >= nlo_probe.im.abs() {
-        "real"
-    } else {
-        "imag"
-    };
 
     let scale_settings = [
         (MUV_SHIFTED, format!("general.m_uv={SHIFTED_SCALE}")),
@@ -624,22 +624,13 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
     assert!(
         lo_probe.re.is_finite()
             && lo_probe.im.is_finite()
-            && lo_probe.re.abs().max(lo_probe.im.abs()) > 0.0,
-        "the LO phase probe must be finite and nonzero, got {lo_probe:e}",
+            && lo_probe.re > 0.0
+            && lo_probe.im.abs() <= 1.0e-12 * lo_probe.re,
+        "the LO probe must be positive and real, got {lo_probe:e}",
     );
-    assert!(
-        lo_probe.re.abs().min(lo_probe.im.abs())
-            <= 1.0e-8 * lo_probe.re.abs().max(lo_probe.im.abs()),
-        "the LO probe is not phase-pure enough for a single-phase magnitude acceptance: {lo_probe:e}",
-    );
-    let lo_phase = if lo_probe.re.abs() >= lo_probe.im.abs() {
-        "real"
-    } else {
-        "imag"
-    };
     cli.run_command(&format!(
         r#"set process -p {LO_PROCESS} -i {LO} kv
-            integrator.integrated_phase="{lo_phase}"
+            integrator.integrated_phase="real"
             integrator.min_samples_for_update=5000
             integrator.n_start=5000
             integrator.n_increase=5000
@@ -665,9 +656,17 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
     let lo_estimate = lo_output
         .single_slot_integral()
         .ok_or_else(|| eyre!("expected one LO integration slot"))?;
-    let lo_value = lo_estimate.result.re.0.hypot(lo_estimate.result.im.0);
-    let lo_error = lo_estimate.error.re.0.hypot(lo_estimate.error.im.0);
-    assert!(lo_value > 0.0, "expected a nonzero LO cross-section");
+    let lo_value = lo_estimate.result.re.0;
+    let lo_error = lo_estimate.error.re.0.abs();
+    assert!(
+        lo_estimate.result.im.0.abs()
+            <= 3.0 * lo_estimate.error.im.0.abs() + 1.0e-12 * published_lo_pb
+            && lo_estimate.error.im.0.abs() <= 0.05 * published_lo_pb,
+        "LO must have a vanishing imaginary component: {:e} ± {:e}",
+        lo_estimate.result,
+        lo_estimate.error,
+    );
+    assert!(lo_value > 0.0, "expected a positive LO cross-section");
     assert!(
         lo_error / lo_value <= 0.05,
         "LO uncertainty is too large for the normalization acceptance: {lo_value:e} ± {lo_error:e}",
@@ -676,7 +675,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
     let published_lo_tolerance = (3.0 * lo_error).max(0.05 * published_lo_pb);
     assert!(
         published_lo_delta <= published_lo_tolerance,
-        "LO absolute normalization mismatch: |LO|={lo_value:e} ± {lo_error:e} pb, converted published gamma-star value={published_lo_pb:e} pb, |delta|={published_lo_delta:e}, tolerance={published_lo_tolerance:e}",
+        "LO absolute normalization mismatch: LO={lo_value:e} ± {lo_error:e} pb, converted published gamma-star value={published_lo_pb:e} pb, |delta|={published_lo_delta:e}, tolerance={published_lo_tolerance:e}",
     );
 
     let normalization = alpha_s / PI;
@@ -691,7 +690,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
                 sampling.lmb_multichanneling=true
                 sampling.lmb_channels="summed"
                 sampling.lmb_channel_weight="ose"
-                integrator.integrated_phase="{nlo_phase}"
+                integrator.integrated_phase="real"
                 integrator.min_samples_for_update=10000
                 integrator.n_start=10000
                 integrator.n_increase=10000
@@ -726,13 +725,37 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         let slot = output
             .slot(&format!("{scale_process}@{variant}"))
             .ok_or_else(|| eyre!("expected {variant} integration slot"))?;
-        let breakdown = match nlo_phase {
-            "real" => slot.grid_breakdown.re.as_ref(),
-            "imag" => slot.grid_breakdown.im.as_ref(),
-            _ => unreachable!("the phase probe returns real or imag"),
+        assert!(
+            slot.integral.result.im.0.abs()
+                <= 3.0 * slot.integral.error.im.0.abs() + 1.0e-12 * published_nlo_pb
+                && slot.integral.error.im.0.abs() <= 0.15 * published_nlo_pb,
+            "{variant} must have a vanishing imaginary component: {:e} ± {:e}",
+            slot.integral.result,
+            slot.integral.error,
+        );
+        let breakdown = slot
+            .grid_breakdown
+            .re
+            .as_ref()
+            .filter(|breakdown| breakdown.axis_label == "graph")
+            .ok_or_else(|| eyre!("{variant} graph-MC result has no real graph breakdown"))?;
+        let imaginary_breakdown = slot
+            .grid_breakdown
+            .im
+            .as_ref()
+            .filter(|breakdown| breakdown.axis_label == "graph")
+            .ok_or_else(|| eyre!("{variant} graph-MC result has no imaginary graph breakdown"))?;
+        assert_eq!(imaginary_breakdown.entries.len(), breakdown.entries.len());
+        for entry in &imaginary_breakdown.entries {
+            assert!(
+                entry.value.0.abs() <= 3.0 * entry.error.0.abs() + 1.0e-12 * published_nlo_pb
+                    && entry.error.0.abs() <= 0.15 * published_nlo_pb,
+                "{variant} graph {:?} has a nonzero imaginary integral: {:e} ± {:e}",
+                entry.bin_label,
+                entry.value.0,
+                entry.error.0,
+            );
         }
-        .filter(|breakdown| breakdown.axis_label == "graph")
-        .ok_or_else(|| eyre!("{variant} graph-MC result has no {nlo_phase} graph breakdown"))?;
         for entry in &breakdown.entries {
             let graph = entry
                 .bin_label
@@ -759,22 +782,13 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
     let base_slot = output
         .slot(&format!("{scale_process}@{NLO}"))
         .ok_or_else(|| eyre!("expected the base NLO integration slot"))?;
-    let (base_integral, base_integral_error) = match nlo_phase {
-        "real" => (
-            base_slot.integral.result.re.0,
-            base_slot.integral.error.re.0.abs(),
-        ),
-        "imag" => (
-            base_slot.integral.result.im.0,
-            base_slot.integral.error.im.0.abs(),
-        ),
-        _ => unreachable!("the phase probe returns real or imag"),
-    };
+    let base_integral = base_slot.integral.result.re.0;
+    let base_integral_error = base_slot.integral.error.re.0.abs();
     let nlo_value = base_integral;
     let nlo_error = base_integral_error;
     assert!(
         nlo_value > 0.0,
-        "the shipped -i NLO prefactor must produce a positive inclusive correction, got {nlo_value:e} ± {nlo_error:e}",
+        "the inclusive NLO correction must be positive, got {nlo_value:e} ± {nlo_error:e}",
     );
     let nlo_relative_error = nlo_error / nlo_value;
     assert!(

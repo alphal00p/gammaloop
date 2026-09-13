@@ -2836,7 +2836,7 @@ impl State {
                                     process_id,
                                     cs.build_integrand(
                                         &state.model,
-                                        &process_name,
+                                        &p.definition,
                                         global_settings,
                                         runtime_default,
                                         generation_pool,

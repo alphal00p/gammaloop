@@ -1,13 +1,13 @@
 use color_eyre::Result;
 use eyre::{Context, eyre};
-use linnet::half_edge::subgraph::{SubGraphLike, SubSetOps};
+use linnet::half_edge::subgraph::SubSetOps;
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
     cff::CutCFFIndex,
     graph::{
-        FeynmanGraph, Graph,
+        Graph,
         cuts::{CutSet, ResidueSelector},
         parse::string_utils::dot_statement_value,
     },
@@ -80,15 +80,13 @@ impl ProcessIntegrand {
                     )
                 })?;
                 let cut_structure = CutStructure::empty(&term.graph);
-                let post_factor = (Atom::var(crate::utils::GS.pi) * Atom::num(2))
-                    .pow(3 * term.graph.get_loop_number() as i64);
                 export_graph(
                     &term.graph,
                     cut_structure,
                     orientation,
                     generation_settings,
                     export_settings,
-                    |atom| atom / &post_factor,
+                    |_, atom| atom,
                 )
             }
             Self::CrossSection(integrand) => {
@@ -119,12 +117,14 @@ impl ProcessIntegrand {
                     })
                     .collect();
                 let cut_structure = CutStructure { cuts };
-                let loop_number = term.graph.cyclotomatic_number(&term.graph.full_filter())
-                    - term.graph.initial_state_cut.nedges(&term.graph);
-                let loop_3 = loop_number as i64 * 3;
-                let lu_prefactor = Atom::var(crate::utils::GS.rescale_star).pow(loop_3)
-                    * Atom::var(crate::utils::GS.hfunction_lu_cut)
-                    / (Atom::num(2) * Atom::var(crate::utils::GS.pi)).pow(loop_3 - 1);
+                // Finalized UV nodes already include the CFF spatial measure.
+                // Reuse the physical cut-group conversion, as production does.
+                let lu_prefactors = term
+                    .cut_group_data
+                    .cut_groups
+                    .iter()
+                    .map(|group| group.lu_prefactor(&term.graph, &term.cuts))
+                    .collect::<Result<Vec<_>>>()?;
 
                 export_graph(
                     &term.graph,
@@ -132,7 +132,7 @@ impl ProcessIntegrand {
                     orientation,
                     generation_settings,
                     export_settings,
-                    |atom| atom * &lu_prefactor,
+                    |forest_index, atom| atom * &lu_prefactors[forest_index],
                 )
             }
         }
@@ -145,7 +145,7 @@ fn export_graph(
     orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
     export_settings: &UVForestExportSettings,
-    mut post_process: impl FnMut(Atom) -> Atom,
+    mut post_process: impl FnMut(usize, Atom) -> Atom,
 ) -> Result<UVForestExport> {
     if generation_settings.uv.orchestrator == UVOrchestrator::Compare {
         return Err(eyre!(
@@ -171,7 +171,7 @@ fn export_graph(
                 orientation,
                 generation_settings,
                 export_settings,
-                &mut post_process,
+                &mut |atom| post_process(forest_index, atom),
                 &mut forest_dot,
                 &mut node_terms,
             )?,
@@ -183,7 +183,7 @@ fn export_graph(
                 orientation,
                 generation_settings,
                 export_settings,
-                &mut post_process,
+                &mut |atom| post_process(forest_index, atom),
                 &mut forest_dot,
                 &mut node_terms,
             )?,
@@ -489,6 +489,193 @@ mod tests {
     }
 
     #[test]
+    fn computed_exports_match_physical_production_normalization() -> color_eyre::Result<()> {
+        use crate::{
+            feyngen::GenerationType,
+            processes::{Process, ProcessCollection, ProcessDefinition},
+            settings::{GlobalSettings, RuntimeSettings},
+            utils::{W_, load_generic_model},
+            uv::marker::UvMarker,
+        };
+        use linnet::half_edge::{involution::EdgeIndex, subgraph::SubSetOps};
+        use symbolica::atom::{AtomCore, AtomView};
+
+        test_initialise()?;
+        let model = load_generic_model("scalars");
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
+        let runtime = RuntimeSettings::default();
+        for orchestrator in [UVOrchestrator::LegacyDagForest, UVOrchestrator::HedgePoset] {
+            // One amplitude contour and two Born cut multiplicities expose both
+            // a lost cut i and any second insertion of the spatial measure.
+            for multiplicity in [0, 2, 3] {
+                let (kind, source) = if multiplicity == 0 {
+                    (
+                        GenerationType::Amplitude,
+                        include_str!(concat!(
+                            env!("CARGO_MANIFEST_DIR"),
+                            "/../../tests/resources/graphs/scalar_bubble.dot"
+                        ))
+                        .to_string(),
+                    )
+                } else {
+                    let mut source = String::from(
+                        "digraph scalar_born { ext [style=invis]; \
+                         ext -> left [particle=scalar_2,is_cut=0]; \
+                         right -> ext [particle=scalar_2,is_cut=0];",
+                    );
+                    for _ in 0..multiplicity {
+                        source.push_str("left -> right [particle=scalar_0];");
+                    }
+                    source.push('}');
+                    (GenerationType::CrossSection, source)
+                };
+                let graphs = Graph::from_string(&source, &model)?;
+                let definition = ProcessDefinition::from_graph_list(&graphs, kind, &model)?;
+                let mut process = Process::from_graph_list(
+                    "export_phase".into(),
+                    "default".into(),
+                    graphs,
+                    kind,
+                    Some(definition),
+                    None,
+                    &model,
+                )?;
+                let mut settings = GlobalSettings::default();
+                settings.generation.uv.orchestrator = orchestrator;
+                settings.generation.uv.subtract_uv = false;
+                settings.generation.uv.generate_integrated = false;
+                settings.generation.threshold_subtraction.enable_thresholds = false;
+                settings.generation.explicit_orientation_sum_only = true;
+                settings.generation.evaluator.compile = false;
+                process.preprocess(&model, &settings, &(&runtime).into(), &pool)?;
+                process.generate_integrands(&model, &settings, (&runtime).into(), &pool)?;
+                let (graph, production, expected) = match &process.collection {
+                    ProcessCollection::Amplitudes(amplitudes) => {
+                        let graph = &amplitudes["default"].graphs[0];
+                        (
+                            &graph.graph,
+                            graph.derived_data.cff_expression.as_ref().unwrap(),
+                            graph.derived_data.all_mighty_integrand.clone(),
+                        )
+                    }
+                    ProcessCollection::CrossSections(cross_sections) => {
+                        let graph = &cross_sections["default"].supergraphs[0];
+                        assert_eq!(graph.cuts.len(), 1);
+                        let integrands = &graph.derived_data.cut_paramatric_integrand
+                            [crate::processes::cross_section::CutGroupId(0)]
+                        .integrands;
+                        assert_eq!(integrands.iter().count(), 1);
+                        (
+                            &graph.graph,
+                            graph.derived_data.global_cff_expression.as_ref().unwrap(),
+                            integrands.iter().next().unwrap().1.clone(),
+                        )
+                    }
+                };
+                let options = graph.production_cff_3d_expression_options(&settings.generation)?;
+                let orientation = OrientationProjection::exact_expression(
+                    production,
+                    &options,
+                    &settings.generation.orientation_pattern,
+                    true,
+                );
+                let exported = process
+                    .get_integrand("default")?
+                    .require_generated()?
+                    .export_uv_forest_graph(
+                        0,
+                        Some(orientation),
+                        &settings.generation,
+                        &UVForestExportSettings { computed: true },
+                    )?;
+                let [root] = exported.node_terms.as_slice() else {
+                    panic!("unsubtracted scalar fixture must export exactly its root");
+                };
+                assert_eq!(root.node_index, 0);
+                let parsed = Graph::from_string(&root.dot, &model)?;
+                let split = graph
+                    .iter_edges_of(
+                        &graph
+                            .full_filter()
+                            .subtract(&graph.initial_state_cut)
+                            .subtract(&graph.tree_edges),
+                    )
+                    .map(|(_, edge, _)| GS.split_mom_pattern_simple(edge))
+                    .collect::<Vec<_>>();
+                let actual = UvMarker::new(&settings.generation.uv).finish(
+                    &parsed[0]
+                        .global_prefactor
+                        .num
+                        .replace_multiple(&split)
+                        .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                        .with(W_.d_),
+                );
+                // Compare the stored trees first. If their factorizations differ,
+                // evaluate those trees directly at exact nonsingular points.
+                // These signed checks certify the sampled values, not a symbolic
+                // identity; neither numerator is expanded or polynomialized.
+                if actual != expected {
+                    let mut inputs = actual
+                        .get_all_indeterminates(false)
+                        .into_iter()
+                        .chain(expected.get_all_indeterminates(false))
+                        .map(|input| input.to_owned())
+                        .collect::<Vec<_>>();
+                    inputs.sort();
+                    inputs.dedup();
+                    for base in [3, 5, 7] {
+                        let mut actual_value = actual.clone();
+                        let mut expected_value = expected.clone();
+                        for (index, input) in inputs.iter().enumerate() {
+                            let value = Atom::num(base).pow(index as i64 + 1);
+                            actual_value = actual_value.replace(input.clone()).with(value.clone());
+                            expected_value = expected_value.replace(input.clone()).with(value);
+                        }
+                        assert!(matches!(actual_value.as_view(), AtomView::Num(_)));
+                        assert!(matches!(expected_value.as_view(), AtomView::Num(_)));
+                        assert!(!expected_value.is_zero());
+                        assert_eq!(
+                            actual_value, expected_value,
+                            "{kind}/{orchestrator}: computed export differs from production at base {base}"
+                        );
+                    }
+                }
+                if multiplicity != 0 {
+                    let [coupling, expression] = model.get_coupling("SCALAR_COUPLING").rep_rule();
+                    let lambda: Atom = model.get_parameter("lam").name.into();
+                    // The runtime tree-denominator function is the identity;
+                    // these contact Born graphs have an empty product inside it.
+                    let mut physical = actual
+                        .replace(GS.wrap_tree_denoms(Atom::one()))
+                        .with(Atom::one())
+                        .replace(coupling)
+                        .with(expression)
+                        .replace(lambda)
+                        .with(Atom::one())
+                        .replace(GS.rescale_star)
+                        .with(Atom::one())
+                        .replace(GS.hfunction_lu_cut)
+                        .with(Atom::one());
+                    for edge in 0..graph.n_edges() {
+                        physical = physical.replace(GS.ose(EdgeIndex(edge))).with(Atom::one());
+                    }
+                    // With all cut energies set to one, |A|²=1 and no graph
+                    // symmetry factor, dPhi_n has residue coefficient
+                    // 2pi / [(2pi)^(3(n-1)) * 2^n]. The LU derivative is separate.
+                    let two_pi = Atom::num(2) * Atom::var(GS.pi);
+                    let born = &two_pi
+                        / (two_pi.pow(3 * (multiplicity - 1)) * Atom::num(2).pow(multiplicity));
+                    assert_eq!(
+                        physical, born,
+                        "{orchestrator}: scalar Born export has the wrong phase or normalization"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn computed_export_retains_nonempty_forests_in_all_routes_and_orchestrators()
     -> color_eyre::Result<()> {
         test_initialise()?;
@@ -532,7 +719,7 @@ mod tests {
                     Some(projection),
                     &generation,
                     &UVForestExportSettings { computed: true },
-                    |atom| atom,
+                    |_, atom| atom,
                 )?;
                 let node_indices = exported
                     .node_terms
@@ -558,7 +745,7 @@ mod tests {
                     None,
                     &generation,
                     &UVForestExportSettings { computed: false },
-                    |atom| atom,
+                    |_, atom| atom,
                 )?;
                 assert!(!topology.forest_dot.is_empty());
                 assert!(topology.node_terms.is_empty());

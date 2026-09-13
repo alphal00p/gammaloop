@@ -207,6 +207,10 @@ pub struct CutCFF {
 impl CutCFF {
     /// Convert a generated CFF into GammaLoop's scalar-denominator convention.
     ///
+    /// Together with the energy factors below this yields the signed
+    /// `dq0/(2*pi*i)` contour. Physical amplitudes restore `dq0/(2*pi)`
+    /// through a separate `i` per integrated loop energy.
+    ///
     /// `three-dimensional-reps` writes every source with positive local
     /// `1/(2E_i)` factors. For an ordinary CFF, surface conversion removes
     /// those factors and `Graph::cff` restores the historical global
@@ -389,7 +393,7 @@ impl Graph {
         let cff_loop_number = self
             .get_loop_number()
             .saturating_sub(self.cyclotomatic_number(&contract_subgraph));
-        let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
+        let cff_phase = Atom::i().pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
         let cff_energy_factor = match production.energy_factor_ownership {
             CffEnergyFactorOwnership::GlobalSourceProduct => {
@@ -696,7 +700,7 @@ impl Graph {
             }
         }
         let residues = select_indexed_cff_residues(cff, cutset)?;
-        let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
+        let cff_phase = Atom::i().pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
         let mut terms = BTreeMap::new();
         for (cut_cff_index, expr) in residues {
@@ -825,7 +829,7 @@ impl Graph {
         let cff_loop_number = self
             .get_loop_number()
             .saturating_sub(self.cyclotomatic_number(contract_subgraph));
-        let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
+        let cff_phase = Atom::i().pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
         let cff_energy_factor = match energy_factor_ownership {
             CffEnergyFactorOwnership::GlobalSourceProduct => {
@@ -899,7 +903,7 @@ impl Graph {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::{collections::BTreeSet, fmt::Write};
 
     use super::*;
     use crate::{
@@ -1945,7 +1949,8 @@ mod tests {
             })
             .sqrt();
         // Ordinary CFF distributes the double-pole residue across orientations,
-        // so only the complete explicit sum has the contour normalization.
+        // so the complete explicit sum and its typed source-frame bridge are
+        // needed to obtain the physical contour normalization.
         let expected_orientation_sum =
             Atom::i() / (Atom::num(32) * Atom::var(GS.pi).pow(3) * on_shell_energy.pow(3));
         let occurrence_offset = graph.underlying.n_edges();
@@ -1978,7 +1983,8 @@ mod tests {
             .replace(GS.ose(edge))
             .with(on_shell_energy);
         assert!(
-            (orientation_sum - expected_orientation_sum)
+            (orientation_sum * Atom::num(cff.production_prefactor_factor())
+                - expected_orientation_sum)
                 .together()
                 .is_zero()
         );
@@ -2775,7 +2781,7 @@ mod tests {
             .collect::<Vec<_>>();
         let mut reference_parsed: Option<three_dimensional_reps::ParsedGraph> = None;
         let mut reference_orientation_sum: Option<Atom> = None;
-        let mut reference_quadratic_sum: Option<Atom> = None;
+        let mut reference_scaled_quadratic_sum: Option<Atom> = None;
         for denominators in denominator_records.iter().cloned().permutations(3) {
             let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
                 &graph,
@@ -2841,11 +2847,11 @@ mod tests {
                 .sqrt();
             // The raw mathematical q0 contour of (q0²-E²)^-3 is
             // -3i/(128π³E⁵), including the spatial (2π)^-3 normalization.
-            // GammaLoop production shares the ordinary CFF convention
-            // 1/prod(-2E), whose odd three-denominator product supplies the
-            // additional minus sign. This test locks that production convention;
-            // it does not choose a physical phase convention.
-            let production_contour = Atom::num(3) * Atom::i()
+            // The ordinary 1/prod(-2E) factors and typed source-frame bridge
+            // together recover the signed dq0/(2πi) contour. Multiplication
+            // by i, rather than the historical -i, restores the physical
+            // dq0/(2π) measure independently of the denominator count.
+            let production_contour = -Atom::num(3) * Atom::i()
                 / (Atom::num(128) * Atom::var(GS.pi).pow(3) * energy.pow(5));
             let difference = (&orientation_sum - &production_contour).together();
             assert!(
@@ -2862,6 +2868,11 @@ mod tests {
                 reference_orientation_sum = Some(orientation_sum.clone());
             }
 
+            // Clear the common E^5 denominator on scalar CFF kernels before
+            // inserting any numerator. This also aligns lower-sector E^-3
+            // terms while retaining every mapped numerator factor.
+            let common_energy_denominator = energy.pow(5);
+            let scaled_orientation_sum = (&orientation_sum * &common_energy_denominator).together();
             let quadratic_numerator = GS.emr_mom(carrier, GS.cind(0)).pow(2);
             let (quadratic_cff, _) = graph.cff_from_4d_denominators_in_uv_edges(
                 &denominators,
@@ -2887,12 +2898,14 @@ mod tests {
                 vec![2],
                 "an original quadratic energy must stay on its canonical source occurrence"
             );
-            let quadratic_sum = quadratic_cff
+            let scaled_quadratic_sum = quadratic_cff
                 .terms
                 .values()
                 .flat_map(|term| {
                     term.orientations.iter().map(|orientation| {
-                        Ok(orientation.expression.clone()
+                        let scaled_kernel =
+                            (&orientation.expression * &common_energy_denominator).together();
+                        Ok(scaled_kernel
                             * term.map_exact_source_numerator(&orientation.orientation)?)
                     })
                 })
@@ -2920,12 +2933,14 @@ mod tests {
                 &tagged_quadratic_numerator,
                 None,
             )?;
-            let tagged_quadratic_sum = tagged_quadratic_cff
+            let scaled_tagged_quadratic_sum = tagged_quadratic_cff
                 .terms
                 .values()
                 .flat_map(|term| {
                     term.orientations.iter().map(|orientation| {
-                        Ok(orientation.expression.clone()
+                        let scaled_kernel =
+                            (&orientation.expression * &common_energy_denominator).together();
+                        Ok(scaled_kernel
                             * term.map_exact_source_numerator(&orientation.orientation)?)
                     })
                 })
@@ -2933,7 +2948,11 @@ mod tests {
                 .into_iter()
                 .fold(Atom::Zero, |sum, term| sum + term)
                 * Atom::num(tagged_quadratic_cff.production_prefactor_factor());
-            let tagged_difference = (&tagged_quadratic_sum - &quadratic_sum).together();
+            // Normalize each factorized numerator route before subtraction;
+            // rational-polynomial normalization would expand its mapped factors.
+            let tagged_difference = (scaled_tagged_quadratic_sum.collect_factors()
+                - scaled_quadratic_sum.collect_factors())
+            .collect_factors();
             assert!(
                 tagged_difference.is_zero(),
                 "two fixed provenance factors carrying the same hard Q must reproduce Q0^2: {tagged_difference}",
@@ -2942,14 +2961,16 @@ mod tests {
             // the powered pole. Keep this test on production invariants:
             // tagged and untagged forms agree above, and permuting provenance
             // owners cannot change the resulting Laurent functional below.
-            if let Some(reference) = &reference_quadratic_sum {
-                let provenance_difference = (&quadratic_sum - reference).together();
+            if let Some(reference) = &reference_scaled_quadratic_sum {
+                let provenance_difference = (scaled_quadratic_sum.collect_factors()
+                    - reference.collect_factors())
+                .collect_factors();
                 assert!(
                     provenance_difference.is_zero(),
                     "the q0^2 cubic exact UV CFF depends on denominator-factor order: {provenance_difference}"
                 );
             } else {
-                reference_quadratic_sum = Some(quadratic_sum.clone());
+                reference_scaled_quadratic_sum = Some(scaled_quadratic_sum.clone());
             }
 
             let spatial_norm = (1..=3).fold(Atom::Zero, |norm_squared, spatial_index| {
@@ -2964,12 +2985,14 @@ mod tests {
                 &momentum_squared_numerator,
                 None,
             )?;
-            let momentum_squared_sum = momentum_squared_cff
+            let scaled_momentum_squared_sum = momentum_squared_cff
                 .terms
                 .values()
                 .flat_map(|term| {
                     term.orientations.iter().map(|orientation| {
-                        Ok(orientation.expression.clone()
+                        let scaled_kernel =
+                            (&orientation.expression * &common_energy_denominator).together();
+                        Ok(scaled_kernel
                             * term.map_exact_source_numerator(&orientation.orientation)?)
                     })
                 })
@@ -2977,10 +3000,16 @@ mod tests {
                 .into_iter()
                 .fold(Atom::Zero, |sum, term| sum + term)
                 * Atom::num(momentum_squared_cff.production_prefactor_factor());
-            let momentum_squared_reference = &quadratic_sum - &spatial_norm * &orientation_sum;
-            let momentum_squared_difference = (momentum_squared_sum - momentum_squared_reference)
-                .together()
-                .expand();
+            let momentum_squared_reference =
+                &scaled_quadratic_sum - &spatial_norm * &scaled_orientation_sum;
+            // Normalize numeric signs within the local sums, including the
+            // common coefficients exposed by collection, without distributing
+            // products of retained numerator factors.
+            let momentum_squared_difference =
+                (scaled_momentum_squared_sum.expand_num().collect_factors()
+                    - momentum_squared_reference.expand_num().collect_factors())
+                .collect_factors()
+                .expand_num();
             assert!(
                 momentum_squared_difference.is_zero(),
                 "the full momentum-square numerator must preserve CFF linearity between its temporal and spatial factors: {momentum_squared_difference}"
@@ -3323,7 +3352,8 @@ mod tests {
                         .sqrt();
                     exact_sum = exact_sum.replace(GS.ose(edge)).with(on_shell_energy);
                 }
-                let difference = (&exact_sum - &ordinary_sum).together();
+                let difference = (exact_sum.collect_factors() - ordinary_sum.collect_factors())
+                    .collect_factors();
                 assert!(
                     difference.is_zero(),
                     "exact and ordinary LU residues differ for maximum order {expected_order}, index {index}: {difference}"
@@ -3664,7 +3694,8 @@ mod tests {
             .replace(GS.ose(EdgeIndex(0)))
             .with(on_shell_energy.clone());
         assert!(
-            (orientation_sum - expected_orientation_sum)
+            (orientation_sum * Atom::num(cff.production_prefactor_factor())
+                - expected_orientation_sum)
                 .together()
                 .is_zero()
         );
@@ -3889,7 +3920,10 @@ mod tests {
         )?;
         let combined_uncut_sum = cff_sum(&combined_uncut)?;
         let cograph_uncut_sum = cff_sum(&cograph_uncut)?;
-        let uncut_difference = (&combined_uncut_sum - &cograph_uncut_sum * &uv_sum).together();
+        // Keep the spectator numerator factorized in both complete routes.
+        let uncut_difference = (combined_uncut_sum.collect_factors()
+            - (&cograph_uncut_sum * &uv_sum).collect_factors())
+        .collect_factors();
         assert!(
             uncut_difference.is_zero(),
             "an uncut exact source must factorize between its independent rational components: difference={uncut_difference}, combined={combined_uncut_sum} (bridge={}), cograph={cograph_uncut_sum} (bridge={}), spectator={uv_sum} (bridge={})",
@@ -3897,7 +3931,9 @@ mod tests {
             cograph_uncut.production_prefactor_factor(),
             uv.production_prefactor_factor(),
         );
-        let difference = (combined_sum - cograph_sum * uv_sum).together();
+        let difference = (combined_sum.collect_factors()
+            - (cograph_sum * uv_sum).collect_factors())
+        .collect_factors();
         assert!(
             difference.is_zero(),
             "an LU residue in one exact component must factorize from a quadratic cubic spectator: {difference}"
@@ -4000,7 +4036,9 @@ mod tests {
                 .fold(Atom::Zero, |sum, term| sum + term)
                 * Atom::num(cff.production_prefactor_factor())
         };
-        let difference = (highest_pole(&generalized) - highest_pole(&ordinary)).together();
+        let difference = (highest_pole(&generalized).collect_factors()
+            - highest_pole(&ordinary).collect_factors())
+        .collect_factors();
         assert!(
             difference.is_zero(),
             "the maximum-order LU residue must commute with its factorized cubic numerator: {difference}",
@@ -4116,12 +4154,13 @@ mod tests {
                 .fold(Atom::Zero, |sum, term| sum + term)
                 * Atom::num(cff.production_prefactor_factor())
         };
-        let difference = (selected_lu1(&generalized, &numerator)
-            - selected_lu1(&remainder, &remainder_numerator)
-            - selected_lu1(&contact, &alias_energy))
+        let difference = (selected_lu1(&generalized, &numerator).collect_factors()
+            - (selected_lu1(&remainder, &remainder_numerator)
+                + selected_lu1(&contact, &alias_energy))
+            .collect_factors())
         .replace(GS.ose(EdgeIndex(4)))
         .with(GS.ose(EdgeIndex(3)))
-        .together();
+        .collect_factors();
         assert!(
             difference.is_zero(),
             "the first-order LU residue must preserve exact polynomial division on a repeated channel: {difference}",
@@ -6627,9 +6666,9 @@ mod tests {
             "the exact test point must lie on the selected LU surface"
         );
         let raised_laurent_residue = |expression: Atom| -> Result<Atom> {
-            // Expanding the complete mapped-numerator times CFF rational
-            // function supplies the same t derivatives as raised-cut pass two,
-            // without assigning representation-dependent raw channels.
+            // After fixing the physical data, the radial Laurent coefficient
+            // supplies the same t derivatives as raised-cut pass two without
+            // expanding numerator products or assigning raw channels.
             Ok(rescale_expression(expression)
                 .series(GS.rescale, rescale_star.clone(), 0)
                 .map_err(|error| eyre::eyre!("failed to expand selected LU residue: {error}"))?
@@ -6841,6 +6880,127 @@ mod tests {
     }
 
     #[test]
+    fn scalar_amplitude_phases_match_independent_bubble_contours() -> Result<()> {
+        test_initialise()?;
+        let model = crate::utils::load_generic_model("scalars");
+        let coupling = model.get_coupling("SCALAR_COUPLING");
+        let lambda: Atom = model.get_parameter("lam").name.into();
+        assert_eq!(coupling.value, Some(Complex::new(0.0, -1.0)));
+        assert_eq!(
+            coupling
+                .expression
+                .replace(lambda.to_pattern())
+                .with(Atom::one()),
+            -Atom::i(),
+        );
+        let [coupling_symbol, coupling_expression] = coupling.rep_rule();
+        // A zero-energy bubble with masses 1 and 2 has poles at 1 and 2.
+        // Closing below gives -i times their residue sum:
+        // -i * [1/(2*(1-4)) + 1/(4*(4-1))] = i/12.
+        // Joining such bubbles at quartic vertices leaves independent energy
+        // contours. Strip only the real spatial (2π)^(-3L) measure below.
+        // These are energy-integral oracles, not UV-convergent 4D integrals.
+        let unit_phases = [
+            Atom::one(),
+            Atom::i(),
+            -Atom::one(),
+            -Atom::i(),
+            Atom::one(),
+        ];
+        for (loops, unit_phase) in unit_phases.into_iter().enumerate() {
+            let mut dot = format!(
+                "digraph scalar_phase_{loops} {{ edge [particle=scalar_1]; \
+                 incoming0 [style=invis]; incoming1 [style=invis]; \
+                 outgoing0 [style=invis]; outgoing1 [style=invis]; \
+                 incoming0 -> a0 [id={}]; incoming1 -> a0 [id={}]; \
+                 a{loops} -> outgoing0 [id={}]; a{loops} -> outgoing1 [id={}];",
+                2 * loops,
+                2 * loops + 1,
+                2 * loops + 2,
+                2 * loops + 3,
+            );
+            for bubble in 0..loops {
+                write!(
+                    dot,
+                    "a{bubble} -> a{} [id={} lmb_id={bubble}]; \
+                     a{bubble} -> a{} [id={} particle=scalar_2];",
+                    bubble + 1,
+                    2 * bubble,
+                    bubble + 1,
+                    2 * bubble + 1,
+                )?;
+            }
+            dot.push('}');
+            let physical: Graph = dot.into_graph(&model)?;
+            assert_eq!(physical.get_loop_number(), loops);
+            let unit = physical
+                .with_global_numerator_only(format!("scalar_unit_phase_{loops}"), Atom::one());
+            let expected_unit = unit_phase / Atom::num(12).pow(loops as i64);
+            // V=L+1 quartic vertices and I=2L scalar propagators give
+            // physical phases -i,+i,-i,+i,-i for positive lambda.
+            let expected_physical = (if loops.is_multiple_of(2) {
+                -Atom::i()
+            } else {
+                Atom::i()
+            }) / Atom::num(12).pow(loops as i64);
+            for (mut graph, expected) in [(unit, expected_unit), (physical, expected_physical)] {
+                let numerator = graph
+                    .production_numerator_atom_for_full_3d_expression()
+                    .replace(coupling_symbol.to_pattern())
+                    .with(coupling_expression.to_pattern())
+                    .replace(lambda.to_pattern())
+                    .with(Atom::one());
+                let options = graph.denominator_only_cff_3d_expression_options();
+                let cutset = CutSet::empty(graph.n_hedges());
+                let production = graph.generate_3d_expression_for_integrand(
+                    &[],
+                    &graph.get_esurface_canonization(&graph.loop_momentum_basis),
+                    &options,
+                    Some(&numerator),
+                )?;
+                let stored = graph.cff_from_production_expression(
+                    &production,
+                    &cutset,
+                    &OrientationPattern::default(),
+                )?;
+                let direct = graph.cff(
+                    &graph.empty_subgraph::<SuBitGraph>(),
+                    &cutset,
+                    &OrientationPattern::default(),
+                    &options,
+                    Some(&numerator),
+                )?;
+                for (route, cff) in [("stored", stored), ("direct", direct)] {
+                    let mut actual = cff
+                        .terms
+                        .values()
+                        .flat_map(|term| &term.orientations)
+                        .fold(Atom::zero(), |sum, term| sum + &term.expression)
+                        * Atom::num(cff.production_prefactor_factor())
+                        * &numerator
+                        * (Atom::num(2) * Atom::var(GS.pi)).pow(3 * loops as i64);
+                    for edge in 0..2 * loops + 4 {
+                        let id = EdgeIndex(edge);
+                        actual = actual
+                            .replace(GS.ose(id))
+                            .with(Atom::num(1 + edge as i64 % 2))
+                            .replace(GS.emr_mom(id, GS.cind(0)))
+                            .with(Atom::zero())
+                            .replace(cut_energy(id))
+                            .with(Atom::zero());
+                    }
+                    assert_eq!(
+                        actual, expected,
+                        "{} {route}: physical contour differs from its exact residue value",
+                        graph.name,
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn ordinary_terminal_sources_match_signed_contours() -> Result<()> {
         test_initialise()?;
         let tadpole: Graph = dot!(digraph ordinary_unit_tadpole {
@@ -6943,7 +7103,7 @@ mod tests {
                 );
                 let mut gamma_signed = term_sum
                     * (Atom::num(2) * Atom::var(GS.pi)).pow(3 * loop_count as i64)
-                    / (-Atom::i()).pow(loop_count as i64);
+                    / Atom::i().pow(loop_count as i64);
                 for (edge, energy) in energies.iter().enumerate() {
                     raw_signed = raw_signed
                         .replace(three_dimensional_reps::symbols::ose_atom_from_index(

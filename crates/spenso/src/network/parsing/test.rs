@@ -550,6 +550,76 @@ fn parse_schoonschipped_dot_product() {
 }
 
 #[test]
+fn compact_inner_product_preserves_explicit_spectator_slots() {
+    let compact = mink4();
+    let spectators = [Lorentz {}.new_rep(4).to_lib(), compact.to_lib()];
+    for spectator in spectators {
+        let slots = [
+            slot!(spectator, a).to_atom(),
+            slot!(spectator, b).to_atom(),
+            slot!(spectator, c).to_atom(),
+            slot!(spectator, d).to_atom(),
+        ];
+        let left = tensor!(compact_left, &slots[0], &slots[1], compact.to_symbolic([]));
+        let right = tensor!(compact_right, &slots[2], &slots[3], compact.to_symbolic([]));
+        for head in [SPENSO_TAG.dot, ETS.metric] {
+            let expr = function!(head, &left, &right);
+            let parsed = expr
+                .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+                .unwrap();
+            assert_eq!(parsed.store.tensors.len(), 2);
+            let external = parsed.graph.dangling_indices();
+            assert_eq!(external.len(), slots.len());
+            for slot in &slots {
+                assert!(external.contains(
+                    &Slot::<LibraryRep, AbstractIndex>::try_from(slot.as_view()).unwrap()
+                ));
+            }
+        }
+    }
+}
+
+#[test]
+fn compact_inner_product_contracts_only_repeated_spectators() {
+    let rep = mink4();
+    let a = slot!(rep, a).to_atom();
+    let b = slot!(rep, b).to_atom();
+    let c = slot!(rep, c).to_atom();
+    let expr = function!(
+        SPENSO_TAG.dot,
+        tensor!(compact_left, &a, &b, rep.to_symbolic([])),
+        tensor!(compact_right, &b, &c, rep.to_symbolic([]))
+    );
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    assert_eq!(parsed.store.tensors.len(), 2);
+    let external = parsed.graph.dangling_indices();
+    assert_eq!(external.len(), 2);
+    for slot in [&a, &c] {
+        assert!(
+            external
+                .contains(&Slot::<LibraryRep, AbstractIndex>::try_from(slot.as_view()).unwrap())
+        );
+    }
+}
+
+#[test]
+fn multiple_compact_axes_do_not_choose_an_implicit_contraction() {
+    let rep = mink4();
+    for other in [rep.to_symbolic([]), Lorentz {}.new_rep(4).to_symbolic([])] {
+        let expr = function!(
+            SPENSO_TAG.dot,
+            tensor!(compact_left, rep.to_symbolic([]), &other),
+            tensor!(compact_right, rep.to_symbolic([]), &other)
+        );
+        assert!(
+            !materialization::SchoonschipMaterializer::<AbstractIndex>::contains_schoonschip_shorthand(expr.as_view())
+        );
+    }
+}
+
+#[test]
 fn opaque_schoonschipped_dot_product_parses_as_tensor_scalar() {
     let rep = mink4();
     let expr = function!(

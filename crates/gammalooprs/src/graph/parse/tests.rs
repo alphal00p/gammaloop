@@ -1179,10 +1179,11 @@ mod failing {
 
         insta::assert_snapshot!(gs[0].underlying[NodeIndex(0)].num.to_ordered_simple(),@"(-1*Q(0,mink(4,hedge(1)))*g(mink(4,hedge(0)),mink(4,hedge(2)))+-1*Q(1,mink(4,hedge(2)))*g(mink(4,hedge(0)),mink(4,hedge(1)))+-1*Q(2,mink(4,hedge(0)))*g(mink(4,hedge(1)),mink(4,hedge(2)))+Q(0,mink(4,hedge(2)))*g(mink(4,hedge(0)),mink(4,hedge(1)))+Q(1,mink(4,hedge(0)))*g(mink(4,hedge(1)),mink(4,hedge(2)))+Q(2,mink(4,hedge(1)))*g(mink(4,hedge(0)),mink(4,hedge(2))))*GC_10*f(coad(8,hedge(0)),coad(8,hedge(1)),coad(8,hedge(2)))");
         insta::assert_snapshot!(gs[1].underlying[NodeIndex(0)].num.to_ordered_simple(),@"GC_11*gamma(bis(4,hedge(1)),bis(4,hedge(0)),mink(4,hedge(2)))*t(coad(8,hedge(2)),cof(3,hedge(0)),dind(cof(3,hedge(1))))");
-        insta::assert_snapshot!(gs[2].underlying[NodeIndex(0)].num.to_ordered_simple(),@"-1*GC_10*Q(1,mink(4,hedge(2)))*f(coad(8,hedge(2)),coad(8,hedge(0)),coad(8,hedge(1)))");
-        insta::assert_snapshot!(gs[3].underlying[NodeIndex(0)].num.to_ordered_simple(),@"GC_10*Q(1,mink(4,hedge(1)))*f(coad(8,hedge(1)),coad(8,hedge(0)),coad(8,hedge(2)))");
-        insta::assert_snapshot!(gs[4].underlying[NodeIndex(0)].num.to_ordered_simple(),@"GC_10*Q(2,mink(4,hedge(0)))*f(coad(8,hedge(0)),coad(8,hedge(1)),coad(8,hedge(2)))");
-        insta::assert_snapshot!(gs[5].underlying[NodeIndex(0)].num.to_ordered_simple(),@"GC_10*Q(1,mink(4,hedge(0)))*f(coad(8,hedge(0)),coad(8,hedge(2)),coad(8,hedge(1)))");
+        // The corrected UUV1 rule reverses these four ghost-vector orientations.
+        insta::assert_snapshot!(gs[2].underlying[NodeIndex(0)].num.to_ordered_simple(),@"GC_10*Q(1,mink(4,hedge(2)))*f(coad(8,hedge(2)),coad(8,hedge(0)),coad(8,hedge(1)))");
+        insta::assert_snapshot!(gs[3].underlying[NodeIndex(0)].num.to_ordered_simple(),@"-1*GC_10*Q(1,mink(4,hedge(1)))*f(coad(8,hedge(1)),coad(8,hedge(0)),coad(8,hedge(2)))");
+        insta::assert_snapshot!(gs[4].underlying[NodeIndex(0)].num.to_ordered_simple(),@"-1*GC_10*Q(2,mink(4,hedge(0)))*f(coad(8,hedge(0)),coad(8,hedge(1)),coad(8,hedge(2)))");
+        insta::assert_snapshot!(gs[5].underlying[NodeIndex(0)].num.to_ordered_simple(),@"-1*GC_10*Q(1,mink(4,hedge(0)))*f(coad(8,hedge(0)),coad(8,hedge(2)),coad(8,hedge(1)))");
 
         let gs: Vec<Graph> = dot!(
             digraph g1{

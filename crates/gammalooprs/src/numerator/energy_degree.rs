@@ -2055,10 +2055,11 @@ mod tests {
             |_| true,
         );
         assert!(
-            (optimized.replace_multiple(&neutral)
+            (optimized.replace_multiple(&neutral).collect_factors()
                 - GS.erase_uv_momentum_provenance(&numerator)
-                    .replace_multiple(&neutral))
-            .expand()
+                    .replace_multiple(&neutral)
+                    .collect_factors())
+            .collect_factors()
             .is_zero(),
             "soft routing must be an exact off-shell identity"
         );
@@ -2078,10 +2079,11 @@ mod tests {
             "an unavailable crown carrier cannot masquerade as a rank-zero coefficient",
         );
         assert!(
-            (rerouted.replace_multiple(&neutral)
+            (rerouted.replace_multiple(&neutral).collect_factors()
                 - GS.erase_uv_momentum_provenance(&soft(0).pow(2))
-                    .replace_multiple(&neutral))
-            .expand()
+                    .replace_multiple(&neutral)
+                    .collect_factors())
+            .collect_factors()
             .is_zero()
         );
         assert!(
@@ -2109,10 +2111,11 @@ mod tests {
         );
         assert!(matches!(routed.as_view(), AtomView::Mul(_)));
         assert!(
-            (routed.replace_multiple(&neutral)
+            (routed.replace_multiple(&neutral).collect_factors()
                 - GS.erase_uv_momentum_provenance(&factorized)
-                    .replace_multiple(&neutral))
-            .expand()
+                    .replace_multiple(&neutral)
+                    .collect_factors())
+            .collect_factors()
             .is_zero(),
             "abstract-slot routing must obey the same exact linear identity"
         );

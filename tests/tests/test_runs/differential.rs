@@ -42,14 +42,15 @@ min = 0.0
 #[test]
 #[serial]
 fn lu_differential_observables_without_selectors_still_fill_histograms() -> Result<()> {
-    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
+    let mut cli = setup_sm_differential_lu_cli(
+        "lu_differential_observables_without_selectors_still_fill_histograms",
+    )?;
     configure_differential_leading_jet_observable(&mut cli)?;
     cli.run_command(
         "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"json\"]",
     )?;
 
-    let workspace =
-        get_tests_workspace_path().join("lu_differential_integration_json/no_selector_workspace");
+    let workspace = cli.cli_settings.state.folder.join("no_selector_workspace");
     Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
@@ -77,15 +78,16 @@ fn lu_differential_observables_without_selectors_still_fill_histograms() -> Resu
 #[test]
 #[serial]
 fn lu_differential_integration_cli_flag_writes_iteration_observables() -> Result<()> {
-    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
+    let mut cli = setup_sm_differential_lu_cli(
+        "lu_differential_integration_cli_flag_writes_iteration_observables",
+    )?;
     configure_differential_leading_jet_observable(&mut cli)?;
     configure_differential_leading_jet_selector(&mut cli)?;
     cli.run_command(
         "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"json\"]",
     )?;
 
-    let workspace =
-        get_tests_workspace_path().join("lu_differential_integration_json/cli_flag_workspace");
+    let workspace = cli.cli_settings.state.folder.join("cli_flag_workspace");
     Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
@@ -118,13 +120,14 @@ fn lu_differential_integration_cli_flag_writes_iteration_observables() -> Result
 #[test]
 #[serial]
 fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Result<()> {
-    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_hwu")?;
+    let mut cli = setup_sm_differential_lu_cli(
+        "lu_differential_integration_hwu_output_is_optional_and_single_file",
+    )?;
     cli.run_command(
         "set process kv integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"hwu\"]",
     )?;
 
-    let workspace_without_observables =
-        get_tests_workspace_path().join("lu_differential_integration_hwu/without_observables");
+    let workspace_without_observables = cli.cli_settings.state.folder.join("without_observables");
     Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
@@ -148,8 +151,7 @@ fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Resul
 
     configure_differential_leading_jet_observable(&mut cli)?;
     configure_differential_leading_jet_selector(&mut cli)?;
-    let workspace_with_observables =
-        get_tests_workspace_path().join("lu_differential_integration_hwu/with_observables");
+    let workspace_with_observables = cli.cli_settings.state.folder.join("with_observables");
     Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
@@ -203,15 +205,15 @@ mod failing {
     #[test]
     #[serial]
     fn lu_differential_integration_writes_json_observables() -> Result<()> {
-        let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
+        let mut cli =
+            setup_sm_differential_lu_cli("lu_differential_integration_writes_json_observables")?;
         configure_differential_leading_jet_observable(&mut cli)?;
         configure_differential_leading_jet_selector(&mut cli)?;
         cli.run_command(
             "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"json\"]",
         )?;
 
-        let workspace =
-            get_tests_workspace_path().join("lu_differential_integration_json/workspace");
+        let workspace = cli.cli_settings.state.folder.join("workspace");
         let integration_result = Integrate {
             process: vec![],
             integrand_name: vec!["default".to_string()],
@@ -244,15 +246,15 @@ mod failing {
     #[test]
     #[serial]
     fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
-        let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
+        let mut cli =
+            setup_sm_differential_lu_cli("lu_differential_json_observables_resume_from_workspace")?;
         configure_differential_leading_jet_observable(&mut cli)?;
         configure_differential_leading_jet_selector(&mut cli)?;
         cli.run_command(
             "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"json\"]",
         )?;
 
-        let workspace =
-            get_tests_workspace_path().join("lu_differential_integration_json/resume_workspace");
+        let workspace = cli.cli_settings.state.folder.join("resume_workspace");
         Integrate {
             process: vec![],
             integrand_name: vec!["default".to_string()],
@@ -315,15 +317,15 @@ mod failing {
     #[test]
     #[serial]
     fn lu_differential_hwu_observables_resume_from_workspace() -> Result<()> {
-        let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_hwu")?;
+        let mut cli =
+            setup_sm_differential_lu_cli("lu_differential_hwu_observables_resume_from_workspace")?;
         configure_differential_leading_jet_observable(&mut cli)?;
         configure_differential_leading_jet_selector(&mut cli)?;
         cli.run_command(
             "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"hwu\"]",
         )?;
 
-        let workspace =
-            get_tests_workspace_path().join("lu_differential_integration_hwu/resume_workspace");
+        let workspace = cli.cli_settings.state.folder.join("resume_workspace");
         Integrate {
             process: vec![],
             integrand_name: vec!["default".to_string()],

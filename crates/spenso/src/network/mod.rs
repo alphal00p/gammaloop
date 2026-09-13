@@ -3424,14 +3424,56 @@ fn try_balanced_scalar_sum<K, Aind, Store>(
 ) -> Option<NetworkLeaf<K, Aind>>
 where
     Store: NetworkStoreAccess,
-    Store::Scalar: Clone + Ref + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>,
+    Store::Tensor: HasStructure + Clone,
+    Store::Scalar: Clone
+        + Ref
+        + From<<Store::Tensor as HasStructure>::Scalar>
+        + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>
+        + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>,
 {
+    // Fully contracted tensors can retain lazy sum and coefficient wrappers.
+    // Check every component before doing scalar algebra or modifying the store.
+    if !targets.iter().all(|(_, leaf)| match leaf {
+        NetworkLeaf::Scalar(_) => true,
+        NetworkLeaf::LocalTensor(index) => store.tensor(*index).scalar_ref().is_some(),
+        NetworkLeaf::TensorSum(indices) => indices
+            .iter()
+            .all(|index| store.tensor(*index).scalar_ref().is_some()),
+        NetworkLeaf::ScaledTensor(term) => store.tensor(term.tensor).scalar_ref().is_some(),
+        NetworkLeaf::ScaledTensorSum(terms) => terms
+            .iter()
+            .all(|term| store.tensor(term.tensor).scalar_ref().is_some()),
+        NetworkLeaf::LibraryKey { .. } => false,
+    }) {
+        return None;
+    }
+
+    let scalar_value = |term: &ScaledTensorRef| {
+        let tensor = store.tensor(term.tensor).clone();
+        let mut value = Store::Scalar::from(tensor.scalar().expect("rank-zero tensor"));
+        if let Some(scale) = term.scale {
+            value *= store.scalar_ref(scale).refer();
+        }
+        value
+    };
     let mut terms = Vec::with_capacity(targets.len());
     for (_, leaf) in targets {
-        let NetworkLeaf::Scalar(index) = leaf else {
-            return None;
-        };
-        terms.push(store.scalar_ref(*index).clone());
+        match leaf {
+            NetworkLeaf::Scalar(index) => terms.push(store.scalar_ref(*index).clone()),
+            NetworkLeaf::LocalTensor(index) => {
+                terms.push(scalar_value(&ScaledTensorRef::tensor(*index)));
+            }
+            NetworkLeaf::TensorSum(indices) => terms.extend(
+                indices
+                    .iter()
+                    .map(|index| scalar_value(&ScaledTensorRef::tensor(*index))),
+            ),
+            NetworkLeaf::ScaledTensor(term) => terms.push(scalar_value(term)),
+            NetworkLeaf::ScaledTensorSum(scaled_terms) => {
+                terms.extend(scaled_terms.iter().map(scalar_value));
+            }
+            NetworkLeaf::LibraryKey { .. } => unreachable!("scalar sum has no library keys"),
+        }
     }
 
     let result = balanced_ref_sum(terms, sum_start);
