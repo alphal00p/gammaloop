@@ -2152,9 +2152,7 @@ impl LmbMultiChannelingSetup {
     }
 
     /// Compile the selected channels and bind them to the raw-frame bridge.
-    /// Runtime integration is staged: callers must not mix this bridge with
-    /// the pre-catalogue channel loop until its frame and prepared cut context
-    /// are supplied.
+    /// The process sampler supplies the prepared frame and external data.
     pub fn compile_sampling_channel_bridge(
         &self,
         resolved: &ResolvedSamplingChannelSelection,
@@ -2719,8 +2717,8 @@ impl LmbMultiChannelingSetup {
     }
 
     /// Build an exact map-density partition for ordinary LMB channels at one
-    /// common raw momentum sample.  This is an opt-in bridge for the advanced
-    /// sampling path; the existing channel-weighting code remains unchanged.
+    /// common raw momentum sample. Discrete runtime samples use the canonical
+    /// bridge below; this helper remains available for diagnostics.
     ///
     /// The returned weights are pointwise identical to the legacy
     /// `LmbChannelWeight::InverseJacobian` prefactors for the selected channel

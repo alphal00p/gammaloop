@@ -428,10 +428,8 @@ pub struct SamplingMomentumSampleContext<'a> {
 
 impl SamplingChannelBridgeEvaluation {
     /// Materialize this exact full-frame bridge point as a graph-evaluator
-    /// momentum sample.  This is intentionally opt-in: wiring the advanced
-    /// bridge into the production sampler still requires process-level graph
-    /// and channel selection, but the conversion and its dimension checks are
-    /// shared and testable here.
+    /// momentum sample. The production sampler uses the same conversion after
+    /// graph-level channel and cut preparation.
     pub fn to_momentum_sample<T: FloatLike>(
         &self,
         context: SamplingMomentumSampleContext<'_>,
