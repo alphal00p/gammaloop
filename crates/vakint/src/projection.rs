@@ -124,6 +124,31 @@ impl ScalarTerms {
             }
             if candidate.is_zero() {
                 **out = Atom::zero();
+                return;
+            }
+            // Restored aliases can leave a rational zero whose relative Laurent
+            // series has no leading term. Certify scalar sums with denominators
+            // without collecting tensor factors or rewriting surviving coefficients.
+            let mut scalar_rational = true;
+            let mut has_denominator = false;
+            term.visitor(&mut |part| {
+                scalar_rational &= match part {
+                    AtomView::Fun(_) => false,
+                    AtomView::Num(number) => matches!(
+                        number.get_coeff_view(),
+                        CoefficientView::Natural(..) | CoefficientView::Large(..)
+                    ),
+                    AtomView::Pow(power) => {
+                        let exponent = power.get_base_exp().1;
+                        has_denominator |= !exponent.is_positive();
+                        matches!(exponent, AtomView::Num(number) if number.get_coeff_view().is_integer())
+                    }
+                    _ => true,
+                };
+                scalar_rational
+            });
+            if scalar_rational && has_denominator && term.together().is_zero() {
+                **out = Atom::zero();
             }
         });
         if coefficient.is_zero() {
@@ -830,6 +855,40 @@ mod tests {
             -spectator
                 * (atom("eps") * (complex + Atom::one()) + atom("log(mu)"))
                 * atom("dot(k(1),k(1))^2")
+        );
+    }
+
+    #[test]
+    fn rational_zero_after_alias_restoration_is_removed_before_laurent_expansion() {
+        // The GL1 two-loop gluon self-energy produces this scalar coefficient
+        // after completing its d-dimensional algebra with d = 4 - 2*eps.
+        let coupling = Atom::i() * atom("g1*g2^3");
+        let denominator = atom("-4+2*eps");
+        let zero = (&coupling * atom("4-2*eps") * 8 - &coupling * 32) / &denominator
+            + &coupling * 32 / denominator
+            + &coupling * 8;
+        assert!(!zero.is_zero());
+        let coefficient = atom("g(mu,nu)") * zero;
+        let spectator = atom("(a+b)*(c+d)*tensor(T(mu),mu)");
+        let surviving_monomial = atom("dot(k(1),k(1))^2");
+        let input =
+            &coefficient * atom("dot(k(1),k(1))*dot(k(1),k(2))") + &spectator * &surviving_monomial;
+        let terms = ScalarTerms::parse(input.as_view()).unwrap();
+        // Check removal before calling the backend, so a regression fails here
+        // instead of hanging while searching for the zero's leading epsilon term.
+        assert_eq!(terms.0.len(), 1);
+        assert_eq!(terms.0[&surviving_monomial], spectator);
+        let (_, aliases, extra_orders) = terms
+            .backend_kernel(&VakintSettings::default(), &[])
+            .unwrap();
+        assert_eq!(aliases.len(), 1);
+        assert_eq!(aliases[0].1, spectator);
+        assert_eq!(extra_orders, 0);
+        assert_eq!(
+            ScalarTerms::parse((&spectator + coefficient).as_view())
+                .unwrap()
+                .expression(),
+            spectator
         );
     }
 
