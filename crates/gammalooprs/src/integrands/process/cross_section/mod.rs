@@ -97,9 +97,10 @@ use typed_index_collections::{TiVec, ti_vec};
 
 use super::{
     GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
-    evaluate_sample, filtered_orientation_count, format_lmb_channel_label,
-    format_orientation_label, histogram_process_info_for_integrand, resolve_visible_orientation_id,
-    validate_group_orientation_catalogs, validate_process_runtime_settings,
+    evaluate_sample, filtered_orientation_count, format_orientation_label,
+    format_sampling_channel_label, histogram_process_info_for_integrand,
+    resolve_visible_orientation_id, validate_group_orientation_catalogs,
+    validate_process_runtime_settings,
 };
 
 pub mod export;
@@ -1675,7 +1676,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             .map(format_orientation_label)
     }
 
-    fn lmb_channel_label(
+    fn sampling_channel_label(
         &self,
         channel_id: SamplingChannelId,
         parameterization_settings: &ParameterizationSettings,
@@ -1685,7 +1686,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             &self.multi_channeling_setup.graph.name,
             parameterization_settings,
         )? {
-            Ok(Some(format_lmb_channel_label(
+            Ok(Some(format_sampling_channel_label(
                 &self.multi_channeling_setup.effective_channel_edge_ids(
                     channel_id,
                     &self.multi_channeling_setup.graph.name,
