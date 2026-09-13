@@ -75,8 +75,8 @@ pub use sampling_context::{
 };
 pub use sampling_maps::{
     SamplingJacobian, SamplingMapAcceptanceReport, SamplingMapComponent, SamplingMapComposition,
-    SamplingMapContract, SamplingMapDefinition, SamplingMapEvaluation, SamplingMapKernel,
-    SamplingMapPoint, SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
+    SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding, SamplingMapEvaluation,
+    SamplingMapKernel, SamplingMapPoint, SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
 };
 pub use sampling_partition::{
     SamplingChannelScore, SamplingPartition, SamplingPartitionMode, SamplingScoreEvaluator,
