@@ -15,10 +15,11 @@ use crate::settings::runtime::{SamplingChannelDefinition, SamplingChannelSelecti
 use color_eyre::eyre::{Result, eyre};
 use serde::{Deserialize, Serialize};
 
+use super::sampling_maps::combine_contracts;
 use super::{
-    SamplingChannelScore, SamplingMapComponent, SamplingMapContract, SamplingMapDefinition,
-    SamplingMapEmbedding, SamplingMapEvaluation, SamplingMapKernel, SamplingPartition,
-    SamplingPartitionMode, SamplingScoreFunction, SurfaceRadialMap,
+    SamplingChannelScore, SamplingMapAffine, SamplingMapComponent, SamplingMapContract,
+    SamplingMapDefinition, SamplingMapEmbedding, SamplingMapEvaluation, SamplingMapKernel,
+    SamplingPartition, SamplingPartitionMode, SamplingScoreFunction, SurfaceRadialMap,
 };
 use crate::momentum::sample::{LoopMomenta, MomentumSample};
 use crate::settings::runtime::ParameterizationSettings;
@@ -196,6 +197,10 @@ pub struct SamplingChannelCompileContext {
     pub e_cm: f64,
     pub n_loop_momenta: usize,
     pub surfaces: BTreeMap<Vec<usize>, SamplingSurfaceGeometry>,
+    /// Exact affine maps routing a generated LMB into the master frame. The
+    /// key is the generated catalogue basis id; absent entries are diagnosed
+    /// when a non-master LMB is selected.
+    pub lmb_frame_maps: BTreeMap<usize, SamplingMapAffine>,
 }
 
 impl SamplingChannelCompileContext {
@@ -213,6 +218,7 @@ impl SamplingChannelCompileContext {
             e_cm,
             n_loop_momenta,
             surfaces: BTreeMap::new(),
+            lmb_frame_maps: BTreeMap::new(),
         }
     }
 }
@@ -223,6 +229,10 @@ impl SamplingChannelCompileContext {
 #[derive(Clone, Debug)]
 pub enum CompiledSamplingMap {
     Lmb(SamplingMapKernel),
+    AffineLmb {
+        lmb: SamplingMapKernel,
+        frame: SamplingMapAffine,
+    },
     Surface(SurfaceRadialMap),
     Embedded(SamplingMapEmbedding),
 }
@@ -231,6 +241,7 @@ impl CompiledSamplingMap {
     pub fn contract(&self) -> SamplingMapContract {
         match self {
             Self::Lmb(map) => map.contract(),
+            Self::AffineLmb { lmb, frame } => combine_contracts(lmb.contract(), frame.contract()),
             Self::Surface(map) => map.contract(),
             Self::Embedded(map) => map.contract(),
         }
@@ -239,25 +250,99 @@ impl CompiledSamplingMap {
     pub fn dimensions(&self) -> usize {
         match self {
             Self::Lmb(map) => map.dimensions(),
+            Self::AffineLmb { lmb, .. } => lmb.dimensions(),
             Self::Surface(map) => map.dimension(),
             Self::Embedded(map) => map.dimensions(),
         }
     }
 
     pub fn as_component(&self) -> &dyn SamplingMapComponent {
-        match self {
-            Self::Lmb(map) => map,
-            Self::Surface(map) => map,
-            Self::Embedded(map) => map,
-        }
+        self
     }
 
     pub fn forward(&self, coordinates: &[f64]) -> Result<SamplingMapEvaluation> {
-        self.as_component().forward(coordinates, &[])
+        <Self as SamplingMapComponent>::forward(self, coordinates, &[])
     }
 
     pub fn inverse(&self, point: &[f64]) -> Result<SamplingMapEvaluation> {
-        self.as_component().inverse(point, &[])
+        <Self as SamplingMapComponent>::inverse(self, point, &[])
+    }
+}
+
+impl SamplingMapComponent for CompiledSamplingMap {
+    fn dimensions(&self) -> usize {
+        self.dimensions()
+    }
+
+    fn output_dimensions(&self) -> usize {
+        self.dimensions()
+    }
+
+    fn contract(&self) -> SamplingMapContract {
+        self.contract()
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Lmb(_) => "lmb",
+            Self::AffineLmb { .. } => "affine_lmb",
+            Self::Surface(_) => "surface",
+            Self::Embedded(_) => "embedded",
+        }
+    }
+
+    fn forward(&self, coordinates: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+        match self {
+            Self::Lmb(map) => SamplingMapComponent::forward(map, coordinates, context),
+            Self::Surface(map) => SamplingMapComponent::forward(map, coordinates, context),
+            Self::Embedded(map) => SamplingMapComponent::forward(map, coordinates, context),
+            Self::AffineLmb { lmb, frame } => {
+                let lmb_evaluation = SamplingMapComponent::forward(lmb, coordinates, context)?;
+                let frame_evaluation =
+                    SamplingMapComponent::forward(frame, &lmb_evaluation.point, context)?;
+                Ok(SamplingMapEvaluation {
+                    coordinates: lmb_evaluation.coordinates,
+                    point: frame_evaluation.point,
+                    jacobian: lmb_evaluation.jacobian * frame_evaluation.jacobian,
+                    inverse_jacobian: lmb_evaluation.inverse_jacobian
+                        * frame_evaluation.inverse_jacobian,
+                    residual: lmb_evaluation.residual.max(frame_evaluation.residual),
+                    support: combine_contracts(lmb.contract(), frame.contract()).support,
+                    diagnostics: lmb_evaluation
+                        .diagnostics
+                        .into_iter()
+                        .chain(frame_evaluation.diagnostics)
+                        .collect(),
+                })
+            }
+        }
+    }
+
+    fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+        match self {
+            Self::Lmb(map) => SamplingMapComponent::inverse(map, point, context),
+            Self::Surface(map) => SamplingMapComponent::inverse(map, point, context),
+            Self::Embedded(map) => SamplingMapComponent::inverse(map, point, context),
+            Self::AffineLmb { lmb, frame } => {
+                let frame_evaluation = SamplingMapComponent::inverse(frame, point, context)?;
+                let lmb_evaluation =
+                    SamplingMapComponent::inverse(lmb, &frame_evaluation.point, context)?;
+                Ok(SamplingMapEvaluation {
+                    coordinates: lmb_evaluation.coordinates,
+                    point: point.to_vec(),
+                    jacobian: lmb_evaluation.jacobian * frame_evaluation.jacobian,
+                    inverse_jacobian: lmb_evaluation.inverse_jacobian
+                        * frame_evaluation.inverse_jacobian,
+                    residual: lmb_evaluation.residual.max(frame_evaluation.residual),
+                    support: combine_contracts(lmb.contract(), frame.contract()).support,
+                    diagnostics: lmb_evaluation
+                        .diagnostics
+                        .into_iter()
+                        .chain(frame_evaluation.diagnostics)
+                        .collect(),
+                })
+            }
+        }
     }
 }
 
@@ -652,9 +737,29 @@ impl CompiledSamplingChannel {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SamplingChannelCompileError {
     EmptyMasterGraph,
-    UnsupportedMap { channel: String, map: String },
-    MissingSurfaceGeometry { channel: String, edges: Vec<usize> },
-    InvalidChannel { channel: String, error: String },
+    UnsupportedMap {
+        channel: String,
+        map: String,
+    },
+    MissingSurfaceGeometry {
+        channel: String,
+        edges: Vec<usize>,
+    },
+    MissingLmbFrameMap {
+        channel: String,
+        basis_id: Option<usize>,
+        edges: Vec<usize>,
+        parent_lmb: Vec<usize>,
+    },
+    InvalidLmbFrameMap {
+        channel: String,
+        basis_id: usize,
+        error: String,
+    },
+    InvalidChannel {
+        channel: String,
+        error: String,
+    },
 }
 
 impl fmt::Display for SamplingChannelCompileError {
@@ -670,6 +775,23 @@ impl fmt::Display for SamplingChannelCompileError {
             Self::MissingSurfaceGeometry { channel, edges } => write!(
                 formatter,
                 "sampling channel `{channel}` has no prepared surface geometry for master-graph edges {edges:?}"
+            ),
+            Self::MissingLmbFrameMap {
+                channel,
+                basis_id,
+                edges,
+                parent_lmb,
+            } => write!(
+                formatter,
+                "sampling channel `{channel}` uses non-master LMB edges {edges:?} (parent LMB {parent_lmb:?}) but no affine frame map was supplied for basis {basis_id:?}"
+            ),
+            Self::InvalidLmbFrameMap {
+                channel,
+                basis_id,
+                error,
+            } => write!(
+                formatter,
+                "sampling channel `{channel}` has invalid affine frame map for basis {basis_id}: {error}"
             ),
             Self::InvalidChannel { channel, error } => write!(
                 formatter,
@@ -800,6 +922,59 @@ fn compile_surface_map(
     })
 }
 
+fn compile_lmb_map(
+    channel: &str,
+    basis_id: Option<usize>,
+    edges: &[usize],
+    context: &SamplingChannelCompileContext,
+) -> Result<CompiledSamplingMap, SamplingChannelCompileError> {
+    let definition = SamplingMapDefinition::Lmb(edges.to_vec());
+    let lmb = SamplingMapKernel::new(
+        definition,
+        context.parameterization_settings.clone(),
+        context.e_cm,
+        context.n_loop_momenta,
+    )
+    .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+        channel: channel.to_owned(),
+        error: error.to_string(),
+    })?;
+    if edges == context.parent_lmb {
+        return Ok(CompiledSamplingMap::Lmb(lmb));
+    }
+    let Some(basis_id) = basis_id else {
+        return Err(SamplingChannelCompileError::MissingLmbFrameMap {
+            channel: channel.to_owned(),
+            basis_id: None,
+            edges: edges.to_vec(),
+            parent_lmb: context.parent_lmb.clone(),
+        });
+    };
+    let Some(frame) = context.lmb_frame_maps.get(&basis_id) else {
+        return Err(SamplingChannelCompileError::MissingLmbFrameMap {
+            channel: channel.to_owned(),
+            basis_id: Some(basis_id),
+            edges: edges.to_vec(),
+            parent_lmb: context.parent_lmb.clone(),
+        });
+    };
+    let expected_dimension = 3 * context.n_loop_momenta;
+    if frame.dimension() != expected_dimension {
+        return Err(SamplingChannelCompileError::InvalidLmbFrameMap {
+            channel: channel.to_owned(),
+            basis_id,
+            error: format!(
+                "affine frame dimension {} does not match parent raw dimension {expected_dimension}",
+                frame.dimension()
+            ),
+        });
+    }
+    Ok(CompiledSamplingMap::AffineLmb {
+        lmb,
+        frame: frame.clone(),
+    })
+}
+
 impl SamplingChannelCatalogue {
     pub fn lmb_entries(&self) -> impl Iterator<Item = (usize, &[usize])> {
         self.entries.iter().filter_map(|entry| match entry {
@@ -853,15 +1028,6 @@ impl SamplingChannelCatalogue {
                 SamplingCatalogueEntry::Lmb {
                     basis_id, edges, ..
                 } => {
-                    if edges != &context.parent_lmb {
-                        return Err(SamplingChannelCompileError::InvalidChannel {
-                            channel: format!("lmb[{basis_id}]"),
-                            error: format!(
-                                "LMB edges {edges:?} do not match master parent LMB {:?}; the graph-frame affine routing must be compiled before this channel can be sampled",
-                                context.parent_lmb
-                            ),
-                        });
-                    }
                     let definition = SamplingMapDefinition::Lmb(edges.clone());
                     let map = SamplingMapKernel::new(
                         definition.clone(),
@@ -875,12 +1041,34 @@ impl SamplingChannelCatalogue {
                             error: error.to_string(),
                         }
                     })?;
-                    (
-                        format!("lmb[{basis_id}]"),
-                        Some(*basis_id),
-                        definition,
-                        CompiledSamplingMap::Lmb(map),
-                    )
+                    let map = if edges == &context.parent_lmb {
+                        CompiledSamplingMap::Lmb(map)
+                    } else {
+                        let frame = context.lmb_frame_maps.get(basis_id).ok_or_else(|| {
+                            SamplingChannelCompileError::MissingLmbFrameMap {
+                                channel: format!("lmb[{basis_id}]"),
+                                basis_id: Some(*basis_id),
+                                edges: edges.clone(),
+                                parent_lmb: context.parent_lmb.clone(),
+                            }
+                        })?;
+                        if frame.dimension() != 3 * context.n_loop_momenta {
+                            return Err(SamplingChannelCompileError::InvalidLmbFrameMap {
+                                channel: format!("lmb[{basis_id}]"),
+                                basis_id: *basis_id,
+                                error: format!(
+                                    "affine frame routing has dimension {}, expected {}",
+                                    frame.dimension(),
+                                    3 * context.n_loop_momenta
+                                ),
+                            });
+                        }
+                        CompiledSamplingMap::AffineLmb {
+                            lmb: map,
+                            frame: frame.clone(),
+                        }
+                    };
+                    (format!("lmb[{basis_id}]"), Some(*basis_id), definition, map)
                 }
                 SamplingCatalogueEntry::Surface { edges, parent_lmb } => {
                     if parent_lmb != &context.parent_lmb {
@@ -909,28 +1097,7 @@ impl SamplingChannelCatalogue {
                     let definition = channel.map.clone();
                     let map = match &definition {
                         SamplingMapDefinition::Lmb(edges) => {
-                            if edges != &context.parent_lmb {
-                                return Err(SamplingChannelCompileError::InvalidChannel {
-                                    channel: channel.name.clone(),
-                                    error: format!(
-                                        "LMB edges {edges:?} do not match master parent LMB {:?}; the graph-frame affine routing must be compiled before this channel can be sampled",
-                                        context.parent_lmb
-                                    ),
-                                });
-                            }
-                            SamplingMapKernel::new(
-                                definition.clone(),
-                                context.parameterization_settings.clone(),
-                                context.e_cm,
-                                context.n_loop_momenta,
-                            )
-                            .map(CompiledSamplingMap::Lmb)
-                            .map_err(|error| {
-                                SamplingChannelCompileError::InvalidChannel {
-                                    channel: channel.name.clone(),
-                                    error: error.to_string(),
-                                }
-                            })?
+                            compile_lmb_map(&channel.name, None, edges, context)?
                         }
                         SamplingMapDefinition::Surface(edges) => {
                             compile_surface_map(&channel.name, edges, context)?
@@ -946,7 +1113,9 @@ impl SamplingChannelCatalogue {
                 }
             };
             let embedded_edges = match &map {
-                CompiledSamplingMap::Embedded(_) => context.parent_lmb.clone(),
+                CompiledSamplingMap::Embedded(_) | CompiledSamplingMap::AffineLmb { .. } => {
+                    context.parent_lmb.clone()
+                }
                 _ => match &definition {
                     SamplingMapDefinition::Lmb(edges)
                     | SamplingMapDefinition::Surface(edges)
@@ -1545,9 +1714,61 @@ mod tests {
         let error = catalogue.compile(&context).unwrap_err();
         assert!(matches!(
             error,
-            SamplingChannelCompileError::InvalidChannel { .. }
+            SamplingChannelCompileError::MissingLmbFrameMap { .. }
         ));
-        assert!(error.to_string().contains("graph-frame affine routing"));
+        assert!(error.to_string().contains("no affine frame map"));
+    }
+
+    #[test]
+    fn catalogue_wraps_non_parent_lmb_in_supplied_affine_frame() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![2, 4])], &[0]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context.lmb_frame_maps.insert(
+            0,
+            SamplingMapAffine::new(
+                vec![
+                    vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+                ],
+                vec![0.5; 6],
+            )
+            .unwrap(),
+        );
+        let compiled = catalogue.compile(&context).unwrap();
+        assert!(matches!(
+            compiled[0].map,
+            CompiledSamplingMap::AffineLmb { .. }
+        ));
+        assert_eq!(compiled[0].embedded_edges, vec![1, 2]);
+        let point = compiled[0]
+            .forward(&[0.31, 0.42, 0.57, 0.23, 0.68, 0.81])
+            .unwrap();
+        assert!(point.residual < 1.0e-10);
+        assert!((point.point[0] - 0.5).abs() > 1.0e-6);
+        let inverse = compiled[0].inverse(&point.point).unwrap();
+        assert!(inverse.residual < 1.0e-10);
+        let bridge = SamplingChannelBridge::new(compiled.clone()).unwrap();
+        let bridged = bridge
+            .forward(
+                SamplingChannelId::from(0),
+                &[0.31, 0.42, 0.57, 0.23, 0.68, 0.81],
+            )
+            .unwrap();
+        assert_eq!(bridged.raw_coordinates, point.point);
+        assert!((bridged.partition.weight_sum() - 1.0).abs() < 1.0e-12);
     }
 
     #[test]
