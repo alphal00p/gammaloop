@@ -2335,6 +2335,32 @@ impl LmbMultiChannelingSetup {
         Ok(matches!(entry, SamplingCatalogueEntry::Lmb { .. }))
     }
 
+    /// Return the generated LMB behind a canonical channel when that channel
+    /// is an LMB entry. Graph-aware channels intentionally have no LMB index;
+    /// callers that only expose LMB metadata can skip those entries without
+    /// creating a second channel enumeration.
+    pub fn sampling_channel_lmb_id(
+        &self,
+        channel_id: SamplingChannelId,
+        graph_name: &str,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<Option<LmbIndex>> {
+        let catalogue = self.canonical_sampling_catalogue(graph_name, parameterization_settings)?;
+        let entry = catalogue.entries.get(channel_id.index()).ok_or_else(|| {
+            eyre!(
+                "Requested sampling channel {} is out of range for graph '{}'",
+                channel_id.index(),
+                graph_name
+            )
+        })?;
+        match entry {
+            SamplingCatalogueEntry::Lmb { basis_id, .. } => {
+                self.validate_lmb_basis_id(*basis_id, graph_name).map(Some)
+            }
+            SamplingCatalogueEntry::Surface { .. } | SamplingCatalogueEntry::Named(_) => Ok(None),
+        }
+    }
+
     pub fn effective_channel_lmb_id(
         &self,
         channel_index: SamplingChannelId,
