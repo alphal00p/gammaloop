@@ -1,141 +1,96 @@
 # Advanced sampling channels for GammaLoop
 
 Status: implementation in progress, 2026-09-13. This document records the accepted
-design before source changes. It is the authority for the implementation that
-follows. It applies to arbitrary loop order and topology, to amplitudes and
+design and current implementation status. It is the implementation authority
+and applies to arbitrary loop order and topology, to amplitudes and
 cross sections, and to both ordinary and threshold-adapted sampling.
 
-Current implementation status: the canonical `SamplingChannelId` catalogue,
-Symbolica selection parser, explicit parent-LMB validation, explicit active
-`subspace_lmb` metadata for named surface channels, prepared cut/side guards,
-exact affine LMB routing, and the discrete map-density bridge are implemented
-and pushed on `advanced_sampling`. There is one channel catalogue and one ID
-domain: the remaining LMB reinterpretation branch is an evaluation detail of
-that catalogue during migration, never a second enumeration or index space.
-It is scheduled for removal once all momentum-space consumers use compiled
-parent-frame maps. The exact implicit radial kernel now also accepts a
-conditional evaluator whose root depends on a preceding complement block;
-ordered `then` composition passes that context and has focused forward/inverse
-coverage. A prepared cross-section context can now be constructed from one
-solved LU sample, with positive `t*` and frame validation. Physical directional
-E-surface maps, connecting that context to the per-sample conditional density,
-and the saved-state replacement harness remain open milestones. Production
-standalone-integrand owners have already been removed; the test-only probe is
-only a temporary fixture for generic integration/UI tests and is not a second
-physical parameterization. The
-`ProcessIntegrand::evaluate_reference_coordinates` entry point now provides a
-loaded-process coordinate-batch hook with exact `1/N` weights and diagnostics;
-`evaluate_reference_discrete_coordinates` and `group_sampling_channel_ids` add
-the corresponding explicit canonical `(group, orientation, channel)` route.
-Focused discrete decoding/order coverage and a saved/reloaded scalar-bubble
-amplitude acceptance fixture are in place; the full saved-state
-amplitude/cross-section assertions, including physical cut maps, remain open.
-The process-level bridge acceptance harness also exercises a mixed named/LMB
-catalogue and verifies that both canonical IDs are sampled without compacting
-the generated LMB basis number into a second axis. An unused combined legacy
-LMB reinterpretation/prefactor helper has been removed; the remaining
-compatibility route is limited to the helpers still consumed by cross-section
-evaluation and remains scheduled for retirement with the deferred map bridge.
-discrete graph sampler now carries the selected canonical partition factor
-with the parent-frame map Jacobian, including for the direct momentum route;
-the obsolete separate per-channel sample representation has been removed
-rather than maintained as a second channel model. Top-level
-summed amplitude sampling now retains its unit-cube point and routes every
-canonical catalogue entry through the same bridge, including mixed LMB and
-named entries; cross-section summed graph-aware entries remain guarded until
-their per-sample LU/\(t^\star\) context is available.
+Current implementation status: there is one `SamplingChannelCatalogue` and one
+`SamplingChannelId` domain. The Symbolica selection parser, explicit parent-LMB
+validation, active `subspace_lmb` metadata, exact affine LMB routing, graph/default
+selection and canonical map-density bridge are implemented. Generated LMB basis
+numbers remain graph-routing metadata; they never define another channel axis.
 
-The deferred boundary now has a typed hand-off carrying the same canonical
-`SamplingChannelId`, the original unit-cube coordinates, and the parent-frame
-momentum sample. It validates the coordinate domain and preserves the sample
-identity, but deliberately supplies no physical-map Jacobian; cross-section
-code must attach the solved LU/\(t^\star\) context before evaluating a
-conditional map. This is a carrier within the one catalogue axis, not a
-second channel enumeration.
+Summed and Monte-Carlo sampling now use the same canonical bridge for amplitudes
+and cross sections. The `LegacyLmb` request and its LMB-only partition/prefactor
+implementation have been removed. Summed sampling applies `J_c w_c` once per
+channel to the graph result and event weight, with outer Jacobian one; Monte
+Carlo keeps its selected-map factor and separate grid probability. Mapping is
+performed before applying each stability rotation. Direct momentum input retains
+its supplied raw point. The remaining default single-basis reinterpretation and
+obsolete weight-setting aliases still require cleanup; they are not an
+alternative multichannel enumeration.
 
-The exact-result boundary is represented by `PreparedCrossSectionMapEvaluation<T>`.
-It keeps the canonical channel identity, mapped sample, forward and inverse
-Jacobians, runtime map context, and solved cut context together. Stability
-rotations transform both the mapped momenta and the prepared kinematic context
-as one value, preserving the frame in which projections and Jacobians are
-interpreted. This is an interface and invariant for the eventual physical maps;
-it does not claim that the cut, left, and right maps are implemented yet.
+The map kernels include exact eager/dual Symbolica Jacobians, affine LMB maps,
+regular and implicit radial maps, bounded products and ordered `then` maps.
+A product currently supports disjoint blocks with at most one explicit surface;
+ordered maps derive later centers/root contexts from earlier blocks and their
+inverse. Unresolved numerical roots fail explicitly. The current implicit map
+uses a normalized ordinary fallback when its supplied center is outside or on
+the surface; this does not prove that the surface is absent. Interior-center
+selection and true absent/pinched classification remain required for generic
+surface targeting, especially with boosted external kinematics.
+Soft/collinear primitives and general joint normal/star charts remain unfinished.
 
-The partition also supports the explicit `singularity_proxy` weight. A named
-channel may supply a Symbolica expression in the complete parent-frame raw
-coordinates (`x0`, `x1`, ...); it is compiled eagerly and must be finite, real
-and strictly positive wherever the proxy has support. Every channel must
-provide its own proxy when this mode is selected, and the selected map still
-uses its true forward Jacobian. No proxy is inferred from a map. A typed
-`DeferredCrossSectionSamplingState` carries per-canonical-channel prepared
-cut data and runtime evaluator contexts, while the cross-section evaluator
-currently rejects physical cut/left/right maps at its pre-LU boundary until a
-two-stage carrier can use that state in both the selected map and every
-partition denominator.
+A standalone `phase_space(cut(...))` channel now uses the actual graph energy
+equation, warmup masses, fixed external momenta and full parent-frame radial
+chart. It retains the auxiliary LU scale instead of reducing the integration
+dimension. Thus it solves its own directional cut radius before evaluating the
+physical integrand. Cut IDs are validated metadata, not channel IDs; identical
+energy-edge sets with incompatible energy shifts are rejected. Cut/left/right
+compositions remain guarded until their conditional maps preserve the cut
+kinematics and provide consistent forward and foreign inverse densities.
 
-The Symbolica evaluator now exposes real map values and the full dual-derived
-Jacobian matrix, including its signed and absolute determinant. Its audit also
-fixed the HyperDual input layout and tests both eager values and derivatives.
-Soft/collinear syntax has explicit capability diagnostics until graph-resolved
-frames and normalized profiles can be compiled; it cannot enter the exact-map
-catalogue as an unlabelled proxy.
+The deferred boundary retains canonical coordinates and a typed prepared cut
+context. `PreparedCutSamplingContext::from_lu_sample` uses that sample's positive
+`t*` and complete parent frame. `DeferredCrossSectionSamplingState` and
+`SamplingChannelRuntimeContexts` carry distinct per-channel cut and evaluator
+contexts. `PreparedCrossSectionMapEvaluation<T>` records a mapped sample,
+Jacobians and prepared context together. These records are interfaces for the
+remaining conditional maps; they do not themselves implement those maps or
+replace the high-precision LU solver.
 
-Implicit radial maps can now take a context-dependent centre as well as a
-context-dependent directional root. They remain conditional alone and become
-full-support only inside an ordered composition whose earlier blocks provide
-the context; invalid centres and unbracketed roots are hard errors. The bridge
-acceptance harness now integrates a normalized Gaussian through every selected
-canonical channel with the exact `N J_i w_i` estimator and reports finite
-counts, normalization and second-moment errors, partition and Jacobian ranges,
-and round-trip residuals. Cross-section
-event metadata also preserves the canonical advanced channel id while physical
-cut maps remain guarded until their per-sample LU density is complete.
+The partition supports exact map densities and explicit Symbolica-compiled
+`singularity_proxy` scores in complete raw coordinates. Every selected channel
+must provide a valid positive score in proxy mode. No proxy is silently inferred
+from a map; the selected map always supplies its actual determinant. Runtime
+contexts are supplied independently to every denominator score at the same raw
+point. Proxy asymptotic certification and automatic score construction remain
+part of the unfinished generic machinery.
 
-A bounded `product(...)` compiler is now available as one canonical channel
-entry when its `lmb(...)`/`complement(...)` blocks, and at most one explicit
-surface block, form a disjoint cover of the parent LMB. Each block is compiled
-in its local dimension and embedded by an explicit parent-frame permutation.
-The same bounded block compiler now supports ordered `then(...)`; when its
-first block has full support, later context-dependent blocks are resolved by
-the composition inverse and the complete map advertises full support to the
-partition. A standalone conditional map remains guarded. Multiple per-child
-surface metadata and prepared cut maps remain open until their context and
-partition-density contracts are complete.
+Production standalone-integrand owners have been removed; a test-only probe
+remains for generic UI/integration tests. The bridge acceptance harness tests
+normalization, moments, partition sums, inverses and Jacobians, including mixed
+named/LMB catalogues. Loaded-process continuous and explicit canonical discrete
+coordinate entry points exist, with saved/reloaded scalar-bubble coverage.
+The summed reference overlay currently errors explicitly because its one-point
+moment record cannot represent several mapped channel points. Moving reference
+substitution and moment accumulation through the shared physical evaluation
+boundary remains a required harness milestone. Actual physical summed-versus-MC
+regressions are separate from this reference-overlay limitation.
 
-The first process-level acceptance probe now integrates a normalized Gaussian
-through the canonical compiled bridge and checks the map partition. The loaded
-process API now drives both continuous and explicit canonical discrete
-selections without reconstructing a channel index. The full
-amplitude/cross-section saved-state harness, moments, absent/pinched branches,
-and multi-channel grid checks remain to be added. They validate the production
-replacement for the deleted standalone tests; they must not recreate a second
-standalone integrand owner.
+The unified-bridge milestone passed 140 isolated sampling tests and the API
+physical summed/MC regression with rotations. This includes actual generated
+massive/massless cut charts, independent shell/determinant checks, four-loop
+Cartesian inverses and canonical Gaussian acceptance. These gates exposed and
+verified corrections to the radial outer-branch `(1-split)` derivative, affine
+inverse coordinates and the massless-origin radial right derivative. Formatting,
+core/API library checks, core test checking and clippy passed; clippy retains
+17 pre-existing style warnings. Extreme-tail validation and final numerical root
+residual certification remain a separate kernel-hardening slice.
 
-The current cross-section and conditional-channel bridge is intentionally a
-safe boundary: it is compiled before the per-sample LU root and `t*` solve, so
-it must reject cut/phase-space/left/right maps and standalone conditional maps
-whose partition scores do not yet carry the same context, rather than attach
-stale global kinematics or miscompute the channel denominator. A complete
-ordered composition may promote an internal conditional block to full support
-when its inverse derives that context from an earlier full block.
-Full cross-section support requires a two-stage conditional map (or an
-equivalent composite proposal) whose implicit root and `t*` Jacobian are part
-of the same canonical channel density.
+The amplitude candidate study generated a massive two-loop kite in under a
+second, checked its four thresholds and same-orientation intersections, and
+identified a massive planar double box as a second inexpensive topology. Actual
+amplitude surface registration is still missing from the production compile
+context; supplied-geometry map tests and LMB fallback are not evidence that
+graph-derived amplitude surface maps already work.
 
-`PreparedCutSamplingContext::from_lu_sample` now provides the per-sample
-handoff: it takes the unrescaled parent-frame loop vectors used in the LU
-root solve, applies that sample's finite positive `t*`, retains its external
-data and checks the complete loop dimension. This record is preparation data,
-not a sampling map or a substitute for the LU implicit Jacobian. Physical
-cut/left/right channels remain guarded until a complete composition supplies
-the same conditional data to both forward maps and every inverse density in
-the canonical partition.
-
-The bridge now exposes `SamplingChannelRuntimeContexts`, indexed by the same
-catalogue IDs. Context-aware forward, inverse and partition calls evaluate
-every denominator score with that channel's context, so a selected cut cannot
-silently reuse its kinematics for another cut or side. This is the runtime
-boundary used by the deferred cross-section implementation.
+LU-h-matched profiles are now part of the goal, with a dedicated independently
+reviewed research note and portable one-dimensional checks. They are proposed
+profiles, not implemented settings or evidence of a GL638 improvement. General
+conditional sides, automatic channel construction, the complete saved-state
+acceptance harness and all-orientation GL638 improvement remain open.
 
 The portable research bundle is in
 [`docs/research/advanced_sampling/README.md`](docs/research/advanced_sampling/README.md).
@@ -157,6 +112,28 @@ Cutkosky-cut/left/right compositions. They must compose with ordinary LMB
 channels through the existing multichanneling machinery and use one unbiased
 raw-coordinate estimator. The implementation must work for amplitudes as well
 as cross sections, with all cut preparation and physical cut sums preserved.
+
+Include generic radial profiles matched to the existing Cutkosky/LU localization
+function. A cut-aligned channel should sample its dimensionless LU scale from a
+normalized density approximating `lu_h_function`, with its actual Jacobian and
+inverse density retained exactly. This extends the implementation goal to
+reducing artificial LU radial weight variation as well as the GL638 threshold
+tails. The proposal must account for raised-cut derivatives and reference-test
+tail coverage; it must never modify the physical localization function.
+
+Validate the generic implementation on multiloop amplitudes as well as cross
+sections. Include inexpensive UV-finite scalar two-loop amplitude benchmarks
+with existing and intersecting thresholds, testing both map correctness and
+variance improvement without any Cutkosky rescaling. Two-loop six-photon graphs
+are an optional later stress test, not a prerequisite if their generation cost
+would impede the core validation. Choose the scalar topologies and kinematics
+from the dedicated amplitude-candidate study and preserve their UV-finiteness
+including every loop subgraph.
+
+Keep a future light-cone/collinear-segment chart possible for IR-pinched surfaces.
+The dedicated pinched-surface study defines the necessary geometry and interface
+guardrails. This is architectural preparation, not a requirement to implement
+new pinched sampling in the current milestone.
 
 The intended GL638 outcome is a reproducible improvement of the remaining
 regular H/Z and projected-star large-weight regions while retaining ordinary
@@ -187,7 +164,9 @@ partitions and samples the complete already-subtracted physical integrand.
   primarily as an orchestrator, delegate implementation, audit, testing and
   research slices to multiple agents, and repeatedly re-read the existing
   research (especially `SOPER_AND_SAMPLING_API.md`, `REPORT.md`,
-  `API_AND_GENERICITY_ADDENDUM.md` and `SOPER_ANGULAR_REVIEW.md`) before
+  `API_AND_GENERICITY_ADDENDUM.md`, `SOPER_ANGULAR_REVIEW.md`,
+  `LU_H_MATCHED_SAMPLING.md`, `PINCHED_COLLINEAR_SAMPLING.md` and
+  `AMPLITUDE_BENCHMARK_CANDIDATES.md`) before
   settling interfaces or numerical claims. Extend that research when the
   implementation exposes a case not covered by those documents.
 * Preserve the untracked user directory `TMP_TO_IGNORE/`.
@@ -199,15 +178,13 @@ partitions and samples the complete already-subtracted physical integrand.
   the root agent has reviewed each milestone. Do not force-push.
 * Do not introduce a parallel LMB/channel enumeration while migrating. Every
   grid, evaluator, diagnostic and API consumer must resolve through the same
-`SamplingChannelCatalogue` and `SamplingChannelId`; legacy LMB fields may be
-consumed only as catalogue inputs until deleted.
+  `SamplingChannelCatalogue` and `SamplingChannelId`; legacy LMB fields may be
+  consumed only as catalogue inputs until deleted.
 
-The graph-evaluation boundary also has one channel request field,
-`SamplingChannelEvaluation<T>`, carrying the same canonical id for both the
-temporary LMB compatibility route and the mapped route.  No separate
-`advanced_channel_id`/legacy index pair may be reintroduced.  The LMB variant
-is a migration seam only and must disappear when cross-section LU/`t*`
-preparation can feed the compiled maps per sample.
+The graph-evaluation boundary has one `Option<SamplingChannelId>` field.
+The former `SamplingChannelEvaluation` wrapper and its `LegacyLmb` variant are
+gone. No separate advanced/legacy channel fields may be reintroduced; mapping
+and partitioning belong to the canonical driver outside physical evaluation.
 
 Event metadata and observable axes now use `sampling_channel_id` and
 `sampling_channel_edge_ids` (with corresponding `SamplingChannel*` enum
@@ -221,20 +198,16 @@ old `Advanced` variant is gone, so callers cannot mistake mapped channel
 samples for a second enumeration.
 
 The discrete settings variant formerly called `DiscreteMultiChanneling` is
-now `SamplingMultiChanneling`.  It remains a temporary dispatch mode for
-per-channel sampling and is scheduled for removal once all graph terms use
-conditional compiled maps; it does not define a separate channel index type.
+now `SamplingMultiChanneling`. It selects one canonical channel with the grid,
+whereas the summed mode evaluates all entries of that same catalogue. This
+choice of estimator must never introduce a separate channel index type.
 
-The retirement sequence is explicit: first route direct momentum evaluation
-through compiled parent-frame maps for every catalogue entry; then remove the
-`DiscreteGraphSamplingType::SamplingMultiChanneling` compatibility mode and
-the LMB-only prefactor/reinterpretation helpers; finally remove
-`LmbMultiChannelingSetup` and remaining LMB-specific labels/API quantities
-where they describe a generic sampling channel. The ordinal
-`SamplingChannelId` remains only as the catalogue's stable position, never as
-an independently generated LMB index. Until each step is complete, its
-compatibility code must consume canonical catalogue IDs and may not enumerate
-or renumber a second list.
+The remaining retirement work is explicit: route default single-basis sampling
+through the same compiled maps, remove its reinterpretation helper, remove
+obsolete OSE/alpha settings and aliases, and replace `LmbMultiChannelingSetup`
+where it still owns generic catalogue behavior. The old LMB partition helpers
+are already removed. The ordinal `SamplingChannelId` remains only as the
+catalogue's stable position, never an independently generated LMB index.
 
 ### Milestones
 
@@ -249,7 +222,9 @@ or renumber a second list.
    analytic/nonconstant normalization tests.
 3. **Composition.** Add validated product and ordered conditional maps, explicit
    support/fallback branches, soft/collinear primitives, and fixed partition
-   estimators. Add amplitude and cross-section cut-context tests.
+   estimators. Validate the inexpensive UV-finite two-loop amplitude suite,
+   including genuine graph-derived surfaces and variance comparisons; add
+   cross-section cut-context tests separately.
 4. **Intersections and stars.** Add rank-checked joint normal charts, controlled
    branches, affine CT-star pullbacks where certified, then generic implicit
    star charts. No unsupported map is silently accepted.
@@ -343,6 +318,64 @@ orientations, host cuts, sides, duplicate constraints and invalid ranks produce
 exhaustive transactional diagnostics. Exact CT-star selectors name host cut,
 threshold variant, native subspace and common-center branch.
 
+### LU localization profiles
+
+Implement the proposal in
+[`LU_H_MATCHED_SAMPLING.md`](docs/research/advanced_sampling/LU_H_MATCHED_SAMPLING.md)
+as part of the generic cut-channel machinery. For the current multiplicative
+LU flow and zero-centered full-parent chart, let `R_c(n)` be the physical cut
+radius and sample `t = R_c(n)/r`. A simple cut, including its residue and raw
+radial measure, leaves `h(t) dt` times a shape-dependent coefficient. Therefore
+target a normalized `q_t(t)` close to the existing LU `h(t)`, with
+`dt/du = 1/q_t(t)` and full raw determinant
+`J_Omega R_c(n)^D / (t^(D+1) q_t(t))`. The full determinant is not just `1/h`.
+
+Expose a concise named-channel option `radial_profile = "lu_h"` and an expert
+inline-table form, for example
+`radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }`.
+Both forms resolve to one profile owner. Inherit the actual runtime
+`[h_function]` settings, including sigma/power, and invalidate the warmup
+proposal when they change. Expert parameters steer only the proposal. Reject
+this cut-specific profile on an amplitude-only surface or a chart without a
+certified LU scale. Amplitude sampling retains its generic surface profiles.
+
+Start with the algebraically invertible log-logistic approximation, fitted to
+the mode and curvature of the log-t density `t h(t)`. Use a family-appropriate
+proposal for `exponential`, whose density is nonzero at t=0. Provide normalized
+positive piecewise-exponential surrogates or controlled numerical CDF inversion
+behind the same profile interface when useful. Approximation quality affects
+variance only: always differentiate/invert the actual proposal, never replace
+its determinant by the desired `1/h`. Compile the map and density expressions
+together using the existing eager/dual Symbolica evaluators.
+
+For a cut of order m, cover the radial packets `t^j h^(j)(t)`, `0 <= j < m`.
+Inspect the generated maximum order automatically and support a positive
+derivative-envelope approximation with user-steerable coefficients. Proposal
+Jacobians and partitions remain outside all residue derivatives. The physics
+`h`, local threshold localization symmetry, and PV cancellation stay unchanged.
+
+Require adequate broad coverage, not just positivity. Pure exact-h proposals
+can give the Gaussian reference infinite variance at the raw origin; some
+high-power log-logistic fits do too. Include a normalized broad component such
+as `s/(s+t)^2`, or certify equivalent coverage from a selected ordinary channel
+with a positive probability. A mixture must use its actual full density and
+CDF/inverse (or all inverse branches), rather than an artificial denominator
+floor. Users may disable the component only with explicit diagnostics about
+the resulting reference-moment assumptions. Use the same deterministic ordinary
+fallback in forward and inverse when the cut has no regular radial root.
+
+Each selected host contributes a canonical channel, while every channel still
+evaluates the full physical cut/CT sum. Evaluate all foreign densities at the
+same raw momentum point with their own `t_c`; never substitute the selected
+host's t into another cut's density. Validate radial normalization, tails,
+independent Cartesian determinants, simple-residue radial flattening, and the
+raised-residue oracle `integral t^j h^(j)(t) dt = (-1)^j j!` where endpoint
+terms vanish. Exercise the loaded-state reference harness with broad coverage.
+Then compare all-orientation GL638 absolute/signed moments, maximum weights,
+root ratios, precision-rescue rate and time at equal work budgets. This radial
+optimization complements the H/Z and CT-star shape channels; its one-dimensional
+model improvements do not establish a GL638 improvement.
+
 ### Profiles, coverage and channel identity
 
 Regular one-surface maps use a normalized full-support profile. A signed power
@@ -397,9 +430,12 @@ earlier complement coordinates is triangular; active dependence must be included
 in the full derivative.
 
 `product` requires a direct-sum block and independent fixed-complement data.
-`then` is an explicitly ordered acyclic conditional map with reverse inverse and
-triangular determinant; both ordered compositions and their master-frame
-embeddings propagate an outer context before appending earlier child outputs.
+`then` is an explicitly ordered acyclic conditional map with a triangular
+determinant. Its block inverse uses the same earlier physical output blocks as
+the forward condition, so it can traverse declaration order. Ordinary function
+composition instead reverses its component inverses. Both forms must follow
+their actual dependency graph; master-frame embeddings propagate the outer
+context before appending earlier child outputs.
 `intersect` uses scalar normals plus tangent coordinates, requires full rank and
 controls all inverse branches and chart patches. A
 successful root solve does not establish global injectivity; unsupported or
@@ -412,6 +448,41 @@ space and the auxiliary scale. Left and right threshold maps then act in their
 preserving subspaces. The complete physical cut sum remains in every event.
 Amplitudes use the same primitives with fixed external data and no artificial
 physical-cut context.
+
+### Future pinched-surface maps
+
+Preserve the extension described in
+[`PINCHED_COLLINEAR_SAMPLING.md`](docs/research/advanced_sampling/PINCHED_COLLINEAR_SAMPLING.md).
+A massless two-line pinch is a collinear segment, with one longitudinal and
+two transverse coordinates. In a spatial cylindrical chart its measure is
+`d^3k = (P/2) dz d(k_perp^2) dphi`; a factor `k_perp^2` appears after using a
+logarithmic transverse coordinate. Uniform sampling in that logarithm down to
+zero is not normalizable. Use a normalized fractional-power or suitably
+logarithmically softened profile, with explicit full-space longitudinal tails
+and joint soft-endpoint coverage.
+
+The alternative exact prolate chart has normal coordinate
+`delta=(|k-A|+|B-k|)/P-1`, so the energy deficit is exactly `P delta`.
+It has an explicit inverse and determinant and can enhance both the segment
+interior and endpoints. It is a candidate for a later focused implementation,
+not a mandatory new production map now. Neither construction replaces a
+general multiloop pinch classifier: simplex interiors, massive point pinches,
+soft faces and overlapping normal spaces require their own rank/support data.
+
+Keep `Existing`, `Pinched` and `Absent` distinct. A pinched chart needs its
+geometry, normal rank and frame rather than a fictitious zero-radius regular
+shell. Reuse signed-cycle subspace metadata and certify that a conditional
+active block leaves the host cut momenta and segment total momentum fixed.
+Otherwise reconstruct the changed cut and its full pullback determinant.
+Do not overcount shell shape coordinates when adding the auxiliary LU scale.
+
+Endpoint and axis vectors must be typed frame data, or be rebuilt in the
+target frame and precision. They must not be placed in the current opaque
+runtime vector and silently copied as rotational scalars. Stored f64 prepared
+cut records are not a high-precision geometry cache. Forward and all foreign
+inverse/proxy evaluations must reconstruct matching native contexts at the
+same raw point. These are requirements before enabling conditional physical
+maps, even if the pinched primitive itself remains deferred.
 
 ### Symbolica evaluators and Jacobians
 
@@ -477,7 +548,37 @@ threshold groups/centers, complete cut sums, event weights, summed/MC
 equivalence and raw-frame invariance. All Symbolica evaluators have direct
 finite-difference determinant comparisons at regular points.
 
-## 5. GL638 validation and completion criteria
+## 5. Multiloop amplitude validation
+
+Use the reproducible candidates and kinematics in
+[`AMPLITUDE_BENCHMARK_CANDIDATES.md`](docs/research/advanced_sampling/AMPLITUDE_BENCHMARK_CANDIDATES.md).
+The initial fixture is the five-propagator massive scalar two-loop kite, obtained
+from `tests/resources/graphs/double_triangle.dot` with every internal mass
+positive. Its overall UV degree is -2 and every loop subgraph is UV finite.
+At masses one and rest-frame energy five, it has both two-particle and
+three-particle thresholds. A boosted configuration supplies a regular
+intersection of the genuinely coupled three-particle surfaces. The massive
+planar double box is a secondary topology; two-loop six-photon production is an
+optional later stress test.
+
+Resolve the actual generated thresholds, orientations and requested parent LMB;
+do not substitute a catalogue basis number for the parent frame. Test existing,
+absent and intersecting surfaces, spectator complements, coupled six-dimensional
+maps and runtime changes of external kinematics. No Cutkosky root or rescaling
+is introduced in this amplitude path. The acceptance overlay must use the actual
+loaded amplitude's compiled maps and cover normalization, nonconstant moments,
+independent Jacobians, inverse recovery and summed/MC equivalence.
+
+For physical variance comparisons hold the fully threshold-subtracted amplitude,
+threshold groups/centers and all orientations fixed. Compare ordinary LMB,
+optimized LMB, explicit surface-only, mixed and automatic channels using several
+independent seeds, first equal evaluations and then equal wall time. Record real
+and imaginary integrals, estimated variances/second moments, maximum weights,
+stability/rescue counts and map costs. Establish statistical agreement before
+claiming a gain. Report neutral or worse variance too: a smoothly subtracted
+amplitude need not benefit from concentrating on a particular threshold.
+
+## 6. GL638 validation and completion criteria
 
 The first manual channels are the direct H surface in the prepared cut-1 p
 block, the certified affine A-star H pullback with its native `[3,7]` context,
