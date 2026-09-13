@@ -1399,11 +1399,12 @@ struct GlobalOverlapRecord {
 }
 
 /// One complete solve group. Every sample is expressed in `subspace`'s parent,
-/// while its cut's fixed data and derivative orders remain independent.
+/// while its cut's fixed data remain independent. Raised derivative packets
+/// stay on the cut's `LUCTKinematicPoint`, outside shared center geometry.
 struct ThresholdSolveGroup<T: FloatLike> {
     thresholds: EsurfaceCollection,
     subspace: SubspaceData,
-    kinematics: Vec<LUCTKinematicPoint<T>>,
+    kinematics: Vec<MomentumSample<T>>,
     records: Vec<GlobalOverlapRecord>,
     overlap: OverlapStructure,
     prefactor_power: usize,
@@ -1660,10 +1661,14 @@ impl LUCounterTerm {
     /// Collect all solved cuts before constructing independent physical-cycle groups.
     /// Local threshold IDs are retained only for residue dispatch; each center's
     /// multichannel complements continue to refer to the complete solve group.
+    /// Only representative cut samples enter geometry preparation; the caller
+    /// retains its raised LU packets for physical residue evaluation. Additional
+    /// packets may carry different momenta and derivatives; none of those values
+    /// may alter common centers or the foreign-cut data retained by a group.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prepare_shared_overlaps<T: FloatLike>(
         &self,
-        kinematic_points: &[(CutGroupId, &LUCTKinematicPoint<T>)],
+        cut_samples: &[(CutGroupId, &MomentumSample<T>)],
         graph: &Graph,
         masses: &EdgeVec<F<T>>,
         reversed_edges: &TiVec<CutGroupId, Vec<EdgeIndex>>,
@@ -1674,7 +1679,7 @@ impl LUCounterTerm {
         let mut partitions = BTreeMap::new();
         let e_cm = F::from_f64(settings.kinematics.e_cm);
         let existence_threshold = F::from_f64(settings.subtraction.esurface_existence_threshold);
-        for &(cut_group_id, kinematic_point) in kinematic_points {
+        for &(cut_group_id, cut_sample) in cut_samples {
             let variants = self
                 .variant_subspaces
                 .as_ref()
@@ -1713,13 +1718,12 @@ impl LUCounterTerm {
                         continue;
                     }
                     let subspace = subspaces.map_or(legacy, |data| &data[local_id]);
-                    let native = kinematic_point
+                    let native = cut_sample
                         .lmb_transform(&graph.loop_momentum_basis, subspace.get_lmb(all_lmbs));
-                    let sample = native.representative_sample();
                     if !surface
                         .classify_existence_subspace(
-                            sample.loop_moms(),
-                            sample.external_moms(),
+                            native.loop_moms(),
+                            native.external_moms(),
                             subspace,
                             all_lmbs,
                             graph,
@@ -1812,17 +1816,10 @@ impl LUCounterTerm {
             }
             let solver_kinematics = kinematics
                 .iter()
-                .map(|point| {
-                    let sample = point.representative_sample();
-                    OverlapKinematics {
-                        loop_moms: sample.loop_moms().iter().map(|p| p.to_f64()).collect(),
-                        external_momenta: sample
-                            .external_moms()
-                            .iter()
-                            .map(|p| p.to_f64())
-                            .collect(),
-                        edge_masses: None,
-                    }
+                .map(|sample| OverlapKinematics {
+                    loop_moms: sample.loop_moms().iter().map(|p| p.to_f64()).collect(),
+                    external_momenta: sample.external_moms().iter().map(|p| p.to_f64()).collect(),
+                    edge_masses: None,
                 })
                 .collect_vec();
             let existing: ExistingThresholds = thresholds.keys().collect();
@@ -1861,7 +1858,7 @@ impl LUCounterTerm {
             }));
         }
         let mut result = ti_vec![None; self.thresholds.len()];
-        for &(cut_group_id, _) in kinematic_points {
+        for &(cut_group_id, _) in cut_samples {
             let mut local = LUSharedOverlaps {
                 left: OverlapStructure::new_empty(),
                 right: OverlapStructure::new_empty(),
@@ -3402,7 +3399,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             .iter()
             .map(|&id| {
                 let surface_id = shared.overlap.existing_esurfaces[id];
-                let sample = shared.kinematics[surface_id.0].representative_sample();
+                let sample = &shared.kinematics[surface_id.0];
                 let mut momenta = sample.loop_moms().clone();
                 for index in shared.subspace.iter_lmb_indices() {
                     momenta[index] = shared_center.center[index].map(&F::from_ff64);
@@ -3815,10 +3812,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .thresholds
             .iter_enumerated()
             .map(|(id, surface)| {
-                let mut momenta = group.kinematics[id.0]
-                    .representative_sample()
-                    .loop_moms()
-                    .clone();
+                let mut momenta = group.kinematics[id.0].loop_moms().clone();
                 for index in group.subspace.iter_lmb_indices() {
                     momenta[index] = active_sample.loop_moms()[index].clone();
                 }
@@ -3827,9 +3821,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                         group_lmb,
                         builder.counterterm_builder.real_mass_vector,
                         &momenta,
-                        group.kinematics[id.0]
-                            .representative_sample()
-                            .external_moms(),
+                        group.kinematics[id.0].external_moms(),
                     )
                     .powi(group.prefactor_power as i32)
             })
@@ -3872,7 +3864,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .thresholds
             .iter_enumerated()
             .map(|(id, surface)| {
-                let sample = group.kinematics[id.0].representative_sample();
+                let sample = &group.kinematics[id.0];
                 // The target cut's complement carries its live LU-t derivatives.
                 // Other cuts' already-solved data are constants for this residue;
                 // their threshold-r dependence enters through the shared coordinates.

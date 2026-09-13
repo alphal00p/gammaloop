@@ -1,7 +1,10 @@
 # Certified affine CT-star pullbacks: implementation audit
 
-**Read-only proposal; X4 is unimplemented.** Audited after X2 commit
-`f2f64fb17`, without new numerical runs, source changes or literature searches.
+**X4 map proposal; the star chart is unimplemented.** Initially audited after X2
+commit `f2f64fb17`, without new numerical runs or literature searches. The first
+source extraction now separates representative overlap kinematics from raised
+derivative packets. Its foreign-cut/radial-derivative and generated raised-cut
+regressions pass; it does not yet implement the shared scale or a star map.
 This proposes a generic certified affine class, not a GL638 equation engine or
 a claim that projected singularities are already covered by direct-H sampling.
 
@@ -70,6 +73,43 @@ the existing projection/root owner to expose a complement-only scale alpha for
 certified null directions; physical reconstruction and sampling must use the
 same definition. Retain r*=alpha*r and the existing raised-residue derivative
 calculation. Do not introduce another approximate projection solver.
+
+The existing `Esurface::compute_self_and_r_derivative_subspace` and radial-guess
+algebra already accept an unnormalized displacement, despite their unit-ray
+argument names. The existing `RadialRootDiagnostics` budget bounds the energy
+residual, so it can solve the dimensionless scale with the same tolerance and
+precision diagnostics. Convert its result using `r*=alpha*r` and
+`d eta/dr=(d eta/d alpha)/r`, retaining the residual and iteration count. The
+physical base star point must then use `c+alpha*Delta` directly. Both raised
+geometry paths must retain this same zeroth-order point while preserving the
+existing higher derivatives; leaving a normalized-direction reconstruction in
+either path would defeat the shared numerical definition. This remains a
+separate implementation and regression gate after the representative-data
+extraction.
+
+## Resolve a star without requiring user threshold directives
+
+A proposed structural descriptor, inside the existing host and active block, is
+`at_star(block(lmb(V...),left(surface(A...))),target)`. Here the inner block is
+the projecting CT's solve-space descriptor, not another sampled coordinate
+block. The surrounding channel supplies the complete parent and the sampler's
+active W. Resolve the descriptor against existing runtime thresholds, native
+subspaces and exact solve signatures. The left/right qualifier identifies CT
+ownership; it does not restrict the physical cut sum. Amplitudes use the same
+structural selection without a physical cut host.
+
+The compact alternative `at_star(variant(id),target)` may disambiguate an
+explicit metadata variant. It cannot be the only selector: the current
+no-directive LU path need not allocate a metadata registry. If the structural
+selection matches several user-split groups, report all candidates and require
+disambiguation. Neither spelling nor its parser is implemented yet.
+
+Internally, stable overlap branches use sorted complete occurrence identities:
+cut group, side, local threshold and variant when present. A variant ID alone
+can have several cut associations. Resolve these through the existing owner
+and expand the existing canonical sampling catalogue; do not add a second
+threshold or channel enumeration. Runtime existence IDs and center-vector
+positions are not persistent branch identities.
 
 ## Affine composition and center branches
 

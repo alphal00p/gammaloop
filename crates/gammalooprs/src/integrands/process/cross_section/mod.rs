@@ -2747,7 +2747,12 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         let deferred_points = deferred_cut_evaluations
             .iter()
-            .map(|deferred| (deferred.cut_group_id, &deferred.kinematic_point))
+            .map(|deferred| {
+                (
+                    deferred.cut_group_id,
+                    deferred.kinematic_point.representative_sample(),
+                )
+            })
             .collect_vec();
         let shared_overlaps = if context.settings.subtraction.disable_threshold_subtraction {
             ti_vec![None; self.cut_group_data.cut_groups.len()]
