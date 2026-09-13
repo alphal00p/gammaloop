@@ -995,12 +995,20 @@ impl std::error::Error for SamplingSelectionError {}
 
 /// Resolve the selectors that apply to `graph_name`.
 ///
-/// The default and graph-specific entries form an additive union.  Duplicates
-/// are removed while preserving the first occurrence's order.  This is useful
-/// to callers constructing a catalogue for several graphs at once: a common
-/// baseline can be supplied by the default entry and graph-specific channels
-/// can be appended without repeating it.
+/// A graph-specific entry replaces the default list. If no entry exists for
+/// this graph, the default list applies. Entries within the selected list are
+/// additive and deduplicated in declaration order.
 pub fn resolve_sampling_channel_selection(
+    graph_name: &str,
+    selection: &SamplingChannelSelection,
+) -> Result<ResolvedSamplingChannelSelection, SamplingSelectionError> {
+    resolve_selection(graph_name, selection, true)
+}
+
+/// Resolve with an additive default plus graph-specific list. This is useful
+/// for callers that intentionally construct a shared baseline catalogue; the
+/// runtime TOML contract uses replacement semantics above.
+pub fn resolve_sampling_channel_selection_with_defaults(
     graph_name: &str,
     selection: &SamplingChannelSelection,
 ) -> Result<ResolvedSamplingChannelSelection, SamplingSelectionError> {
@@ -1009,9 +1017,8 @@ pub fn resolve_sampling_channel_selection(
 
 /// Resolve using the explicit graph entry as a replacement for the defaults.
 ///
-/// The public TOML contract currently uses the additive resolver above.  This
-/// variant is retained for catalogue builders that need strict per-graph
-/// replacement semantics without reimplementing validation.
+/// This is retained as a named compatibility entry point for callers that
+/// want to state the replacement policy explicitly.
 pub fn resolve_sampling_channel_selection_replacing_default(
     graph_name: &str,
     selection: &SamplingChannelSelection,
@@ -1030,12 +1037,18 @@ fn resolve_selection(
     }
 
     let graph_selectors = selection.channel_selection.get(graph_name);
-    let raw_selectors = (!replace_default)
-        .then_some(selection.default_channel_selection.as_slice())
-        .into_iter()
-        .flatten()
-        .chain(graph_selectors.into_iter().flatten())
-        .collect::<Vec<_>>();
+    let raw_selectors = if replace_default {
+        graph_selectors
+            .map_or(selection.default_channel_selection.as_slice(), Vec::as_slice)
+            .iter()
+            .collect::<Vec<_>>()
+    } else {
+        selection
+            .default_channel_selection
+            .iter()
+            .chain(graph_selectors.into_iter().flatten())
+            .collect::<Vec<_>>()
+    };
     let mut selectors = Vec::with_capacity(raw_selectors.len());
     for raw in raw_selectors {
         let selector = SamplingChannelSelector::parse(raw)?;
@@ -1118,7 +1131,7 @@ mod tests {
     }
 
     #[test]
-    fn graph_entry_unions_default_and_deduplicates_entries() {
+    fn graph_entry_replaces_default_and_deduplicates_entries() {
         let mut selection = SamplingChannelSelection {
             default_channel_selection: vec!["auto:lmb".into(), "common".into()],
             ..Default::default()
@@ -1138,13 +1151,39 @@ mod tests {
         assert_eq!(
             resolved.selectors,
             vec![
+                SamplingChannelSelector::Preset(SamplingChannelPreset::Surfaces),
+                SamplingChannelSelector::Named("named".into())
+            ]
+        );
+        assert!(resolved.named("named").is_some());
+    }
+
+    #[test]
+    fn additive_resolver_keeps_default_and_graph_entries() {
+        let mut selection = SamplingChannelSelection {
+            default_channel_selection: vec!["auto:lmb".into(), "common".into()],
+            ..Default::default()
+        };
+        selection.channel_selection.insert(
+            "G".into(),
+            vec!["auto:surfaces".into(), "common".into(), "named".into()],
+        );
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("named".into(), definition("surface(1,2)"));
+
+        let resolved = resolve_sampling_channel_selection_with_defaults("G", &selection).unwrap();
+        assert_eq!(
+            resolved.selectors,
+            vec![
                 SamplingChannelSelector::Preset(SamplingChannelPreset::Lmb),
                 SamplingChannelSelector::Named("common".into()),
                 SamplingChannelSelector::Preset(SamplingChannelPreset::Surfaces),
                 SamplingChannelSelector::Named("named".into())
             ]
         );
-        assert!(resolved.named("named").is_some());
     }
 
     #[test]
