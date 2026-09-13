@@ -2260,7 +2260,13 @@ fn compile_lmb_map(
 }
 
 impl SamplingChannelCatalogue {
-    pub fn lmb_entries(&self) -> impl Iterator<Item = (usize, &[usize])> {
+    /// Return generated-LMB metadata carried by canonical catalogue entries.
+    ///
+    /// The returned `basis_id` is an implementation detail used to prepare
+    /// affine frame maps; it is deliberately not a channel index.  Callers
+    /// that need the production channel axis must enumerate `entries` and
+    /// assign [`SamplingChannelId`] from the entry position.
+    pub fn lmb_basis_entries(&self) -> impl Iterator<Item = (usize, &[usize])> {
         self.entries.iter().filter_map(|entry| match entry {
             SamplingCatalogueEntry::Lmb {
                 basis_id, edges, ..
@@ -3455,10 +3461,47 @@ mod tests {
         let catalogue =
             build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2]), (1, vec![2, 4])], &[1]);
         assert_eq!(catalogue.entries.len(), 2);
-        assert_eq!(catalogue.lmb_entries().next(), Some((1, &[2, 4][..])));
+        assert_eq!(catalogue.lmb_basis_entries().next(), Some((1, &[2, 4][..])));
         assert_eq!(catalogue.named_entries().next().unwrap().name, "surface_hz");
         assert!(catalogue.inspection_rows()[0].contains("basis=1"));
         assert!(catalogue.inspection_rows()[1].contains("parent_lmb=[1, 2]"));
+    }
+
+    #[test]
+    fn catalogue_keeps_one_id_axis_when_named_channel_precedes_lmb() {
+        let mut selection = SamplingChannelSelection {
+            default_channel_selection: vec!["threshold".into(), "auto:lmb".into()],
+            ..Default::default()
+        };
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("threshold".into(), definition("surface(1,2)"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[(7, vec![1, 2])], &[7]);
+
+        // The LMB basis number is metadata of the second catalogue entry. It
+        // must not become a compacted positional channel number after the
+        // named entry, otherwise LMB-only consumers would enumerate a second
+        // channel axis and disagree with the canonical SamplingChannelId.
+        assert!(matches!(
+            catalogue.entries.first(),
+            Some(SamplingCatalogueEntry::Named(channel)) if channel.name == "threshold"
+        ));
+        assert!(matches!(
+            catalogue.entries.get(1),
+            Some(SamplingCatalogueEntry::Lmb { basis_id: 7, .. })
+        ));
+        assert_eq!(
+            catalogue
+                .entries
+                .iter()
+                .enumerate()
+                .map(|(index, _)| SamplingChannelId::from(index))
+                .collect::<Vec<_>>(),
+            vec![SamplingChannelId::from(0), SamplingChannelId::from(1)]
+        );
     }
 
     #[test]
@@ -3485,7 +3528,7 @@ mod tests {
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue =
             build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![2])], &[0, 1]);
-        assert_eq!(catalogue.lmb_entries().count(), 2);
+        assert_eq!(catalogue.lmb_basis_entries().count(), 2);
     }
 
     #[test]
@@ -3528,7 +3571,7 @@ mod tests {
             );
             assert_eq!(
                 catalogue
-                    .lmb_entries()
+                    .lmb_basis_entries()
                     .map(|(basis, _)| basis)
                     .collect::<Vec<_>>(),
                 vec![0, 1, 2]
@@ -3554,7 +3597,7 @@ mod tests {
             &[],
         );
         assert_eq!(
-            catalogue.lmb_entries().collect::<Vec<_>>(),
+            catalogue.lmb_basis_entries().collect::<Vec<_>>(),
             vec![(7, &[1, 2][..])]
         );
         assert!(
