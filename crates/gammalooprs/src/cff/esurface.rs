@@ -146,9 +146,8 @@ impl Esurface {
     /// and the mass expression, never by edge identity or rounded momenta.
     /// The returned common route has active coefficient +1: the kernel uses
     /// x=L+c0, so the existing affine embedding must return L=x-c0.
-    // Staged with the component tests until the physical binder transports
-    // one prerequisite-only disk policy through native precision retries.
-    #[cfg(test)]
+    // Physical binders must transport one prerequisite-only disk policy
+    // through native precision retries alongside this reconstructed geometry.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn sampling_joint_geometry_in_subspace<T: FloatLike>(
         &self,

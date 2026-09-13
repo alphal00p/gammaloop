@@ -58,6 +58,12 @@ slow-timeout = { period = "5m", terminate-after = 2 }
 filter = "test(=state::tests::saved_generated_process_runs_reference_acceptance_after_reload) or test(=processes::raised_cross_section_tests::conditional_cut_sampling_preserves_both_sides_and_raised_sum)"
 slow-timeout = { period = "1m", terminate-after = 5 }
 
+[[profile.default.overrides]]
+# The generated kite checks 8192 summed joint-map draws, including fixed-Arb
+# proposal preparation and directed domain certificates, in the unoptimized build.
+filter = "test(=integrands::process::amplitude::sampling_tests::generated_kite_sampling_uses_physical_six_dimensional_surfaces)"
+slow-timeout = { period = "5m", terminate-after = 6 }
+
 [profile.default.junit]
 # Default JUnit output location
 path = "target/nextest/default/junit.xml"

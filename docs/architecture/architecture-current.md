@@ -574,14 +574,38 @@ The existing block resolver now treats two distinct plain surfaces under
 `intersect` as one three-dimensional block, with qualifiers on the pair. Their
 separate equations remain in the same geometry key, and the canonical program
 cache compiles one neutral joint expression for all participating channels.
-A staged graph matcher is tested against actual routed amplitude equations;
-production graph binding and physical-host uncertainty transport remain disabled.
-The component's conditional ordinary fallback retains the existing normalized
-radial map. Compact/fallback
-and dyadic-radius choices need prerequisite-only persistence across native
-retries before production binding; fixed-context tests do not establish that
-property.
-Map coverage is now `Full` or `Restricted`, independently of `requires_context`.
+The graph matcher has prior coverage against actual routed amplitude equations.
+The current source adds an amplitude binder for that supported class, retaining
+the native shared-energy translation. Empty-prior blocks bind once at warmup
+through static `Affine`; only nonempty priors use the existing ordered embedding.
+Its trial disk radius is `e_cm * sampling.b`, with isotropic normal scale one;
+the component's conditional fallback retains the existing normalized radial map.
+The binder and source transport pass combined numerical gates: all-18-orientation
+kite Gaussian/moment acceptance, actual physical map/partition consistency and
+controlled Double-to-Quad body retry, plus the generated triangle's empty-prior
+binder, nonzero offset, compact roundtrip and production reference evaluation.
+These joint fixtures clear rotation probes; nonidentity-probe behavior and
+GL638 runtime improvement are not established by this milestone.
+
+An original-source preparation phase uses existing 1000-bit Arb arithmetic and
+the same graph/channel map traversal to collect discrete compact/fallback and
+dyadic-radius choices. `EvaluationMetaData` owns these transient records, keyed
+by graph, generating channel, target channel and compiled block path.
+`SamplingChannelRuntimeContexts` lends that owner to the component's typed
+prerequisite context; warmed maps retain no mutable draw cache. Preparation runs
+before norm-based lane selection and final target evaluation. Map-required roots
+and centers still run; the physical shared-overlap pipeline, rotations and events
+are skipped. Every native, summed, direct and debug replay rebuilds numerical
+data and compares its complete decision with the sealed choice. Missing or
+conflicting choices produce existing typed retry/error handling. Ordinary
+catalogues need no extra phase. This finite-budget comparison concerns
+represented source data; it does not certify an exact physical host root.
+
+Hosted cross-section joint binding remains disabled. It still needs certified
+fixed-external routing and authoritative physical cut `t*` preparation; CT-star
+maps additionally need the actual common center and projection alpha handoff.
+Map coverage is `Full` or `Restricted`, independently of `requires_context` and
+the new `requires_proposal_policy` preparation flag.
 Certified inverse exclusion propagates through the existing compositions,
 embeddings and affine frames as `None`, becoming zero in the existing partition.
 Numerical uncertainty and underflow remain errors. Exact and proxy partitions

@@ -424,9 +424,9 @@ pub struct ParameterizationSettings {
     pub power: f64,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub lmb_basis_ids: BTreeMap<String, Vec<usize>>,
-    /// Advanced graph-aware sampling channels.  The production sampler does not
-    /// consume this catalogue yet, but keeping it with the parameterisation
-    /// makes it survive the `SamplingSettings` enum round trip.
+    /// Graph-aware channels consumed by the production sampler. Keeping their
+    /// selection with the parameterization preserves the canonical catalogue
+    /// through the `SamplingSettings` enum round trip.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub sampling_channels: SamplingChannelSelection,
 }

@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::{Result, WrapErr, eyre};
 use rug::{
     Float,
     float::{Round, Special},
@@ -20,6 +20,7 @@ use symbolica::{
 use crate::utils::{F, FloatLike};
 
 use super::{
+    sampling_context::{SamplingMapContext, SamplingProposalDecision},
     sampling_evaluator::SamplingExpressionEvaluator,
     sampling_maps::{
         SamplingEvaluationError, SamplingJacobian, SamplingMapComponent, SamplingMapContract,
@@ -28,7 +29,7 @@ use super::{
 };
 
 /// Parameters of E0(x)+E1(x+a)-C1 and E0(x)+E2(x+b)-C2.
-/// The later graph matcher must establish the shared signed routing and masses.
+/// The graph matcher establishes the shared signed routing and masses.
 #[derive(Clone, Debug)]
 pub struct SharedEnergyJointGeometry<T: FloatLike = f64> {
     pub shifts: [[T; 3]; 2],
@@ -486,31 +487,36 @@ impl<T: FloatLike> SharedEnergyJointMap<T> {
         SamplingExpressionEvaluator::new(outputs, p.clone(), true)
     }
 
-    fn prepare(&self, context: &[T]) -> Result<(SharedEnergyJointGeometry<T>, Option<T>)> {
-        if context.len() != self.context_dimension {
+    fn prepare(
+        &self,
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<(SharedEnergyJointGeometry<T>, Option<T>)> {
+        if context.previous.len() != self.context_dimension {
             return Err(eyre!(
                 "joint chart context has dimension {}, expected {}",
-                context.len(),
+                context.previous.len(),
                 self.context_dimension
             ));
         }
-        if context.iter().any(|x| !x.is_finite()) {
+        if context.previous.iter().any(|x| !x.is_finite()) {
             return Err(SamplingEvaluationError::Unrepresentable {
                 operation: "joint context",
                 detail: "non-finite previous coordinates".into(),
             }
             .into());
         }
-        let geometry = (self.geometry)(context)?;
+        let geometry = (self.geometry)(context.previous)?;
         geometry.validate()?;
         let mut radius = F(self.max_radius.clone());
         let two = radius.from_usize(2);
+        let mut compact = None;
         // A deterministic complement-only policy, not a claim of absence.
         // Arithmetic ambiguity in a lower-endpoint sign is propagated before
         // halving; exhausted geometric boxes use the normalized ordinary map.
-        for _ in 0..32 {
+        for dyadic_exponent in 0..32 {
             if geometry.certificate(&radius.0, &self.normal_scale)? {
-                return Ok((geometry, Some(radius.0)));
+                compact = Some((dyadic_exponent, radius.0));
+                break;
             }
             radius /= &two;
             if !radius.is_finite() || radius <= radius.zero() {
@@ -521,7 +527,19 @@ impl<T: FloatLike> SharedEnergyJointMap<T> {
                 .into());
             }
         }
-        Ok((geometry, None))
+        let decision = compact.as_ref().map_or(
+            SamplingProposalDecision::Ordinary,
+            |(dyadic_exponent, _)| SamplingProposalDecision::Compact {
+                dyadic_exponent: *dyadic_exponent,
+            },
+        );
+        // Revalidate the complete native choice, not merely whether a stored
+        // smaller disk would also be valid. Different valid radii are different laws.
+        context.validate_decision(decision).wrap_err_with(|| format!(
+            "joint native decision {decision:?}, precision {:?}, max radius {:?}, normal scale {:?}, represented geometry {geometry:?}",
+            T::sampling_precision(), self.max_radius, self.normal_scale,
+        ))?;
+        Ok((geometry, compact.map(|(_, radius)| radius)))
     }
 
     fn parameters(
@@ -625,11 +643,16 @@ impl<T: FloatLike> SamplingMapComponent<T> for SharedEnergyJointMap<T> {
         SamplingMapContract {
             support: SamplingSupport::Restricted,
             requires_context: self.context_dimension > 0,
+            requires_proposal_policy: true,
             jacobian: SamplingJacobian::ExactForward,
         }
     }
 
-    fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+    fn forward(
+        &self,
+        coordinates: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<SamplingMapEvaluation<T>> {
         if coordinates.len() != 3
             || coordinates.iter().enumerate().any(|(i, x)| {
                 !x.is_finite() || x < &x.zero() || x >= &x.one() || (i == 0 && x == &x.zero())
@@ -651,7 +674,11 @@ impl<T: FloatLike> SamplingMapComponent<T> for SharedEnergyJointMap<T> {
                 }
                 .into());
             }
-            let mut output = SamplingMapComponent::forward(&self.fallback, coordinates, &[])?;
+            let mut output = SamplingMapComponent::forward(
+                &self.fallback,
+                coordinates,
+                &mut context.reborrow(&[], None),
+            )?;
             output
                 .diagnostics
                 .push("joint: normalized ordinary fallback; disk policy declined".into());
@@ -684,7 +711,11 @@ impl<T: FloatLike> SamplingMapComponent<T> for SharedEnergyJointMap<T> {
         .validate("joint forward")
     }
 
-    fn inverse(&self, point: &[T], context: &[T]) -> Result<Option<SamplingMapEvaluation<T>>> {
+    fn inverse(
+        &self,
+        point: &[T],
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<SamplingMapEvaluation<T>>> {
         if point.len() != 3 {
             return Err(eyre!("joint chart point must have three components"));
         }
@@ -697,7 +728,11 @@ impl<T: FloatLike> SamplingMapComponent<T> for SharedEnergyJointMap<T> {
         }
         let (geometry, radius) = self.prepare(context)?;
         let Some(radius) = radius else {
-            let mut output = SamplingMapComponent::inverse(&self.fallback, point, &[])?;
+            let mut output = SamplingMapComponent::inverse(
+                &self.fallback,
+                point,
+                &mut context.reborrow(&[], None),
+            )?;
             if let Some(output) = &mut output {
                 output
                     .diagnostics
@@ -861,8 +896,13 @@ mod tests {
         );
         for phi in [0.0, 0.13, 0.5, 0.83] {
             let cube = [0.41, 0.27, phi];
-            let output = map.forward(&cube, &[]).unwrap();
-            let inverse = map.inverse(&output.point, &[]).unwrap().unwrap();
+            let output = map
+                .forward(&cube, &mut SamplingMapContext::detached(&[]))
+                .unwrap();
+            let inverse = map
+                .inverse(&output.point, &mut SamplingMapContext::detached(&[]))
+                .unwrap()
+                .unwrap();
             assert!((output.jacobian * inverse.inverse_jacobian - 1.0).abs() < 2e-9);
             for (a, b) in cube.iter().zip(&inverse.coordinates) {
                 let difference = (a - b).abs();
@@ -881,8 +921,12 @@ mod tests {
                     plus[column] = plus[column].rem_euclid(1.0);
                     minus[column] = minus[column].rem_euclid(1.0);
                 }
-                let plus = map.forward(&plus, &[]).unwrap();
-                let minus = map.forward(&minus, &[]).unwrap();
+                let plus = map
+                    .forward(&plus, &mut SamplingMapContext::detached(&[]))
+                    .unwrap();
+                let minus = map
+                    .forward(&minus, &mut SamplingMapContext::detached(&[]))
+                    .unwrap();
                 for (row, values) in matrix.iter_mut().enumerate() {
                     values[column] = (plus.point[row] - minus.point[row]) / (2.0 * step);
                 }
@@ -897,7 +941,14 @@ mod tests {
                 output.jacobian
             );
         }
-        assert!(map.inverse(&[100.0, 100.0, 100.0], &[]).unwrap().is_none());
+        assert!(
+            map.inverse(
+                &[100.0, 100.0, 100.0],
+                &mut SamplingMapContext::detached(&[])
+            )
+            .unwrap()
+            .is_none()
+        );
     }
 
     #[test]
@@ -912,9 +963,16 @@ mod tests {
             let original = map(original, program.clone());
             let changed = map(changed, program);
             let cube = [0.41, 0.27, 0.13].map(T::from_f64_exact_binary);
-            let base = original.forward(&cube, &[]).unwrap();
-            let output = changed.forward(&cube, &[]).unwrap();
-            let inverse = changed.inverse(&output.point, &[]).unwrap().unwrap();
+            let base = original
+                .forward(&cube, &mut SamplingMapContext::detached(&[]))
+                .unwrap();
+            let output = changed
+                .forward(&cube, &mut SamplingMapContext::detached(&[]))
+                .unwrap();
+            let inverse = changed
+                .inverse(&output.point, &mut SamplingMapContext::detached(&[]))
+                .unwrap()
+                .unwrap();
             let error = (F(output.jacobian.clone()) * F(inverse.inverse_jacobian) - &one).abs();
             assert!(
                 error < one.clone() / one.from_usize(10).powi(27),
@@ -928,14 +986,87 @@ mod tests {
             // the parent lock cannot prevent a worker from evaluating.
             let worker = changed.clone();
             let _parent_lock = changed.program.lock().unwrap();
-            let threaded = std::thread::spawn(move || worker.forward(&cube, &[]).unwrap())
-                .join()
-                .unwrap();
+            let threaded = std::thread::spawn(move || {
+                worker
+                    .forward(&cube, &mut SamplingMapContext::detached(&[]))
+                    .unwrap()
+            })
+            .join()
+            .unwrap();
             assert_eq!(threaded.point, output.point);
         }
         let program = SharedEnergyJointMap::<f64>::compile_program().unwrap();
         check::<QuadFloat>(program.clone());
         check::<ArbPrec>(program);
+    }
+
+    #[test]
+    fn joint_sampling_policy_rejects_another_valid_radius_and_ordinary_branch() {
+        use crate::integrands::process::{
+            SamplingChannelId, SamplingChannelRuntimeContexts,
+            sampling_context::SamplingProposalPolicies,
+        };
+        crate::initialisation::test_initialise().unwrap();
+        let program = SharedEnergyJointMap::<f64>::compile_program().unwrap();
+        let mut canonical = map(geometry::<ArbPrec>(), program.clone());
+        canonical.max_radius = F::<ArbPrec>::default().from_usize(100).0;
+        let mut policies = SamplingProposalPolicies::default();
+        policies.begin_collection();
+        let (_, radius) = {
+            let mut rows =
+                SamplingChannelRuntimeContexts::for_draw(1, 0, SamplingChannelId(0), &mut policies);
+            canonical
+                .prepare(&mut rows.for_channel(SamplingChannelId(0)).unwrap())
+                .unwrap()
+        };
+        let radius = radius.unwrap();
+        assert!(radius < canonical.max_radius);
+        policies.seal();
+        let mut enlarged = geometry::<ArbPrec>();
+        let two = F::<ArbPrec>::default().from_usize(2);
+        for value in enlarged
+            .shifts
+            .iter_mut()
+            .flatten()
+            .chain(&mut enlarged.masses)
+            .chain(&mut enlarged.energy_sums)
+        {
+            *value = (F(value.clone()) * &two).0;
+        }
+        // The retained radius remains certified in the enlarged geometry.
+        // Its own policy chooses twice that radius, so accepting validity alone
+        // would silently replace the normalized law for this original draw.
+        assert!(
+            enlarged
+                .certificate(&radius, &canonical.normal_scale)
+                .unwrap()
+        );
+        let mut changed = map(enlarged, program.clone());
+        changed.max_radius = canonical.max_radius.clone();
+        let (_, changed_radius) = changed
+            .prepare(&mut SamplingMapContext::detached(&[]))
+            .unwrap();
+        assert_eq!(changed_radius.unwrap(), (F(radius) * &two).0);
+        let mut ordinary_geometry = geometry::<ArbPrec>();
+        ordinary_geometry.energy_sums = [two.one().0.clone(), two.one().0];
+        let ordinary = map(ordinary_geometry, program);
+        for changed in [&changed, &ordinary] {
+            let mut rows =
+                SamplingChannelRuntimeContexts::for_draw(1, 0, SamplingChannelId(0), &mut policies);
+            let error = changed
+                .prepare(&mut rows.for_channel(SamplingChannelId(0)).unwrap())
+                .unwrap_err();
+            assert!(
+                error.downcast_ref::<SamplingEvaluationError>().is_some(),
+                "{error:?}"
+            );
+        }
+        let mut rows =
+            SamplingChannelRuntimeContexts::for_draw(1, 0, SamplingChannelId(0), &mut policies);
+        canonical
+            .prepare(&mut rows.for_channel(SamplingChannelId(0)).unwrap())
+            .unwrap();
+        assert_eq!(policies.len(), 1);
     }
 
     #[test]
@@ -948,15 +1079,27 @@ mod tests {
             SharedEnergyJointMap::<f64>::compile_program().unwrap(),
         );
         let cube = [0.41, 0.27, 0.13];
-        let output = map.forward(&cube, &[]).unwrap();
-        let ordinary = SamplingMapComponent::forward(&map.fallback, &cube, &[]).unwrap();
+        let output = map
+            .forward(&cube, &mut SamplingMapContext::detached(&[]))
+            .unwrap();
+        let ordinary = SamplingMapComponent::forward(
+            &map.fallback,
+            &cube,
+            &mut SamplingMapContext::detached(&[]),
+        )
+        .unwrap();
         assert_eq!(output.point, ordinary.point);
         assert_eq!(output.jacobian, ordinary.jacobian);
         assert!(output.diagnostics.iter().any(|d| d.contains("fallback")));
-        let inverse = map.inverse(&output.point, &[]).unwrap().unwrap();
+        let inverse = map
+            .inverse(&output.point, &mut SamplingMapContext::detached(&[]))
+            .unwrap()
+            .unwrap();
         assert!((output.jacobian * inverse.inverse_jacobian - 1.0).abs() < 1e-12);
         assert_eq!(map.contract().support, SamplingSupport::Restricted);
-        let boundary = map.forward(&[0.41, 0.0, 0.13], &[]).unwrap_err();
+        let boundary = map
+            .forward(&[0.41, 0.0, 0.13], &mut SamplingMapContext::detached(&[]))
+            .unwrap_err();
         assert!(boundary.downcast_ref::<SamplingEvaluationError>().is_some());
         assert!(
             boundary
@@ -978,7 +1121,9 @@ mod tests {
             SharedEnergyJointMap::<f64>::compile_program().unwrap(),
         );
         // Original unsquared energies are exactly (3,5,5), hence h=z=0.
-        let error = map.inverse(&[0.0, 0.0, 3.0], &[]).unwrap_err();
+        let error = map
+            .inverse(&[0.0, 0.0, 3.0], &mut SamplingMapContext::detached(&[]))
+            .unwrap_err();
         assert!(error.downcast_ref::<SamplingEvaluationError>().is_some());
         assert!(error.to_string().contains("R=0"), "{error}");
     }

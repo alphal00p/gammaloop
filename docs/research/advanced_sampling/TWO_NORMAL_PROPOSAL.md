@@ -1,7 +1,9 @@
 # Exact two-normal H/Z proposal and its A-star pullback
 
-12 September 2026. Independent analytic and arithmetic audit. This is a proposal,
-not an implemented or integrated sampler. It strengthens the one-normal map:
+Analytic audit begun 12 September 2026; source status updated 13 September.
+The bounded generic component, amplitude binding and proposal transport are
+implemented and validated for the supported class. The hosted GL638 channel and A-star
+pullback remain proposals. The construction strengthens the one-normal map:
 on a regular compact patch, a density proportional to `1/R` bounds a leading
 `1/R` weight, whereas `|H|^(-beta)`, `0<beta<1`, gives finite local variance but
 leaves the weight unbounded on generic rays.
@@ -185,12 +187,11 @@ at regular points, not a global domain certificate or an implementation claim.
 
 ## Generic shared-energy component and remaining graph binding
 
-The represented-geometry component and support/partition migration now pass
-their focused checks. The next slice resolves a pair as one three-dimensional
-`intersect` block in the existing catalogue, compiles its neutral eager program
-once, and tests a shared graph-routed energy matcher. Production command-card
-binding and native proposal-policy transport remain gated. The component is
-not yet a usable GL638 channel through the run-card API.
+The represented-geometry component, support/partition migration, common
+`intersect` block and routed-energy matcher have passed their earlier focused
+checks. The current source adds amplitude command-card binding and native
+proposal-policy transport; their combined numerical gates now pass.
+The component is not yet a usable hosted GL638 channel through the run-card API.
 
 The first exact primitive accepts two prepared energy equations in one
 three-dimensional active block, rather than graph names or H/Z formulas:
@@ -346,12 +347,17 @@ deliberate box overestimation from arithmetic uncertainty in its bound, and
 retain/check proposal decisions through the existing per-draw context owner
 for selected and foreign maps. Rebuild native geometric coefficients and
 certificates from original inputs; never promote earlier prepared numbers.
-The exact transport contract remains a production integration prerequisite.
-The represented-geometry kernel and fixed-context acceptance tests can proceed
-without claiming this gate is satisfied.
+The current source implements this transport in the original-source owner:
+prepare participating rows at existing 1000-bit Arb precision before norm-based
+lane selection, seal discrete decisions, and compare complete native choices
+through the same typed borrowed context on every replay. The same map traversal
+prepares any required roots/centers; it does not run final bodies, physical
+shared-overlap solving, rotations or events. Ordinary catalogues bypass the
+phase. Its source regressions and production amplitude acceptance now pass
+independently of the earlier fixed-context component tests.
 
 The detailed prerequisite-only policy and its exact bias counterexample are in
-[the shared preparation audit](AFFINE_STAR_IMPLEMENTATION_AUDIT.md#proposal-policy-across-native-retries--unimplemented).
+[the shared preparation audit](AFFINE_STAR_IMPLEMENTATION_AUDIT.md#proposal-policy-across-native-retries).
 
 ### Existing owners and dependency order
 
@@ -376,12 +382,14 @@ The detailed prerequisite-only policy and its exact bias counterexample are in
    requested singular derivative or a singular intermediate depending on active
    inputs still gives a typed numerical error. Expressions remain compiled once
    in the current program cache, with worker-local buffers and native parameters.
-4. `cff/esurface.rs` stages the routed-energy matcher and prepared constants;
+4. `cff/esurface.rs` owns the routed-energy matcher and prepared constants;
    `sampling_selection.rs` admits exactly `intersect(surface(...),surface(...))`
    as one existing block/registry key. Resolve both leaves under one host/frame,
    consume three coordinates total, and preserve ordered prior dependencies.
-   Production amplitude/cross-section binding will return this same component
-   after proposal-policy and host gates. No second
+   The amplitude binder now returns this same component with its native affine
+   translation: empty-prior blocks bind once at warmup through static `Affine`,
+   while nonempty priors use ordered embedding. Cross-section binding awaits the
+   physical host gates. No second
    channel enumeration, automatic discovery, arbitrary implicit intersection
    solver or new projected-target resolver belongs in this slice.
 
@@ -413,7 +421,8 @@ of that outer map, not assumptions hidden in the joint kernel.
 - On a regular compact patch, test the expected 1/R density and bounded weight
   for a controlled leading C/R integrand. This proves neither global finite
   variance nor star alignment. Benchmark certificate/map costs before a long
-  GL638 run; no performance gain follows from the formulas alone.
+  GL638 run; no performance gain follows from the formulas alone. The complete
+  sampling pipeline must meet the warmed 10% physical-runtime budget below.
 
 ### Implemented component validation
 
@@ -446,6 +455,31 @@ reference draws and repeated support/certificate evaluations, not a production
 map benchmark. Prepared-data reuse and production map cost need measurement
 when the graph binder and per-draw context are connected.
 
+The accepted runtime requirement is a conservative
+`T_sampling / T_physical <= 0.10` on matched warmed, optimized GL638 samples,
+using all 936 orientations, six cuts and the actual UV/threshold/stability
+settings on 20 cores. Include the fixed-Arb proposal-policy pass, native maps,
+Jacobians, foreign inverses, proxies/partition, certificates and all repeated
+sampling work during rescue in `T_sampling`. Count shared preparation once;
+conservatively attribute it to sampling and remove it from the physical
+denominator, documenting the allocation. The denominator must be the actual
+complete physical evaluation, with no redundant preparation added for timing.
+
+Measure representative production draws and stored hard/max-weight samples,
+reporting each set's aggregate ratio, per-draw distributions, high quantiles
+and extrema with repeated-batch timing uncertainty. Report first compilation,
+warmup and training separately. Unoptimized amplitude or component test timings
+do not establish this gate. Optimize only enough to meet the 10% bound, then
+stop performance work; retain correctness and normalization requirements.
+This budget is pending measurement, not a new passing or improvement claim.
+The historical optimized
+[X2 GL638 pilot](GL638_X2_PHYSICAL_PILOT.md#fixed-budget-pilot) recorded
+72.04–79.47 ms total per all-orientation draw, with 0.151–0.170 ms map time for
+direct-H selections and 0.075 ms for six optimized LMBs. It predates the joint
+chart and fixed-Arb policy phase. These values provide context only; the current
+unoptimized amplitude test rate likewise establishes neither success nor
+failure against the new matched optimized GL638 budget.
+
 ### Graph-binding groundwork validation
 
 The subsequent combined run passes 168 core tests in 141.997 seconds. The
@@ -458,12 +492,57 @@ A serial-edge graph checks distinct globally reversed shared routes, unequal
 partner masses, fixed-energy multiplicities and inconsistent mass diagnostics.
 Missing prerequisites/external ports and underflowed fixed energies are rejected.
 Existing raised-cut, raised-selection and shared-threshold regressions pass.
-These are factory/component checks; the factory is staged under `cfg(test)`
-until production policy transport is connected. The full GL638 external-frame
-specialization and hosted joint channel remain unimplemented.
+These were factory/component checks while the factory was staged under
+`cfg(test)`. They precede the current production amplitude binder and policy
+transport. The full GL638 external-frame specialization and hosted joint
+channel remain unimplemented.
 
 Core checking, Python-enabled API checking and all-target core clippy pass,
 with no changed-line warnings. Both saved-state reference-acceptance and
 summed/selected canonical-channel API regressions pass in 125.211 seconds.
 They validate the existing loaded-state workflow; they do not enable or certify
 production joint channels. Formatting and diff checks pass.
+
+### Current source milestone — validated amplitude binding and transport
+
+The amplitude binder accepts the supported shared-energy pair through the
+existing `intersect` block and complete parent frame. For the boosted kite the
+definition is
+`then(complement(4),block(lmb(6),intersect(surface(2,4,6),surface(3,5,6))))`,
+with parent `[4,6]` and an explicitly selected ordinary sibling. The first
+runtime prescription uses trial radius `e_cm * sampling.b` and normal scale
+one. `sampling.power` does not change the joint uniform-R law or introduce
+anisotropy. Both target equations and their native translation remain intact.
+Empty-prior blocks bind once at warmup through static `Affine`; only nonempty
+priors use ordered embedding.
+
+The added tests pass native map comparisons, all-18-orientation Gaussian/value
+and moment acceptance, retained choices under selective Double-to-Quad body
+retry, norm/debug prepasses, ordinary-phase bypass and generating-row separation.
+Actual physical checks establish `X = raw * J*w` and selected-momentum
+`raw * w` at the regular point.
+`generated_triangle_joint_binds_without_prerequisites` passes the actual
+empty-prior binder with nonzero offset, compact roundtrip and one production
+reference evaluation.
+These source fixtures clear rotation probes; they do not establish behavior
+under nonidentity probes.
+
+The combined run passes 170 focused core tests in 110.864 s. The complete kite
+test passes in 1537.369 s, including 8192 Gaussian draws satisfying the fixed
+6% normalization and 8% moment bounds. Both saved-state/canonical-channel API
+regressions pass in 104.496 s; core checking takes 17.15 s and API checking
+15.51 s. Clippy passes in 73 s with 52 existing warnings, none on changed lines;
+formatting and diff checks pass. The full kite timing comes from the unoptimized
+test profile and measures the complete fixture, not production map cost. The
+matched optimized GL638 10% runtime gate remains pending.
+In the controlled law-switch example, 1 versus 3/2
+is the compact-generator conditional oracle; with the equally selected ordinary
+sibling and constant support-gated proxies, the complete mean is 1 versus 5/4.
+
+These changes do not supply GL638's exact fixed-external routing specialization
+or authoritative Cutkosky `t*` handoff. CT-star pullbacks separately need the
+actual common overlap center and native projection alpha. The next host record
+belongs to lane-local typed map/runtime preparation, carrying the native routed
+equation and root into physical adoption and raised jets; metadata retains only
+cross-lane decisions/history. No all-orientation
+GL638 bounded-weight or variance improvement follows from amplitude acceptance.

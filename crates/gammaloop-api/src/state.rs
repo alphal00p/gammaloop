@@ -5587,8 +5587,9 @@ rotation_axis = [{type = "x"}, {type = "y"}]
         // reconstructed raw point, including the nonzero external shift.
         use gammalooprs::{
             integrands::process::{
-                GraphTerm, MomentumSpaceEvaluationInput, ProcessIntegrand, ProcessIntegrandImpl,
-                SamplingMapComponent, SamplingMapDefinition, SamplingMapKernel,
+                sampling_context::SamplingMapContext, GraphTerm, MomentumSpaceEvaluationInput,
+                ProcessIntegrand, ProcessIntegrandImpl, SamplingMapComponent,
+                SamplingMapDefinition, SamplingMapKernel,
             },
             momentum::ThreeMomentum,
         };
@@ -5634,8 +5635,9 @@ rotation_axis = [{type = "x"}, {type = "y"}]
             1,
         )?;
         let xs = [0.27, 0.36, 0.71];
-        let selected = SamplingMapComponent::forward(&kernel, &xs, &[])?;
-        let raw = frame.forward(&selected.point, &[])?;
+        let selected =
+            SamplingMapComponent::forward(&kernel, &xs, &mut SamplingMapContext::detached(&[]))?;
+        let raw = frame.forward(&selected.point, &mut SamplingMapContext::detached(&[]))?;
         let sampling_jacobian = selected.jacobian * raw.jacobian;
         let sample = Sample::Continuous(F(1.0), xs.into_iter().map(F).collect());
         let reference_result = integrand.evaluate_reference_sample_detailed(&sample, &reference)?;

@@ -23,7 +23,9 @@ use crate::observables::{
     events::{format_complex_generic, format_optional_real_generic, format_real_generic},
 };
 use crate::{
-    integrands::process::sampling_reference::ReferenceMoments,
+    integrands::process::{
+        sampling_context::SamplingProposalPolicies, sampling_reference::ReferenceMoments,
+    },
     settings::runtime::{IntegrationStatisticsSnapshot, Precision},
     utils::{
         ArbPrec, F, FloatLike, duration_from_secs_f64_saturating, f128, format_evaluation_time,
@@ -998,6 +1000,8 @@ pub struct EvaluationMetaData {
     pub(crate) threshold_counterterm_error: Option<String>,
     #[serde(skip)]
     pub(crate) radial_root_diagnostics: RadialRootDiagnostics,
+    #[serde(skip)]
+    pub(crate) sampling_proposal_policies: SamplingProposalPolicies,
 }
 
 impl Display for EvaluationMetaData {
@@ -1077,6 +1081,7 @@ impl EvaluationMetaData {
             stability_results: Vec::new(),
             threshold_counterterm_error: None,
             radial_root_diagnostics: RadialRootDiagnostics::default(),
+            sampling_proposal_policies: SamplingProposalPolicies::default(),
         }
     }
 
