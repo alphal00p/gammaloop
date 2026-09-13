@@ -88,7 +88,8 @@ pub use sampling_reference::{
 };
 pub use sampling_selection::{
     CompiledSamplingChannel, CompiledSamplingMap, ResolvedNamedSamplingChannel,
-    ResolvedSamplingChannelSelection, SamplingCatalogueEntry, SamplingChannelCatalogue,
+    ResolvedSamplingChannelSelection, SamplingCatalogueEntry, SamplingChannelBridge,
+    SamplingChannelBridgeError, SamplingChannelBridgeEvaluation, SamplingChannelCatalogue,
     SamplingChannelCompileContext, SamplingChannelCompileError, SamplingChannelPreset,
     SamplingChannelSelector, SamplingSelectionError, SamplingSurfaceGeometry,
     build_sampling_channel_catalogue, explicitly_selected_graphs, graph_channel_definitions,

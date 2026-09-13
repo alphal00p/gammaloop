@@ -15,8 +15,9 @@ use crate::settings::runtime::{SamplingChannelDefinition, SamplingChannelSelecti
 use color_eyre::eyre::Result;
 
 use super::{
-    SamplingMapComponent, SamplingMapContract, SamplingMapDefinition, SamplingMapEvaluation,
-    SamplingMapKernel, SurfaceRadialMap,
+    SamplingChannelScore, SamplingMapComponent, SamplingMapContract, SamplingMapDefinition,
+    SamplingMapEvaluation, SamplingMapKernel, SamplingPartition, SamplingPartitionMode,
+    SamplingScoreFunction, SurfaceRadialMap,
 };
 use crate::settings::runtime::ParameterizationSettings;
 
@@ -241,6 +242,247 @@ pub struct CompiledSamplingChannel {
     /// Ordered master-graph edge ids for this raw coordinate block.
     pub embedded_edges: Vec<usize>,
     pub map: CompiledSamplingMap,
+}
+
+/// A bounded bridge from compiled graph channels to the existing graph
+/// evaluator.  The bridge deliberately deals in the complete master raw
+/// frame: it never silently embeds a lower-dimensional surface block or
+/// reinterprets a channel in another graph's loop basis.
+#[derive(Clone, Debug)]
+pub struct SamplingChannelBridge {
+    channels: Vec<CompiledSamplingChannel>,
+    scores: Vec<SamplingChannelScore>,
+    dimensions: usize,
+}
+
+/// One push-forward/inverse result together with the common raw-frame
+/// multichannel partition.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SamplingChannelBridgeEvaluation {
+    pub channel_index: usize,
+    pub channel_name: String,
+    /// The complete master raw coordinate frame passed to graph evaluation.
+    pub raw_coordinates: Vec<f64>,
+    pub map: SamplingMapEvaluation,
+    pub partition: SamplingPartition,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SamplingChannelBridgeError {
+    Empty,
+    DimensionMismatch {
+        channel: String,
+        dimensions: usize,
+        expected: usize,
+    },
+    IncompatibleFrames {
+        channel: String,
+        edges: Vec<usize>,
+        expected: Vec<usize>,
+    },
+    PartialSupport {
+        channel: String,
+        support: super::SamplingSupport,
+    },
+    InexactJacobian {
+        channel: String,
+        jacobian: super::SamplingJacobian,
+    },
+    InvalidChannel {
+        channel: String,
+        error: String,
+    },
+    UnknownChannel {
+        channel: usize,
+    },
+}
+
+impl fmt::Display for SamplingChannelBridgeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => {
+                formatter.write_str("sampling channel bridge requires at least one channel")
+            }
+            Self::DimensionMismatch {
+                channel,
+                dimensions,
+                expected,
+            } => write!(
+                formatter,
+                "sampling channel `{channel}` has {dimensions} raw dimensions; the bridge requires {expected}"
+            ),
+            Self::IncompatibleFrames {
+                channel,
+                edges,
+                expected,
+            } => write!(
+                formatter,
+                "sampling channel `{channel}` uses master-frame edges {edges:?}, incompatible with bridge frame {expected:?}"
+            ),
+            Self::PartialSupport { channel, support } => write!(
+                formatter,
+                "sampling channel `{channel}` has {support:?} support; partial/conditional surface maps cannot be passed to the graph evaluator"
+            ),
+            Self::InexactJacobian { channel, jacobian } => write!(
+                formatter,
+                "sampling channel `{channel}` supplies {jacobian:?}; the evaluator bridge requires an exact map Jacobian"
+            ),
+            Self::InvalidChannel { channel, error } => {
+                write!(
+                    formatter,
+                    "sampling channel `{channel}` is invalid: {error}"
+                )
+            }
+            Self::UnknownChannel { channel } => {
+                write!(
+                    formatter,
+                    "sampling channel index {channel} is out of range"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for SamplingChannelBridgeError {}
+
+impl SamplingChannelBridge {
+    /// Construct an exact map-density bridge.  Every map must cover the full
+    /// raw frame and have an exact forward determinant; this rejects partial
+    /// surface maps before they can reach graph evaluation.
+    pub fn new(
+        channels: Vec<CompiledSamplingChannel>,
+    ) -> std::result::Result<Self, SamplingChannelBridgeError> {
+        let Some(first) = channels.first() else {
+            return Err(SamplingChannelBridgeError::Empty);
+        };
+        let dimensions = first.dimensions();
+        let frame = &first.embedded_edges;
+        let mut scores = Vec::with_capacity(channels.len());
+        for channel in &channels {
+            if channel.embedded_edges != *frame {
+                return Err(SamplingChannelBridgeError::IncompatibleFrames {
+                    channel: channel.name.clone(),
+                    edges: channel.embedded_edges.clone(),
+                    expected: frame.clone(),
+                });
+            }
+            if channel.dimensions() != dimensions {
+                return Err(SamplingChannelBridgeError::DimensionMismatch {
+                    channel: channel.name.clone(),
+                    dimensions: channel.dimensions(),
+                    expected: dimensions,
+                });
+            }
+            let contract = channel.contract();
+            if contract.support != super::SamplingSupport::Full {
+                return Err(SamplingChannelBridgeError::PartialSupport {
+                    channel: channel.name.clone(),
+                    support: contract.support,
+                });
+            }
+            if matches!(contract.jacobian, super::SamplingJacobian::ProxyOnly) {
+                return Err(SamplingChannelBridgeError::InexactJacobian {
+                    channel: channel.name.clone(),
+                    jacobian: contract.jacobian,
+                });
+            }
+            let map = channel.map.clone();
+            let name = channel.name.clone();
+            scores.push(SamplingChannelScore::map_density(
+                name,
+                SamplingScoreFunction::from_positive_function(move |raw| {
+                    let evaluation = map.inverse(raw)?;
+                    let density = evaluation.inverse_jacobian.abs();
+                    if !density.is_finite() || density <= 0.0 {
+                        return Err(color_eyre::eyre::eyre!(
+                            "inverse map density is not finite and positive: {density}"
+                        ));
+                    }
+                    Ok(Some(density))
+                }),
+            ));
+        }
+        Ok(Self {
+            channels,
+            scores,
+            dimensions,
+        })
+    }
+
+    pub fn channels(&self) -> &[CompiledSamplingChannel] {
+        &self.channels
+    }
+
+    pub fn dimensions(&self) -> usize {
+        self.dimensions
+    }
+
+    pub fn partition(&self, raw_coordinates: &[f64]) -> Result<SamplingPartition> {
+        if raw_coordinates.len() != self.dimensions {
+            return Err(color_eyre::eyre::eyre!(
+                "raw sampling frame has {}, expected {} dimensions",
+                raw_coordinates.len(),
+                self.dimensions
+            ));
+        }
+        SamplingPartition::new(
+            SamplingPartitionMode::MapDensity,
+            &self.scores,
+            raw_coordinates,
+        )
+    }
+
+    pub fn forward(
+        &self,
+        channel_index: usize,
+        coordinates: &[f64],
+    ) -> Result<SamplingChannelBridgeEvaluation> {
+        let channel =
+            self.channels
+                .get(channel_index)
+                .ok_or(SamplingChannelBridgeError::UnknownChannel {
+                    channel: channel_index,
+                })?;
+        let map = channel.forward(coordinates)?;
+        if map.point.len() != self.dimensions {
+            return Err(SamplingChannelBridgeError::DimensionMismatch {
+                channel: channel.name.clone(),
+                dimensions: map.point.len(),
+                expected: self.dimensions,
+            }
+            .into());
+        }
+        let partition = self.partition(&map.point)?;
+        Ok(SamplingChannelBridgeEvaluation {
+            channel_index,
+            channel_name: channel.name.clone(),
+            raw_coordinates: map.point.clone(),
+            map,
+            partition,
+        })
+    }
+
+    pub fn inverse(
+        &self,
+        channel_index: usize,
+        raw_coordinates: &[f64],
+    ) -> Result<SamplingChannelBridgeEvaluation> {
+        let channel =
+            self.channels
+                .get(channel_index)
+                .ok_or(SamplingChannelBridgeError::UnknownChannel {
+                    channel: channel_index,
+                })?;
+        let map = channel.inverse(raw_coordinates)?;
+        let partition = self.partition(raw_coordinates)?;
+        Ok(SamplingChannelBridgeEvaluation {
+            channel_index,
+            channel_name: channel.name.clone(),
+            raw_coordinates: raw_coordinates.to_vec(),
+            map,
+            partition,
+        })
+    }
 }
 
 impl CompiledSamplingChannel {
@@ -944,6 +1186,106 @@ mod tests {
         assert!(matches!(
             catalogue.compile(&context),
             Err(SamplingChannelCompileError::UnsupportedMap { .. })
+        ));
+    }
+
+    #[test]
+    fn bridge_pushes_selected_channel_and_partitions_the_raw_frame() {
+        let settings = ParameterizationSettings::default();
+        let map = SamplingMapKernel::new(
+            SamplingMapDefinition::Lmb(vec![1]),
+            settings.clone(),
+            100.0,
+            1,
+        )
+        .unwrap();
+        let second =
+            SamplingMapKernel::new(SamplingMapDefinition::Lmb(vec![1]), settings, 100.0, 1)
+                .unwrap();
+        let bridge = SamplingChannelBridge::new(vec![
+            CompiledSamplingChannel {
+                name: "left".into(),
+                master_graph: "G".into(),
+                basis_id: Some(0),
+                definition: SamplingMapDefinition::Lmb(vec![1]),
+                embedded_edges: vec![1],
+                map: CompiledSamplingMap::Lmb(map),
+            },
+            CompiledSamplingChannel {
+                name: "right".into(),
+                master_graph: "G".into(),
+                basis_id: Some(1),
+                definition: SamplingMapDefinition::Lmb(vec![1]),
+                embedded_edges: vec![1],
+                map: CompiledSamplingMap::Lmb(second),
+            },
+        ])
+        .unwrap();
+        let evaluation = bridge.forward(1, &[0.31, 0.42, 0.57]).unwrap();
+        assert_eq!(evaluation.raw_coordinates, evaluation.map.point);
+        assert_eq!(evaluation.partition.weights.len(), 2);
+        assert!((evaluation.partition.weight_sum() - 1.0).abs() < 1.0e-12);
+        assert!(
+            evaluation
+                .partition
+                .weights
+                .iter()
+                .all(|weight| *weight > 0.0)
+        );
+        let inverse = bridge.inverse(1, &evaluation.raw_coordinates).unwrap();
+        assert!(inverse.map.residual < 1.0e-10);
+    }
+
+    #[test]
+    fn bridge_rejects_partial_or_mismatched_channels() {
+        let settings = ParameterizationSettings::default();
+        let map = SamplingMapKernel::new(SamplingMapDefinition::Lmb(vec![1]), settings, 100.0, 1)
+            .unwrap();
+        let channel = CompiledSamplingChannel {
+            name: "one".into(),
+            master_graph: "G".into(),
+            basis_id: Some(0),
+            definition: SamplingMapDefinition::Lmb(vec![1]),
+            embedded_edges: vec![1],
+            map: CompiledSamplingMap::Lmb(map),
+        };
+        let bridge = SamplingChannelBridge::new(vec![channel.clone()]).unwrap();
+        assert!(bridge.forward(1, &[0.2, 0.3, 0.4]).is_err());
+        let mut malformed = channel;
+        malformed.name = "wrong".into();
+        // A map with a different loop count cannot be put into the common raw frame.
+        let other = SamplingMapKernel::new(
+            SamplingMapDefinition::Lmb(vec![1, 2]),
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        )
+        .unwrap();
+        malformed.map = CompiledSamplingMap::Lmb(other);
+        assert!(matches!(
+            SamplingChannelBridge::new(vec![malformed, bridge.channels()[0].clone()]),
+            Err(SamplingChannelBridgeError::DimensionMismatch { .. })
+        ));
+
+        let different_frame = CompiledSamplingChannel {
+            name: "different-frame".into(),
+            master_graph: "G".into(),
+            basis_id: Some(2),
+            definition: SamplingMapDefinition::Lmb(vec![2]),
+            embedded_edges: vec![2],
+            map: CompiledSamplingMap::Lmb(
+                SamplingMapKernel::new(
+                    SamplingMapDefinition::Lmb(vec![2]),
+                    ParameterizationSettings::default(),
+                    100.0,
+                    1,
+                )
+                .unwrap(),
+            ),
+        };
+        assert!(matches!(
+            SamplingChannelBridge::new(vec![bridge.channels()[0].clone(), different_frame]),
+            Err(SamplingChannelBridgeError::IncompatibleFrames { .. })
         ));
     }
 }
