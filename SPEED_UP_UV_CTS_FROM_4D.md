@@ -2256,3 +2256,78 @@ If a gate fails, use the measurements to continue the generic implementation, in
   `diagnostic_sparse_pair_estimate/unit_checks`. The broader integration and
   final physical generation/runtime gates remain pending. These checks overlap
   the immutable diagnostic and are correctness evidence only.
+
+### 2026-09-13 — Complete GL00 acceptance and GL262 evaluator failure
+
+- Milestone 26 is committed and pushed as
+  `f938f9c1386eb2670a0a7f603f5eb0878086352a`, with ValentinHirschi as author
+  and committer. CLI22 SHA256 is
+  `b84c2d9e89f7a28fd1c1910db8b2d43cd1fda2db460fd2e5d6fa4661eca6c36a`;
+  counter22 SHA256 is
+  `f7eb7998ef2cfb991b45838bfb80f96bea21f0c10bbd84c363dc1a9e7f948822`.
+  CLI check/build pass in 12.235/215.715 s. Four integration executables are
+  frozen from this source; all 630 selected unit tests pass (308 core,
+  153 Linnet, 169 Spenso). The integration freeze's first attempt rejected an
+  unsupported nextest command-line jobs flag. Its logs and recipe are preserved;
+  the corrected build uses CARGO_BUILD_JOBS=8 and passes. No physics assertions
+  or expected values changed. The 184 integration executions remain pending.
+- The immutable CLI21 direct GL262 run completed all 3,050 tensor summands.
+  The complete atom-preprocessing interval is 2,314.461627237 s: normalization
+  4.664586707 s, parsing/preparation 346.884190798 s, contraction
+  1,803.169261787 s and scalar-finalization/loop residual 159.743587945 s.
+  Independently measured alias resolution is a 121.587107639 s subset of that
+  residual. The enclosing preprocessing interval is 2,314.506255130 s.
+- At the pre-evaluator event (15:12:41.096 UTC), RSS was 46,050,947,072 bytes
+  and the process high-water mark was 68,617,658,368 bytes. Observation lag was
+  42.844 ms. These distinguish current boundary RSS from prior peak memory.
+  The final scalar contains 19,982,016,710 bytes, equal in size to the old
+  CLI18 result; equal size alone is not an exact symbolic-equality certificate.
+- Expression preparation took 175.971761456 s, with zero function-map
+  replacements. A separate twenty-second sample attributes this interval to
+  orientation-condition symbol searches in the lazily consumed input iterator.
+  It is not the cost of the empty replacement branch. Symbolica construction
+  began at 15:15:37.070 UTC with Horner=1 and CPE=5.
+- The run then failed inside Symbolica construction: exit 101, outer wall
+  3,598.304500737 s, peak RSS 120,480,550,912 bytes. The 500 GB RAM guard did
+  not intervene. No completed evaluator, saved state, production forest export
+  or numerical runtime exists. The reported buffer-boundary panic is under
+  source-level investigation; expression-size handling is a hypothesis rather
+  than a proven diagnosis. Final failure audits and the complete preprocessing
+  prefix are retained under `diagnostic_bulk_scalar_tensor_sum`.
+- Stage-specific memory corrects the early GL262 comparison. At forest
+  completion CLI21 direct used 1,400,643,584 bytes RSS, with a 3,001,602,048-byte
+  high-water mark; CLI18 erased used 2,270,416,896 and 4,097,462,272 bytes.
+  These are different frozen revisions, whose UV code is unchanged, and are
+  diagnostic observations rather than final paired timings. The much larger
+  peaks occur in later tensor/scalar processing. Erased CLI18's eventual
+  375,509,811,200-byte peak is explicitly a failed, capped attempt.
+- Fresh CLI22 GL00 acceptance now completes: all three routes, three fresh
+  generations per route, both base and 100x points, with no owned build/profile
+  overlap. Graph-generation medians are 11.925558 s (localized 3D), 6.316841 s
+  (erased 3D) and 6.476487 s (direct 4D). The primary generation ratio is
+  1.025273. Process-wall medians are separately 13.006635, 7.004717 and
+  8.004754 s and are not substituted for graph-generation timings.
+- GL00 direct/erased evaluator ratios are 0.795665 at the base point and
+  0.805925 at the scaled point; total-time ratios are 0.818698 and 0.825173.
+  All five gates pass, with repeat and within-pass uncertainty envelopes clear
+  of 1.15. There are 54 retained primed passes of twenty batches, totaling
+  2,388,838 samples and 195.916593598 actual seconds. Every retained pass lasts
+  3.362306–3.906375 measured seconds. Undersized initial attempts remain
+  excluded. All eighteen pointwise comparisons pass; worst relative difference
+  is 4.32938e-15. Counts are stable across repeats, with 20,210 original
+  instructions in direct 4D versus 25,840 in erased 3D. Localized 3D retains
+  both its original and its separate summed-function-map program in the audit.
+- GL00 generation high-water ranges are 520.5–574.0 MB (localized),
+  297.9–355.8 MB (erased), and 394.1–408.2 MB (direct). Thus this small graph
+  still has a modest direct-route memory premium; it is distinct from GL262's
+  tens/hundreds-of-GB expression-materialization problem. The full GL00-only
+  snapshot and independent receipt/sample/counter audit are preserved in
+  `diagnostic_sparse_pair_estimate/final27` before future aggregate reuse.
+- The existing captured-evaluator small H1/CPE5 control passes again. A
+  separately guarded replay of the unchanged 3,389,407,083-byte physical GL262
+  scalar component is running with the same pinned symbolic builder, without
+  repeating UV construction or tensor contraction. It is one component, not
+  the complete failed 19.98 GB scalar. Alternate existing-compiler control
+  cards are prepared but unrun; they are diagnostics only and do not change
+  the production or final benchmark settings. GL01, GL262 and all remaining
+  integration/performance requirements keep the implementation goal open.
