@@ -94,9 +94,9 @@ pub use sampling_reference::{
     GaussianReferenceFunction, ReferenceSampleEvaluation, ReferenceSamplingReport,
 };
 pub use sampling_selection::{
-    CompiledSamplingChannel, CompiledSamplingMap, ResolvedNamedSamplingChannel,
-    ResolvedSamplingChannelSelection, SamplingCatalogueEntry, SamplingChannelBridge,
-    SamplingChannelBridgeAcceptanceReport, SamplingChannelBridgeError,
+    CompiledSamplingChannel, CompiledSamplingMap, DeferredCrossSectionSamplingState,
+    ResolvedNamedSamplingChannel, ResolvedSamplingChannelSelection, SamplingCatalogueEntry,
+    SamplingChannelBridge, SamplingChannelBridgeAcceptanceReport, SamplingChannelBridgeError,
     SamplingChannelBridgeEvaluation, SamplingChannelCatalogue, SamplingChannelCompileContext,
     SamplingChannelCompileError, SamplingChannelId, SamplingChannelInspection,
     SamplingChannelPreset, SamplingChannelRuntimeContexts, SamplingChannelSelector,
@@ -3543,6 +3543,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
             DiscreteGraphSample::MultiChanneling {
                 alpha,
                 channel_weight,
+                sampling_coordinates,
                 sample,
             } => {
                 let parameterization_settings = context
@@ -3551,32 +3552,116 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     .get_parameterization_settings()
                     .expect("LMB multichanneling requires a parameterization.");
                 let channel_ids = integrand
-                    .get_master_graph(group_id)
+                    .get_graph(graph_id)
                     .sampling_channel_ids(&parameterization_settings)?;
+                let use_canonical_bridge = integrand
+                    .get_graph(graph_id)
+                    .supports_canonical_summed_sampling();
+                let coordinates = sampling_coordinates.as_ref().map(|coordinates| {
+                    coordinates
+                        .iter()
+                        .map(|coordinate| coordinate.clone().into_ff64().0)
+                        .collect_vec()
+                });
+                let bridge = if use_canonical_bridge {
+                    let externals = context
+                        .settings
+                        .kinematics
+                        .externals
+                        .get_dependent_externals::<f64>(
+                            integrand.get_dependent_momenta_constructor(),
+                        )?;
+                    let external_momenta = externals
+                        .iter()
+                        .map(|momentum| {
+                            [
+                                momentum.temporal.value.0,
+                                momentum.spatial.px.0,
+                                momentum.spatial.py.0,
+                                momentum.spatial.pz.0,
+                            ]
+                        })
+                        .collect_vec();
+                    Some(integrand.get_graph(graph_id).compile_sampling_bridge(
+                        &parameterization_settings,
+                        context.settings.kinematics.e_cm,
+                        &external_momenta,
+                        sample.sample.orientation,
+                    )?)
+                } else {
+                    None
+                };
+                let channel_count = channel_ids.len() as f64;
                 channel_ids
                     .into_iter()
                     .map(|channel_index| {
-                        if !integrand
-                            .get_master_graph(group_id)
-                            .sampling_channel_is_lmb(channel_index, &parameterization_settings)?
-                        {
-                            return Err(eyre!(
-                                "summed sampling multichanneling cannot evaluate graph-aware channel {}; use discrete multi-channeling",
-                                channel_index.index()
-                            ));
+                        if let Some(bridge) = bridge.as_ref() {
+                            let coordinates = coordinates.as_ref().ok_or_else(|| {
+                                eyre!(
+                                    "canonical summed amplitude channel {} requires retained unit-cube coordinates",
+                                    channel_index.index()
+                                )
+                            })?;
+                            let mapped = bridge.forward(channel_index, coordinates)?;
+                            let partition_weight = mapped
+                                .partition
+                                .weight(channel_index.index())
+                                .ok_or_else(|| {
+                                    eyre!(
+                                        "sampling channel partition has no weight for channel {}",
+                                        channel_index.index()
+                                    )
+                                })?;
+                            if !partition_weight.is_finite() || partition_weight <= 0.0 {
+                                return Err(eyre!(
+                                    "sampling channel partition has invalid weight {partition_weight}"
+                                ));
+                            }
+                            let mut mapped_sample = mapped.to_momentum_sample::<T>(
+                                SamplingMomentumSampleContext {
+                                    loop_mom_cache_id: sample.sample.loop_mom_cache_id,
+                                    external_moms: &context.settings.kinematics.externals,
+                                    external_mom_cache_id: sample.sample.external_mom_cache_id,
+                                    dependent_momenta_constructor: integrand
+                                        .get_dependent_momenta_constructor(),
+                                    orientation: sample.sample.orientation,
+                                },
+                            )?;
+                            mapped_sample.sample.parameterization_branch =
+                                sample.sample.parameterization_branch;
+                            mapped_sample.sample.jacobian = mapped_sample.sample.jacobian
+                                * F::from_f64(partition_weight * channel_count);
+                            evaluate_graph_term(
+                                integrand,
+                                graph_id,
+                                &mapped_sample,
+                                context,
+                                Some(SamplingChannelEvaluation::Mapped { id: channel_index }),
+                                None,
+                            )
+                        } else {
+                            if !integrand.get_graph(graph_id).sampling_channel_is_lmb(
+                                channel_index,
+                                &parameterization_settings,
+                            )? {
+                                return Err(eyre!(
+                                    "summed sampling multichanneling cannot evaluate graph-aware channel {}; use discrete multi-channeling",
+                                    channel_index.index()
+                                ));
+                            }
+                            evaluate_graph_term(
+                                integrand,
+                                graph_id,
+                                sample,
+                                context,
+                                Some(SamplingChannelEvaluation::LegacyLmb {
+                                    id: channel_index,
+                                    alpha: alpha.clone(),
+                                    channel_weight: *channel_weight,
+                                }),
+                                None,
+                            )
                         }
-                        evaluate_graph_term(
-                            integrand,
-                            graph_id,
-                            sample,
-                            context,
-                            Some(SamplingChannelEvaluation::LegacyLmb {
-                                id: channel_index,
-                                alpha: alpha.clone(),
-                                channel_weight: *channel_weight,
-                            }),
-                            None,
-                        )
                     })
                     .try_fold(
                         GraphEvaluationResult::zero(zero.clone()),
@@ -4485,10 +4570,25 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                             "Channel selection is not available for this discrete-graph sampling mode."
                         ));
                     }
-                    DiscreteGraphSample::MultiChanneling {
-                        alpha: F::from_f64(multichanneling_settings.alpha),
-                        channel_weight: multichanneling_settings.channel_weight,
-                        sample,
+                    if integrand
+                        .get_master_graph(group_id)
+                        .supports_canonical_summed_sampling()
+                    {
+                        // Direct momentum input already contains the desired
+                        // point; amplitudes must not reinterpret it once per
+                        // channel. The canonical bridge is only needed for
+                        // unit-cube samples, which retain their coordinates.
+                        DiscreteGraphSample::Default {
+                            sample,
+                            use_lmb_basis: false,
+                        }
+                    } else {
+                        DiscreteGraphSample::MultiChanneling {
+                            alpha: F::from_f64(multichanneling_settings.alpha),
+                            channel_weight: multichanneling_settings.channel_weight,
+                            sampling_coordinates: None,
+                            sample,
+                        }
                     }
                 }
                 DiscreteGraphSamplingType::TropicalSampling(_) => {

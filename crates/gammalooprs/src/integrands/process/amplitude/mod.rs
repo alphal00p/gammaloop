@@ -45,8 +45,7 @@ use crate::{
         HasIntegrand,
         evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
-            LmbChannelWeightingSettings, ParamBuilder, SamplingChannelBridge,
-            SamplingChannelCompileContext, SamplingChannelId,
+            ParamBuilder, SamplingChannelBridge, SamplingChannelCompileContext, SamplingChannelId,
             evaluators::{ActiveF64Backend, EvaluatorStack},
             graph_to_group_id_for_group_structure, resolve_sampling_channel_selection,
             threshold_multiplier::ThresholdMultiplierEvaluatorCollection,
@@ -807,47 +806,26 @@ impl AmplitudeGraphTerm {
         momentum_sample: &MomentumSample<T>,
         context: &mut GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<AmplitudeGraphTermEvaluation<T>> {
-        let (momentum_sample, prefactor) = if let Some(SamplingChannelEvaluation::LegacyLmb {
-            id: channel_id,
-            alpha,
-            channel_weight,
-        }) = &context.sampling_channel
-        {
-            let parameterization_settings = context
-                .settings
-                .sampling
-                .get_parameterization_settings()
-                .expect("LMB multichanneling requires a parameterization.");
-            let weighting_settings = LmbChannelWeightingSettings {
-                graph_name: &self.multi_channeling_setup.graph.name,
-                model: context.model,
-                alpha,
-                channel_weight: *channel_weight,
-                parameterization_settings: &parameterization_settings,
-                e_cm: context.settings.kinematics.e_cm,
-            };
-
-            self.multi_channeling_setup
-                .reinterpret_loop_momenta_and_compute_prefactor(
-                    *channel_id,
-                    momentum_sample,
-                    0,
-                    weighting_settings,
-                )?
+        if matches!(
+            &context.sampling_channel,
+            Some(SamplingChannelEvaluation::LegacyLmb { .. })
+        ) {
+            return Err(eyre!(
+                "amplitude sampling channels must be mapped through the canonical sampling bridge"
+            ));
+        }
+        let (momentum_sample, prefactor) = if let Some(lmb_basis_id) = context.lmb_basis_id {
+            (
+                self.multi_channeling_setup
+                    .reinterpret_loop_momenta_for_lmb(
+                        lmb_basis_id,
+                        momentum_sample,
+                        momentum_sample.sample.loop_mom_cache_id,
+                    ),
+                momentum_sample.one(),
+            )
         } else {
-            if let Some(lmb_basis_id) = context.lmb_basis_id {
-                (
-                    self.multi_channeling_setup
-                        .reinterpret_loop_momenta_for_lmb(
-                            lmb_basis_id,
-                            momentum_sample,
-                            momentum_sample.sample.loop_mom_cache_id,
-                        ),
-                    momentum_sample.one(),
-                )
-            } else {
-                (momentum_sample.clone(), momentum_sample.one())
-            }
+            (momentum_sample.clone(), momentum_sample.one())
         };
 
         let hel = context.settings.kinematics.externals.get_helicities();
