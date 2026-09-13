@@ -1124,6 +1124,26 @@ impl SamplingChannelCatalogue {
                         });
                     }
                     let definition = channel.map.clone();
+                    match &definition {
+                        SamplingMapDefinition::Left(_) | SamplingMapDefinition::Right(_) => {
+                            let required_side =
+                                if matches!(&definition, SamplingMapDefinition::Left(_)) {
+                                    super::SamplingCutSide::Left
+                                } else {
+                                    super::SamplingCutSide::Right
+                                };
+                            if context.side != Some(required_side) {
+                                return Err(SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: format!(
+                                        "map `{definition:?}` requires prepared side {required_side:?}, but context supplies {:?}",
+                                        context.side
+                                    ),
+                                });
+                            }
+                        }
+                        _ => {}
+                    }
                     let map = match &definition {
                         SamplingMapDefinition::Lmb(edges) => {
                             compile_lmb_map(&channel.name, None, edges, context)?
