@@ -1339,7 +1339,7 @@ pub(crate) fn evaluate_profile_momentum_point_precise<I: ProcessIntegrandImpl>(
     )
 }
 
-fn format_lmb_channel_label(edge_ids: &[usize]) -> String {
+fn format_sampling_channel_label(edge_ids: &[usize]) -> String {
     let mut sorted = edge_ids.to_vec();
     sorted.sort_unstable();
     format!(
@@ -1394,7 +1394,7 @@ pub(crate) fn histogram_process_info_for_integrand<I: ProcessIntegrandImpl>(
                 .collect_vec()
         })
         .collect_vec();
-    let lmb_channel_labels_by_group = integrand
+    let sampling_channel_labels_by_group = integrand
         .get_group_structure()
         .iter_enumerated()
         .map(|(group_id, _)| {
@@ -1403,7 +1403,7 @@ pub(crate) fn histogram_process_info_for_integrand<I: ProcessIntegrandImpl>(
             (0..channel_count)
                 .map(|channel_id| {
                     Ok(master
-                        .lmb_channel_label(
+                        .sampling_channel_label(
                             SamplingChannelId::from(channel_id),
                             &parameterization_settings,
                         )?
@@ -1417,7 +1417,7 @@ pub(crate) fn histogram_process_info_for_integrand<I: ProcessIntegrandImpl>(
         graph_to_group_id,
         graph_group_master_names,
         orientation_labels_by_group,
-        lmb_channel_labels_by_group,
+        sampling_channel_labels_by_group,
     })
 }
 
@@ -3191,7 +3191,7 @@ pub trait GraphTerm {
 
     fn name(&self) -> String;
     fn orientation_label(&self, orientation_id: usize) -> Option<String>;
-    fn lmb_channel_label(
+    fn sampling_channel_label(
         &self,
         channel_id: SamplingChannelId,
         parameterization_settings: &ParameterizationSettings,

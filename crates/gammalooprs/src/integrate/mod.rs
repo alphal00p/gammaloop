@@ -949,7 +949,7 @@ fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
                     .iter()
                     .map(|&channel_id| {
                         graph_term
-                            .lmb_channel_label(channel_id, &parameterization_settings)
+                            .sampling_channel_label(channel_id, &parameterization_settings)
                             .ok()
                             .flatten()
                             .unwrap_or_else(|| format!("#{}", channel_id.index()))
@@ -975,7 +975,7 @@ fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
                     .iter()
                     .map(|&channel_id| {
                         graph_term
-                            .lmb_channel_label(channel_id, &parameterization_settings)
+                            .sampling_channel_label(channel_id, &parameterization_settings)
                             .ok()
                             .flatten()
                             .unwrap_or_else(|| format!("#{}", channel_id.index()))
