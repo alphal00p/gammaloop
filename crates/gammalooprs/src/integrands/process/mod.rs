@@ -99,9 +99,10 @@ pub use sampling_selection::{
     SamplingChannelBridgeAcceptanceReport, SamplingChannelBridgeError,
     SamplingChannelBridgeEvaluation, SamplingChannelCatalogue, SamplingChannelCompileContext,
     SamplingChannelCompileError, SamplingChannelId, SamplingChannelInspection,
-    SamplingChannelPreset, SamplingChannelSelector, SamplingMomentumSampleContext,
-    SamplingSelectionError, SamplingSurfaceGeometry, build_sampling_channel_catalogue,
-    build_sampling_channel_catalogue_with_surfaces, explicitly_selected_graphs,
+    SamplingChannelPreset, SamplingChannelSelector, SamplingCoverageReport,
+    SamplingMomentumSampleContext, SamplingSelectionError, SamplingSurfaceGeometry,
+    build_sampling_channel_catalogue, build_sampling_channel_catalogue_with_surfaces,
+    build_sampling_channel_catalogue_with_surfaces_and_coverage, explicitly_selected_graphs,
     graph_channel_definitions, resolve_sampling_channel_selection,
     resolve_sampling_channel_selection_replacing_default,
 };
@@ -2064,6 +2065,35 @@ impl LmbMultiChannelingSetup {
             .inspection())
     }
 
+    /// Report the conservative full-domain and elementary soft coverage of
+    /// the canonical catalogue.  This is an inspection operation only: it
+    /// does not discover physical E-surfaces or construct a second channel
+    /// enumeration.
+    pub fn sampling_channel_coverage_report(
+        &self,
+        resolved: &ResolvedSamplingChannelSelection,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<SamplingCoverageReport> {
+        let catalogue = self.sampling_channel_catalogue(resolved, parameterization_settings)?;
+        let all_lmbs = self
+            .all_bases
+            .iter_enumerated()
+            .map(|(basis_id, basis)| {
+                (
+                    usize::from(basis_id),
+                    basis.loop_edges.iter().map(|edge| edge.0).collect(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let massless_edges = self
+            .graph
+            .underlying
+            .iter_edges()
+            .filter_map(|(_, edge_id, edge)| edge.data.particle.is_massless().then_some(edge_id.0))
+            .collect::<Vec<_>>();
+        Ok(catalogue.coverage_report(&all_lmbs, &massless_edges))
+    }
+
     /// Resolve the same selection while supplying E-surface candidates already
     /// enumerated in the master graph frame. Surface existence and geometry are
     /// still prepared per cut/orientation before compilation.
@@ -2100,12 +2130,19 @@ impl LmbMultiChannelingSetup {
             .iter()
             .map(|edge| edge.0)
             .collect::<Vec<_>>();
-        Ok(build_sampling_channel_catalogue_with_surfaces(
+        let massless_edges = self
+            .graph
+            .underlying
+            .iter_edges()
+            .filter_map(|(_, edge_id, edge)| edge.data.particle.is_massless().then_some(edge_id.0))
+            .collect::<Vec<_>>();
+        Ok(build_sampling_channel_catalogue_with_surfaces_and_coverage(
             resolved,
             &all_lmbs,
             &optimized_lmbs,
             surface_edges,
             &parent_lmb,
+            &massless_edges,
         ))
     }
 

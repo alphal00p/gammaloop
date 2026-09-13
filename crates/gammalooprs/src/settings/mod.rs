@@ -757,6 +757,9 @@ mod tests {
         assert!(toml.contains("sampling_channels = \"monte_carlo\""));
         assert!(toml.contains("alpha = 3.0"));
         assert!(toml.contains("sampling_channel_weight = \"map_density\""));
+        assert!(!toml.contains("lmb_multichanneling"));
+        assert!(!toml.contains("lmb_channels"));
+        assert!(!toml.contains("lmb_channel_weight"));
         assert!(toml.contains("coordinate_system = \"spherical\""));
         assert!(toml.contains("power = 1.0"));
         assert!(toml.contains("graph_names = []"));
@@ -819,6 +822,35 @@ channel_definitions = { G = { bad = { around = "surface(1)" } } }
         )
         .unwrap_err();
         assert!(err.to_string().contains("requires a non-empty parent_lmb"));
+    }
+
+    #[test]
+    fn sampling_settings_rejects_duplicate_channel_edge_metadata() {
+        let duplicate_subspace = toml::from_str::<SamplingSettings>(
+            r#"
+sampling_multichanneling = true
+channel_definitions = { G = { bad = { around = "surface(1)", parent_lmb = [1, 2], subspace_lmb = [1, 1] } } }
+"#,
+        )
+        .unwrap_err();
+        assert!(
+            duplicate_subspace
+                .to_string()
+                .contains("duplicate subspace_lmb edge ids")
+        );
+
+        let duplicate_on_cut = toml::from_str::<SamplingSettings>(
+            r#"
+sampling_multichanneling = true
+channel_definitions = { G = { bad = { around = "surface(1)", parent_lmb = [1, 2], subspace_lmb = [1], on_cut = [3, 3] } } }
+"#,
+        )
+        .unwrap_err();
+        assert!(
+            duplicate_on_cut
+                .to_string()
+                .contains("duplicate on_cut edge ids")
+        );
     }
 
     #[test]

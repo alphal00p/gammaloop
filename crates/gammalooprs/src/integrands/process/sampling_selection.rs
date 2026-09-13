@@ -155,6 +155,23 @@ pub struct SamplingChannelCatalogue {
     pub entries: Vec<SamplingCatalogueEntry>,
 }
 
+/// Conservative coverage facts for a resolved catalogue.
+///
+/// This report only makes claims that can be established from the canonical
+/// catalogue itself.  In particular, an LMB entry is known to provide a
+/// full-domain ordinary map, while a named graph-aware map is not assumed to
+/// have full support until its compiled contract has been checked.  The soft
+/// audit is deliberately elementary: it records massless loop edges that are
+/// present in at least one generated LMB and whether an ordinary selected
+/// channel exposes each one.  It does not claim coverage of compound soft or
+/// collinear strata.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SamplingCoverageReport {
+    pub has_full_domain_lmb: bool,
+    pub covered_massless_loop_edges: Vec<usize>,
+    pub missing_massless_loop_edges: Vec<usize>,
+}
+
 /// Stable, side-effect-free view of the resolved catalogue for diagnostics.
 ///
 /// This report is deliberately built from [`SamplingChannelCatalogue`] rather
@@ -1813,6 +1830,51 @@ impl SamplingChannelCatalogue {
         })
     }
 
+    /// Audit ordinary full-domain and elementary soft coverage using the same
+    /// catalogue entries that drive production channel enumeration.
+    pub fn coverage_report(
+        &self,
+        all_lmbs: &[(usize, Vec<usize>)],
+        massless_edges: &[usize],
+    ) -> SamplingCoverageReport {
+        let selected_lmbs = self
+            .entries
+            .iter()
+            .filter_map(|entry| match entry {
+                SamplingCatalogueEntry::Lmb {
+                    basis_id, edges, ..
+                } => Some((*basis_id, edges.as_slice())),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        // A zero-loop graph has a zero-dimensional momentum domain and needs
+        // no ordinary LMB coordinate block to cover it.
+        let has_full_domain_lmb = !selected_lmbs.is_empty() || all_lmbs.is_empty();
+        let relevant_massless = massless_edges
+            .iter()
+            .copied()
+            .filter(|edge| all_lmbs.iter().any(|(_, lmb)| lmb.contains(edge)))
+            .collect::<BTreeSet<_>>();
+        let covered_massless_loop_edges = relevant_massless
+            .iter()
+            .copied()
+            .filter(|edge| selected_lmbs.iter().any(|(_, lmb)| lmb.contains(edge)))
+            .collect::<Vec<_>>();
+        let covered_set = covered_massless_loop_edges
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let missing_massless_loop_edges = relevant_massless
+            .difference(&covered_set)
+            .copied()
+            .collect();
+        SamplingCoverageReport {
+            has_full_domain_lmb,
+            covered_massless_loop_edges,
+            missing_massless_loop_edges,
+        }
+    }
+
     /// Compile ordinary LMB/surface entries and the bounded conditional
     /// `then(lmb|complement, surface?)` route in this catalogue.
     ///
@@ -2101,6 +2163,27 @@ pub fn build_sampling_channel_catalogue_with_surfaces(
     surface_edges: &[Vec<usize>],
     parent_lmb: &[usize],
 ) -> SamplingChannelCatalogue {
+    build_sampling_channel_catalogue_with_surfaces_and_coverage(
+        resolved,
+        all_lmbs,
+        optimized_lmbs,
+        surface_edges,
+        parent_lmb,
+        &[],
+    )
+}
+
+/// Expand a selection while applying the automatic elementary soft-coverage
+/// audit.  Physical E-surface candidates remain an explicit input prepared by
+/// the process layer; this helper never invents them from edge ids.
+pub fn build_sampling_channel_catalogue_with_surfaces_and_coverage(
+    resolved: &ResolvedSamplingChannelSelection,
+    all_lmbs: &[(usize, Vec<usize>)],
+    optimized_lmbs: &[usize],
+    surface_edges: &[Vec<usize>],
+    parent_lmb: &[usize],
+    massless_edges: &[usize],
+) -> SamplingChannelCatalogue {
     let mut entries = Vec::new();
     for selector in &resolved.selectors {
         let Some(preset) = selector.preset() else {
@@ -2114,12 +2197,46 @@ pub fn build_sampling_channel_catalogue_with_surfaces(
             }
             continue;
         };
-        let basis_ids: Vec<usize> = match preset {
+        let mut basis_ids: Vec<usize> = match preset {
             SamplingChannelPreset::Lmb => all_lmbs.iter().map(|(id, _)| *id).collect(),
-            SamplingChannelPreset::OptimizedLmb | SamplingChannelPreset::Surfaces => {
-                optimized_lmbs.to_vec()
-            }
+            SamplingChannelPreset::OptimizedLmb | SamplingChannelPreset::Surfaces => optimized_lmbs
+                .iter()
+                .copied()
+                .filter(|id| all_lmbs.iter().any(|(candidate, _)| candidate == id))
+                .collect(),
         };
+        if matches!(
+            preset,
+            SamplingChannelPreset::OptimizedLmb | SamplingChannelPreset::Surfaces
+        ) {
+            // A surface-aware or optimized preset must retain at least one
+            // ordinary full-domain channel when generated LMBs exist.  This
+            // is a deterministic fallback, not a hidden second catalogue.
+            if basis_ids.is_empty() && optimized_lmbs.is_empty() {
+                if let Some((basis_id, _)) = all_lmbs.first() {
+                    basis_ids.push(*basis_id);
+                }
+            }
+            // Add the smallest available ordinary channel exposing each
+            // elementary massless loop edge omitted by the heuristic.  This
+            // is intentionally weaker than a compound-soft guarantee.
+            if !basis_ids.is_empty() {
+                for edge in massless_edges {
+                    if basis_ids.iter().any(|basis_id| {
+                        all_lmbs
+                            .iter()
+                            .find(|(candidate, _)| candidate == basis_id)
+                            .is_some_and(|(_, lmb)| lmb.contains(edge))
+                    }) {
+                        continue;
+                    }
+                    if let Some((basis_id, _)) = all_lmbs.iter().find(|(_, lmb)| lmb.contains(edge))
+                    {
+                        basis_ids.push(*basis_id);
+                    }
+                }
+            }
+        }
         for basis_id in basis_ids {
             let Some((_, edges)) = all_lmbs.iter().find(|(id, _)| *id == basis_id) else {
                 continue;
@@ -2706,6 +2823,63 @@ mod tests {
             SamplingCatalogueEntry::Surface { edges, parent_lmb }
                 if edges == &vec![1, 2] && parent_lmb == &vec![1, 2]
         )));
+    }
+
+    #[test]
+    fn optimized_and_surface_presets_retain_full_domain_and_elementary_soft_coverage() {
+        let all_lmbs = vec![(0, vec![4, 5]), (1, vec![1, 5]), (2, vec![2, 4])];
+        for preset in ["auto:optimized_lmb", "auto:surfaces"] {
+            let mut selection = SamplingChannelSelection::default();
+            selection.default_channel_selection = vec![preset.into()];
+            let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+            // The heuristic selected only basis 0.  The automatic audit adds
+            // the smallest available basis exposing each omitted
+            // loop-dependent soft edge, while leaving the catalogue's single
+            // canonical axis intact.
+            let catalogue = build_sampling_channel_catalogue_with_surfaces_and_coverage(
+                &resolved,
+                &all_lmbs,
+                &[0],
+                &[],
+                &[4, 5],
+                &[1, 2, 99],
+            );
+            assert_eq!(
+                catalogue
+                    .lmb_entries()
+                    .map(|(basis, _)| basis)
+                    .collect::<Vec<_>>(),
+                vec![0, 1, 2]
+            );
+            let report = catalogue.coverage_report(&all_lmbs, &[1, 2, 99]);
+            assert!(report.has_full_domain_lmb);
+            assert_eq!(report.covered_massless_loop_edges, vec![1, 2]);
+            assert!(report.missing_massless_loop_edges.is_empty());
+        }
+    }
+
+    #[test]
+    fn optimized_preset_falls_back_to_one_full_domain_lmb_when_heuristic_is_empty() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:optimized_lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue_with_surfaces_and_coverage(
+            &resolved,
+            &[(7, vec![1, 2])],
+            &[],
+            &[],
+            &[1, 2],
+            &[],
+        );
+        assert_eq!(
+            catalogue.lmb_entries().collect::<Vec<_>>(),
+            vec![(7, &[1, 2][..])]
+        );
+        assert!(
+            catalogue
+                .coverage_report(&[(7, vec![1, 2])], &[])
+                .has_full_domain_lmb
+        );
     }
 
     #[test]
