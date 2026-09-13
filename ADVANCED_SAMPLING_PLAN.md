@@ -487,8 +487,32 @@ Formatting and clippy pass; new test warnings are resolved, and the existing
 1624-byte map-enum size warning is unchanged from the previous milestone.
 The detailed checks, tolerances and limitations
 are in [the X2 ledger](docs/research/advanced_sampling/CROSS_SECTION_DELIVERY_PATH.md#x2-generated-graph-validation).
-The next numerical dependency is the actual GL638 direct-H map on the reduced
-state, then all-orientation acceptance and matched physical comparisons.
+The actual GL638 direct-H map now passes reduced-state reference checks at 8192
+and 32768 points, native inverse checks on eight saved rays, and an independent
+full twelve-dimensional determinant check. The normalization estimates are
+0.998664 and 1.010322, with broad deterministic-draw dispersions; these are
+mapping checks, not a precision or physical-variance claim. The density's
+measured local exponent agrees with the intended `|H|^-1/2` behavior. Inputs,
+provenance and limits are recorded in
+[GL638_X2_DIRECT_H.md](docs/research/advanced_sampling/GL638_X2_DIRECT_H.md).
+The full-state diagnostic first stopped before reference evaluation because it
+confused one exposed summed selector with the production orientation count. The
+corrected optimized run verifies all 936 production keys, 32768 finite reference
+draws, the twelve-dimensional determinant and native ray inverses; its moments
+match the reduced-state run at the same cubes. Reference substitution bypasses
+physical orientation evaluation. All-orientation physical comparisons, star
+images and joint normal maps still remain to establish GL638 improvement.
+
+The next projected-target boundary is recorded in the
+[affine-star implementation audit](docs/research/advanced_sampling/AFFINE_STAR_IMPLEMENTATION_AUDIT.md).
+Certify complement-only dependence for the entire physical solve group before
+sharing its actual overlap centers with sampling. For a projecting threshold
+that has null directions in the sampling block, sampling and subtraction must
+also share the existing root owner's complement-only projection scale; a
+separate approximate root does not establish alignment with the counterterm.
+Represent stable overlap-membership branches in the same canonical catalogue,
+with a finite expansion cap and normalized fallback for absent branches. This
+is an unimplemented X4 requirement; direct-H validation does not cover it.
 
 
 The shared fiber slice reuses `Esurface`, `SubspaceData`, the current implicit
