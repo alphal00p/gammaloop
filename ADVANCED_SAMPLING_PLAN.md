@@ -30,6 +30,12 @@ the corresponding explicit canonical `(group, orientation, channel)` route.
 Focused discrete decoding/order coverage and a saved/reloaded scalar-bubble
 amplitude acceptance fixture are in place; the full saved-state
 amplitude/cross-section assertions, including physical cut maps, remain open.
+The process-level bridge acceptance harness also exercises a mixed named/LMB
+catalogue and verifies that both canonical IDs are sampled without compacting
+the generated LMB basis number into a second axis. An unused combined legacy
+LMB reinterpretation/prefactor helper has been removed; the remaining
+compatibility route is limited to the helpers still consumed by cross-section
+evaluation and remains scheduled for retirement with the deferred map bridge.
 discrete graph sampler now carries the selected canonical partition factor
 with the parent-frame map Jacobian, including for the direct momentum route;
 the obsolete separate per-channel sample representation has been removed
