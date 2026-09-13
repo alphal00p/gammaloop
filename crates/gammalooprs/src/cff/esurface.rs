@@ -140,63 +140,524 @@ impl Eq for Esurface {}
 impl Esurface {
     /// Compile an exact radial chart around this graph-routed energy surface.
     /// The callback retains the complete parent frame, masses and external
-    /// data; its ray root is the same cut equation used by LU. This f64 chart
-    /// defines the sampling proposal, not the precision of the integrand.
-    pub(crate) fn sampling_radial_map(
+    /// data in the evaluation precision; its ray root is the same cut equation
+    /// used by LU, without promoting already rounded lower-precision vectors.
+    pub(crate) fn sampling_radial_map<T: FloatLike>(
         &self,
         lmb: &LoopMomentumBasis,
-        masses: &EdgeVec<F<f64>>,
-        external_momenta: &ExternalFourMomenta<F<f64>>,
+        masses: &EdgeVec<F<T>>,
+        external_momenta: &ExternalFourMomenta<F<T>>,
         beta: f64,
         power: f64,
-    ) -> Result<ImplicitSurfaceRadialMap> {
+    ) -> Result<ImplicitSurfaceRadialMap<T>> {
         let dimension = 3 * lmb.loop_edges.len();
         let surface = self.clone();
         let lmb = lmb.clone();
         let masses = masses.clone();
         let external_momenta = external_momenta.clone();
-        let spatial_externals: ExternalThreeMomenta<F<f64>> = external_momenta
-            .iter()
-            .map(|momentum| momentum.spatial)
-            .collect();
+        let zero = F::<T>::from_f64(0.0);
         let center = LoopMomenta::from_iter(
-            (0..dimension / 3).map(|_| ThreeMomentum::new(F(0.0), F(0.0), F(0.0))),
+            (0..dimension / 3)
+                .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
         );
-        let evaluator = std::sync::Arc::new(move |direction: &[f64], radius: f64| {
+        let evaluator = std::sync::Arc::new(move |direction: &[T], radius: T| {
+            let radius = F(radius);
             let unit_loops = LoopMomenta::from_iter(direction.chunks_exact(3).map(|components| {
-                ThreeMomentum::new(F(components[0]), F(components[1]), F(components[2]))
+                ThreeMomentum::new(
+                    F(components[0].clone()),
+                    F(components[1].clone()),
+                    F(components[2].clone()),
+                )
             }));
-            let (value, mut derivative) = surface.compute_self_and_r_derivative(
-                &F(radius),
+            let (value, derivative) = surface.sampling_evaluate_ray(
+                &radius,
                 &unit_loops,
                 &center,
                 &external_momenta,
                 &masses,
                 &lmb,
             );
-            if radius == 0.0 {
-                // At a massless endpoint E(r)=r|v| the radial right derivative is
-                // |v|, whereas the two-sided formula q.v/E would evaluate 0/0.
-                // Keep this endpoint convention local to the sampling chart.
-                derivative = surface
-                    .energies
-                    .iter()
-                    .map(|&edge| {
-                        let signature = &lmb.edge_signatures[edge];
-                        let momentum = signature.compute_momentum(&center, &spatial_externals);
-                        let velocity = compute_loop_part(&signature.internal, &unit_loops);
-                        let energy = (momentum.norm_squared() + masses[edge].square()).sqrt();
-                        if energy == F(0.0) {
-                            velocity.norm_squared().sqrt()
-                        } else {
-                            momentum * velocity / energy
-                        }
-                    })
-                    .fold(F(0.0), |sum, contribution| sum + contribution);
-            }
             Ok((value.0, derivative.0))
         });
-        ImplicitSurfaceRadialMap::new(dimension, vec![0.0; dimension], beta, power, evaluator)
+        ImplicitSurfaceRadialMap::new(dimension, vec![zero.0; dimension], beta, power, evaluator)
+    }
+
+    /// Bind a routed energy surface on active coordinates, conditional on an
+    /// already sampled complement in the same complete parent LMB. Later
+    /// coordinates may be omitted only when every energy row vanishes on them.
+    /// Preparation
+    /// never consumes active cube coordinates, so its derivatives occupy only
+    /// the off-diagonal block of an ordered composition's Jacobian. Active
+    /// outputs follow `subspace.iter_lmb_indices()` (parent-index order), while
+    /// complement inputs follow the explicit `complement` order. A compiler
+    /// must permute these blocks before attaching user-ordered edge metadata.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn sampling_radial_map_in_subspace<T: FloatLike>(
+        &self,
+        subspace: &SubspaceData,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        graph: &Graph,
+        masses: &EdgeVec<F<T>>,
+        external_momenta: &ExternalFourMomenta<F<T>>,
+        complement: &[LoopIndex],
+        settings: &crate::settings::RuntimeSettings,
+        beta: f64,
+        power: f64,
+    ) -> Result<ImplicitSurfaceRadialMap<T>> {
+        use crate::integrands::process::PreparedSurfaceStatus;
+        use crate::integrands::process::sampling_maps::SamplingEvaluationError;
+        use crate::momentum::SignOrZero;
+        use crate::subtraction::overlap_subspace::{OverlapInput, find_center};
+        use std::sync::Arc;
+        use three_dimensional_reps::utils::rank_i64;
+
+        if !settings.kinematics.e_cm.is_finite() || settings.kinematics.e_cm <= 0.0 {
+            return Err(eyre!("sampling fiber requires finite positive e_cm"));
+        }
+        let lmb = subspace.get_lmb(all_lmbs);
+        let active = subspace.iter_lmb_indices().collect_vec();
+        let mut covered = active.iter().chain(complement).copied().collect_vec();
+        covered.sort();
+        if active.is_empty()
+            || covered.windows(2).any(|pair| pair[0] == pair[1])
+            || covered.iter().any(|index| index.0 >= lmb.loop_edges.len())
+            || external_momenta.len() != lmb.ext_edges.len()
+            || external_momenta.is_empty()
+        {
+            return Err(eyre!(
+                "sampling fiber requires disjoint active/complement slots in its parent frame and complete external momenta: active {active:?}, complement {complement:?}, parent {:?}, external count {} (expected {})",
+                lmb.loop_edges,
+                external_momenta.len(),
+                lmb.ext_edges.len(),
+            ));
+        }
+        // Later blocks may be absent from this prefix only when their exact
+        // routed rows vanish. Their zero placeholders then represent proven
+        // spectators, never unknown active coordinates of the energy equation.
+        for index in (0..lmb.loop_edges.len())
+            .map(LoopIndex)
+            .filter(|index| !covered.contains(index))
+        {
+            if self
+                .energies
+                .iter()
+                .any(|edge| lmb.edge_signatures[*edge].internal[index] != SignOrZero::Zero)
+            {
+                return Err(eyre!(
+                    "sampling fiber depends on unsampled parent edge {}",
+                    lmb.loop_edges[index]
+                ));
+            }
+        }
+        for momentum in external_momenta {
+            if !momentum.temporal.value.0.is_finite()
+                || [
+                    &momentum.spatial.px,
+                    &momentum.spatial.py,
+                    &momentum.spatial.pz,
+                ]
+                .iter()
+                .any(|value| !value.0.is_finite())
+            {
+                return Err(eyre!("sampling fiber external momenta must be finite"));
+            }
+        }
+        let rows = self
+            .energies
+            .iter()
+            .map(|edge| {
+                active
+                    .iter()
+                    .map(|&index| match lmb.edge_signatures[*edge].internal[index] {
+                        SignOrZero::Minus => -1_i64,
+                        SignOrZero::Zero => 0,
+                        SignOrZero::Plus => 1,
+                    })
+                    .collect_vec()
+            })
+            .collect_vec();
+        let rank = rank_i64(&rows);
+        if rank != active.len() {
+            return Err(eyre!(
+                "sampling fiber {:?} has active routing rank {rank}, expected {}; spectator directions require a complement block",
+                self.energies,
+                active.len()
+            ));
+        }
+        let varying = self
+            .energies
+            .iter()
+            .zip(&rows)
+            .filter_map(|(&edge, row)| row.iter().any(|&sign| sign != 0).then_some(edge))
+            .collect_vec();
+        let subspace_energies = subspace.contains(&self.energies, graph).collect_vec();
+        if varying.iter().any(|edge| !subspace_energies.contains(edge)) {
+            return Err(eyre!(
+                "sampling fiber routing is inconsistent with its selected cycle subgraph"
+            ));
+        }
+        for &edge in &self.energies {
+            let mass = &masses[edge];
+            if !mass.0.is_finite() || mass < &mass.zero() {
+                return Err(eyre!(
+                    "sampling fiber edge {edge} requires a finite nonnegative mass"
+                ));
+            }
+        }
+        let surface = Arc::new(self.clone());
+        let lmbs = Arc::new(all_lmbs.clone());
+        let graph = Arc::new(graph.clone());
+        let subspace = Arc::new(subspace.clone());
+        let masses = Arc::new(masses.clone());
+        let externals = Arc::new(external_momenta.clone());
+        let settings = Arc::new(settings.clone());
+        let complement = Arc::new(complement.to_vec());
+        let active = Arc::new(active);
+        let zero = external_momenta[ExternalIndex(0)].temporal.value.zero();
+        let dimension = active.len() * 3;
+        let freeze_context = complement.is_empty();
+        let n_loops = lmb.loop_edges.len();
+        // One shared routed-ray evaluator serves both full and conditional
+        // charts. Complement entries have zero radial velocity.
+        let evaluator = {
+            let (surface, lmbs, subspace, masses, externals, complement, active) = (
+                surface.clone(),
+                lmbs.clone(),
+                subspace.clone(),
+                masses.clone(),
+                externals.clone(),
+                complement.clone(),
+                active.clone(),
+            );
+            Arc::new(
+                move |direction: &[T], radius: T, center: &[T], context: &[T]| {
+                    let zero = F(radius.zero());
+                    let mut loops = LoopMomenta::from_iter(
+                        (0..n_loops)
+                            .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+                    );
+                    let mut velocity = loops.clone();
+                    for (&index, components) in complement.iter().zip(context.chunks_exact(3)) {
+                        loops[index] = ThreeMomentum::new(
+                            F(components[0].clone()),
+                            F(components[1].clone()),
+                            F(components[2].clone()),
+                        );
+                    }
+                    for ((&index, components), unit) in active
+                        .iter()
+                        .zip(center.chunks_exact(3))
+                        .zip(direction.chunks_exact(3))
+                    {
+                        loops[index] = ThreeMomentum::new(
+                            F(components[0].clone()),
+                            F(components[1].clone()),
+                            F(components[2].clone()),
+                        );
+                        velocity[index] = ThreeMomentum::new(
+                            F(unit[0].clone()),
+                            F(unit[1].clone()),
+                            F(unit[2].clone()),
+                        );
+                    }
+                    let (value, derivative) = surface.sampling_evaluate_ray(
+                        &F(radius),
+                        &velocity,
+                        &loops,
+                        &externals,
+                        &masses,
+                        subspace.get_lmb(&lmbs),
+                    );
+                    Ok((value.0, derivative.0))
+                },
+            )
+        };
+        let preparer = Arc::new(move |context: &[T]| {
+            let zero = externals[ExternalIndex(0)].temporal.value.zero();
+            if context.len() != complement.len() * 3
+                || context.iter().any(|value| !value.is_finite())
+            {
+                return Err(eyre!(
+                    "sampling fiber expected {} finite complement components, got {}",
+                    complement.len() * 3,
+                    context.len()
+                ));
+            }
+            let lmb = subspace.get_lmb(&lmbs);
+            let spatial: ExternalThreeMomenta<F<T>> =
+                externals.iter().map(|p| p.spatial.clone()).collect();
+            let mut center = LoopMomenta::from_iter(
+                (0..n_loops).map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+            );
+            for (&index, components) in complement.iter().zip(context.chunks_exact(3)) {
+                center[index] = ThreeMomentum::new(
+                    F(components[0].clone()),
+                    F(components[1].clone()),
+                    F(components[2].clone()),
+                );
+            }
+            let zero_velocity = LoopMomenta::from_iter(
+                (0..n_loops).map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+            );
+            let mut constant = surface.compute_shift_part_from_momenta(&externals, lmb);
+            // Include the inputs to routed differences, not just their small
+            // residuals. Large common spatial shifts may otherwise round an
+            // actually nonzero separation to zero before minimum testing.
+            let mut scale = center
+                .iter()
+                .flat_map(|p| [&p.px, &p.py, &p.pz])
+                .chain(externals.iter().flat_map(|p| {
+                    [
+                        &p.temporal.value,
+                        &p.spatial.px,
+                        &p.spatial.py,
+                        &p.spatial.pz,
+                    ]
+                }))
+                .fold(constant.abs(), |sum, component| sum + component.abs());
+            for &edge in &surface.energies {
+                if !varying.contains(&edge) {
+                    let momentum = lmb.edge_signatures[edge].compute_momentum(&center, &spatial);
+                    let energy = (momentum.norm_squared() + masses[edge].square()).sqrt();
+                    constant += &energy;
+                    scale += energy;
+                }
+            }
+            let minimum = if active.len() == 1 && varying.len() == 2 {
+                // For q_i = s_i k + b_i, s_i = +/-1, the exact convex minimum
+                // is sqrt((b1-s1*s2*b2)^2 + (m1+m2)^2). With zero total mass
+                // the minimizing set is a segment; its midpoint is a valid
+                // proposal center, not a claim that the pinch is isolated.
+                let [first, second] = [varying[0], varying[1]];
+                let index = active[0];
+                let sign = |edge| match lmb.edge_signatures[edge].internal[index] {
+                    SignOrZero::Plus => zero.one(),
+                    SignOrZero::Minus => -zero.one(),
+                    SignOrZero::Zero => unreachable!("two varying rank-one energies"),
+                };
+                let first_shift = lmb.edge_signatures[first].compute_momentum(&center, &spatial);
+                let second_shift = lmb.edge_signatures[second].compute_momentum(&center, &spatial);
+                let separation = &first_shift - &(second_shift * (sign(first) * sign(second)));
+                let total_mass = &masses[first] + &masses[second];
+                let fraction = if total_mass > zero {
+                    &masses[first] / &total_mass
+                } else {
+                    zero.one() / zero.from_i64(2)
+                };
+                center[index] = (&separation * fraction - first_shift) * sign(first);
+                let energy = (separation.norm_squared() + total_mass.square()).sqrt();
+                scale += &energy;
+                Some(energy + &constant)
+            } else {
+                None
+            };
+            let tolerance = zero.epsilon()
+                * zero.from_usize(64 * (surface.energies.len() + 1))
+                * scale.max(zero.one());
+            let normalized = |value: &F<T>| -> Result<T> {
+                let margin = -value / F::<T>::from_f64(settings.kinematics.e_cm);
+                if !margin.0.is_finite() {
+                    return Err(SamplingEvaluationError::Unrepresentable {
+                        operation: "normalized sampling surface margin",
+                        detail: "finite surface value and energy scale produce a nonfinite margin"
+                            .to_owned(),
+                    }
+                    .into());
+                }
+                Ok(margin.0)
+            };
+            let status = if let Some(minimum) = minimum {
+                if !minimum.0.is_finite() || minimum.abs() <= tolerance {
+                    return Err(SamplingEvaluationError::UncertainGeometry { detail: format!("two-energy fiber minimum is not sign-certified: minimum={minimum}, tolerance={tolerance}, edges={:?}", surface.energies) }.into());
+                }
+                if minimum > zero {
+                    PreparedSurfaceStatus::absent(format!(
+                        "positive exact two-energy minimum {minimum}"
+                    ))?
+                } else {
+                    PreparedSurfaceStatus::existing(Some(normalized(&minimum)?))?
+                }
+            } else {
+                // The sum of masses is a necessary lower bound for every
+                // routed topology. A positive bound certifies absence; a
+                // failed approximate optimizer by itself never does.
+                let lower = varying
+                    .iter()
+                    .fold(constant, |sum, &edge| sum + &masses[edge]);
+                if lower > tolerance {
+                    PreparedSurfaceStatus::absent(format!("positive energy lower bound {lower}"))?
+                } else {
+                    let value = surface
+                        .sampling_evaluate_ray(
+                            &zero,
+                            &zero_velocity,
+                            &center,
+                            &externals,
+                            &masses,
+                            lmb,
+                        )
+                        .0;
+                    if !esurface_value_is_strictly_inside(
+                        &value,
+                        &F::<T>::from_f64(settings.kinematics.e_cm),
+                    ) {
+                        let thresholds = EsurfaceCollection::from(vec![surface.as_ref().clone()]);
+                        let existing = ExistingThresholds::from(vec![EsurfaceID(0)]);
+                        let input = OverlapInput {
+                            graph: &graph,
+                            settings: &settings,
+                            subspace: &subspace,
+                            threshold_subspaces: None,
+                            lmbs: &lmbs,
+                            thresholds: &thresholds,
+                            edge_masses: masses.iter().map(|(_, mass)| mass.into_ff64()).collect(),
+                            surface_kinematics: None,
+                        };
+                        let loops: LoopMomenta<F<f64>> =
+                            center.iter().map(ThreeMomentum::to_f64).collect();
+                        let external: ExternalFourMomenta<F<f64>> =
+                            externals.iter().map(|p| p.to_f64()).collect();
+                        if loops
+                            .iter()
+                            .flat_map(|p| [&p.px, &p.py, &p.pz])
+                            .any(|v| !v.0.is_finite())
+                            || external
+                                .iter()
+                                .flat_map(|p| {
+                                    [
+                                        &p.temporal.value,
+                                        &p.spatial.px,
+                                        &p.spatial.py,
+                                        &p.spatial.pz,
+                                    ]
+                                })
+                                .any(|v| !v.0.is_finite())
+                            || input
+                                .edge_masses
+                                .iter()
+                                .any(|(_, mass)| !mass.0.is_finite())
+                        {
+                            return Err(SamplingEvaluationError::UncertainGeometry {
+                                detail: "native fiber data exceed the finite range of the approximate f64 SOCP center seed".to_owned(),
+                            }.into());
+                        }
+                        let candidate = find_center(&input, &[ExistingEsurfaceId(0)], &existing, &loops, &external, false)
+                            .map_err(|error| SamplingEvaluationError::UncertainGeometry { detail: format!("fiber center seed failed without an absence certificate: {error}") })?
+                            .ok_or_else(|| SamplingEvaluationError::UncertainGeometry { detail: "fiber SOCP reported infeasibility without a native absence certificate".to_owned() })?;
+                        for &index in active.iter() {
+                            center[index] = ThreeMomentum::from_ff64(candidate[index]);
+                        }
+                    }
+                    let value = surface
+                        .sampling_evaluate_ray(
+                            &zero,
+                            &zero_velocity,
+                            &center,
+                            &externals,
+                            &masses,
+                            lmb,
+                        )
+                        .0;
+                    if !esurface_value_is_strictly_inside(
+                        &value,
+                        &F::<T>::from_f64(settings.kinematics.e_cm),
+                    ) {
+                        return Err(SamplingEvaluationError::UncertainGeometry {
+                            detail: format!(
+                                "fiber center is not natively certified inside: value={value}"
+                            ),
+                        }
+                        .into());
+                    }
+                    PreparedSurfaceStatus::existing(Some(normalized(&value)?))?
+                }
+            };
+            if status.is_existing() {
+                // The analytic minimum does not excuse a rounded minimizing
+                // point: the actual bound center must also be strictly inside.
+                let value = surface
+                    .sampling_evaluate_ray(&zero, &zero_velocity, &center, &externals, &masses, lmb)
+                    .0;
+                if !esurface_value_is_strictly_inside(
+                    &value,
+                    &F::<T>::from_f64(settings.kinematics.e_cm),
+                ) || value >= -&tolerance
+                {
+                    return Err(SamplingEvaluationError::UncertainGeometry {
+                        detail: format!(
+                            "prepared fiber center is not natively certified inside: value={value}, tolerance={tolerance}"
+                        ),
+                    }
+                    .into());
+                }
+            }
+            let center = active
+                .iter()
+                .flat_map(|&index| {
+                    [
+                        center[index].px.0.clone(),
+                        center[index].py.0.clone(),
+                        center[index].pz.0.clone(),
+                    ]
+                })
+                .collect();
+            Ok((center, status))
+        });
+        ImplicitSurfaceRadialMap::new(
+            dimension,
+            vec![zero.0; dimension],
+            beta,
+            power,
+            Arc::new(|_, _| Err(eyre!("sampling fiber requires prepared complement data"))),
+        )
+        .and_then(|map| {
+            let map = map
+                .with_context_evaluator(evaluator)
+                .with_context_preparer(preparer);
+            if freeze_context {
+                map.freeze_context(&[])
+            } else {
+                Ok(map)
+            }
+        })
+    }
+
+    /// Shared routed ray evaluation for full-space and proper-fiber charts.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn sampling_evaluate_ray<T: FloatLike>(
+        &self,
+        radius: &F<T>,
+        velocity: &LoopMomenta<F<T>>,
+        center: &LoopMomenta<F<T>>,
+        externals: &ExternalFourMomenta<F<T>>,
+        masses: &EdgeVec<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> (F<T>, F<T>) {
+        let (value, mut derivative) =
+            self.compute_self_and_r_derivative(radius, velocity, center, externals, masses, lmb);
+        if radius == &radius.zero() {
+            // At a massless endpoint E(r)=r|v| the radial right derivative is
+            // |v|, whereas the two-sided formula q.v/E would evaluate 0/0.
+            // Keep this endpoint convention local to the sampling chart.
+            let spatial: ExternalThreeMomenta<F<T>> =
+                externals.iter().map(|p| p.spatial.clone()).collect();
+            derivative = self
+                .energies
+                .iter()
+                .map(|&edge| {
+                    let signature = &lmb.edge_signatures[edge];
+                    let momentum = signature.compute_momentum(center, &spatial);
+                    let velocity = compute_loop_part(&signature.internal, velocity);
+                    let energy = (momentum.norm_squared() + masses[edge].square()).sqrt();
+                    if energy == radius.zero() {
+                        velocity.norm_squared().sqrt()
+                    } else {
+                        momentum * velocity / energy
+                    }
+                })
+                .fold(radius.zero(), |sum, contribution| sum + contribution);
+        }
+        (value, derivative)
     }
 
     pub(crate) fn has_radial_dependence_in_subspace(
@@ -1428,6 +1889,50 @@ mod tests {
                 assert!((actual - expected).abs() < 1.0e-9);
             }
         }
+
+        // The graph factory must bind source data in the evaluation precision.
+        // These two energies are indistinguishable in f64 but define different
+        // physical shells and therefore different forward maps at Quad precision.
+        let one = F::<crate::utils::f128>::from_f64(1.0);
+        let energy = one.from_i64(1000);
+        let displacement = one.from_i64(10).powi(-20);
+        assert_eq!(energy.into_f64(), (energy + displacement).into_f64());
+        let native_masses = graph
+            .underlying
+            .new_edgevec_from_iter(
+                masses
+                    .iter()
+                    .map(|(_, mass)| F::<crate::utils::f128>::from_ff64(*mass)),
+            )
+            .unwrap();
+        let coordinates = [0.19, 0.27, 0.61, 0.39, 0.72, 0.58]
+            .map(|value| F::<crate::utils::f128>::from_f64(value).0);
+        let mut points = Vec::new();
+        for energy in [energy, energy + displacement] {
+            let externals = ExternalFourMomenta::from_iter(
+                [FourMomentum::from_args(energy, one.zero(), one.zero(), one.zero()); 2],
+            );
+            let map = surface
+                .sampling_radial_map(&lmb, &native_masses, &externals, 400.0, 2.0)
+                .unwrap();
+            let forward = map.forward(&coordinates).unwrap();
+            let inverse = map.inverse(&forward.point).unwrap();
+            for (actual, expected) in inverse.coordinates.iter().zip(coordinates) {
+                assert!((F(*actual) - F(expected)).abs() < one.from_i64(10).powi(-25));
+            }
+            points.push(forward.point);
+        }
+        assert_ne!(points[0], points[1]);
+        assert_eq!(
+            points[0]
+                .iter()
+                .map(|value| F(*value).into_f64())
+                .collect::<Vec<_>>(),
+            points[1]
+                .iter()
+                .map(|value| F(*value).into_f64())
+                .collect::<Vec<_>>(),
+        );
     }
 
     #[test]

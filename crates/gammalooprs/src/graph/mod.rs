@@ -220,6 +220,7 @@ impl Graph {
             improvement_settings: PhaseSpaceImprovementSettings::default(),
             f_64_cache: None,
             f_128_cache: None,
+            arb_cache: Default::default(),
         }
     }
 
@@ -258,6 +259,11 @@ impl Graph {
         );
 
         LmbMultiChannelingSetup {
+            sampling_bridge: Default::default(),
+            sampling_bridge_quad: Default::default(),
+            sampling_bridge_arb: Default::default(),
+            sampling_catalogue: Default::default(),
+            sampling_programs: Default::default(),
             lmb_basis_ids: channels,
             graph: self.clone(),
             all_bases: lmbs.clone(),

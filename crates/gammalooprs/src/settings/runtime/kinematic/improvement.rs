@@ -185,6 +185,7 @@ pub(crate) fn generate_default_momenta(
             helicities: vec![Helicity::PLUS, Helicity::PLUS],
             f_64_cache: None,
             f_128_cache: None,
+            arb_cache: Default::default(),
         });
     }
 
@@ -297,6 +298,7 @@ pub(crate) fn generate_default_momenta(
         helicities,
         f_64_cache: None,
         f_128_cache: None,
+        arb_cache: Default::default(),
     })
 }
 
@@ -694,6 +696,129 @@ mod tests {
         momentum::{FourMomentum, SignOrZero},
         utils::{F, FloatLike, f128, load_generic_model},
     };
+
+    #[test]
+    fn arb_external_cache_preserves_native_constraints_and_archive_layout() {
+        use crate::momentum::{Dep, ExternalMomenta, Helicity, Rotatable, RotationMethod};
+        use crate::settings::runtime::kinematic::Externals;
+        use crate::utils::ArbPrec;
+
+        test_initialise().unwrap();
+        let signature: SignatureLike<ExternalIndex> = [1i8, 1, -1, -1].into_iter().collect();
+        let constructor = DependentMomentaConstructor::Amplitude(&signature);
+        let masses: TiVec<ExternalIndex, F<f64>> = vec![F(0.0), F(0.0), F(1.0), F(1.0)].into();
+        let e_cm = F(10.0);
+        let mut externals = Externals::Constant {
+            momenta: vec![
+                [F(5.0), F(0.0), F(0.0), F(5.0)].into(),
+                [F(5.0), F(0.0), F(0.0), F(-5.0)].into(),
+                [F(5.0), F(3.0), F(0.0), F(15.0_f64.sqrt())].into(),
+                ExternalMomenta::Dependent(Dep::Dep),
+            ],
+            helicities: vec![Helicity::PLUS; 4],
+            improvement_settings: super::PhaseSpaceImprovementSettings {
+                mode: super::ImprovementMode::Vh,
+                ..Default::default()
+            },
+            f_64_cache: None,
+            f_128_cache: None,
+            arb_cache: Default::default(),
+        };
+        externals
+            .improve_and_cache(constructor, &masses, &e_cm)
+            .unwrap();
+        let native = externals
+            .get_dependent_externals::<ArbPrec>(constructor)
+            .unwrap();
+        assert_eq!(
+            ArbPrec::try_extract_externals_from_cache(&externals),
+            Some(&native)
+        );
+        let native_masses = masses
+            .iter()
+            .map(|mass| F::<ArbPrec>::from_ff64(*mass))
+            .collect();
+        let native_e_cm = F::<ArbPrec>::from_ff64(e_cm);
+        // The existing independent conservation/on-shell checker uses native
+        // epsilon, so promoting a double or Quad improved point cannot pass.
+        test_kinematic_validity(&native, &signature, &native_masses, &native_e_cm).unwrap();
+
+        let rotated = externals.rotate(&RotationMethod::Pi2X.into());
+        let rotated_native = rotated
+            .get_dependent_externals::<ArbPrec>(constructor)
+            .unwrap();
+        assert_eq!(
+            rotated_native[ExternalIndex::from(2)].spatial.px,
+            native[ExternalIndex::from(2)].spatial.px
+        );
+        assert_eq!(
+            rotated_native[ExternalIndex::from(2)].spatial.py,
+            -native[ExternalIndex::from(2)].spatial.pz.clone()
+        );
+        test_kinematic_validity(&rotated_native, &signature, &native_masses, &native_e_cm).unwrap();
+
+        let config = bincode::config::standard();
+        let encoded = bincode::encode_to_vec(&externals, config).unwrap();
+        let Externals::Constant {
+            momenta,
+            helicities,
+            improvement_settings,
+            f_64_cache,
+            f_128_cache,
+            ..
+        } = &externals;
+        let historical_fields = (
+            0usize,
+            momenta,
+            helicities,
+            improvement_settings,
+            f_64_cache,
+            f_128_cache,
+        );
+        assert_eq!(
+            encoded,
+            bincode::encode_to_vec(historical_fields, config).unwrap()
+        );
+        let (mut decoded, consumed): (Externals, usize) =
+            bincode::decode_from_slice(&encoded, config).unwrap();
+        assert_eq!(consumed, encoded.len());
+        assert!(ArbPrec::try_extract_externals_from_cache(&decoded).is_none());
+        decoded
+            .improve_and_cache(constructor, &masses, &e_cm)
+            .unwrap();
+        assert_eq!(
+            decoded
+                .get_dependent_externals::<ArbPrec>(constructor)
+                .unwrap(),
+            native
+        );
+        assert!(!toml::to_string(&externals).unwrap().contains("arb_cache"));
+
+        let Externals::Constant { momenta, .. } = &mut externals;
+        let ExternalMomenta::Independent(components) = &mut momenta[2] else {
+            panic!("fixture momentum is independent")
+        };
+        components[1] = F(3.0 + 1.0e-10);
+        externals
+            .improve_and_cache(constructor, &masses, &e_cm)
+            .unwrap();
+        let updated = externals
+            .get_dependent_externals::<ArbPrec>(constructor)
+            .unwrap();
+        assert_ne!(updated, native);
+        test_kinematic_validity(&updated, &signature, &native_masses, &native_e_cm).unwrap();
+
+        let Externals::Constant { momenta, .. } = &mut externals;
+        momenta.truncate(1);
+        assert!(
+            externals
+                .improve_and_cache(constructor, &masses, &e_cm)
+                .is_err()
+        );
+        assert!(f64::try_extract_externals_from_cache(&externals).is_none());
+        assert!(f128::try_extract_externals_from_cache(&externals).is_none());
+        assert!(ArbPrec::try_extract_externals_from_cache(&externals).is_none());
+    }
 
     fn test_default_momenta_graph(graph: &Graph, model: &Model, e_cm: &F<f64>) -> Result<()> {
         let external_signature = graph.get_external_signature();

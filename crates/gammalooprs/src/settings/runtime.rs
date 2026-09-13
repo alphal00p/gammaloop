@@ -724,6 +724,37 @@ mod tests {
     use spenso::algebra::complex::Complex;
 
     #[test]
+    fn sampling_lu_h_profile_shorthand_and_table_share_one_definition() {
+        let shorthand: SamplingChannelDefinition =
+            toml::from_str("around='phase_space(cut(2,3))'\nradial_profile='lu_h'").unwrap();
+        let table: SamplingChannelDefinition = toml::from_str("around='phase_space(cut(2,3))'\nradial_profile={kind='lu_h',approximation='log_logistic',broad_fraction=0.02}").unwrap();
+        assert_eq!(shorthand, table);
+        assert_eq!(
+            shorthand.radial_profile,
+            Some(SamplingRadialProfile::default())
+        );
+        let exported = toml::to_string(&shorthand).unwrap();
+        assert_eq!(
+            toml::from_str::<SamplingChannelDefinition>(&exported).unwrap(),
+            shorthand
+        );
+        for invalid in [
+            "{kind='lu_h',broad_faction=0.1}",
+            "'unknown'",
+            "{kind='lu_h',approximation='exact'}",
+        ] {
+            assert!(
+                toml::from_str::<SamplingChannelDefinition>(&format!("radial_profile={invalid}"))
+                    .is_err()
+            );
+        }
+        let _guard = ShowDefaultsGuard::new(true);
+        let json = serde_json::to_value(SamplingRadialProfile::default()).unwrap();
+        assert!(json.get("scale").is_some());
+        assert!(json.get("shape").is_some());
+    }
+
+    #[test]
     fn test_integration_result_display() {
         let result = IntegralEstimate {
             neval: 1000000,
@@ -1305,10 +1336,119 @@ impl SamplingChannelWeight {
     }
 }
 
+/// Radial proposal family for a physical-cut sampling channel.
+#[derive(
+    Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
+)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[serde(rename_all = "snake_case")]
+pub enum SamplingRadialProfileKind {
+    #[default]
+    LuH,
+}
+
+#[derive(
+    Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
+)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[serde(rename_all = "snake_case")]
+pub enum SamplingRadialApproximation {
+    #[default]
+    LogLogistic,
+}
+
+/// A normalized proposal for the auxiliary LU scale. This changes sampling
+/// only: the physical LU h-function and its raised-cut derivatives are intact.
+#[derive(Debug, Clone, Serialize, PartialEq, Encode, Decode, JsonSchema)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[schemars(with = "SamplingRadialProfileInput")]
+pub struct SamplingRadialProfile {
+    pub kind: SamplingRadialProfileKind,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub approximation: SamplingRadialApproximation,
+    pub broad_fraction: f64,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub scale: Option<f64>,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub shape: Option<f64>,
+}
+
+impl Default for SamplingRadialProfile {
+    fn default() -> Self {
+        Self {
+            kind: SamplingRadialProfileKind::LuH,
+            approximation: SamplingRadialApproximation::LogLogistic,
+            broad_fraction: 0.02,
+            scale: None,
+            shape: None,
+        }
+    }
+}
+
+// Normalize the compact string and the explicit table to one runtime type.
+// Export always retains the detailed form, including the proposal overrides.
+#[derive(Deserialize, JsonSchema)]
+#[serde(untagged, deny_unknown_fields)]
+enum SamplingRadialProfileInput {
+    Name(SamplingRadialProfileKind),
+    Settings {
+        kind: SamplingRadialProfileKind,
+        #[serde(default)]
+        approximation: SamplingRadialApproximation,
+        #[serde(default = "SamplingRadialProfile::default_broad_fraction")]
+        broad_fraction: f64,
+        #[serde(default)]
+        scale: Option<f64>,
+        #[serde(default)]
+        shape: Option<f64>,
+    },
+}
+
+impl SamplingRadialProfile {
+    fn default_broad_fraction() -> f64 {
+        Self::default().broad_fraction
+    }
+}
+
+impl<'de> Deserialize<'de> for SamplingRadialProfile {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(
+            match SamplingRadialProfileInput::deserialize(deserializer)? {
+                SamplingRadialProfileInput::Name(kind) => Self {
+                    kind,
+                    ..Self::default()
+                },
+                SamplingRadialProfileInput::Settings {
+                    kind,
+                    approximation,
+                    broad_fraction,
+                    scale,
+                    shape,
+                } => Self {
+                    kind,
+                    approximation,
+                    broad_fraction,
+                    scale,
+                    shape,
+                },
+            },
+        )
+    }
+}
+
 /// A graph-scoped channel definition.  `parent_lmb` is deliberately explicit:
 /// resolving a short expression against a graph is a later validation step,
 /// while exported definitions must never lose the routing frame they use.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
@@ -1316,6 +1456,8 @@ impl SamplingChannelWeight {
 #[serde(default, deny_unknown_fields)]
 pub struct SamplingChannelDefinition {
     pub around: String,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub radial_profile: Option<SamplingRadialProfile>,
     /// Ordered loop edges spanning the coordinates in which a surface or
     /// joint constraint is solved.  This is distinct from the edge set in
     /// `around`, which identifies the physical energy constraints.
@@ -1332,20 +1474,8 @@ pub struct SamplingChannelDefinition {
     pub singularity_proxy: Option<String>,
 }
 
-impl Default for SamplingChannelDefinition {
-    fn default() -> Self {
-        Self {
-            around: String::new(),
-            subspace_lmb: Vec::new(),
-            parent_lmb: Vec::new(),
-            on_cut: Vec::new(),
-            singularity_proxy: None,
-        }
-    }
-}
-
 /// Selection and user definitions for graph-aware sampling channels.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
@@ -2034,6 +2164,21 @@ impl CoordinateSystem {
 }
 
 impl SamplingSettings {
+    /// Whether the selected runtime mode maps canonical sampling channels.
+    /// Both top-level and discrete graph sampling use the same channel owner;
+    /// keeping the predicate central also guards cut-dependent maps in both forms.
+    pub(crate) fn uses_sampling_channels(&self) -> bool {
+        match self {
+            Self::MultiChanneling(_) => true,
+            Self::DiscreteGraphs(settings) => matches!(
+                &settings.sampling_type,
+                DiscreteGraphSamplingType::MultiChanneling(_)
+                    | DiscreteGraphSamplingType::SamplingMultiChanneling(_)
+            ),
+            Self::Default(_) => false,
+        }
+    }
+
     pub fn selected_graph_names(&self) -> &[String] {
         match self {
             SamplingSettings::DiscreteGraphs(settings) => &settings.graph_names,

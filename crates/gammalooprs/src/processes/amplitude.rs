@@ -3651,6 +3651,7 @@ pub mod test {
                             improvement_settings: PhaseSpaceImprovementSettings::default(),
                             f_64_cache: None,
                             f_128_cache: None,
+                            arb_cache: Default::default(),
                         },
                     },
                     ..RuntimeSettings::default()
@@ -3969,6 +3970,7 @@ pub mod test {
                             improvement_settings: PhaseSpaceImprovementSettings::default(),
                             f_64_cache: None,
                             f_128_cache: None,
+                            arb_cache: Default::default(),
                         },
                     },
                     ..RuntimeSettings::default()
@@ -4139,6 +4141,7 @@ pub mod test {
                             improvement_settings: PhaseSpaceImprovementSettings::default(),
                             f_64_cache: None,
                             f_128_cache: None,
+                            arb_cache: Default::default(),
                         },
                     },
                     ..RuntimeSettings::default()
@@ -4614,6 +4617,7 @@ pub mod test {
                             improvement_settings: PhaseSpaceImprovementSettings::default(),
                             f_64_cache: None,
                             f_128_cache: None,
+                            arb_cache: Default::default(),
                         },
                     },
                     ..RuntimeSettings::default()

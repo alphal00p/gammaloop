@@ -348,6 +348,7 @@ impl RadialRootDiagnostics {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn restart_precision_pass(&mut self) {
         self.current_precision_bits = None;
         self.current_occurrences.clear();

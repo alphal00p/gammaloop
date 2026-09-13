@@ -9,23 +9,29 @@
 use color_eyre::Result;
 use eyre::eyre;
 use spenso::algebra::complex::Complex;
-use symbolica::{atom::Atom, prelude::*};
+use symbolica::{
+    atom::{Atom, AtomView},
+    prelude::*,
+};
 
 use crate::{
     integrands::process::{GenericEvaluator, GenericEvaluatorFloat},
     processes::EvaluatorSettings,
-    utils::{F, hyperdual_utils::DualOrNot},
+    settings::runtime::{HFunction, HFunctionSettings, SamplingRadialProfile},
+    utils::{F, FloatLike, hyperdual_utils::DualOrNot},
 };
 use symbolica::evaluate::OptimizationSettings;
 
+use super::sampling_maps::SamplingEvaluationError;
+
 /// Values and first partial derivatives of one evaluated expression.
 #[derive(Clone, Debug, PartialEq)]
-pub struct SamplingDualValue {
+pub struct SamplingDualValue<T: FloatLike = f64> {
     /// The value of the expression at the supplied parameters.
-    pub value: Complex<F<f64>>,
+    pub value: Complex<F<T>>,
     /// First derivatives in the same order as the parameters passed to
     /// [`SamplingExpressionEvaluator::new`].
-    pub derivatives: Vec<Complex<F<f64>>>,
+    pub derivatives: Vec<Complex<F<T>>>,
 }
 
 /// Real-valued output and first-derivative matrix of a sampling expression.
@@ -36,19 +42,19 @@ pub struct SamplingDualValue {
 /// map density must use [`Self::absolute_determinant`], since a coordinate
 /// chart may reverse orientation.
 #[derive(Clone, Debug, PartialEq)]
-pub struct SamplingJacobianEvaluation {
+pub struct SamplingJacobianEvaluation<T: FloatLike = f64> {
     /// Expression values in the order supplied to the evaluator.
-    pub values: Vec<f64>,
+    pub values: Vec<T>,
     /// `derivatives[output][parameter]` from Symbolica's first-order duals.
-    pub derivatives: Vec<Vec<f64>>,
+    pub derivatives: Vec<Vec<T>>,
     /// Signed determinant of `derivatives`.
-    pub determinant: f64,
+    pub determinant: T,
 }
 
-impl SamplingJacobianEvaluation {
+impl<T: FloatLike> SamplingJacobianEvaluation<T> {
     /// Absolute determinant required by a push-forward volume density.
-    pub fn absolute_determinant(&self) -> f64 {
-        self.determinant.abs()
+    pub fn absolute_determinant(&self) -> T {
+        F(self.determinant.clone()).abs().0
     }
 }
 
@@ -57,6 +63,8 @@ impl SamplingJacobianEvaluation {
 /// The eager program is always retained.  If `with_derivatives` is requested,
 /// Symbolica's hyper-dual evaluator is built from the very same expression
 /// tree, yielding exact first partials suitable for a forward-map Jacobian.
+/// Cloning copies the already compiled programs and their mutable buffers;
+/// it does not run expression optimization or compilation again.
 #[derive(Clone)]
 pub struct SamplingExpressionEvaluator {
     evaluator: GenericEvaluator,
@@ -102,6 +110,124 @@ impl SamplingExpressionEvaluator {
         })
     }
 
+    /// Compile a declared-positive proxy once for all supported precisions.
+    ///
+    /// Non-real and nonpositive constants are rejected before compilation.
+    /// This is not a positivity certificate for arbitrary expressions: native
+    /// score evaluation must still check every result, and the graph compiler
+    /// must separately establish coverage of the intended singular features.
+    pub(crate) fn new_positive_proxy(
+        expression: Atom,
+        parameters: impl IntoIterator<Item = Atom>,
+    ) -> Result<Self> {
+        if let AtomView::Num(number) = expression.as_view() {
+            let coefficient = number.get_coeff_view().to_owned();
+            if !coefficient.is_real() || coefficient.is_zero() || coefficient.is_negative() {
+                return Err(eyre!(
+                    "sampling Symbolica score constant must be real and strictly positive: {expression}"
+                ));
+            }
+        }
+        Self::new([expression], parameters, false)
+    }
+
+    /// Compile the auxiliary-scale proposal once, including its native fit and
+    /// first derivatives. The two sign inputs select algebraically equivalent
+    /// stable tails: every evaluated exponential has a nonpositive argument.
+    /// Inputs are log(t), log(R), log(beta), focused sign and broad sign;
+    /// outputs are fitted log-scale, shape, CDF, survival and log(raw radius).
+    pub(crate) fn new_lu_h_profile(
+        profile: &SamplingRadialProfile,
+        h: &HFunctionSettings,
+    ) -> Result<Self> {
+        if !h.sigma.is_finite() || h.sigma <= 0.0 {
+            return Err(eyre!(
+                "LU-h sampling requires a positive finite h_function.sigma"
+            ));
+        }
+        if !profile.broad_fraction.is_finite()
+            || !(0.0..=1.0).contains(&profile.broad_fraction)
+            || [profile.scale, profile.shape]
+                .into_iter()
+                .flatten()
+                .any(|value| !value.is_finite() || value <= 0.0)
+        {
+            return Err(eyre!(
+                "LU-h sampling requires broad_fraction in [0,1] and positive finite scale/shape overrides"
+            ));
+        }
+        let power = h.power.unwrap_or(0);
+        let (log_scale, shape) = match h.function {
+            HFunction::PolyExponential | HFunction::PolyLeftRightExponential => {
+                if ![0, 1, 3, 4, 6, 7, 9, 10, 12, 13, 15, 16].contains(&power) {
+                    return Err(eyre!(
+                        "unsupported LU h-function power {power}; supported powers are 0,1,3,4,6,7,9,10,12,13,15,16"
+                    ));
+                }
+                let a = if matches!(h.function, HFunction::PolyExponential) {
+                    2
+                } else {
+                    1
+                };
+                let b = format!("((1-{power})/(2*{a}))");
+                // asinh(b) written with positive arguments, evaluated in the
+                // requested native precision rather than fitted in binary64.
+                (
+                    format!("log({})+log({b}+sqrt(1+({b})^2))/{a}", h.sigma),
+                    format!("2*{a}*(1+({b})^2)^(1/4)"),
+                )
+            }
+            HFunction::Exponential => (format!("log({}/2)", h.sigma), "1".to_owned()),
+            HFunction::ExponentialCT => {
+                return Err(eyre!(
+                    "exponential_ct is a local threshold localization, not a normalized auxiliary LU h-function"
+                ));
+            }
+        };
+        let log_scale = profile
+            .scale
+            .map_or(log_scale, |scale| format!("log({scale})"));
+        let shape = profile.shape.map_or(shape, |shape| shape.to_string());
+        let parameters = [
+            "lu_profile_y",
+            "lu_profile_log_root",
+            "lu_profile_log_beta",
+            "lu_profile_focus_sign",
+            "lu_profile_broad_sign",
+        ];
+        let x = format!("exp(lu_profile_focus_sign*({shape})*(lu_profile_y-({log_scale})))");
+        let b = "exp(lu_profile_broad_sign*(lu_profile_y-lu_profile_log_root+lu_profile_log_beta))";
+        let focused_cdf =
+            format!("((1+lu_profile_focus_sign)*({x})+1-lu_profile_focus_sign)/(2*(1+({x})))");
+        let focused_survival =
+            format!("(1+lu_profile_focus_sign+(1-lu_profile_focus_sign)*({x}))/(2*(1+({x})))");
+        let broad_cdf =
+            format!("((1+lu_profile_broad_sign)*({b})+1-lu_profile_broad_sign)/(2*(1+({b})))");
+        let broad_survival =
+            format!("(1+lu_profile_broad_sign+(1-lu_profile_broad_sign)*({b}))/(2*(1+({b})))");
+        let epsilon = profile.broad_fraction;
+        let expressions = [
+            log_scale,
+            shape,
+            format!("(1-{epsilon})*({focused_cdf})+{epsilon}*({broad_cdf})"),
+            format!("(1-{epsilon})*({focused_survival})+{epsilon}*({broad_survival})"),
+            "lu_profile_log_root-lu_profile_y".to_owned(),
+        ];
+        Self::new(
+            expressions
+                .iter()
+                .map(|expression| try_parse!(expression))
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| eyre!(error))?,
+            parameters
+                .iter()
+                .map(|parameter| try_parse!(*parameter))
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| eyre!(error))?,
+            true,
+        )
+    }
+
     pub fn parameter_count(&self) -> usize {
         self.parameter_count
     }
@@ -115,10 +241,10 @@ impl SamplingExpressionEvaluator {
     }
 
     /// Evaluate all outputs eagerly at a real parameter point.
-    pub fn evaluate(&mut self, parameters: &[f64]) -> Result<Vec<Complex<F<f64>>>> {
+    pub fn evaluate<T: FloatLike>(&mut self, parameters: &[T]) -> Result<Vec<Complex<F<T>>>> {
         self.validate_parameters(parameters)?;
         let input = self.evaluator_parameters(parameters);
-        let values = <f64 as GenericEvaluatorFloat>::get_evaluator(&mut self.evaluator)(&input);
+        let values = <T as GenericEvaluatorFloat>::get_evaluator(&mut self.evaluator)(&input);
         values
             .into_iter()
             .map(|value| match value {
@@ -133,10 +259,10 @@ impl SamplingExpressionEvaluator {
     }
 
     /// Evaluate all outputs and their first partial derivatives.
-    pub fn evaluate_with_derivatives(
+    pub fn evaluate_with_derivatives<T: FloatLike>(
         &mut self,
-        parameters: &[f64],
-    ) -> Result<Vec<SamplingDualValue>> {
+        parameters: &[T],
+    ) -> Result<Vec<SamplingDualValue<T>>> {
         if !self.with_derivatives {
             return Err(eyre!(
                 "sampling evaluator was built without derivative support"
@@ -144,7 +270,7 @@ impl SamplingExpressionEvaluator {
         }
         self.validate_parameters(parameters)?;
         let input = self.evaluator_parameters(parameters);
-        let values = <f64 as GenericEvaluatorFloat>::get_evaluator(&mut self.evaluator)(&input);
+        let values = <T as GenericEvaluatorFloat>::get_evaluator(&mut self.evaluator)(&input);
         values
             .into_iter()
             .map(|value| match value {
@@ -175,10 +301,10 @@ impl SamplingExpressionEvaluator {
     /// runtime.  A non-real output is rejected rather than silently projected
     /// onto its real part, since doing so would invalidate the advertised
     /// volume Jacobian.
-    pub fn evaluate_with_real_jacobian(
+    pub fn evaluate_with_real_jacobian<T: FloatLike>(
         &mut self,
-        parameters: &[f64],
-    ) -> Result<SamplingJacobianEvaluation> {
+        parameters: &[T],
+    ) -> Result<SamplingJacobianEvaluation<T>> {
         if self.output_count != self.parameter_count {
             return Err(eyre!(
                 "sampling Jacobian requires a square map ({} outputs, {} parameters)",
@@ -190,13 +316,18 @@ impl SamplingExpressionEvaluator {
         let mut values = Vec::with_capacity(dual_values.len());
         let mut derivatives = Vec::with_capacity(dual_values.len());
         for (output_index, value) in dual_values.into_iter().enumerate() {
-            values.push(real_component(value.value, "value", output_index, None)?);
+            values.push(Self::real_component(
+                value.value,
+                "value",
+                output_index,
+                None,
+            )?);
             let row = value
                 .derivatives
                 .into_iter()
                 .enumerate()
                 .map(|(parameter_index, derivative)| {
-                    real_component(
+                    Self::real_component(
                         derivative,
                         "derivative",
                         output_index,
@@ -207,11 +338,6 @@ impl SamplingExpressionEvaluator {
             derivatives.push(row);
         }
         let determinant = signed_determinant(&derivatives)?;
-        if !determinant.is_finite() {
-            return Err(eyre!(
-                "sampling Jacobian determinant is not finite: {determinant}"
-            ));
-        }
         Ok(SamplingJacobianEvaluation {
             values,
             derivatives,
@@ -219,7 +345,7 @@ impl SamplingExpressionEvaluator {
         })
     }
 
-    fn validate_parameters(&self, parameters: &[f64]) -> Result<()> {
+    fn validate_parameters<T: FloatLike>(&self, parameters: &[T]) -> Result<()> {
         if parameters.len() != self.parameter_count {
             return Err(eyre!(
                 "sampling evaluator received {} parameters, expected {}",
@@ -237,96 +363,124 @@ impl SamplingExpressionEvaluator {
     /// for every scalar parameter. Keep this flattening local to the shared
     /// evaluator wrapper so eager values and dual Jacobians cannot disagree on
     /// the input layout.
-    fn evaluator_parameters(&self, parameters: &[f64]) -> Vec<Complex<F<f64>>> {
+    fn evaluator_parameters<T: FloatLike>(&self, parameters: &[T]) -> Vec<Complex<F<T>>> {
         if !self.with_derivatives {
             return parameters
                 .iter()
-                .copied()
+                .cloned()
                 .map(|value| Complex::new_re(F(value)))
                 .collect();
         }
         let dual_width = self.parameter_count + 1;
         let mut input = Vec::with_capacity(self.parameter_count * dual_width);
-        for (parameter_index, value) in parameters.iter().copied().enumerate() {
-            input.push(Complex::new_re(F(value)));
+        for (parameter_index, value) in parameters.iter().cloned().enumerate() {
+            let value = F(value);
+            input.push(Complex::new_re(value.clone()));
             for derivative_index in 0..self.parameter_count {
-                input.push(Complex::new_re(F(if parameter_index == derivative_index {
-                    1.0
+                input.push(Complex::new_re(if parameter_index == derivative_index {
+                    value.one()
                 } else {
-                    0.0
-                })));
+                    value.zero()
+                }));
             }
         }
         debug_assert_eq!(input.len(), self.parameter_count * dual_width);
         input
     }
+
+    pub(crate) fn real_component<T: FloatLike>(
+        value: Complex<F<T>>,
+        role: &str,
+        output_index: usize,
+        parameter_index: Option<usize>,
+    ) -> Result<T> {
+        // Expressions in the map language are required to be real. Permit only
+        // roundoff-level imaginary residue from complex constants, and retain the
+        // diagnostic location when a genuinely complex map is supplied. Scale
+        // relative to the native output, including values smaller than f64 can hold.
+        let tolerance = value.re.epsilon() * value.re.from_usize(512) * value.re.abs();
+        if !value.re.0.is_finite() || !value.im.0.is_finite() {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "eager sampling expression",
+                detail: format!(
+                    "sampling {role} {output_index}{} is non-finite: {value:?}",
+                    parameter_index
+                        .map(|index| format!("/{index}"))
+                        .unwrap_or_default()
+                ),
+            }
+            .into());
+        }
+        if value.im.abs() > tolerance {
+            return Err(eyre!(
+                "sampling {role} {output_index}{} has non-negligible imaginary part {}",
+                parameter_index
+                    .map(|index| format!("/{index}"))
+                    .unwrap_or_default(),
+                value.im
+            ));
+        }
+        Ok(value.re.0)
+    }
 }
 
-fn real_component(
-    value: Complex<F<f64>>,
-    role: &str,
-    output_index: usize,
-    parameter_index: Option<usize>,
-) -> Result<f64> {
-    let imaginary = value.im.0;
-    // Expressions in the map language are required to be real.  Permit only
-    // roundoff-level imaginary residue from complex constants, and retain the
-    // diagnostic location when a genuinely complex map is supplied.
-    let tolerance = 1.0e-13 * value.re.0.abs().max(1.0);
-    if !value.re.0.is_finite() || !imaginary.is_finite() {
-        return Err(eyre!(
-            "sampling {role} {output_index}{} is non-finite: {value:?}",
-            parameter_index
-                .map(|index| format!("/{index}"))
-                .unwrap_or_default()
-        ));
-    }
-    if imaginary.abs() > tolerance {
-        return Err(eyre!(
-            "sampling {role} {output_index}{} has non-negligible imaginary part {}",
-            parameter_index
-                .map(|index| format!("/{index}"))
-                .unwrap_or_default(),
-            imaginary
-        ));
-    }
-    Ok(value.re.0)
-}
-
-fn signed_determinant(matrix: &[Vec<f64>]) -> Result<f64> {
+fn signed_determinant<T: FloatLike>(matrix: &[Vec<T>]) -> Result<T> {
     let dimension = matrix.len();
     if dimension == 0 || matrix.iter().any(|row| row.len() != dimension) {
         return Err(eyre!(
             "sampling Jacobian determinant requires a non-empty square matrix"
         ));
     }
-    let mut work = matrix.to_vec();
-    let mut determinant = 1.0;
+    let mut work = matrix
+        .iter()
+        .map(|row| row.iter().cloned().map(F).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    if work.iter().flatten().any(|value| !value.0.is_finite()) {
+        return Err(SamplingEvaluationError::Unrepresentable {
+            operation: "sampling Jacobian determinant",
+            detail: "matrix contains non-finite entries".into(),
+        }
+        .into());
+    }
+    let mut determinant = work[0][0].one();
     for pivot in 0..dimension {
+        if (pivot..dimension).any(|row| !work[row][pivot].0.is_finite()) {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "sampling Jacobian determinant",
+                detail: "elimination produced a non-finite pivot".into(),
+            }
+            .into());
+        }
         let (pivot_row, pivot_value) = (pivot..dimension)
             .map(|row| (row, work[row][pivot].abs()))
-            .max_by(|(_, left), (_, right)| left.total_cmp(right))
+            .max_by(|(_, left), (_, right)| left.partial_cmp(right).expect("finite pivots"))
             .expect("non-empty pivot range");
-        if !pivot_value.is_finite() {
-            return Err(eyre!("sampling Jacobian contains a non-finite pivot"));
-        }
-        if pivot_value == 0.0 {
-            return Ok(0.0);
+        if pivot_value == pivot_value.zero() {
+            return Ok(pivot_value.0);
         }
         if pivot_row != pivot {
             work.swap(pivot_row, pivot);
             determinant = -determinant;
         }
-        let diagonal = work[pivot][pivot];
-        determinant *= diagonal;
-        for row in (pivot + 1)..dimension {
-            let factor = work[row][pivot] / diagonal;
-            for column in (pivot + 1)..dimension {
-                work[row][column] -= factor * work[pivot][column];
+        let diagonal = work[pivot][pivot].clone();
+        determinant *= &diagonal;
+        if !determinant.0.is_finite() || determinant == determinant.zero() {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "sampling Jacobian determinant",
+                detail: "product of nonzero pivots overflowed or underflowed".into(),
+            }
+            .into());
+        }
+        let (completed, pending) = work.split_at_mut(pivot + 1);
+        let pivot_values = &completed[pivot];
+        for row in pending {
+            let factor = &row[pivot] / &diagonal;
+            for (entry, pivot_entry) in row.iter_mut().zip(pivot_values).skip(pivot + 1) {
+                *entry -= &factor * pivot_entry;
             }
         }
     }
-    Ok(determinant)
+    Ok(determinant.0)
 }
 
 fn first_derivative_shape(parameter_count: usize) -> Vec<Vec<usize>> {
@@ -344,6 +498,65 @@ fn first_derivative_shape(parameter_count: usize) -> Vec<Vec<usize>> {
 mod tests {
     use super::*;
     use crate::initialisation::test_initialise;
+
+    #[test]
+    fn sampling_lu_h_profile_rejects_unsupported_physical_and_proposal_settings() {
+        let profile = SamplingRadialProfile::default();
+        for h in [
+            HFunctionSettings {
+                function: HFunction::ExponentialCT,
+                ..Default::default()
+            },
+            HFunctionSettings {
+                power: Some(2),
+                ..Default::default()
+            },
+            HFunctionSettings {
+                sigma: 0.0,
+                ..Default::default()
+            },
+        ] {
+            assert!(SamplingExpressionEvaluator::new_lu_h_profile(&profile, &h).is_err());
+            // Broad-only sampling still validates the actual inherited h at
+            // warmup, even though its map subsequently skips the root solve.
+            assert!(
+                SamplingExpressionEvaluator::new_lu_h_profile(
+                    &SamplingRadialProfile {
+                        broad_fraction: 1.0,
+                        ..profile.clone()
+                    },
+                    &h
+                )
+                .is_err()
+            );
+        }
+        for invalid in [
+            SamplingRadialProfile {
+                broad_fraction: -0.1,
+                ..profile.clone()
+            },
+            SamplingRadialProfile {
+                broad_fraction: 1.1,
+                ..profile.clone()
+            },
+            SamplingRadialProfile {
+                scale: Some(0.0),
+                ..profile.clone()
+            },
+            SamplingRadialProfile {
+                shape: Some(f64::INFINITY),
+                ..profile.clone()
+            },
+        ] {
+            assert!(
+                SamplingExpressionEvaluator::new_lu_h_profile(
+                    &invalid,
+                    &HFunctionSettings::default()
+                )
+                .is_err()
+            );
+        }
+    }
 
     #[test]
     fn eager_evaluation_returns_all_outputs() {
@@ -439,5 +652,86 @@ mod tests {
         let x = Atom::var(symbol!("sampling_test::x_only"));
         let mut evaluator = SamplingExpressionEvaluator::new([x.clone()], [x], false).unwrap();
         assert!(evaluator.evaluate_with_derivatives(&[1.0]).is_err());
+    }
+
+    #[test]
+    fn native_eager_duals_and_determinants_preserve_values_outside_f64() {
+        test_initialise().unwrap();
+        let x = try_parse!("sampling_native::x").unwrap();
+        let y = try_parse!("sampling_native::y").unwrap();
+        let mut evaluator = SamplingExpressionEvaluator::new(
+            [
+                try_parse!("10^400 * sampling_native::x").unwrap(),
+                try_parse!("10^-400 * sampling_native::y").unwrap(),
+            ],
+            [x, y],
+            true,
+        )
+        .unwrap();
+        let error = evaluator
+            .evaluate_with_real_jacobian(&[1.0, 1.0])
+            .unwrap_err();
+        assert!(error.downcast_ref::<SamplingEvaluationError>().is_some());
+
+        // QuadFloat extends the mantissa using two binary64 numbers; its
+        // exponent range cannot represent these coefficients either.
+        let quad_one = F::<crate::utils::QuadFloat>::default().one().0;
+        let error = evaluator
+            .evaluate_with_real_jacobian(&[quad_one, quad_one])
+            .unwrap_err();
+        assert!(error.downcast_ref::<SamplingEvaluationError>().is_some());
+
+        fn check<T: FloatLike>(evaluator: &mut SamplingExpressionEvaluator) {
+            let one = F::<T>::default().one();
+            let large = one.from_usize(10).powi(400);
+            let small = &one / &large;
+            let tolerance = one.epsilon() * one.from_usize(2048);
+            // Reuse the same compiled program after its f64 failure.
+            let evaluated = evaluator
+                .evaluate_with_real_jacobian(&[one.0.clone(), one.0.clone()])
+                .unwrap();
+            assert!((F(evaluated.values[0].clone()) / &large - &one).abs() < tolerance);
+            assert!((F(evaluated.values[1].clone()) / &small - &one).abs() < tolerance);
+            assert!((F(evaluated.derivatives[0][0].clone()) / &large - &one).abs() < tolerance);
+            assert!((F(evaluated.derivatives[1][1].clone()) / &small - &one).abs() < tolerance);
+            assert!((F(evaluated.determinant) - &one).abs() < tolerance);
+
+            // A tiny imaginary output remains non-real despite lying below
+            // every f64 reporting scale and the old fixed absolute tolerance.
+            let error = SamplingExpressionEvaluator::real_component(
+                Complex::new(small.clone(), small),
+                "native test",
+                0,
+                None,
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains("imaginary part"));
+            assert!(error.downcast_ref::<SamplingEvaluationError>().is_none());
+        }
+        check::<crate::utils::ArbPrec>(&mut evaluator);
+    }
+
+    #[test]
+    fn native_dual_seeds_resolve_sub_f64_changes() {
+        test_initialise().unwrap();
+        let x = try_parse!("sampling_native::perturbed_x").unwrap();
+        let mut evaluator =
+            SamplingExpressionEvaluator::new([x.clone() * x.clone()], [x], true).unwrap();
+        fn check<T: FloatLike>(evaluator: &mut SamplingExpressionEvaluator) {
+            let one = F::<T>::default().one();
+            let delta = &one / one.from_usize(10).powi(25);
+            let x = &one + &delta;
+            let value = evaluator
+                .evaluate_with_derivatives(std::slice::from_ref(&x.0))
+                .unwrap()
+                .remove(0);
+            let two = one.from_usize(2);
+            let tolerance = one.epsilon() * one.from_usize(64);
+            assert!((value.value.re - x.square()).abs() < tolerance);
+            assert!((value.derivatives[0].re.clone() - &two * &x).abs() < tolerance);
+            assert!(value.derivatives[0].re > two);
+        }
+        check::<crate::utils::QuadFloat>(&mut evaluator);
+        check::<crate::utils::ArbPrec>(&mut evaluator);
     }
 }

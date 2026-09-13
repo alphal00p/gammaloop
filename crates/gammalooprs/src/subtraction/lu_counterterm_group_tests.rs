@@ -117,9 +117,9 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
         thresholds: vec![surface_a.clone(), surface_bc.clone(), surface_bc].into(),
         subspace: subspaces[0].clone(),
         kinematics: vec![
-            point.clone(),
-            make_point(make_sample(100.0, -2.0 * active_sign / fixed_sign, 1.0)),
-            make_point(make_sample(-100.0, 0.0, 1.0)),
+            point.representative_sample().clone(),
+            make_sample(100.0, -2.0 * active_sign / fixed_sign, 1.0),
+            make_sample(-100.0, 0.0, 1.0),
         ],
         records: (0..3)
             .map(|index| GlobalOverlapRecord {
@@ -137,7 +137,7 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
     let independent = Arc::new(ThresholdSolveGroup {
         thresholds: vec![surface_a.clone()].into(),
         subspace: subspaces[0].clone(),
-        kinematics: vec![point.clone()],
+        kinematics: vec![point.representative_sample().clone()],
         records: vec![GlobalOverlapRecord {
             cut_group_id: CutGroupId(0),
             side: ThresholdCountertermSide::Left,
@@ -269,7 +269,7 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
     let right_group = Arc::new(ThresholdSolveGroup {
         thresholds: vec![right_threshold.clone()].into(),
         subspace: right_subspace.clone(),
-        kinematics: vec![runtime_point.clone()],
+        kinematics: vec![runtime_point.representative_sample().clone()],
         records: vec![GlobalOverlapRecord {
             cut_group_id: CutGroupId(0),
             side: ThresholdCountertermSide::Right,
