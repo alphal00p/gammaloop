@@ -1,9 +1,18 @@
 # Advanced sampling channels for GammaLoop
 
-Status: implementation plan, 2026-09-12. This document records the accepted
+Status: implementation in progress, 2026-09-13. This document records the accepted
 design before source changes. It is the authority for the implementation that
 follows. It applies to arbitrary loop order and topology, to amplitudes and
 cross sections, and to both ordinary and threshold-adapted sampling.
+
+Current implementation status: the canonical `SamplingChannelId` catalogue,
+Symbolica selection parser, explicit parent-LMB validation, prepared cut/side
+guards, exact affine LMB routing, and the discrete map-density bridge are
+implemented and pushed on `advanced_sampling`. The old LMB-only enum variant is
+kept only for direct momentum-space compatibility during migration; x-space
+discrete sampling now enters through the canonical bridge for every channel.
+Physical directional E-surface maps, prepared cross-section `t*` context
+construction, and final old standalone-integrand removal remain open milestones.
 
 The portable research bundle is in
 [`docs/research/advanced_sampling/README.md`](docs/research/advanced_sampling/README.md).
