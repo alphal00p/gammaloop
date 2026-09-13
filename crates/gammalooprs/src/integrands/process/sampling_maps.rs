@@ -1501,24 +1501,13 @@ impl ImplicitSurfaceRadialMap {
     }
 
     fn radius_from_coordinate(&self, coordinate: f64, root: Option<(f64, f64)>) -> (f64, f64) {
-        let threshold = root.map(|(radius, _)| radius).unwrap_or(0.0);
-        let split = threshold / (threshold + self.beta);
-        if split > 0.0 && coordinate < split {
-            let fraction = coordinate / split;
-            let radius = threshold * fraction.powf(self.power);
-            let derivative = threshold * self.power * fraction.powf(self.power - 1.0) / split;
-            (radius, derivative)
-        } else {
-            let odds = if split > 0.0 {
-                (coordinate - split) / (1.0 - coordinate)
-            } else {
-                coordinate / (1.0 - coordinate)
-            };
-            let radius = threshold + self.beta * odds.powf(self.power);
-            let derivative =
-                self.beta * self.power * odds.powf(self.power - 1.0) / (1.0 - coordinate).powi(2);
-            (radius, derivative)
-        }
+        let (radius, jacobian) = SurfaceRadialMap::radius_from_coordinate(
+            &F(coordinate),
+            F(root.map(|(radius, _)| radius).unwrap_or(0.0)),
+            F(self.beta),
+            F(self.power),
+        );
+        (radius.0, jacobian.0)
     }
 
     fn coordinate_from_radius(&self, radius: f64, root: Option<(f64, f64)>) -> f64 {
@@ -1692,7 +1681,9 @@ impl SurfaceRadialMap {
     /// Map a unit-cube point to a point around the surface centre.
     pub fn forward<T: FloatLike>(&self, coordinates: &[F<T>]) -> Result<SurfaceRadialPoint<T>> {
         self.validate_coordinates(coordinates)?;
-        let (radius, radial_jacobian) = self.radius_from_coordinate(&coordinates[0]);
+        let (_, threshold, beta) = self.split_coordinate();
+        let (radius, radial_jacobian) =
+            Self::radius_from_coordinate(&coordinates[0], threshold, beta, F::from_f64(self.power));
         let one = radius.one();
         let two = radius.from_i64(2);
         let phi = radius.TAU() * &coordinates[1];
@@ -1814,10 +1805,14 @@ impl SurfaceRadialMap {
         (split, threshold, beta)
     }
 
-    fn radius_from_coordinate<T: FloatLike>(&self, coordinate: &F<T>) -> (F<T>, F<T>) {
+    fn radius_from_coordinate<T: FloatLike>(
+        coordinate: &F<T>,
+        threshold: F<T>,
+        beta: F<T>,
+        power: F<T>,
+    ) -> (F<T>, F<T>) {
         let one = coordinate.one();
-        let power = F::<T>::from_f64(self.power);
-        let (split, threshold, beta) = self.split_coordinate();
+        let split = &threshold / (&threshold + &beta);
         if split > coordinate.zero() && coordinate < &split {
             let fraction = coordinate / &split;
             let radius = &threshold * fraction.powf(&power);
@@ -1826,8 +1821,10 @@ impl SurfaceRadialMap {
         } else {
             let odds = (coordinate - &split) / (&one - coordinate);
             let radius = &threshold + &beta * odds.powf(&power);
-            let jacobian =
-                &beta * &power * odds.powf(&(&power - &one)) / (&one - coordinate).square();
+            // d[(u-s)/(1-u)]/du = (1-s)/(1-u)^2; the branch
+            // interval shrinks when the threshold occupies a finite radius.
+            let jacobian = &beta * &power * odds.powf(&(&power - &one)) * (&one - &split)
+                / (&one - coordinate).square();
             (radius, jacobian)
         }
     }
@@ -1839,12 +1836,12 @@ impl SurfaceRadialMap {
         if split > radius.zero() && radius < &threshold {
             let fraction = radius / &threshold;
             let coordinate = &split * fraction.powf(&(&one / &power));
-            let (_, jacobian) = self.radius_from_coordinate(&coordinate);
+            let (_, jacobian) = Self::radius_from_coordinate(&coordinate, threshold, beta, power);
             (coordinate, jacobian)
         } else {
             let z = ((radius - &threshold) / &beta).powf(&(&one / &power));
             let coordinate = (&z + &split) / (&one + &z);
-            let (_, jacobian) = self.radius_from_coordinate(&coordinate);
+            let (_, jacobian) = Self::radius_from_coordinate(&coordinate, threshold, beta, power);
             (coordinate, jacobian)
         }
     }
@@ -2238,6 +2235,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn radial_profiles_include_the_outer_branch_interval_in_the_jacobian() {
+        for threshold in [None, Some(2.0)] {
+            for power in [1.0, 2.0] {
+                let explicit = |coordinate| {
+                    SurfaceRadialMap::radius_from_coordinate(
+                        &F(coordinate),
+                        F(threshold.unwrap_or(0.0)),
+                        F(2.0),
+                        F(power),
+                    )
+                };
+                let implicit = ImplicitSurfaceRadialMap::new(
+                    3,
+                    vec![0.0; 3],
+                    2.0,
+                    power,
+                    Arc::new(|_: &[f64], radius: f64| Ok((radius - 2.0, 1.0))),
+                )
+                .unwrap();
+                for coordinate in [0.1, 0.8] {
+                    let step = 1.0e-6;
+                    let (radius, jacobian) = explicit(coordinate);
+                    let plus = explicit(coordinate + step).0;
+                    let minus = explicit(coordinate - step).0;
+                    let finite_difference = (plus.0 - minus.0) / (2.0 * step);
+                    assert!((jacobian.0 / finite_difference - 1.0).abs() < 1.0e-8);
+                    let (implicit_radius, implicit_jacobian) = implicit
+                        .radius_from_coordinate(coordinate, threshold.map(|radius| (radius, 1.0)));
+                    assert!((implicit_radius - radius.0).abs() < 1.0e-12);
+                    assert!((implicit_jacobian / finite_difference - 1.0).abs() < 1.0e-8);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn affine_map_round_trips_with_translation_and_exact_determinant() {
         let map = SamplingMapAffine::new(vec![vec![2.0, 1.0], vec![1.0, 3.0]], vec![0.5, -1.0])
             .expect("invertible affine map");
@@ -2365,20 +2398,66 @@ mod tests {
 
     #[test]
     fn ordinary_kernel_supports_cartesian_shell_and_rejects_non_bijective_map() {
-        let settings = ParameterizationSettings {
-            mode: ParameterizationMode::Cartesian,
-            ..Default::default()
-        };
-        let kernel = SamplingMapKernel::new(
-            SamplingMapDefinition::Complement(vec![0]),
-            settings,
-            42.2,
-            1,
-        )
-        .unwrap();
-        let point = kernel.forward(&[F(0.2), F(0.4), F(0.7)]).unwrap();
-        assert!(point.jacobian.0.is_finite() && point.jacobian > F(0.0));
-        assert!(point.residual < F(1.0e-12));
+        let coordinates = [
+            0.05, 0.2, 0.5, 0.4, 0.7, 0.9, 0.13, 0.87, 0.6, 0.31, 0.69, 0.95,
+        ]
+        .map(F);
+        for mapping in [
+            ParameterizationMapping::Log,
+            ParameterizationMapping::Linear,
+        ] {
+            let kernel = SamplingMapKernel::new(
+                SamplingMapDefinition::Complement(vec![0, 1, 2, 3]),
+                ParameterizationSettings {
+                    mode: ParameterizationMode::Cartesian,
+                    mapping,
+                    ..Default::default()
+                },
+                42.2,
+                4,
+            )
+            .unwrap();
+            let point = kernel.forward(&coordinates).unwrap();
+            assert!(point.jacobian.0.is_finite() && point.jacobian > F(0.0));
+            assert!(point.residual < F(1.0e-12));
+            let inverse = kernel.inverse(&point.loop_momenta).unwrap();
+            for (expected, actual) in coordinates.iter().zip(&inverse.coordinates) {
+                assert!((expected - actual).abs() < F(1.0e-12));
+            }
+            assert!((point.jacobian * inverse.inverse_jacobian - F(1.0)).abs() < F(1.0e-12));
+
+            // Independent derivatives of the forward map certify the inverse density.
+            let step = 1.0e-6;
+            let mut numerical_jacobian = 1.0;
+            for dimension in 0..coordinates.len() {
+                let mut lower = coordinates;
+                let mut upper = coordinates;
+                lower[dimension].0 -= step;
+                upper[dimension].0 += step;
+                let lower = kernel.forward(&lower).unwrap().loop_momenta;
+                let upper = kernel.forward(&upper).unwrap().loop_momenta;
+                let component = dimension % 3;
+                let lower = &lower.0[dimension / 3];
+                let upper = &upper.0[dimension / 3];
+                let lower = [&lower.px, &lower.py, &lower.pz][component].0;
+                let upper = [&upper.px, &upper.py, &upper.pz][component].0;
+                numerical_jacobian *= (upper - lower) / (2.0 * step);
+            }
+            assert!((numerical_jacobian * inverse.inverse_jacobian.0 - 1.0).abs() < 1.0e-8);
+        }
+        assert!(
+            SamplingMapKernel::new(
+                SamplingMapDefinition::Lmb(vec![0]),
+                ParameterizationSettings {
+                    mode: ParameterizationMode::Cartesian,
+                    mapping: ParameterizationMapping::Power,
+                    ..Default::default()
+                },
+                42.2,
+                1,
+            )
+            .is_err()
+        );
         assert!(
             SamplingMapKernel::new(
                 SamplingMapDefinition::Lmb(vec![0]),

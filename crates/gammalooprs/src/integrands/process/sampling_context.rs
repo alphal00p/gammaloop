@@ -59,15 +59,11 @@ impl<T: FloatLike> PreparedCrossSectionMapEvaluation<T> {
             ("map Jacobian", &jacobian),
             ("inverse map Jacobian", &inverse_jacobian),
         ] {
-            let value = value.into_f64();
-            if !value.is_finite() || value <= 0.0 {
+            if !value.0.is_finite() || value <= &value.zero() {
                 return Err(eyre!("{name} must be finite and positive, got {value}"));
             }
         }
-        if runtime_context
-            .iter()
-            .any(|value| !value.into_f64().is_finite())
-        {
+        if runtime_context.iter().any(|value| !value.0.is_finite()) {
             return Err(eyre!(
                 "deferred map runtime context contains a non-finite value"
             ));
@@ -680,7 +676,7 @@ mod tests {
     #[test]
     fn prepared_map_evaluation_rejects_invalid_jacobians_and_context() {
         let sample = MomentumSample::new(
-            LoopMomenta::from_iter([crate::momentum::ThreeMomentum::new(F(0.0), F(0.0), F(0.0))]),
+            LoopMomenta::from_iter(vec![ThreeMomentum::new(F(0.0), F(0.0), F(0.0)); 3]),
             0,
             &Externals::default(),
             0,
@@ -690,28 +686,63 @@ mod tests {
         )
         .unwrap();
         for (jacobian, inverse_jacobian) in [(0.0, 1.0), (1.0, 0.0), (-1.0, 1.0)] {
-            assert!(
-                PreparedCrossSectionMapEvaluation::new(
-                    SamplingChannelId::from(0),
-                    sample.clone(),
-                    F(jacobian),
-                    F(inverse_jacobian),
-                    vec![],
-                    context(SamplingCutSide::Right),
-                )
-                .is_err()
-            );
-        }
-        assert!(
-            PreparedCrossSectionMapEvaluation::new(
+            let error = PreparedCrossSectionMapEvaluation::new(
                 SamplingChannelId::from(0),
-                sample,
-                F(1.0),
-                F(1.0),
-                vec![F(f64::NAN)],
+                sample.clone(),
+                F(jacobian),
+                F(inverse_jacobian),
+                vec![],
                 context(SamplingCutSide::Right),
             )
-            .is_err()
+            .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("Jacobian must be finite and positive")
+            );
+        }
+        let error = PreparedCrossSectionMapEvaluation::new(
+            SamplingChannelId::from(0),
+            sample.clone(),
+            F(1.0),
+            F(1.0),
+            vec![F(f64::NAN)],
+            context(SamplingCutSide::Right),
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("runtime context contains a non-finite value")
         );
+
+        // A finite value at rescue precision need not fit in f64. Validation
+        // must not classify an underflowed or overflowed conversion as invalid.
+        let one = F::<crate::utils::ArbPrec>::default().one();
+        let large = one.from_usize(10).powi(400);
+        let small = &one / &large;
+        assert!(large.into_f64().is_infinite());
+        assert_eq!(small.into_f64(), 0.0);
+        PreparedCrossSectionMapEvaluation::new(
+            SamplingChannelId::from(0),
+            MomentumSample::new(
+                LoopMomenta::from_iter(vec![
+                    ThreeMomentum::new(one.zero(), one.zero(), one.zero());
+                    3
+                ]),
+                0,
+                &Externals::default(),
+                0,
+                one,
+                DependentMomentaConstructor::CrossSection,
+                None,
+            )
+            .unwrap(),
+            large.clone(),
+            small,
+            vec![large],
+            context(SamplingCutSide::Right),
+        )
+        .unwrap();
     }
 }

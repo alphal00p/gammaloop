@@ -6,9 +6,8 @@ use crate::momentum::{Rotation, ThreeMomentum};
 use crate::utils::{self, F, FloatLike, global_parameterize};
 use crate::{
     DependentMomentaConstructor, settings::runtime::DiscreteGraphSamplingType,
-    settings::runtime::LmbChannelWeight, settings::runtime::ParameterizationMode,
-    settings::runtime::ParameterizationSettings, settings::runtime::SamplingSettings,
-    settings::runtime::kinematic::KinematicsSettings,
+    settings::runtime::ParameterizationMode, settings::runtime::ParameterizationSettings,
+    settings::runtime::SamplingSettings, settings::runtime::kinematic::KinematicsSettings,
 };
 use color_eyre::Result;
 use eyre::eyre;
@@ -59,12 +58,10 @@ pub enum GammaLoopSample<T: FloatLike> {
         sample: MomentumSample<T>,
     },
     MultiChanneling {
-        alpha: F<T>,
-        channel_weight: LmbChannelWeight,
         /// Unit-cube coordinates retained for canonical summed channels.
-        /// Amplitude graph terms replay these coordinates through the one
-        /// canonical bridge; cross-section terms retain them for the guarded
-        /// legacy route until their conditional LU/t* context is available.
+        /// Every graph term replays these coordinates through the canonical
+        /// bridge. Per-channel Jacobians and partitions multiply the graph
+        /// result, so this outer sample carries a unit Jacobian.
         sampling_coordinates: Option<Vec<F<T>>>,
         sample: MomentumSample<T>,
     },
@@ -98,13 +95,9 @@ impl<T: FloatLike> GammaLoopSample<T> {
                 sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
             },
             GammaLoopSample::MultiChanneling {
-                alpha,
-                channel_weight,
                 sampling_coordinates,
                 sample,
             } => GammaLoopSample::MultiChanneling {
-                alpha: alpha.clone(),
-                channel_weight: *channel_weight,
                 sampling_coordinates: sampling_coordinates.clone(),
                 sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
             },
@@ -155,13 +148,9 @@ impl<T: FloatLike> GammaLoopSample<T> {
                 sample: sample.cast_sample(),
             },
             GammaLoopSample::MultiChanneling {
-                alpha,
-                channel_weight,
                 sampling_coordinates,
                 sample,
             } => GammaLoopSample::MultiChanneling {
-                alpha: alpha.clone().into(),
-                channel_weight: *channel_weight,
                 sampling_coordinates: sampling_coordinates
                     .as_ref()
                     .map(|coordinates| coordinates.iter().cloned().map(F::<T2>::from).collect()),
@@ -193,13 +182,9 @@ impl<T: FloatLike> GammaLoopSample<T> {
                 sample: sample.higher_precision(),
             },
             GammaLoopSample::MultiChanneling {
-                alpha,
-                channel_weight,
                 sampling_coordinates,
                 sample,
             } => GammaLoopSample::MultiChanneling {
-                alpha: alpha.higher(),
-                channel_weight: *channel_weight,
                 sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
                     coordinates
                         .iter()
@@ -234,13 +219,9 @@ impl<T: FloatLike> GammaLoopSample<T> {
                 sample: sample.lower_precision(),
             },
             GammaLoopSample::MultiChanneling {
-                alpha,
-                channel_weight,
                 sampling_coordinates,
                 sample,
             } => GammaLoopSample::MultiChanneling {
-                alpha: alpha.lower(),
-                channel_weight: *channel_weight,
                 sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
                     coordinates
                         .iter()
@@ -276,11 +257,9 @@ pub enum DiscreteGraphSample<T: FloatLike> {
         use_lmb_basis: bool,
     },
     MultiChanneling {
-        alpha: F<T>,
-        channel_weight: LmbChannelWeight,
-        /// Unit-cube coordinates retained for canonical amplitude routing.
-        /// Cross-section terms may still use the compatibility path until
-        /// their per-cut LU/t* context is available.
+        /// Unit-cube coordinates retained for canonical per-channel routing.
+        /// Both process kinds replay their maps before physical evaluation;
+        /// conditional cut/side maps additionally require prepared LU/t* data.
         sampling_coordinates: Option<Vec<F<T>>>,
         sample: MomentumSample<T>,
     },
@@ -368,10 +347,9 @@ impl<T: FloatLike> DeferredCrossSectionSample<T> {
     }
 }
 
-/// Whether the selected runtime mode still uses the legacy *summed* channel
-/// estimator.  Both top-level summed sampling and discrete graph sampling can
-/// request this mode; keeping the predicate central prevents the nested graph
-/// form from bypassing the graph-aware-channel guard below.
+/// Whether the selected runtime mode explicitly sums the canonical channels.
+/// Both top-level and discrete graph sampling use the same summed estimator;
+/// keeping the predicate central also guards cut-dependent maps in both forms.
 fn is_summed_multichanneling(settings: &SamplingSettings) -> bool {
     match settings {
         SamplingSettings::MultiChanneling(_) => true,
@@ -420,13 +398,9 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                 use_lmb_basis: *use_lmb_basis,
             },
             DiscreteGraphSample::MultiChanneling {
-                alpha,
-                channel_weight,
                 sampling_coordinates,
                 sample,
             } => DiscreteGraphSample::MultiChanneling {
-                alpha: alpha.clone(),
-                channel_weight: *channel_weight,
                 sampling_coordinates: sampling_coordinates.clone(),
                 sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
             },
@@ -464,13 +438,9 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                 use_lmb_basis: *use_lmb_basis,
             },
             DiscreteGraphSample::MultiChanneling {
-                alpha,
-                channel_weight,
                 sampling_coordinates,
                 sample,
             } => DiscreteGraphSample::MultiChanneling {
-                alpha: Into::<F<T2>>::into(alpha.clone()),
-                channel_weight: *channel_weight,
                 sampling_coordinates: sampling_coordinates
                     .as_ref()
                     .map(|coordinates| coordinates.iter().cloned().map(F::<T2>::from).collect()),
@@ -511,13 +481,9 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                 use_lmb_basis: *use_lmb_basis,
             },
             DiscreteGraphSample::MultiChanneling {
-                alpha,
-                channel_weight,
                 sampling_coordinates,
                 sample,
             } => DiscreteGraphSample::MultiChanneling {
-                alpha: alpha.higher(),
-                channel_weight: *channel_weight,
                 sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
                     coordinates
                         .iter()
@@ -562,13 +528,9 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                 use_lmb_basis: *use_lmb_basis,
             },
             DiscreteGraphSample::MultiChanneling {
-                alpha,
-                channel_weight,
                 sampling_coordinates,
                 sample,
             } => DiscreteGraphSample::MultiChanneling {
-                alpha: alpha.lower(),
-                channel_weight: *channel_weight,
                 sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
                     coordinates
                         .iter()
@@ -677,17 +639,18 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
     {
         // Resolve the canonical catalogue before decoding discrete indices.
         // This turns unsupported named/surface channels into a diagnostic
-        // instead of silently treating them as an empty legacy channel axis.
+        // instead of silently treating an invalid catalogue as an empty axis.
         for group_id in 0..integrand.get_group_structure().len() {
             let graph = integrand.get_master_graph(GroupId(group_id));
             graph.sampling_channel_ids(parameterization_settings)?;
-            if is_summed_multichanneling(&settings.sampling)
-                && !graph.supports_canonical_summed_sampling()
-            {
+            if is_summed_multichanneling(&settings.sampling) {
                 for channel_id in graph.sampling_channel_ids(parameterization_settings)? {
-                    if !graph.sampling_channel_is_lmb(channel_id, parameterization_settings)? {
+                    if graph.sampling_channel_requires_deferred_cut_context(
+                        channel_id,
+                        parameterization_settings,
+                    )? {
                         return Err(eyre!(
-                            "summed sampling multichanneling cannot use graph-aware channel {}; use discrete multi-channeling",
+                            "sampling channel {} requires solved LU/t* context before mapping",
                             channel_id.index()
                         ));
                     }
@@ -727,19 +690,19 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
             use_lmb_basis: true,
         }),
         SamplingSettings::MultiChanneling(multichanneling_settings) => {
+            let mut sample = default_parametrize(
+                &xs,
+                dependent_momenta_constructor,
+                &multichanneling_settings.parameterization_settings,
+                &settings.kinematics,
+                None,
+                loop_mom_cache_id,
+                external_mom_cache_id,
+            );
+            sample.sample.jacobian = sample.one();
             Ok(GammaLoopSample::MultiChanneling {
-                alpha: F::from_f64(multichanneling_settings.alpha),
-                channel_weight: multichanneling_settings.channel_weight,
                 sampling_coordinates: Some(xs.clone()),
-                sample: default_parametrize(
-                    &xs,
-                    dependent_momenta_constructor,
-                    &multichanneling_settings.parameterization_settings,
-                    &settings.kinematics,
-                    None,
-                    loop_mom_cache_id,
-                    external_mom_cache_id,
-                ),
+                sample,
             })
         }
         SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
@@ -766,21 +729,21 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                     })
                 }
                 DiscreteGraphSamplingType::MultiChanneling(multichanneling_settings) => {
+                    let mut sample = default_parametrize(
+                        &xs,
+                        dependent_momenta_constructor,
+                        &multichanneling_settings.parameterization_settings,
+                        &settings.kinematics,
+                        orientation_id,
+                        loop_mom_cache_id,
+                        external_mom_cache_id,
+                    );
+                    sample.sample.jacobian = sample.one();
                     Ok(GammaLoopSample::DiscreteGraph {
                         group_id,
                         sample: DiscreteGraphSample::MultiChanneling {
-                            alpha: F::from_f64(multichanneling_settings.alpha),
-                            channel_weight: multichanneling_settings.channel_weight,
                             sampling_coordinates: Some(xs.clone()),
-                            sample: default_parametrize(
-                                &xs,
-                                dependent_momenta_constructor,
-                                &multichanneling_settings.parameterization_settings,
-                                &settings.kinematics,
-                                orientation_id,
-                                loop_mom_cache_id,
-                                external_mom_cache_id,
-                            ),
+                            sample,
                         },
                     })
                 }
@@ -899,7 +862,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                             "sampling channel partition has invalid weight {partition_weight}"
                         ));
                     }
-                    sample.sample.jacobian = sample.sample.jacobian * F::from_f64(partition_weight);
+                    sample.sample.jacobian *= F::from_f64(partition_weight);
                     Ok(GammaLoopSample::DiscreteGraph {
                         group_id,
                         sample: DiscreteGraphSample::SamplingChannel {
@@ -1158,8 +1121,6 @@ mod tests {
         .expect("empty cross-section sample is valid for metadata test");
         let coordinates = vec![F(0.125), F(0.625), F(0.875)];
         let summed = DiscreteGraphSample::MultiChanneling {
-            alpha: F(1.0),
-            channel_weight: crate::settings::runtime::LmbChannelWeight::Ose,
             sampling_coordinates: Some(coordinates.clone()),
             sample,
         };

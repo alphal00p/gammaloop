@@ -4295,8 +4295,47 @@ pub(crate) fn inv_parametrize3d<T: FloatLike>(
 ) -> ([F<T>; 3], F<T>) {
     let one = e_cm.one();
     let zero = one.zero();
+    if settings.mode == ParameterizationMode::Cartesian {
+        let two = one.from_i64(2);
+        let mut coordinates = [zero.clone(), zero.clone(), zero.clone()];
+        let mut jac = one.clone();
+        for (coordinate, momentum) in coordinates.iter_mut().zip([&mom.px, &mom.py, &mom.pz]) {
+            let scaled = momentum / &e_cm;
+            let magnitude = scaled.abs();
+            // Invert the negative half first to avoid overflow or cancellation in the tails.
+            let lower = match settings.mapping {
+                ParameterizationMapping::Log => {
+                    let exponential = (-magnitude).exp();
+                    &exponential / (&one + &exponential)
+                }
+                ParameterizationMapping::Linear => {
+                    if magnitude > one {
+                        let reciprocal = &one / &magnitude;
+                        let twice_reciprocal = &two * reciprocal;
+                        &twice_reciprocal
+                            / ((&one + twice_reciprocal.square()).sqrt() + &one + &twice_reciprocal)
+                    } else {
+                        &two / ((magnitude.square() + two.square()).sqrt() + magnitude + &two)
+                    }
+                }
+                ParameterizationMapping::Power => {
+                    panic!("Power radial mapping is only supported for spherical coordinates");
+                }
+            };
+            let upper = &one - &lower;
+            jac *= match settings.mapping {
+                ParameterizationMapping::Log => &lower * &upper / &e_cm,
+                ParameterizationMapping::Linear => {
+                    lower.square() * upper.square() / (&e_cm * (lower.square() + upper.square()))
+                }
+                ParameterizationMapping::Power => unreachable!(),
+            };
+            *coordinate = if scaled < zero { lower } else { upper };
+        }
+        return (coordinates, jac);
+    }
     if settings.mode != ParameterizationMode::Spherical {
-        panic!("Inverse mapping is only implemented for spherical coordinates");
+        panic!("Inverse mapping requires cartesian or spherical coordinates");
     }
 
     let mut jac = one.clone();

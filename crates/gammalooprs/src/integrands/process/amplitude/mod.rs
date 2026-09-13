@@ -86,10 +86,10 @@ use crate::{
 
 use super::{
     GraphTerm, GraphTermEvaluationContext, LmbMultiChannelingSetup, ProcessIntegrandImpl,
-    RuntimeCache, SamplingChannelEvaluation, create_grid, evaluate_sample,
-    filtered_orientation_count, format_orientation_label, format_sampling_channel_label,
-    histogram_process_info_for_integrand, prepare_buffered_event, resolve_visible_orientation_id,
-    validate_group_orientation_catalogs, validate_process_runtime_settings,
+    RuntimeCache, create_grid, evaluate_sample, filtered_orientation_count,
+    format_orientation_label, format_sampling_channel_label, histogram_process_info_for_integrand,
+    prepare_buffered_event, resolve_visible_orientation_id, validate_group_orientation_catalogs,
+    validate_process_runtime_settings,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -804,16 +804,8 @@ impl AmplitudeGraphTerm {
     fn evaluate_impl<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        context: &mut GraphTermEvaluationContext<'_, '_, T>,
+        context: &mut GraphTermEvaluationContext<'_, '_>,
     ) -> Result<AmplitudeGraphTermEvaluation<T>> {
-        if matches!(
-            &context.sampling_channel,
-            Some(SamplingChannelEvaluation::LegacyLmb { .. })
-        ) {
-            return Err(eyre!(
-                "amplitude sampling channels must be mapped through the canonical sampling bridge"
-            ));
-        }
         let (momentum_sample, prefactor) = if let Some(lmb_basis_id) = context.lmb_basis_id {
             (
                 self.multi_channeling_setup
@@ -1181,10 +1173,6 @@ impl GraphTerm for AmplitudeGraphTerm {
             .compile_sampling_channel_bridge_with_external(&resolved, &context, external_momenta)
     }
 
-    fn supports_canonical_summed_sampling(&self) -> bool {
-        true
-    }
-
     fn sampling_channel_is_lmb(
         &self,
         channel_id: SamplingChannelId,
@@ -1210,12 +1198,9 @@ impl GraphTerm for AmplitudeGraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        mut context: GraphTermEvaluationContext<'_, '_, T>,
+        mut context: GraphTermEvaluationContext<'_, '_>,
     ) -> Result<GraphEvaluationResult<T>> {
-        let event_channel_id = context
-            .sampling_channel
-            .as_ref()
-            .map(SamplingChannelEvaluation::id);
+        let event_channel_id = context.sampling_channel;
         let prepared_event = prepare_buffered_event(
             context.settings,
             context.rotation,
