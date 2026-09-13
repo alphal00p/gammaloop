@@ -194,6 +194,13 @@ unimplemented; no bounded GL638 weight claim follows from these component
 checks. Automatic discovery and longer direct-H runs are not prerequisites
 for X5.
 
+The next AST/factory groundwork passes 168 core checks, including the generated
+kite in three precisions and distinct reversed shared edges with unequal
+partner masses. Saved-state API regressions also pass. Production binding stays
+disabled until the original-source proposal phase is connected; GL638 also
+requires exact certification of its centre-of-mass shared-energy relation and
+physical host reconciliation.
+
 ### X2 generated-graph validation
 
 The first complete focused run passes twelve tests in 66.919 seconds. It includes

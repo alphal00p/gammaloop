@@ -169,16 +169,25 @@ impl SamplingMapDefinition {
         }
     }
 
-    /// Physical energy edges are distinct from the active coordinate block.
-    pub fn energy_edges(&self) -> Option<&[usize]> {
+    /// Physical equations are distinct from the active coordinate block. A
+    /// supported intersection keeps its two energy sets in normal-coordinate
+    /// order; their union would lose the equations and their shared energy.
+    pub fn energy_edge_sets(&self) -> Vec<&[usize]> {
         match self {
-            Self::Surface(edges) | Self::Cut(edges) => Some(edges),
+            Self::Surface(edges) | Self::Cut(edges) => vec![edges],
+            Self::Intersect(maps)
+                if maps.len() == 2
+                    && maps[0] != maps[1]
+                    && maps.iter().all(|map| matches!(map, Self::Surface(_))) =>
+            {
+                maps.iter().flat_map(Self::energy_edge_sets).collect()
+            }
             Self::PhaseSpace(map)
             | Self::Left(map)
             | Self::Right(map)
             | Self::AtCut { map, .. }
-            | Self::Block { map, .. } => map.energy_edges(),
-            _ => None,
+            | Self::Block { map, .. } => map.energy_edge_sets(),
+            _ => Vec::new(),
         }
     }
 
@@ -3750,7 +3759,20 @@ mod tests {
             map
         );
         assert_eq!(map.host_cut(), Some([2, 9].as_slice()));
-        assert_eq!(map.energy_edges(), Some([4, 6].as_slice()));
+        assert_eq!(map.energy_edge_sets(), vec![[4, 6].as_slice()]);
+        let joint = SamplingMapDefinition::parse(
+            "block(lmb(7),at_cut(cut(9,2),intersect(surface(6,4),surface(6,3))))",
+        )
+        .unwrap();
+        assert_eq!(
+            SamplingMapDefinition::from_atom(joint.to_atom().as_view()).unwrap(),
+            joint
+        );
+        assert_eq!(joint.host_cut(), Some([2, 9].as_slice()));
+        assert_eq!(
+            joint.energy_edge_sets(),
+            vec![[4, 6].as_slice(), [3, 6].as_slice()]
+        );
         for invalid in [
             "block(surface(1),surface(2))",
             "at_cut(lmb(1),surface(2))",

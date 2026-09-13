@@ -1181,7 +1181,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                 channel
                     .blocks
                     .iter()
-                    .filter(|block| block.target.energy_edges().is_some())
+                    .filter(|block| !block.target.energy_edge_sets().is_empty())
                     .map(move |block| (channel, block))
             })
             .collect_vec();
@@ -1235,6 +1235,12 @@ impl GraphTerm for AmplitudeGraphTerm {
                     .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
             );
             for (channel, block) in surface_channels {
+                if block.target.energy_edge_sets().len() == 2 {
+                    return Err(eyre!(
+                        "amplitude joint sampling channel '{}' is not enabled: routed-energy matching and proposal-policy retention across native retries must be bound before production intersect targets can be used",
+                        channel.name
+                    ));
+                }
                 let SamplingMapDefinition::Surface(edges) = &block.target else {
                     return Err(eyre!(
                         "amplitude sampling channel '{}' cannot use a Cutkosky host or side qualifier: {:?}",
@@ -1402,7 +1408,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                         // Nonnegative external shifts certify no open interior,
                         // including exact massless pinches, without a numerical
                         // rediscovery of the minimum at every complement point.
-                        context.insert_surface_map(
+                        context.insert_geometry_map(
                             block.target.clone(),
                             channel.definition.parent_lmb.clone(),
                             active_edges,
@@ -1428,7 +1434,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                         beta,
                         parameterization_settings.power,
                     )?;
-                    context.insert_surface_map(
+                    context.insert_geometry_map(
                         block.target.clone(),
                         channel.definition.parent_lmb.clone(),
                         active_edges,
@@ -1474,7 +1480,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                             parameterization_settings.power,
                         )?
                     };
-                    context.insert_surface_map(
+                    context.insert_geometry_map(
                         block.target.clone(),
                         channel.definition.parent_lmb.clone(),
                         active_edges,
@@ -1482,7 +1488,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                         CompiledSamplingMap::ImplicitSurface(map),
                     )?;
                 } else {
-                    context.insert_surface_map(
+                    context.insert_geometry_map(
                         block.target.clone(),
                         channel.definition.parent_lmb.clone(),
                         active_edges,
@@ -3609,6 +3615,285 @@ parent_lmb = [4,6]
                 }
             }
         }
+        // This is a routed factory/component gate. The production joint card
+        // stays disabled until one proposal policy survives physical rescue.
+        fn check_joint_matcher<T: FloatLike>(
+            term: &AmplitudeGraphTerm,
+            program: crate::integrands::process::SamplingExpressionEvaluator,
+        ) -> Result<()> {
+            use crate::integrands::process::{SamplingMapComponent, SharedEnergyJointMap};
+            use crate::momentum::sample::SubspaceData;
+            let one = F::<T>::default().one();
+            let zero = one.zero();
+            let half = &one / one.from_usize(2);
+            let energy = one.from_usize(26).sqrt();
+            let externals: ExternalFourMomenta<F<T>> = (0..2)
+                .map(|_| {
+                    FourMomentum::from_args(energy.clone(), zero.clone(), zero.clone(), one.clone())
+                })
+                .collect();
+            let spatial = externals
+                .iter()
+                .map(|p| p.spatial.clone())
+                .collect::<crate::momentum::sample::ExternalThreeMomenta<F<T>>>();
+            let masses: EdgeVec<F<T>> = term
+                .real_mass_vec
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|(_, m)| m.map(F::<T>::from_ff64).unwrap_or_else(|| zero.clone()))
+                .collect();
+            for (parent, active_edge) in [(vec![4, 6], 6), (vec![5, 4], 5)] {
+                let lmbs = TiVec::from(vec![
+                    term.multi_channeling_setup.sampling_parent_lmb(&parent)?,
+                ]);
+                let id = LmbIndex::from(0);
+                let lmb = &lmbs[id];
+                let subspace = SubspaceData::new_from_parent_basis_edges(
+                    &[EdgeIndex(active_edge)],
+                    &term.graph.full_filter(),
+                    id,
+                    &term.graph,
+                    &lmbs,
+                )?;
+                let active = subspace.iter_lmb_indices().next().unwrap();
+                let prior = lmb
+                    .loop_edges
+                    .iter_enumerated()
+                    .find_map(|(i, e)| (*e == EdgeIndex(4)).then_some(i))
+                    .unwrap();
+                let select = |edges: &[usize]| {
+                    term.esurfaces
+                        .iter()
+                        .find(|s| {
+                            s.energies
+                                .iter()
+                                .map(|e| e.0)
+                                .sorted()
+                                .eq(edges.iter().copied())
+                                && s.compute_shift_part_from_momenta(&externals, lmb) < zero
+                        })
+                        .unwrap()
+                        .clone()
+                };
+                let c = select(&[2, 4, 6]);
+                let d = select(&[3, 5, 6]);
+                let (prepare, common) = c.sampling_joint_geometry_in_subspace(
+                    &d,
+                    &subspace,
+                    &lmbs,
+                    &term.graph,
+                    &masses,
+                    &externals,
+                    &[prior],
+                )?;
+                let context = [one.0.clone(), zero.0.clone(), (-&half).0];
+                let geometry = prepare(&context)?;
+                assert_eq!(
+                    geometry.shifts[0],
+                    [one.0.clone(), zero.0.clone(), half.0.clone()]
+                );
+                assert_eq!(
+                    geometry.shifts[1],
+                    [one.0.clone(), zero.0.clone(), (-&half).0]
+                );
+                for sum in &geometry.energy_sums {
+                    assert!(
+                        (F(sum.clone()) - (&energy - one.from_usize(3) * &half)).abs()
+                            < one.epsilon().sqrt()
+                    );
+                }
+                let mut loops = LoopMomenta::from_iter(
+                    (0..2).map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+                );
+                loops[prior] = ThreeMomentum::new(one.clone(), zero.clone(), -&half);
+                let offset: ThreeMomentum<F<T>> = common.compute_momentum(&loops, &spatial);
+                assert_eq!(
+                    offset.norm_squared() > zero,
+                    active_edge == 5,
+                    "alternate parent must exercise a nonzero shared-energy affine offset"
+                );
+                let kernel = SharedEnergyJointMap::new(
+                    prepare.clone(),
+                    3,
+                    (&one / one.from_usize(8)).0,
+                    one.0.clone(),
+                    5.0,
+                    program.clone(),
+                )?;
+                let cube = [19, 31, 67].map(|v| (one.from_usize(v) / one.from_usize(100)).0);
+                let forward = kernel.forward(&cube, &context)?;
+                assert!(
+                    forward
+                        .diagnostics
+                        .iter()
+                        .any(|d| d.contains("certified normal disk"))
+                );
+                let inverse = kernel
+                    .inverse(&forward.point, &context)?
+                    .expect("selected compact point");
+                assert!(
+                    (F(forward.jacobian) * F(inverse.inverse_jacobian) - &one).abs()
+                        < one.epsilon().sqrt() * one.from_usize(100)
+                );
+                for point in [
+                    forward.point,
+                    vec![half.0.clone(), (-&one).0, one.0.clone()],
+                ] {
+                    let x = ThreeMomentum::new(
+                        F(point[0].clone()),
+                        F(point[1].clone()),
+                        F(point[2].clone()),
+                    );
+                    loops[active] = &x - &offset;
+                    let e0 = (x.norm_squared() + F(geometry.masses[0].clone()).square()).sqrt();
+                    for (i, surface) in [&c, &d].into_iter().enumerate() {
+                        let shift = ThreeMomentum::new(
+                            F(geometry.shifts[i][0].clone()),
+                            F(geometry.shifts[i][1].clone()),
+                            F(geometry.shifts[i][2].clone()),
+                        );
+                        let partner = &x + shift;
+                        let expected = &e0
+                            + (partner.norm_squared() + F(geometry.masses[i + 1].clone()).square())
+                                .sqrt()
+                            - F(geometry.energy_sums[i].clone());
+                        let original =
+                            surface.compute_from_momenta(lmb, &masses, &loops, &externals);
+                        assert!(
+                            (original - expected).abs()
+                                < one.epsilon().sqrt() * one.from_usize(100)
+                        );
+                    }
+                }
+                assert!(
+                    c.sampling_joint_geometry_in_subspace(
+                        &d,
+                        &subspace,
+                        &lmbs,
+                        &term.graph,
+                        &masses,
+                        &externals,
+                        &[]
+                    )
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("unsampled")
+                );
+                assert!(
+                    c.sampling_joint_geometry_in_subspace(
+                        &c,
+                        &subspace,
+                        &lmbs,
+                        &term.graph,
+                        &masses,
+                        &externals,
+                        &[prior]
+                    )
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("common full signed routing")
+                );
+                let mut repeated = c.clone();
+                repeated.energies.push(EdgeIndex(2));
+                assert!(
+                    repeated
+                        .sampling_joint_geometry_in_subspace(
+                            &d,
+                            &subspace,
+                            &lmbs,
+                            &term.graph,
+                            &masses,
+                            &externals,
+                            &[prior]
+                        )
+                        .err()
+                        .unwrap()
+                        .to_string()
+                        .contains("two varying energy occurrences")
+                );
+                // Diagnostic mass input isolates a fixed-energy range failure;
+                // it does not claim this is a regenerated physical kite model.
+                let mut tiny_masses = masses.clone();
+                tiny_masses[EdgeIndex(4)] = &one / one.from_usize(10).powi(200);
+                let mut tiny_externals = externals.clone();
+                for momentum in &mut tiny_externals {
+                    momentum.temporal.value = &tiny_masses[EdgeIndex(4)] * one.from_usize(2);
+                }
+                let (tiny, _) = c.sampling_joint_geometry_in_subspace(
+                    &d,
+                    &subspace,
+                    &lmbs,
+                    &term.graph,
+                    &tiny_masses,
+                    &tiny_externals,
+                    &[prior],
+                )?;
+                let tiny_result = tiny(&[zero.0.clone(), zero.0.clone(), zero.0.clone()]);
+                if matches!(
+                    T::sampling_precision(),
+                    crate::settings::runtime::Precision::Arb
+                ) {
+                    let sum = F(tiny_result?.energy_sums[0].clone());
+                    assert_eq!(sum, tiny_masses[EdgeIndex(4)]);
+                    assert!(sum > zero);
+                } else {
+                    assert!(tiny_result.err().unwrap().downcast_ref::<crate::integrands::process::sampling_maps::SamplingEvaluationError>().is_some());
+                }
+                let short = ExternalFourMomenta::from_iter(externals.iter().take(1).cloned());
+                assert!(
+                    c.sampling_joint_geometry_in_subspace(
+                        &d,
+                        &subspace,
+                        &lmbs,
+                        &term.graph,
+                        &masses,
+                        &short,
+                        &[prior]
+                    )
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("external ports")
+                );
+            }
+            Ok(())
+        }
+        let joint_program =
+            crate::integrands::process::SharedEnergyJointMap::<f64>::compile_program()?;
+        check_joint_matcher::<f64>(term, joint_program.clone())?;
+        check_joint_matcher::<crate::utils::QuadFloat>(term, joint_program.clone())?;
+        check_joint_matcher::<crate::utils::ArbPrec>(term, joint_program)?;
+        {
+            let mut parameterization = settings.sampling.get_parameterization_settings().unwrap();
+            parameterization.sampling_channels.default_channel_selection =
+                vec!["joint".into(), "ordinary".into()];
+            let definitions = parameterization
+                .sampling_channels
+                .channel_definitions
+                .get_mut("massive_kite")
+                .unwrap();
+            let mut definition = definitions["C"].clone();
+            definition.around =
+                "then(complement(4),block(lmb(6),intersect(surface(2,4,6),surface(3,5,6))))".into();
+            definition.subspace_lmb = vec![6];
+            definitions.insert("joint".into(), definition);
+            let error = term
+                .compile_sampling_bridge(
+                    &parameterization,
+                    &settings,
+                    &[[5.0, 0.0, 0.0, 0.0]; 2],
+                    None,
+                )
+                .unwrap_err();
+            assert!(
+                error.to_string().contains("proposal-policy retention"),
+                "{error}"
+            );
+        }
+
         // The same generated C equation also defines a genuine three-dimensional
         // fiber: k=q4 varies while l=q6 was sampled by the preceding block.
         // This factory/composition gate complements the production command-card

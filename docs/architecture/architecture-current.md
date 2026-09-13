@@ -570,9 +570,14 @@ The graph-independent shared-energy joint component supplies a compact
 three-dimensional full-circle map for two energy sums with one common routed
 energy. It uses that eager Jacobian owner, a directed MPFR enclosure certificate
 for the residual disk, and an inverse density evaluated at the supplied point.
-The component's represented-geometry contract does not yet include graph
-matching, run-card binding or physical-host uncertainty transport. Its conditional
-ordinary fallback retains the existing normalized radial map. Compact/fallback
+The existing block resolver now treats two distinct plain surfaces under
+`intersect` as one three-dimensional block, with qualifiers on the pair. Their
+separate equations remain in the same geometry key, and the canonical program
+cache compiles one neutral joint expression for all participating channels.
+A staged graph matcher is tested against actual routed amplitude equations;
+production graph binding and physical-host uncertainty transport remain disabled.
+The component's conditional ordinary fallback retains the existing normalized
+radial map. Compact/fallback
 and dyadic-radius choices need prerequisite-only persistence across native
 retries before production binding; fixed-context tests do not establish that
 property.

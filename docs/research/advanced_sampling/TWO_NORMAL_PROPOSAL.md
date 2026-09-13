@@ -186,9 +186,11 @@ at regular points, not a global domain certificate or an implementation claim.
 ## Generic shared-energy component and remaining graph binding
 
 The represented-geometry component and support/partition migration now pass
-their focused checks. Graph matching, command-card binding and native proposal
-policy transport remain unimplemented. The component is not yet a usable
-GL638 channel through the run-card API.
+their focused checks. The next slice resolves a pair as one three-dimensional
+`intersect` block in the existing catalogue, compiles its neutral eager program
+once, and tests a shared graph-routed energy matcher. Production command-card
+binding and native proposal-policy transport remain gated. The component is
+not yet a usable GL638 channel through the run-card API.
 
 The first exact primitive accepts two prepared energy equations in one
 three-dimensional active block, rather than graph names or H/Z formulas:
@@ -207,11 +209,29 @@ A common invertible affine change to x is retained by the existing frame map.
 The bounded first matcher accepts active coefficients equal up to sign; an
 unsupported routing class is a structural diagnostic, not an ordinary fallback.
 
-Actual GL638 fits this class with `a=q2`, `b=-q10`, masses `(mt,mt,0)`,
-`C1=E(a+t)+E(t)` and `C2=Q-E(t)` in the prepared host frame. The common energy
-is carried by distinct edges 12 and 3 with identical routed momenta. This is a
-fixture demonstrating the class; the kernel receives none of those labels.
-Amplitudes can supply the same data without a cut or projection owner.
+GL638 supplies `a=q2`, `b=-q10`, masses `(mt,mt,0)`, and the original global
+equation constants `C1=Q-Eh(a)` and `C2=Q-Et(t)` in the prepared host frame.
+The analytic expression `C1=Et(a+t)+Et(t)` agrees only on the exact host cut;
+substituting it at finite LU-root accuracy moves the requested target by the
+host residual. Retain the original global equation during binding.
+
+Its shared energy is carried by distinct edges 12 and 3. Graph conservation
+gives `q12=q3+Q_in`: their spatial momenta coincide in the specified
+centre-of-mass frame, but their full formal external signatures need not match.
+The first matcher requires identical complete signed routing and a common mass
+expression. A later GL638 binding must also certify this fixed-external spatial
+identity exactly, retaining the original rows; a tolerance comparison or an
+assumption about boosted kinematics is insufficient. This specialization belongs
+to the sampling matcher, not to the structural raised-edge equivalence rule.
+The kernel receives none of these graph labels. Amplitudes supply the same
+prepared equation class without a cut or projection owner.
+
+The matcher also corrects an existing whole-sign comparison: independently
+normalizing internal and external signs falsely identifies `L+Q` with `-L+Q`.
+One common sign must relate both parts. The existing raised-edge callers retain
+this structural invariant, with dedicated regression coverage. The factory
+preserves fixed-energy multiplicities and rejects missing prerequisites,
+ambiguous shared occurrences and unsupported energy classes explicitly.
 
 This is a graph-agnostic **exact supported class**, not support for every pair
 of routed E-surfaces. The generic machinery is the existing block, context,
@@ -335,19 +355,18 @@ The detailed prerequisite-only policy and its exact bias counterexample are in
 
 ### Existing owners and dependency order
 
-1. `sampling_maps.rs` owns the new native component and its paired forward/
-   inverse. Extend the existing inverse return contract to express outside
-   support (for example `Result<Option<SamplingMapEvaluation<T>>>`), propagating
-   it through affine, embedding and ordered composition. Positive supported
+1. `sampling_joint.rs` implements the native component under the existing
+   `sampling_maps.rs` forward/inverse contract. Outside support is represented
+   by `Result<Option<SamplingMapEvaluation<T>>>` and propagated through affine,
+   embedding and ordered composition. Positive supported
    densities still undergo existing validation; `None` never represents
    underflow, a failed solve, or a selected forward point's missing inverse.
 2. `sampling_selection.rs` passes outside-support to the **existing**
    `SamplingPartition::from_log_scores` None convention: zero channel weight;
-   all-None already errors. Refine the existing map contract so restricted
-   image coverage is not confused with complement dependence or branch count.
-   Its current Full/Conditional/Branched enum conflates these facts. Maintain
-   one support contract and migrate it, rather than adding an independent
-   domain registry. Require ordinary coverage for a selected compact chart.
+   all-None already errors. The migrated map contract separates Full/Restricted
+   image coverage from complement dependence. It replaces the previous
+   Full/Conditional/Branched enum without an independent domain registry.
+   An explicitly selected full-support sibling covers a compact chart.
 3. `sampling_evaluator.rs` retains the common eager/dual program. This prerequisite
    is now implemented: select the three cube derivative columns while holding
    prepared parameters fixed, using the existing determinant owner. Static
@@ -357,11 +376,12 @@ The detailed prerequisite-only policy and its exact bias counterexample are in
    requested singular derivative or a singular intermediate depending on active
    inputs still gives a typed numerical error. Expressions remain compiled once
    in the current program cache, with worker-local buffers and native parameters.
-4. `cff/esurface.rs` supplies the routed-energy matcher and prepared constants;
+4. `cff/esurface.rs` stages the routed-energy matcher and prepared constants;
    `sampling_selection.rs` admits exactly `intersect(surface(...),surface(...))`
    as one existing block/registry key. Resolve both leaves under one host/frame,
    consume three coordinates total, and preserve ordered prior dependencies.
-   Amplitude/cross-section binders then return this same component. No second
+   Production amplitude/cross-section binding will return this same component
+   after proposal-policy and host gates. No second
    channel enumeration, automatic discovery, arbitrary implicit intersection
    solver or new projected-target resolver belongs in this slice.
 
@@ -425,3 +445,25 @@ Gaussian/partition test accounts for 102.144 seconds. This includes 8192
 reference draws and repeated support/certificate evaluations, not a production
 map benchmark. Prepared-data reuse and production map cost need measurement
 when the graph binder and per-draw context are connected.
+
+### Graph-binding groundwork validation
+
+The subsequent combined run passes 168 core tests in 141.997 seconds. The
+resolver treats the qualified pair as one ordered 3D block, its registry key
+retains both equations, and the catalogue shares one compiled joint program.
+The generated kite checks the matcher and component in Double, Quad and Arb,
+including a parent with nonzero affine translation. Independent evaluations of
+the original E-surfaces agree at mapped and unrelated Cartesian points.
+A serial-edge graph checks distinct globally reversed shared routes, unequal
+partner masses, fixed-energy multiplicities and inconsistent mass diagnostics.
+Missing prerequisites/external ports and underflowed fixed energies are rejected.
+Existing raised-cut, raised-selection and shared-threshold regressions pass.
+These are factory/component checks; the factory is staged under `cfg(test)`
+until production policy transport is connected. The full GL638 external-frame
+specialization and hosted joint channel remain unimplemented.
+
+Core checking, Python-enabled API checking and all-target core clippy pass,
+with no changed-line warnings. Both saved-state reference-acceptance and
+summed/selected canonical-channel API regressions pass in 125.211 seconds.
+They validate the existing loaded-state workflow; they do not enable or certify
+production joint channels. Formatting and diff checks pass.
