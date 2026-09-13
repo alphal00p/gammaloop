@@ -566,6 +566,10 @@ pub struct SamplingChannelBridgeAcceptanceReport {
     pub partition_max: f64,
     pub jacobian_min: f64,
     pub jacobian_max: f64,
+    /// Maximum forward/inverse coordinate residual seen by the acceptance run.
+    /// A finite small value is required before a channel is trusted in a
+    /// graph-level acceptance test.
+    pub round_trip_residual_max: f64,
 }
 
 impl SamplingChannelBridgeAcceptanceReport {
@@ -623,6 +627,7 @@ impl SamplingChannelBridgeAcceptanceReport {
             partition_max: f64::NEG_INFINITY,
             jacobian_min: f64::INFINITY,
             jacobian_max: f64::NEG_INFINITY,
+            round_trip_residual_max: 0.0,
         };
         let mut square_sum = 0.0;
         let total_samples = sample_count * channel_count;
@@ -633,6 +638,27 @@ impl SamplingChannelBridgeAcceptanceReport {
                     .map(|axis| bridge_halton(sample, bridge_prime(axis)))
                     .collect::<Vec<_>>();
                 let evaluation = bridge.forward(channel_id, &coordinates)?;
+                // Exercise the inverse on every accepted point as well.  This
+                // catches a channel whose forward determinant is finite while
+                // its inverse uses a different branch or frame, which would
+                // invalidate the graph-level map-density estimator.
+                let inverse = bridge.inverse(channel_id, &evaluation.raw_coordinates)?;
+                let coordinate_residual = inverse
+                    .map
+                    .coordinates
+                    .iter()
+                    .zip(&coordinates)
+                    .map(|(recovered, original)| (recovered - original).abs())
+                    .fold(inverse.map.residual, f64::max);
+                if !coordinate_residual.is_finite() {
+                    return Err(eyre!(
+                        "sampling bridge acceptance inverse residual is non-finite for channel {} sample {}",
+                        channel_index,
+                        sample
+                    ));
+                }
+                report.round_trip_residual_max =
+                    report.round_trip_residual_max.max(coordinate_residual);
                 let partition_sum = evaluation.partition.weights.iter().sum::<f64>();
                 if !partition_sum.is_finite() {
                     return Err(eyre!(
@@ -3766,6 +3792,7 @@ mod tests {
         assert!((report.partition_max - 1.0).abs() < 1.0e-12);
         assert!((report.normalization - 1.0).abs() < 5.0e-2);
         assert!(report.normalization_stderr.is_finite());
+        assert!(report.round_trip_residual_max < 1.0e-10);
     }
 
     #[test]
@@ -3794,6 +3821,7 @@ mod tests {
         assert!((report.normalization - 1.0).abs() < 5.0e-2);
         assert!((report.partition_min - 1.0).abs() < 1.0e-12);
         assert!((report.partition_max - 1.0).abs() < 1.0e-12);
+        assert!(report.round_trip_residual_max < 1.0e-10);
     }
 
     #[test]
