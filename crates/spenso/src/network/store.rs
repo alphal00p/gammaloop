@@ -1,11 +1,16 @@
+use std::fmt::Debug;
+
 use serde::{Deserialize, Serialize};
 
+use crate::structure::slot::AbsInd;
+
 use super::{
-    graph::ScalarRef,
+    graph::{NetworkGraph, ScalarRef},
     profile::{self, Counter, Timer},
 };
 
 pub trait TensorScalarStore: Default + TensorScalarStoreMapping {
+    /// Tensor indices are local to the current graph and may change during execution.
     fn add_tensor(&mut self, tensor: Self::Tensor) -> usize;
     fn add_scalar(&mut self, scalar: Self::Scalar) -> usize;
 
@@ -32,6 +37,13 @@ pub trait NetworkStoreAccess {
     }
     fn push_tensor(&mut self, tensor: Self::Tensor) -> usize;
     fn push_scalar(&mut self, scalar: Self::Scalar) -> usize;
+
+    /// Drop unused tensors after installing a complete execution wave.
+    /// The graph must include every pending reference to this store.
+    fn retain_graph_tensors<K: Debug, FK: Debug, Aind: AbsInd>(
+        &mut self,
+        graph: &mut NetworkGraph<K, FK, Aind>,
+    );
 }
 
 pub trait TensorScalarStoreMapping: Sized {
@@ -223,6 +235,34 @@ impl<T, S> NetworkStoreAccess for NetworkStore<T, S> {
         self.scalar_aliases.push(None);
         index
     }
+
+    fn retain_graph_tensors<K: Debug, FK: Debug, Aind: AbsInd>(
+        &mut self,
+        graph: &mut NetworkGraph<K, FK, Aind>,
+    ) {
+        if self.tensors.is_empty() {
+            return;
+        }
+        // MAX marks an unreferenced slot, never a graph index. Mark every
+        // reference, including shared IDs, before moving any tensor.
+        let mut indices = vec![usize::MAX; self.tensors.len()];
+        graph.map_tensor_refs(|index| {
+            indices[index] = index;
+            index
+        });
+        let mut retained = 0;
+        let mut old_indices = indices.iter_mut();
+        self.tensors.retain(|_| {
+            let index = old_indices.next().unwrap();
+            if *index == usize::MAX {
+                return false;
+            }
+            *index = retained;
+            retained += 1;
+            true
+        });
+        graph.map_tensor_refs(|index| indices[index]);
+    }
 }
 
 impl<T, S> NetworkStoreAccess for NetworkStoreOverlay<'_, T, S> {
@@ -277,6 +317,14 @@ impl<T, S> NetworkStoreAccess for NetworkStoreOverlay<'_, T, S> {
         self.scalar.push(scalar);
         self.scalar_aliases.push(None);
         index
+    }
+
+    fn retain_graph_tensors<K: Debug, FK: Debug, Aind: AbsInd>(
+        &mut self,
+        _graph: &mut NetworkGraph<K, FK, Aind>,
+    ) {
+        // Workers borrow the shared base and can hold references outside their
+        // operation graph. Reclamation belongs to the joined, merged wave.
     }
 }
 
@@ -582,5 +630,223 @@ impl<T, S> TensorScalarStoreMapping for NetworkStore<T, S> {
                 })
                 .collect::<Result<Vec<_>, Er>>()?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use linnet::{
+        half_edge::{builder::HedgeGraphBuilder, involution::Flow},
+        permutation::Permutation,
+    };
+
+    use crate::{
+        network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, ScaledTensorRef},
+        structure::PermutedStructure,
+    };
+
+    use super::{
+        NetworkGraph, NetworkStore, NetworkStoreAccess, NetworkStoreOverlay, ScalarRef,
+        TensorScalarStore,
+    };
+
+    #[test]
+    fn tensor_retention_moves_shared_payloads_and_preserves_every_leaf_variant() {
+        let library = NetworkLeaf::LibraryKey {
+            key: PermutedStructure {
+                structure: 7i8,
+                rep_permutation: Permutation::id(0),
+                index_permutation: Permutation::id(0),
+            },
+            indices: vec![],
+        };
+        let mut builder = HedgeGraphBuilder::new();
+        for leaf in [
+            NetworkLeaf::LocalTensor(2),
+            NetworkLeaf::TensorSum(vec![2, 5, 2]),
+            NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled_ref(8, ScalarRef::Alias(0))),
+            NetworkLeaf::ScaledTensorSum(vec![
+                ScaledTensorRef::tensor(5),
+                ScaledTensorRef::scaled(8, 1),
+            ]),
+            NetworkLeaf::Scalar(ScalarRef::Alias(0)),
+            library.clone(),
+        ] {
+            let node = builder.add_node(NetworkNode::Leaf(leaf));
+            builder.add_external_edge(node, NetworkEdge::Head, true, Flow::Source);
+        }
+        let mut graph: NetworkGraph<i8, i8> = builder.into();
+        // Mutex deliberately has no Clone implementation: compaction must move payloads.
+        let mut store = NetworkStore {
+            tensors: (0..10).map(Mutex::new).collect(),
+            scalar: vec![11, 13],
+            scalar_aliases: vec![Some(17), None],
+        };
+        let expected = vec![
+            NetworkLeaf::LocalTensor(0),
+            NetworkLeaf::TensorSum(vec![0, 1, 0]),
+            NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled_ref(2, ScalarRef::Alias(0))),
+            NetworkLeaf::ScaledTensorSum(vec![
+                ScaledTensorRef::tensor(1),
+                ScaledTensorRef::scaled(2, 1),
+            ]),
+            NetworkLeaf::Scalar(ScalarRef::Alias(0)),
+            library,
+        ];
+        for _ in 0..2 {
+            store.retain_graph_tensors(&mut graph);
+            assert_eq!(
+                store
+                    .tensors
+                    .iter()
+                    .map(|tensor| *tensor.lock().unwrap())
+                    .collect::<Vec<_>>(),
+                [2, 5, 8]
+            );
+            assert_eq!(
+                graph
+                    .graph
+                    .iter_nodes()
+                    .map(|(_, _, node)| {
+                        let NetworkNode::Leaf(leaf) = node else {
+                            panic!("expected leaf")
+                        };
+                        leaf.clone()
+                    })
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            assert_eq!(store.scalar, [11, 13]);
+            assert_eq!(store.scalar_aliases, [Some(17), None]);
+        }
+        let mut scalar_graph: NetworkGraph<i8, i8> = NetworkGraph::scalar(0);
+        store.retain_graph_tensors(&mut scalar_graph);
+        assert!(store.tensors.is_empty());
+        assert_eq!(store.scalar_ref(ScalarRef::Alias(0)), &17);
+    }
+
+    #[test]
+    fn overlay_retention_keeps_base_and_unmerged_addition_indices() {
+        let base = NetworkStore {
+            tensors: vec![10, 20, 30],
+            scalar: vec![7],
+            scalar_aliases: vec![Some(11)],
+        };
+        let mut overlay = NetworkStoreOverlay::new(&base);
+        assert_eq!(overlay.push_tensor(40), 3);
+        assert_eq!(overlay.push_tensor(50), 4);
+        let mut graph: NetworkGraph<i8, i8> = NetworkGraph::scalar(0);
+        let root = graph.graph.node_id(graph.head());
+        graph.graph[root] = NetworkNode::Leaf(NetworkLeaf::TensorSum(vec![1, 4]));
+        let before = graph.clone();
+        overlay.retain_graph_tensors(&mut graph);
+        assert_eq!(graph, before);
+        assert_eq!(overlay.tensor(1), &20);
+        assert_eq!(overlay.tensor(4), &50);
+        assert_eq!(overlay.scalar_ref(ScalarRef::Alias(0)), &11);
+        assert_eq!(overlay.into_additions(), (vec![40, 50], vec![], vec![]));
+        assert_eq!(base.tensors, [10, 20, 30]);
+    }
+
+    #[cfg(feature = "shadowing")]
+    #[test]
+    fn tensor_retention_preserves_unreferenced_alias_definitions() {
+        use symbolica::{atom::Atom, parse};
+
+        use crate::network::{Network, tags::scalar_store_alias};
+
+        let mut network: Network<NetworkStore<Mutex<i32>, Atom>, i8, i8> =
+            Network::from_scalar(parse!("x+y"));
+        let nested = network
+            .store
+            .add_scalar(scalar_store_alias(0) + parse!("z"));
+        let aliases = network.alias_scalar_refs(|_, _| true);
+        network.store.add_tensor(Mutex::new(1));
+        network.store.retain_graph_tensors(&mut network.graph);
+        assert!(network.store.tensors.is_empty());
+        assert_eq!(
+            network.resolve_scalar_aliases(&aliases, scalar_store_alias(nested)),
+            parse!("x+y+z")
+        );
+        assert_eq!(aliases.aliased_indices().collect::<Vec<_>>(), [0, 1]);
+    }
+
+    #[test]
+    fn completed_execution_waves_reclaim_tensor_inputs_in_every_strategy() {
+        use crate::{
+            network::{
+                ExecutionResult, Network, Sequential, SequentialExtract, SequentialRef,
+                SmallestDegree,
+                library::{DummyKey, DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+            },
+            structure::{
+                OrderedStructure,
+                representation::{Euclidean, RepName},
+            },
+            tensors::data::DenseTensor,
+        };
+
+        #[cfg(feature = "shadowing")]
+        let _parallel = crate::symbolic_parallelism::scoped_symbolica_rayon_setting_for_test(
+            crate::symbolic_parallelism::SymbolicParallelism::Parallel,
+            || true,
+        );
+        type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+        type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+        type LibTensor = DummyLibraryTensor<Tensor>;
+        type Lib = DummyLibrary<Tensor, DummyKey>;
+        type FnLib = ErroringLibrary<DummyKey>;
+        let lib = Lib::new();
+        let fn_lib = FnLib::new();
+        let structure = OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure;
+        let tensor = |data| Net::from_tensor(Tensor::from_data(data, structure.clone()).unwrap());
+        // The two inner sums can run in separate overlays before later waves
+        // negate and combine them. Every stage must use the remapped indices.
+        let original = -(tensor(vec![1.0, 2.0]) + tensor(vec![3.0, 4.0]))
+            + -(tensor(vec![5.0, 6.0]) + tensor(vec![7.0, 8.0]));
+        assert_eq!(original.store.tensors.len(), 4);
+        for strategy in 0..4 {
+            let mut network = original.clone();
+            match strategy {
+                0 => network
+                    .execute::<Sequential, SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib),
+                1 => network
+                    .execute::<SequentialRef, SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib),
+                2 => network.execute::<SequentialExtract, SmallestDegree, LibTensor, Lib, FnLib>(
+                    &lib, &fn_lib,
+                ),
+                _ => {
+                    network.execute_parallel::<SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+                }
+            }
+            .unwrap();
+            assert_eq!(network.store.tensors.len(), 1);
+            let (NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)), _, _) =
+                network.graph.result().unwrap()
+            else {
+                panic!("expected a materialized tensor")
+            };
+            assert_eq!(*index, 0);
+            assert_eq!(network.store.tensors[0].data, [-16.0, -20.0]);
+        }
+
+        // A self-loop-only network finishes before scheduling an operation wave.
+        let structure = OrderedStructure::new(vec![
+            Euclidean {}.new_slot(2, 1),
+            Euclidean {}.new_slot(2, 1),
+        ])
+        .structure;
+        let mut trace =
+            Net::from_tensor(Tensor::from_data(vec![1.0, 2.0, 3.0, 4.0], structure).unwrap());
+        trace
+            .execute::<Sequential, SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+            .unwrap();
+        assert_eq!(trace.store.tensors.len(), 1);
+        let ExecutionResult::Val(value) = trace.result_scalar().unwrap() else {
+            panic!("expected a trace")
+        };
+        assert_eq!(*value, 5.0);
     }
 }

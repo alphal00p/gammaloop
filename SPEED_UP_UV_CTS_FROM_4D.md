@@ -1699,3 +1699,120 @@ If a gate fails, use the measurements to continue the generic implementation, in
   traversal order or the existing deferred-deletion lifetime. CLI17 and a new
   provenance-bound replay are prepared next; no successful large-summand result
   or final performance ratio is claimed at this milestone.
+
+- CLI17 is frozen from clean `947c6acef7b85aeeac86e54e9b099be7ed4678eb`:
+  check 17.41 s, build 259.40 s, binary SHA-256
+  `79645f8c4296abf1dd8b15541a61f4e91e48b5f9b46ac52ca507cf5329eb1836`
+  (1,576,768,728 bytes). The artifact freezer required metadata-only finalization
+  because Cargo reports host and runtime Symbolica artifacts separately; exact
+  owning dependency fingerprints resolve the runtime libraries, without another
+  Cargo build. Receipts are in `diagnostic_compact_ready_operations`.
+- The unchanged v2 probe source links against the five exact CLI17 runtime
+  libraries as v3; metadata check 0.161 s, link 21.414 s, frozen binary SHA-256
+  `6b944423fcd6330fcfd8dd30114021085205d2d382e68ae0f563c12027b96c0f`.
+  Its unprofiled tensor smoke has the same 36 closed boundaries and 11,996,015-byte
+  final scalar as v2; matching output size is not an exact equality proof.
+- The first v3 largest replay is preserved as a supervisor failure: a valid JSON
+  scalar profiling line was incorrectly assumed to be an object. It stopped
+  before primary execution. The corrected runner passes mixed object/scalar/
+  null/list controls and a profiled tensor smoke, clears the actual sparse-tensor
+  override, and terminates/waits its owned child group and perf if monitoring
+  raises. The repeated run has a fresh directory and the same immutable binary.
+- `captured_tensor_replay_v3/largest_cli17_profile2` reproduces the same input
+  and prepared inventory. It completes 29,920 boundaries in 44.510 s and reaches
+  primary execution at 151.818 s. Its first actual plan contains 779,720 operations
+  and 4,695,382 included half-edges, with global extent 13,662,997; first-wave
+  execution takes 1.895 s. Compact membership passes the original unfinished
+  planning failure and thirteen complete batches (0–12) execute. After batch 12,
+  the live graph has about 25,000 nodes but the global half-edge extent remains
+  unchanged until deferred deletion.
+- A later memory increase reaches the 30 GiB guard at 421.513 s, observing
+  32,364,167,168 bytes; exit -15, with primary execution still incomplete.
+  The 10,800-sample profile contains real contraction work; its final samples
+  primarily construct the next traversal/cache roots. This later failure is
+  distinct from retaining a dense mask for every ready operation. The profile
+  does not establish how much tensor-store payload is still live. A separately
+  guarded 64 GiB public-API inventory replay is prepared to measure that, without
+  changing production execution. Profiling and build overlap preclude acceptance
+  timing claims from these diagnostics.
+- Integration check82 passes (14.78 s; wrapper 14.832 s), build12 passes
+  (5m10s; wrapper 310.928 s), and all four executables are frozen under
+  `validation_candidate_947c6`. All fourteen boundary checks pass: UV composition
+  21.988 s, cut/threshold 18.307 s, API 4.472 s and analytic renormalization
+  0.391 s. These are nextest summary durations and snapshot-specific correctness
+  results, not the complete 184-test final matrix.
+- Counter17 is frozen with SHA-256
+  `d8e69655dff3ce3f877cac55ec6e5cae5f42e84c06f6ffb6aa51d72bf80063f7`.
+  Integration compilation had selected the core's `eval` dependency feature
+  and an API without `ufo_support`; its API is not mixed with CLI17's core.
+  A separately recorded check/build restores the exact CLI17 API/core pairing,
+  verifies all five previously frozen shared-library hashes, and records the
+  restored API hash. Its known GL00 counter validation passes, with unchanged
+  state and identical reference operation-count rows.
+- Full GL262 direct/erased generation cards are prepared but unlaunched. No
+  completed GL262 evaluator/state, numerical timing, production forest export
+  or final repeated generation/runtime ratio is yet available. Final scalar/
+  physical coverage and all original acceptance gates remain open.
+
+
+### 2026-09-13 — Reclaiming completed tensor intermediates
+
+- The v4 public-API inventory replay completes the largest captured GL262
+  summand using unchanged CLI17 production code (`947c6ace`). It executes all
+  23 native batches, exits successfully in 588.166 s, and reaches a measured
+  peak of 56,981,630,976 bytes (53.068 GiB) under its diagnostic 64 GiB guard.
+  The final scalar is 3,389,407,083 Atom bytes, emitted at 565.051 s. This is
+  one selected summand, not a completed graph evaluator or saved state.
+- Terminal stored Atom payload is 28,439,588,507 bytes: 3,389,407,083 live and
+  25,050,181,424 dead (88.082%). All 21,542,810,048 tensor Atom bytes are dead,
+  across 3,852,060 tensor slots. Scalar slots contain 3,507,371,376 dead bytes
+  and the live final scalar; this source creates no aliases. Counts include
+  Atom payload per stored entry, excluding containers, concrete tensor data,
+  graph memory and allocator overhead; they are not interchangeable with RSS.
+- Small independent controls validate the inventory's complete leaf-reference
+  walk and pin the original scalar definitions needed for alias restoration.
+  The tensor control has 95,538,693 stored Atom bytes, of which 11,996,015
+  remain live. An alias control retains its 4,817-byte definition and 10-byte
+  handle. Exact identities and full stage records are retained under
+  `captured_tensor_replay_v4`, including `inventory_controls.json` and
+  `largest_cli17_64g/analysis.json`.
+- The profile has 14,432 samples, including 4,248 cache-root frames and 4,552
+  contraction-pair selection frames. These overlapping stack categories are
+  diagnostic attribution, not additive generation timings or acceptance ratios.
+- This evidence motivates a narrow shared-owner change: reclaim unused tensors
+  after complete contraction waves, remapping all live tensor leaf variants.
+  Scalar indices and alias definitions remain stable. Root alignment also uses
+  the existing traversal's discovery order without constructing an extra
+  child-vector forest, and drops the traversal before converting the graph's
+  node store. The existing conversion is retained even when roots do not change,
+  since it also normalizes sibling ordering. Implementation and validation of
+  this next milestone are in progress; no new performance ratio is claimed.
+
+- Implementation now extends the existing tensor-reference walker used for
+  index shifting and parallel result rebasing. The owned `NetworkStore` uses
+  move-only retention; borrowed overlays defer reclamation to their joined
+  wave. All execution strategies reclaim only after their complete graph is
+  restored, with a final pass after terminal materialization. Scalar vectors
+  and alias definitions are unchanged. Tests exercise all six leaf variants,
+  repeated/shared references, non-Clone tensor payloads, overlays, aliases,
+  sequential/ref/extracted/parallel execution and self-loop-only completion.
+- Check83 identified associated-type normalization at concrete `ExecuteOp`
+  supertrait bounds. The affected concrete store and overlay callers now state
+  their existing tensor/scalar equalities explicitly; check84 passes in
+  11.15 s. No expectation or physical tolerance changed. The selected nextest
+  suite is compiling; its result remains pending.
+
+- Nextest34 passes all 608 selected Linnet, Spenso, CFF, UV, energy-degree and
+  exact-source tests (3m14s build; 52.179 s tests; 467 skipped by selection,
+  including 15 by the existing profile). Clippy16 passes in 24.81 s with the
+  same three existing type-complexity warnings. Formatting and diff checks
+  pass, and the original plan-prefix SHA-256 remains unchanged.
+- The v5 reference probe is frozen against the exact CLI17 libraries, before
+  rebuilding them. It can stream a portable scalar export and compare two
+  imports exactly in one Symbolica state. Small controls with different symbol
+  introduction orders produce different serialized file digests but equal
+  imported Atoms; internal symbol-ID hashes are not used as an equality proof.
+  The largest reference export is running separately under its existing guard.
+  CLI18, its matched counter and the identical candidate probe are prepared
+  for rebuilding after this milestone. Full graph generation, saved evaluators,
+  pointwise physical checks and final timing gates remain pending.

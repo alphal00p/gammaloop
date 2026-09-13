@@ -3789,7 +3789,9 @@ where
         if <C as ContractionStrategy<E, L, K, FK, Aind>>::SUPPORTS_PARTIAL_GRAPH_REWRITE {
             let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
             for _ in 0..N {
-                while executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {}
+                while executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {
+                    executor.retain_graph_tensors(graph);
+                }
 
                 profile::bump(Counter::ExecuteIteration, 1);
                 let planned = plan_ready_operation_batch(graph, &ignored);
@@ -3815,6 +3817,7 @@ where
                 if !did_progress {
                     break;
                 }
+                executor.retain_graph_tensors(graph);
             }
 
             if !ignored.is_empty() {
@@ -3825,7 +3828,9 @@ where
         }
 
         for _ in 0..N {
-            while executor.execute_self_loop_traces(graph, lib)? {}
+            while executor.execute_self_loop_traces(graph, lib)? {
+                executor.retain_graph_tensors(graph);
+            }
 
             // find the *one* ready op
             if let Some((mut extracted_graph, _op)) = graph.extract_next_ready_op() {
@@ -3868,6 +3873,7 @@ where
                 );
 
                 graph.splice_descendents_of(extracted_graph);
+                executor.retain_graph_tensors(graph);
             }
         }
 
@@ -3895,7 +3901,9 @@ where
         if <C as ContractionStrategy<E, L, K, FK, Aind>>::SUPPORTS_PARTIAL_GRAPH_REWRITE {
             let mut ignored: SuBitGraph = graph.graph.empty_subgraph();
             for _ in 0..N {
-                while executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {}
+                while executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {
+                    executor.retain_graph_tensors(graph);
+                }
 
                 profile::bump(Counter::ExecuteIteration, 1);
                 let planned = plan_ready_operation_batch(graph, &ignored);
@@ -3921,6 +3929,7 @@ where
                 if !did_progress {
                     break;
                 }
+                executor.retain_graph_tensors(graph);
             }
 
             if !ignored.is_empty() {
@@ -3931,7 +3940,9 @@ where
         }
 
         for _ in 0..N {
-            while executor.execute_self_loop_traces(graph, lib)? {}
+            while executor.execute_self_loop_traces(graph, lib)? {
+                executor.retain_graph_tensors(graph);
+            }
 
             // find the *one* ready op
             if let Some((mut extracted_graph, _op)) = graph.extract_next_ready_op() {
@@ -3946,6 +3957,7 @@ where
                     executor.execute::<C>(&extracted_graph, &operation, lib, fnlib)?;
                 collapse_operation_subgraph(&mut extracted_graph, &operation, replacement)?;
                 graph.splice_descendents_of(extracted_graph);
+                executor.retain_graph_tensors(graph);
             }
         }
 
@@ -3989,6 +4001,7 @@ where
                     executor.execute::<C>(&extracted_graph, &operation, lib, fnlib)?;
                 collapse_operation_subgraph(&mut extracted_graph, &operation, replacement)?;
                 graph.splice_descendents_of(extracted_graph);
+                executor.retain_graph_tensors(graph);
                 true
             } else {
                 false
@@ -4033,6 +4046,7 @@ where
                     executor.execute::<C>(&extracted_graph, &operation, lib, fnlib)?;
                 collapse_operation_subgraph(&mut extracted_graph, &operation, replacement)?;
                 graph.splice_descendents_of(extracted_graph);
+                executor.retain_graph_tensors(graph);
                 true
             } else {
                 false
@@ -4064,6 +4078,7 @@ where
         if <C as ContractionStrategy<E, L, K, FK, Aind>>::SUPPORTS_PARTIAL_GRAPH_REWRITE {
             loop {
                 if executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {
+                    executor.retain_graph_tensors(graph);
                     continue;
                 }
 
@@ -4091,6 +4106,7 @@ where
                 if !did_progress {
                     break;
                 }
+                executor.retain_graph_tensors(graph);
             }
 
             if !ignored.is_empty() {
@@ -4104,6 +4120,7 @@ where
 
         loop {
             if executor.execute_self_loop_traces_ignoring(graph, lib, &mut ignored)? {
+                executor.retain_graph_tensors(graph);
                 continue;
             }
 
@@ -4189,6 +4206,7 @@ where
                     })?;
             }
             graph.finish_deferred_node_identifications();
+            executor.retain_graph_tensors(graph);
             batch_index += 1;
         }
 
@@ -4214,31 +4232,14 @@ fn remap_parallel_replacement<K, Aind>(
     tensor_offset: usize,
     scalar_offset: usize,
 ) {
-    fn rebase_index(index: &mut usize, base: usize, offset: usize) {
-        if *index >= base {
-            *index = offset + (*index - base);
-        }
-    }
-
     replacement.map_scalar_refs(|scalar| scalar.rebase_from(base_scalars, scalar_offset));
-
-    match replacement {
-        NetworkLeaf::LocalTensor(index) => rebase_index(index, base_tensors, tensor_offset),
-        NetworkLeaf::TensorSum(indices) => {
-            for index in indices {
-                rebase_index(index, base_tensors, tensor_offset);
-            }
+    replacement.map_tensor_refs(|index| {
+        if index >= base_tensors {
+            tensor_offset + (index - base_tensors)
+        } else {
+            index
         }
-        NetworkLeaf::ScaledTensor(term) => {
-            rebase_index(&mut term.tensor, base_tensors, tensor_offset);
-        }
-        NetworkLeaf::ScaledTensorSum(terms) => {
-            for term in terms {
-                rebase_index(&mut term.tensor, base_tensors, tensor_offset);
-            }
-        }
-        NetworkLeaf::Scalar(_) | NetworkLeaf::LibraryKey { .. } => {}
-    }
+    });
 }
 
 impl Parallel {
@@ -4250,8 +4251,9 @@ impl Parallel {
         fnlib: &FL,
     ) -> Result<(), TensorNetworkError<K, FK>>
     where
-        NetworkStore<T, Sc>: ExecuteOp<FL, L, K, FK, Aind>,
-        for<'a> NetworkStoreOverlay<'a, T, Sc>: ExecuteOp<FL, L, K, FK, Aind>,
+        NetworkStore<T, Sc>: ExecuteOp<FL, L, K, FK, Aind, Tensor = T, Scalar = Sc>,
+        for<'a> NetworkStoreOverlay<'a, T, Sc>:
+            ExecuteOp<FL, L, K, FK, Aind, Tensor = T, Scalar = Sc>,
         C: ContractionStrategy<NetworkStore<T, Sc>, L, K, FK, Aind>,
         for<'a> C: ContractionStrategy<NetworkStoreOverlay<'a, T, Sc>, L, K, FK, Aind>,
         T: Clone + Send + Sync,
@@ -4360,6 +4362,7 @@ impl Parallel {
                     })?;
             }
             graph.finish_deferred_node_identifications();
+            executor.retain_graph_tensors(graph);
         }
 
         if !ignored.is_empty() {
@@ -4370,7 +4373,7 @@ impl Parallel {
     }
 }
 
-pub trait ExecuteOp<FL, L, K, FK, Aind>: Sized {
+pub trait ExecuteOp<FL, L, K, FK, Aind>: Sized + NetworkStoreAccess {
     // type LibStruct;
     #[allow(clippy::result_large_err)]
     fn execute_self_loop_traces(
@@ -4442,7 +4445,9 @@ where
             profile::bump(Counter::MergeOps, 1);
             self.merge_ops();
         }
-        self.store.execute_self_loop_traces(&mut self.graph, lib)?;
+        if self.store.execute_self_loop_traces(&mut self.graph, lib)? {
+            self.store.retain_graph_tensors(&mut self.graph);
+        }
         Strat::execute_all::<C>(&mut self.store, &mut self.graph, lib, fn_lib)?;
         // Automatic deferral is internal to execution. Keep the ordinary
         // terminal result available through result(), including sums below a
@@ -4463,6 +4468,7 @@ where
                 self.graph.graph[root] = NetworkNode::Leaf(leaf);
             }
         }
+        self.store.retain_graph_tensors(&mut self.graph);
         self.state = self.graph.state();
         Ok(())
     }
@@ -4658,8 +4664,9 @@ where
         L: Library<S, Key = K, Value = PermutedStructure<LT>> + Sync,
         FL: FunctionLibrary<T, Sc, Key = FK> + Sync,
         LT: LibraryTensor<WithIndices = T>,
-        NetworkStore<T, Sc>: ExecuteOp<FL, L, K, FK, Aind>,
-        for<'a> NetworkStoreOverlay<'a, T, Sc>: ExecuteOp<FL, L, K, FK, Aind>,
+        NetworkStore<T, Sc>: ExecuteOp<FL, L, K, FK, Aind, Tensor = T, Scalar = Sc>,
+        for<'a> NetworkStoreOverlay<'a, T, Sc>:
+            ExecuteOp<FL, L, K, FK, Aind, Tensor = T, Scalar = Sc>,
         C: ContractionStrategy<NetworkStore<T, Sc>, L, K, FK, Aind>,
         for<'a> C: ContractionStrategy<NetworkStoreOverlay<'a, T, Sc>, L, K, FK, Aind>,
         T: Clone
@@ -4700,6 +4707,7 @@ where
                 self.graph.graph[root] = NetworkNode::Leaf(leaf);
             }
         }
+        self.store.retain_graph_tensors(&mut self.graph);
         self.state = self.graph.state();
         Ok(())
     }

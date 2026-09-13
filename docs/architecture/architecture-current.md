@@ -209,6 +209,10 @@ parallel and partial-rewrite strategies use this common payload. Only extraction
 materializes a dense subset for an individual operation, with the complete graph
 extent. Retained batch membership therefore scales with touched incidence rather
 than the product of graph size and ready-operation count.
+Root alignment uses the existing traversal's discovery order to collect one
+root per visited node, without converting that traversal to child vectors.
+Requests for disjoint node crowns commute. The traversal is released before
+the graph's node-store conversion, which still normalizes sibling ordering.
 
 Rational-shell extraction groups equal denominator multisets through sums,
 products and powers while leaving denominator-free numerator subtrees opaque.
@@ -479,6 +483,17 @@ internal dual contractions and spectator incidence are preserved. It changes
 the contraction graph, leaving the input Atom, raw Taylor algebra and selected
 energy assignments untouched. Symbolic networks used to reconstruct numerator
 Atoms do not invoke this preparation.
+
+Completed contraction waves reclaim tensors no longer referenced by the whole
+network graph. The owned store moves surviving entries and remaps every tensor
+leaf variant, including shared references and scaled sums. Tensor indices are
+local execution handles and may change between waves. Reclamation occurs only
+after replacement leaves are installed and deferred node identifications are
+finished; parallel workers first return all additions from their borrowed
+overlays. Extracted subgraphs cannot determine whole-store liveness. Scalar
+indices remain stable, preserving alias handles embedded inside expressions and
+the original definitions used during final restoration. No symbolic expression
+is rewritten by this storage compaction.
 
 The default `intermediate_cost` preset selects
 `MinIntermediateCost`, a configuration of the existing `ContractionStrategy`

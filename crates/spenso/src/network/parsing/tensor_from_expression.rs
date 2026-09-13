@@ -111,7 +111,8 @@ where
         + crate::structure::slot::ParseableAind,
     Lib: TensorLibraryFor<S, T, Key = K> + Sync,
     FunLib: FunctionLibrary<T, Sc, Key = symbolica::atom::Symbol>,
-    NetworkStore<T, Sc>: ExecuteOp<FunLib, Lib, K, symbolica::atom::Symbol, Aind>,
+    NetworkStore<T, Sc>:
+        ExecuteOp<FunLib, Lib, K, symbolica::atom::Symbol, Aind, Tensor = T, Scalar = Sc>,
     SmallestDegree: ContractionStrategy<NetworkStore<T, Sc>, Lib, K, symbolica::atom::Symbol, Aind>,
 {
     fn tensor_from_expression(

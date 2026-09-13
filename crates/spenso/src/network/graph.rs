@@ -435,6 +435,24 @@ impl<K, Aind> NetworkLeaf<K, Aind> {
             | NetworkLeaf::LibraryKey { .. } => {}
         }
     }
+
+    pub fn map_tensor_refs(&mut self, mut f: impl FnMut(usize) -> usize) {
+        match self {
+            NetworkLeaf::LocalTensor(index) => *index = f(*index),
+            NetworkLeaf::TensorSum(indices) => {
+                for index in indices {
+                    *index = f(*index);
+                }
+            }
+            NetworkLeaf::ScaledTensor(term) => term.tensor = f(term.tensor),
+            NetworkLeaf::ScaledTensorSum(terms) => {
+                for term in terms {
+                    term.tensor = f(term.tensor);
+                }
+            }
+            NetworkLeaf::Scalar(_) | NetworkLeaf::LibraryKey { .. } => {}
+        }
+    }
 }
 
 impl<K: Display, Aind> Display for NetworkLeaf<K, Aind> {
@@ -1214,14 +1232,17 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     where
         S: SubSetLike<Base = SuBitGraph>,
     {
-        let tt: SimpleTraversalTree<ChildVecStore<()>> = self.expr_tree_ignoring(hidden).cast();
-        let head = self.head();
-        let root_node = self.graph.node_id(head);
-        let new_roots = tt
-            .iter_preorder_tree_nodes(&self.graph, root_node)
-            .map(|node| tt.root_hedge(node).into())
-            .collect::<Vec<_>>();
+        let new_roots = {
+            let tt = self.expr_tree_ignoring(hidden);
+            // Each visited node supplies one independent crown root. Discovery
+            // order therefore needs no child-vector copy of the traversal forest.
+            tt.node_order()
+                .into_iter()
+                .map(|node| tt.root_hedge(node).into())
+                .collect::<Vec<_>>()
+        };
 
+        // Release the traversal forest before converting the graph's node store.
         self.graph.node_store.reroot_many(new_roots)
     }
 
@@ -1646,25 +1667,13 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     pub fn shift_tensors(&mut self, shift: usize) {
         let _span = profile::span(Timer::ShiftTensors);
         profile::bump(Counter::ShiftTensors, 1);
+        self.map_tensor_refs(|index| index + shift);
+    }
+
+    pub fn map_tensor_refs(&mut self, mut f: impl FnMut(usize) -> usize) {
         self.graph.iter_nodes_mut().for_each(|(_, _, d)| {
             if let NetworkNode::Leaf(leaf) = d {
-                match leaf {
-                    NetworkLeaf::LocalTensor(tensor) => *tensor += shift,
-                    NetworkLeaf::TensorSum(tensors) => {
-                        for tensor in tensors {
-                            *tensor += shift;
-                        }
-                    }
-                    NetworkLeaf::ScaledTensor(term) => {
-                        term.tensor += shift;
-                    }
-                    NetworkLeaf::ScaledTensorSum(terms) => {
-                        for term in terms {
-                            term.tensor += shift;
-                        }
-                    }
-                    NetworkLeaf::LibraryKey { .. } | NetworkLeaf::Scalar(_) => {}
-                }
+                leaf.map_tensor_refs(&mut f);
             }
         });
     }
@@ -3348,6 +3357,58 @@ pub mod test {
     }
 
     #[test]
+    fn root_alignment_matches_preorder_on_shared_expression_cycles() {
+        // A structural traversal fixture, not an evaluable numerator: a shared
+        // child closes a diamond, with an additional head self-loop.
+        let (mut builder, root) =
+            NetworkGraph::<i8>::head_builder(NetworkNode::Op(NetworkOp::Product));
+        let left = builder.add_node(NetworkNode::Op(NetworkOp::Sum));
+        let right = builder.add_node(NetworkNode::Op(NetworkOp::Sum));
+        let shared = builder.add_node(NetworkNode::Leaf(NetworkLeaf::Scalar(0.into())));
+        for (child, parent) in [
+            (left, root),
+            (right, root),
+            (shared, left),
+            (shared, right),
+            (shared, shared),
+        ] {
+            builder.add_edge(child, parent, super::NetworkEdge::Head, true);
+        }
+        let original: NetworkGraph<i8> = builder.into();
+        let cycle_hedge = original
+            .graph
+            .iter_crown(shared)
+            .find(|hedge| original.graph.node_id(original.graph.inv(*hedge)) == right)
+            .unwrap();
+        for hidden_hedges in [
+            vec![],
+            vec![cycle_hedge],
+            vec![original.graph.inv(cycle_hedge)],
+            vec![cycle_hedge, original.graph.inv(cycle_hedge)],
+        ] {
+            let mut graph = original.clone();
+            let mut hidden: SuBitGraph = graph.graph.empty_subgraph();
+            for hedge in hidden_hedges {
+                hidden.add(hedge);
+            }
+            for _ in 0..2 {
+                let mut oracle = graph.clone();
+                let roots = {
+                    let tree = oracle
+                        .expr_tree_ignoring(&hidden)
+                        .cast::<ChildVecStore<()>>();
+                    tree.iter_preorder_tree_nodes(&oracle.graph, root)
+                        .map(|node| tree.root_hedge(node).into())
+                        .collect::<Vec<_>>()
+                };
+                let expected = oracle.graph.node_store.reroot_many(roots);
+                assert_eq!(graph.cache_expr_tree_roots_ignoring(&hidden), expected);
+                assert_eq!(graph, oracle);
+            }
+        }
+    }
+
+    #[test]
     fn hidden_expression_edges_are_ignored_by_cached_children() {
         let scalar = NetworkGraph::<i8>::scalar(2);
         let scalar_b = NetworkGraph::<i8>::scalar(3);
@@ -3531,7 +3592,21 @@ pub mod test {
             for hedge in hidden_hedges {
                 hidden.add(hedge);
             }
-            graph.cache_expr_tree_roots_ignoring(&hidden);
+            for _ in 0..2 {
+                let mut preorder_oracle = graph.clone();
+                let old_roots = {
+                    let tree = preorder_oracle
+                        .expr_tree_ignoring(&hidden)
+                        .cast::<ChildVecStore<()>>();
+                    let root = preorder_oracle.graph.node_id(preorder_oracle.head());
+                    tree.iter_preorder_tree_nodes(&preorder_oracle.graph, root)
+                        .map(|node| tree.root_hedge(node).into())
+                        .collect::<Vec<_>>()
+                };
+                let expected = preorder_oracle.graph.node_store.reroot_many(old_roots);
+                assert_eq!(graph.cache_expr_tree_roots_ignoring(&hidden), expected);
+                assert_eq!(graph, preorder_oracle);
+            }
 
             // Retain the dense intersection/union admission rule as an oracle
             // for complete operation payloads and their traversal order.
