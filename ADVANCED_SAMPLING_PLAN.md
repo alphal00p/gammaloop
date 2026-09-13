@@ -539,6 +539,16 @@ does not depend on CT centers or alpha. Only its star pullback adds those
 dependencies. Automatic channel discovery and long adaptive runs are not
 prerequisites for this explicit-chart implementation.
 
+The [joint-chart implementation slice](docs/research/advanced_sampling/TWO_NORMAL_PROPOSAL.md#next-implementation-slice-a-generic-shared-energy-chart-unimplemented)
+now identifies its independent prerequisites: outside-support inverse results
+flowing into the existing zero-score partition, eager differentiation of active
+coordinates with prepared parameters held fixed, a routed shared-energy pair
+matcher and a rigorously certified complement-dependent normal disk. The first
+exact primitive is graph-agnostic but accepts a specified energy-equation class;
+other pairs remain explicit binding errors until the generic implicit rank-two
+component is implemented under the same AST and catalogue. A compact chart
+requires full-support ordinary coverage and deterministic normalized fallback.
+
 In parallel, the subtraction owner has separated representative overlap
 kinematics from the raised derivative packets, using the existing sample and
 group types. The foreign-cut/radial-derivative regression and generated raised
