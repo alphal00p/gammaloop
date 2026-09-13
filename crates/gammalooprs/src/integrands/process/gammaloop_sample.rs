@@ -470,17 +470,35 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
     let external_mom_cache_id = integrand.external_cache_id();
     let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
     let parameterization_settings = settings.sampling.get_parameterization_settings();
+    if let Some(parameterization_settings) = parameterization_settings.as_ref()
+        && matches!(
+            &settings.sampling,
+            SamplingSettings::MultiChanneling(_) | SamplingSettings::DiscreteGraphs(_)
+        )
+    {
+        // Resolve the canonical catalogue before decoding discrete indices.
+        // This turns unsupported named/surface channels into a diagnostic
+        // instead of silently treating them as an empty legacy channel axis.
+        for group_id in 0..integrand.get_group_structure().len() {
+            integrand
+                .get_master_graph(GroupId(group_id))
+                .get_num_channels(parameterization_settings)?;
+        }
+    }
     let (group_id, orientation_id, channel_id) = resolve_discrete_selection_for_sampling(
         &settings.sampling,
         &discrete_indices,
         integrand.get_group_structure().len(),
         |group_id| Some(integrand.get_master_graph(group_id).get_num_orientations()),
         |group_id| {
-            parameterization_settings.as_ref().map(|settings| {
-                integrand
-                    .get_master_graph(group_id)
-                    .get_num_channels(settings)
-            })
+            parameterization_settings
+                .as_ref()
+                .map(|settings| {
+                    integrand
+                        .get_master_graph(group_id)
+                        .get_num_channels(settings)
+                })
+                .transpose()
         },
     )?;
 

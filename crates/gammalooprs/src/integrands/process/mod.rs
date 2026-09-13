@@ -240,7 +240,7 @@ pub(crate) fn resolve_discrete_selection_for_sampling(
     discrete_dimensions: &[usize],
     group_count: usize,
     mut orientation_count_for_group: impl FnMut(GroupId) -> Option<usize>,
-    mut channel_count_for_group: impl FnMut(GroupId) -> Option<usize>,
+    mut channel_count_for_group: impl FnMut(GroupId) -> Result<Option<usize>>,
 ) -> Result<(Option<GroupId>, Option<usize>, Option<SamplingChannelId>)> {
     match sampling {
         SamplingSettings::Default(_) | SamplingSettings::MultiChanneling(_) => {
@@ -294,7 +294,7 @@ pub(crate) fn resolve_discrete_selection_for_sampling(
             let channel = match &settings.sampling_type {
                 DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => {
                     let channel_index = *discrete_dimensions.last().expect("validated depth");
-                    let channel_count = channel_count_for_group(group_id).ok_or_else(|| {
+                    let channel_count = channel_count_for_group(group_id)?.ok_or_else(|| {
                         eyre!(
                             "Could not determine channel count for group {}.",
                             group_id.0
@@ -740,7 +740,7 @@ impl ProcessIntegrand {
             discrete_dimensions,
             group_count,
             |group_id| self.group_orientation_count(group_id),
-            |group_id| self.group_channel_count(group_id),
+            |group_id| Ok(self.group_channel_count(group_id)),
         )
     }
 
@@ -828,11 +828,13 @@ impl ProcessIntegrand {
         match self {
             ProcessIntegrand::Amplitude(integrand) => Some(
                 integrand.data.graph_terms[integrand.data.graph_group_structure[group_id].master()]
-                    .get_num_channels(&parameterization_settings),
+                    .get_num_channels(&parameterization_settings)
+                    .ok()?,
             ),
             ProcessIntegrand::CrossSection(integrand) => Some(
                 integrand.data.graph_terms[integrand.data.graph_group_structure[group_id].master()]
-                    .get_num_channels(&parameterization_settings),
+                    .get_num_channels(&parameterization_settings)
+                    .ok()?,
             ),
         }
     }
@@ -1403,7 +1405,8 @@ pub(crate) fn histogram_process_info_for_integrand<I: ProcessIntegrandImpl>(
         .iter_enumerated()
         .map(|(group_id, _)| {
             let master = integrand.get_master_graph(group_id);
-            (0..master.get_num_channels(&parameterization_settings))
+            let channel_count = master.get_num_channels(&parameterization_settings)?;
+            (0..channel_count)
                 .map(|channel_id| {
                     Ok(master
                         .lmb_channel_label(
@@ -2090,11 +2093,16 @@ impl LmbMultiChannelingSetup {
                 )
             })
             .collect::<Vec<_>>();
-        let optimized_lmbs = self
-            .effective_channels(&self.graph.name, parameterization_settings)?
-            .into_iter()
-            .map(usize::from)
-            .collect::<Vec<_>>();
+        let optimized_lmbs = parameterization_settings
+            .lmb_basis_ids
+            .get(&self.graph.name)
+            .cloned()
+            .unwrap_or_else(|| {
+                self.lmb_basis_ids
+                    .iter()
+                    .map(|basis| usize::from(*basis))
+                    .collect()
+            });
         let parent_lmb = self
             .graph
             .loop_momentum_basis
@@ -2162,26 +2170,50 @@ impl LmbMultiChannelingSetup {
         graph_name: &str,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<Vec<LmbIndex>> {
-        if let Some(basis_ids) = parameterization_settings.lmb_basis_ids.get(graph_name) {
-            basis_ids
-                .iter()
-                .copied()
-                .map(|basis_id| self.validate_lmb_basis_id(basis_id, graph_name))
-                .collect()
-        } else {
-            Ok(self.lmb_basis_ids.iter().copied().collect())
+        let catalogue = self.canonical_sampling_catalogue(graph_name, parameterization_settings)?;
+        let mut lmbs = Vec::new();
+        for entry in &catalogue.entries {
+            match entry {
+                SamplingCatalogueEntry::Lmb { basis_id, .. } => {
+                    lmbs.push(self.validate_lmb_basis_id(*basis_id, graph_name)?);
+                }
+                SamplingCatalogueEntry::Surface { .. } | SamplingCatalogueEntry::Named(_) => {
+                    return Err(eyre!(
+                        "sampling selection for graph '{graph_name}' contains a non-LMB channel, but the legacy runtime driver has not yet been migrated to evaluate compiled maps; select only auto:lmb/auto:optimized_lmb until the canonical map driver is active"
+                    ));
+                }
+            }
         }
+        Ok(lmbs)
+    }
+
+    /// Build the one canonical catalogue used by all channel-count and LMB
+    /// lookup helpers during the runtime migration.  The old generated basis
+    /// list is only input data for this catalogue; it is never enumerated as a
+    /// second channel universe.
+    fn canonical_sampling_catalogue(
+        &self,
+        graph_name: &str,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<SamplingChannelCatalogue> {
+        let mut selection = parameterization_settings.sampling_channels.clone();
+        if selection.default_channel_selection.is_empty()
+            && !selection.channel_selection.contains_key(graph_name)
+        {
+            selection.default_channel_selection = vec![SamplingChannelPreset::OPTIMIZED_LMB.into()];
+        }
+        let resolved = resolve_sampling_channel_selection(graph_name, &selection)?;
+        self.sampling_channel_catalogue(&resolved, parameterization_settings)
     }
 
     pub fn effective_channel_count(
         &self,
         graph_name: &str,
         parameterization_settings: &ParameterizationSettings,
-    ) -> usize {
-        parameterization_settings
-            .lmb_basis_ids
-            .get(graph_name)
-            .map_or_else(|| self.lmb_basis_ids.len(), Vec::len)
+    ) -> Result<usize> {
+        Ok(self
+            .effective_channels(graph_name, parameterization_settings)?
+            .len())
     }
 
     pub fn effective_channel_lmb_id(
@@ -2190,26 +2222,16 @@ impl LmbMultiChannelingSetup {
         graph_name: &str,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<LmbIndex> {
-        if let Some(basis_ids) = parameterization_settings.lmb_basis_ids.get(graph_name) {
-            let basis_id = basis_ids.get(channel_index.0).ok_or_else(|| {
+        let channels = self.effective_channels(graph_name, parameterization_settings)?;
+        channels
+            .get(channel_index.index())
+            .copied()
+            .ok_or_else(|| {
                 eyre!(
-                    "Requested LMB channel {} is out of range for graph '{}'; the graph has {} effective LMB channels.",
-                    channel_index.0,
-                    graph_name,
-                    basis_ids.len()
-                )
-            })?;
-            self.validate_lmb_basis_id(*basis_id, graph_name)
-        } else {
-            self.lmb_basis_ids.get(channel_index).copied().ok_or_else(|| {
-                eyre!(
-                    "Requested LMB channel {} is out of range for graph '{}'; the graph has {} effective LMB channels.",
-                    channel_index.0,
-                    graph_name,
-                    self.lmb_basis_ids.len()
+                    "Requested sampling channel {} is out of range for graph '{}'; the canonical catalogue contains {} LMB channels.",
+                    channel_index.index(), graph_name, channels.len()
                 )
             })
-        }
     }
 
     pub fn effective_channel_edge_ids(
@@ -2967,7 +2989,10 @@ pub trait GraphTerm {
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()>;
     fn get_graph(&self) -> &Graph;
-    fn get_num_channels(&self, parameterization_settings: &ParameterizationSettings) -> usize;
+    fn get_num_channels(
+        &self,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<usize>;
     fn get_num_orientations(&self) -> usize;
     fn production_orientation_keys(&self) -> &[String];
     fn selected_production_orientation_keys(&self) -> Vec<&str>;
@@ -3115,7 +3140,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     .expect("LMB multichanneling requires a parameterization.");
                 let num_channels = integrand
                     .get_master_graph(group_id)
-                    .get_num_channels(&parameterization_settings);
+                    .get_num_channels(&parameterization_settings)?;
                 (0..num_channels)
                     .map(SamplingChannelId::from)
                     .map(|channel_index| {
@@ -3589,7 +3614,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                         .expect("LMB multichanneling requires a parameterization.");
                     let num_channels = integrand
                         .get_graph(graph_id)
-                        .get_num_channels(&parameterization_settings);
+                        .get_num_channels(&parameterization_settings)?;
                     let graph_result = (0..num_channels).map(SamplingChannelId::from).try_fold(
                         GraphEvaluationResult::zero(zero.clone()),
                         |mut channel_sum, channel_index| {
@@ -3662,10 +3687,12 @@ fn create_grid_for_graph<G: GraphTerm>(
         }
         DiscreteGraphSamplingType::DiscreteMultiChanneling(multichanneling_settings) => {
             let continuous_grid = create_default_continous_grid(graph_term, integrator_settings);
+            let channel_count = graph_term
+                .get_num_channels(&multichanneling_settings.parameterization_settings)
+                .unwrap_or_else(|error| panic!("cannot build the sampling channel grid: {error}"));
             let lmb_channel_grid = Grid::Discrete(
                 DiscreteGrid::new(
-                    (0..graph_term
-                        .get_num_channels(&multichanneling_settings.parameterization_settings))
+                    (0..channel_count)
                         .map(|_| Some(continuous_grid.clone()))
                         .collect_vec(),
                     F(integrator_settings.max_prob_ratio),
@@ -4964,7 +4991,12 @@ mod tests {
             setup.effective_channels("G", &override_settings).unwrap(),
             vec![LmbIndex::from(1)]
         );
-        assert_eq!(setup.effective_channel_count("G", &override_settings), 1);
+        assert_eq!(
+            setup
+                .effective_channel_count("G", &override_settings)
+                .unwrap(),
+            1
+        );
         assert_eq!(
             setup
                 .effective_channel_lmb_id(SamplingChannelId::from(0), "G", &override_settings)

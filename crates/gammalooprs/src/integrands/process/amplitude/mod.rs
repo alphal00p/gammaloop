@@ -1122,7 +1122,10 @@ impl GraphTerm for AmplitudeGraphTerm {
         &self.graph
     }
 
-    fn get_num_channels(&self, parameterization_settings: &ParameterizationSettings) -> usize {
+    fn get_num_channels(
+        &self,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<usize> {
         self.multi_channeling_setup.effective_channel_count(
             &self.multi_channeling_setup.graph.name,
             parameterization_settings,
