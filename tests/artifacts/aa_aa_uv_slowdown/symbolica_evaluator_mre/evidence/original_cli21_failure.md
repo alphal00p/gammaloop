@@ -1,6 +1,7 @@
 The original GL262 run failed inside Symbolica's **evaluator construction** call.
-Evaluator compilation was disabled. The full portable input is being recovered;
-this historical failure has **not yet been reproduced by the standalone package**.
+Evaluator compilation was disabled. All scalar components have been recovered;
+this historical failure has **not been reproduced by the standalone package**.
+Further GL262 investigation was deferred by the user on 2026-09-13.
 The machine-readable record is [original_cli21_failure.json](original_cli21_failure.json).
 
 The application supplied one valid, contracted physical scalar expression with an

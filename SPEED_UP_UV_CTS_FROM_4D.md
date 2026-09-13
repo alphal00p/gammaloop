@@ -2388,3 +2388,33 @@ If a gate fails, use the measurements to continue the generic implementation, in
   partial-sum diagnostic is running with recovery suspended through its owned
   process handle; its supervisor retains the measurement lock and its existing
   guard. Recovery resumes in the driver's cleanup path.
+
+
+### 2026-09-13 — User-authorized merge scope
+
+- The user explicitly set GL262 aside and requested a fully validated,
+  merge-ready PR into the original branch. This supersedes GL262's outstanding
+  generation/runtime and full physical acceptance requirements above; the
+  original plan remains verbatim. No further GL262 diagnostic or optimization
+  run is part of this merge milestone. GL00/GL01 validation, the complete scalar
+  matrix and the other correctness/lint checks remain required.
+- The original base is `codex/raised-energy-cff-reviewed` at
+  `78395e3ab3ddd8d8f62b2f674d7488484eace197`, confirmed by the feature branch's
+  creation reflog and the remote branch. Numerical source remains
+  `f938f9c1386eb2670a0a7f603f5eb0878086352a`.
+- The final dedicated correctness selection is now 183 tests: 167 scalar,
+  two physical GL00/GL01 comparisons, and fourteen boundary tests. The GL262
+  test remains available in source; its exclusion from this final run records
+  the user's scope change and is not a passing result.
+- The 5,360,536,185-byte abstract Symbolica input built successfully in
+  232.995202810 s, reaching 43,696,500,736 bytes VmHWM. The saved larger
+  13,887,502,713-byte input was stopped during import by the watchdog's
+  two-second `ps` timeout, before evaluator construction. That attempt did not
+  reproduce the original Symbolica panic. Both input dumps and original
+  receipts remain available; no physical-equivalence claim is made.
+- Full scalar recovery finished normally at 20:26:22.923 UTC: all 3,050
+  components exported, exit zero, 3,613.106796847 s outer duration (including
+  diagnostic pauses), 46,723,674,112 bytes observed peak RSS. The recovery and
+  its supervisor have exited. The nonsymmetric `f(x,y)` import reproducer is
+  confirmed separately; the large evaluator panic remains without a confirmed
+  standalone reproducer. Neither diagnostic invokes evaluator compilation.

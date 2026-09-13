@@ -16,6 +16,14 @@ problem on the 19 MB physical control; it is not validated for physical replay.
 Successful subsets are controls, not reproducers. Preserve the actual failing
 input and logs before calling a case an evaluator-construction MRE.
 
+Investigation was deferred by the user on 2026-09-13 so the UV feature could
+proceed to merge. All 3,050 physical scalar components were recovered. A
+5.36 GB abstract input built successfully in 232.995 s (43.697 GB VmHWM).
+A 13.887 GB combined dump was saved, but its subsequent import was interrupted
+by the watchdog's two-second `ps` timeout before evaluator construction.
+That infrastructure failure is not the original Symbolica panic. The large
+dumps and detailed run receipts remain local, outside version control.
+
 ## Build and small control
 
 Symbolica and its Numerica/Graphica dependencies are pinned to
@@ -180,6 +188,7 @@ target/dev-optim/examples/import_remap read import_test.symbolica
 
 The writer registers `x,y,f` and exports `f(x,y)`; the separate reader registers
 `y,x,f`. It imports `f(y,x)` instead of `f(x,y)` and fails the equality assertion.
+`f` has no symmetry attributes: its ordered arguments must retain their identities.
 The function keeps its original symbol ID, while its argument IDs need remapping.
 Pinned `AtomView::rename_no_norm` only visits a function's arguments when that
 function's own ID appears in the remapping table. No application dependencies
@@ -211,8 +220,8 @@ Immediately before `.build()`, RSS was 80,584,704 bytes and lifetime VmHWM was
 130,838,528 bytes; after the build lifetime VmHWM was 244,830,208 bytes. Full
 logs and guarded command receipts are retained in the respective directories.
 
-The 3.389 GB physical context control, combined-input control and original
-large evaluator-construction panic remain unvalidated in this standalone
-package. Root coordinates those larger cases separately. The supplied-context
+The 3.389 GB physical context control and original large evaluator-construction
+panic remain unvalidated in this standalone package. The 5.36 GB abstract
+combined-input control passed as recorded above. The supplied-context
 import issue is unresolved; no physical equivalence is claimed for the
 abstract-parameter mode.
