@@ -42,7 +42,7 @@ pub struct PreparedCrossSectionMapEvaluation<T: FloatLike> {
     jacobian: F<T>,
     inverse_jacobian: F<T>,
     runtime_context: Vec<F<T>>,
-    prepared_cut_context: PreparedCutSamplingContext,
+    prepared_cut_context: PreparedCutSamplingContext<T>,
 }
 
 impl<T: FloatLike> PreparedCrossSectionMapEvaluation<T> {
@@ -52,7 +52,7 @@ impl<T: FloatLike> PreparedCrossSectionMapEvaluation<T> {
         jacobian: F<T>,
         inverse_jacobian: F<T>,
         runtime_context: Vec<F<T>>,
-        prepared_cut_context: PreparedCutSamplingContext,
+        prepared_cut_context: PreparedCutSamplingContext<T>,
     ) -> Result<Self> {
         prepared_cut_context.validate_loop_dimension(mapped_sample.loop_moms().0.len())?;
         for (name, value) in [
@@ -93,7 +93,7 @@ impl<T: FloatLike> PreparedCrossSectionMapEvaluation<T> {
     pub fn runtime_context(&self) -> &[F<T>] {
         &self.runtime_context
     }
-    pub fn prepared_cut_context(&self) -> &PreparedCutSamplingContext {
+    pub fn prepared_cut_context(&self) -> &PreparedCutSamplingContext<T> {
         &self.prepared_cut_context
     }
 
@@ -132,7 +132,9 @@ impl<T: FloatLike> PreparedCrossSectionMapEvaluation<T> {
                 .cloned()
                 .map(F::<T2>::from)
                 .collect(),
-            prepared_cut_context: self.prepared_cut_context.clone(),
+            prepared_cut_context: self
+                .prepared_cut_context
+                .cast_sample(|value| F::<T2>::from(F(value.clone())).0),
         }
     }
 }
@@ -144,23 +146,23 @@ impl<T: FloatLike> PreparedCrossSectionMapEvaluation<T> {
 /// channel.  `Pinched` remains explicit because it has different diagnostics
 /// and may require a dedicated local map in a later implementation.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum PreparedSurfaceStatus {
+pub enum PreparedSurfaceStatus<T: FloatLike = f64> {
     Existing {
-        threshold_radius: f64,
-        normalized_margin: Option<f64>,
+        threshold_radius: T,
+        normalized_margin: Option<T>,
     },
     Pinched {
-        normalized_margin: f64,
+        normalized_margin: T,
     },
     Absent {
         reason: String,
     },
 }
 
-impl PreparedSurfaceStatus {
-    pub fn existing(threshold_radius: f64, normalized_margin: Option<f64>) -> Result<Self> {
-        validate_finite_non_negative(threshold_radius, "threshold radius")?;
-        if let Some(margin) = normalized_margin {
+impl<T: FloatLike> PreparedSurfaceStatus<T> {
+    pub fn existing(threshold_radius: T, normalized_margin: Option<T>) -> Result<Self> {
+        validate_finite_non_negative(&threshold_radius, "threshold radius")?;
+        if let Some(margin) = &normalized_margin {
             validate_finite(margin, "normalized surface margin")?;
         }
         Ok(Self::Existing {
@@ -169,8 +171,8 @@ impl PreparedSurfaceStatus {
         })
     }
 
-    pub fn pinched(normalized_margin: f64) -> Result<Self> {
-        validate_finite(normalized_margin, "normalized surface margin")?;
+    pub fn pinched(normalized_margin: T) -> Result<Self> {
+        validate_finite(&normalized_margin, "normalized surface margin")?;
         Ok(Self::Pinched { normalized_margin })
     }
 
@@ -185,11 +187,11 @@ impl PreparedSurfaceStatus {
     }
 
     /// Radius to use for a regular threshold shell, if one exists.
-    pub fn threshold_radius(&self) -> Option<f64> {
+    pub fn threshold_radius(&self) -> Option<T> {
         match self {
             Self::Existing {
                 threshold_radius, ..
-            } => Some(*threshold_radius),
+            } => Some(threshold_radius.clone()),
             Self::Pinched { .. } | Self::Absent { .. } => None,
         }
     }
@@ -205,19 +207,19 @@ impl PreparedSurfaceStatus {
 
 /// One surface prepared in a cut host's native loop-momentum frame.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PreparedSamplingSurface {
+pub struct PreparedSamplingSurface<T: FloatLike = f64> {
     /// Edges defining the physical E-surface.
     pub edge_ids: Vec<usize>,
     /// Edges spanning the coordinates on which this surface is solved.
     pub subspace_edges: Vec<usize>,
-    pub status: PreparedSurfaceStatus,
+    pub status: PreparedSurfaceStatus<T>,
 }
 
-impl PreparedSamplingSurface {
+impl<T: FloatLike> PreparedSamplingSurface<T> {
     pub fn new(
         edge_ids: Vec<usize>,
         subspace_edges: Vec<usize>,
-        status: PreparedSurfaceStatus,
+        status: PreparedSurfaceStatus<T>,
     ) -> Result<Self> {
         validate_edges(&edge_ids, "surface")?;
         validate_edges(&subspace_edges, "surface subspace")?;
@@ -238,7 +240,7 @@ impl PreparedSamplingSurface {
 /// intentionally represented by its complete ordered edge list; no implicit
 /// default is permitted at this boundary.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PreparedCutSamplingContext {
+pub struct PreparedCutSamplingContext<T: FloatLike = f64> {
     pub graph_name: String,
     pub graph_id: usize,
     pub cut_id: usize,
@@ -246,13 +248,13 @@ pub struct PreparedCutSamplingContext {
     pub side: SamplingCutSide,
     /// Complete parent LMB edge list used to interpret all surface data.
     pub parent_lmb: Vec<usize>,
-    pub rescaling_t_star: f64,
-    pub loop_momenta: Vec<[f64; 3]>,
-    pub external_momenta: Vec<[f64; 4]>,
-    pub surfaces: Vec<PreparedSamplingSurface>,
+    pub rescaling_t_star: T,
+    pub loop_momenta: Vec<[T; 3]>,
+    pub external_momenta: Vec<[T; 4]>,
+    pub surfaces: Vec<PreparedSamplingSurface<T>>,
 }
 
-impl PreparedCutSamplingContext {
+impl<T: FloatLike> PreparedCutSamplingContext<T> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         graph_name: impl Into<String>,
@@ -261,27 +263,27 @@ impl PreparedCutSamplingContext {
         orientation: Option<usize>,
         side: SamplingCutSide,
         parent_lmb: Vec<usize>,
-        rescaling_t_star: f64,
-        loop_momenta: Vec<[f64; 3]>,
-        external_momenta: Vec<[f64; 4]>,
-        surfaces: Vec<PreparedSamplingSurface>,
+        rescaling_t_star: T,
+        loop_momenta: Vec<[T; 3]>,
+        external_momenta: Vec<[T; 4]>,
+        surfaces: Vec<PreparedSamplingSurface<T>>,
     ) -> Result<Self> {
         let graph_name = graph_name.into();
         if graph_name.trim().is_empty() {
             return Err(eyre!("prepared sampling context needs a graph name"));
         }
         validate_edges(&parent_lmb, "parent LMB")?;
-        validate_finite(rescaling_t_star, "cut rescaling t*")?;
-        if rescaling_t_star <= 0.0 {
+        validate_finite(&rescaling_t_star, "cut rescaling t*")?;
+        if rescaling_t_star <= rescaling_t_star.zero() {
             return Err(eyre!(
                 "cut rescaling t* must be strictly positive, got {rescaling_t_star}"
             ));
         }
         for momentum in loop_momenta.iter().flatten() {
-            validate_finite(*momentum, "loop momentum")?;
+            validate_finite(momentum, "loop momentum")?;
         }
         for momentum in external_momenta.iter().flatten() {
-            validate_finite(*momentum, "external momentum")?;
+            validate_finite(momentum, "external momentum")?;
         }
         for (index, surface) in surfaces.iter().enumerate() {
             if surface
@@ -315,7 +317,7 @@ impl PreparedCutSamplingContext {
     /// used by that root solve; applying `t*` here keeps the resulting cut
     /// point and its rescaling together, without any process-global cut cache.
     #[allow(clippy::too_many_arguments)]
-    pub fn from_lu_sample<T: FloatLike>(
+    pub fn from_lu_sample(
         graph_name: impl Into<String>,
         graph_id: usize,
         cut_id: usize,
@@ -325,7 +327,7 @@ impl PreparedCutSamplingContext {
         rescaling_t_star: &F<T>,
         unrescaled_loop_momenta: &LoopMomenta<F<T>>,
         external_momenta: &ExternalFourMomenta<F<T>>,
-        surfaces: Vec<PreparedSamplingSurface>,
+        surfaces: Vec<PreparedSamplingSurface<T>>,
     ) -> Result<Self> {
         let zero = rescaling_t_star.zero();
         if !rescaling_t_star.0.is_finite() || rescaling_t_star.0 <= zero.0 {
@@ -339,9 +341,9 @@ impl PreparedCutSamplingContext {
             .iter()
             .map(|momentum| {
                 [
-                    momentum.px.into_f64(),
-                    momentum.py.into_f64(),
-                    momentum.pz.into_f64(),
+                    momentum.px.0.clone(),
+                    momentum.py.0.clone(),
+                    momentum.pz.0.clone(),
                 ]
             })
             .collect();
@@ -349,10 +351,10 @@ impl PreparedCutSamplingContext {
             .iter()
             .map(|momentum: &FourMomentum<F<T>>| {
                 [
-                    momentum.temporal.value.into_f64(),
-                    momentum.spatial.px.into_f64(),
-                    momentum.spatial.py.into_f64(),
-                    momentum.spatial.pz.into_f64(),
+                    momentum.temporal.value.0.clone(),
+                    momentum.spatial.px.0.clone(),
+                    momentum.spatial.py.0.clone(),
+                    momentum.spatial.pz.0.clone(),
                 ]
             })
             .collect();
@@ -363,7 +365,7 @@ impl PreparedCutSamplingContext {
             orientation,
             side,
             parent_lmb,
-            rescaling_t_star.into_f64(),
+            rescaling_t_star.0.clone(),
             loop_momenta,
             external_momenta,
             surfaces,
@@ -377,33 +379,80 @@ impl PreparedCutSamplingContext {
     /// loop and external vectors must remain in the same frame as the sample
     /// after stability rotations.
     pub(crate) fn rotated(&self, rotation: &Rotation) -> Self {
-        let rotate_three = |momentum: [f64; 3]| {
-            let rotated =
-                ThreeMomentum::new(F(momentum[0]), F(momentum[1]), F(momentum[2])).rotate(rotation);
-            [
-                rotated.px.into_f64(),
-                rotated.py.into_f64(),
-                rotated.pz.into_f64(),
-            ]
+        let rotate_three = |momentum: &[T; 3]| {
+            let rotated = ThreeMomentum::new(
+                F(momentum[0].clone()),
+                F(momentum[1].clone()),
+                F(momentum[2].clone()),
+            )
+            .rotate(rotation);
+            [rotated.px.0, rotated.py.0, rotated.pz.0]
         };
-        let rotate_four = |momentum: [f64; 4]| {
-            let spatial = rotate_three([momentum[1], momentum[2], momentum[3]]);
-            [momentum[0], spatial[0], spatial[1], spatial[2]]
+        let rotate_four = |momentum: &[T; 4]| {
+            let [px, py, pz] = rotate_three(&[
+                momentum[1].clone(),
+                momentum[2].clone(),
+                momentum[3].clone(),
+            ]);
+            [momentum[0].clone(), px, py, pz]
         };
         Self {
+            loop_momenta: self.loop_momenta.iter().map(rotate_three).collect(),
+            external_momenta: self.external_momenta.iter().map(rotate_four).collect(),
+            ..self.clone()
+        }
+    }
+
+    /// Convert the whole prepared payload without a lower-precision intermediate.
+    /// Precision rescue must still rebuild it from the original source point;
+    /// this conversion is only for an already prepared sample's representation.
+    pub fn cast_sample<T2: FloatLike>(
+        &self,
+        cast: impl Fn(&T) -> T2 + Copy,
+    ) -> PreparedCutSamplingContext<T2> {
+        PreparedCutSamplingContext {
+            graph_name: self.graph_name.clone(),
+            graph_id: self.graph_id,
+            cut_id: self.cut_id,
+            orientation: self.orientation,
+            side: self.side,
+            parent_lmb: self.parent_lmb.clone(),
+            rescaling_t_star: cast(&self.rescaling_t_star),
             loop_momenta: self
                 .loop_momenta
                 .iter()
-                .copied()
-                .map(rotate_three)
+                .map(|p| p.each_ref().map(cast))
                 .collect(),
             external_momenta: self
                 .external_momenta
                 .iter()
-                .copied()
-                .map(rotate_four)
+                .map(|p| p.each_ref().map(cast))
                 .collect(),
-            ..self.clone()
+            surfaces: self
+                .surfaces
+                .iter()
+                .map(|surface| PreparedSamplingSurface {
+                    edge_ids: surface.edge_ids.clone(),
+                    subspace_edges: surface.subspace_edges.clone(),
+                    status: match &surface.status {
+                        PreparedSurfaceStatus::Existing {
+                            threshold_radius,
+                            normalized_margin,
+                        } => PreparedSurfaceStatus::Existing {
+                            threshold_radius: cast(threshold_radius),
+                            normalized_margin: normalized_margin.as_ref().map(cast),
+                        },
+                        PreparedSurfaceStatus::Pinched { normalized_margin } => {
+                            PreparedSurfaceStatus::Pinched {
+                                normalized_margin: cast(normalized_margin),
+                            }
+                        }
+                        PreparedSurfaceStatus::Absent { reason } => PreparedSurfaceStatus::Absent {
+                            reason: reason.clone(),
+                        },
+                    },
+                })
+                .collect(),
         }
     }
 
@@ -429,11 +478,11 @@ impl PreparedCutSamplingContext {
         Ok(())
     }
 
-    pub fn surface(&self, index: usize) -> Option<&PreparedSamplingSurface> {
+    pub fn surface(&self, index: usize) -> Option<&PreparedSamplingSurface<T>> {
         self.surfaces.get(index)
     }
 
-    pub fn regular_surface_radii(&self) -> impl Iterator<Item = f64> + '_ {
+    pub fn regular_surface_radii(&self) -> impl Iterator<Item = T> + '_ {
         self.surfaces
             .iter()
             .filter_map(|surface| surface.status.threshold_radius())
@@ -457,16 +506,16 @@ fn validate_edges(edges: &[usize], label: &str) -> Result<()> {
     Ok(())
 }
 
-fn validate_finite(value: f64, label: &str) -> Result<()> {
+fn validate_finite<T: FloatLike>(value: &T, label: &str) -> Result<()> {
     if !value.is_finite() {
         return Err(eyre!("{label} must be finite, got {value}"));
     }
     Ok(())
 }
 
-fn validate_finite_non_negative(value: f64, label: &str) -> Result<()> {
+fn validate_finite_non_negative<T: FloatLike>(value: &T, label: &str) -> Result<()> {
     validate_finite(value, label)?;
-    if value < 0.0 {
+    if value < &value.zero() {
         return Err(eyre!("{label} must be non-negative, got {value}"));
     }
     Ok(())
@@ -542,7 +591,7 @@ mod tests {
             PreparedSamplingSurface::new(
                 vec![1, 2, 1],
                 vec![1],
-                PreparedSurfaceStatus::absent("missing").unwrap()
+                PreparedSurfaceStatus::<f64>::absent("missing").unwrap()
             )
             .is_err()
         );
@@ -624,6 +673,114 @@ mod tests {
             wrong_dimension
                 .to_string()
                 .contains("1 loop momenta, expected 2")
+        );
+    }
+
+    #[test]
+    fn prepared_lu_context_preserves_native_precision_through_rotation_and_cast() {
+        use crate::utils::{PrecisionUpgradable, f128};
+
+        let one = F::<f128>::from_f64(1.0);
+        let t_star = one + one.from_i64(2).powi(-80);
+        assert_eq!(t_star.into_f64(), 1.0);
+        assert_ne!(t_star, one);
+        let loops = LoopMomenta::from_iter([ThreeMomentum::new(t_star, one, -t_star)]);
+        let externals = ExternalFourMomenta::from_iter([FourMomentum::from_args(
+            t_star,
+            one.zero(),
+            t_star,
+            one.zero(),
+        )]);
+        let prepared = PreparedCutSamplingContext::from_lu_sample(
+            "native",
+            2,
+            3,
+            Some(4),
+            SamplingCutSide::Right,
+            vec![7],
+            &t_star,
+            &loops,
+            &externals,
+            vec![
+                PreparedSamplingSurface::new(
+                    vec![2, 7],
+                    vec![7],
+                    PreparedSurfaceStatus::existing(t_star.0, Some((-t_star).0)).unwrap(),
+                )
+                .unwrap(),
+            ],
+        )
+        .unwrap();
+        assert_eq!(prepared.rescaling_t_star, t_star.0);
+        assert_eq!(prepared.loop_momenta[0][0], t_star.square().0);
+        assert_eq!(prepared.external_momenta[0][0], t_star.0);
+        assert_eq!(
+            prepared.regular_surface_radii().collect::<Vec<_>>(),
+            vec![t_star.0]
+        );
+        let restored: PreparedCutSamplingContext<f128> =
+            serde_json::from_str(&serde_json::to_string(&prepared).unwrap()).unwrap();
+        assert_eq!(restored, prepared);
+        let promoted = prepared.cast_sample(|value| value.higher());
+        assert_eq!(promoted.cast_sample(|value| value.lower()), prepared);
+
+        let rotation = Rotation::new(crate::momentum::RotationMethod::Pi2X);
+        let rotated = promoted.rotated(&rotation);
+        assert_eq!(rotated.rescaling_t_star, promoted.rescaling_t_star);
+        assert_eq!(
+            rotated.loop_momenta[0][1],
+            (-F(promoted.loop_momenta[0][2].clone())).0
+        );
+        assert_eq!(rotated.loop_momenta[0][2], promoted.loop_momenta[0][1]);
+        assert_eq!(
+            rotated.external_momenta[0][3],
+            promoted.external_momenta[0][2]
+        );
+        assert_eq!(rotated.surfaces, promoted.surfaces);
+    }
+
+    #[test]
+    fn prepared_lu_context_accepts_finite_native_values_outside_f64_range() {
+        let one = F::<crate::utils::ArbPrec>::from_f64(1.0);
+        let large = one.from_i64(10).powi(400);
+        let small = &one / &large;
+        assert!(large.into_f64().is_infinite());
+        assert_eq!(small.into_f64(), 0.0);
+        let loops =
+            LoopMomenta::from_iter([ThreeMomentum::new(large.clone(), one.zero(), one.zero())]);
+        let externals = ExternalFourMomenta::from_iter([FourMomentum::from_args(
+            large.clone(),
+            one.zero(),
+            one.zero(),
+            large.clone(),
+        )]);
+        let prepared = PreparedCutSamplingContext::from_lu_sample(
+            "native",
+            0,
+            0,
+            None,
+            SamplingCutSide::Left,
+            vec![0],
+            &small,
+            &loops,
+            &externals,
+            vec![
+                PreparedSamplingSurface::new(
+                    vec![0, 1],
+                    vec![0],
+                    PreparedSurfaceStatus::existing(large.0.clone(), Some(small.0.clone()))
+                        .unwrap(),
+                )
+                .unwrap(),
+            ],
+        )
+        .unwrap();
+        assert_eq!(prepared.rescaling_t_star, small.0);
+        assert_eq!(prepared.loop_momenta[0][0], (&large * &small).0);
+        assert_eq!(prepared.external_momenta[0][0], large.0);
+        assert_eq!(
+            prepared.surface(0).unwrap().status.threshold_radius(),
+            Some(large.0)
         );
     }
 
@@ -741,7 +898,8 @@ mod tests {
             large.clone(),
             small,
             vec![large],
-            context(SamplingCutSide::Right),
+            context(SamplingCutSide::Right)
+                .cast_sample(|value| crate::utils::ArbPrec::from_f64(*value)),
         )
         .unwrap();
     }

@@ -1,7 +1,7 @@
 # Native sampling precision and rescue
 
-Status: implementation proposal after the two-sided radial profile gate.
-The native radial kernel is tested; complete production sampling rescue is not.
+Status: native components and geometry pass 122 isolated numerical tests;
+production binding and original-source stability rescue remain to implement.
 This note complements [ADVANCED_SAMPLING_PLAN.md](../../../ADVANCED_SAMPLING_PLAN.md)
 and [LU_H_MATCHED_SAMPLING.md](LU_H_MATCHED_SAMPLING.md).
 
@@ -23,6 +23,21 @@ and score -> partition -> physical/reference value -> final weighted result.
 Only original f64 settings/cube inputs and final public f64 reporting are valid
 conversion boundaries. Recomputing after promotion of a rounded point, root,
 rotation, improved external vector or `t*` does not implement rescue.
+
+Preserve the exact binary value of a generated Monte Carlo cube coordinate when
+reconstructing it at higher precision. The general `from_f64` conversion uses
+the shortest decimal spelling for physical input conventions; that is a
+different source point. Reuse the existing exact-binary constructors at the
+retained-draw boundary, while keeping the established decimal interpretation of
+user model/kinematic settings. Test a value such as binary64 `0.1` whose exact
+binary embedding differs from decimal `0.1`.
+
+GammaLoop's `QuadFloat` wraps Symbolica's two-binary64 `DoubleFloat`: it adds
+mantissa precision but retains binary64's exponent range. Native tests must
+distinguish these two capabilities. Sub-f64 coordinate differences can recover
+in Quad; range failures such as `exp(-1000)` or `10^400` require Arb. A Quad
+retry that remains unrepresentable is an expected precision outcome, not proof
+of a broken evaluator. Test that it continues to Arb without dropping support.
 
 ## One owner and object-safe native components
 

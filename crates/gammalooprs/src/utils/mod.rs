@@ -1593,6 +1593,9 @@ pub trait PrecisionUpgradable {
 
 pub trait FloatLike:
     Real
+    + Send
+    + Sync
+    + 'static
     +R
     +Default
     + Clone

@@ -140,41 +140,48 @@ impl Eq for Esurface {}
 impl Esurface {
     /// Compile an exact radial chart around this graph-routed energy surface.
     /// The callback retains the complete parent frame, masses and external
-    /// data; its ray root is the same cut equation used by LU. This f64 chart
-    /// defines the sampling proposal, not the precision of the integrand.
-    pub(crate) fn sampling_radial_map(
+    /// data in the evaluation precision; its ray root is the same cut equation
+    /// used by LU, without promoting already rounded lower-precision vectors.
+    pub(crate) fn sampling_radial_map<T: FloatLike>(
         &self,
         lmb: &LoopMomentumBasis,
-        masses: &EdgeVec<F<f64>>,
-        external_momenta: &ExternalFourMomenta<F<f64>>,
+        masses: &EdgeVec<F<T>>,
+        external_momenta: &ExternalFourMomenta<F<T>>,
         beta: f64,
         power: f64,
-    ) -> Result<ImplicitSurfaceRadialMap> {
+    ) -> Result<ImplicitSurfaceRadialMap<T>> {
         let dimension = 3 * lmb.loop_edges.len();
         let surface = self.clone();
         let lmb = lmb.clone();
         let masses = masses.clone();
         let external_momenta = external_momenta.clone();
-        let spatial_externals: ExternalThreeMomenta<F<f64>> = external_momenta
+        let spatial_externals: ExternalThreeMomenta<F<T>> = external_momenta
             .iter()
-            .map(|momentum| momentum.spatial)
+            .map(|momentum| momentum.spatial.clone())
             .collect();
+        let zero = F::<T>::from_f64(0.0);
         let center = LoopMomenta::from_iter(
-            (0..dimension / 3).map(|_| ThreeMomentum::new(F(0.0), F(0.0), F(0.0))),
+            (0..dimension / 3)
+                .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
         );
-        let evaluator = std::sync::Arc::new(move |direction: &[f64], radius: f64| {
+        let evaluator = std::sync::Arc::new(move |direction: &[T], radius: T| {
+            let radius = F(radius);
             let unit_loops = LoopMomenta::from_iter(direction.chunks_exact(3).map(|components| {
-                ThreeMomentum::new(F(components[0]), F(components[1]), F(components[2]))
+                ThreeMomentum::new(
+                    F(components[0].clone()),
+                    F(components[1].clone()),
+                    F(components[2].clone()),
+                )
             }));
             let (value, mut derivative) = surface.compute_self_and_r_derivative(
-                &F(radius),
+                &radius,
                 &unit_loops,
                 &center,
                 &external_momenta,
                 &masses,
                 &lmb,
             );
-            if radius == 0.0 {
+            if radius == radius.zero() {
                 // At a massless endpoint E(r)=r|v| the radial right derivative is
                 // |v|, whereas the two-sided formula q.v/E would evaluate 0/0.
                 // Keep this endpoint convention local to the sampling chart.
@@ -186,17 +193,17 @@ impl Esurface {
                         let momentum = signature.compute_momentum(&center, &spatial_externals);
                         let velocity = compute_loop_part(&signature.internal, &unit_loops);
                         let energy = (momentum.norm_squared() + masses[edge].square()).sqrt();
-                        if energy == F(0.0) {
+                        if energy == radius.zero() {
                             velocity.norm_squared().sqrt()
                         } else {
                             momentum * velocity / energy
                         }
                     })
-                    .fold(F(0.0), |sum, contribution| sum + contribution);
+                    .fold(radius.zero(), |sum, contribution| sum + contribution);
             }
             Ok((value.0, derivative.0))
         });
-        ImplicitSurfaceRadialMap::new(dimension, vec![0.0; dimension], beta, power, evaluator)
+        ImplicitSurfaceRadialMap::new(dimension, vec![zero.0; dimension], beta, power, evaluator)
     }
 
     pub(crate) fn has_radial_dependence_in_subspace(
@@ -1428,6 +1435,50 @@ mod tests {
                 assert!((actual - expected).abs() < 1.0e-9);
             }
         }
+
+        // The graph factory must bind source data in the evaluation precision.
+        // These two energies are indistinguishable in f64 but define different
+        // physical shells and therefore different forward maps at Quad precision.
+        let one = F::<crate::utils::f128>::from_f64(1.0);
+        let energy = one.from_i64(1000);
+        let displacement = one.from_i64(10).powi(-20);
+        assert_eq!(energy.into_f64(), (energy + displacement).into_f64());
+        let native_masses = graph
+            .underlying
+            .new_edgevec_from_iter(
+                masses
+                    .iter()
+                    .map(|(_, mass)| F::<crate::utils::f128>::from_ff64(*mass)),
+            )
+            .unwrap();
+        let coordinates = [0.19, 0.27, 0.61, 0.39, 0.72, 0.58]
+            .map(|value| F::<crate::utils::f128>::from_f64(value).0);
+        let mut points = Vec::new();
+        for energy in [energy, energy + displacement] {
+            let externals = ExternalFourMomenta::from_iter(
+                [FourMomentum::from_args(energy, one.zero(), one.zero(), one.zero()); 2],
+            );
+            let map = surface
+                .sampling_radial_map(&lmb, &native_masses, &externals, 400.0, 2.0)
+                .unwrap();
+            let forward = map.forward(&coordinates).unwrap();
+            let inverse = map.inverse(&forward.point).unwrap();
+            for (actual, expected) in inverse.coordinates.iter().zip(coordinates) {
+                assert!((F(*actual) - F(expected)).abs() < one.from_i64(10).powi(-25));
+            }
+            points.push(forward.point);
+        }
+        assert_ne!(points[0], points[1]);
+        assert_eq!(
+            points[0]
+                .iter()
+                .map(|value| F(*value).into_f64())
+                .collect::<Vec<_>>(),
+            points[1]
+                .iter()
+                .map(|value| F(*value).into_f64())
+                .collect::<Vec<_>>(),
+        );
     }
 
     #[test]

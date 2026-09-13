@@ -800,14 +800,18 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                     let bridge = graph.sampling_setup().sampling_bridge()?;
                     let coordinates = xs.iter().map(|x| x.clone().into_ff64().0).collect_vec();
                     let mapped = bridge.forward(channel_id, &coordinates)?;
-                    let mut sample =
-                        mapped.to_momentum_sample::<T>(SamplingMomentumSampleContext {
+                    // The host still binds f64 maps here; the native cache migration
+                    // will materialize the sample directly in its evaluation precision.
+                    let mut sample = mapped.to_momentum_sample::<T>(
+                        SamplingMomentumSampleContext {
                             loop_mom_cache_id,
                             external_moms: &settings.kinematics.externals,
                             external_mom_cache_id,
                             dependent_momenta_constructor,
                             orientation: orientation_id,
-                        })?;
+                        },
+                        |value| F::<T>::from_f64(*value),
+                    )?;
                     let partition_weight =
                         mapped.partition.weight(channel_id.0).ok_or_else(|| {
                             eyre!(
