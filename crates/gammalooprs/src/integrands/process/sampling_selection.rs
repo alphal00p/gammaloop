@@ -17,9 +17,10 @@ use serde::{Deserialize, Serialize};
 
 use super::sampling_maps::combine_contracts;
 use super::{
-    SamplingChannelScore, SamplingMapAffine, SamplingMapComponent, SamplingMapContract,
-    SamplingMapDefinition, SamplingMapEmbedding, SamplingMapEvaluation, SamplingMapKernel,
-    SamplingPartition, SamplingPartitionMode, SamplingScoreFunction, SurfaceRadialMap,
+    ImplicitSurfaceRadialMap, SamplingChannelScore, SamplingMapAffine, SamplingMapComponent,
+    SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding, SamplingMapEvaluation,
+    SamplingMapKernel, SamplingPartition, SamplingPartitionMode, SamplingScoreFunction,
+    SurfaceRadialMap,
 };
 use crate::momentum::sample::{LoopMomenta, MomentumSample};
 use crate::settings::runtime::ParameterizationSettings;
@@ -246,6 +247,7 @@ pub enum CompiledSamplingMap {
         frame: SamplingMapAffine,
     },
     Surface(SurfaceRadialMap),
+    ImplicitSurface(ImplicitSurfaceRadialMap),
     Embedded(SamplingMapEmbedding),
 }
 
@@ -255,6 +257,7 @@ impl CompiledSamplingMap {
             Self::Lmb(map) => map.contract(),
             Self::AffineLmb { lmb, frame } => combine_contracts(lmb.contract(), frame.contract()),
             Self::Surface(map) => map.contract(),
+            Self::ImplicitSurface(map) => map.contract(),
             Self::Embedded(map) => map.contract(),
         }
     }
@@ -264,6 +267,7 @@ impl CompiledSamplingMap {
             Self::Lmb(map) => map.dimensions(),
             Self::AffineLmb { lmb, .. } => lmb.dimensions(),
             Self::Surface(map) => map.dimension(),
+            Self::ImplicitSurface(map) => map.dimension(),
             Self::Embedded(map) => map.dimensions(),
         }
     }
@@ -299,6 +303,7 @@ impl SamplingMapComponent for CompiledSamplingMap {
             Self::Lmb(_) => "lmb",
             Self::AffineLmb { .. } => "affine_lmb",
             Self::Surface(_) => "surface",
+            Self::ImplicitSurface(_) => "implicit_surface",
             Self::Embedded(_) => "embedded",
         }
     }
@@ -307,6 +312,7 @@ impl SamplingMapComponent for CompiledSamplingMap {
         match self {
             Self::Lmb(map) => SamplingMapComponent::forward(map, coordinates, context),
             Self::Surface(map) => SamplingMapComponent::forward(map, coordinates, context),
+            Self::ImplicitSurface(map) => SamplingMapComponent::forward(map, coordinates, context),
             Self::Embedded(map) => SamplingMapComponent::forward(map, coordinates, context),
             Self::AffineLmb { lmb, frame } => {
                 let lmb_evaluation = SamplingMapComponent::forward(lmb, coordinates, context)?;
@@ -334,6 +340,7 @@ impl SamplingMapComponent for CompiledSamplingMap {
         match self {
             Self::Lmb(map) => SamplingMapComponent::inverse(map, point, context),
             Self::Surface(map) => SamplingMapComponent::inverse(map, point, context),
+            Self::ImplicitSurface(map) => SamplingMapComponent::inverse(map, point, context),
             Self::Embedded(map) => SamplingMapComponent::inverse(map, point, context),
             Self::AffineLmb { lmb, frame } => {
                 let frame_evaluation = SamplingMapComponent::inverse(frame, point, context)?;
