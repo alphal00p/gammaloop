@@ -2331,3 +2331,60 @@ If a gate fails, use the measurements to continue the generic implementation, in
   cards are prepared but unrun; they are diagnostics only and do not change
   the production or final benchmark settings. GL01, GL262 and all remaining
   integration/performance requirements keep the implementation goal open.
+
+### 2026-09-13 — Standalone Symbolica reproduction requested
+
+- The user prioritized an author-facing reproducer for the GL262 evaluator
+  construction failure. A large portable physical expression is acceptable.
+  This is the immediate diagnostic task within the unfinished optimization
+  goal; none of the remaining physical or correctness gates are waived.
+- Evaluator compilation remains disabled. The replay calls Symbolica's
+  `evaluator(...).function_map(...).optimization_settings(...).build()` only.
+  The `compile: true` field in stage logs is the `#compile` logging tag, not
+  `EvaluatorSettings.compile`; the actual configuration sets `compile=false`.
+- The captured 3,389,407,083-byte physical scalar completes direct H1/CPE5
+  construction in 131.555473030 s. Its whole diagnostic lasts 234.970642086 s
+  and peaks at 27,143,188,480 bytes. It is a successful component control,
+  not a reproduction of the full-input failure. The optional large tree-route
+  diagnostic was deliberately interrupted to prioritize the requested MRE;
+  its cancellation and observations are preserved.
+- GL01's queued final benchmark was paused before its first generation; no
+  timed case was interrupted. The complete passing GL00 results remain frozen.
+- No complete post-tensor scalar dump was retained from the failed CLI21 run.
+  The exact normalized pre-tensor input is retained as one hashed 678,173,112-
+  byte JSONL event containing 3,050 summands. The existing frozen CLI18 replay
+  is recovering and atomically exporting their contracted scalars without
+  repeating UV generation. This provenance is distinct from CLI21, and exact
+  standalone reproduction must be observed before claiming an MRE.
+- A separate package at `tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre`
+  imports the scalar plus 220 ordered parameters and 63 function definitions
+  using Symbolica alone. It pins the original Symbolica revision, retains
+  debug assertions, and performs no generated evaluator compilation. The
+  original panic, phase timings, boundary memory and successful controls are
+  preserved as small author-facing evidence. Package validation and tests of
+  actual physical partial sums are in progress; failure reproduction is still
+  pending.
+- The standalone small physical control exposed a separate portable-import
+  error before the large-panic test. The imported parameter container had wrong
+  symbol identities and lacked `mUV`. A 2,480-byte independent reproducer now
+  proves the import defect: export `f(x,y)`, register `y,x,f` in a fresh process,
+  then import; the observed result is `f(y,x)`. The unchanged function-symbol
+  branch in Symbolica's renamer skips its arguments. This is a confirmed
+  separate issue, not proof of the original evaluator-construction cause.
+- To isolate construction without relying on that corrupted context, the
+  diagnostic can declare the imported expression's distinct variable and whole
+  function leaves as formal runtime inputs, using the existing
+  `get_all_indeterminates(false)` API. It neither expands nor rewrites the
+  expression. This is an explicit mathematical abstraction, not a physical
+  equivalence claim or a production implementation change. Horner rewriting of
+  nontrivial function arguments can still invalidate whole-function keys; a
+  failed abstraction must not be confused with the target buffer panic.
+- The isolated package passes check, build and clippy with assertions enabled.
+  The exact executable SHA256 is
+  `2a1a680f267fa56578d6a99aa983ef4ab4567661ce657c07181faa86eddaca79`.
+  Tiny context and function-leaf controls pass; the recovered small scalar also
+  builds under the abstraction (34 inputs, 0.539004993 s). These controls overlap
+  scalar recovery and supply correctness evidence only. The first large
+  partial-sum diagnostic is running with recovery suspended through its owned
+  process handle; its supervisor retains the measurement lock and its existing
+  guard. Recovery resumes in the driver's cleanup path.

@@ -1,0 +1,152 @@
+{
+  "utc": "2026-09-13T19:48:25.971049+00:00",
+  "kind": "Standalone correctness validation; authorized overlap with scalar capture; not final benchmark or physics-equivalence evidence",
+  "build": {
+    "created_utc": "2026-09-13T19:45:20.816572+00:00",
+    "kind": "Standalone Symbolica diagnostic executable with explicit abstract-parameter reduction; no generated evaluator code compilation",
+    "build_lock": "/tmp/gammaloop-aa-aa-uv-build.lock",
+    "target_directory": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target",
+    "symbolica_revision": "4d0a833eb8e059d1f95bdae5abed2559830b235f",
+    "debug_assertions": true,
+    "steps": [
+      {
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--offline",
+          "--profile",
+          "dev-optim",
+          "--manifest-path",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.toml",
+          "--all-targets",
+          "-j8"
+        ],
+        "started_utc": "2026-09-13T19:45:20.816845+00:00",
+        "exit_code": 0,
+        "ended_utc": "2026-09-13T19:45:21.054909+00:00"
+      },
+      {
+        "command": [
+          "cargo",
+          "build",
+          "--locked",
+          "--offline",
+          "--profile",
+          "dev-optim",
+          "--manifest-path",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.toml",
+          "--all-targets",
+          "-j8"
+        ],
+        "started_utc": "2026-09-13T19:45:21.055250+00:00",
+        "exit_code": 0,
+        "ended_utc": "2026-09-13T19:45:27.396200+00:00"
+      },
+      {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--profile",
+          "dev-optim",
+          "--manifest-path",
+          "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.toml",
+          "--all-targets",
+          "-j8",
+          "--no-deps",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "started_utc": "2026-09-13T19:45:27.396535+00:00",
+        "exit_code": 0,
+        "ended_utc": "2026-09-13T19:45:27.734003+00:00"
+      }
+    ],
+    "source_hashes": {
+      "Cargo.toml": "9397516ee06bb5d183f059bde1c774de216e9d5b5b5a2b39444a65426e3cc366",
+      "src/main.rs": "89aecfb0c23b2daec024d3be2abf995465753a3a53b4ca093705e3ea03cd5965",
+      "examples/import_remap.rs": "7ed2e0791dd8ee9dfde141f40cf475035fa4ffd004fd964ef1b8907901565f99"
+    },
+    "binary": {
+      "path": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/symbolica-evaluator-mre",
+      "bytes": 357235648,
+      "sha256": "2a1a680f267fa56578d6a99aa983ef4ab4567661ce657c07181faa86eddaca79"
+    },
+    "package_lock_sha256": "3edcc8955c7c77e03bfbaaca11ab9559cbab47c424fa520047ea796920fb1ce8",
+    "complete": true
+  },
+  "controls": [
+    {
+      "case": "tiny_control_r2",
+      "receipt": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/tiny_control_r2/control_receipt.json",
+      "exit_code": 0,
+      "build_seconds": 0.0009466029999999999,
+      "before_build": {
+        "stage": "symbolica_build_start",
+        "elapsed_seconds": 0.002630837,
+        "pid": 815187,
+        "rss_bytes": 4489216,
+        "vmhwm_bytes": 4489216
+      },
+      "after_build": {
+        "stage": "symbolica_build_done",
+        "elapsed_seconds": 0.00357744,
+        "pid": 815187,
+        "rss_bytes": 4972544,
+        "vmhwm_bytes": 4972544
+      },
+      "operation_count_line": "operations=OperationCount { additions: 3, multiplications: 2, inversions: 0, function_calls: 0 }"
+    },
+    {
+      "case": "tiny_abstract_control_r1",
+      "receipt": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/tiny_abstract_control_r1/control_receipt.json",
+      "exit_code": 0,
+      "build_seconds": 0.00011282999999999996,
+      "before_build": {
+        "stage": "symbolica_build_start",
+        "elapsed_seconds": 0.000898923,
+        "pid": 815192,
+        "rss_bytes": 5025792,
+        "vmhwm_bytes": 5025792
+      },
+      "after_build": {
+        "stage": "symbolica_build_done",
+        "elapsed_seconds": 0.001011753,
+        "pid": 815192,
+        "rss_bytes": 5120000,
+        "vmhwm_bytes": 5120000
+      },
+      "operation_count_line": "operations=OperationCount { additions: 1, multiplications: 2, inversions: 1, function_calls: 0 }"
+    },
+    {
+      "case": "physical_scalar0_abstract_r1",
+      "receipt": "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/physical_scalar0_abstract_r1/control_receipt.json",
+      "exit_code": 0,
+      "build_seconds": 0.539004993,
+      "before_build": {
+        "stage": "symbolica_build_start",
+        "elapsed_seconds": 0.590002669,
+        "pid": 815216,
+        "rss_bytes": 80584704,
+        "vmhwm_bytes": 130838528
+      },
+      "after_build": {
+        "stage": "symbolica_build_done",
+        "elapsed_seconds": 1.129007662,
+        "pid": 815216,
+        "rss_bytes": 159510528,
+        "vmhwm_bytes": 244830208
+      },
+      "operation_count_line": "operations=OperationCount { additions: 3132, multiplications: 3383, inversions: 1, function_calls: 5 }"
+    }
+  ],
+  "retained_failures": [
+    "physical_scalar0_control_r1/control_receipt.json",
+    "import_remap_r1/receipt.json"
+  ],
+  "original_large_build_panic_reproduced": false,
+  "main_source_frozen_for_parent_run": true
+}
