@@ -152,6 +152,19 @@ pub struct SamplingChannelCatalogue {
     pub entries: Vec<SamplingCatalogueEntry>,
 }
 
+/// Stable, side-effect-free view of the resolved catalogue for diagnostics.
+///
+/// This report is deliberately built from [`SamplingChannelCatalogue`] rather
+/// than enumerating channels independently.  CLI and Python inspection can
+/// therefore show exactly the catalogue that the production sampling path
+/// will compile, without constructing kinematics or running a sample.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SamplingChannelInspection {
+    pub graph_name: String,
+    pub selectors: Vec<String>,
+    pub entries: Vec<String>,
+}
+
 /// Kinematic data needed when compiling a graph-local surface channel.
 ///
 /// The centre and threshold radius are intentionally supplied by the process
@@ -960,6 +973,20 @@ impl SamplingChannelCatalogue {
             })
             .collect()
     }
+
+    /// Return the canonical resolved selectors and catalogue rows for
+    /// read-only CLI/API inspection.
+    pub fn inspection(&self) -> SamplingChannelInspection {
+        SamplingChannelInspection {
+            graph_name: self.graph_name.clone(),
+            selectors: self
+                .selectors
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+            entries: self.inspection_rows(),
+        }
+    }
 }
 
 /// Expand a resolved graph selection against the generated LMB catalogue.
@@ -1397,6 +1424,21 @@ mod tests {
         assert_eq!(catalogue.named_entries().next().unwrap().name, "surface_hz");
         assert!(catalogue.inspection_rows()[0].contains("basis=1"));
         assert!(catalogue.inspection_rows()[1].contains("parent_lmb=[1, 2]"));
+    }
+
+    #[test]
+    fn inspection_reports_resolved_selectors_and_canonical_rows() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:optimized_lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2])], &[0]);
+
+        let report = catalogue.inspection();
+        assert_eq!(report.graph_name, "G");
+        assert_eq!(report.selectors, vec!["auto:optimized_lmb"]);
+        assert_eq!(report.entries, catalogue.inspection_rows());
+        assert_eq!(report.entries, vec!["0: lmb basis=0 edges=[1, 2] source=auto:optimized_lmb"]);
     }
 
     #[test]

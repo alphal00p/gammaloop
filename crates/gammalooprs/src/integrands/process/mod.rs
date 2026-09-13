@@ -90,7 +90,8 @@ pub use sampling_selection::{
     ResolvedSamplingChannelSelection, SamplingCatalogueEntry, SamplingChannelBridge,
     SamplingChannelBridgeError, SamplingChannelBridgeEvaluation, SamplingChannelCatalogue,
     SamplingChannelCompileContext, SamplingChannelCompileError, SamplingChannelId,
-    SamplingChannelPreset, SamplingChannelSelector, SamplingMomentumSampleContext,
+    SamplingChannelInspection, SamplingChannelPreset, SamplingChannelSelector,
+    SamplingMomentumSampleContext,
     SamplingSelectionError, SamplingSurfaceGeometry, build_sampling_channel_catalogue,
     build_sampling_channel_catalogue_with_surfaces, explicitly_selected_graphs,
     graph_channel_definitions, resolve_sampling_channel_selection,
@@ -2043,6 +2044,20 @@ impl LmbMultiChannelingSetup {
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<SamplingChannelCatalogue> {
         self.sampling_channel_catalogue_with_surfaces(resolved, parameterization_settings, &[])
+    }
+
+    /// Resolve the canonical catalogue and return its read-only inspection
+    /// view.  This is useful to CLI/Python diagnostics and intentionally does
+    /// not compile maps, prepare kinematics, or enumerate a second channel
+    /// domain.
+    pub fn inspect_sampling_channels(
+        &self,
+        resolved: &ResolvedSamplingChannelSelection,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<SamplingChannelInspection> {
+        Ok(self
+            .sampling_channel_catalogue(resolved, parameterization_settings)?
+            .inspection())
     }
 
     /// Resolve the same selection while supplying E-surface candidates already
