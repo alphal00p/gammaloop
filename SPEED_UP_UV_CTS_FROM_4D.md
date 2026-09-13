@@ -1263,3 +1263,96 @@ If a gate fails, use the measurements to continue the generic implementation, in
   compiler, flags, assertion-enabled profile and immutable byte count. The next
   diagnostic is queued after the existing frozen-run/check sequence; no new
   generation or runtime result is implied by this build.
+- CLI12 reaches its 2,400 s cap during operator merging: termination is
+  requested at 2,400.1950 s, final outer wall is 2,402.2633 s, exit -15,
+  and peak RSS is 21,575,184,384 bytes. Its guard does not intervene. The
+  forest is complete but evaluator preparation is incomplete, with no saved
+  state, evaluator or production forest export. This remains an incomplete
+  diagnostic; the full cold-run gate is not certified.
+- All fourteen frozen `9427` boundary checks pass after CLI12 releases the
+  lock: four UV composition checks in 21.827 s, seven cut/threshold checks in
+  17.818 s, two API checks in 4.329 s and analytic renormalization in 0.411 s.
+  These checks precede the operator-merging replacement.
+- The operator-merging milestone is committed and pushed as
+  `1c4131224ee10189c2a42659cf24d25701d695e2`, with ValentinHirschi as both
+  author and committer. Counter13 reproduces the known GL00 evaluator counts
+  without changing any state hash. CLI13 starts at 06:22:39.323946 UTC, with
+  the same 2,400 s cap and its 30 GiB guard armed from launch.
+- Integration check66 passes in 9.53 s and build8 passes in 3m24s. Four
+  immutable executables from clean `1c4131224` are bound by
+  `validation_candidate_1c413/final_build_manifest.json`; fourteen current
+  boundary checks are queued behind CLI13. The 167-case scalar matrix, three
+  physical route tests, final repeated generations and both runtime-point
+  gates remain pending on this implementation.
+
+### 2026-09-13 — Independent additive tensor preprocessing
+
+- CLI13 completes all ten forest nodes in 913.929492 s: root 19.978591 s
+  and nine nonroot nodes 893.948735 s. Full dispatch accounting is
+  6.167046 s (0.68987% of nonroot generation), pending a successful complete
+  generation receipt. It uses 13 canonical source descriptors, 15 distinct
+  ordered-capacity source keys, 127 requests, 201 candidates and 8,494 mapped
+  native rows. A full-ancestry comparison with CLI12 matches source/capacity,
+  scored candidate, selected-row and outer-choice multisets; these counts alone
+  do not certify exact coefficients or immutable assignment equality.
+- CLI13 network parsing takes 213.163113 s, followed by 153.504 ms for 476
+  aliases over 653 scalar terms (4,272,626 bytes). The next six-second profile
+  has 97 samples with zero lost: 92.78% include boundary preparation and 85.57%
+  include network extraction. Offline source resolution places 83 samples at
+  the whole-network extraction of a ready sum boundary, not extraction of
+  individual sum arms. The preceding operator-mask hotspot is absent from
+  the >=1% report. CLI13 remains immutable under its original cap and guard.
+- The next shared fix stays in EvaluatorStack::preprocess_atom: normalize once,
+  contract each already-existing top-level additive term in its own network,
+  restore its local aliases, and bulk-add scalar outputs before global evaluator
+  optimization. No products, powers or nested sums are distributed. Independent
+  review confirms that open tensor zeros remain invalid scalar outputs and
+  aliases must resolve before combining independent stores. Three regressions
+  cover the whole-network finite-component oracle, factorized scalar aliases,
+  contraction-induced cancellation and open indices. Check67 passes in 10.05 s;
+  focused nextest24 is building. A separate normalization interval and per-term
+  indices preserve meaningful preprocessing timing accounting.
+- Nextest24 builds in 3m25s and passes 37 of 38 selected checks. Its only
+  failure is the newly added alias oracle comparing a tensor-library floating
+  coefficient 4.0 structurally with integer 4. The assertion now requires exact
+  zero after subtraction, with no tolerance and no factor expansion. This is
+  a routine test representation correction authorized by the user's standing
+  instruction. The whole-network oracle also covers the existing fallback and
+  both contraction modes. Check68 passes in 8.16 s; broader nextest25 is running
+  with the curated profile and zero retries. The initial nextest24 invocation
+  used the default profile and retried its failure once; it is retained as a
+  failed diagnostic, not clean coverage.
+- CLI13 reaches its unchanged 2,400 s cap: termination is requested at
+  2,400.179081 s, outer wall is 2,402.146918 s, exit -15, and peak RSS is
+  21,493,309,440 bytes. Its 30 GiB guard does not intervene. Boundary
+  preparation never completes, so no evaluator, saved state, production forest
+  export or runtime measurement exists. The corresponding erased-3D card
+  remains unrun. This is an incomplete diagnostic, not a successful timing ratio.
+- The existing artifact parser now has a separate evaluator timing ledger;
+  all 40 synthetic controls pass (27 previous controls plus 13 new ones).
+  It accounts for normalization + per-term parsing + per-term execution +
+  finalization/alias restoration/addition/destruction residual, validating term
+  counts, ordering and complete successful execution. Boundary preparation is
+  a subset of parsing; cumulative milestones are never summed as phase times.
+  Historical unindexed parsing retains its normalization-inclusive meaning.
+  The old parser is preserved and the new parser has SHA-256
+  `6ca6934c6a367426ad0e5c5f91ea274c1d39f72a927c725dbd5789c4bcbedcb9`.
+- All fourteen frozen `1c4131224` boundary checks pass: four UV composition
+  checks in 22.184 s, seven cut/threshold checks in 18.088 s, two API checks
+  in 4.427 s and analytic renormalization in 0.423 s. These validate the
+  operator-merging revision, before additive preprocessing.
+- Nextest25 builds in 2m51s and passes 306 of 307 broader UV, CFF, numerator
+  and evaluator checks in 47.752 s. The same new alias fixture still fails:
+  floating zero is not the canonical Atom::Zero used by is_zero. Comparing the
+  complete original outputs confirms that only the two 4.0 versus 4 coefficient
+  spellings differ. The independent trace oracle now uses the tensor library's
+  explicit f64 coefficient representation and restores exact structural Atom
+  equality; no physics value, tolerance or factorization changes. Focused
+  nextest26 is rebuilding after check69. Clippy10 passes with the same three
+  tuple-complexity warnings (2m39s including its wait for the build lock).
+- Check69 passes in 7.73 s. Focused nextest26 builds in 2m27s and passes all
+  five evaluator-preprocessing checks in 0.253 s, including the corrected exact
+  alias oracle. Together with nextest25 this covers all 307 selected checks;
+  the only intervening change was the new test's coefficient representation.
+  No physical expectation or tolerance was changed. Final clippy11 is running.
+- Clippy11 passes in 18.11 s with the same three tuple-complexity warnings.

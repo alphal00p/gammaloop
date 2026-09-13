@@ -584,7 +584,6 @@ impl EvaluatorStack {
             "Evaluator timing milestone"
         );
         // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
-        let instant = std::time::Instant::now();
         let network_input = if settings.do_algebra {
             let color_simplified = a.as_atom_view().simplify_color_with(
                 ColorSimplifySettings::default().with_cof_dimension_invariants(),
@@ -613,168 +612,204 @@ impl EvaluatorStack {
             );
             a.as_atom_view().to_cof_dimension_invariants()
         };
+        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+            stage = "evaluator_stack_parse_atom_normalization_done",
+            atom_index,
+            elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+            "Normalized evaluator input before independent scalar contractions"
+        );
         crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
             stage = "evaluator_stack_parse_atom_before_network_parse",
             atom_index,
             log.atom = network_input,
             "Evaluator atom before network parsing"
         );
-        let mut net = network_input.parse_into_net()?;
+        // Each existing top-level summand is an independent scalar contraction.
+        // Keeping its network local avoids repeatedly scanning unrelated terms
+        // during boundary extraction. Products, powers and nested sums retain
+        // their grouping; the resulting scalars are reunited before optimization.
+        let terms = if let AtomView::Add(sum) = network_input.as_view() {
+            sum.iter().collect::<Vec<_>>()
+        } else {
+            vec![network_input.as_view()]
+        };
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-            stage = "evaluator_stack_parse_atom_net_done",
+            stage = "evaluator_stack_parse_atom_terms_start",
             atom_index,
-            elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-            "Evaluator timing milestone"
+            term_count = terms.len(),
+            "Contracting independent scalar summands"
         );
+        let result = terms
+            .into_iter()
+            .enumerate()
+            .map(|(term_index, term)| -> Result<Atom> {
+                let term_started = std::time::Instant::now();
+                let mut net = term.parse_into_net()?;
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_net_done",
+                    atom_index,
+                    term_index,
+                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
 
-        // println!("Net: {}", net.dot_pretty());
-        let scalar_aliases = net.alias_scalar_refs(|_, scalar| {
-            scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
-        });
-        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-            stage = "evaluator_stack_parse_atom_scalar_aliases_done",
-            atom_index,
-            threshold_bytes = NETWORK_SCALAR_ALIAS_MIN_BYTES,
-            aliases_created = scalar_aliases.aliases_created(),
-            aliased_terms = scalar_aliases.aliased_terms(),
-            aliased_bytes = scalar_aliases.aliased_bytes(),
-            max_aliased_bytes = scalar_aliases.max_aliased_bytes(),
-            elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-            "Evaluator timing milestone"
-        );
-        // Prepare only the finite component contraction. Raw symbolic networks
-        // used by Taylor expansion retain their original product/sum grouping.
-        let contraction_preparation_started = std::time::Instant::now();
-        let closed_sum_boundaries = net.graph.contract_ready_sum_boundaries();
-        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-            stage = "evaluator_stack_parse_atom_tensor_boundaries_done",
-            atom_index,
-            closed_sum_boundaries,
-            elapsed_ms = contraction_preparation_started.elapsed().as_secs_f64() * 1000.0,
-            "Prepared finite tensor contractions through pending sums"
-        );
-        crate::debug_tags!(#generation, #compile, #term, #dump;
-            stage = "evaluator_stack_parse_atom_network_dump",
-            atom_index,
-            file.atom = %a.as_atom_view().to_canonical_string(),
-            file.network = %net.dot_pretty(),
-            "Parsed evaluator network dump"
-        );
+                // println!("Net: {}", net.dot_pretty());
+                let scalar_aliases = net.alias_scalar_refs(|_, scalar| {
+                    scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
+                });
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_scalar_aliases_done",
+                    atom_index,
+                    term_index,
+                    threshold_bytes = NETWORK_SCALAR_ALIAS_MIN_BYTES,
+                    aliases_created = scalar_aliases.aliases_created(),
+                    aliased_terms = scalar_aliases.aliased_terms(),
+                    aliased_bytes = scalar_aliases.aliased_bytes(),
+                    max_aliased_bytes = scalar_aliases.max_aliased_bytes(),
+                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
+                // Prepare only the finite component contraction. Raw symbolic networks
+                // used by Taylor expansion retain their original product/sum grouping.
+                let contraction_preparation_started = std::time::Instant::now();
+                let closed_sum_boundaries = net.graph.contract_ready_sum_boundaries();
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_tensor_boundaries_done",
+                    atom_index,
+                    term_index,
+                    closed_sum_boundaries,
+                    elapsed_ms = contraction_preparation_started.elapsed().as_secs_f64() * 1000.0,
+                    "Prepared finite tensor contractions through pending sums"
+                );
+                crate::debug_tags!(#generation, #compile, #term, #dump;
+                    stage = "evaluator_stack_parse_atom_network_dump",
+                    atom_index,
+                    term_index,
+                    file.atom = %term.to_canonical_string(),
+                    file.network = %net.dot_pretty(),
+                    "Parsed evaluator network dump"
+                );
 
-        let parse_elapsed = instant.elapsed();
-        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-            stage = "evaluator_stack_parse_atom_parse_elapsed",
-            atom_index,
-            elapsed_ms = parse_elapsed.as_secs_f64() * 1000.0,
-            "Evaluator timing milestone"
-        );
-        let instant = std::time::Instant::now();
+                let parse_elapsed = term_started.elapsed();
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_parse_elapsed",
+                    atom_index,
+                    term_index,
+                    elapsed_ms = parse_elapsed.as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
+                let instant = std::time::Instant::now();
 
-        macro_rules! execute_min_result_rank {
-            ($execution_strategy:ty) => {
-                match settings.tensor_network_contraction_order {
-                    TensorNetworkContractionOrder::IntermediateCost => net
-                        .execute::<$execution_strategy, MinIntermediateCost, _, _, _>(
+                macro_rules! execute_min_result_rank {
+                    ($execution_strategy:ty) => {
+                        match settings.tensor_network_contraction_order {
+                            TensorNetworkContractionOrder::IntermediateCost => net
+                                .execute::<$execution_strategy, MinIntermediateCost, _, _, _>(
+                                TENSORLIB.read().unwrap().deref(),
+                                FUN_LIB.deref(),
+                            ),
+                            TensorNetworkContractionOrder::SparseAtomAware => net
+                                .execute::<$execution_strategy, MinResultRank, _, _, _>(
+                                TENSORLIB.read().unwrap().deref(),
+                                FUN_LIB.deref(),
+                            ),
+                            TensorNetworkContractionOrder::AtomAware => net
+                                .execute::<$execution_strategy, MinResultRankWith<
+                                    { PAIR_SCORE_ATOM_AWARE },
+                                    { DEFAULT_EXACT_JOIN_LIMIT },
+                                >, _, _, _>(
+                                    TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()
+                                ),
+                            TensorNetworkContractionOrder::ResultRankOnly => net
+                                .execute::<$execution_strategy, MinResultRankWith<
+                                    { PAIR_SCORE_RESULT_RANK_ONLY },
+                                    { DEFAULT_EXACT_JOIN_LIMIT },
+                                >, _, _, _>(
+                                    TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()
+                                ),
+                            TensorNetworkContractionOrder::EntryAware => net
+                                .execute::<$execution_strategy, MinResultRankWith<
+                                    { PAIR_SCORE_ENTRY_AWARE },
+                                    { DEFAULT_EXACT_JOIN_LIMIT },
+                                >, _, _, _>(
+                                    TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()
+                                ),
+                        }
+                    };
+                }
+
+                match settings.spenso_execution_mode {
+                    (ExecutionMode::Sequential, ContractionMode::SmallestDegree) => {
+                        net.execute::<Sequential, SmallestDegree, _, _, _>(
                             TENSORLIB.read().unwrap().deref(),
                             FUN_LIB.deref(),
-                        ),
-                    TensorNetworkContractionOrder::SparseAtomAware => net
-                        .execute::<$execution_strategy, MinResultRank, _, _, _>(
-                            TENSORLIB.read().unwrap().deref(),
-                            FUN_LIB.deref(),
-                        ),
-                    TensorNetworkContractionOrder::AtomAware => {
-                        net.execute::<$execution_strategy, MinResultRankWith<
-                            { PAIR_SCORE_ATOM_AWARE },
-                            { DEFAULT_EXACT_JOIN_LIMIT },
-                        >, _, _, _>(
-                            TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()
-                        )
+                        )?;
                     }
-                    TensorNetworkContractionOrder::ResultRankOnly => net
-                        .execute::<$execution_strategy, MinResultRankWith<
-                            { PAIR_SCORE_RESULT_RANK_ONLY },
-                            { DEFAULT_EXACT_JOIN_LIMIT },
-                        >, _, _, _>(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()),
-                    TensorNetworkContractionOrder::EntryAware => {
-                        net.execute::<$execution_strategy, MinResultRankWith<
-                            { PAIR_SCORE_ENTRY_AWARE },
-                            { DEFAULT_EXACT_JOIN_LIMIT },
-                        >, _, _, _>(
-                            TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()
-                        )
+                    (ExecutionMode::Sequential, ContractionMode::MinResultRank) => {
+                        execute_min_result_rank!(Sequential)?;
+                    }
+                    (ExecutionMode::SequentialRef, ContractionMode::SmallestDegree) => {
+                        net.execute::<SequentialRef, SmallestDegree, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                    (ExecutionMode::SequentialRef, ContractionMode::MinResultRank) => {
+                        execute_min_result_rank!(SequentialRef)?;
+                    }
+                    (ExecutionMode::SequentialExtract, ContractionMode::SmallestDegree) => {
+                        net.execute::<SequentialExtract, SmallestDegree, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                    (ExecutionMode::SequentialExtract, ContractionMode::MinResultRank) => {
+                        execute_min_result_rank!(SequentialExtract)?;
+                    }
+                    _ => {
+                        net.execute::<Sequential, SmallestDegree, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
                     }
                 }
-            };
-        }
 
-        match settings.spenso_execution_mode {
-            (ExecutionMode::Sequential, ContractionMode::SmallestDegree) => {
-                net.execute::<Sequential, SmallestDegree, _, _, _>(
-                    TENSORLIB.read().unwrap().deref(),
-                    FUN_LIB.deref(),
-                )?;
-            }
-            (ExecutionMode::Sequential, ContractionMode::MinResultRank) => {
-                execute_min_result_rank!(Sequential)?;
-            }
-            (ExecutionMode::SequentialRef, ContractionMode::SmallestDegree) => {
+                // println!("Executing ", net.dot_pretty());
                 net.execute::<SequentialRef, SmallestDegree, _, _, _>(
                     TENSORLIB.read().unwrap().deref(),
                     FUN_LIB.deref(),
                 )?;
-            }
-            (ExecutionMode::SequentialRef, ContractionMode::MinResultRank) => {
-                execute_min_result_rank!(SequentialRef)?;
-            }
-            (ExecutionMode::SequentialExtract, ContractionMode::SmallestDegree) => {
-                net.execute::<SequentialExtract, SmallestDegree, _, _, _>(
-                    TENSORLIB.read().unwrap().deref(),
-                    FUN_LIB.deref(),
-                )?;
-            }
-            (ExecutionMode::SequentialExtract, ContractionMode::MinResultRank) => {
-                execute_min_result_rank!(SequentialExtract)?;
-            }
-            _ => {
-                net.execute::<Sequential, SmallestDegree, _, _, _>(
-                    TENSORLIB.read().unwrap().deref(),
-                    FUN_LIB.deref(),
-                )?;
-            }
-        }
 
-        // println!("Executing ", net.dot_pretty());
-        net.execute::<SequentialRef, SmallestDegree, _, _, _>(
-            TENSORLIB.read().unwrap().deref(),
-            FUN_LIB.deref(),
-        )?;
+                let execute_elapsed = instant.elapsed();
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_execute_elapsed",
+                    atom_index,
+                    term_index,
+                    elapsed_ms = execute_elapsed.as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_execute_done",
+                    atom_index,
+                    term_index,
+                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
 
-        let execute_elapsed = instant.elapsed();
-        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-            stage = "evaluator_stack_parse_atom_execute_elapsed",
-            atom_index,
-            elapsed_ms = execute_elapsed.as_secs_f64() * 1000.0,
-            "Evaluator timing milestone"
-        );
-        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-            stage = "evaluator_stack_parse_atom_execute_done",
-            atom_index,
-            elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-            "Evaluator timing milestone"
-        );
-
-        let result = net
-            .result_scalar()
-            .map(|a| match a {
-                ExecutionResult::One => Atom::num(1),
-                ExecutionResult::Zero => Atom::Zero,
-                ExecutionResult::Val(v) => v.into_owned(),
+                net.result_scalar()
+                    .map(|a| match a {
+                        ExecutionResult::One => Atom::num(1),
+                        ExecutionResult::Zero => Atom::Zero,
+                        ExecutionResult::Val(v) => v.into_owned(),
+                    })
+                    .map(|root| net.resolve_scalar_aliases(&scalar_aliases, root))
+                    .map_err(|a| {
+                        Report::from(a)
+                            .with_note(|| format!("Network looks like: {}", net.dot_pretty()))
+                    })
             })
-            .map(|root| net.resolve_scalar_aliases(&scalar_aliases, root))
-            .map_err(|a| {
-                Report::from(a).with_note(|| format!("Network looks like: {}", net.dot_pretty()))
-            });
+            .collect::<Result<Vec<_>>>()
+            .map(Atom::add_many);
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
             stage = "evaluator_stack_parse_atom_done",
             atom_index,
@@ -2150,6 +2185,118 @@ mod tests {
         .unwrap();
 
         assert!((scalar - algebraic_scalar).expand().is_zero());
+    }
+
+    #[test]
+    fn evaluator_preprocess_additive_tensor_terms_matches_whole_network() {
+        test_initialise().unwrap();
+        let index = parse_lit!(spenso::mink(4, 1));
+        let temporal = GS.energy_delta(index.as_view());
+        let momentum =
+            GS.emr_vec_index(EdgeIndex(7), index.as_view()) + GS.ose(EdgeIndex(7)) * &temporal;
+        let numerator = &momentum * &momentum + Atom::num(3) * &temporal * &momentum + Atom::num(5);
+        let mut whole = numerator.parse_into_net().unwrap();
+        whole
+            .execute::<SequentialRef, SmallestDegree, _, _, _>(
+                TENSORLIB.read().unwrap().deref(),
+                FUN_LIB.deref(),
+            )
+            .unwrap();
+        let ExecutionResult::Val(expected) = whole.result_scalar().unwrap() else {
+            panic!("expected a nonconstant scalar");
+        };
+        for mode in [
+            ExecutionMode::Sequential,
+            ExecutionMode::SequentialRef,
+            ExecutionMode::SequentialExtract,
+            ExecutionMode::Parallel,
+        ] {
+            for (contraction, order) in [
+                (
+                    ContractionMode::SmallestDegree,
+                    TensorNetworkContractionOrder::IntermediateCost,
+                ),
+                (
+                    ContractionMode::MinResultRank,
+                    TensorNetworkContractionOrder::IntermediateCost,
+                ),
+                (
+                    ContractionMode::MinResultRank,
+                    TensorNetworkContractionOrder::SparseAtomAware,
+                ),
+                (
+                    ContractionMode::MinResultRank,
+                    TensorNetworkContractionOrder::AtomAware,
+                ),
+                (
+                    ContractionMode::MinResultRank,
+                    TensorNetworkContractionOrder::ResultRankOnly,
+                ),
+                (
+                    ContractionMode::MinResultRank,
+                    TensorNetworkContractionOrder::EntryAware,
+                ),
+            ] {
+                let settings = EvaluatorSettings {
+                    spenso_execution_mode: (mode, contraction),
+                    tensor_network_contraction_order: order,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    EvaluatorStack::preprocess_atom(&numerator, 0, &settings).unwrap(),
+                    *expected,
+                    "{mode:?}, {contraction:?}, {order:?}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn evaluator_preprocess_restores_each_summands_scalar_aliases() {
+        test_initialise().unwrap();
+        let coefficients: Vec<_> = [
+            symbol!("evaluator_test::sum_coefficient_left"),
+            symbol!("evaluator_test::sum_coefficient_right"),
+        ]
+        .into_iter()
+        .map(|symbol| {
+            Atom::add_many((0..512).map(|i| function!(symbol, i)).collect::<Vec<_>>()).pow(7)
+        })
+        .collect();
+        assert!(coefficients.iter().all(|coefficient| {
+            coefficient.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
+        }));
+        let numerator = Bispinor {}.new_rep(4).g(9, 9) * &coefficients[0]
+            + Bispinor {}.new_rep(4).g(8, 8) * &coefficients[1];
+        let expected = Atom::num(4.0) * &coefficients[0] + Atom::num(4.0) * &coefficients[1];
+        let scalar =
+            EvaluatorStack::preprocess_atom(&numerator, 0, &EvaluatorSettings::default()).unwrap();
+        // Tensor-library entries carry f64 coefficients; exact Atom equality
+        // checks both aliases without expanding the factorized scalar blocks.
+        assert_eq!(scalar, expected);
+    }
+
+    #[test]
+    fn evaluator_preprocess_preserves_closed_zeros_and_rejects_open_sums() {
+        test_initialise().unwrap();
+        let settings = EvaluatorSettings::default();
+        let index = parse_lit!(spenso::mink(4, 1));
+        let spatial = GS.emr_vec_index(EdgeIndex(7), index.as_view());
+        let temporal = GS.energy_delta(index.as_view());
+        let closed_zero = &spatial * &temporal;
+        let cancellation =
+            Bispinor {}.new_rep(4).g(9, 9) - Bispinor {}.new_rep(4).g(8, 8) + closed_zero;
+        assert!(
+            EvaluatorStack::preprocess_atom(&cancellation, 0, &settings)
+                .unwrap()
+                .is_zero()
+        );
+        assert!(EvaluatorStack::preprocess_atom(&(spatial + temporal), 0, &settings).is_err());
+        assert!(
+            EvaluatorStack::preprocess_atom(&Atom::Zero, 0, &settings)
+                .unwrap()
+                .is_zero()
+        );
     }
 
     #[test]

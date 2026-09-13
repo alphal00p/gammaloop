@@ -427,9 +427,14 @@ projected local4D are summed representations and reject that request.
 
 ### 3.3 Tensor-network contraction order
 
-Evaluator construction parses the factorized numerator into a Spenso network,
-aliases large scalar references, and contracts its tensor products before
-resolving those aliases. At this finite component boundary, a ready tensor
+Evaluator construction normalizes its factorized input once, then parses each
+existing top-level summand into an independent Spenso network. This bounds
+boundary extraction to the current summand instead of repeatedly scanning the
+complete additive input. Products, powers and nested sums retain their grouping.
+Each network aliases large scalar references and contracts its tensor products
+before resolving its own aliases. Scalar results are combined in one bulk sum
+before global evaluator optimization; open tensors, including open zero tensors,
+remain invalid scalar outputs. At this finite component boundary, a ready tensor
 whose exposed indices all contract with a pending tensor sum is attached to
 each immediate sum branch first. Eligible leaves of the same sum move together,
 so its branches and boundary are reconstructed once. This reduces the sum's
