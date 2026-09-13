@@ -25,8 +25,10 @@ only a temporary fixture for generic integration/UI tests and is not a second
 physical parameterization. The
 `ProcessIntegrand::evaluate_reference_coordinates` entry point now provides a
 loaded-process coordinate-batch hook with exact `1/N` weights and diagnostics;
-discrete graph/channel fixture coverage and the full saved-state assertions
-remain open.
+`evaluate_reference_discrete_coordinates` and `group_sampling_channel_ids` add
+the corresponding explicit canonical `(group, orientation, channel)` route.
+Focused discrete decoding/order coverage is in place; the full saved-state
+amplitude/cross-section assertions remain open.
 discrete graph sampler now carries the selected canonical partition factor
 with the parent-frame map Jacobian, including for the direct momentum route;
 the obsolete `DiscreteGraphSample::DiscreteMultiChanneling` representation has
@@ -61,7 +63,9 @@ surface metadata and prepared cut maps remain open until their context and
 partition-density contracts are complete.
 
 The first process-level acceptance probe now integrates a normalized Gaussian
-through the canonical compiled bridge and checks the map partition. The full
+through the canonical compiled bridge and checks the map partition. The loaded
+process API now drives both continuous and explicit canonical discrete
+selections without reconstructing a channel index. The full
 amplitude/cross-section saved-state harness, moments, absent/pinched branches,
 and multi-channel grid checks remain to be added. They validate the production
 replacement for the deleted standalone tests; they must not recreate a second
