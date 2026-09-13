@@ -24,9 +24,11 @@ alternative multichannel enumeration.
 
 The map kernels include exact eager/dual Symbolica Jacobians, affine LMB maps,
 regular and implicit radial maps, bounded products and ordered `then` maps.
-A product currently supports disjoint blocks with at most one explicit surface;
-ordered maps derive later centers/root contexts from earlier blocks and their
-inverse. Root residuals must be certified; narrow brackets alone do not suffice.
+Products support disjoint, independently evaluable blocks; ordered maps derive
+later centers/root contexts from earlier blocks and their inverse. The X2 source
+generalizes the shared traversal to multiple explicit surface blocks; nested
+mixed compositions remain rejected until their dependency semantics are covered.
+Root residuals must be certified; narrow brackets alone do not suffice.
 Inverse maps no longer clip recovered coordinates, and native finiteness checks
 retain arbitrary precision. The implicit kernel has a normalized fallback for
 a clearly positive origin residual under its increasing-root contract; that
@@ -39,8 +41,10 @@ minimum, while general fibers can reuse the existing SOCP center solver. An
 SOCP result is only a candidate: its actual native energy residual must be
 strictly negative. Failed solves or ambiguous minimum signs produce typed
 numerical errors rather than certifying absence. Per-draw errors enter precision
-rescue; errors while binding frozen geometry currently abort transactional
-warmup, so that boundary still needs retry support.
+rescue. The X2 source also retains typed frozen-binding failures in the existing
+native caches. Warmup requires one configured precision usable for every graph;
+structural errors or failure at every configured precision invalidate the epoch.
+The focused and broader X2 core/API numerical gates pass.
 Soft/collinear primitives and general joint normal/star charts remain unfinished.
 
 A standalone `phase_space(cut(...))` channel now uses the actual graph energy
@@ -48,18 +52,20 @@ equation, warmup masses, fixed external momenta and full parent-frame radial
 chart. It retains the auxiliary LU scale instead of reducing the integration
 dimension. Thus it solves its own directional cut radius before evaluating the
 physical integrand. Cut IDs are validated metadata, not channel IDs; identical
-energy-edge sets with incompatible energy shifts are rejected. Cut/left/right
-compositions remain guarded until their conditional maps preserve the cut
-kinematics and provide consistent forward and foreign inverse densities.
+energy-edge sets with incompatible energy shifts are rejected. X2 binds
+cut/left/right compositions through the same qualified block plan and native
+implicit kernels. Exact signed routing must certify that a side displacement
+preserves the host cut and that each target depends only on available inputs.
+The generated-graph numerical gates pass, including both sides and boosted frames.
 
-The deferred boundary retains canonical coordinates and a typed prepared cut
-context. `PreparedCutSamplingContext::from_lu_sample` uses that sample's positive
-`t*` and complete parent frame. `DeferredCrossSectionSamplingState` and
-`SamplingChannelRuntimeContexts` carry distinct per-channel cut and evaluator
-contexts. `PreparedCrossSectionMapEvaluation<T>` records a mapped sample,
-Jacobians and prepared context together. These records are interfaces for the
-remaining conditional maps; they do not themselves implement those maps or
-replace the high-precision LU solver.
+The conditional boundary consumes actual preceding raw coordinates, solves the
+host's native `t*`, and prepares physical complement data before the side map.
+Each foreign inverse performs this preparation at its own supplied point.
+The active physical-to-raw affine map retains both `t*` and the external-momentum
+shift of the native parent. One registry holds geometry qualified by target,
+host/side, parent, active edges and ordered prerequisites. The earlier unused
+complete prepared-sample records have been replaced by this existing embedding
+boundary; unsampled active coordinates are never passed as a complete LU sample.
 
 The partition supports exact map densities and explicit Symbolica-compiled
 `singularity_proxy` scores in complete raw coordinates. Every selected channel
@@ -177,7 +183,9 @@ physical propagator sets remain distinct from the common output-coordinate
 frame. Explicit proper subspace/complement registration now works in the master parent
 LMB, with active cube axes in canonical parent order. A surface shorthand orders
 the complement first; explicit dependent products are rejected in favor of
-`then`. Arbitrary native parents and automatic amplitude discovery remain open.
+`then`. X2 resolves alternative complete parents and their requested order by
+reordering a clone of the existing generated basis, retaining external routing.
+Automatic amplitude discovery remains open.
 
 Named standalone cut channels now accept `radial_profile="lu_h"` and its expert
 table. They inherit actual runtime h settings, compile the fitted log-logistic
@@ -256,7 +264,7 @@ strongly undersampled; no reliable efficiency or convergence gain is established
 settings, maxima, state hashes and the limitations of this comparison.
 
 These source changes and bounded pilots do not establish a GL638 sampling improvement. Conditional
-sides, physical pinched-root classification, automatic channel construction,
+side validation, physical pinched-root classification, automatic channel construction,
 the complete saved-state acceptance harness and all-orientation GL638 improvement
 remain open. See the independently reviewed
 [LU profile study](docs/research/advanced_sampling/LU_H_MATCHED_SAMPLING.md).
@@ -459,7 +467,31 @@ fiber geometry. Root integrates and audits their interfaces before the next
 source milestone. Experiments record the frozen source and binary hashes;
 subsequent source edits must not silently change a running comparison.
 
-The next fiber slice reuses `Esurface`, `SubspaceData`, the current implicit
+The conditional-amplitude/reference milestone is committed and pushed as
+`f89addb17`. X2 now has three source owners: shared AST/block traversal, one
+qualified geometry registry and affine embedding; production cut/side binding
+with the serial-bubble and boosted-parent oracles; and numeric warmup-failure
+caching through the existing precision retry owner, plus amplitude/interface
+migration. Root runs the combined gates after these interfaces are coherent.
+The bounded frozen-X1 amplitude inventory is complete; do not expand it while
+conditional cross-section production and the GL638 direct-H check are pending.
+
+The X2 implementation now passes all 141 selected core/API tests, including
+saved-state reference acceptance, summed/explicit physical agreement, the
+conditional nine-dimensional raised-cut fixture and frozen-geometry precision
+rescue. A real LU-h profile also passes the conditional-channel inverse and
+full-Jacobian checks. The shifted bridge reference moment was corrected and
+tested; prior frozen-pilot evidence uses an unaffected reference owner. Core/API
+and Python-feature checking pass, as do all eleven differential regression tests.
+Formatting and clippy pass; new test warnings are resolved, and the existing
+1624-byte map-enum size warning is unchanged from the previous milestone.
+The detailed checks, tolerances and limitations
+are in [the X2 ledger](docs/research/advanced_sampling/CROSS_SECTION_DELIVERY_PATH.md#x2-generated-graph-validation).
+The next numerical dependency is the actual GL638 direct-H map on the reduced
+state, then all-orientation acceptance and matched physical comparisons.
+
+
+The shared fiber slice reuses `Esurface`, `SubspaceData`, the current implicit
 radial kernel and the existing overlap center solver. The solver may propose a
 center in binary64, but native evaluation must certify it strictly interior.
 Solver failure is not an absence certificate. The current invariant-margin
@@ -470,17 +502,17 @@ independent kite/direct-H oracle. More general unresolved cases remain explicit
 until certified. Prepare the center and classification once per complement,
 before directional root iteration. A prepared host's side is optional, and an
 existing surface's radius belongs to the sampled direction, not to a universal
-host record. These are upcoming implementation requirements, not completed
-conditional-cut support.
+host record. X2 connects these owners to conditional cuts; its combined
+generated-graph and subsequent GL638 gates must establish the claimed support.
 
 Production and diagnostic map preparation must use the same dependency graph.
-The current typed prepared-cut records are constructed only in tests: wiring
-them into actual sampling is an explicit deliverable, not already completed
-conditional-cut support. A host cut context must exist independently of an
+The former complete prepared-cut records had only test callers and could not
+represent a block whose active coordinates were not yet sampled. X2 uses the
+existing embedding's native preparation callback instead. Its cut data exist independently of an
 optional Left/Right designation; a target can be another energy surface evaluated
 on that host. Resolve geometry from graph energy equations, not exclusively from
-the threshold-CT registry. Before this slice, settle one explicit host/frame
-selector and per-child block description in the existing Symbolica-parsed model.
+the threshold-CT registry. The shared Symbolica model uses `at_cut` for the
+explicit host and `block` for per-child active coordinates.
 Current `on_cut` numbers are CutIds, not edge sets; never silently reinterpret
 them. A `cut(...)` expression identifies physical edges and is resolved against
 the loaded graph. No sampling selector restricts the physical cut sum.

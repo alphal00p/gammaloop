@@ -1,5 +1,6 @@
 use crate::integrands::process::{
     GenericEvaluatorFloat, LmbMultiChannelingSetup, SamplingChannelBridge,
+    sampling_maps::SamplingEvaluationError,
 };
 use crate::model::Model;
 use crate::momentum::sample::{
@@ -1269,13 +1270,15 @@ impl FloatLike for f128 {
 
     fn sampling_bridge_cache(
         setup: &LmbMultiChannelingSetup,
-    ) -> &RuntimeCache<SamplingChannelBridge<Self>> {
+    ) -> &RuntimeCache<std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>>
+    {
         &setup.sampling_bridge_quad
     }
 
     fn sampling_bridge_cache_mut(
         setup: &mut LmbMultiChannelingSetup,
-    ) -> &mut RuntimeCache<SamplingChannelBridge<Self>> {
+    ) -> &mut RuntimeCache<std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>>
+    {
         &mut setup.sampling_bridge_quad
     }
 
@@ -1364,13 +1367,15 @@ impl FloatLike for ArbPrec {
 
     fn sampling_bridge_cache(
         setup: &LmbMultiChannelingSetup,
-    ) -> &RuntimeCache<SamplingChannelBridge<Self>> {
+    ) -> &RuntimeCache<std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>>
+    {
         &setup.sampling_bridge_arb
     }
 
     fn sampling_bridge_cache_mut(
         setup: &mut LmbMultiChannelingSetup,
-    ) -> &mut RuntimeCache<SamplingChannelBridge<Self>> {
+    ) -> &mut RuntimeCache<std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>>
+    {
         &mut setup.sampling_bridge_arb
     }
 
@@ -1744,8 +1749,8 @@ pub trait FloatLike:
 
     /// Runtime stability level represented by this native scalar type.
     fn sampling_precision() -> crate::settings::runtime::Precision;
-    fn sampling_bridge_cache(setup: &LmbMultiChannelingSetup) -> &RuntimeCache<SamplingChannelBridge<Self>>;
-    fn sampling_bridge_cache_mut(setup: &mut LmbMultiChannelingSetup) -> &mut RuntimeCache<SamplingChannelBridge<Self>>;
+    fn sampling_bridge_cache(setup: &LmbMultiChannelingSetup) -> &RuntimeCache<std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>>;
+    fn sampling_bridge_cache_mut(setup: &mut LmbMultiChannelingSetup) -> &mut RuntimeCache<std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>>;
 
 
     #[allow(clippy::wrong_self_convention)]
@@ -2699,13 +2704,15 @@ impl FloatLike for f64 {
 
     fn sampling_bridge_cache(
         setup: &LmbMultiChannelingSetup,
-    ) -> &RuntimeCache<SamplingChannelBridge<Self>> {
+    ) -> &RuntimeCache<std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>>
+    {
         &setup.sampling_bridge
     }
 
     fn sampling_bridge_cache_mut(
         setup: &mut LmbMultiChannelingSetup,
-    ) -> &mut RuntimeCache<SamplingChannelBridge<Self>> {
+    ) -> &mut RuntimeCache<std::result::Result<SamplingChannelBridge<Self>, SamplingEvaluationError>>
+    {
         &mut setup.sampling_bridge
     }
 

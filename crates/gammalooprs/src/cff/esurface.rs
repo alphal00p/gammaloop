@@ -183,7 +183,9 @@ impl Esurface {
     }
 
     /// Bind a routed energy surface on active coordinates, conditional on an
-    /// already sampled complement in the same complete parent LMB. Preparation
+    /// already sampled complement in the same complete parent LMB. Later
+    /// coordinates may be omitted only when every energy row vanishes on them.
+    /// Preparation
     /// never consumes active cube coordinates, so its derivatives occupy only
     /// the off-diagonal block of an ordered composition's Jacobian. Active
     /// outputs follow `subspace.iter_lmb_indices()` (parent-index order), while
@@ -217,16 +219,35 @@ impl Esurface {
         let mut covered = active.iter().chain(complement).copied().collect_vec();
         covered.sort();
         if active.is_empty()
-            || covered != (0..lmb.loop_edges.len()).map(LoopIndex).collect_vec()
+            || covered.windows(2).any(|pair| pair[0] == pair[1])
+            || covered.iter().any(|index| index.0 >= lmb.loop_edges.len())
             || external_momenta.len() != lmb.ext_edges.len()
             || external_momenta.is_empty()
         {
             return Err(eyre!(
-                "sampling fiber requires a complete disjoint active/complement parent frame and complete external momenta: active {active:?}, complement {complement:?}, parent {:?}, external count {} (expected {})",
+                "sampling fiber requires disjoint active/complement slots in its parent frame and complete external momenta: active {active:?}, complement {complement:?}, parent {:?}, external count {} (expected {})",
                 lmb.loop_edges,
                 external_momenta.len(),
                 lmb.ext_edges.len(),
             ));
+        }
+        // Later blocks may be absent from this prefix only when their exact
+        // routed rows vanish. Their zero placeholders then represent proven
+        // spectators, never unknown active coordinates of the energy equation.
+        for index in (0..lmb.loop_edges.len())
+            .map(LoopIndex)
+            .filter(|index| !covered.contains(index))
+        {
+            if self
+                .energies
+                .iter()
+                .any(|edge| lmb.edge_signatures[*edge].internal[index] != SignOrZero::Zero)
+            {
+                return Err(eyre!(
+                    "sampling fiber depends on unsampled parent edge {}",
+                    lmb.loop_edges[index]
+                ));
+            }
         }
         for momentum in external_momenta {
             if !momentum.temporal.value.0.is_finite()
@@ -433,7 +454,18 @@ impl Esurface {
             let tolerance = zero.epsilon()
                 * zero.from_usize(64 * (surface.energies.len() + 1))
                 * scale.max(zero.one());
-            let normalized = |value: &F<T>| (-value / F::<T>::from_f64(settings.kinematics.e_cm)).0;
+            let normalized = |value: &F<T>| -> Result<T> {
+                let margin = -value / F::<T>::from_f64(settings.kinematics.e_cm);
+                if !margin.0.is_finite() {
+                    return Err(SamplingEvaluationError::Unrepresentable {
+                        operation: "normalized sampling surface margin",
+                        detail: "finite surface value and energy scale produce a nonfinite margin"
+                            .to_owned(),
+                    }
+                    .into());
+                }
+                Ok(margin.0)
+            };
             let status = if let Some(minimum) = minimum {
                 if !minimum.0.is_finite() || minimum.abs() <= tolerance {
                     return Err(SamplingEvaluationError::UncertainGeometry { detail: format!("two-energy fiber minimum is not sign-certified: minimum={minimum}, tolerance={tolerance}, edges={:?}", surface.energies) }.into());
@@ -443,7 +475,7 @@ impl Esurface {
                         "positive exact two-energy minimum {minimum}"
                     ))?
                 } else {
-                    PreparedSurfaceStatus::existing(Some(normalized(&minimum)))?
+                    PreparedSurfaceStatus::existing(Some(normalized(&minimum)?))?
                 }
             } else {
                 // The sum of masses is a necessary lower bound for every
@@ -537,7 +569,7 @@ impl Esurface {
                         }
                         .into());
                     }
-                    PreparedSurfaceStatus::existing(Some(normalized(&value)))?
+                    PreparedSurfaceStatus::existing(Some(normalized(&value)?))?
                 }
             };
             if status.is_existing() {
@@ -592,7 +624,7 @@ impl Esurface {
 
     /// Shared routed ray evaluation for full-space and proper-fiber charts.
     #[allow(clippy::too_many_arguments)]
-    fn sampling_evaluate_ray<T: FloatLike>(
+    pub(crate) fn sampling_evaluate_ray<T: FloatLike>(
         &self,
         radius: &F<T>,
         velocity: &LoopMomenta<F<T>>,

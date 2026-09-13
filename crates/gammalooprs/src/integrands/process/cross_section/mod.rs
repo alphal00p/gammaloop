@@ -13,11 +13,16 @@ use crate::{
         evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
             GraphTermEvaluationContext, ParamBuilder, SamplingChannelBridge,
-            SamplingChannelCompileContext, SamplingChannelId,
+            SamplingChannelCompileContext, SamplingChannelId, SamplingCutSide,
             evaluators::{ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single},
             graph_to_group_id_for_group_structure,
             param_builder::LUParams,
             prepare_buffered_event,
+            sampling_maps::{
+                ImplicitSurfaceRadialMap, SamplingEvaluationError, SamplingMapAffine,
+                SamplingMapComponent, SamplingMapComposition, SamplingMapEmbedding,
+            },
+            sampling_selection::CompiledSamplingMap,
             threshold_multiplier::{
                 ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierExpression,
                 ThresholdMultiplierLayout,
@@ -27,7 +32,10 @@ use crate::{
     model::Model,
     momentum::{
         Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum,
-        sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
+        sample::{
+            ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta, MomentumSample, Subspace,
+            SubspaceData,
+        },
     },
     observables::{
         AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup,
@@ -58,7 +66,7 @@ use crate::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape,
         },
-        newton_solver::{NewtonIterationResult, RadialRootIdentity},
+        newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
         serde_utils::SmartSerde,
     },
 };
@@ -70,6 +78,7 @@ use eyre::eyre;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     slice,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -1657,9 +1666,38 @@ impl GraphTerm for CrossSectionGraphTerm {
         );
         context.orientation = orientation;
         if catalogue.named_entries().any(|channel| {
-            matches!(&channel.map, super::SamplingMapDefinition::PhaseSpace(inner)
-                if matches!(inner.as_ref(), super::SamplingMapDefinition::Cut(_)))
+            channel
+                .blocks
+                .iter()
+                .any(|block| block.target.energy_edges().is_some())
         }) {
+            if self.graph.loop_momentum_basis
+                != self.multi_channeling_setup.graph.loop_momentum_basis
+            {
+                return Err(eyre!(
+                    "cross-section surface sampling for graph '{}' requires the master's complete loop/external routing; graph parent {:?}, master '{}' parent {:?}",
+                    self.graph.name,
+                    self.graph.loop_momentum_basis.loop_edges,
+                    self.multi_channeling_setup.graph.name,
+                    self.multi_channeling_setup
+                        .graph
+                        .loop_momentum_basis
+                        .loop_edges,
+                ));
+            }
+            if external_momenta.len() != self.graph.loop_momentum_basis.ext_edges.len()
+                || external_momenta
+                    .iter()
+                    .flatten()
+                    .any(|value| !value.is_finite())
+            {
+                return Err(eyre!(
+                    "cross-section surface sampling for graph '{}' needs {} finite external four-momenta, received {:?}",
+                    self.graph.name,
+                    self.graph.loop_momentum_basis.ext_edges.len(),
+                    external_momenta
+                ));
+            }
             let cached_masses = self.real_mass_vec.as_ref().ok_or_else(|| {
                 eyre!(
                     "physical-cut sampling for graph '{}' requires warmup mass data",
@@ -1671,16 +1709,15 @@ impl GraphTerm for CrossSectionGraphTerm {
                     .map(F::<T>::from_ff64)
                     .unwrap_or_else(|| zero.clone())
             });
-            let externals = crate::momentum::sample::ExternalFourMomenta::from_iter(
-                external_momenta.iter().map(|momentum| {
+            let externals =
+                ExternalFourMomenta::from_iter(external_momenta.iter().map(|momentum| {
                     FourMomentum::from_args(
                         F(momentum[0].clone()),
                         F(momentum[1].clone()),
                         F(momentum[2].clone()),
                         F(momentum[3].clone()),
                     )
-                }),
-            );
+                }));
             for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
                 if !self.counterterm.cut_group_is_active(cut_group_id) {
                     continue;
@@ -1692,16 +1729,18 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .iter()
                         .map(|edge| edge.0)
                         .sorted()
-                        .collect::<Vec<_>>();
+                        .collect_vec();
                     let selected = catalogue.named_entries().any(|channel| {
-                        matches!(&channel.map, super::SamplingMapDefinition::PhaseSpace(inner)
-                            if matches!(inner.as_ref(), super::SamplingMapDefinition::Cut(selected) if selected == &edges))
+                        channel
+                            .blocks
+                            .iter()
+                            .any(|block| block.target.host_cut() == Some(edges.as_slice()))
                     });
                     let cut_ids = context.physical_cut_ids.entry(edges.clone()).or_default();
                     if selected && let Some(previous_id) = cut_ids.first() {
                         let previous = &self.cut_esurface[CutId(*previous_id)];
-                        if previous.external_shift.iter().sorted().collect::<Vec<_>>()
-                            != surface.external_shift.iter().sorted().collect::<Vec<_>>()
+                        if previous.external_shift.iter().sorted().collect_vec()
+                            != surface.external_shift.iter().sorted().collect_vec()
                         {
                             return Err(eyre!(
                                 "physical-cut sampling for graph '{}' is ambiguous: cut IDs {} and {} have the same energy edges {:?} but incompatible external shifts {:?} and {:?}",
@@ -1720,22 +1759,426 @@ impl GraphTerm for CrossSectionGraphTerm {
                     // the root evaluator; a named profile inherits this bound.
                     context
                         .physical_cut_max_occurrences
-                        .entry(edges.clone())
+                        .entry(edges)
                         .and_modify(|order| {
                             *order = (*order).max(cut_group.related_esurface_group.max_occurence)
                         })
                         .or_insert(cut_group.related_esurface_group.max_occurence);
-                    if !selected || cut_ids.len() > 1 {
+                }
+            }
+            for channel in catalogue.named_entries() {
+                let parent = &channel.definition.parent_lmb;
+                let lmbs = TiVec::from(vec![
+                    self.multi_channeling_setup.sampling_parent_lmb(parent)?,
+                ]);
+                let basis_id = LmbIndex::from(0);
+                let lmb = &lmbs[basis_id];
+                let frame = self
+                    .multi_channeling_setup
+                    .lmb_frame_map(lmb, external_momenta)?;
+                // LU fixes generation K=0. In an affine native frame L=A K+BQ,
+                // its fixed point is BQ; scaling L itself would change the cut.
+                let origin = frame
+                    .inverse(&vec![zero.0.clone(); 3 * parent.len()], &[])?
+                    .coordinates;
+                let origin_loops = LoopMomenta::from_iter(origin.chunks_exact(3).map(|v| {
+                    ThreeMomentum::new(F(v[0].clone()), F(v[1].clone()), F(v[2].clone()))
+                }));
+                for block in &channel.blocks {
+                    let Some(edges) = block.target.energy_edges() else {
+                        continue;
+                    };
+                    if context
+                        .surface_maps
+                        .contains_key(&block.geometry_key(parent))
+                    {
                         continue;
                     }
-                    let map = surface.sampling_radial_map(
-                        &self.graph.loop_momentum_basis,
-                        &masses,
-                        &externals,
-                        e_cm * parameterization_settings.b,
-                        parameterization_settings.power,
+                    let host_edges = block.target.host_cut().ok_or_else(|| eyre!(
+                        "cross-section surface channel '{}' needs at_cut(cut(...), ...) or a preceding phase_space(cut(...)) host for target {:?}",
+                        channel.name, block.target))?;
+                    let cut_id = context.physical_cut_ids.get(host_edges)
+                        .and_then(|ids| ids.iter().find(|id| channel.definition.on_cut.is_empty() || channel.definition.on_cut.contains(id)))
+                        .copied().map(CutId).ok_or_else(|| eyre!(
+                            "sampling channel '{}' requests inactive or excluded host cut {:?}; active cuts {:?}, on_cut {:?}",
+                            channel.name, host_edges, context.physical_cut_ids, channel.definition.on_cut))?;
+                    let host = &self.cut_esurface[cut_id];
+                    let active = block
+                        .active_lmb
+                        .iter()
+                        .map(|edge| {
+                            LoopIndex(
+                                parent
+                                    .iter()
+                                    .position(|candidate| candidate == edge)
+                                    .expect("resolved active parent edge"),
+                            )
+                        })
+                        .collect_vec();
+                    let preceding = block
+                        .preceding_lmb
+                        .iter()
+                        .map(|edge| {
+                            LoopIndex(
+                                parent
+                                    .iter()
+                                    .position(|candidate| candidate == edge)
+                                    .expect("resolved prior parent edge"),
+                            )
+                        })
+                        .collect_vec();
+                    let remaining = block
+                        .remaining_lmb
+                        .iter()
+                        .map(|edge| {
+                            LoopIndex(
+                                parent
+                                    .iter()
+                                    .position(|candidate| candidate == edge)
+                                    .expect("resolved remaining parent edge"),
+                            )
+                        })
+                        .collect_vec();
+                    let certify_independent = |surface: &Esurface,
+                                               omitted: &[LoopIndex],
+                                               role: &str|
+                     -> Result<()> {
+                        let dependencies = surface
+                            .energies
+                            .iter()
+                            .flat_map(|edge| {
+                                let row = lmb.edge_signatures[*edge].internal.to_momtrop_format();
+                                omitted.iter().filter_map(move |index| {
+                                    (row[index.0] != 0).then_some((
+                                        edge.0,
+                                        parent[index.0],
+                                        row[index.0],
+                                    ))
+                                })
+                            })
+                            .collect_vec();
+                        if !dependencies.is_empty() {
+                            return Err(eyre!(
+                                "sampling channel '{}' target {:?}, parent {:?}: {} depends on omitted/active coordinates (energy edge, LMB edge, signed coefficient) {:?}; host {:?}, active {:?}, preceding {:?}, remaining {:?}",
+                                channel.name,
+                                block.target,
+                                parent,
+                                role,
+                                dependencies,
+                                host_edges,
+                                block.active_lmb,
+                                block.preceding_lmb,
+                                block.remaining_lmb
+                            ));
+                        }
+                        Ok(())
+                    };
+                    let map = if block.target.is_phase_space() {
+                        let outside = preceding.iter().chain(&remaining).copied().collect_vec();
+                        certify_independent(host, &outside, "phase-space cut")?;
+                        // This ray is centered at the actual LU fixed point, not
+                        // a generic SOCP center. Only then does t*=R(direction)/r.
+                        let zero_velocity =
+                            LoopMomenta::from_iter((0..parent.len()).map(|_| {
+                                ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())
+                            }));
+                        let value = host
+                            .sampling_evaluate_ray(
+                                &zero,
+                                &zero_velocity,
+                                &origin_loops,
+                                &externals,
+                                &masses,
+                                lmb,
+                            )
+                            .0;
+                        if !value.0.is_finite()
+                            || value >= -F::<T>::from_f64(e_cm) * zero.epsilon() * zero.from_i64(64)
+                        {
+                            return Err(SamplingEvaluationError::UncertainGeometry { detail: format!(
+                                "phase-space channel '{}' host {:?} is not certified strictly interior at its LU fixed point BQ={:?}: eta={}; a shifted geometric center cannot retain the LU R/r profile",
+                                channel.name, host_edges, origin, value) }.into());
+                        }
+                        let surface = host.clone();
+                        let lmb = lmb.clone();
+                        let masses = masses.clone();
+                        let externals = externals.clone();
+                        let origin_loops = origin_loops.clone();
+                        let active = active.clone();
+                        let dimension = 3 * active.len();
+                        let evaluator = Arc::new(move |direction: &[T], radius: T| {
+                            let radius = F(radius);
+                            let mut velocity =
+                                LoopMomenta::from_iter((0..lmb.loop_edges.len()).map(|_| {
+                                    ThreeMomentum::new(radius.zero(), radius.zero(), radius.zero())
+                                }));
+                            for (&index, v) in active.iter().zip(direction.chunks_exact(3)) {
+                                velocity[index] = ThreeMomentum::new(
+                                    F(v[0].clone()),
+                                    F(v[1].clone()),
+                                    F(v[2].clone()),
+                                );
+                            }
+                            let (value, derivative) = surface.sampling_evaluate_ray(
+                                &radius,
+                                &velocity,
+                                &origin_loops,
+                                &externals,
+                                &masses,
+                                &lmb,
+                            );
+                            Ok((value.0, derivative.0))
+                        });
+                        let map =
+                            CompiledSamplingMap::ImplicitSurface(ImplicitSurfaceRadialMap::new(
+                                dimension,
+                                vec![zero.0.clone(); dimension],
+                                e_cm * parameterization_settings.b,
+                                parameterization_settings.power,
+                                evaluator,
+                            )?);
+                        let translation = block
+                            .active_lmb
+                            .iter()
+                            .flat_map(|edge| {
+                                let index = parent
+                                    .iter()
+                                    .position(|candidate| candidate == edge)
+                                    .unwrap();
+                                origin[3 * index..3 * index + 3].iter().cloned()
+                            })
+                            .collect_vec();
+                        let matrix = (0..dimension)
+                            .map(|i| {
+                                (0..dimension)
+                                    .map(|j| if i == j { zero.one().0 } else { zero.0.clone() })
+                                    .collect()
+                            })
+                            .collect();
+                        CompiledSamplingMap::Affine {
+                            map: Box::new(map),
+                            frame: SamplingMapAffine::new(matrix, translation)?,
+                        }
+                    } else {
+                        certify_independent(
+                            host,
+                            &active.iter().chain(&remaining).copied().collect_vec(),
+                            "host cut",
+                        )?;
+                        let associations = match block.target.cut_side() {
+                            Some(SamplingCutSide::Left) => {
+                                Some(&self.cut_threshold_associations[cut_id].left)
+                            }
+                            Some(SamplingCutSide::Right) => {
+                                Some(&self.cut_threshold_associations[cut_id].right)
+                            }
+                            None => None,
+                        };
+                        // The full-graph equation includes fixed other-side cut
+                        // energies. Resolving only runtime CTs would wrongly omit
+                        // direct sampling targets whose subtraction is inactive.
+                        let candidates = self
+                            .topological_threshold_esurfaces
+                            .iter_enumerated()
+                            .filter(|(id, surface)| {
+                                surface
+                                    .energies
+                                    .iter()
+                                    .map(|edge| edge.0)
+                                    .sorted()
+                                    .eq(edges.iter().copied())
+                                    && associations.is_none_or(|associations| {
+                                        associations
+                                            .iter()
+                                            .any(|entry| entry.topological_threshold_id == *id)
+                                    })
+                            })
+                            .collect_vec();
+                        let (_, surface) = candidates.first().ok_or_else(|| eyre!(
+                            "sampling channel '{}' has no {:?} target {:?} on host cut {} {:?}; topological candidates {:?}",
+                            channel.name, block.target.cut_side(), edges, cut_id.0, host_edges,
+                            self.topological_threshold_esurfaces.iter_enumerated().map(|(id, surface)| (id, &surface.energies, &surface.external_shift)).collect_vec()))?;
+                        if candidates.iter().any(|(_, candidate)| {
+                            candidate.external_shift.iter().sorted().collect_vec()
+                                != surface.external_shift.iter().sorted().collect_vec()
+                        }) {
+                            return Err(eyre!(
+                                "sampling channel '{}' target {:?} is ambiguous across topological equations {:?}",
+                                channel.name,
+                                block.target,
+                                candidates
+                            ));
+                        }
+                        certify_independent(surface, &remaining, "threshold target")?;
+                        let subspace = SubspaceData::new_from_parent_basis_edges(
+                            &block
+                                .active_lmb
+                                .iter()
+                                .copied()
+                                .map(EdgeIndex)
+                                .collect_vec(),
+                            &self.graph.full_filter(),
+                            basis_id,
+                            &self.graph,
+                            &lmbs,
+                        )?;
+                        let complement = (0..parent.len())
+                            .map(LoopIndex)
+                            .filter(|index| !active.contains(index))
+                            .collect_vec();
+                        let fiber = surface.sampling_radial_map_in_subspace(
+                            &subspace,
+                            &lmbs,
+                            &self.graph,
+                            &masses,
+                            &externals,
+                            &complement,
+                            settings,
+                            e_cm * parameterization_settings.b,
+                            parameterization_settings.power,
+                        )?;
+                        let host = host.clone();
+                        let lmb = self.graph.loop_momentum_basis.clone();
+                        let masses = masses.clone();
+                        let externals = externals.clone();
+                        let origin = origin.clone();
+                        let frame = frame.clone();
+                        let active_dimension = 3 * active.len();
+                        let active = active.clone();
+                        let preceding = preceding.clone();
+                        let identity = RadialRootIdentity::new(format!(
+                            "sampling host graph '{}' cut {}",
+                            self.graph.name, cut_id.0
+                        ));
+                        let transform = Arc::new(move |raw_prior: &[T]| {
+                            if raw_prior.len() != 3 * preceding.len() {
+                                return Err(eyre!(
+                                    "sampling host requires {} declared prior components, received {}",
+                                    3 * preceding.len(),
+                                    raw_prior.len()
+                                ));
+                            }
+                            // Only signature-certified null directions remain
+                            // unspecified here. Their BQ representative cannot
+                            // affect either the host root or the target equation.
+                            let mut native = origin.clone();
+                            for (&index, values) in preceding.iter().zip(raw_prior.chunks_exact(3))
+                            {
+                                native[3 * index.0..3 * index.0 + 3].clone_from_slice(values);
+                            }
+                            let master = frame.forward(&native, &[])?.point;
+                            let loops = LoopMomenta::from_iter(master.chunks_exact(3).map(|v| {
+                                ThreeMomentum::new(
+                                    F(v[0].clone()),
+                                    F(v[1].clone()),
+                                    F(v[2].clone()),
+                                )
+                            }));
+                            let zero = F(native[0].clone()).zero();
+                            let center =
+                                LoopMomenta::from_iter((0..lmb.loop_edges.len()).map(|_| {
+                                    ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())
+                                }));
+                            let (guess, _) = host.get_radius_guess(&loops, &externals, &lmb);
+                            let solution = RadialRootDiagnostics::default()
+                                .solve(
+                                    &identity,
+                                    &zero,
+                                    &guess,
+                                    |t| {
+                                        host.sampling_evaluate_ray(
+                                            t, &loops, &center, &externals, &masses, &lmb,
+                                        )
+                                    },
+                                    &zero.one(),
+                                    2000,
+                                    64,
+                                    &F::from_f64(e_cm),
+                                )
+                                .map_err(|error| SamplingEvaluationError::UncertifiedRoot {
+                                    detail: format!("{identity:?}: {error:?}"),
+                                })?;
+                            let tau = solution.solution;
+                            let physical_master = master
+                                .into_iter()
+                                .map(|value| (F(value) * &tau).0)
+                                .collect_vec();
+                            if physical_master.iter().any(|value| !value.is_finite()) {
+                                return Err(SamplingEvaluationError::Unrepresentable {
+                                    operation: "conditional LU kinematics",
+                                    detail: format!(
+                                        "nonfinite prepared generation coordinates at t={tau}"
+                                    ),
+                                }
+                                .into());
+                            }
+                            let physical_native = frame.inverse(&physical_master, &[])?.coordinates;
+                            let physical_prior = complement
+                                .iter()
+                                .flat_map(|index| {
+                                    physical_native[3 * index.0..3 * index.0 + 3]
+                                        .iter()
+                                        .cloned()
+                                })
+                                .collect_vec();
+                            let inverse_tau = tau.one() / &tau;
+                            let dimension = 3 * active.len();
+                            let matrix = (0..dimension)
+                                .map(|i| {
+                                    (0..dimension)
+                                        .map(|j| {
+                                            if i == j {
+                                                inverse_tau.0.clone()
+                                            } else {
+                                                zero.0.clone()
+                                            }
+                                        })
+                                        .collect()
+                                })
+                                .collect();
+                            let translation = active
+                                .iter()
+                                .flat_map(|index| {
+                                    origin[3 * index.0..3 * index.0 + 3].iter().map(|value| {
+                                        ((tau.one() - &inverse_tau) * F(value.clone())).0
+                                    })
+                                })
+                                .collect_vec();
+                            if physical_prior
+                                .iter()
+                                .chain(&translation)
+                                .any(|value| !value.is_finite())
+                            {
+                                return Err(SamplingEvaluationError::Unrepresentable { operation: "conditional LU frame", detail: format!("nonfinite prepared context or affine translation at t={tau}") }.into());
+                            }
+                            // This matrix is exactly I/t for a validated positive
+                            // root: a constructor failure, including determinant
+                            // underflow/overflow, requires native precision rescue.
+                            let affine = SamplingMapAffine::new(matrix, translation).map_err(
+                                |error| SamplingEvaluationError::Unrepresentable {
+                                    operation: "conditional LU Jacobian",
+                                    detail: format!(
+                                        "could not represent t^(-{dimension}) at t={tau}: {error}"
+                                    ),
+                                },
+                            )?;
+                            Ok((physical_prior, affine))
+                        });
+                        CompiledSamplingMap::Embedded(
+                            SamplingMapEmbedding::from_composition(
+                                SamplingMapComposition::then(vec![Box::new(fiber)])?,
+                                (0..active_dimension).collect(),
+                            )?
+                            .with_context_transform(transform),
+                        )
+                    };
+                    context.insert_surface_map(
+                        block.target.clone(),
+                        parent.clone(),
+                        block.active_lmb.clone(),
+                        block.preceding_lmb.clone(),
+                        map,
                     )?;
-                    context.insert_implicit_surface(edges, context.parent_lmb.clone(), map)?;
                 }
             }
         }
@@ -1758,19 +2201,6 @@ impl GraphTerm for CrossSectionGraphTerm {
             &self.multi_channeling_setup.graph.name,
             parameterization_settings,
         )
-    }
-
-    fn sampling_channel_requires_deferred_cut_context(
-        &self,
-        channel_id: SamplingChannelId,
-        parameterization_settings: &ParameterizationSettings,
-    ) -> Result<bool> {
-        self.multi_channeling_setup
-            .sampling_channel_requires_deferred_cut_context(
-                channel_id,
-                &self.multi_channeling_setup.graph.name,
-                parameterization_settings,
-            )
     }
 
     fn sampling_channel_ids(

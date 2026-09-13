@@ -5404,7 +5404,8 @@ rotation_axis = [{type = "x"}, {type = "y"}]
                     ]
                 })
                 .collect::<Vec<_>>();
-            term.sampling_setup().lmb_frame_map(basis, &externals)?
+            let setup = term.sampling_setup();
+            setup.lmb_frame_map(&setup.all_bases[basis], &externals)?
         };
         let kernel = SamplingMapKernel::new(
             SamplingMapDefinition::Lmb(vec![0]),

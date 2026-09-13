@@ -500,8 +500,16 @@ numeric caches before rebuilding from directly edited inputs.
 Standalone `phase_space(cut(...))` maps use the real graph's cut equation,
 warmup masses and fixed external data through the shared implicit radial kernel.
 They retain the auxiliary raw radial variable. Conditional cut/left/right maps
-remain guarded until their geometry and all foreign-channel densities use the
-correct cut data. The old LMB-specific partition implementation is removed.
+now share the Symbolica-resolved ordered block plan and one geometry registry.
+The registry key includes qualified target, native parent, active edges and
+ordered prerequisites. Exact routing rejects any unsampled dependency or side
+displacement that would change the host cut. The existing embedding prepares
+the host's native LU root from actual preceding coordinates, then maps physical
+active coordinates back to raw coordinates with the complete affine shift and
+determinant. Every foreign inverse prepares its own supplied raw point. The
+complete native map is routed to the master frame once. The combined generated
+fixture gates pass; general nested mixed compositions remain rejected.
+The old LMB-specific partition implementation is removed.
 Default single-basis routing and obsolete weight settings remain migration work.
 
 A named standalone cut channel accepts `radial_profile="lu_h"`, or its detailed
@@ -513,11 +521,16 @@ density uses the supplied raw radius. Named proposals share registered cut
 geometry without overwriting each other's settings. The largest raised order
 is collected before equivalent cut geometries are deduplicated; this initial
 fit does not optimize derivative envelopes. Physical h and all residue/CT
-derivatives remain unchanged. The profile is rejected on amplitude channels.
+derivatives remain unchanged. A composed channel may attach this profile to its
+unique phase-space block. The chart requires the actual LU fixed point to be
+certified interior; a geometric recentering cannot silently change the meaning
+of its radial LU scale. The profile is rejected on amplitude channels.
 
 Explicit amplitude E-surfaces populate the production compile context from real
-catalogue equations, masses and external momenta. The master parent LMB supports
-both full-space and proper-fiber charts. Active axes follow canonical parent
+catalogue equations, masses and external momenta. Complete native parent LMBs
+support both full-space and proper-fiber charts. Requested parent order is
+resolved by reordering a clone of an existing generated basis, preserving its
+external routing and the catalogue's immutable IDs. Active axes follow parent
 order; an explicit surface shorthand samples its complement first, then the
 conditional active block. Dependent products are rejected. Ambiguous shifts,
 unsupported frames and rank-deficient requests fail clearly.
@@ -531,16 +544,18 @@ sign tolerances include cancelling routed inputs. Empty-complement preparation
 is frozen at warmup. Certified absence or explicit pinched status retains a
 normalized full-support fallback; a failed solve or numerically ambiguous sign
 requires a typed numerical error. Per-draw preparation participates in precision
-rescue; frozen-geometry binding errors currently abort transactional warmup and
-need a follow-up in that existing owner. This is not an interval certificate. Arbitrary
-parents, automatic discovery and production cut/left/right preparation remain
-unfinished. The selected UV-finite two-loop amplitude benchmarks are recorded in
+rescue. Frozen-binding successes and typed numerical failures use the same
+native runtime caches. Warmup requires one configured precision usable for all
+graphs; structural errors and failure at every precision invalidate the epoch.
+This is not an interval certificate. Automatic discovery remains unfinished.
+The combined X2 numerical gates for conditional cuts and frozen-binding rescue
+pass, including the broader 141-test core/API run. The selected UV-finite two-loop amplitude benchmarks are recorded in
 [the amplitude study](../research/advanced_sampling/AMPLITUDE_BENCHMARK_CANDIDATES.md).
 The kernel certifies residuals and rejects unrepresentable inverse points without
 clipping.
 The shared radial profile focuses on both signed distances to the threshold
 with a common analytic inverse. Native kernel tests cover Quad and arbitrary
-precision. Components, affine/composed maps, prepared cut records, eager/dual
+precision. Components, affine/composed maps, conditional cut data, eager/dual
 evaluations and foreign-density partitions now retain native values throughout.
 Typed numerical errors distinguish unrepresentable derived coordinates/scores
 from invalid original inputs. The implicit root uses the existing native

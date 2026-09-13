@@ -46,8 +46,9 @@ use crate::{
         HasIntegrand,
         evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
-            ParamBuilder, SamplingChannelBridge, SamplingChannelCompileContext, SamplingChannelId,
-            SamplingMapDefinition, SamplingSurfaceGeometry,
+            CompiledSamplingMap, ParamBuilder, SamplingChannelBridge,
+            SamplingChannelCompileContext, SamplingChannelId, SamplingMapDefinition,
+            SurfaceRadialMap,
             evaluators::{ActiveF64Backend, EvaluatorStack},
             graph_to_group_id_for_group_structure,
             threshold_multiplier::ThresholdMultiplierEvaluatorCollection,
@@ -56,7 +57,7 @@ use crate::{
     model::Model,
     momentum::{
         FourMomentum, Helicity, Rotation, RotationMethod, SignOrZero, ThreeMomentum,
-        sample::{ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta, MomentumSample},
+        sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample},
         signature::SignatureLike,
     },
     observables::{
@@ -1191,17 +1192,12 @@ impl GraphTerm for AmplitudeGraphTerm {
         context.orientation = orientation;
         let surface_channels = catalogue
             .named_entries()
-            .filter_map(|channel| {
-                let children = match &channel.map {
-                    SamplingMapDefinition::Surface(_) => std::slice::from_ref(&channel.map),
-                    SamplingMapDefinition::Product(children)
-                    | SamplingMapDefinition::Then(children) => children,
-                    _ => return None,
-                };
-                children.iter().find_map(|map| match map {
-                    SamplingMapDefinition::Surface(edges) => Some((channel, edges)),
-                    _ => None,
-                })
+            .flat_map(|channel| {
+                channel
+                    .blocks
+                    .iter()
+                    .filter(|block| block.target.energy_edges().is_some())
+                    .map(move |block| (channel, block))
             })
             .collect_vec();
         if !surface_channels.is_empty() {
@@ -1253,28 +1249,29 @@ impl GraphTerm for AmplitudeGraphTerm {
                 (0..context.n_loop_momenta)
                     .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
             );
-            let lmbs = TiVec::from(vec![lmb.clone()]);
-            for (channel, edges) in surface_channels {
-                if channel.definition.parent_lmb != context.parent_lmb {
+            for (channel, block) in surface_channels {
+                let SamplingMapDefinition::Surface(edges) = &block.target else {
                     return Err(eyre!(
-                        "amplitude surface channel '{}' for graph '{}' currently requires master parent {:?}, received parent {:?}, subspace {:?}; alternate-parent maps are not yet supported",
+                        "amplitude sampling channel '{}' cannot use a Cutkosky host or side qualifier: {:?}",
                         channel.name,
-                        self.graph.name,
-                        context.parent_lmb,
-                        channel.definition.parent_lmb,
-                        channel.definition.subspace_lmb,
+                        block.target
                     ));
-                }
+                };
+                let lmbs = TiVec::from(vec![
+                    self.multi_channeling_setup
+                        .sampling_parent_lmb(&channel.definition.parent_lmb)?,
+                ]);
+                let parent_id = LmbIndex::from(0);
+                let lmb = &lmbs[parent_id];
                 let subspace = crate::momentum::sample::SubspaceData::new_from_parent_basis_edges(
-                    &channel
-                        .definition
-                        .subspace_lmb
+                    &block
+                        .active_lmb
                         .iter()
                         .copied()
                         .map(EdgeIndex)
                         .collect_vec(),
                     &self.graph.full_filter(),
-                    LmbIndex::from(0),
+                    parent_id,
                     &self.graph,
                     &lmbs,
                 )?;
@@ -1283,10 +1280,22 @@ impl GraphTerm for AmplitudeGraphTerm {
                     .iter_basis_edges(&lmbs)
                     .map(|edge| edge.0)
                     .collect_vec();
-                let complement = (0..context.n_loop_momenta)
-                    .map(LoopIndex)
-                    .filter(|index| !active.contains(index))
-                    .collect_vec();
+                let complement = block
+                    .preceding_lmb
+                    .iter()
+                    .map(|edge| {
+                        lmb.loop_edges
+                            .iter_enumerated()
+                            .find(|(_, candidate)| candidate.0 == *edge)
+                            .map(|(index, _)| index)
+                            .ok_or_else(|| {
+                                eyre!(
+                                    "sampling prerequisite edge {edge} is absent from parent {:?}",
+                                    channel.definition.parent_lmb
+                                )
+                            })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
                 let candidates = self
                     .esurfaces
                     .iter_enumerated()
@@ -1311,6 +1320,30 @@ impl GraphTerm for AmplitudeGraphTerm {
                             .collect_vec(),
                     ));
                 };
+                let unsampled_dependencies = block
+                    .remaining_lmb
+                    .iter()
+                    .filter(|edge| {
+                        let index = lmb
+                            .loop_edges
+                            .iter_enumerated()
+                            .find(|(_, candidate)| candidate.0 == **edge)
+                            .unwrap()
+                            .0;
+                        representative.energies.iter().any(|energy| {
+                            lmb.edge_signatures[*energy].internal[index] != SignOrZero::Zero
+                        })
+                    })
+                    .copied()
+                    .collect_vec();
+                if !unsampled_dependencies.is_empty() {
+                    return Err(eyre!(
+                        "sampling product/ordered block '{}' target {:?} depends on unsampled parent edges {:?}; sample these prerequisites in a preceding block",
+                        channel.name,
+                        block.target,
+                        unsampled_dependencies,
+                    ));
+                }
                 let rows = representative
                     .energies
                     .iter()
@@ -1377,22 +1410,26 @@ impl GraphTerm for AmplitudeGraphTerm {
                     ));
                 }
                 let beta = e_cm * parameterization_settings.b;
-                if !complement.is_empty() {
+                if active.len() < context.n_loop_momenta {
                     // Eligibility fixes the routed equation once; its body and
                     // interior center are classified for each sampled complement.
                     let Some((_, surface)) = eligible.first() else {
                         // Nonnegative external shifts certify no open interior,
                         // including exact massless pinches, without a numerical
                         // rediscovery of the minimum at every complement point.
-                        context.surfaces.insert(
-                            (edges.clone(), active_edges.clone()),
-                            SamplingSurfaceGeometry {
-                                center: vec![zero.0.clone(); 3 * active.len()],
-                                threshold_radius: None,
+                        context.insert_surface_map(
+                            block.target.clone(),
+                            channel.definition.parent_lmb.clone(),
+                            active_edges,
+                            block.preceding_lmb.clone(),
+                            CompiledSamplingMap::Surface(SurfaceRadialMap::new(
+                                3 * active.len(),
+                                vec![zero.0.clone(); 3 * active.len()],
+                                None,
                                 beta,
-                                power: parameterization_settings.power,
-                            },
-                        );
+                                parameterization_settings.power,
+                            )?),
+                        )?;
                         continue;
                     };
                     let map = surface.sampling_radial_map_in_subspace(
@@ -1406,7 +1443,13 @@ impl GraphTerm for AmplitudeGraphTerm {
                         beta,
                         parameterization_settings.power,
                     )?;
-                    context.insert_implicit_surface(edges.clone(), active_edges, map)?;
+                    context.insert_surface_map(
+                        block.target.clone(),
+                        channel.definition.parent_lmb.clone(),
+                        active_edges,
+                        block.preceding_lmb.clone(),
+                        CompiledSamplingMap::ImplicitSurface(map),
+                    )?;
                     continue;
                 }
                 let existing = eligible.first().filter(|(_, surface)| {
@@ -1446,21 +1489,27 @@ impl GraphTerm for AmplitudeGraphTerm {
                             parameterization_settings.power,
                         )?
                     };
-                    context.insert_implicit_surface(
-                        edges.clone(),
-                        context.parent_lmb.clone(),
-                        map,
+                    context.insert_surface_map(
+                        block.target.clone(),
+                        channel.definition.parent_lmb.clone(),
+                        active_edges,
+                        block.preceding_lmb.clone(),
+                        CompiledSamplingMap::ImplicitSurface(map),
                     )?;
                 } else {
-                    context.surfaces.insert(
-                        (edges.clone(), context.parent_lmb.clone()),
-                        SamplingSurfaceGeometry {
-                            center: vec![zero.0.clone(); 3 * context.n_loop_momenta],
-                            threshold_radius: None,
+                    context.insert_surface_map(
+                        block.target.clone(),
+                        channel.definition.parent_lmb.clone(),
+                        active_edges,
+                        block.preceding_lmb.clone(),
+                        CompiledSamplingMap::Surface(SurfaceRadialMap::new(
+                            3 * context.n_loop_momenta,
+                            vec![zero.0.clone(); 3 * context.n_loop_momenta],
+                            None,
                             beta,
-                            power: parameterization_settings.power,
-                        },
-                    );
+                            parameterization_settings.power,
+                        )?),
+                    )?;
                 }
             }
         }
@@ -2977,7 +3026,9 @@ mod sampling_tests {
     use super::*;
     use crate::{
         initialisation::test_initialise,
-        integrands::process::{CompiledSamplingMap, ProcessIntegrand, SamplingMapAffine},
+        integrands::process::{
+            CompiledSamplingMap, ProcessIntegrand, SamplingMapAffine, SamplingSupport,
+        },
         processes::Amplitude,
         utils::load_generic_model,
     };
@@ -3358,6 +3409,155 @@ parent_lmb = [4,6]
                 first.evaluation.integrand_result
             );
         }
+        // A depends only on q4, so its independent product block freezes the
+        // analytic two-energy center during binding. Its boosted invariant is
+        // above threshold, but the interior depth is below Double's native
+        // cancellation budget. Quad binds the same physical equation.
+        {
+            use crate::{
+                integrands::{
+                    evaluation::StabilityStatus,
+                    process::{GaussianReferenceFunction, sampling_maps::SamplingEvaluationError},
+                },
+                momentum::ExternalMomenta,
+                settings::runtime::{
+                    Precision, SamplingSettings, StabilityLevelSetting, kinematic::Externals,
+                },
+                utils::QuadFloat,
+            };
+            let mut runtime = integrand.clone();
+            let runtime_settings = runtime.get_mut_settings();
+            runtime_settings.stability.rotation_axis.clear();
+            runtime_settings.stability.levels = vec![
+                StabilityLevelSetting::default_double(),
+                StabilityLevelSetting::default_quad(),
+            ];
+            let SamplingSettings::MultiChanneling(channels) = &mut runtime_settings.sampling else {
+                unreachable!()
+            };
+            channels.parameterization_settings.power = 1.0;
+            channels
+                .parameterization_settings
+                .sampling_channels
+                .default_channel_selection = vec!["frozen_A".into()];
+            let definitions = channels
+                .parameterization_settings
+                .sampling_channels
+                .channel_definitions
+                .get_mut("massive_kite")
+                .unwrap();
+            let mut definition = definitions["C"].clone();
+            definition.around = "product(block(lmb(4),surface(3,4)),complement(6))".into();
+            definition.subspace_lmb = vec![4];
+            definitions.insert("frozen_A".into(), definition);
+            let Externals::Constant { momenta, .. } = &mut runtime_settings.kinematics.externals;
+            momenta[0] = ExternalMomenta::Independent([1.0e6 + 2.1e-6, 0.0, 0.0, 1.0e6].map(F));
+            runtime.warm_up(&model)?;
+            let ProcessIntegrand::Amplitude(amplitude) = &mut runtime else {
+                unreachable!()
+            };
+            let setup = &amplitude.data.graph_terms[0].multi_channeling_setup;
+            let failure = setup.sampling_bridge::<f64>().unwrap_err();
+            assert!(
+                matches!(
+                    failure.downcast_ref::<SamplingEvaluationError>(),
+                    Some(SamplingEvaluationError::UncertainGeometry { .. })
+                ),
+                "{failure:#}"
+            );
+            assert!(setup.sampling_bridge::<QuadFloat>().is_ok());
+            assert!(setup.sampling_catalogue.as_ref().is_some());
+            // Removing an input which a fresh bind requires proves that repeated
+            // requests reuse the cached result, without another center solve.
+            let masses = amplitude.data.graph_terms[0].real_mass_vec.take();
+            for _ in 0..3 {
+                assert_eq!(
+                    format!(
+                        "{:#}",
+                        amplitude.prepare_sampling_precision::<f64>().unwrap_err()
+                    ),
+                    format!("{failure:#}")
+                );
+                amplitude.prepare_sampling_precision::<QuadFloat>()?;
+            }
+            amplitude.data.graph_terms[0].real_mass_vec = masses;
+            let source =
+                Sample::Continuous(F(1.0), [0.19, 0.27, 0.61, 0.39, 0.72, 0.58].map(F).to_vec());
+            // q3 = q4 + Q, so the equal-mass A center is q4 = -Q/2.
+            // Keep this probe near that center instead of testing a negligible tail.
+            let reference =
+                GaussianReferenceFunction::new(5.0, vec![0.0, 0.0, -5.0e5, 0.0, 0.0, 0.0])?;
+            let rescued = runtime.evaluate_reference_sample_detailed(&source, &reference)?;
+            assert_eq!(
+                rescued.evaluation.evaluation_metadata.final_precision(),
+                Some(Precision::Quad)
+            );
+            assert!(matches!(
+                rescued.evaluation.evaluation_metadata.stability_results[0].status,
+                StabilityStatus::Unstable(0)
+            ));
+            assert!(rescued.evaluation.integrand_result.re.0 > 0.0);
+            assert!(rescued.moments.second_moment.0 > 0.0);
+            let mut quad_only = runtime.clone();
+            quad_only.get_mut_settings().stability.levels =
+                vec![StabilityLevelSetting::default_quad()];
+            quad_only.warm_up(&model)?;
+            let direct = quad_only.evaluate_reference_sample_detailed(&source, &reference)?;
+            assert_eq!(
+                rescued.evaluation.integrand_result,
+                direct.evaluation.integrand_result
+            );
+            assert_eq!(rescued.moments.second_moment, direct.moments.second_moment);
+            // No configured usable precision must fail warmup with its numerical
+            // cause, rather than publishing an epoch that can never evaluate.
+            let mut double_only = runtime.clone();
+            double_only.get_mut_settings().stability.levels =
+                vec![StabilityLevelSetting::default_double()];
+            let error = double_only.warm_up(&model).unwrap_err();
+            assert!(format!("{error:#}").contains("no wholly usable configured precision"));
+            assert!(format!("{error:#}").contains("sampling binding for graph 'massive_kite'"));
+            let ProcessIntegrand::Amplitude(amplitude) = &double_only else {
+                unreachable!()
+            };
+            assert!(
+                amplitude.data.graph_terms[0]
+                    .multi_channeling_setup
+                    .sampling_catalogue
+                    .as_ref()
+                    .is_none()
+            );
+            // A structural bind failure still invalidates all precisions even
+            // when the previous epoch contained a usable Quad binding.
+            let ProcessIntegrand::Amplitude(amplitude) = &mut runtime else {
+                unreachable!()
+            };
+            let masses = amplitude.data.graph_terms[0].real_mass_vec.take();
+            let error = amplitude.warm_up_sampling().unwrap_err();
+            assert!(error.downcast_ref::<SamplingEvaluationError>().is_none());
+            assert!(error.to_string().contains("warmup mass data"));
+            assert!(
+                amplitude.data.graph_terms[0]
+                    .multi_channeling_setup
+                    .sampling_catalogue
+                    .as_ref()
+                    .is_none()
+            );
+            amplitude.data.graph_terms[0].real_mass_vec = masses;
+            let Externals::Constant { momenta, .. } =
+                &mut runtime.get_mut_settings().kinematics.externals;
+            momenta[0] = ExternalMomenta::Independent([5.0, 0.0, 0.0, 0.0].map(F));
+            runtime.warm_up(&model)?;
+            let ProcessIntegrand::Amplitude(amplitude) = &runtime else {
+                unreachable!()
+            };
+            assert!(
+                amplitude.data.graph_terms[0]
+                    .multi_channeling_setup
+                    .sampling_bridge::<f64>()
+                    .is_ok(),
+                "changed externals must invalidate the cached Double failure"
+            );
+        }
         let mut runtime_for_rescue = integrand.clone();
         let mut seam_coordinates = None;
         let ProcessIntegrand::Amplitude(integrand) = integrand else {
@@ -3365,6 +3565,63 @@ parent_lmb = [4,6]
         };
         let term = integrand.data.graph_terms.first_mut().unwrap();
         assert_eq!(term.production_orientation_keys.len(), 18);
+        // Requested parent order changes coordinates, never the generated
+        // catalogue or its exact external routing. Compare the same native
+        // point after swapping its two loop blocks, then exercise both compiled
+        // physical channels in the common master frame.
+        {
+            use crate::integrands::process::SamplingMapComponent;
+            let setup = &term.multi_channeling_setup;
+            let generated = setup.all_bases.clone();
+            let first = setup.sampling_parent_lmb(&[5, 6])?;
+            let reversed = setup.sampling_parent_lmb(&[6, 5])?;
+            assert_eq!(
+                first.loop_edges.iter().copied().collect_vec(),
+                [EdgeIndex(5), EdgeIndex(6)]
+            );
+            assert_eq!(first.tree, reversed.tree);
+            assert_eq!(first.ext_edges, reversed.ext_edges);
+            let external = [[5.0, 0.0, 0.0, 1.0]; 2];
+            let first_point = setup
+                .lmb_frame_map(&first, &external)?
+                .forward(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[])?;
+            let reversed_point = setup
+                .lmb_frame_map(&reversed, &external)?
+                .forward(&[4.0, 5.0, 6.0, 1.0, 2.0, 3.0], &[])?;
+            assert_eq!(first_point.point, reversed_point.point);
+            assert_eq!(first_point.jacobian, reversed_point.jacobian);
+            assert_eq!(setup.all_bases, generated);
+            for invalid in [&[5][..], &[5, 5], &[5, 999]] {
+                assert!(setup.sampling_parent_lmb(invalid).is_err());
+            }
+            for parent in [vec![5, 6], vec![6, 5]] {
+                let mut parameterization =
+                    settings.sampling.get_parameterization_settings().unwrap();
+                parameterization.sampling_channels.default_channel_selection = vec!["C".into()];
+                let definition = parameterization
+                    .sampling_channels
+                    .channel_definitions
+                    .get_mut("massive_kite")
+                    .unwrap()
+                    .get_mut("C")
+                    .unwrap();
+                definition.parent_lmb = parent.clone();
+                definition.subspace_lmb = parent;
+                let bridge =
+                    term.compile_sampling_bridge(&parameterization, &settings, &external, None)?;
+                assert!(matches!(
+                    bridge.channels()[0].map,
+                    CompiledSamplingMap::Affine { .. }
+                ));
+                let coordinates = [0.19, 0.27, 0.61, 0.39, 0.72, 0.58];
+                let mapped = bridge.forward(SamplingChannelId(0), &coordinates)?;
+                let inverse = bridge.inverse(SamplingChannelId(0), &mapped.raw_coordinates)?;
+                assert!((mapped.map.jacobian * inverse.map.inverse_jacobian - 1.0).abs() < 1.0e-9);
+                for (actual, expected) in inverse.map.coordinates.iter().zip(coordinates) {
+                    assert!((actual - expected).abs() < 1.0e-10);
+                }
+            }
+        }
         // The same generated C equation also defines a genuine three-dimensional
         // fiber: k=q4 varies while l=q6 was sampled by the preceding block.
         // This factory/composition gate complements the production command-card
@@ -3437,6 +3694,54 @@ parent_lmb = [4,6]
                 1.0,
             )?;
             let cube = [19, 31, 67].map(|value| (one.from_i64(value) / one.from_i64(100)).0);
+            // A=[3,4] is independent of q6 in this parent, whereas C=[2,4,6]
+            // depends on it. Only the former may omit that later coordinate.
+            let independent = term
+                .esurfaces
+                .iter()
+                .find(|candidate| {
+                    candidate.energies == [EdgeIndex(3), EdgeIndex(4)]
+                        && candidate
+                            .compute_shift_part_from_momenta(&externals, &lmbs[LmbIndex::from(0)])
+                            < zero
+                })
+                .unwrap()
+                .sampling_radial_map_in_subspace(
+                    &subspace,
+                    &lmbs,
+                    &term.graph,
+                    &masses,
+                    &externals,
+                    &[],
+                    settings,
+                    2.0,
+                    1.0,
+                )?;
+            assert_eq!(independent.contract().support, SamplingSupport::Full);
+            let independent_point = independent.forward(&cube)?;
+            assert!(
+                independent
+                    .inverse(&independent_point.point)?
+                    .inverse_jacobian
+                    .is_finite()
+            );
+            assert!(
+                surface
+                    .sampling_radial_map_in_subspace(
+                        &subspace,
+                        &lmbs,
+                        &term.graph,
+                        &masses,
+                        &externals,
+                        &[],
+                        settings,
+                        2.0,
+                        1.0,
+                    )
+                    .unwrap_err()
+                    .to_string()
+                    .contains("depends on unsampled parent edge")
+            );
             for (numerator, denominator, existing) in
                 [(0, 1, true), (1, 1, true), (21, 10, false), (3, 1, false)]
             {
@@ -3836,12 +4141,10 @@ parent_lmb = [4,6]
                     .unwrap();
                 definition.around = "product(surface(2,4,6),complement(6))".to_owned();
                 runtime.get_mut_settings().sampling = toml::from_str(&toml::to_string(&parser)?)?;
+                let error = runtime.warm_up(&model).unwrap_err();
                 assert!(
-                    runtime
-                        .warm_up(&model)
-                        .unwrap_err()
-                        .to_string()
-                        .contains("conditional surface")
+                    format!("{error:#}").contains("depends on unsampled parent edges [6]"),
+                    "{error:#}"
                 );
             }
         }
@@ -3851,7 +4154,7 @@ parent_lmb = [4,6]
         for (around, diagnostic) in [
             (
                 "surface(2,4,6)",
-                "radial_profile=lu_h requires standalone phase_space(cut(...))",
+                "radial_profile=lu_h requires exactly one phase_space(cut(...)) block",
             ),
             (
                 "phase_space(cut(2,4,6))",

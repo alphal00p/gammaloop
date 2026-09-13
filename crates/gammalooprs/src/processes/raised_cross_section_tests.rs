@@ -1454,3 +1454,616 @@ fn lu_h_sampling_preserves_normalization_and_raised_derivative_integrals() {
         }
     }
 }
+
+#[test]
+fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
+    std::thread::Builder::new()
+        .name("conditional-cut-sampling".into())
+        .stack_size(128 * 1024 * 1024)
+        .spawn(|| {
+            use crate::{
+                DependentMomentaConstructor,
+                graph::LmbIndex,
+                integrands::process::{
+                    GaussianReferenceFunction, GraphTerm, MomentumSpaceEvaluationInput,
+                    SamplingChannelBridge, SamplingChannelBridgeAcceptanceReport, SamplingChannelId,
+                    sampling_maps::{SamplingEvaluationError, SamplingMapAffine, SamplingMapComponent},
+                },
+                momentum::{
+                    ThreeMomentum,
+                    sample::{LoopMomenta, SubspaceData},
+                },
+                settings::runtime::{
+                    DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, MultiChannelingSettings,
+                    ParameterizationSettings, SamplingChannelDefinition, SamplingRadialProfile,
+                    SamplingSettings, StabilityLevelSetting,
+                },
+                utils::{
+                    ArbPrec,
+                    newton_solver::{RadialRootDiagnostics, RadialRootIdentity},
+                },
+            };
+            use itertools::Itertools;
+            use symbolica::prelude::SingleFloat;
+            use typed_index_collections::TiVec;
+
+            test_initialise().unwrap();
+            let model = Model::from_str(SCALARS_2P_3P_MODEL.to_string(), "json").unwrap();
+            let graph = TRIPLE_DOTTED_BUBBLE.into_graph(&model).unwrap();
+            let generation = generation_settings();
+            let runtime = runtime_settings();
+            let mut cross_section = preprocess_graph(graph, &model, &generation, &runtime);
+            let definition = ProcessDefinition::from_graph_list(
+                std::slice::from_ref(&cross_section.supergraphs[0].graph),
+                GenerationType::CrossSection,
+                &model,
+            )
+            .unwrap();
+            cross_section
+                .build_integrand(
+                    &model,
+                    &definition,
+                    &GlobalSettings {
+                        generation,
+                        ..Default::default()
+                    },
+                    (&runtime).into(),
+                    &generation_pool(),
+                )
+                .unwrap();
+            let mut integrand = cross_section.integrand.take().unwrap();
+            integrand.warm_up(&model).unwrap();
+
+            for (parent, boost) in [(vec![1, 4, 7], 0.0), (vec![3, 6, 9], 1.0)] {
+                // The second parent has L=Q-k, so BQ is nonzero in a boosted
+                // frame. It catches a mistaken L_phys=t*L_raw rescaling.
+                let mut runtime = runtime.clone();
+                runtime.kinematics.externals = toml::from_str(&format!(
+                    "type='constant'\n[data]\nmomenta=[[5.0,{boost},0.0,0.0]]\nhelicities=['summed_averaged']"
+                )).unwrap();
+                let externals = runtime
+                    .kinematics
+                    .externals
+                    .get_dependent_externals::<f64>(DependentMomentaConstructor::CrossSection)
+                    .unwrap();
+                let external_arrays = externals
+                    .iter()
+                    .map(|p| {
+                        [
+                            p.temporal.value.0,
+                            p.spatial.px.0,
+                            p.spatial.py.0,
+                            p.spatial.pz.0,
+                        ]
+                    })
+                    .collect_vec();
+                let ProcessIntegrand::CrossSection(prepared) = &integrand else {
+                    unreachable!()
+                };
+                let term = &prepared.data.graph_terms[0];
+                let (host_id, host) = term
+                    .cut_esurface
+                    .iter_enumerated()
+                    .find(|(_, surface)| {
+                        surface
+                            .energies
+                            .iter()
+                            .map(|edge| edge.0)
+                            .sorted()
+                            .eq([4, 6])
+                    })
+                    .unwrap();
+                assert!(term.cut_group_data.cut_groups.iter().any(|group| {
+                    group.cuts.contains(&host_id) && group.related_esurface_group.max_occurence == 2
+                }));
+                let associations = &term.cut_threshold_associations[host_id];
+                let left =
+                    &term.topological_threshold_esurfaces[associations.left[0].topological_threshold_id];
+                let right =
+                    &term.topological_threshold_esurfaces[associations.right[0].topological_threshold_id];
+                let edge_string = |surface: &crate::cff::esurface::Esurface| {
+                    surface
+                        .energies
+                        .iter()
+                        .map(|edge| edge.0)
+                        .sorted()
+                        .join(",")
+                };
+                let cut_edges = edge_string(host);
+                let left_edges = edge_string(left);
+                let right_edges = edge_string(right);
+                let graph_name = term.graph.name.clone();
+                let lmbs = TiVec::from(vec![
+                    term.multi_channeling_setup
+                        .sampling_parent_lmb(&parent)
+                        .unwrap(),
+                ]);
+                let basis_id = LmbIndex::from(0);
+                let lmb = &lmbs[basis_id];
+                let frame = term
+                    .multi_channeling_setup
+                    .lmb_frame_map(lmb, &external_arrays)
+                    .unwrap();
+                let native_origin = frame.inverse(&[0.0; 9], &[]).unwrap().coordinates;
+                assert_eq!(
+                    native_origin,
+                    vec![boost, 0.0, 0.0, boost, 0.0, 0.0, boost, 0.0, 0.0]
+                );
+                let masses = term.graph.get_real_mass_vector::<f64>(&model);
+                let zero_loops =
+                    LoopMomenta::from_iter((0..3).map(|_| ThreeMomentum::new(F(0.0), F(0.0), F(0.0))));
+                let to_loops = |point: &[f64]| {
+                    LoopMomenta::from_iter(
+                        point
+                            .chunks_exact(3)
+                            .map(|v| ThreeMomentum::new(F(v[0]), F(v[1]), F(v[2]))),
+                    )
+                };
+                let lu = |point: &[f64]| {
+                    let loops = to_loops(point);
+                    let (guess, _) =
+                        host.get_radius_guess(&loops, &externals, &term.graph.loop_momentum_basis);
+                    RadialRootDiagnostics::default()
+                        .solve(
+                            &RadialRootIdentity::new("conditional fixture host".into()),
+                            &F(0.0),
+                            &guess,
+                            |t| {
+                                host.sampling_evaluate_ray(
+                                    t,
+                                    &loops,
+                                    &zero_loops,
+                                    &externals,
+                                    &masses,
+                                    &term.graph.loop_momentum_basis,
+                                )
+                            },
+                            &F(1.0),
+                            2000,
+                            64,
+                            &F(5.0),
+                        )
+                        .unwrap()
+                        .solution
+                        .0
+                };
+
+                let mut parameterization = ParameterizationSettings::default();
+                parameterization.sampling_channels.default_channel_selection =
+                    vec!["left_only".into(), "both".into()];
+                parameterization.sampling_channels.channel_definitions.insert(graph_name.clone(), BTreeMap::from([
+                    ("left_only".into(), SamplingChannelDefinition {
+                        around: format!("then(block(lmb({}),phase_space(cut({cut_edges}))),block(lmb({}),left(surface({left_edges}))),lmb({}))", parent[1], parent[0], parent[2]),
+                        parent_lmb: parent.clone(), on_cut: vec![host_id.0], ..Default::default()
+                    }),
+                    ("both".into(), SamplingChannelDefinition {
+                        around: format!("then(block(lmb({}),phase_space(cut({cut_edges}))),block(lmb({}),left(surface({left_edges}))),block(lmb({}),right(surface({right_edges}))))", parent[1], parent[0], parent[2]),
+                        parent_lmb: parent.clone(), on_cut: vec![host_id.0], ..Default::default()
+                    }),
+                ]));
+                let bridge = term
+                    .compile_sampling_bridge(&parameterization, &runtime, &external_arrays, None)
+                    .unwrap();
+                // An explicitly hosted graph surface remains a sampling
+                // target without any host-side CT association. A side-qualified
+                // spelling still enforces that side's physical identity.
+                let mut direct_term = term.clone();
+                direct_term.cut_threshold_associations[host_id].left.clear();
+                let mut direct_settings = parameterization.clone();
+                direct_settings.sampling_channels.default_channel_selection = vec!["direct".into()];
+                direct_settings.sampling_channels.channel_definitions.get_mut(&graph_name).unwrap().insert("direct".into(), SamplingChannelDefinition {
+                    around: format!("then(block(lmb({}),phase_space(cut({cut_edges}))),block(lmb({}),surface({left_edges})),lmb({}))", parent[1], parent[0], parent[2]),
+                    parent_lmb: parent.clone(), on_cut: vec![host_id.0], ..Default::default()
+                });
+                direct_term
+                    .compile_sampling_bridge(&direct_settings, &runtime, &external_arrays, None)
+                    .unwrap();
+                let error = direct_term
+                    .compile_sampling_bridge(&parameterization, &runtime, &external_arrays, None)
+                    .unwrap_err();
+                assert!(
+                    error.to_string().contains("target") && error.to_string().contains("host cut"),
+                    "{error:?}"
+                );
+                let mut invalid = direct_settings.clone();
+                invalid
+                    .sampling_channels
+                    .channel_definitions
+                    .get_mut(&graph_name)
+                    .unwrap()
+                    .get_mut("direct")
+                    .unwrap()
+                    .around = format!(
+                    "then(block(lmb({}),phase_space(cut({cut_edges}))),block(lmb({}),surface({left_edges})),lmb({}))",
+                    parent[0], parent[1], parent[2]
+                );
+                let error = term
+                    .compile_sampling_bridge(&invalid, &runtime, &external_arrays, None)
+                    .unwrap_err();
+                assert!(
+                    error
+                        .to_string()
+                        .contains("phase-space cut depends on omitted/active coordinates"),
+                    "{error:?}"
+                );
+                assert_eq!(bridge.dimensions(), 9);
+                assert_eq!(bridge.channels().len(), 2);
+                let coordinates = [0.31, 0.27, 0.61, 0.42, 0.33, 0.73, 0.57, 0.23, 0.67];
+                let channel = SamplingChannelId(1);
+                let mapped = bridge.forward(channel, &coordinates).unwrap();
+                let tau = lu(&mapped.raw_coordinates);
+                let physical_master = mapped.raw_coordinates.iter().map(|k| k * tau).collect_vec();
+                let physical_native = frame.inverse(&physical_master, &[]).unwrap().coordinates;
+                let master_loops = to_loops(&physical_master);
+                let native_loops = to_loops(&physical_native);
+                let host_value = host
+                    .sampling_evaluate_ray(
+                        &F(1.0),
+                        &master_loops,
+                        &zero_loops,
+                        &externals,
+                        &masses,
+                        &term.graph.loop_momentum_basis,
+                    )
+                    .0
+                    .0;
+                assert!(host_value.abs() < 2.0e-10, "{host_value}");
+                for (surface, active_edge) in [(left, parent[0]), (right, parent[2])] {
+                    let subspace = SubspaceData::new_from_parent_basis_edges(
+                        &[EdgeIndex(active_edge)],
+                        &term.graph.full_filter(),
+                        basis_id,
+                        &term.graph,
+                        &lmbs,
+                    )
+                    .unwrap();
+                    let global = surface
+                        .sampling_evaluate_ray(
+                            &F(1.0),
+                            &master_loops,
+                            &zero_loops,
+                            &externals,
+                            &masses,
+                            &term.graph.loop_momentum_basis,
+                        )
+                        .0
+                        .0;
+                    let native_global = surface
+                        .sampling_evaluate_ray(
+                            &F(1.0),
+                            &native_loops,
+                            &zero_loops,
+                            &externals,
+                            &masses,
+                            lmb,
+                        )
+                        .0
+                        .0;
+                    let subspace_value = surface
+                        .compute_self_and_r_derivative_subspace(
+                            &F(1.0),
+                            &native_loops,
+                            &zero_loops,
+                            &externals,
+                            &masses,
+                            &subspace,
+                            &lmbs,
+                            &term.graph,
+                        )
+                        .0
+                        .0;
+                    let spatial: TiVec<crate::momentum::sample::ExternalIndex, _> =
+                        externals.iter().map(|p| p.spatial).collect();
+                    let energy_sum = |surface: &crate::cff::esurface::Esurface| {
+                        surface
+                            .energies
+                            .iter()
+                            .map(|edge| {
+                                let p =
+                                    lmb.edge_signatures[*edge].compute_momentum(&native_loops, &spatial);
+                                (p.norm_squared().0 + masses[*edge].0.powi(2)).sqrt()
+                            })
+                            .sum::<f64>()
+                    };
+                    let boundary = energy_sum(surface) - energy_sum(host)
+                        + surface.compute_shift_part_from_momenta(&externals, lmb).0
+                        - host.compute_shift_part_from_momenta(&externals, lmb).0;
+                    let index = parent.iter().position(|edge| *edge == active_edge).unwrap();
+                    let p = &native_loops.0[index];
+                    let q_minus_p = &externals[crate::momentum::sample::ExternalIndex(0)].spatial - p;
+                    let analytic =
+                        (p.norm_squared().0 + 1.0).sqrt() + (q_minus_p.norm_squared().0 + 1.0).sqrt() - 5.0;
+                    assert!((global - analytic).abs() < 1.0e-9);
+                    assert!((global - native_global).abs() < 1.0e-9);
+                    assert!((global - subspace_value).abs() < 1.0e-9);
+                    assert!((global - boundary).abs() < 1.0e-9);
+                }
+                let mut changed = coordinates;
+                changed[3] += 0.07;
+                changed[6] -= 0.09;
+                let other = bridge.forward(channel, &changed).unwrap();
+                assert!((lu(&other.raw_coordinates) - tau).abs() < 1.0e-10);
+                assert_eq!(&mapped.raw_coordinates[3..6], &other.raw_coordinates[3..6]);
+
+                // Full 9D finite differences include cut-to-side off-diagonal
+                // derivatives; multiplying only independent radial Jacobians
+                // would miss the two physical-to-raw t^(-3) factors.
+                let check_jacobian = |bridge: &SamplingChannelBridge| {
+                    let mapped = bridge.forward(channel, &coordinates).unwrap();
+                    let step = 2.0e-6;
+                    let mut jacobian = vec![vec![0.0; 9]; 9];
+                    for axis in 0..9 {
+                        let mut plus = coordinates;
+                        let mut minus = coordinates;
+                        plus[axis] += step;
+                        minus[axis] -= step;
+                        let plus = bridge.forward(channel, &plus).unwrap();
+                        let minus = bridge.forward(channel, &minus).unwrap();
+                        for (row, values) in jacobian.iter_mut().enumerate() {
+                            values[axis] =
+                                (plus.raw_coordinates[row] - minus.raw_coordinates[row]) / (2.0 * step);
+                        }
+                    }
+                    assert!(jacobian[0][0].abs() > 1.0e-3);
+                    let finite_difference = SamplingMapAffine::new(jacobian, vec![0.0; 9])
+                        .unwrap()
+                        .determinant();
+                    assert!(
+                        (finite_difference / mapped.map.jacobian - 1.0).abs() < 3.0e-5,
+                        "{finite_difference} vs {}",
+                        mapped.map.jacobian
+                    );
+                };
+                check_jacobian(&bridge);
+                // Attach the actual runtime LU h profile to the reduced cut
+                // block, then retain both prepared side maps. Profile-free and
+                // matched variants coexist without overwriting shared geometry.
+                let mut matched = parameterization.clone();
+                matched
+                    .sampling_channels
+                    .channel_definitions
+                    .get_mut(&graph_name)
+                    .unwrap()
+                    .get_mut("both")
+                    .unwrap()
+                    .radial_profile = Some(SamplingRadialProfile::default());
+                let matched_bridge = term
+                    .compile_sampling_bridge(&matched, &runtime, &external_arrays, None)
+                    .unwrap();
+                let matched_point = matched_bridge.forward(channel, &coordinates).unwrap();
+                assert!(
+                    matched_point
+                        .map
+                        .diagnostics
+                        .iter()
+                        .any(|value| value.contains("max_occurrence=2")),
+                    "{:?}",
+                    matched_point.map.diagnostics
+                );
+                assert_ne!(matched_point.raw_coordinates, mapped.raw_coordinates);
+                check_jacobian(&matched_bridge);
+                for id in [SamplingChannelId(0), SamplingChannelId(1)] {
+                    let inverse = matched_bridge
+                        .inverse(id, &matched_point.raw_coordinates)
+                        .unwrap();
+                    let recovered = matched_bridge
+                        .forward(id, &inverse.map.coordinates)
+                        .unwrap();
+                    assert!(
+                        recovered
+                            .raw_coordinates
+                            .iter()
+                            .zip(&matched_point.raw_coordinates)
+                            .all(|(a, b)| (a - b).abs() < 1.0e-7)
+                    );
+                }
+                for id in [SamplingChannelId(0), SamplingChannelId(1)] {
+                    let inverse = bridge.inverse(id, &mapped.raw_coordinates).unwrap();
+                    let recovered = bridge.forward(id, &inverse.map.coordinates).unwrap();
+                    assert!(
+                        recovered
+                            .raw_coordinates
+                            .iter()
+                            .zip(&mapped.raw_coordinates)
+                            .all(|(a, b)| (a - b).abs() < 1.0e-7)
+                    );
+                }
+                let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
+                    &bridge,
+                    8192,
+                    1.5,
+                    &[0.2, -0.1, 0.3, 0.1, 0.2, -0.1, -0.2, 0.1, 0.2],
+                )
+                .unwrap();
+                assert!((report.normalization - 1.0).abs() < 0.06, "{report:?}");
+                assert!(
+                    (report.second_moment / report.expected_second_moment - 1.0).abs() < 0.08,
+                    "{report:?}"
+                );
+
+                if boost == 0.0 {
+                    // Finite I/t entries can still have an unrepresentable
+                    // determinant. This must request precision rescue, never
+                    // declare an absent surface or accept zero proposal support.
+                    let tiny = [0.3, 0.2, 0.1, 1.0, -0.5, 0.2, 0.7, 0.1, -0.3].map(|v| v * 1.0e-110);
+                    let error = bridge.inverse(channel, &tiny).unwrap_err();
+                    assert!(
+                        matches!(
+                            error.downcast_ref::<SamplingEvaluationError>(),
+                            Some(SamplingEvaluationError::Unrepresentable { .. })
+                        ),
+                        "{error:?}"
+                    );
+                    let native_externals = external_arrays
+                        .iter()
+                        .map(|p| p.map(|v| F::<ArbPrec>::from_f64(v).0))
+                        .collect_vec();
+                    let native_bridge = term
+                        .compile_sampling_bridge(&parameterization, &runtime, &native_externals, None)
+                        .unwrap();
+                    let native_tiny = tiny.map(|v| F::<ArbPrec>::from_f64(v).0);
+                    let recovered = native_bridge.inverse(channel, &native_tiny).unwrap();
+                    assert!(
+                        recovered.map.jacobian.is_finite() && recovered.map.inverse_jacobian.is_finite()
+                    );
+                    assert!(recovered.map.jacobian > F::<ArbPrec>::default().zero().0);
+                }
+
+                // The same complete physical raised-cut/CT estimator is used
+                // by summed channels, explicit channel MC, and direct momenta.
+                runtime.sampling = SamplingSettings::MultiChanneling(MultiChannelingSettings {
+                    parameterization_settings: parameterization.clone(),
+                    ..Default::default()
+                });
+                runtime.stability.rotation_axis.clear();
+                runtime.stability.levels = vec![StabilityLevelSetting::default_double()];
+                *integrand.get_mut_settings() = runtime.clone();
+                integrand.warm_up(&model).unwrap();
+                let sample = Sample::Continuous(F(1.0), coordinates.iter().copied().map(F).collect());
+                let reference = GaussianReferenceFunction::new(1.5, vec![0.2; 9]).unwrap();
+                let summed_reference = integrand
+                    .evaluate_reference_sample_detailed(&sample, &reference)
+                    .unwrap();
+                let summed = integrand
+                    .evaluate_samples_raw(
+                        &model,
+                        std::slice::from_ref(&sample),
+                        0,
+                        false,
+                        false,
+                        Complex::new(F(0.0), F(0.0)),
+                    )
+                    .unwrap()
+                    .samples
+                    .remove(0);
+                assert!(
+                    !summed.evaluation_metadata.is_nan,
+                    "{}",
+                    summed.evaluation_metadata
+                );
+                assert!(summed.integrand_result.re.0.abs() + summed.integrand_result.im.0.abs() > 0.0);
+                assert!(!summed.event_groups.is_empty());
+                let mut direct_sum = Complex::new(F(0.0), F(0.0));
+                let mut direct_results = Vec::new();
+                for id in [SamplingChannelId(0), SamplingChannelId(1)] {
+                    let point = bridge.forward(id, &coordinates).unwrap();
+                    let direct = integrand
+                        .evaluate_momentum_configuration(
+                            &model,
+                            &MomentumSpaceEvaluationInput {
+                                loop_momenta: to_loops(&point.raw_coordinates).0,
+                                integrator_weight: F(1.0),
+                                graph_id: Some(0),
+                                group_id: None,
+                                orientation: None,
+                                channel_id: None,
+                            },
+                            false,
+                        )
+                        .unwrap();
+                    assert!(
+                        !direct.evaluation_metadata.is_nan,
+                        "{}",
+                        direct.evaluation_metadata
+                    );
+                    assert!(!direct.event_groups.is_empty());
+                    let factor = point.selected_factor().unwrap();
+                    direct_sum += direct.integrand_result * F(factor);
+                    direct_results.push((direct, factor));
+                }
+                for (a, b) in [
+                    (summed.integrand_result.re.0, direct_sum.re.0),
+                    (summed.integrand_result.im.0, direct_sum.im.0),
+                ] {
+                    assert!(
+                        (a - b).abs() <= 1.0e-8 * a.abs().max(b.abs()).max(1.0e-25),
+                        "{a} != {b}"
+                    );
+                }
+                let SamplingSettings::MultiChanneling(multichanneling) = runtime.sampling.clone() else {
+                    unreachable!()
+                };
+                integrand.get_mut_settings().sampling =
+                    SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                        sample_orientations: false,
+                        sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(multichanneling),
+                        ..Default::default()
+                    });
+                integrand.warm_up(&model).unwrap();
+                let mut explicit_sum = Complex::new(F(0.0), F(0.0));
+                let mut reference_sum = 0.0;
+                let mut moment_sum = 0.0;
+                for (id, (direct, factor)) in direct_results.iter().enumerate() {
+                    let discrete = Sample::Discrete(
+                        F(1.0),
+                        0,
+                        Some(Box::new(Sample::Discrete(
+                            F(1.0),
+                            id,
+                            Some(Box::new(sample.clone())),
+                        ))),
+                    );
+                    let reference = integrand
+                        .evaluate_reference_sample_detailed(&discrete, &reference)
+                        .unwrap();
+                    reference_sum += reference.evaluation.integrand_result.re.0;
+                    moment_sum += reference.moments.second_moment.0;
+                    let selected = integrand
+                        .evaluate_samples_raw(
+                            &model,
+                            &[discrete],
+                            0,
+                            false,
+                            false,
+                            Complex::new(F(0.0), F(0.0)),
+                        )
+                        .unwrap()
+                        .samples
+                        .remove(0);
+                    assert!(
+                        !selected.evaluation_metadata.is_nan,
+                        "{}",
+                        selected.evaluation_metadata
+                    );
+                    let direct_events = direct
+                        .event_groups
+                        .iter()
+                        .flat_map(|group| group.iter())
+                        .collect_vec();
+                    let selected_events = selected
+                        .event_groups
+                        .iter()
+                        .flat_map(|group| group.iter())
+                        .collect_vec();
+                    assert!(!selected_events.is_empty());
+                    assert_eq!(selected_events.len(), direct_events.len());
+                    assert_eq!(selected.event_groups.len(), direct.event_groups.len());
+                    for (selected, direct) in selected_events.iter().zip(direct_events) {
+                        assert_eq!(selected.cut_info.cut_id, direct.cut_info.cut_id);
+                        for (a, b) in [
+                            (selected.weight.re.0, direct.weight.re.0 * factor),
+                            (selected.weight.im.0, direct.weight.im.0 * factor),
+                        ] {
+                            assert!(
+                                (a - b).abs() < 1.0e-8 * a.abs().max(b.abs()).max(1.0e-25),
+                                "event {a} != {b}"
+                            );
+                        }
+                    }
+                    explicit_sum += selected.integrand_result;
+                }
+                assert!(
+                    (reference_sum - summed_reference.evaluation.integrand_result.re.0).abs() < 1.0e-11
+                );
+                assert!((moment_sum - summed_reference.moments.second_moment.0).abs() < 1.0e-10);
+                assert!(
+                    (explicit_sum.re.0 - summed.integrand_result.re.0).abs()
+                        < 1.0e-8 * summed.integrand_result.re.0.abs().max(1.0e-25)
+                );
+                assert!(
+                    (explicit_sum.im.0 - summed.integrand_result.im.0).abs()
+                        < 1.0e-8 * summed.integrand_result.im.0.abs().max(1.0e-25)
+                );
+            }
+        }).unwrap().join().unwrap();
+}

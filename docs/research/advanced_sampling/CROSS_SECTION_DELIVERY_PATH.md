@@ -20,12 +20,12 @@ requiring separate treatment; the migration alone does not authorize all strongl
 concentrated long-run claims. See
 [the precision audit](SAMPLING_PRECISION_RESCUE.md).
 
-`PreparedCutSamplingContext::from_lu_sample`,
-`PreparedCrossSectionMapEvaluation::new`, and
-`DeferredCrossSectionSamplingState::new` currently have only test callers.
-The production cross-section host does not yet bind these sampling contracts.
-Its physical evaluator already solves every active LU cut before preparing
-shared threshold overlaps; preserve that ordering and complete cut sum.
+The X2 source now binds conditional targets through the existing map embedding
+and one shared qualified-block plan. It replaces the earlier test-only complete
+prepared-sample handoff, which could not faithfully represent unsampled active
+coordinates. The combined numerical gates pass. The physical evaluator
+still solves every active LU cut before preparing shared threshold overlaps;
+its ordering and complete cut sum are unchanged.
 
 The first useful GL638 H target is **another cut equation evaluated on cut 1**,
 not a generated threshold CT of cut 1. H must therefore come from the full
@@ -76,7 +76,7 @@ When routing certifies the dependency, infer the complement and generate it
 before the active block. Export the explicit ordered form below so the inferred
 layout is inspectable. Multiple or ambiguous blocks use explicit scopes.
 
-A concrete future GL638 direct-H channel is:
+A concrete GL638 direct-H channel to validate after the cheap generated gates is:
 
 ```toml
 [sampling.channel_definitions.GL638.direct_H]
@@ -84,12 +84,12 @@ parent_lmb = [3,6,7,10]
 around = "then(complement(6,7,10), block(lmb(3), at_cut(cut(2,6,10), surface(2,4,12))))"
 ```
 
-This is proposed syntax. Raw complements are generated first; exact routing
+X2 implements this syntax. Raw complements are generated first; exact routing
 certifies that the remaining p displacement cannot change any host-cut momentum.
 The host can then solve its complete cut kinematics without guessed active data.
 The H map operates in prepared p and returns raw p, with the factor `t*^-3`.
-Current production still requires the graph's own full parent; supporting this
-native alternative parent is a shared frame-binding extension, not a GL exception.
+The shared parent resolver now accepts the complete native alternative parent
+and its requested order through existing generated routing, without a GL exception.
 
 Keep the affine external shift when changing the LU parent. If the native
 coordinates are `L = A K + B Q`, while physical LU rescales the generation-parent
@@ -129,8 +129,11 @@ Extend the existing Symbolica AST and compile traversal once. Each block exposes
 its qualified target, complete native parent, active edges, ordered preceding
 edges and remaining edges to both graph binding and compilation. The geometry
 registry key includes that qualified target (host and optional side), the routed
-native parent and canonical active edges. This prevents collisions between equal
-energy-edge selectors on different cut hosts or cycles. It migrates the existing
+native parent, canonical active edges and ordered preceding edges. The preceding
+layout matters because a compiled callback consumes those actual coordinates;
+equal targets can appear as the first or second side of different channel
+compositions. This prevents collisions between different cut hosts, cycles or
+callback input layouts. It migrates the existing
 registry; it is not a second catalogue. Named channels remain distinct proposals.
 
 The existing map embedding prepares a conditional affine transformation from
@@ -147,7 +150,10 @@ owner. Generalize that owner to wrap any compiled map rather than retaining an
 LMB-only numerical path. One unique cut block/profile per channel is the first
 scope cap; its LU-h profile uses the actual host h and raised order. A direct
 `at_cut` target can instead infer an ordinary complement block when its routing
-certificate permits it.
+certificate permits it. The LU-h profile retains the generation-origin fixed
+point (native BQ) and currently requires it to be certified inside the cut. A
+nonzero geometric SOCP center cannot replace that point while retaining the
+physical interpretation of R/r as the LU scale.
 
 The earlier test-only complete prepared-sample handoff cannot describe unsampled
 active coordinates. Migrate its validation responsibilities to the immutable
@@ -170,6 +176,48 @@ may be represented algebraically without claiming they were sampled.
 | X5: regular joint normals | Shared `Esurface` callbacks, eager/dual normal Jacobians, existing map support/partition owners. One generic rank-two local chart with certified domain and complete inverse branches. | Both coupled amplitude surfaces and GL638 H/Z use the same engine. Analytic GL638 equations are an independent oracle, not the implementation engine. Compare scalar-normal powers and polar normal laws on certified patches; defer global intersection atlases. |
 | X6: automatic catalogue | Existing `SamplingChannelCatalogue`/selection owner; pass fully resolved physical targets from amplitude and cross-section hosts. | Initial discovery covers supported single surfaces/cuts with deterministic ordinary soft coverage, then adds already-supported side/joint/star candidates under caps. Stable IDs/aliases, current-context fallback, explicit omissions and no-surface graphs. Do not claim complete auto support while conditional candidates are unimplemented. |
 | X7: demonstrated GL638 gain | Existing integration engine, runtime cards and replay/acceptance reports. Compare frozen catalogues at equal evaluations and equal wall time on 20 cores. | Independent seeds, signed/absolute moments, second moments, maxima, rescue/NaN counts, map/physics cost and soft cancellation. Long runs start only after native rescue and map/reference gates. Report neutral or worse outcomes honestly. |
+
+### X2 generated-graph validation
+
+The first complete focused run passes twelve tests in 66.919 seconds. It includes
+the actual serial raised-bubble graph, the two-loop amplitude kite, shared parser
+and conditional-map checks, frozen-binding rescue, and shifted reference moments.
+The final broader core/API run passes all 141 selected tests in 99.301 seconds,
+including saved-state acceptance and physical channel sums. Core/API and Python-
+feature test checking pass. All eleven differential regressions, formatting and
+clippy also pass. New test warnings are resolved; the existing 1624-byte map-enum
+size warning is unchanged from the previous milestone.
+
+The serial-bubble fixture has two nine-dimensional proposals: cut, left threshold
+and ordinary right coordinates; and cut, left threshold and right threshold.
+It exercises parent `[1,4,7]` at rest and native parent `[3,6,9]` with external
+momentum `(5,1,0,0)`. The latter requires the nonzero affine external shift.
+
+| Check | Independent comparison and acceptance |
+| --- | --- |
+| Physical equations | Global/master, native-parent, existing subspace and boundary-energy equations agree within `1e-9`; the simple bubble supplies an analytic oracle. |
+| Host preservation | Changing side radii leaves the raw host block unchanged and its LU root unchanged within `1e-10`. |
+| Full Jacobian | Nine-dimensional Cartesian finite differences agree within `3e-5` relative, including derivatives of both side maps with respect to cut coordinates. |
+| Foreign inverses | Both channels invert the same supplied raw point and recover it within `1e-7`. |
+| LU-h composition | An actual runtime LU-h profile on the both-sides channel inherits raised order two, changes the proposal, and passes selected/foreign inverse and full nine-dimensional finite-difference checks in both frames. |
+| Normalized reference | 8192 draws per channel and frame, 32768 total; normalization within 6% and raw second moment within 8%. |
+| Native range | Tiny raw cut momenta give `t*` of order `1e110`: finite Double affine entries have an unrepresentable determinant, which raises a typed error; Arb returns finite positive reciprocal Jacobians. |
+| Physical estimator | Direct momenta with `J*w`, summed channels and explicit canonical channels agree within `1e-8` relative, including retained per-cut events. Controls require valid metadata and a nonzero physical sum. |
+| Reference estimator | Summed and explicit-channel reference values/moments agree within `1e-11`/`1e-10`. |
+| Diagnostics | A direct hosted target survives removal of its host-side CT association; a side-qualified target still requires that association. Missing dependencies and conflicting blocks fail explicitly. |
+
+The shifted-reference audit corrected the low-level bridge report to accumulate
+raw `|K|²`, while its Gaussian density still uses `|K-center|²`. A displaced
+three-dimensional regression has expected moment `4.8125`; the old expression
+would approach `3`. Existing committed bridge callers had zero centers. The
+frozen X1 amplitude reports used the separate, correct process-level reference
+owner, and the GL638 pilot used physical integration; their evidence is unaffected.
+
+These generated tests establish conditional-map and estimator behavior. They do
+not establish a GL638 efficiency gain, coverage of projected star images, or a
+generic solution for dependent/nested joint charts. The serial fixture disables
+UV subtraction; the final GL638 comparison still requires all orientations and
+the full local 3D and integrated UV calculation.
 
 X1 now passes the resolved runtime LU h through the existing compile owner and
 process warmup, together with the largest

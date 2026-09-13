@@ -11,7 +11,7 @@ use crate::integrands::evaluation::{
     StabilityStatus, StatisticsCounter,
 };
 use crate::model::Model;
-use crate::momentum::sample::{BareMomentumSample, LoopMomenta, MomentumSample};
+use crate::momentum::sample::{BareMomentumSample, LoopIndex, LoopMomenta, MomentumSample};
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::observables::{
     AdditionalWeightKey, EventProcessingRuntime, GenericEvent, HistogramProcessInfo,
@@ -46,7 +46,6 @@ pub mod amplitude;
 pub mod cache_debugging;
 pub mod cross_section;
 pub mod gammaloop_sample;
-pub use gammaloop_sample::DeferredCrossSectionSample;
 pub mod ir;
 pub mod sampling_context;
 pub mod sampling_maps;
@@ -76,16 +75,14 @@ pub use sampling_evaluator::{SamplingDualValue, SamplingExpressionEvaluator};
 
 pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
-pub use sampling_context::{
-    PreparedCrossSectionMapEvaluation, PreparedCutSamplingContext, PreparedSamplingSurface,
-    PreparedSurfaceStatus, SamplingCutSide,
-};
+pub use sampling_context::{PreparedSurfaceStatus, SamplingCutSide};
 pub use sampling_maps::{
     ImplicitSurfaceContextPreparer, ImplicitSurfaceRadialContextEvaluator,
     ImplicitSurfaceRadialEvaluator, ImplicitSurfaceRadialMap, SamplingJacobian,
     SamplingMapAcceptanceReport, SamplingMapAffine, SamplingMapComponent, SamplingMapComposition,
-    SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding, SamplingMapEvaluation,
-    SamplingMapKernel, SamplingMapPoint, SamplingSupport, SurfaceRadialMap, SurfaceRadialPoint,
+    SamplingMapContextTransform, SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding,
+    SamplingMapEvaluation, SamplingMapKernel, SamplingMapPoint, SamplingSupport, SurfaceRadialMap,
+    SurfaceRadialPoint,
 };
 pub use sampling_partition::{
     SamplingChannelScore, SamplingPartition, SamplingPartitionMode, SamplingScoreFunction,
@@ -94,14 +91,14 @@ pub use sampling_reference::{
     GaussianReferenceFunction, ReferenceMoments, ReferenceSampleEvaluation, ReferenceSamplingReport,
 };
 pub use sampling_selection::{
-    CompiledSamplingChannel, CompiledSamplingMap, DeferredCrossSectionSamplingState,
-    ResolvedNamedSamplingChannel, ResolvedSamplingChannelSelection, SamplingCatalogueEntry,
+    CompiledSamplingChannel, CompiledSamplingMap, ResolvedNamedSamplingChannel,
+    ResolvedSamplingBlock, ResolvedSamplingChannelSelection, SamplingCatalogueEntry,
     SamplingChannelBridge, SamplingChannelBridgeAcceptanceReport, SamplingChannelBridgeError,
     SamplingChannelBridgeEvaluation, SamplingChannelCatalogue, SamplingChannelCompileContext,
     SamplingChannelCompileError, SamplingChannelId, SamplingChannelInspection,
     SamplingChannelPreset, SamplingChannelRuntimeContexts, SamplingChannelSelector,
-    SamplingCoverageReport, SamplingMomentumSampleContext, SamplingSelectionError,
-    SamplingSurfaceGeometry, build_sampling_channel_catalogue,
+    SamplingCoverageReport, SamplingGeometryKey, SamplingMomentumSampleContext,
+    SamplingSelectionError, build_sampling_channel_catalogue,
     build_sampling_channel_catalogue_with_surfaces,
     build_sampling_channel_catalogue_with_surfaces_and_coverage, explicitly_selected_graphs,
     graph_channel_definitions, resolve_sampling_channel_selection,
@@ -2016,15 +2013,20 @@ pub struct LmbMultiChannelingSetup {
     /// Canonical group-master graph used to resolve group-level channel overrides.
     pub graph: Graph,
     pub all_bases: TiVec<LmbIndex, LoopMomentumBasis>,
-    pub(crate) sampling_bridge: RuntimeCache<SamplingChannelBridge>,
-    pub(crate) sampling_bridge_quad: RuntimeCache<SamplingChannelBridge<f128>>,
-    pub(crate) sampling_bridge_arb: RuntimeCache<SamplingChannelBridge<ArbPrec>>,
+    pub(crate) sampling_bridge:
+        RuntimeCache<Result<SamplingChannelBridge, sampling_maps::SamplingEvaluationError>>,
+    pub(crate) sampling_bridge_quad:
+        RuntimeCache<Result<SamplingChannelBridge<f128>, sampling_maps::SamplingEvaluationError>>,
+    pub(crate) sampling_bridge_arb: RuntimeCache<
+        Result<SamplingChannelBridge<ArbPrec>, sampling_maps::SamplingEvaluationError>,
+    >,
     pub(crate) sampling_catalogue: RuntimeCache<SamplingChannelCatalogue>,
     pub(crate) sampling_programs: RuntimeCache<Vec<SamplingChannelPrograms>>,
 }
 
 impl LmbMultiChannelingSetup {
-    /// Borrow the bridge compiled from the last successful process warmup.
+    /// Borrow the bridge compiled in the current successful warmup epoch, or
+    /// replay that precision's cached numerical failure into the stability loop.
     /// Explicit constructors remain fresh and never populate this runtime cache.
     pub fn sampling_bridge<T: FloatLike>(&self) -> Result<&SamplingChannelBridge<T>> {
         T::sampling_bridge_cache(self).as_ref().ok_or_else(|| {
@@ -2032,6 +2034,11 @@ impl LmbMultiChannelingSetup {
                 "sampling bridge for graph '{}' is not initialized; call warm_up after loading or changing runtime settings, model parameters, or graph routing",
                 self.graph.name
             )
+        })?.as_ref().map_err(|error| {
+            eyre::Report::new(error.clone()).wrap_err(format!(
+                "sampling binding for graph '{}' at {} precision",
+                self.graph.name, T::sampling_precision()
+            ))
         })
     }
 
@@ -2151,9 +2158,10 @@ impl LmbMultiChannelingSetup {
     }
 
     /// Compile the selected catalogue against prepared master-graph
-    /// kinematics.  The context is explicit because surface centres and
-    /// radii may only be known after cut kinematics (including any `t*`
-    /// rescaling) has been solved.
+    /// kinematics. The context binds each surface's native equation and frame;
+    /// any cut/side centers, radii and `t*` are prepared from its declared prior
+    /// blocks inside the compiled map. This rejects missing or stale physical
+    /// prerequisites before a mapped sample reaches the graph evaluator.
     pub fn compile_sampling_channels<T: FloatLike>(
         &self,
         catalogue: &SamplingChannelCatalogue,
@@ -2167,7 +2175,7 @@ impl LmbMultiChannelingSetup {
                 self.graph.name
             ));
         }
-        catalogue.compile(context, programs).map_err(Into::into)
+        catalogue.compile(context, programs)
     }
 
     /// Compile channels after preparing the external data needed by every
@@ -2187,36 +2195,27 @@ impl LmbMultiChannelingSetup {
             if edges != context.parent_lmb.as_slice() {
                 context.lmb_frame_maps.insert(
                     basis_id,
-                    self.lmb_frame_map(LmbIndex::from(basis_id), external_momenta)?,
+                    self.lmb_frame_map(
+                        &self.all_bases[LmbIndex::from(basis_id)],
+                        external_momenta,
+                    )?,
                 );
             }
         }
         for channel in catalogue.named_entries() {
-            let SamplingMapDefinition::Lmb(edges) = &channel.map else {
-                continue;
+            let edges = match &channel.map {
+                SamplingMapDefinition::Lmb(edges) => edges,
+                _ => &channel.definition.parent_lmb,
             };
             if edges == context.parent_lmb.as_slice() {
                 continue;
             }
-            let Some((basis_id, _)) = self.all_bases.iter_enumerated().find(|(_, basis)| {
-                basis
-                    .loop_edges
-                    .iter()
-                    .map(|edge| edge.0)
-                    .eq(edges.iter().copied())
-            }) else {
-                return Err(eyre!(
-                    "named sampling channel '{}' selects LMB edges {:?}, but the graph has no matching generated LMB basis",
-                    channel.name,
-                    edges
-                ));
-            };
-            context.lmb_frame_maps_by_edges.insert(
-                edges.clone(),
-                self.lmb_frame_map(basis_id, external_momenta)?,
-            );
+            let basis = self.sampling_parent_lmb(edges)?;
+            context
+                .lmb_frame_maps_by_edges
+                .insert(edges.clone(), self.lmb_frame_map(&basis, external_momenta)?);
         }
-        catalogue.compile(&context, programs).map_err(Into::into)
+        catalogue.compile(&context, programs)
     }
 
     /// Compile the selected channels and bind them to the raw-frame bridge.
@@ -2342,36 +2341,6 @@ impl LmbMultiChannelingSetup {
         Ok(matches!(entry, SamplingCatalogueEntry::Lmb { .. }))
     }
 
-    /// Return whether this canonical channel needs solved physical-cut data
-    /// before its map can be evaluated.  Ordinary LMB, surface, and their
-    /// validated conditional compositions are immediately evaluable; maps
-    /// involving `cut`, `phase_space`, `left`, or `right` belong to the
-    /// deferred cross-section boundary and must not be treated as plain
-    /// parent-frame coordinates.
-    pub fn sampling_channel_requires_deferred_cut_context(
-        &self,
-        channel_id: SamplingChannelId,
-        graph_name: &str,
-        parameterization_settings: &ParameterizationSettings,
-    ) -> Result<bool> {
-        let catalogue = self.canonical_sampling_catalogue(graph_name, parameterization_settings)?;
-        let entry = catalogue.entries.get(channel_id.index()).ok_or_else(|| {
-            eyre!(
-                "Requested sampling channel {} is out of range for graph '{}'",
-                channel_id.index(),
-                graph_name
-            )
-        })?;
-        Ok(match entry {
-            SamplingCatalogueEntry::Named(channel) => {
-                crate::integrands::process::sampling_selection::sampling_map_requires_deferred_cut_context(
-                    &channel.map,
-                )
-            }
-            SamplingCatalogueEntry::Lmb { .. } | SamplingCatalogueEntry::Surface { .. } => false,
-        })
-    }
-
     /// Return the generated LMB behind a canonical channel when that channel
     /// is an LMB entry. Graph-aware channels intentionally have no LMB index;
     /// callers that only expose LMB metadata can skip those entries without
@@ -2480,6 +2449,54 @@ impl LmbMultiChannelingSetup {
         Ok(channels)
     }
 
+    /// Resolve a complete user-ordered parent from a generated edge set without
+    /// rebuilding its tree or external routing. Reorder a clone only: canonical
+    /// catalogue IDs and the generated basis order are immutable.
+    pub(crate) fn sampling_parent_lmb(&self, edges: &[usize]) -> Result<LoopMomentumBasis> {
+        let selected = edges.iter().copied().collect::<BTreeSet<_>>();
+        if edges.len() != self.graph.loop_momentum_basis.loop_edges.len()
+            || selected.len() != edges.len()
+        {
+            return Err(eyre!(
+                "sampling parent requires {} distinct loop edges, received {edges:?}",
+                self.graph.loop_momentum_basis.loop_edges.len()
+            ));
+        }
+        let candidates = self
+            .all_bases
+            .iter()
+            .filter(|basis| {
+                basis.loop_edges.len() == edges.len()
+                    && basis
+                        .loop_edges
+                        .iter()
+                        .all(|edge| selected.contains(&edge.0))
+            })
+            .collect_vec();
+        let [basis] = candidates.as_slice() else {
+            return Err(eyre!(
+                "sampling parent {edges:?} matches {} generated bases for graph '{}'; expected one complete basis, available {:?}",
+                candidates.len(),
+                self.graph.name,
+                self.all_bases
+                    .iter()
+                    .map(|basis| &basis.loop_edges)
+                    .collect_vec()
+            ));
+        };
+        let mut basis = (*basis).clone();
+        for (index, edge) in edges.iter().enumerate() {
+            let current = basis
+                .loop_edges
+                .iter_enumerated()
+                .find(|(_, candidate)| candidate.0 == *edge)
+                .unwrap()
+                .0;
+            basis.swap_loops(LoopIndex(index), current);
+        }
+        Ok(basis)
+    }
+
     /// Build the exact affine routing from one generated LMB into this setup's
     /// parent loop frame.  The integer edge signatures provide the linear
     /// block matrix; the supplied external momenta provide its translation.
@@ -2488,19 +2505,15 @@ impl LmbMultiChannelingSetup {
     /// coordinates.
     pub fn lmb_frame_map<T: FloatLike>(
         &self,
-        basis_id: LmbIndex,
+        channel_lmb: &LoopMomentumBasis,
         external_momenta: &[[T; 4]],
     ) -> Result<SamplingMapAffine<T>> {
-        let channel_lmb = self
-            .all_bases
-            .get(basis_id)
-            .ok_or_else(|| eyre!("LMB basis {} is out of range", usize::from(basis_id)))?;
         let parent_loop_edges = &self.graph.loop_momentum_basis.loop_edges;
         let channel_loop_count = channel_lmb.loop_edges.len();
         if parent_loop_edges.len() != channel_loop_count {
             return Err(eyre!(
-                "cannot route LMB {} with {} loop blocks into parent frame with {} blocks",
-                usize::from(basis_id),
+                "cannot route LMB {:?} with {} loop blocks into parent frame with {} blocks",
+                &channel_lmb.loop_edges,
                 channel_loop_count,
                 parent_loop_edges.len()
             ));
@@ -2514,8 +2527,8 @@ impl LmbMultiChannelingSetup {
             let internal = signature.internal.to_momtrop_format();
             if internal.len() != channel_loop_count {
                 return Err(eyre!(
-                    "LMB {} edge {} has internal signature length {}, expected {}",
-                    usize::from(basis_id),
+                    "LMB {:?} edge {} has internal signature length {}, expected {}",
+                    &channel_lmb.loop_edges,
                     edge_index.0,
                     internal.len(),
                     channel_loop_count
@@ -2524,8 +2537,8 @@ impl LmbMultiChannelingSetup {
             let external = signature.external.to_momtrop_format();
             if external.len() != external_momenta.len() {
                 return Err(eyre!(
-                    "LMB {} edge {} has external signature length {}, but {} external momenta were supplied",
-                    usize::from(basis_id),
+                    "LMB {:?} edge {} has external signature length {}, but {} external momenta were supplied",
+                    &channel_lmb.loop_edges,
                     edge_index.0,
                     external.len(),
                     external_momenta.len()
@@ -2611,8 +2624,10 @@ pub trait ProcessIntegrandImpl {
     fn warm_up(&mut self, model: &Model) -> Result<()>;
 
     /// Compile fixed graph geometry after process warmup has prepared masses
-    /// and improved externals. Publish only when every bridge is valid; radial
-    /// roots and conditional cut contexts remain point-dependent runtime data.
+    /// and improved externals. Publish only when one configured precision has
+    /// every bridge valid; retain numerical failures at other precisions for the
+    /// existing retry loop. Radial roots and conditional cut contexts remain
+    /// point-dependent runtime data. Structural failures invalidate the epoch.
     fn warm_up_sampling(&mut self) -> Result<()> {
         for graph in self.get_terms_mut() {
             graph.sampling_setup_mut().invalidate_sampling();
@@ -2654,15 +2669,39 @@ pub trait ProcessIntegrandImpl {
             .map(|level| level.precision)
             .unique()
             .collect_vec();
-        let result = precisions
-            .into_iter()
-            .try_for_each(|precision| match precision {
-                Precision::Double => self.prepare_sampling_precision::<f64>(),
-                Precision::Quad => self.prepare_sampling_precision::<f128>(),
-                Precision::Arb => self.prepare_sampling_precision::<ArbPrec>(),
-            });
+        let result = (|| {
+            let mut usable_precision = false;
+            let mut numerical_failures = Vec::new();
+            for precision in precisions {
+                let prepared = match precision {
+                    Precision::Double => self.prepare_sampling_precision::<f64>(),
+                    Precision::Quad => self.prepare_sampling_precision::<f128>(),
+                    Precision::Arb => self.prepare_sampling_precision::<ArbPrec>(),
+                };
+                match prepared {
+                    Ok(()) => usable_precision = true,
+                    Err(error)
+                        if error
+                            .downcast_ref::<sampling_maps::SamplingEvaluationError>()
+                            .is_some() =>
+                    {
+                        numerical_failures.push(format!("{precision}: {error:#}"));
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+            if usable_precision {
+                Ok(())
+            } else {
+                Err(eyre!(
+                    "sampling warmup has no wholly usable configured precision; numerical binding failures [{}]",
+                    numerical_failures.join("; ")
+                ))
+            }
+        })();
         if result.is_err() {
-            // A failed warmup publishes no usable catalogue or partial precision set.
+            // A structurally invalid epoch, or one with no usable configured
+            // precision, publishes neither a catalogue nor partial bindings.
             for graph in self.get_terms_mut() {
                 graph.sampling_setup_mut().invalidate_sampling();
             }
@@ -2670,8 +2709,9 @@ pub trait ProcessIntegrandImpl {
         result
     }
 
-    /// Bind a configured or explicitly requested precision once per warmup epoch.
-    /// Programs and canonical IDs are reused; geometry comes from the same native
+    /// Bind a configured or explicitly requested precision once per warmup epoch,
+    /// retaining typed numerical failures as well as successes. Programs and
+    /// canonical IDs are reused; geometry comes from the same native
     /// improved external data consumed by physical evaluation. Worker clones own
     /// their evaluator buffers, and a precision request never reparses metadata.
     fn prepare_sampling_precision<T: FloatLike>(&mut self) -> Result<()> {
@@ -2683,7 +2723,12 @@ pub trait ProcessIntegrandImpl {
                 .as_ref()
                 .is_some()
         }) {
-            return Ok(());
+            return (0..self.graph_count()).try_for_each(|id| {
+                self.get_graph(id)
+                    .sampling_setup()
+                    .sampling_bridge::<T>()
+                    .map(|_| ())
+            });
         }
         let parameterization = self
             .get_settings()
@@ -2732,23 +2777,36 @@ pub trait ProcessIntegrandImpl {
             let programs = setup.sampling_programs.as_ref().ok_or_else(|| eyre!(
                 "sampling programs for graph '{}' are not initialized; call warm_up", graph.name()
             ))?;
-            let bridge = graph.bind_sampling_bridge(catalogue, programs, &parameterization, self.get_settings(), &external_momenta, None)?;
-            match density_tolerance {
-                Some(tolerance) => bridge.with_relative_density_tolerance(tolerance).map(Some),
-                None => Ok(Some(bridge)),
+            let bridge = graph.bind_sampling_bridge(catalogue, programs, &parameterization, self.get_settings(), &external_momenta, None)
+                .and_then(|bridge| match density_tolerance {
+                    Some(tolerance) => bridge.with_relative_density_tolerance(tolerance),
+                    None => Ok(bridge),
+                });
+            match bridge {
+                Ok(bridge) => Ok(Some(Ok(bridge))),
+                Err(error) => match error.downcast_ref::<sampling_maps::SamplingEvaluationError>() {
+                    Some(error) => Ok(Some(Err(error.clone()))),
+                    None => Err(error),
+                },
             }
         }).collect::<Result<Vec<_>>>()?;
-        for (graph, bridge) in self.get_terms_mut().zip(bridges) {
-            if let Some(bridge) = bridge {
+        for (graph, binding) in self.get_terms_mut().zip(bridges) {
+            if let Some(binding) = binding {
                 crate::debug_tags!(#sampling;
                     stage = "sampling_bridge_warmup", graph = %graph.name(),
-                    channels = bridge.channels().len(), precision = std::any::type_name::<T>(),
-                    "prepared graph sampling bridge"
+                    channels = ?binding.as_ref().ok().map(|bridge| bridge.channels().len()),
+                    precision = std::any::type_name::<T>(), valid = binding.is_ok(),
+                    "prepared graph sampling binding"
                 );
-                T::sampling_bridge_cache_mut(graph.sampling_setup_mut()).set(bridge);
+                T::sampling_bridge_cache_mut(graph.sampling_setup_mut()).set(binding);
             }
         }
-        Ok(())
+        (0..self.graph_count()).try_for_each(|id| {
+            self.get_graph(id)
+                .sampling_setup()
+                .sampling_bridge::<T>()
+                .map(|_| ())
+        })
     }
 
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation>;
@@ -3141,18 +3199,6 @@ pub trait GraphTerm {
         channel_id: SamplingChannelId,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<bool>;
-    /// Whether this channel is a physical-cut map whose evaluation must be
-    /// deferred until its host cut has solved LU/t*.  The evaluator boundary
-    /// checks this before handing a mapped sample to the graph term, avoiding
-    /// accidental use of stale or absent cut context.
-    fn sampling_channel_requires_deferred_cut_context(
-        &self,
-        channel_id: SamplingChannelId,
-        parameterization_settings: &ParameterizationSettings,
-    ) -> Result<bool> {
-        let _ = (channel_id, parameterization_settings);
-        Ok(false)
-    }
     fn sampling_channel_ids(
         &self,
         parameterization_settings: &ParameterizationSettings,
@@ -3196,7 +3242,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
 ) -> Result<GraphEvaluationResult<T>> {
     if let Some(channel_id) = sampling_channel {
         let graph = integrand.get_graph(graph_id);
-        let channel = graph
+        graph
             .sampling_setup()
             .sampling_bridge::<T>()?
             .channels()
@@ -3208,13 +3254,9 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
                     graph.name()
                 )
             })?;
-        if sampling_selection::sampling_map_requires_deferred_cut_context(&channel.definition) {
-            return Err(eyre!(
-                "sampling channel {} for graph '{}' requires a deferred physical-cut context (solved LU/t* and unit-cube coordinates); the cross-section evaluator boundary cannot evaluate it from a pre-mapped sample",
-                channel_id.index(),
-                graph.name(),
-            ));
-        }
+        // A successfully bound triangular map owns the cut/side prerequisites
+        // used to produce this parent-frame point. Readiness is its compiled
+        // contract, not an additional fully sampled LU handoff.
     }
     // Default sampling starts in a selected LMB. Both targets must see the
     // same graph-parent point, after the existing affine reinterpretation.
@@ -4771,7 +4813,10 @@ mod tests {
     use crate::cff::expression::OrientationID;
     use crate::{
         dot,
-        graph::{Graph, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph},
+        graph::{
+            FeynmanGraph, Graph, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
+            parse::from_dot::IntoGraph,
+        },
         initialisation::test_initialise,
         momentum::{
             ThreeMomentum,
@@ -5141,6 +5186,21 @@ mod tests {
                 .expect("runtime cache should decode");
         assert_eq!(consumed, 0);
         assert!(decoded.as_ref().is_none());
+        // Cached preparation failures are as transient as compiled bridges;
+        // neither payload needs a codec or may enter a saved state.
+        let mut failure: RuntimeCache<
+            Result<super::SamplingChannelBridge, super::sampling_maps::SamplingEvaluationError>,
+        > = RuntimeCache::default();
+        failure.set(Err(
+            super::sampling_maps::SamplingEvaluationError::UncertainGeometry {
+                detail: "numeric binding fixture".into(),
+            },
+        ));
+        assert!(
+            bincode::encode_to_vec(&failure, bincode::config::standard())
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -5317,7 +5377,7 @@ mod tests {
                 .is_err()
         );
 
-        let mut deferred_settings = ParameterizationSettings::default();
+        let mut physical_settings = ParameterizationSettings::default();
         let parent_lmb = setup
             .graph
             .loop_momentum_basis
@@ -5325,10 +5385,10 @@ mod tests {
             .iter()
             .map(|edge| edge.0)
             .collect::<Vec<_>>();
-        deferred_settings
+        physical_settings
             .sampling_channels
             .default_channel_selection = vec!["cut".into()];
-        deferred_settings
+        physical_settings
             .sampling_channels
             .channel_definitions
             .entry(setup.graph.name.clone())
@@ -5336,7 +5396,7 @@ mod tests {
             .insert(
                 "cut".into(),
                 SamplingChannelDefinition {
-                    around: "then(phase_space(cut(0)),left(surface(0)))".into(),
+                    around: "phase_space(cut(0))".into(),
                     subspace_lmb: parent_lmb.clone(),
                     parent_lmb,
                     on_cut: vec![],
@@ -5344,14 +5404,31 @@ mod tests {
                     radial_profile: None,
                 },
             );
+        let catalogue = setup
+            .canonical_sampling_catalogue(&setup.graph.name, &physical_settings)
+            .unwrap();
+        let dimension = 3 * setup.graph.get_loop_number();
+        let programs = catalogue
+            .compile_programs(dimension, &HFunctionSettings::default())
+            .unwrap();
+        let context = SamplingChannelCompileContext::<f64>::new(
+            setup.graph.name.clone(),
+            setup
+                .graph
+                .loop_momentum_basis
+                .loop_edges
+                .iter()
+                .map(|edge| edge.0)
+                .collect(),
+            physical_settings,
+            1.0,
+            setup.graph.get_loop_number(),
+        );
+        // Physical labels alone do not provide their native cut geometry.
         assert!(
             setup
-                .sampling_channel_requires_deferred_cut_context(
-                    SamplingChannelId::from(0),
-                    &setup.graph.name,
-                    &deferred_settings,
-                )
-                .unwrap()
+                .compile_sampling_channel_bridge(&catalogue, &programs, &context)
+                .is_err()
         );
 
         // Graph-aware entries occupy the same canonical channel axis as LMB
