@@ -7,6 +7,13 @@
 //! boundary between that kinematic preparation and the graph-independent map
 //! kernels in [`super::sampling_maps`].
 
+use crate::{
+    momentum::{
+        FourMomentum,
+        sample::{ExternalFourMomenta, LoopMomenta},
+    },
+    utils::{F, FloatLike},
+};
 use color_eyre::eyre::{Result, eyre};
 use serde::{Deserialize, Serialize};
 
@@ -185,6 +192,90 @@ impl PreparedCutSamplingContext {
         })
     }
 
+    /// Build the kinematic part of a prepared context directly from one
+    /// solved LU sample. The input loop momenta are the unrescaled vectors
+    /// used by that root solve; applying `t*` here keeps the resulting cut
+    /// point and its rescaling together, without any process-global cut cache.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_lu_sample<T: FloatLike>(
+        graph_name: impl Into<String>,
+        graph_id: usize,
+        cut_id: usize,
+        orientation: Option<usize>,
+        side: SamplingCutSide,
+        parent_lmb: Vec<usize>,
+        rescaling_t_star: &F<T>,
+        unrescaled_loop_momenta: &LoopMomenta<F<T>>,
+        external_momenta: &ExternalFourMomenta<F<T>>,
+        surfaces: Vec<PreparedSamplingSurface>,
+    ) -> Result<Self> {
+        let zero = rescaling_t_star.zero();
+        if !rescaling_t_star.0.is_finite() || rescaling_t_star.0 <= zero.0 {
+            return Err(eyre!(
+                "a prepared LU sample requires a finite positive t*, got {rescaling_t_star}"
+            ));
+        }
+        let n_loop_momenta = parent_lmb.len();
+        let loop_momenta = unrescaled_loop_momenta
+            .rescale(rescaling_t_star, None)
+            .iter()
+            .map(|momentum| {
+                [
+                    momentum.px.into_f64(),
+                    momentum.py.into_f64(),
+                    momentum.pz.into_f64(),
+                ]
+            })
+            .collect();
+        let external_momenta = external_momenta
+            .iter()
+            .map(|momentum: &FourMomentum<F<T>>| {
+                [
+                    momentum.temporal.value.into_f64(),
+                    momentum.spatial.px.into_f64(),
+                    momentum.spatial.py.into_f64(),
+                    momentum.spatial.pz.into_f64(),
+                ]
+            })
+            .collect();
+        let prepared = Self::new(
+            graph_name,
+            graph_id,
+            cut_id,
+            orientation,
+            side,
+            parent_lmb,
+            rescaling_t_star.into_f64(),
+            loop_momenta,
+            external_momenta,
+            surfaces,
+        )?;
+        prepared.validate_loop_dimension(n_loop_momenta)?;
+        Ok(prepared)
+    }
+
+    /// Check that this context is suitable for a parent frame with the given
+    /// loop dimension.  This is intentionally a separate check from
+    /// construction: a serialized context can be valid in isolation while
+    /// still belonging to a different graph or sample frame.
+    pub fn validate_loop_dimension(&self, n_loop_momenta: usize) -> Result<()> {
+        if self.parent_lmb.len() != n_loop_momenta {
+            return Err(eyre!(
+                "prepared parent LMB has {} edges, expected {} loop momenta",
+                self.parent_lmb.len(),
+                n_loop_momenta
+            ));
+        }
+        if self.loop_momenta.len() != n_loop_momenta {
+            return Err(eyre!(
+                "prepared LU sample has {} loop momenta, expected {}",
+                self.loop_momenta.len(),
+                n_loop_momenta
+            ));
+        }
+        Ok(())
+    }
+
     pub fn surface(&self, index: usize) -> Option<&PreparedSamplingSurface> {
         self.surfaces.get(index)
     }
@@ -283,7 +374,7 @@ mod tests {
             1.0,
             vec![[0.0, 0.0, 0.0]],
             vec![],
-            vec![surface(absent)],
+            vec![PreparedSamplingSurface::new(vec![3, 7], vec![0], absent).unwrap()],
         )
         .unwrap();
         assert!(context.has_absent_surface());
@@ -315,6 +406,70 @@ mod tests {
                 vec![],
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn lu_sample_constructor_rejects_nonpositive_root_and_checks_frame_dimension() {
+        let loop_momenta =
+            LoopMomenta::from_iter([crate::momentum::ThreeMomentum::new(F(1.0), F(2.0), F(3.0))]);
+        let external_momenta = ExternalFourMomenta::from_iter([FourMomentum::new(
+            crate::momentum::Energy::new(F(10.0)),
+            crate::momentum::ThreeMomentum::new(F(0.0), F(0.0), F(10.0)),
+        )]);
+        for t_star in [0.0, -0.5, f64::INFINITY, f64::NAN] {
+            assert!(
+                PreparedCutSamplingContext::from_lu_sample(
+                    "g",
+                    0,
+                    0,
+                    Some(0),
+                    SamplingCutSide::Left,
+                    vec![0],
+                    &F(t_star),
+                    &loop_momenta,
+                    &external_momenta,
+                    vec![],
+                )
+                .is_err()
+            );
+        }
+
+        let context = PreparedCutSamplingContext::from_lu_sample(
+            "g",
+            0,
+            0,
+            Some(0),
+            SamplingCutSide::Left,
+            vec![0],
+            &F(0.5),
+            &loop_momenta,
+            &external_momenta,
+            vec![],
+        )
+        .unwrap();
+        context.validate_loop_dimension(1).unwrap();
+        assert!(context.validate_loop_dimension(2).is_err());
+        assert_eq!(context.rescaling_t_star, 0.5);
+        assert_eq!(context.loop_momenta, vec![[0.5, 1.0, 1.5]]);
+        assert_eq!(context.external_momenta, vec![[10.0, 0.0, 0.0, 10.0]]);
+        let wrong_dimension = PreparedCutSamplingContext::from_lu_sample(
+            "g",
+            0,
+            0,
+            Some(0),
+            SamplingCutSide::Left,
+            vec![0, 1],
+            &F(0.5),
+            &loop_momenta,
+            &external_momenta,
+            vec![],
+        )
+        .unwrap_err();
+        assert!(
+            wrong_dimension
+                .to_string()
+                .contains("1 loop momenta, expected 2")
         );
     }
 }
