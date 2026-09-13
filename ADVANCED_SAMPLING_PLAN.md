@@ -158,8 +158,15 @@ partitions and samples the complete already-subtracted physical integrand.
   the root agent has reviewed each milestone. Do not force-push.
 * Do not introduce a parallel LMB/channel enumeration while migrating. Every
   grid, evaluator, diagnostic and API consumer must resolve through the same
-  `SamplingChannelCatalogue` and `SamplingChannelId`; legacy LMB fields may be
-  consumed only as catalogue inputs until deleted.
+`SamplingChannelCatalogue` and `SamplingChannelId`; legacy LMB fields may be
+consumed only as catalogue inputs until deleted.
+
+The graph-evaluation boundary also has one channel request field,
+`SamplingChannelEvaluation<T>`, carrying the same canonical id for both the
+temporary LMB compatibility route and the mapped route.  No separate
+`advanced_channel_id`/legacy index pair may be reintroduced.  The LMB variant
+is a migration seam only and must disappear when cross-section LU/`t*`
+preparation can feed the compiled maps per sample.
 
 The retirement sequence is explicit: first route direct momentum evaluation
 through compiled parent-frame maps for every catalogue entry; then remove the

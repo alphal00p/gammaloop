@@ -3361,12 +3361,34 @@ pub struct GraphTermEvaluationContext<'a, 'm, T: FloatLike> {
     pub rotation: &'a Rotation,
     pub evaluation_metadata: &'m mut EvaluationMetaData,
     pub record_primary_timing: bool,
-    /// Canonical sampling-channel selection used by the graph estimator.
-    pub channel_id: Option<(SamplingChannelId, F<T>, LmbChannelWeight)>,
-    /// Canonical advanced channel id. Its point has already been mapped into
-    /// the parent frame and must not be LMB-reinterpreted by the graph term.
-    pub advanced_channel_id: Option<SamplingChannelId>,
+    /// The single canonical sampling-channel selection used by the graph
+    /// estimator.  The legacy LMB weighting route is represented explicitly
+    /// as one variant while the mapped route carries the same stable channel
+    /// id; there is no second channel-index domain.
+    pub sampling_channel: Option<SamplingChannelEvaluation<T>>,
     pub lmb_basis_id: Option<LmbIndex>,
+}
+
+#[derive(Debug, Clone)]
+pub enum SamplingChannelEvaluation<T: FloatLike> {
+    /// Temporary compatibility route for cross-section terms which still
+    /// need per-sample LU/t* data before a complete map can be replayed.
+    LegacyLmb {
+        id: SamplingChannelId,
+        alpha: F<T>,
+        channel_weight: LmbChannelWeight,
+    },
+    /// The canonical map route. The momentum point has already been mapped
+    /// into the graph's parent frame and must not be reinterpreted as an LMB.
+    Mapped { id: SamplingChannelId },
+}
+
+impl<T: FloatLike> SamplingChannelEvaluation<T> {
+    pub fn id(&self) -> SamplingChannelId {
+        match self {
+            Self::LegacyLmb { id, .. } | Self::Mapped { id } => *id,
+        }
+    }
 }
 
 /// Evaluate one graph term using the canonical sampling channel contract.
@@ -3375,8 +3397,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     graph_id: usize,
     sample: &MomentumSample<T>,
     context: &mut EvaluationContext<'_, '_>,
-    channel_id: Option<(SamplingChannelId, F<T>, LmbChannelWeight)>,
-    advanced_channel_id: Option<SamplingChannelId>,
+    sampling_channel: Option<SamplingChannelEvaluation<T>>,
     lmb_basis_id: Option<LmbIndex>,
 ) -> Result<GraphEvaluationResult<T>> {
     let mut event_processing_runtime = integrand.take_event_processing_runtime();
@@ -3388,8 +3409,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
             rotation: context.rotation,
             evaluation_metadata: context.evaluation_metadata,
             record_primary_timing: context.record_primary_timing,
-            channel_id,
-            advanced_channel_id,
+            sampling_channel,
             lmb_basis_id,
         };
         integrand
@@ -3459,15 +3479,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
             } => {
                 let lmb_basis_id =
                     selected_lmb_basis_for_default_sampling(integrand, graph_id, *use_lmb_basis)?;
-                evaluate_graph_term(
-                    integrand,
-                    graph_id,
-                    sample,
-                    context,
-                    None,
-                    None,
-                    lmb_basis_id,
-                )
+                evaluate_graph_term(integrand, graph_id, sample, context, None, lmb_basis_id)
             }
             DiscreteGraphSample::Advanced {
                 channel_id,
@@ -3480,8 +3492,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     graph_id,
                     sample,
                     context,
-                    None,
-                    Some(*channel_id),
+                    Some(SamplingChannelEvaluation::Mapped { id: *channel_id }),
                     None,
                 )?;
                 if let Some(weight) = partition_weight {
@@ -3524,8 +3535,11 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                             graph_id,
                             sample,
                             context,
-                            Some((channel_index, alpha.clone(), *channel_weight)),
-                            None,
+                            Some(SamplingChannelEvaluation::LegacyLmb {
+                                id: channel_index,
+                                alpha: alpha.clone(),
+                                channel_weight: *channel_weight,
+                            }),
                             None,
                         )
                     })
@@ -3562,7 +3576,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     });
 
                 let mut graph_result =
-                    evaluate_graph_term(integrand, graph_id, sample, context, None, None, None)?;
+                    evaluate_graph_term(integrand, graph_id, sample, context, None, None)?;
                 graph_result.integrand_result *= Complex::new_re(prefactor);
                 Ok(graph_result)
             }
@@ -3965,7 +3979,6 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                                 sample,
                                 &mut context,
                                 None,
-                                None,
                                 lmb_basis_id,
                             )?;
                             sum.merge_in_place(graph_result);
@@ -3975,7 +3988,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                 }
             }
             GammaLoopSample::Graph { graph_id, sample } => {
-                evaluate_graph_term(integrand, *graph_id, sample, &mut context, None, None, None)?
+                evaluate_graph_term(integrand, *graph_id, sample, &mut context, None, None)?
             }
             GammaLoopSample::MultiChanneling {
                 alpha,
@@ -4078,8 +4091,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                                     graph_id,
                                     &mapped_sample,
                                     &mut context,
-                                    None,
-                                    Some(channel_index),
+                                    Some(SamplingChannelEvaluation::Mapped { id: channel_index }),
                                     None,
                                 )?
                             } else {
@@ -4097,8 +4109,11 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                                     graph_id,
                                     sample,
                                     &mut context,
-                                    Some((channel_index, alpha.clone(), *channel_weight)),
-                                    None,
+                                    Some(SamplingChannelEvaluation::LegacyLmb {
+                                        id: channel_index,
+                                        alpha: alpha.clone(),
+                                        channel_weight: *channel_weight,
+                                    }),
                                     None,
                                 )?
                             };
