@@ -4226,11 +4226,24 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                             "Momentum-space evaluation for discrete multichanneling requires selecting a channel."
                         )
                     })?;
-                    DiscreteGraphSample::DiscreteMultiChanneling {
-                        alpha: F::from_f64(multichanneling_settings.alpha),
-                        channel_weight: multichanneling_settings.channel_weight,
-                        channel_id,
-                        sample,
+                    let parameterization_settings =
+                        &multichanneling_settings.parameterization_settings;
+                    let graph = integrand.get_master_graph(group_id);
+                    // Resolve the ID against the canonical graph catalogue before
+                    // selecting the evaluator route. Named/surface entries are
+                    // already in the parent frame and must not be interpreted as
+                    // legacy LMB coordinates.
+                    let is_lmb =
+                        graph.sampling_channel_is_lmb(channel_id, parameterization_settings)?;
+                    if is_lmb {
+                        DiscreteGraphSample::DiscreteMultiChanneling {
+                            alpha: F::from_f64(multichanneling_settings.alpha),
+                            channel_weight: multichanneling_settings.channel_weight,
+                            channel_id,
+                            sample,
+                        }
+                    } else {
+                        DiscreteGraphSample::Advanced { channel_id, sample }
                     }
                 }
             };
@@ -5111,50 +5124,62 @@ mod tests {
         };
         let default_settings = ParameterizationSettings::default();
         let override_settings = ParameterizationSettings {
-            lmb_basis_ids: std::collections::BTreeMap::from([("G".to_string(), vec![1])]),
+            lmb_basis_ids: std::collections::BTreeMap::from([(setup.graph.name.clone(), vec![1])]),
             ..Default::default()
         };
         let out_of_range_settings = ParameterizationSettings {
-            lmb_basis_ids: std::collections::BTreeMap::from([("G".to_string(), vec![3])]),
+            lmb_basis_ids: std::collections::BTreeMap::from([(setup.graph.name.clone(), vec![3])]),
             ..Default::default()
         };
 
         assert_eq!(
-            setup.selected_lmb_basis_id("G", &default_settings).unwrap(),
+            setup
+                .selected_lmb_basis_id(&setup.graph.name, &default_settings)
+                .unwrap(),
             LmbIndex::from(2)
         );
         assert_eq!(
             setup
-                .selected_lmb_basis_id("G", &override_settings)
+                .selected_lmb_basis_id(&setup.graph.name, &override_settings)
                 .unwrap(),
             LmbIndex::from(1)
         );
         assert_eq!(
-            setup.effective_channels("G", &override_settings).unwrap(),
+            setup
+                .effective_channels(&setup.graph.name, &override_settings)
+                .unwrap(),
             vec![LmbIndex::from(1)]
         );
         assert_eq!(
             setup
-                .effective_channel_count("G", &override_settings)
+                .effective_channel_count(&setup.graph.name, &override_settings)
                 .unwrap(),
             1
         );
         assert_eq!(
             setup
-                .effective_channel_lmb_id(SamplingChannelId::from(0), "G", &override_settings)
+                .effective_channel_lmb_id(
+                    SamplingChannelId::from(0),
+                    &setup.graph.name,
+                    &override_settings,
+                )
                 .unwrap(),
             LmbIndex::from(1)
         );
         assert_eq!(
             setup
-                .effective_channel_edge_ids(SamplingChannelId::from(0), "G", &override_settings)
+                .effective_channel_edge_ids(
+                    SamplingChannelId::from(0),
+                    &setup.graph.name,
+                    &override_settings,
+                )
                 .unwrap()
                 .as_slice(),
             &[1]
         );
         assert!(
             setup
-                .selected_lmb_basis_id("G", &out_of_range_settings)
+                .selected_lmb_basis_id(&setup.graph.name, &out_of_range_settings)
                 .is_err()
         );
     }
