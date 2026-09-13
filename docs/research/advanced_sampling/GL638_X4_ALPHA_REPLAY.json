@@ -1,0 +1,1502 @@
+{
+  "schema_version": 1,
+  "scope": "Three raw native physical evaluations, all936 GL638 production orientations and all6cuts; unchanged threshold metadata, 3D localUV and integratedUV. This is a zeroth-alpha regression, not a variance study or a raised-IFT test.",
+  "source": {
+    "state": "/common/dev/gl638_checkpoint_06d470409/all/state",
+    "cards": {
+      "optimized_lmb": "/tmp/gl638-x4-alpha-replay/optimized_lmb.toml"
+    },
+    "source_status": "linked from clean committed source after complete core/API/differential gates",
+    "frozen_comparison_source": "f2f64fb17dd5dab588eca298dc61f1100fa4962d",
+    "cases": [
+      "hz_03_stack",
+      "hz_03_arb",
+      "soft22_ct_on_arb"
+    ],
+    "purpose": "bounded physical zeroth-alpha regression; six simple GL638 cut groups dispatch no LU IFT derivatives",
+    "argv": [
+      "/tmp/gl638-x4-alpha-replay/physical_native",
+      "/tmp/gl638-x4-alpha-replay/manifest.json",
+      "/tmp/gl638-x4-alpha-replay/requests.json",
+      "/tmp/gl638-x4-alpha-replay/results"
+    ],
+    "input_sha256": {
+      "/tmp/gl638-x2-pilot/physical_native.rs": "d91559abe6dfc3b4d88ced7970fc555bfb67d11b45c1434b8fcc3c688a6233e8",
+      "/tmp/gl638-x4-alpha-replay/physical_native.rs": "97772aacdbebf02050eeec4eb18b5cc7f4c2238843a0c71280aa855d194ad327",
+      "/tmp/gl638-x4-alpha-replay/optimized_lmb.toml": "ce606d429657c4a73c5dba632ad8ef0662ad41f013c18da88b059115a7791a70",
+      "/tmp/gl638-x4-alpha-replay/requests.json": "e6757675acd4c82e96db7ccfb6e4aaa9b443926da7f5df5058428e5f2e14bc5c"
+    },
+    "source_commit": "9d2bdf48367cb6bddfe7039c9331f73d1db39dae",
+    "linked_utc": "2026-09-13T20:37:00.011146+00:00",
+    "api_fingerprint": "/common/dev/gammaloop_ir_safe_thresholds/target/debug/.fingerprint/gammaloop-api-a196f440a26dc6bc/lib-gammaloop_api.json",
+    "api_fingerprint_sha256": "f41e422d4311305da4ea42a58637cb2f8f756ec6a0ca1db92a2e4ae1850b32c8",
+    "cargo_lock_sha256": "b61a47c74debca9bfdea2dd5347bd19264bbd0971cb0dba8dfa7298fd1c4da0d",
+    "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "binary_sha256": "e92c5ae081ae93334674ce3558158af8a73d124ec6981a7816e331be1d26aac9",
+    "native_dynamic_libraries": {
+      "/nix/store/8lahnh9pn3lrrnhax5nk7ibvjcbjmnkm-gcc-15.2.0-lib/lib/libgcc_s.so.1": "ae044ece9877d38a4a4bcee7b9c15eed9b50d0dad24d41617eec8fff8bbd262d",
+      "/nix/store/ias8xacs1h3jy7xgwi2awvim61k2ji6c-glibc-2.42-67/lib/libm.so.6": "793d585cf6ddd7ad6adaa7a0142b75f2077fa87487c852ef45516dd7fd7bde42",
+      "/nix/store/ias8xacs1h3jy7xgwi2awvim61k2ji6c-glibc-2.42-67/lib/libc.so.6": "4b6b7a9379b38cb5f6531a7edc4d108391e45221d5b08f171f19460c141f1551",
+      "/nix/store/ias8xacs1h3jy7xgwi2awvim61k2ji6c-glibc-2.42-67/lib/ld-linux-x86-64.so.2": "35c6a09b52908df5bb50d3c38ee63320fa038eb105f210b3e745f02791e84c65",
+      "/nix/store/ias8xacs1h3jy7xgwi2awvim61k2ji6c-glibc-2.42-67/lib64/ld-linux-x86-64.so.2": "35c6a09b52908df5bb50d3c38ee63320fa038eb105f210b3e745f02791e84c65"
+    }
+  },
+  "frozen_comparison": {
+    "source_commit": "f2f64fb17dd5dab588eca298dc61f1100fa4962d",
+    "artifact": "GL638_X2_PHYSICAL_PILOT.json",
+    "native_cases_field": "native_physical_cases",
+    "baseline_generation_source": "06d470409cd34d8d57afa11b04a3fb208ca20890",
+    "original_input_sha256": {
+      "/common/dev/gammaloop_advanced_sampling_checkpoint/examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO_test_GL638.toml": "ab14fb4767e723a737dbca58de438df9e06e22a364c1cec0484951888ff665fe",
+      "/common/dev/gammaloop_advanced_sampling_checkpoint/examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot": "1354c6d854ea66a6298eb1ac9eaad31c3bf8744f0033e83b6e510d0f64602279",
+      "/common/dev/gammaloop_advanced_sampling_checkpoint/assets/models/json/sm/sm.json": "e2d605720392666345939f283b54b0527ddf68890898136f73d27dd976900ed1",
+      "/common/dev/gammaloop_advanced_sampling_checkpoint/assets/models/json/sm/restrict_default.json": "9d357d17c254595dbf612b66d6b531c982eefb71432835360bbfd8b21dcf454b",
+      "/common/dev/gammaloop_advanced_sampling_checkpoint/Cargo.lock": "b61a47c74debca9bfdea2dd5347bd19264bbd0971cb0dba8dfa7298fd1c4da0d"
+    },
+    "uv": {
+      "subtract_uv": true,
+      "generate_integrated": true,
+      "final_integrand": "ThreeD",
+      "local_uv_cts_from_expanded_4d_integrands": false
+    }
+  },
+  "execution": {
+    "argv": [
+      "/tmp/gl638-x4-alpha-replay/physical_native",
+      "/tmp/gl638-x4-alpha-replay/manifest.json",
+      "/tmp/gl638-x4-alpha-replay/requests.json",
+      "/tmp/gl638-x4-alpha-replay/results"
+    ],
+    "started_utc": "2026-09-13T20:37:18.633102+00:00",
+    "finished_utc": "2026-09-13T20:46:15.397179+00:00",
+    "elapsed_seconds": 536.764086826006,
+    "returncode": 0,
+    "binary_sha256": "e92c5ae081ae93334674ce3558158af8a73d124ec6981a7816e331be1d26aac9",
+    "driver_source_sha256": "97772aacdbebf02050eeec4eb18b5cc7f4c2238843a0c71280aa855d194ad327",
+    "log_sha256": "de5fb65c25531c89b80c8564efe1bf0b847c467182382aef49e9150e62927366",
+    "source_commit": "9d2bdf48367cb6bddfe7039c9331f73d1db39dae",
+    "matching_library_sha256": "592c6d0cf52bf3d40c2c1d0a16457d5e48fb500d4231f8da658678f7c642e611  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libgammaloop_api.rlib\n81dfc91d480b146ce39f019fb044e53c4dc1730206e8f15f34b51ece6675db7f  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libgammalooprs-f8d2e69e9c98f363.rlib\n8c79e78a14b35ff96341c76253edc886e478fac0c9e982626f0fea79f4ee9c1e  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libfigment-928a82f04f093fab.rlib\n25782971400679920fbbab8e9ac5704eef7c540c142385896229048a31c90ca3  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libtoml-3d67d1f27a884f50.rlib\n8f71b311138f8b0c34c1f5a47c40a759c4e84e1f6d059f45fd90eba464fe629c  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libcolor_eyre-0e266bf87653fca1.rlib\nd6cd5a2763582bed8719a7f1271aab1585d1eb8ed34a06f4024a2d32765d19c8  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libserde_json-cc2a74ccd07dd083.rlib\nd5ecaf2a932e93d830a7b95ccecb80620273f0eb565e2faac4d0aadabddc2070  /common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libsymbolica-697ea125b5739515.rlib\n"
+  },
+  "cut_groups": [
+    {
+      "cut_ids": [
+        3
+      ],
+      "group_id": 0,
+      "max_occurrence": 1
+    },
+    {
+      "cut_ids": [
+        4
+      ],
+      "group_id": 1,
+      "max_occurrence": 1
+    },
+    {
+      "cut_ids": [
+        1
+      ],
+      "group_id": 2,
+      "max_occurrence": 1
+    },
+    {
+      "cut_ids": [
+        0
+      ],
+      "group_id": 3,
+      "max_occurrence": 1
+    },
+    {
+      "cut_ids": [
+        5
+      ],
+      "group_id": 4,
+      "max_occurrence": 1
+    },
+    {
+      "cut_ids": [
+        2
+      ],
+      "group_id": 5,
+      "max_occurrence": 1
+    }
+  ],
+  "ift_dispatch_evidence": {
+    "max_occurrence_for_all_cut_groups": 1,
+    "generated_t_derivative_count": 0,
+    "backend": "None",
+    "source_owners": [
+      "crates/gammaloop-api/src/integrand_info.rs::cut_raising_powers",
+      "crates/gammalooprs/src/integrands/process/cross_section/mod.rs:generate_rstar_t_dependence_evaluator(max_occurence.saturating_sub(1))",
+      "crates/gammalooprs/src/subtraction/mod.rs:generate_rstar_t_dependence_evaluator(0)",
+      "crates/gammalooprs/src/subtraction/lu_counterterm.rs:EsurfaceCTBuilder::solve_rstar supports_t_derivatives guard"
+    ],
+    "interpretation": "The generic factorial defect does not execute in this GL638 state. This replay checks the alpha representation and the rest of the physical pipeline; generated raised-cut tests independently cover the corrected IFT."
+  },
+  "state_integrity": {
+    "verified_utc": "2026-09-13T20:49:40.834259+00:00",
+    "state_directory": "/common/dev/gl638_checkpoint_06d470409/all/state",
+    "baseline_artifact": "GL638_X2_PHYSICAL_PILOT.json:pilot_provenance.state_sha256_before",
+    "all_recorded_hashes_unchanged": true,
+    "verified_file_count": 35,
+    "unchanged_sha256": {
+      "model_parameters.json": "5cf4b422cfe328559dd3cc9322e5e66c264faba54d5d44b4f5772c3a53a43572",
+      "state_manifest.toml": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8",
+      "global_settings.toml": "95f980a1be61490c716972f0ce6abbc681b99f1308fb675b6e07e64d8cef5a94",
+      "justfile": "49ce845fc918f10f5e41e7d3e13bf8ac862707fdd7144db1221167375556d65c",
+      "model.json": "73bd6a7f4ed3c2a6f5ef35520fd39152483e77d947852ca9d02e913c0296395a",
+      "symbolica_state.bin": "202e160c0e5942aed0ee3679d05d558860cdabe88d24e9b8136405d94a179a6a",
+      "default_runtime_settings.toml": "c233c8791f3745ea736f3643dec6366dd67d8ca561e57356f789dbd272c28eb9",
+      "run.toml": "e874689cffe889735e8454bdb77bb7748b7fda091a46a6d9a3fac0b7e160eeab",
+      "processes/cross_sections/epem_a_tth/settings_history.toml": "cb94f2b51e2ab3b7b586268284dc6076bcc370fc1055956439d7782733104163",
+      "processes/cross_sections/epem_a_tth/def.bin": "0fffb787dcb4198728500a56df9c62f3d625766f3e928e012b9685a3a5a974a3",
+      "processes/cross_sections/epem_a_tth/NNLO/cs.bin": "a843eba496ea639d171b1fa5a14284103dd2e6604ca3ccad320014ede23aeda2",
+      "processes/cross_sections/epem_a_tth/NNLO/GL638.dot": "7fd875ea567fa04e009f20015b14ddaea1f89b3915294858313abc3b062e0942",
+      "processes/cross_sections/epem_a_tth/NNLO/generation_summary.json": "66396569b2ebd19988b3a22a55f3f711803478eb254dbd86a58718843fe1a370",
+      "processes/cross_sections/epem_a_tth/NNLO/integrand/settings.toml": "cdb28893b036e54f3a36b5ce18c1b58caa3ecc92525a2a9794153ee39ed4f022",
+      "processes/cross_sections/epem_a_tth/NNLO/integrand/integrand.bin": "a33d3408acb7a2c5b553bd9fb9669061169f23272b9745009d02a28f65d92c7c",
+      "drawings/templates/figure.typ": "4ab1913e6476ef9f49b4a4bdc07d44589124e5030168fb853963990d7b164672",
+      "drawings/templates/edge-style.typ": "0e961db4de2d939cc0bee8fc59fe82850e220cb96a1fe4d7e938bbbd7e9e0789",
+      "drawings/templates/layout.typ": "069a852cd32f4cb519cbd6eebcc94338ca23e561ad59cee454c89a769ea3568e",
+      "drawings/templates/grid.typ": "a2aea8505809f39564ff2d0ebb1a1c9ac9ee3b46b211d57c72e32c1f1f0ca11d",
+      "drawings/templates/crates/linnest/typst/typst.toml": "899f5436fa4211c3e98fe022a7968623782a5648980ade9d0c8c0e6cf6ecdfa0",
+      "drawings/templates/crates/linnest/typst/linnest.wasm": "655d6c2f3dbdac1d6c8ead2113d0cb576a026e3b9e1bc66b7a6c41439e16cd9d",
+      "drawings/templates/crates/linnest/typst/src/lib.typ": "85d9ce54cad4251140acdea0a153a737b465d346b9668665f53c1db2fa6eb200",
+      "drawings/templates/crates/linnest/typst/src/draw.typ": "7029235345346572dcf7dcd26cf947c9516efdd9828a183d8613b60c6ad8e22f",
+      "drawings/templates/crates/linnest/typst/src/graph.typ": "3b332b75f3212458ef4815010f5ff645c762d09a1fd9798c9637636590f0f392",
+      "drawings/templates/crates/linnest/typst/src/physics-edge-style.typ": "854530edde9152b8adb01cf8e097c4107f0277ac175f6e47c37df97ada735cd7",
+      "drawings/templates/crates/linnest/typst/src/subgraph.typ": "d318d5e98e902e06f412cd8a1f45ebc6f6c8218a7c4063bf3582333616122c53",
+      "drawings/templates/crates/linnest/typst/src/layout.typ": "3c06a8413a62fe124c0731fcb6e0ad354051214d055a682520df5c4186d8301c",
+      "drawings/templates/crates/linnest/typst/src/curve.typ": "4350dfbe4a8e825396e4f476731b9862935d87fb6630c24425350f4071b9e590",
+      "drawings/templates/crates/linnest/typst/src/impl/physics-edge-style.typ": "1e13992babc10e7310fe24bfe0e4f4f67c5ea51afaf08b413418f4d88d269965",
+      "drawings/templates/crates/linnest/typst/src/impl/graph.typ": "1dc82dd0099c0810036992a378042a33f5c162fd919d08d79cf218b8716c08dd",
+      "drawings/templates/crates/linnest/typst/src/impl/draw.typ": "0acb9d50e9f6ac24dbe5b3c9727e3ec4c65843d4dbce57ba5c4f973a0b75f682",
+      "drawings/templates/crates/kurvst/typst/kurvst.wasm": "50619c0dbe6ec78538f9e8a8587b5b8ad33d464672dec974c2c53ab93f7ebd15",
+      "drawings/templates/crates/kurvst/typst/typst.toml": "0d7eec512c399c0beeee8402393b32e489856fbdeb30945feff0ed298dd8bbbd",
+      "drawings/templates/crates/kurvst/typst/src/impl.typ": "0feab4012862ea5020e4bc833861f333d0f68ea2fc3b5420af5709edeaaf10d8",
+      "drawings/templates/crates/kurvst/typst/src/lib.typ": "90fd7952020cb3162f95acb47389e1dafc0516d03d085fa780b084904e9ad636"
+    },
+    "additional_files_outside_original_hash_set": []
+  },
+  "comparison": {
+    "relative_error_definition": "complex norm(new-old)/max(norm(new),norm(old)); both zero=>0",
+    "cases": [
+      {
+        "case": "hz_03_stack",
+        "old_precision": "Double",
+        "new_precision": "Double",
+        "old_total": {
+          "im": "0.000000000000000000000000000000025327509653158803",
+          "re": "-0.000000000000000000000000000000011123062423769237"
+        },
+        "new_total": {
+          "im": "0.000000000000000000000000000000025327509671697254",
+          "re": "-0.000000000000000000000000000000011123062424924006"
+        },
+        "relative_total_complex_norm": "6.71468111279497569251109534035021E-10",
+        "event_identity_equal": true,
+        "old_event_count": 6,
+        "new_event_count": 6,
+        "max_event_relative_complex_norm": "7.22818445031133821938697173870601E-10",
+        "events": [
+          {
+            "cut_info": {
+              "cut_id": 0,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6,
+                  21
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "-0.00000000000000000000000000000000000000007535055916950982",
+              "re": "0.000000000000000000000000000000000000000000000003241124894106032"
+            },
+            "new_weight": {
+              "im": "-0.00000000000000000000000000000000000000007535055916950988",
+              "re": "0.0000000000000000000000000000000000000000000000032411248936873604"
+            },
+            "relative_complex_norm": "7.96297484178514407578243407103168E-16"
+          },
+          {
+            "cut_info": {
+              "cut_id": 1,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "0.00000000000000000000000000000002564962434307536",
+              "re": "0.000000000000000000000000000000001613551872278155"
+            },
+            "new_weight": {
+              "im": "0.00000000000000000000000000000002564962436165203",
+              "re": "0.0000000000000000000000000000000016135518722781605"
+            },
+            "relative_complex_norm": "7.22818445031133821938697173870601E-10"
+          },
+          {
+            "cut_info": {
+              "cut_id": 2,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6,
+                  21,
+                  21
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "0.000000000000000000000000000000000000000011954484012787886",
+              "re": "-0.000000000000000000000000000000000000000000000000000000000006023604311823379"
+            },
+            "new_weight": {
+              "im": "0.000000000000000000000000000000000000000011954484012787886",
+              "re": "-0.000000000000000000000000000000000000000000000000000000000006023604311823379"
+            },
+            "relative_complex_norm": "0.00000000000000000000000000000000E+1072"
+          },
+          {
+            "cut_info": {
+              "cut_id": 3,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "-0.0000000000000000000000000000000003221122217099436",
+              "re": "-0.000000000000000000000000000000012736615555429055"
+            },
+            "new_weight": {
+              "im": "-0.00000000000000000000000000000000032211222174816297",
+              "re": "-0.00000000000000000000000000000001273661555658383"
+            },
+            "relative_complex_norm": "9.06864128155675301577179532431287E-11"
+          },
+          {
+            "cut_info": {
+              "cut_id": 4,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6,
+                  21
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "0.0000000000000000000000000000000000000009181752894413587",
+              "re": "0.00000000000000000000000000000000000000034234489232079315"
+            },
+            "new_weight": {
+              "im": "0.0000000000000000000000000000000000000009181752894413596",
+              "re": "0.0000000000000000000000000000000000000003423448923207928"
+            },
+            "relative_complex_norm": "9.85446819854970436708772517302798E-16"
+          },
+          {
+            "cut_info": {
+              "cut_id": 5,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6,
+                  21
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "-0.000000000000000000000000000000000000003322985818248083",
+              "re": "0.0000000000000000000000000000000000000009170367651049527"
+            },
+            "new_weight": {
+              "im": "-0.00000000000000000000000000000000000000332298581824812",
+              "re": "0.0000000000000000000000000000000000000009170367651049518"
+            },
+            "relative_complex_norm": "1.07365221428791979798803198655960E-14"
+          }
+        ],
+        "old_is_nan": false,
+        "new_is_nan": false,
+        "old_stability_results": [
+          {
+            "estimated_relative_accuracy": 2.302805698111515e-10,
+            "precision": "Double",
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "nanos": 36778742,
+              "secs": 0
+            }
+          }
+        ],
+        "new_stability_results": [
+          {
+            "estimated_relative_accuracy": 8.879148638145885e-11,
+            "precision": "Double",
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "nanos": 575656258,
+              "secs": 0
+            }
+          }
+        ],
+        "smallest_nonzero_new_event_component": "6.023604311823379E-60",
+        "new_reporting_factors": {
+          "parameterization_jacobian": null,
+          "integrator_weight": "1"
+        },
+        "input": {
+          "name": "hz_03_stack",
+          "mode": "optimized_lmb",
+          "forced_arb": false,
+          "momentum_space": true,
+          "threshold_ct_enabled": true,
+          "point_tokens": [
+            "80.051404910012451",
+            "-279.39769435373211",
+            "156.63544180550156",
+            "133.64874779217956",
+            "-73.044385181140456",
+            "270.30215335459906",
+            "153.02426278264537",
+            "-373.94525199342525",
+            "112.54657098792093",
+            "263.67571450212097",
+            "-95.47931288817918",
+            "11.74711974094534"
+          ],
+          "result": "/tmp/gl638-x4-alpha-replay/results/hz_03_stack.json",
+          "frozen_reference": "/tmp/gl638-x2-pilot/physical_native_results/hz_03_stack.json"
+        },
+        "new_elapsed_seconds": 0.576060219,
+        "new_metadata": {
+          "accepted_event_count": 6,
+          "evaluator_evaluation_time": {
+            "nanos": 291750305,
+            "secs": 0
+          },
+          "event_processing_time": {
+            "nanos": 516260,
+            "secs": 0
+          },
+          "generated_event_count": 6,
+          "integrand_evaluation_time": {
+            "nanos": 320272839,
+            "secs": 0
+          },
+          "is_nan": false,
+          "loop_momenta_escalation": null,
+          "parameterization_time": {
+            "nanos": 0,
+            "secs": 0
+          },
+          "relative_instability_error": {
+            "im": 0.0,
+            "re": 0.0
+          },
+          "stability_results": [
+            {
+              "estimated_relative_accuracy": 8.879148638145885e-11,
+              "precision": "Double",
+              "status": {
+                "Stable": 2
+              },
+              "total_time": {
+                "nanos": 575656258,
+                "secs": 0
+              }
+            }
+          ],
+          "total_timing": {
+            "nanos": 575785038,
+            "secs": 0
+          }
+        },
+        "new_event_groups_and_additional_weights": [
+          {
+            "cut_id": 3,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 4,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 1,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 0,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 5,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 2,
+            "group": 0,
+            "additional_weights": []
+          }
+        ],
+        "old_metadata": {
+          "accepted_event_count": 6,
+          "evaluator_evaluation_time": {
+            "nanos": 17006737,
+            "secs": 0
+          },
+          "event_processing_time": {
+            "nanos": 24579,
+            "secs": 0
+          },
+          "generated_event_count": 6,
+          "integrand_evaluation_time": {
+            "nanos": 18412541,
+            "secs": 0
+          },
+          "is_nan": false,
+          "loop_momenta_escalation": null,
+          "parameterization_time": {
+            "nanos": 0,
+            "secs": 0
+          },
+          "relative_instability_error": {
+            "im": 0.0,
+            "re": 0.0
+          },
+          "stability_results": [
+            {
+              "estimated_relative_accuracy": 2.302805698111515e-10,
+              "precision": "Double",
+              "status": {
+                "Stable": 2
+              },
+              "total_time": {
+                "nanos": 36778742,
+                "secs": 0
+              }
+            }
+          ],
+          "total_timing": {
+            "nanos": 36808462,
+            "secs": 0
+          }
+        },
+        "old_reporting_factors": {
+          "parameterization_jacobian": null,
+          "integrator_weight": "1"
+        },
+        "old_event_groups_and_additional_weights": [
+          {
+            "cut_id": 3,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 4,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 1,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 0,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 5,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 2,
+            "group": 0,
+            "additional_weights": []
+          }
+        ]
+      },
+      {
+        "case": "hz_03_arb",
+        "old_precision": "Arb",
+        "new_precision": "Arb",
+        "old_total": {
+          "im": "2.53275096579200051843424286588132255966644353899335062252329387131454674843176437097500147096993982741543674176005358208647027666118423350660470316314576569243170703111255120535745988453740170710887440486295219124919445645307917455684651654009580036633796299310444069506927237597363130121949677935236027e-32",
+          "re": "-1.11230624285921732849677494080653871201955196146583053937952252864367356453419863427121914499000065531720905278676836907680843593783826706326386856555757866253314598138523543774141335314118708567884497693039207470062990927090369599512616491432993674085902436116992283823495572369024338985234202878079397e-32"
+        },
+        "new_total": {
+          "im": "2.53275096579200051843424286588132255966644353899335062252329387131454674843176437097500147096993982741543674176005358208647027666118423350660470316314576569243170703111255120535745988453740170710887440486295219124919445645307917455684651654009580036633796299310444069506927237597363130121949677935076636e-32",
+          "re": "-1.11230624285921732849677494080653871201955196146583053937952252864367356453419863427121914499000065531720905278676836907680843593783826706326386856555757866253314598138523543774141335314118708567884497693039207470062990927090369599512616491432993674085902436116992283823495572369024338985234202882932688e-32"
+        },
+        "relative_total_complex_norm": "1.75542162314224106304381580883583E-296",
+        "event_identity_equal": true,
+        "old_event_count": 6,
+        "new_event_count": 6,
+        "max_event_relative_complex_norm": "3.81138405984610552844684994061841E-296",
+        "events": [
+          {
+            "cut_info": {
+              "cut_id": 0,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6,
+                  21
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "-7.53505591695093323728340552211572310060734772138141025616514910972305011462842085197660589279927376248455467721051171265527328165891582266324703781833253301435218634349196063592411425639887116424564492568951520625630400989768316617737620668598566708255820028531053438681217374051044475880288002575900098e-41",
+              "re": "3.24112489369489161427503653497449955606248292088581261171815819273184574497468121323961787563680312793219211804865293824767377578612512804433595222394353721838347763018589844201972101845263270228607967323714229935690908884271243838951813325452340552914533877496050810074700011206197266712063904019613827e-48"
+            },
+            "new_weight": {
+              "im": "-7.53505591695093323728340552211572310060734772138141025616514910972305011462842085197660589279927376248455467721051171265527328165891582266324703781833253301435218634349196063592411425639887116424564492568951520625630400989768316617737620668598566708255820028531053438681217374051044475880288002575900955e-41",
+              "re": "3.24112489369489161427503653497449955606248292088581261171815819273184574497468121323961787563680312793219211804865293824767377578612512804433595222394353721838347763018589844201972101845263270228607967323714229935690908884271243838951813325452340552914533877496050810074700011206197266712063904725922421e-48"
+            },
+            "relative_complex_norm": "1.14120672026286907321246971487101E-300"
+          },
+          {
+            "cut_info": {
+              "cut_id": 1,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "2.56496243512035153867781319784916913990614353273490771671045140864251477094197001739270944018059534195275687868551594956991508171469616887563779332271906258266824817705291763216704137985523130557677216388110331305288536286326798784163822648363910839665382645927104451673929165003445362628796467138425096e-32",
+              "re": "1.61355187243704311869155855953751306959719208952577263812044021566501048753643090349827041406211869621782765595715905945551506949467800987834796561774262055237381541463799978803666566393500167905205007084886231848275098127933151358420997288344857079249231640792259689506814875338105518067604285624822149e-33"
+            },
+            "new_weight": {
+              "im": "2.56496243512035153867781319784916913990614353273490771671045140864251477094197001739270944018059534195275687868551594956991508171469616887563779332271906258266824817705291763216704137985523130557677216388110331305288536286326798784163822648363910839665382645927104451673929165003445362628796467138426845e-32",
+              "re": "1.61355187243704311869155855953751306959719208952577263812044021566501048753643090349827041406211869621782765595715905945551506949467800987834796561774262055237381541463799978803666566393500167905205007084886231848275098127933151358420997288344857079249231640792259689506814875338105518067604285624822120e-33"
+            },
+            "relative_complex_norm": "6.80537038496765566253943334856422E-300"
+          },
+          {
+            "cut_info": {
+              "cut_id": 2,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6,
+                  21,
+                  21
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "1.19544840127878563691622766465698623963643270023790378213825706400393661396025276773182504091869697386720272867217143726614338177497587724309762038312105605791123441239320695810730483308966088091424485875665951929015518925714254229509220161739752810703952928653581559627518792273842710573435293062348864e-41",
+              "re": "9.96175826086722889649071117878222965941403875193793518415363223904183340456387515973425790179425799623980304632343123767551609646597624329192780233073837101626108685419134611736293321006266139816269261843086063286170251045728577237827894118234264304959479824387177918193292092462364232393109823110386064e-344"
+            },
+            "new_weight": {
+              "im": "1.19544840127878563691622766465698623963643270023790378213825706400393661396025276773182504091869697386720272867217143726614338177497587724309762038312105605791123441239320695810730483308966088091424485875665951929015518925714254229509220161739752810703952928653581559627518792273842710573435293062348864e-41",
+              "re": "9.96175826086722889649071117878222965941403875193793518415363223904183340456387515973425790179425799623980304632343123767551609646597624329192780233073837101626108685419134611736293321006266139816269261843086063286170251045728577237827894118234264304959479824387177918193292092462364232393109823110386064e-344"
+            },
+            "relative_complex_norm": "0.00000000000000000000000000000000E+1072"
+          },
+          {
+            "cut_info": {
+              "cut_id": 3,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "-3.22112225076906239067712380790090061854585034247707866035837818064551239139087669334719874141628141451449752418308346344163074592205475319337127979882935192466029244359919122718521623098100825670441394072559524315011551177776754866304502833073102621409412400321540473798833568164435374683029293010575779e-34",
+              "re": "-1.27366155604108770706290148795740051767297089409782931959518078487522714245318061524836229853258499451727071037539310855399595516860072158707560997262891008676349115189331745950061913333654222962919006386632759609843724402909621006815397244320444170940323826647022681796600391761860319053601874788565354e-32"
+            },
+            "new_weight": {
+              "im": "-3.22112225076906239067712380790090061854585034247707866035837818064551239139087669334719874141628141451449752418308346344163074592205475319337127979882935192466029244359919122718521623098100825670441394072559524315011551177776754866304502833073102621409412400321540473798833568164435374683029293026690299e-34",
+              "re": "-1.27366155604108770706290148795740051767297089409782931959518078487522714245318061524836229853258499451727071037539310855399595516860072158707560997262891008676349115189331745950061913333654222962919006386632759609843724402909621006815397244320444170940323826647022681796600391761860319053601874793418645e-32"
+            },
+            "relative_complex_norm": "3.81138405984610552844684994061841E-296"
+          },
+          {
+            "cut_info": {
+              "cut_id": 4,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6,
+                  21
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "9.18175289441439081981883277779411167141807448054209756514244125818108610123258948769955707539674199852734924548233892824077787253816809902940774831566317255968775545256284795360620283630071069828899111379185183066518011733229649967765916285763107239304495275432596166657716212997870970159009390633441007e-40",
+              "re": "3.42344892320893918720029218521638206052861081767213928503371140480824477028435711984646919562572209821925920497031253214370773050370603633571644483304576910658675282049340554849469047937872302538517059347570587143760488718391047279664365011552641542775964201183983961864611567978499177064272599677643041e-40"
+            },
+            "new_weight": {
+              "im": "9.18175289441439081981883277779411167141807448054209756514244125818108610123258948769955707539674199852734924548233892824077787253816809902940774831566317255968775545256284795360620283630071069828899111379185183066518011733229649967765916285763107239304495275432596166657716212997870970159009390633442104e-40",
+              "re": "3.42344892320893918720029218521638206052861081767213928503371140480824477028435711984646919562572209821925920497031253214370773050370603633571644483304576910658675282049340554849469047937872302538517059347570587143760488718391047279664365011552641542775964201183983961864611567978499177064272599677643590e-40"
+            },
+            "relative_complex_norm": "1.25184225392942386896212506674769E-300"
+          },
+          {
+            "cut_info": {
+              "cut_id": 5,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6,
+                  21
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "-3.32298581824808559691709987494536621343526616091861042932919033434688044391141962774547282602479018358339772039134077504612940213334840422235513069092410186861940977109067455191253238455598750319169406240357852370978063490480585632554543621275897507181065306318775033792479014269615244325563245072805281e-39",
+              "re": "9.17036765104950894497050272190262256209433577334339292957466773092670719145991704162035591893592703461200039906092988859789235237315390028756198166049400501688230319996737207102651059802858079807360731261845061985399805551845931980028493077822175025345710712572919596360782874100661435208555106891380284e-40"
+            },
+            "new_weight": {
+              "im": "-3.32298581824808559691709987494536621343526616091861042932919033434688044391141962774547282602479018358339772039134077504612940213334840422235513069092410186861940977109067455191253238455598750319169406240357852370978063490480585632554543621275897507181065306318775033792479014269615244325563245072807036e-39",
+              "re": "9.17036765104950894497050272190262256209433577334339292957466773092670719145991704162035591893592703461200039906092988859789235237315390028756198166049400501688230319996737207102651059802858079807360731261845061985399805551845931980028493077822175025345710712572919596360782874100661435208555106891379736e-40"
+            },
+            "relative_complex_norm": "5.09356901828489923089697930427407E-300"
+          }
+        ],
+        "old_is_nan": false,
+        "new_is_nan": false,
+        "old_stability_results": [
+          {
+            "estimated_relative_accuracy": 4.233254957053803e-15,
+            "precision": "Arb",
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "nanos": 481639791,
+              "secs": 2
+            }
+          }
+        ],
+        "new_stability_results": [
+          {
+            "estimated_relative_accuracy": 4.233254957053803e-15,
+            "precision": "Arb",
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "nanos": 346147948,
+              "secs": 6
+            }
+          }
+        ],
+        "smallest_nonzero_new_event_component": "9.96175826086722889649071117878222965941403875193793518415363223904183340456387515973425790179425799623980304632343123767551609646597624329192780233073837101626108685419134611736293321006266139816269261843086063286170251045728577237827894118234264304959479824387177918193292092462364232393109823110386064E-344",
+        "new_reporting_factors": {
+          "parameterization_jacobian": null,
+          "integrator_weight": "1.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "input": {
+          "name": "hz_03_arb",
+          "mode": "optimized_lmb",
+          "forced_arb": true,
+          "momentum_space": true,
+          "threshold_ct_enabled": true,
+          "point_tokens": [
+            "80.051404910012451",
+            "-279.39769435373211",
+            "156.63544180550156",
+            "133.64874779217956",
+            "-73.044385181140456",
+            "270.30215335459906",
+            "153.02426278264537",
+            "-373.94525199342525",
+            "112.54657098792093",
+            "263.67571450212097",
+            "-95.47931288817918",
+            "11.74711974094534"
+          ],
+          "result": "/tmp/gl638-x4-alpha-replay/results/hz_03_arb.json",
+          "frozen_reference": "/tmp/gl638-x2-pilot/physical_native_results/hz_03_arb.json"
+        },
+        "new_elapsed_seconds": 6.346724179,
+        "new_metadata": {
+          "accepted_event_count": 6,
+          "evaluator_evaluation_time": {
+            "nanos": 896161970,
+            "secs": 2
+          },
+          "event_processing_time": {
+            "nanos": 1379235,
+            "secs": 0
+          },
+          "generated_event_count": 6,
+          "integrand_evaluation_time": {
+            "nanos": 990621976,
+            "secs": 2
+          },
+          "is_nan": false,
+          "loop_momenta_escalation": null,
+          "parameterization_time": {
+            "nanos": 0,
+            "secs": 0
+          },
+          "relative_instability_error": {
+            "im": 0.0,
+            "re": 0.0
+          },
+          "stability_results": [
+            {
+              "estimated_relative_accuracy": 4.233254957053803e-15,
+              "precision": "Arb",
+              "status": {
+                "Stable": 2
+              },
+              "total_time": {
+                "nanos": 346147948,
+                "secs": 6
+              }
+            }
+          ],
+          "total_timing": {
+            "nanos": 346347418,
+            "secs": 6
+          }
+        },
+        "new_event_groups_and_additional_weights": [
+          {
+            "cut_id": 3,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 4,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 1,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 0,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 5,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 2,
+            "group": 0,
+            "additional_weights": []
+          }
+        ],
+        "old_metadata": {
+          "accepted_event_count": 6,
+          "evaluator_evaluation_time": {
+            "nanos": 32329398,
+            "secs": 1
+          },
+          "event_processing_time": {
+            "nanos": 338530,
+            "secs": 0
+          },
+          "generated_event_count": 6,
+          "integrand_evaluation_time": {
+            "nanos": 59833724,
+            "secs": 1
+          },
+          "is_nan": false,
+          "loop_momenta_escalation": null,
+          "parameterization_time": {
+            "nanos": 0,
+            "secs": 0
+          },
+          "relative_instability_error": {
+            "im": 0.0,
+            "re": 0.0
+          },
+          "stability_results": [
+            {
+              "estimated_relative_accuracy": 4.233254957053803e-15,
+              "precision": "Arb",
+              "status": {
+                "Stable": 2
+              },
+              "total_time": {
+                "nanos": 481639791,
+                "secs": 2
+              }
+            }
+          ],
+          "total_timing": {
+            "nanos": 481727331,
+            "secs": 2
+          }
+        },
+        "old_reporting_factors": {
+          "parameterization_jacobian": null,
+          "integrator_weight": "1.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "old_event_groups_and_additional_weights": [
+          {
+            "cut_id": 3,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 4,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 1,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 0,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 5,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 2,
+            "group": 0,
+            "additional_weights": []
+          }
+        ]
+      },
+      {
+        "case": "soft22_ct_on_arb",
+        "old_precision": "Arb",
+        "new_precision": "Arb",
+        "old_total": {
+          "im": "-4.14017655094970581319307153578790657616728461887429841564226475873956827035785357975030463732344920262660968139470579577671339509562009338132976607497305351762518581921289199473422978727107265782457977038514101738613267863049969816175918927530394969209237750696284533677551661649347880935690552774357724e-31",
+          "re": "-2.27499649517205322672642988372433182646432932302027723728149200885860875762973762787874030431920612598596503570693076465140470616889161033587165896013166101901179064357754288097800780702529869898762644408271084669219555030890418767611223182197542583230017312293319232868827198935034927848544267127418876e-32"
+        },
+        "new_total": {
+          "im": "-4.14017655094970581319307153578790657616728461887429841564226475873956827035785357975030463732344920262660968139470579577671339509562009338132976607497305351762518581921289199473422978727107265782457977038514101738613267863049969816175918927530394969209237750696284533677551661649347880935690552774357724e-31",
+          "re": "-2.27499649517205322672642988372433182646432932302027723728149200885860875762973762787874030431920612598596503570693076465140470616889161033587165896013166101901179064357754288097800780702529869898762644408271084669219555030890418767611223182197542583230017312293319232868827198935034927844542133052406603e-32"
+        },
+        "relative_total_complex_norm": "9.65201751505834884661689910126316E-289",
+        "event_identity_equal": true,
+        "old_event_count": 6,
+        "new_event_count": 6,
+        "max_event_relative_complex_norm": "9.21303968670608219718502370835127E-304",
+        "events": [
+          {
+            "cut_info": {
+              "cut_id": 0,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6,
+                  21
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "-2.80147099230993437954689944751083816941104037999027783589292225560497556299177909500825854593400664898066059712661300055546053643850367002196478988627359038631968106068991405280929896599249174877045408202596546195790806826063289893666767484441722065317816135607188750081081253239997397994664123164855193e-16",
+              "re": "3.62616349356050491192610927344302934232712971906197403187606154876178118291114540364968987923360725320406727200834595146327172278192750182005429645406445745396413492938814028257497065317234238000889959295839789594411014705401623360019442700919306822037144933719682198006136054231104086439561167300905155e-25"
+            },
+            "new_weight": {
+              "im": "-2.80147099230993437954689944751083816941104037999027783589292225560497556299177909500825854593400664898066059712661300055546053643850367002196478988627359038631968106068991405280929896599249174877045408202596546195790806826063289893666767484441722065317816135607188750081081253239997397994664123164855193e-16",
+              "re": "3.62616349356050491192610927344302934232712971906197403187606154876178118291114540364968987923360725320406727200834595146327172278192750182005429645406445745396413492938814028257497065317234238000889959295839789594411014705401623360019442700919306822037144933719682198006136054231104086439561167300924725e-25"
+            },
+            "relative_complex_norm": "6.98561579031867322932488130027120E-308"
+          },
+          {
+            "cut_info": {
+              "cut_id": 1,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "-2.64503028627596330333277027976691991710446214718168244624040843353195480063399148558178274898253204884172154524358153821010241111163155943000662751297640746061437462355219598308431823510496891191257694255343307040735782588269176840450123708937665800455376844774798515993434779471504108058221312737945880e-16",
+              "re": "9.04116017685279609397826272710048412075461744359479895277793687353331679531767150762624280488931580395191710045234979378366714024167052293770629304192270485568388326490831686668892509590031744166627424180653145623803141319173854159252140674417179614065139948380690623470933316791880741089284539458039305e-25"
+            },
+            "new_weight": {
+              "im": "-2.64503028627596330333277027976691991710446214718168244624040843353195480063399148558178274898253204884172154524358153821010241111163155943000662751297640746061437462355219598308431823510496891191257694255343307040735782588269176840450123708937665800455376844774798515993434779471504108058221312737945880e-16",
+              "re": "9.04116017685279609397826272710048412075461744359479895277793687353331679531767150762624280488931580395191710045234979378366714024167052293770629304192270485568388326490831686668892509590031744166627424180653145623803141319173854159252140674417179614065139948380690623470933316791880741089284539701726995e-25"
+            },
+            "relative_complex_norm": "9.21303968670608219718502370835127E-304"
+          },
+          {
+            "cut_info": {
+              "cut_id": 2,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6,
+                  21,
+                  21
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "2.29155289324584389861911163831755977027960294059718645542288760206112667476396422544348450185368198964803445092763140962007322144047856234310426513594938305121043263213961910019977467345863132663005989721447109586607121495428637367038920645471874971598299086638563486347470033103644357482181985677635782e-16",
+              "re": "2.23615552746497698649464382023567354914794298721445528393262813291768254963749828169813120153844472814825446814315354889286842311537826945012379003715560918717206508180225752955857230341799759747957375094941133191099783607032901057830327364731995789787465994881753378924587979716809126858036751358378135e-318"
+            },
+            "new_weight": {
+              "im": "2.29155289324584389861911163831755977027960294059718645542288760206112667476396422544348450185368198964803445092763140962007322144047856234310426513594938305121043263213961910019977467345863132663005989721447109586607121495428637367038920645471874971598299086638563486347470033103644357482181985677635782e-16",
+              "re": "2.23615552746497698649464382023567354914794298721445528393262813291768254963749828169813120153844472814825446814315354889286842311537826945012379003715560918717206508180225752955857230341799759747957375094941133191099783607032901057830327364731995789787465994881753378924587979716809126858036751358378135e-318"
+            },
+            "relative_complex_norm": "0.00000000000000000000000000000000E+1047"
+          },
+          {
+            "cut_info": {
+              "cut_id": 3,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "1.45591333664995896436020163650012873045891779720445742965534106834454501693162037207602664771764711918502785140003317602462152781812207758369669583485906706652968986996795576898614102581507370132405026647914917017474534884991784656279710588992845310101606804040741819289515321968126059731615731264444752e-15",
+              "re": "-1.88461299283103134643484416385435690439963257500836268631327476663500978898882208787979755463089132859453115755510505481076184323683350892543115436558479724910414136862072587017096061036030593176247512743693790437311273071393130812476521846036495972502500906785007624189126904266212962002049600447465949e-24"
+            },
+            "new_weight": {
+              "im": "1.45591333664995896436020163650012873045891779720445742965534106834454501693162037207602664771764711918502785140003317602462152781812207758369669583485906706652968986996795576898614102581507370132405026647914917017474534884991784656279710588992845310101606804040741819289515321968126059731615731264444752e-15",
+              "re": "-1.88461299283103134643484416385435690439963257500836268631327476663500978898882208787979755463089132859453115755510505481076184323683350892543115436558479724910414136862072587017096061036030593176247512743693790437311273071393130812476521846036495972502500906785007624189126904266212962002049600447473762e-24"
+            },
+            "relative_complex_norm": "5.36639084437376577330354447002027E-308"
+          },
+          {
+            "cut_info": {
+              "cut_id": 4,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6,
+                  21
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "7.10471716117214389515288058621685830178492555549299560857253686769943511825844808730839949452769706296150158906845519420168913043838107906627441904997353996634870813836212227743309968355514730814151306296623623882630344892617766554664062296535048802736506541312486995983166778144260838459471786354577135e-16",
+              "re": "6.17804695368542678473426574074175519955101807989992158501280632808421677398690491241281003017766185812202794710447750398497103372526973941437511850772615484652712665288540684221806340948958180898274080078337263709483730713035907427496213545359114664358533115931696317380007484474148652911330953693575698e-25"
+            },
+            "new_weight": {
+              "im": "7.10471716117214389515288058621685830178492555549299560857253686769943511825844808730839949452769706296150158906845519420168913043838107906627441904997353996634870813836212227743309968355514730814151306296623623882630344892617766554664062296535048802736506541312486995983166778144260838459471786354577135e-16",
+              "re": "6.17804695368542678473426574074175519955101807989992158501280632808421677398690491241281003017766185812202794710447750398497103372526973941437511850772615484652712665288540684221806340948958180898274080078337263709483730713035907427496213545359114664358533115931696317380007484474148652911330953850189644e-25"
+            },
+            "relative_complex_norm": "2.20436566927544885293547635971853E-304"
+          },
+          {
+            "cut_info": {
+              "cut_id": 5,
+              "graph_group_id": 0,
+              "graph_id": 0,
+              "orientation_id": 0,
+              "particle_pdgs": [
+                [
+                  -11,
+                  11
+                ],
+                [
+                  25,
+                  -6,
+                  6,
+                  21
+                ]
+              ],
+              "sampling_channel_edge_ids": null,
+              "sampling_channel_id": null
+            },
+            "old_weight": {
+              "im": "-1.85089021423316838946708898119637604832097397288693722457001233383674972409776041924903795364948912969420697350754264519120960772157409645077693207553569771656880587589927066567864866269590497215588318714654583286543326433773352236365106068852580518549660821837145061838902469450219796475658729812174031e-15",
+              "re": "7.59076711936156504481224615312008930377861093999991438219187821582251811623292135470044134297938746686657389373728182632070478996708193014802064968759321700166937846330352473358847240036984436966740058432646183063770543644200889555447785470404048099327468162758737022689002822762460768265569315569247985e-29"
+            },
+            "new_weight": {
+              "im": "-1.85089021423316838946708898119637604832097397288693722457001233383674972409776041924903795364948912969420697350754264519120960772157409645077693207553569771656880587589927066567864866269590497215588318714654583286543326433773352236365106068852580518549660821837145061838902469450219796475658729812174031e-15",
+              "re": "7.59076711936156504481224615312008930377861093999991438219187821582251811623292135470044134297938746686657389373728182632070478996708193014802064968759321700166937846330352473358847240036984436966740058432646183063770543644200889555447785470404048099327468162758737022689002822762460768265569315273743791e-29"
+            },
+            "relative_complex_norm": "1.59655171186060126235263551730058E-308"
+          }
+        ],
+        "old_is_nan": false,
+        "new_is_nan": false,
+        "old_stability_results": [
+          {
+            "estimated_relative_accuracy": 4.4563643810271505e-281,
+            "precision": "Arb",
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "nanos": 492121965,
+              "secs": 2
+            }
+          }
+        ],
+        "new_stability_results": [
+          {
+            "estimated_relative_accuracy": 4.456364381981555e-281,
+            "precision": "Arb",
+            "status": {
+              "Stable": 2
+            },
+            "total_time": {
+              "nanos": 225168162,
+              "secs": 6
+            }
+          }
+        ],
+        "smallest_nonzero_new_event_component": "2.23615552746497698649464382023567354914794298721445528393262813291768254963749828169813120153844472814825446814315354889286842311537826945012379003715560918717206508180225752955857230341799759747957375094941133191099783607032901057830327364731995789787465994881753378924587979716809126858036751358378135E-318",
+        "new_reporting_factors": {
+          "parameterization_jacobian": null,
+          "integrator_weight": "1.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "input": {
+          "name": "soft22_ct_on_arb",
+          "mode": "optimized_lmb",
+          "forced_arb": true,
+          "momentum_space": true,
+          "threshold_ct_enabled": true,
+          "point_tokens": [
+            "37",
+            "126",
+            "-109",
+            "-91",
+            "64",
+            "83",
+            "37.002020305089104",
+            "125.99696954236634",
+            "-108.99393908473269",
+            "36.996969542366344",
+            "125.99393908473269",
+            "-109.0020203050891"
+          ],
+          "result": "/tmp/gl638-x4-alpha-replay/results/soft22_ct_on_arb.json",
+          "frozen_reference": "/tmp/gl638-x2-pilot/physical_native_results/soft22_ct_on_arb.json"
+        },
+        "new_elapsed_seconds": 6.225725513,
+        "new_metadata": {
+          "accepted_event_count": 6,
+          "evaluator_evaluation_time": {
+            "nanos": 836393523,
+            "secs": 2
+          },
+          "event_processing_time": {
+            "nanos": 1460670,
+            "secs": 0
+          },
+          "generated_event_count": 6,
+          "integrand_evaluation_time": {
+            "nanos": 915917730,
+            "secs": 2
+          },
+          "is_nan": false,
+          "loop_momenta_escalation": null,
+          "parameterization_time": {
+            "nanos": 0,
+            "secs": 0
+          },
+          "relative_instability_error": {
+            "im": 0.0,
+            "re": 0.0
+          },
+          "stability_results": [
+            {
+              "estimated_relative_accuracy": 4.456364381981555e-281,
+              "precision": "Arb",
+              "status": {
+                "Stable": 2
+              },
+              "total_time": {
+                "nanos": 225168162,
+                "secs": 6
+              }
+            }
+          ],
+          "total_timing": {
+            "nanos": 225370602,
+            "secs": 6
+          }
+        },
+        "new_event_groups_and_additional_weights": [
+          {
+            "cut_id": 3,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 4,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 1,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 0,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 5,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 2,
+            "group": 0,
+            "additional_weights": []
+          }
+        ],
+        "old_metadata": {
+          "accepted_event_count": 6,
+          "evaluator_evaluation_time": {
+            "nanos": 21632512,
+            "secs": 1
+          },
+          "event_processing_time": {
+            "nanos": 337912,
+            "secs": 0
+          },
+          "generated_event_count": 6,
+          "integrand_evaluation_time": {
+            "nanos": 48500425,
+            "secs": 1
+          },
+          "is_nan": false,
+          "loop_momenta_escalation": null,
+          "parameterization_time": {
+            "nanos": 0,
+            "secs": 0
+          },
+          "relative_instability_error": {
+            "im": 0.0,
+            "re": 0.0
+          },
+          "stability_results": [
+            {
+              "estimated_relative_accuracy": 4.4563643810271505e-281,
+              "precision": "Arb",
+              "status": {
+                "Stable": 2
+              },
+              "total_time": {
+                "nanos": 492121965,
+                "secs": 2
+              }
+            }
+          ],
+          "total_timing": {
+            "nanos": 492227125,
+            "secs": 2
+          }
+        },
+        "old_reporting_factors": {
+          "parameterization_jacobian": null,
+          "integrator_weight": "1.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "old_event_groups_and_additional_weights": [
+          {
+            "cut_id": 3,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 4,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 1,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 0,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 5,
+            "group": 0,
+            "additional_weights": []
+          },
+          {
+            "cut_id": 2,
+            "group": 0,
+            "additional_weights": []
+          }
+        ]
+      }
+    ],
+    "hard_point_stack_vs_arb": {
+      "old_total": "2.449955052910E-10",
+      "new_total": "5.154013730731E-10"
+    }
+  },
+  "reproduction": {
+    "original_rustc_argv": [
+      "rustc",
+      "--edition=2021",
+      "-C",
+      "opt-level=1",
+      "-C",
+      "debuginfo=0",
+      "-L",
+      "dependency=/common/dev/gammaloop_ir_safe_thresholds/target/debug/deps",
+      "--extern",
+      "gammaloop_api=/common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libgammaloop_api.rlib",
+      "--extern",
+      "gammalooprs=/common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libgammalooprs-f8d2e69e9c98f363.rlib",
+      "--extern",
+      "figment=/common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libfigment-928a82f04f093fab.rlib",
+      "--extern",
+      "toml=/common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libtoml-3d67d1f27a884f50.rlib",
+      "--extern",
+      "color_eyre=/common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libcolor_eyre-0e266bf87653fca1.rlib",
+      "--extern",
+      "serde_json=/common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libserde_json-cc2a74ccd07dd083.rlib",
+      "--extern",
+      "symbolica=/common/dev/gammaloop_ir_safe_thresholds/target/debug/deps/libsymbolica-697ea125b5739515.rlib",
+      "physical_native.rs",
+      "-o",
+      "physical_native"
+    ],
+    "target": "/common/dev/gammaloop_ir_safe_thresholds/target/debug",
+    "api_fingerprint": "/common/dev/gammaloop_ir_safe_thresholds/target/debug/.fingerprint/gammaloop-api-a196f440a26dc6bc/lib-gammaloop_api.json",
+    "environment_script": "/tmp/gammaloop-rebase-dev-env.sh",
+    "license_environment": "SYMBOLICA_LICENSE supplied by user",
+    "loader_environment": "LD_LIBRARY_PATH prepends Python sysconfig LIBDIR, as in the previous frozen replay",
+    "build_command": "ALPHA_TARGET=/common/dev/gammaloop_ir_safe_thresholds/target/debug ALPHA_API_FINGERPRINT=/common/dev/gammaloop_ir_safe_thresholds/target/debug/.fingerprint/gammaloop-api-a196f440a26dc6bc/lib-gammaloop_api.json bash /tmp/gl638-x4-alpha-replay/compile.sh",
+    "run_command": "python3 /tmp/gl638-x4-alpha-replay/run.py",
+    "comparison_command": "python3 /tmp/gl638-x4-alpha-replay/compare.py",
+    "existing_state_requirement": "Use the checkpoint whose35file hashes are recorded here; no regeneration was performed. Exact original paths are provenance and can be relocated consistently in manifest/requests/argv.",
+    "files": {
+      "physical_native.rs": "// Scratch diagnostic: preserve native total/event weights through the existing precise owner.\nuse color_eyre::{eyre::{ensure,eyre},Result};\nuse figment::{providers::Serialized,Figment};\nuse gammaloop_api::{commands::set::SetArgs,StateLoadOption};\nuse gammalooprs::{initialisation::initialise,integrands::{evaluation::{GenericEvaluationResult,PreciseEvaluationResult},process::{MomentumSpaceEvaluationInput,ProcessIntegrand,GraphTerm}},momentum::ThreeMomentum,utils::{F,FloatLike}};\nuse serde_json::{json,Value};\nuse std::{env,fs,time::Instant};\nfn record<T:FloatLike>(r:GenericEvaluationResult<T>,precision:&str)->Result<Value>{\n ensure!(!r.evaluation_metadata.is_nan,\"invalid physical result: {}\",r.evaluation_metadata);\n ensure!(r.integrand_result.re.0.is_finite()&&r.integrand_result.im.0.is_finite(),\"nonfinite total\");\n let mut events=Vec::new();\n for (group_id,group) in r.event_groups.iter().enumerate(){for event in group.iter(){\n  ensure!(event.weight.re.0.is_finite()&&event.weight.im.0.is_finite(),\"nonfinite event\");\n  let extra=event.additional_weights.weights.iter().map(|(key,value)|json!({\"key\":format!(\"{key:?}\"),\"re\":value.re.to_string(),\"im\":value.im.to_string()})).collect::<Vec<_>>();\n  events.push(json!({\"group\":group_id,\"cut_info\":event.cut_info,\"weight\":{\"re\":event.weight.re.to_string(),\"im\":event.weight.im.to_string()},\"additional_weights\":extra}));\n }}\n Ok(json!({\"precision\":precision,\"integrand_result\":{\"re\":r.integrand_result.re.to_string(),\"im\":r.integrand_result.im.to_string()},\"parameterization_jacobian\":r.parameterization_jacobian.map(|v|v.to_string()),\"integrator_weight\":r.integrator_weight.to_string(),\"events\":events,\"evaluation_metadata\":r.evaluation_metadata}))\n}\nfn main()->Result<()>{\n initialise()?; let args=env::args().skip(1).collect::<Vec<_>>();ensure!(args.len()==3,\"manifest requests output_directory\");\n let manifest:Value=serde_json::from_str(&fs::read_to_string(&args[0])?)?;let requests:Value=serde_json::from_str(&fs::read_to_string(&args[1])?)?;\n let started=Instant::now();let mut loaded=StateLoadOption::read_only(manifest[\"state\"].as_str().unwrap()).load()?;loaded.state.activate_loaded_integrand_backends(false)?;\n let model=&loaded.state.model;let integrand=loaded.state.process_list.get_integrand_mut(0,\"NNLO\")?;let original=integrand.get_settings().clone();\n let mut previous=String::new();let mut summaries=Vec::new();\n for case in requests[\"cases\"].as_array().unwrap().iter().filter(|c|c[\"momentum_space\"]==true){\n  let mode=case[\"mode\"].as_str().unwrap();let enabled=case[\"threshold_ct_enabled\"].as_bool().unwrap();let config=format!(\"{mode}:{enabled}\");\n  if config!=previous{\n   let card=fs::read_to_string(manifest[\"cards\"][mode].as_str().unwrap())?;\n   let f=SetArgs::String{string:card}.merge_figment(Figment::from(Serialized::defaults(&original)))?;\n   *integrand.get_mut_settings()=SetArgs::String{string:format!(\"general.generate_events=true\\nsubtraction.disable_threshold_subtraction={}\\n\",!enabled)}.merge_figment(f)?.extract()?;\n   std::thread::scope(|scope|->Result<()>{std::thread::Builder::new().stack_size(128*1024*1024).spawn_scoped(scope,||integrand.warm_up(model))?.join().map_err(|_|eyre!(\"warmup panic\"))?})?;\n   let ProcessIntegrand::CrossSection(p)=&*integrand else{return Err(eyre!(\"cross section expected\"))};ensure!(p.data.graph_terms.len()==1&&p.data.graph_terms[0].selected_production_orientation_keys().len()==936,\"actual full936 catalogue required\");\n   let term=&p.data.graph_terms[0];\n   let cut_groups=term.cut_group_data.cut_groups.iter().enumerate().map(|(id,g)|json!({\"group_id\":id,\"cut_ids\":g.cuts.iter().map(|c|c.0).collect::<Vec<_>>(),\"max_occurrence\":g.related_esurface_group.max_occurence})).collect::<Vec<_>>();\n   ensure!(cut_groups.len()==6&&cut_groups.iter().all(|g|g[\"max_occurrence\"]==1),\"expected six simple physical cut groups\");\n   fs::write(format!(\"{}/cut_groups.json\",args[2]),serde_json::to_string_pretty(&cut_groups)?)?;\n   fs::write(format!(\"{}/{}.settings.toml\",args[2],config.replace(':',\"_\")),toml::to_string_pretty(integrand.get_settings())?)?;previous=config;\n  }\n  let point=case[\"point_tokens\"].as_array().unwrap().iter().map(|s|s.as_str().unwrap().parse::<f64>()).collect::<std::result::Result<Vec<_>,_>>()?;\n  let input=MomentumSpaceEvaluationInput{loop_momenta:point.chunks_exact(3).map(|v|ThreeMomentum::from([F(v[0]),F(v[1]),F(v[2])])).collect(),integrator_weight:F(1.),graph_id:Some(0),group_id:None,orientation:None,channel_id:None};\n  let at=Instant::now();let native=integrand.evaluate_momentum_configuration_precise(model,&input,case[\"forced_arb\"].as_bool().unwrap())?;\n  let result=match native{PreciseEvaluationResult::Double(r)=>record(r,\"Double\")?,PreciseEvaluationResult::Quad(r)=>record(r,\"Quad\")?,PreciseEvaluationResult::Arb(r)=>record(r,\"Arb\")?};\n  let row=json!({\"case\":case,\"evaluation\":result,\"elapsed_seconds\":at.elapsed().as_secs_f64(),\"point_definition\":\"original binary64 tokens, promoted by existing source precision owner\"});\n  let name=case[\"name\"].as_str().unwrap();fs::write(format!(\"{}/{name}.json\",args[2]),serde_json::to_string_pretty(&row)?)?;println!(\"completed{name} {}s\",at.elapsed().as_secs_f64());summaries.push(json!({\"name\":name,\"elapsed_seconds\":at.elapsed().as_secs_f64()}));\n }\n fs::write(format!(\"{}/summary.json\",args[2]),serde_json::to_string_pretty(&json!({\"cases\":summaries,\"elapsed_seconds\":started.elapsed().as_secs_f64()}))?)?;Ok(())\n}\n",
+      "compile.sh": "#!/usr/bin/env bash\nset -euo pipefail\n: \"${ALPHA_TARGET:?Set the exact gated target directory containing deps}\"\n: \"${ALPHA_API_FINGERPRINT:?Set the current built API fingerprint JSON}\"\ncd \"$(dirname \"$0\")\"\npython3 - <<'PYCODE'\nimport hashlib,json,os,subprocess\nfrom pathlib import Path\nroot=Path(os.environ['ALPHA_TARGET']); fingerprint=Path(os.environ['ALPHA_API_FINGERPRINT'])\napi=json.loads(fingerprint.read_text()); wanted={name:dep_hash for _,name,_,dep_hash in api['deps']}\nlibs={'gammaloop_api':root/'deps/libgammaloop_api.rlib'}\nfor name in ['gammalooprs','figment','toml','color_eyre','serde_json','symbolica']:\n    matches=[]\n    for p in (root/'.fingerprint').glob('*/lib-'+name):\n        if int.from_bytes(bytes.fromhex(p.read_text().strip()),'little')==wanted[name]:\n            suffix=p.parent.name.rsplit('-',1)[1]\n            lib=root/f'deps/lib{name}-{suffix}.rlib'\n            if lib.is_file(): matches.append(lib)\n    assert len(matches)==1,(name,matches)\n    libs[name]=matches[0]\nPath('reference_libraries.sha256').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+str(p)+'\\n' for p in libs.values()))\nargs=['rustc','--edition=2021','-C','opt-level=1','-C','debuginfo=0','-L','dependency='+str(root/'deps')]\nfor name,path in libs.items(): args+=['--extern',f'{name}={path}']\nargs+=['physical_native.rs','-o','physical_native']\nPath('rustc-command.json').write_text(json.dumps(args,indent=2)+'\\n')\nsubprocess.run(args,check=True)\nPath('reference_driver.sha256').write_text(''.join(hashlib.sha256(Path(name).read_bytes()).hexdigest()+'  '+name+'\\n' for name in ['physical_native','physical_native.rs']))\nPYCODE\n",
+      "run.py": "import datetime,hashlib,json,subprocess,time\nfrom pathlib import Path\nroot=Path(__file__).resolve().parent\nmanifest=json.loads((root/'manifest.json').read_text())\nstarted=datetime.datetime.now(datetime.timezone.utc).isoformat(); clock=time.monotonic()\nwith (root/'run.log').open('w') as log:\n    result=subprocess.run(manifest['argv'],stdout=log,stderr=subprocess.STDOUT)\nprovenance={'argv':manifest['argv'],'started_utc':started,'finished_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'elapsed_seconds':time.monotonic()-clock,'returncode':result.returncode,'binary_sha256':hashlib.sha256((root/'physical_native').read_bytes()).hexdigest(),'driver_source_sha256':hashlib.sha256((root/'physical_native.rs').read_bytes()).hexdigest(),'log_sha256':hashlib.sha256((root/'run.log').read_bytes()).hexdigest(),'source_commit':manifest['source_commit'],'matching_library_sha256':(root/'reference_libraries.sha256').read_text()}\n(root/'run-provenance.json').write_text(json.dumps(provenance,indent=2)+'\\n')\nprint(json.dumps(provenance,indent=2),flush=True)\nraise SystemExit(result.returncode)\n",
+      "compare.py": "import decimal,json\nfrom pathlib import Path\nD=decimal.Decimal;decimal.getcontext().prec=1000\nroot=Path(__file__).resolve().parent\nrequests=json.loads((root/'requests.json').read_text())\ndef norm(z):return (D(z['re'])**2+D(z['im'])**2).sqrt()\ndef relative(a,b):\n    delta={'re':str(D(a['re'])-D(b['re'])),'im':str(D(a['im'])-D(b['im']))}\n    scale=max(norm(a),norm(b));return str(norm(delta)/scale) if scale else '0'\nrows=[]\nfor case in requests['cases']:\n    new=json.loads((root/'results'/f\"{case['name']}.json\").read_text())['evaluation']\n    old=json.loads(Path(case['frozen_reference']).read_text())['evaluation']\n    identity=lambda e:json.dumps(e['cut_info'],sort_keys=True)\n    oe={identity(e):e for e in old['events']};ne={identity(e):e for e in new['events']}\n    events=[]\n    for key in sorted(oe.keys()&ne.keys()):\n        events.append({'cut_info':json.loads(key),'old_weight':oe[key]['weight'],'new_weight':ne[key]['weight'],'relative_complex_norm':relative(oe[key]['weight'],ne[key]['weight'])})\n    rows.append({'case':case['name'],'old_precision':old['precision'],'new_precision':new['precision'],'old_total':old['integrand_result'],'new_total':new['integrand_result'],'relative_total_complex_norm':relative(old['integrand_result'],new['integrand_result']),'event_identity_equal':oe.keys()==ne.keys(),'old_event_count':len(oe),'new_event_count':len(ne),'max_event_relative_complex_norm':str(max((D(e['relative_complex_norm']) for e in events),default=D(0))),'events':events,'old_is_nan':old['evaluation_metadata']['is_nan'],'new_is_nan':new['evaluation_metadata']['is_nan'],'old_stability_results':old['evaluation_metadata']['stability_results'],'new_stability_results':new['evaluation_metadata']['stability_results']})\n(root/'comparison.json').write_text(json.dumps({'relative_error_definition':'complex norm(new-old)/max(norm(new),norm(old)); both zero=>0','cases':rows},indent=2)+'\\n')\nfor row in rows:print(row['case'],row['old_precision'],'->',row['new_precision'],'total',row['relative_total_complex_norm'],'maxevent',row['max_event_relative_complex_norm'],'sameids',row['event_identity_equal'])\n",
+      "manifest.json": "{\n  \"state\": \"/common/dev/gl638_checkpoint_06d470409/all/state\",\n  \"cards\": {\n    \"optimized_lmb\": \"/tmp/gl638-x4-alpha-replay/optimized_lmb.toml\"\n  },\n  \"source_status\": \"linked from clean committed source after complete core/API/differential gates\",\n  \"frozen_comparison_source\": \"f2f64fb17dd5dab588eca298dc61f1100fa4962d\",\n  \"cases\": [\n    \"hz_03_stack\",\n    \"hz_03_arb\",\n    \"soft22_ct_on_arb\"\n  ],\n  \"purpose\": \"bounded physical zeroth-alpha regression; six simple GL638 cut groups dispatch no LU IFT derivatives\",\n  \"argv\": [\n    \"/tmp/gl638-x4-alpha-replay/physical_native\",\n    \"/tmp/gl638-x4-alpha-replay/manifest.json\",\n    \"/tmp/gl638-x4-alpha-replay/requests.json\",\n    \"/tmp/gl638-x4-alpha-replay/results\"\n  ],\n  \"input_sha256\": {\n    \"/tmp/gl638-x2-pilot/physical_native.rs\": \"d91559abe6dfc3b4d88ced7970fc555bfb67d11b45c1434b8fcc3c688a6233e8\",\n    \"/tmp/gl638-x4-alpha-replay/physical_native.rs\": \"97772aacdbebf02050eeec4eb18b5cc7f4c2238843a0c71280aa855d194ad327\",\n    \"/tmp/gl638-x4-alpha-replay/optimized_lmb.toml\": \"ce606d429657c4a73c5dba632ad8ef0662ad41f013c18da88b059115a7791a70\",\n    \"/tmp/gl638-x4-alpha-replay/requests.json\": \"e6757675acd4c82e96db7ccfb6e4aaa9b443926da7f5df5058428e5f2e14bc5c\"\n  },\n  \"source_commit\": \"9d2bdf48367cb6bddfe7039c9331f73d1db39dae\",\n  \"linked_utc\": \"2026-09-13T20:37:00.011146+00:00\",\n  \"api_fingerprint\": \"/common/dev/gammaloop_ir_safe_thresholds/target/debug/.fingerprint/gammaloop-api-a196f440a26dc6bc/lib-gammaloop_api.json\",\n  \"api_fingerprint_sha256\": \"f41e422d4311305da4ea42a58637cb2f8f756ec6a0ca1db92a2e4ae1850b32c8\",\n  \"cargo_lock_sha256\": \"b61a47c74debca9bfdea2dd5347bd19264bbd0971cb0dba8dfa7298fd1c4da0d\",\n  \"source_diff_sha256\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n  \"binary_sha256\": \"e92c5ae081ae93334674ce3558158af8a73d124ec6981a7816e331be1d26aac9\",\n  \"native_dynamic_libraries\": {\n    \"/nix/store/8lahnh9pn3lrrnhax5nk7ibvjcbjmnkm-gcc-15.2.0-lib/lib/libgcc_s.so.1\": \"ae044ece9877d38a4a4bcee7b9c15eed9b50d0dad24d41617eec8fff8bbd262d\",\n    \"/nix/store/ias8xacs1h3jy7xgwi2awvim61k2ji6c-glibc-2.42-67/lib/libm.so.6\": \"793d585cf6ddd7ad6adaa7a0142b75f2077fa87487c852ef45516dd7fd7bde42\",\n    \"/nix/store/ias8xacs1h3jy7xgwi2awvim61k2ji6c-glibc-2.42-67/lib/libc.so.6\": \"4b6b7a9379b38cb5f6531a7edc4d108391e45221d5b08f171f19460c141f1551\",\n    \"/nix/store/ias8xacs1h3jy7xgwi2awvim61k2ji6c-glibc-2.42-67/lib/ld-linux-x86-64.so.2\": \"35c6a09b52908df5bb50d3c38ee63320fa038eb105f210b3e745f02791e84c65\",\n    \"/nix/store/ias8xacs1h3jy7xgwi2awvim61k2ji6c-glibc-2.42-67/lib64/ld-linux-x86-64.so.2\": \"35c6a09b52908df5bb50d3c38ee63320fa038eb105f210b3e745f02791e84c65\"\n  }\n}\n",
+      "requests.json": "{\n  \"cases\": [\n    {\n      \"name\": \"hz_03_stack\",\n      \"mode\": \"optimized_lmb\",\n      \"forced_arb\": false,\n      \"momentum_space\": true,\n      \"threshold_ct_enabled\": true,\n      \"point_tokens\": [\n        \"80.051404910012451\",\n        \"-279.39769435373211\",\n        \"156.63544180550156\",\n        \"133.64874779217956\",\n        \"-73.044385181140456\",\n        \"270.30215335459906\",\n        \"153.02426278264537\",\n        \"-373.94525199342525\",\n        \"112.54657098792093\",\n        \"263.67571450212097\",\n        \"-95.47931288817918\",\n        \"11.74711974094534\"\n      ],\n      \"result\": \"/tmp/gl638-x4-alpha-replay/results/hz_03_stack.json\",\n      \"frozen_reference\": \"/tmp/gl638-x2-pilot/physical_native_results/hz_03_stack.json\"\n    },\n    {\n      \"name\": \"hz_03_arb\",\n      \"mode\": \"optimized_lmb\",\n      \"forced_arb\": true,\n      \"momentum_space\": true,\n      \"threshold_ct_enabled\": true,\n      \"point_tokens\": [\n        \"80.051404910012451\",\n        \"-279.39769435373211\",\n        \"156.63544180550156\",\n        \"133.64874779217956\",\n        \"-73.044385181140456\",\n        \"270.30215335459906\",\n        \"153.02426278264537\",\n        \"-373.94525199342525\",\n        \"112.54657098792093\",\n        \"263.67571450212097\",\n        \"-95.47931288817918\",\n        \"11.74711974094534\"\n      ],\n      \"result\": \"/tmp/gl638-x4-alpha-replay/results/hz_03_arb.json\",\n      \"frozen_reference\": \"/tmp/gl638-x2-pilot/physical_native_results/hz_03_arb.json\"\n    },\n    {\n      \"name\": \"soft22_ct_on_arb\",\n      \"mode\": \"optimized_lmb\",\n      \"forced_arb\": true,\n      \"momentum_space\": true,\n      \"threshold_ct_enabled\": true,\n      \"point_tokens\": [\n        \"37\",\n        \"126\",\n        \"-109\",\n        \"-91\",\n        \"64\",\n        \"83\",\n        \"37.002020305089104\",\n        \"125.99696954236634\",\n        \"-108.99393908473269\",\n        \"36.996969542366344\",\n        \"125.99393908473269\",\n        \"-109.0020203050891\"\n      ],\n      \"result\": \"/tmp/gl638-x4-alpha-replay/results/soft22_ct_on_arb.json\",\n      \"frozen_reference\": \"/tmp/gl638-x2-pilot/physical_native_results/soft22_ct_on_arb.json\"\n    }\n  ]\n}\n",
+      "optimized_lmb.toml": "# X2 comparison: same full physical cut/CT/UV sum; only sampling selection and H profile power vary.\n[general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\ngenerate_events = false\nstore_additional_weights_in_event = false\n\n[kinematics]\ne_cm = 1000.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]\nhelicities = [\"summed_averaged\", \"summed_averaged\"]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2048\nn_increase = 0\nn_max = 2048\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\nintegrated_phase = \"real\"\ntrain_on_avg = false\n\n[stability]\nescalate_if_exact_zero = false\ncheck_on_norm = true\n\n[[stability.rotation_axis]]\ntype = \"euler_angles\"\nalpha = 0.1\nbeta = 0.2\ngamma = 0.3\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 1e-06\nrequired_precision_for_im = 1e-06\nescalate_for_large_weight_threshold = 0.9\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 1e-10\nrequired_precision_for_im = 1e-10\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 1e-12\nrequired_precision_for_im = 1e-12\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ndefault_channel_selection = []\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\nb = 0.3\norientations = \"summed\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\npower = 1.0\n\n[sampling.channel_selection]\nGL638 = [\"auto:optimized_lmb\"]\n\n[subtraction]\nesurface_existence_threshold = 1e-14\ndisable_threshold_subtraction = false\n\n[subtraction.local_ct_settings]\n\n[subtraction.local_ct_settings.uv_localisation]\ngaussian_width = 1.0\nsliver_width = 10.0\nsmooth_sliver = false\ndynamic_width = false\nforce_uv_dampers_to_one = false\n\n[h_function]\nfunction = \"poly_exponential\"\nsigma = 1.0\npower = 3\n\n\n",
+      "effective_settings.toml": "[general]\nm_uv = 91.188\nmu_r = 91.188\nintegral_unit = \"picobarn\"\ngenerate_events = true\n\n[kinematics]\ne_cm = 1000.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    500.0,\n    0.0,\n    0.0,\n    500.0,\n],\n    [\n    500.0,\n    0.0,\n    0.0,\n    -500.0,\n],\n]\nhelicities = [\n    \"summed_averaged\",\n    \"summed_averaged\",\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 2048\nn_increase = 0\nn_max = 2048\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 1337\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = 0.9\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nb = 0.3\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[sampling.channel_selection]\nGL638 = [\"auto:optimized_lmb\"]\n\n[subtraction]\nesurface_existence_threshold = 0.00000000000001\n\n[h_function]\npower = 3\n"
+    },
+    "file_sha256": {
+      "physical_native.rs": "97772aacdbebf02050eeec4eb18b5cc7f4c2238843a0c71280aa855d194ad327",
+      "compile.sh": "e42cbf70aedb4dfb2ac1d3a7462f5e5d3cf624cb6f88c91d56a70d850c9feb33",
+      "run.py": "56a85b54c6c89a1153a01d5f982b9501d01b417735c56a4b51fbf66500f59eab",
+      "compare.py": "5735d01ce2fe6226b4e8408b4897a095ffd85d8766eb41de3b7714a7d66c7595",
+      "manifest.json": "58afc1a5ae347d3acf53822ccf28a2aa691ff45a1dbe8bab353cd6b97bd2db4e",
+      "requests.json": "e6757675acd4c82e96db7ccfb6e4aaa9b443926da7f5df5058428e5f2e14bc5c",
+      "optimized_lmb.toml": "ce606d429657c4a73c5dba632ad8ef0662ad41f013c18da88b059115a7791a70",
+      "effective_settings.toml": "4b1a27f44cbc3ecdbc52a660e3b2f8e5535932abe5ec65426068cf92afa58ac3"
+    }
+  },
+  "limits": [
+    "Three chosen raw points do not establish global accuracy, variance reduction, bounded weights or tail coverage.",
+    "Double-vs-own-Arb relative complex error increased from2.449955052910e-10 to5.154013730731e-10; both are below the requested1e-6 tolerance and the selected precision remainsDouble.",
+    "All native total and event components are retained as decimal strings. No event was suppressed and no f64 reporting conversion was used for native weights.",
+    "The full-state load and3evaluations took536.764seconds; the3evaluation calls alone took13.150seconds."
+  ]
+}
