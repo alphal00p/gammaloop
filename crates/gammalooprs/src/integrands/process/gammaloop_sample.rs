@@ -29,11 +29,17 @@ fn unwrap_sample_impl<T: FloatLike>(
 ) -> (Vec<usize>, Vec<F<T>>) {
     match sample {
         Sample::Continuous(_, xs) => {
-            let xs = xs.iter().map(|x| F::from_ff64(*x)).collect();
+            let xs = xs
+                .iter()
+                .map(|x| F(T::from_f64_exact_binary(x.0)))
+                .collect();
             (discrete_dimensions, xs)
         }
         Sample::Uniform(_, discrete, xs) => {
-            let xs = xs.iter().map(|x| F::from_ff64(*x)).collect();
+            let xs = xs
+                .iter()
+                .map(|x| F(T::from_f64_exact_binary(x.0)))
+                .collect();
             (discrete.clone(), xs)
         }
         Sample::Discrete(_, index, sample) => {
@@ -286,81 +292,6 @@ pub enum DiscreteGraphSample<T: FloatLike> {
     },
 }
 
-/// Typed hand-off for a physical cross-section channel which still has to be
-/// prepared against the sampled cut (LU root, `t*`, and external momenta).
-///
-/// This deliberately carries only the information that is already available
-/// at the sampling boundary: the canonical channel id, its unit-cube input,
-/// and the parent-frame momentum sample.  It does not evaluate a map or
-/// provide a Jacobian.  The cross-section process must consume this value when
-/// it has solved the corresponding cut and construct its
-/// [`DeferredCrossSectionSamplingState`] transactionally.
-#[derive(Debug, Clone)]
-pub struct DeferredCrossSectionSample<T: FloatLike> {
-    channel_id: SamplingChannelId,
-    sampling_coordinates: Vec<F<T>>,
-    parent_sample: MomentumSample<T>,
-}
-
-impl<T: FloatLike> DeferredCrossSectionSample<T> {
-    pub fn new(
-        channel_id: SamplingChannelId,
-        sampling_coordinates: Vec<F<T>>,
-        parent_sample: MomentumSample<T>,
-    ) -> Result<Self> {
-        if sampling_coordinates.is_empty() {
-            return Err(eyre!(
-                "deferred cross-section channel {} needs unit-cube coordinates",
-                channel_id.index()
-            ));
-        }
-        if sampling_coordinates.iter().any(|coordinate| {
-            let coordinate = coordinate.into_f64();
-            !coordinate.is_finite() || !(0.0..=1.0).contains(&coordinate)
-        }) {
-            return Err(eyre!(
-                "deferred cross-section channel {} has non-finite or non-unit-cube coordinates",
-                channel_id.index()
-            ));
-        }
-        Ok(Self {
-            channel_id,
-            sampling_coordinates,
-            parent_sample,
-        })
-    }
-
-    pub fn channel_id(&self) -> SamplingChannelId {
-        self.channel_id
-    }
-
-    pub fn sampling_coordinates(&self) -> &[F<T>] {
-        &self.sampling_coordinates
-    }
-
-    pub fn parent_sample(&self) -> &MomentumSample<T> {
-        &self.parent_sample
-    }
-
-    pub fn into_parent_sample(self) -> MomentumSample<T> {
-        self.parent_sample
-    }
-}
-
-/// Whether the selected runtime mode explicitly sums the canonical channels.
-/// Both top-level and discrete graph sampling use the same summed estimator;
-/// keeping the predicate central also guards cut-dependent maps in both forms.
-fn is_summed_multichanneling(settings: &SamplingSettings) -> bool {
-    match settings {
-        SamplingSettings::MultiChanneling(_) => true,
-        SamplingSettings::DiscreteGraphs(settings) => matches!(
-            &settings.sampling_type,
-            DiscreteGraphSamplingType::MultiChanneling(_)
-        ),
-        SamplingSettings::Default(_) => false,
-    }
-}
-
 impl<T: FloatLike> DiscreteGraphSample<T> {
     #[allow(dead_code)]
     pub(crate) fn zero(&self) -> F<T> {
@@ -589,35 +520,6 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             _ => None,
         }
     }
-
-    /// Extract the canonical deferred cross-section hand-off, if this sample
-    /// was generated from a unit-cube channel.  Direct momentum samples are
-    /// intentionally reported as an error when they claim a physical channel:
-    /// they have no coordinates from which a cut-dependent map can be
-    /// replayed.
-    pub fn deferred_cross_section_sample(&self) -> Result<Option<DeferredCrossSectionSample<T>>> {
-        match self {
-            Self::SamplingChannel {
-                channel_id,
-                sampling_coordinates: Some(coordinates),
-                sample,
-                ..
-            } => Ok(Some(DeferredCrossSectionSample::new(
-                *channel_id,
-                coordinates.clone(),
-                sample.clone(),
-            )?)),
-            Self::SamplingChannel {
-                channel_id,
-                sampling_coordinates: None,
-                ..
-            } => Err(eyre!(
-                "deferred cross-section channel {} has no retained unit-cube coordinates",
-                channel_id.index()
-            )),
-            _ => Ok(None),
-        }
-    }
 }
 
 #[inline]
@@ -625,54 +527,30 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
     sample_point: &Sample<F<f64>>,
     integrand: &mut I,
 ) -> Result<GammaLoopSample<T>> {
+    integrand.prepare_sampling_precision::<T>()?;
     let (discrete_indices, xs) = unwrap_sample(sample_point);
     let settings = integrand.get_settings();
     let loop_mom_cache_id = integrand.loop_cache_id();
     let external_mom_cache_id = integrand.external_cache_id();
     let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
-    let parameterization_settings = settings.sampling.get_parameterization_settings();
-    if let Some(parameterization_settings) = parameterization_settings.as_ref()
-        && matches!(
-            &settings.sampling,
-            SamplingSettings::MultiChanneling(_) | SamplingSettings::DiscreteGraphs(_)
-        )
-    {
-        // Resolve the canonical catalogue before decoding discrete indices.
-        // This turns unsupported named/surface channels into a diagnostic
-        // instead of silently treating an invalid catalogue as an empty axis.
-        for group_id in 0..integrand.get_group_structure().len() {
-            let graph = integrand.get_master_graph(GroupId(group_id));
-            graph.sampling_channel_ids(parameterization_settings)?;
-            if is_summed_multichanneling(&settings.sampling) {
-                for channel_id in graph.sampling_channel_ids(parameterization_settings)? {
-                    if graph.sampling_channel_requires_deferred_cut_context(
-                        channel_id,
-                        parameterization_settings,
-                    )? {
-                        return Err(eyre!(
-                            "sampling channel {} requires solved LU/t* context before mapping",
-                            channel_id.index()
-                        ));
-                    }
-                }
-            }
-        }
-    }
+    // Validate the warmed canonical catalogue before decoding discrete indices.
+    // Each complete triangular map prepares any required cut/LU data internally;
+    // its retained canonical ID, original cube and mapped parent point therefore
+    // need no separate handoff or Jacobian-producing runtime path.
     let (group_id, orientation_id, channel_id) = resolve_discrete_selection_for_sampling(
         &settings.sampling,
         &discrete_indices,
         integrand.get_group_structure().len(),
         |group_id| Some(integrand.get_master_graph(group_id).get_num_orientations()),
         |group_id| {
-            parameterization_settings
-                .as_ref()
-                .map(|settings| {
-                    integrand
-                        .get_master_graph(group_id)
-                        .sampling_channel_ids(settings)
-                        .map(|channel_ids| channel_ids.len())
-                })
-                .transpose()
+            Ok(Some(
+                integrand
+                    .get_master_graph(group_id)
+                    .sampling_setup()
+                    .sampling_bridge::<T>()?
+                    .channels()
+                    .len(),
+            ))
         },
     )?;
 
@@ -809,60 +687,26 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                         sample: DiscreteGraphSample::Tropical(default_sample),
                     })
                 }
-                DiscreteGraphSamplingType::SamplingMultiChanneling(multichanneling_settings) => {
+                DiscreteGraphSamplingType::SamplingMultiChanneling(_) => {
                     let channel_id = channel_id.ok_or_else(|| {
                         eyre!(
                             "Internal error: missing channel selection for discrete multi-channeling."
                         )
                     })?;
 
-                    let parameterization_settings =
-                        &multichanneling_settings.parameterization_settings;
                     let graph = integrand.get_master_graph(group_id);
-                    let externals = settings
-                        .kinematics
-                        .externals
-                        .get_dependent_externals::<f64>(dependent_momenta_constructor)?;
-                    let external_momenta = externals
-                        .iter()
-                        .map(|momentum| {
-                            [
-                                momentum.temporal.value.0,
-                                momentum.spatial.px.0,
-                                momentum.spatial.py.0,
-                                momentum.spatial.pz.0,
-                            ]
-                        })
-                        .collect::<Vec<_>>();
-                    let bridge = graph.compile_sampling_bridge(
-                        parameterization_settings,
-                        settings.kinematics.e_cm,
-                        &external_momenta,
-                        orientation_id,
-                    )?;
-                    let coordinates = xs.iter().map(|x| x.clone().into_ff64().0).collect_vec();
+                    let bridge = graph.sampling_setup().sampling_bridge::<T>()?;
+                    let coordinates = xs.iter().map(|x| x.0.clone()).collect_vec();
                     let mapped = bridge.forward(channel_id, &coordinates)?;
-                    let mut sample =
-                        mapped.to_momentum_sample::<T>(SamplingMomentumSampleContext {
-                            loop_mom_cache_id,
-                            external_moms: &settings.kinematics.externals,
-                            external_mom_cache_id,
-                            dependent_momenta_constructor,
-                            orientation: orientation_id,
-                        })?;
-                    let partition_weight =
-                        mapped.partition.weight(channel_id.0).ok_or_else(|| {
-                            eyre!(
-                                "sampling channel partition has no weight for channel {}",
-                                channel_id.0
-                            )
-                        })?;
-                    if !partition_weight.is_finite() || partition_weight <= 0.0 {
-                        return Err(eyre!(
-                            "sampling channel partition has invalid weight {partition_weight}"
-                        ));
-                    }
-                    sample.sample.jacobian *= F::from_f64(partition_weight);
+                    // The mapped point and physical sample use the same native precision.
+                    let mut sample = mapped.to_momentum_sample(SamplingMomentumSampleContext {
+                        loop_mom_cache_id,
+                        external_moms: &settings.kinematics.externals,
+                        external_mom_cache_id,
+                        dependent_momenta_constructor,
+                        orientation: orientation_id,
+                    })?;
+                    sample.sample.jacobian = F(mapped.selected_factor()?);
                     Ok(GammaLoopSample::DiscreteGraph {
                         group_id,
                         sample: DiscreteGraphSample::SamplingChannel {
@@ -925,7 +769,6 @@ mod tests {
     use crate::utils::F;
     use crate::{DependentMomentaConstructor, settings::runtime::kinematic::Externals};
 
-    use super::is_summed_multichanneling;
     use super::{DiscreteGraphSample, SamplingChannelId, unwrap_sample};
     use crate::settings::runtime::{
         DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, MultiChannelingSettings,
@@ -933,29 +776,31 @@ mod tests {
     };
 
     #[test]
-    fn summed_multichanneling_guard_covers_top_level_and_graph_modes() {
-        assert!(is_summed_multichanneling(
-            &SamplingSettings::MultiChanneling(MultiChannelingSettings::default(),)
-        ));
-        assert!(is_summed_multichanneling(
-            &SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
-                sampling_type: DiscreteGraphSamplingType::MultiChanneling(
-                    MultiChannelingSettings::default(),
-                ),
-                ..Default::default()
-            },)
-        ));
-        assert!(!is_summed_multichanneling(
-            &SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
-                sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(
-                    MultiChannelingSettings::default(),
-                ),
-                ..Default::default()
-            },)
-        ));
-        assert!(!is_summed_multichanneling(&SamplingSettings::Default(
-            ParameterizationSettings::default(),
-        )));
+    fn sampling_channel_guard_covers_summed_and_monte_carlo_modes() {
+        assert!(
+            SamplingSettings::MultiChanneling(MultiChannelingSettings::default())
+                .uses_sampling_channels()
+        );
+        for sampling_type in [
+            DiscreteGraphSamplingType::MultiChanneling(MultiChannelingSettings::default()),
+            DiscreteGraphSamplingType::SamplingMultiChanneling(MultiChannelingSettings::default()),
+        ] {
+            assert!(
+                SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                    sampling_type,
+                    ..Default::default()
+                })
+                .uses_sampling_channels()
+            );
+        }
+        assert!(
+            !SamplingSettings::Default(ParameterizationSettings::default())
+                .uses_sampling_channels()
+        );
+        assert!(
+            !SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings::default())
+                .uses_sampling_channels()
+        );
     }
 
     #[test]
@@ -1019,8 +864,8 @@ mod tests {
 
     #[test]
     fn direct_momentum_sampling_channels_have_no_replay_coordinates() {
-        // The direct-momentum route intentionally cannot replay a unit-cube
-        // map; a deferred physical channel must reject that route explicitly.
+        // Direct momentum inputs intentionally have no cube to replay. Their
+        // channel density comes from the compiled inverse at the supplied point.
         let sample = MomentumSample::new(
             LoopMomenta::from(vec![]),
             0,
@@ -1038,18 +883,10 @@ mod tests {
             sample,
         };
         assert!(sampling_channel.sampling_coordinates().is_none());
-        let error = sampling_channel
-            .deferred_cross_section_sample()
-            .expect_err("physical channels need replay coordinates");
-        assert!(
-            error
-                .to_string()
-                .contains("has no retained unit-cube coordinates")
-        );
     }
 
     #[test]
-    fn deferred_cross_section_sample_preserves_canonical_identity_and_parent() {
+    fn sampling_channel_preserves_canonical_identity_and_parent() {
         let sample = MomentumSample::new(
             LoopMomenta::from(vec![]),
             0,
@@ -1067,44 +904,33 @@ mod tests {
             partition_weight: None,
             sample: sample.clone(),
         };
-        let deferred = sampling_channel
-            .deferred_cross_section_sample()
-            .expect("well-formed channel should build a hand-off")
-            .expect("sampling-channel variant should carry a hand-off");
-        assert_eq!(deferred.channel_id(), SamplingChannelId::from(11));
-        assert_eq!(deferred.sampling_coordinates(), coordinates.as_slice());
         assert_eq!(
-            deferred.parent_sample().sample.jacobian,
-            sample.sample.jacobian
+            sampling_channel.sampling_coordinates(),
+            Some(coordinates.as_slice())
         );
+        let DiscreteGraphSample::SamplingChannel {
+            channel_id,
+            sample: parent,
+            ..
+        } = sampling_channel
+        else {
+            unreachable!()
+        };
+        assert_eq!(channel_id, SamplingChannelId::from(11));
+        assert_eq!(parent.sample.jacobian, sample.sample.jacobian);
         assert_eq!(
-            deferred.parent_sample().sample.loop_mom_cache_id,
+            parent.sample.loop_mom_cache_id,
             sample.sample.loop_mom_cache_id
         );
     }
 
     #[test]
-    fn deferred_cross_section_sample_rejects_non_unit_coordinates() {
-        let sample = MomentumSample::new(
-            LoopMomenta::from(vec![]),
-            0,
-            &Externals::default(),
-            0,
-            F(1.0),
-            DependentMomentaConstructor::CrossSection,
-            None,
-        )
-        .unwrap();
-        let sampling_channel = DiscreteGraphSample::SamplingChannel {
-            channel_id: SamplingChannelId::from(2),
-            sampling_coordinates: Some(vec![F(0.2), F(1.2)]),
-            partition_weight: None,
-            sample,
-        };
-        let error = sampling_channel
-            .deferred_cross_section_sample()
-            .expect_err("coordinates outside the unit cube must be rejected");
-        assert!(error.to_string().contains("non-finite or non-unit-cube"));
+    fn sampling_map_rejects_non_unit_original_coordinates() {
+        use crate::integrands::process::{SamplingMapComponent, SurfaceRadialMap};
+        let map = SurfaceRadialMap::new(3, vec![0.0; 3], None, 1.0, 1.0).unwrap();
+        for coordinates in [[0.2, 1.2, 0.3], [0.2, f64::NAN, 0.3]] {
+            assert!(SamplingMapComponent::forward(&map, &coordinates, &[]).is_err());
+        }
     }
 
     #[test]

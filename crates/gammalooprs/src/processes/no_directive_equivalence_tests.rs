@@ -1,3 +1,4 @@
+use crate::integrands::process::EvaluationTarget;
 use std::collections::BTreeSet;
 
 use crate::{
@@ -403,7 +404,7 @@ fn evaluate_cross_section(
         .as_mut()
         .unwrap()
         .evaluate_samples_raw(
-            model,
+            EvaluationTarget::Physical(model),
             &[sample],
             0,
             false,

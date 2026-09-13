@@ -2,7 +2,7 @@ pub mod evaluation;
 pub mod process;
 
 use crate::integrands::evaluation::{EvaluationResult, RawBatchEvaluationResult};
-use crate::integrands::process::ProcessIntegrand;
+use crate::integrands::process::{EvaluationTarget, ProcessIntegrand};
 use crate::integrands::process::{amplitude, cross_section};
 use crate::model::Model;
 use crate::observables::{
@@ -71,7 +71,7 @@ impl Integrand {
     pub fn evaluate_samples_raw(
         &mut self,
         samples: &[Sample<F<f64>>],
-        model: &Model,
+        target: EvaluationTarget<'_>,
         iter: usize,
         use_arb_prec: bool,
         stop_on_interrupt: bool,
@@ -79,7 +79,7 @@ impl Integrand {
     ) -> Result<RawBatchEvaluationResult> {
         match self {
             Integrand::ProcessIntegrand(integrand) => integrand.evaluate_samples_raw(
-                model,
+                target,
                 samples,
                 iter,
                 use_arb_prec,
@@ -88,6 +88,11 @@ impl Integrand {
             ),
             #[cfg(test)]
             Integrand::TestProbe(_) => {
+                let EvaluationTarget::Physical(model) = target else {
+                    return Err(color_eyre::eyre::eyre!(
+                        "reference overlays require a generated process"
+                    ));
+                };
                 let mut results = Vec::with_capacity(samples.len());
                 for sample in samples {
                     if stop_on_interrupt && is_interrupted() {

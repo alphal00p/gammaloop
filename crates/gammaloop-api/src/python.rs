@@ -643,6 +643,7 @@ mod settings_wrapper_tests {
                 "HZ".to_owned(),
                 SamplingChannelDefinition {
                     around: "surface(2,4,12)".to_owned(),
+                    radial_profile: None,
                     subspace_lmb: vec![3],
                     parent_lmb: vec![3, 6, 7, 10],
                     on_cut: vec![2, 6, 10],
@@ -3121,6 +3122,7 @@ fn build_python_integrate_command(
     min_time_between_status_updates: f64,
     max_table_width: usize,
     write_results_for_each_iteration: bool,
+    reference_gaussian: Option<(f64, Vec<f64>)>,
 ) -> PyResult<Integrate> {
     let mut integrate = if let Some(slots) = slots {
         if process.is_some() || integrand_name.is_some() {
@@ -3140,6 +3142,12 @@ fn build_python_integrate_command(
         integrate
     };
 
+    integrate.reference_gaussian = reference_gaussian
+        .map(|(width, center)| {
+            gammalooprs::integrands::process::GaussianReferenceFunction::new(width, center)
+                .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))
+        })
+        .transpose()?;
     integrate.n_cores = n_cores;
     integrate.workspace_path = workspace_path;
     integrate.restart = restart;
@@ -4839,7 +4847,8 @@ impl GammaLoopAPI {
             batch_timing = 5.0,
             min_time_between_status_updates = 0.0,
             max_table_width = 250,
-            write_results_for_each_iteration = false
+            write_results_for_each_iteration = false,
+            reference_gaussian = None
         )
     )]
     pub fn integrate(
@@ -4868,6 +4877,7 @@ impl GammaLoopAPI {
         min_time_between_status_updates: f64,
         max_table_width: usize,
         write_results_for_each_iteration: bool,
+        reference_gaussian: Option<(f64, Vec<f64>)>,
     ) -> Result<PyIntegrationOutput> {
         let integrate = build_python_integrate_command(
             &self.gammaloop_state,
@@ -4894,6 +4904,7 @@ impl GammaLoopAPI {
             min_time_between_status_updates,
             max_table_width,
             write_results_for_each_iteration,
+            reference_gaussian,
         )?;
 
         Ok(PyIntegrationOutput {

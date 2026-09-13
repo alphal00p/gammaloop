@@ -23,6 +23,7 @@ use crate::observables::{
     events::{format_complex_generic, format_optional_real_generic, format_real_generic},
 };
 use crate::{
+    integrands::process::sampling_reference::ReferenceMoments,
     settings::runtime::{IntegrationStatisticsSnapshot, Precision},
     utils::{
         ArbPrec, F, FloatLike, duration_from_secs_f64_saturating, f128, format_evaluation_time,
@@ -33,6 +34,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct GraphEvaluationResult<T: FloatLike> {
     pub integrand_result: Complex<F<T>>,
+    pub reference_moments: Option<ReferenceMoments<T>>,
     pub event_groups: GenericEventGroupList<T>,
     pub event_processing_time: Duration,
     pub generated_event_count: usize,
@@ -43,6 +45,7 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
     pub fn zero(zero: F<T>) -> Self {
         Self {
             integrand_result: Complex::new_re(zero),
+            reference_moments: None,
             event_groups: GenericEventGroupList::default(),
             event_processing_time: Duration::ZERO,
             generated_event_count: 0,
@@ -52,31 +55,41 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
 
     pub fn merge_in_place(&mut self, mut other: Self) {
         self.integrand_result += other.integrand_result;
+        if let Some(moments) = other.reference_moments {
+            if let Some(current) = &mut self.reference_moments {
+                current.merge_in_place(moments);
+            } else {
+                self.reference_moments = Some(moments);
+            }
+        }
         self.event_groups.append(&mut other.event_groups);
         self.event_processing_time += other.event_processing_time;
         self.generated_event_count += other.generated_event_count;
         self.accepted_event_count += other.accepted_event_count;
     }
 
-    pub fn into_f64(self) -> GraphEvaluationResult<f64> {
-        GraphEvaluationResult {
-            integrand_result: Complex::new(
-                self.integrand_result.re.into_ff64(),
-                self.integrand_result.im.into_ff64(),
-            ),
-            event_groups: self.event_groups.to_f64(),
-            event_processing_time: self.event_processing_time,
-            generated_event_count: self.generated_event_count,
-            accepted_event_count: self.accepted_event_count,
+    /// Apply one sampling factor to the physical value/events or reference
+    /// value/moments at the same boundary. Channel sums must not reweight a
+    /// moment reconstructed from just one representative momentum point.
+    pub(crate) fn apply_sampling_factor(&mut self, factor: F<T>) {
+        if let Some(moments) = &mut self.reference_moments {
+            moments.rescale(&factor);
         }
+        let factor = Complex::new_re(factor);
+        self.integrand_result *= &factor;
+        crate::integrands::process::apply_full_event_multiplicative_factor_precise(
+            &mut self.event_groups,
+            &factor,
+        );
     }
 }
 
 /// The result of an evaluation of the integrand
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationResult {
-    /// Integrand value before the separately reported top-level Jacobian is
-    /// applied. Summed sampling channels already include their individual
+    /// Native map/partition/physics contribution, including its Jacobian.
+    /// The separately reported unapplied top-level Jacobian is unity. Summed
+    /// sampling channels likewise include their individual
     /// map Jacobians and partition factors and report a unit top-level Jacobian.
     pub integrand_result: Complex<F<f64>>,
     pub parameterization_jacobian: Option<F<f64>>,
@@ -97,6 +110,9 @@ pub struct EvaluationResultOutput {
 
 #[derive(Clone, Debug)]
 pub struct GenericEvaluationResult<T: FloatLike> {
+    /// Runtime-only acceptance data, retained until the selected native precision
+    /// has passed both value and moment checks. Physical output schemas omit it.
+    pub(crate) reference_moments: Option<ReferenceMoments<T>>,
     pub integrand_result: Complex<F<T>>,
     pub parameterization_jacobian: Option<F<T>>,
     pub integrator_weight: F<T>,
@@ -114,6 +130,40 @@ pub struct GenericEvaluationResultOutput<T: FloatLike> {
 }
 
 impl<T: FloatLike> GenericEvaluationResult<T> {
+    /// Narrow only the final native map/partition/physics contribution at the
+    /// ordinary integration/reporting boundary. Precise APIs retain this value.
+    pub(crate) fn try_into_f64(self) -> eyre::Result<EvaluationResult> {
+        let weights = std::iter::once(&self.integrand_result).chain(
+            self.event_groups.iter().flat_map(|group| {
+                group.iter().flat_map(|event| {
+                    std::iter::once(&event.weight).chain(event.additional_weights.weights.values())
+                })
+            }),
+        );
+        for value in weights.flat_map(|weight| [&weight.re, &weight.im]) {
+            let reported = value.into_f64();
+            if value.0.is_finite()
+                && (!reported.is_finite() || (reported == 0.0 && value != &value.zero()))
+            {
+                return Err(eyre::eyre!(
+                    "native sampling contribution or event weight {value} cannot be represented by the f64 integration/reporting boundary"
+                ));
+            }
+        }
+        Ok(EvaluationResult {
+            integrand_result: Complex::new(
+                self.integrand_result.re.into_ff64(),
+                self.integrand_result.im.into_ff64(),
+            ),
+            parameterization_jacobian: self
+                .parameterization_jacobian
+                .map(|value| value.into_ff64()),
+            integrator_weight: self.integrator_weight.into_ff64(),
+            event_groups: self.event_groups.to_f64(),
+            evaluation_metadata: self.evaluation_metadata,
+        })
+    }
+
     pub fn into_output(self, minimal_output: bool) -> GenericEvaluationResultOutput<T> {
         GenericEvaluationResultOutput {
             integrand_result: self.integrand_result,
@@ -140,6 +190,14 @@ pub enum PreciseEvaluationResult {
 }
 
 impl PreciseEvaluationResult {
+    pub(crate) fn try_into_f64(self) -> eyre::Result<EvaluationResult> {
+        match self {
+            Self::Double(result) => result.try_into_f64(),
+            Self::Quad(result) => result.try_into_f64(),
+            Self::Arb(result) => result.try_into_f64(),
+        }
+    }
+
     pub fn into_output(self, minimal_output: bool) -> PreciseEvaluationResultOutput {
         match self {
             PreciseEvaluationResult::Double(result) => {
