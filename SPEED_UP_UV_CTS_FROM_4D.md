@@ -855,3 +855,42 @@ If a gate fails, use the measurements to continue the generic implementation, in
   debug events expose the exact cograph and mapped integrand before final
   color simplification. Their source-only capture will distinguish remaining
   scalar color invariants from open tensors before the next generic fix.
+
+### 2026-09-13 — GL262 scalar color-invariant boundary
+
+- Milestone `04501f7eba67f1387ca86d6a9e92fd223fae59e3` is committed and pushed
+  as ValentinHirschi. Its immutable diagnostic CLI has SHA-256
+  `7817960155b15016cbc869632b23ddf339eb4966157dce0cd4119f2cae4f33fb`;
+  check40 and CLI build7 succeeded with debug assertions enabled.
+- Its GL262 source-only run reached the requested pre-color boundary and was
+  deliberately stopped after 26.1735 s, peak RSS 684,453,888 bytes. The cograph
+  is 3,078 Atom bytes; the mapped input is 17,459,639 Atom bytes. Exact captured
+  arguments show only `idx(2,cof(3))` and `cas(2,coad(8))`: one of each before
+  mapping, 3,038 of each afterward. All color representation calls have arity
+  one and are accounted for inside those scalar invariants; there are no open
+  color tensor slots. Files, hashes and inventories are retained in
+  `diagnostic_final_color_boundary/GL262_4d_source_capture_r1`.
+- The existing color simplifier now applies its requested fundamental-dimension
+  invariant substitution immediately after local color rewrites, before
+  representation collection. This handles both preexisting and newly produced
+  scalar invariants without distributing the accompanying numerator. The
+  setting and final substitution remain intact. Focused correctness checks and
+  a fresh full GL262 generation will validate this change; the source-only run
+  is not a completed generation or a performance acceptance result.
+- Check42 passes; the focused nextest suite passes **639/639 tests** in
+  58.214 s after a 3m00s build. Five new color tests cover factorized spectators,
+  generated and unsupported invariants, disabled trace/Fierz operations and
+  idempotence. Clippy4 succeeds with the same three type-complexity warnings.
+- CLI8 SHA-256
+  `c43e77703ad0e23b0b06ba2c5a56606f90f77c0902e6d4e6205913e3330d8c37`
+  builds in 58.85 s. Its first GL262 forest node completes in 55.392331 s;
+  the next full-DOD0 projection takes 2.570277 s, and the DOD2 bubble projection
+  takes 41.925 ms. This passes the previous first-node color bottleneck.
+- The DOD2 bubble's final assembly then reaches a separate color-collection
+  bottleneck. A fresh 116-sample profile (zero lost samples) attributes 96.55%
+  to collection and 94.83% to statistical zero tests. Its 24,756,504-byte Atom
+  contains genuine open adjoint slots: 19,344 two-argument `coad` calls, plus
+  7,936 scalar adjoint invariants. Exact inputs and profile receipts are in
+  `diagnostic_color_invariants/GL262_4d_direct_r1`. The run remains incomplete;
+  the next investigation concerns factorized coefficient handling in the
+  existing shared tensor collector, not another scalar-invariant assumption.

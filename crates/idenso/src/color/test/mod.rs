@@ -288,6 +288,112 @@ fn cof_dimension_invariant_rules_substitute_supported_fundamental_cases() {
 }
 
 #[test]
+fn cof_dimension_simplification_preserves_factorized_spectators() {
+    test_initialize();
+    let invariants = parse_lit!(
+        cas(2, coad(8)) * idx(2, cof(3)),
+        default_namespace = "spenso"
+    );
+    assert_eq!(invariants.simplify_color(), invariants);
+
+    let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 3 * (opaque(z) + opaque(w)));
+    let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
+    let simplified = (invariants * spectator.clone()).simplify_color_with(settings);
+    // Exact Atom equality checks that the spectator's sums and power stay intact.
+    assert_eq!(simplified, (Atom::num(3) / Atom::num(2)) * spectator);
+    assert_eq!(simplified.simplify_color_with(settings), simplified);
+}
+
+#[test]
+fn cof_dimension_simplification_resolves_new_color_invariants() {
+    test_initialize();
+    let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
+    let closed = parse_lit!(
+        f(coad(8, a), coad(8, b), coad(8, c)) ^ 2,
+        default_namespace = "spenso"
+    );
+    assert_eq!(closed.simplify_color_with(settings), Atom::num(24));
+
+    let open = parse_lit!(
+        f(coad(8, a), coad(8, b), coad(8, c)) * f(coad(8, a), coad(8, b), coad(8, d)),
+        default_namespace = "spenso"
+    );
+    let expected = parse_lit!(3 * g(coad(8, c), coad(8, d)), default_namespace = "spenso");
+    let simplified = open.simplify_color_with(settings);
+    assert_eq!(simplified, expected);
+    assert_eq!(simplified.simplify_color_with(settings), simplified);
+
+    let fundamental = ColorFundamental {}.new_rep(3);
+    let adjoint = ColorAdjoint {}.new_rep(8);
+    let trace = trace!(
+        &fundamental,
+        color_t!(slot!(adjoint, a)),
+        color_t!(slot!(adjoint, a)),
+    );
+    assert_eq!(trace.simplify_color_with(settings), Atom::num(4));
+}
+
+#[test]
+fn cof_dimension_simplification_preserves_unsupported_invariants() {
+    test_initialize();
+    let expression = parse_lit!(
+        cas(3, cof(3)) * idx(3, cof(3)) * cas(2, coad(7)),
+        default_namespace = "spenso"
+    );
+    let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
+    assert_eq!(expression.simplify_color_with(settings), expression);
+}
+
+#[test]
+fn cof_dimension_simplification_respects_disabled_trace_evaluation() {
+    test_initialize();
+    let fundamental = ColorFundamental {}.new_rep(3);
+    let adjoint = ColorAdjoint {}.new_rep(8);
+    let closed_chain = chain!(
+        slot!(fundamental, i),
+        slot!(fundamental.dual(), i),
+        color_t!(slot!(adjoint, a)),
+        color_t!(slot!(adjoint, b)),
+    );
+    let invariant = color_cas!(2, ColorAdjoint {}.to_symbolic([Atom::num(8)]));
+    let expected = Atom::num(3)
+        * trace!(
+            &fundamental,
+            color_t!(slot!(adjoint, a)),
+            color_t!(slot!(adjoint, b)),
+        );
+    let settings = ColorSimplifySettings::default()
+        .without_trace_evaluation()
+        .with_cof_dimension_invariants();
+    let simplified = (invariant * closed_chain).simplify_color_with(settings);
+    assert_eq!(simplified, expected);
+    assert_eq!(simplified.simplify_color_with(settings), simplified);
+}
+
+#[test]
+fn cof_dimension_simplification_respects_disabled_fierz_expansion() {
+    test_initialize();
+    let fundamental = ColorFundamental {}.new_rep(3);
+    let adjoint = ColorAdjoint {}.new_rep(8);
+    let chains = chain!(
+        slot!(fundamental, i),
+        slot!(fundamental.dual(), j),
+        color_t!(slot!(adjoint, a)),
+    ) * chain!(
+        slot!(fundamental, k),
+        slot!(fundamental.dual(), l),
+        color_t!(slot!(adjoint, a)),
+    );
+    let invariant = color_idx!(2, ColorFundamental {}.to_symbolic([Atom::num(3)]));
+    let settings = ColorSimplifySettings::default()
+        .without_cross_chain_fierz_expansion()
+        .with_cof_dimension_invariants();
+    let simplified = (invariant * chains.clone()).simplify_color_with(settings);
+    assert_eq!(simplified, chains / Atom::num(2));
+    assert_eq!(simplified.simplify_color_with(settings), simplified);
+}
+
+#[test]
 fn color_structure_symbol_is_antisymmetric() {
     test_initialize();
     let r = TestReps::new();

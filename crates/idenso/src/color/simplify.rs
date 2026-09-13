@@ -82,9 +82,16 @@ impl ColorAlgebraSimplifier {
 
     fn apply_once(&self, expression: AtomView<'_>) -> Atom {
         let collected = self.collect_lines(expression);
-        self.rewrite_terms(collected.as_view())
-            .collect_color()
-            .simplify_metrics()
+        let rewritten = self.rewrite_terms(collected.as_view());
+        // Resolve scalar invariants before their representation labels trigger
+        // tensor collection over the accompanying factorized numerator. Include
+        // invariants produced by this pass, as well as those already present.
+        let rewritten = if self.settings.substitute_cof_dimension_invariants {
+            rewritten.to_cof_dimension_invariants()
+        } else {
+            rewritten
+        };
+        rewritten.collect_color().simplify_metrics()
     }
 
     fn rewrite_terms(&self, expr: AtomView<'_>) -> Atom {

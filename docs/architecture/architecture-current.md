@@ -158,7 +158,11 @@ trace into scalar contractions before canonical merging and energy sampling.
 Both local routes simplify the reduced numerator's color algebra before Taylor
 construction and the cograph's color algebra before residue mapping, using the
 existing numerator operation. Open color indices remain explicit; the final
-color pass contracts indices closed by attached UV terms and projectors. Raw
+color pass contracts indices closed by attached UV terms and projectors. When
+fundamental-dimension invariant substitution is requested, the color simplifier
+also applies it after each local rewrite and before tensor collection. Resolved
+scalar Casimirs and indices therefore do not cause collection over a factorized
+residue sum; newly produced invariants follow the same rule. Raw
 graph storage and parse-time validation are unchanged.
 
 Rational-shell extraction groups equal denominator multisets through sums,
