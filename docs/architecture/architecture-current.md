@@ -512,9 +512,14 @@ certifies residuals and rejects unrepresentable inverse points without clipping.
 Generic geometry preparation still needs suitable interior-center selection.
 The shared radial profile focuses on both signed distances to the threshold
 with a common analytic inverse. Native kernel tests cover Quad and arbitrary
-precision, but the component/bridge boundary still computes in f64; rounded
-threshold-seam errors do not yet trigger native map rescue. This remains a gate
-before long strongly focused sampling runs.
+precision. Components, affine/composed maps, prepared cut records, eager/dual
+evaluations and foreign-density partitions now retain native values throughout.
+Typed numerical errors distinguish unrepresentable derived coordinates/scores
+from invalid original inputs. The implicit root uses the existing native
+safeguarded solver, with callback errors preserved. Production callers still
+bind the f64 bridge; native bindings and original-source stability retry remain
+the next gate before long strongly focused runs. Root localization relative to
+the sampled threshold distance also needs its stronger accuracy certificate.
 
 Physical and Gaussian-reference targets share graph traversal and default-LMB
 routing. Summed reference evaluation aggregates values and raw-frame moments

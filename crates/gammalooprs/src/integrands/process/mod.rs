@@ -3377,14 +3377,17 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                             ));
                         }
                         let mapped_sample = mapped
-                            .to_momentum_sample::<T>(SamplingMomentumSampleContext {
-                                loop_mom_cache_id: sample.sample.loop_mom_cache_id,
-                                external_moms: &context.settings.kinematics.externals,
-                                external_mom_cache_id: sample.sample.external_mom_cache_id,
-                                dependent_momenta_constructor: integrand
-                                    .get_dependent_momenta_constructor(),
-                                orientation: sample.sample.orientation,
-                            })?
+                            .to_momentum_sample::<T>(
+                                SamplingMomentumSampleContext {
+                                    loop_mom_cache_id: sample.sample.loop_mom_cache_id,
+                                    external_moms: &context.settings.kinematics.externals,
+                                    external_mom_cache_id: sample.sample.external_mom_cache_id,
+                                    dependent_momenta_constructor: integrand
+                                        .get_dependent_momenta_constructor(),
+                                    orientation: sample.sample.orientation,
+                                },
+                                |value| F::<T>::from_f64(*value),
+                            )?
                             .rotate(
                                 context.rotation,
                                 sample.sample.loop_mom_cache_id,

@@ -116,6 +116,37 @@ Pass its resolved settings from process warmup, together with the existing
 or looking up settings per draw. Ordinary cache invalidation already covers
 changes to those runtime settings.
 
+### Baseline comparability
+
+Recheck the three state hashes in
+[`runtime-followup-pilot-provenance.json`](../gl638/runtime-followup-pilot-provenance.json)
+before loading the existing full state. The 2026-09-13 inventory found them
+unchanged; that check alone does not prove that the current binary can load
+the state or that its generated payload still has all 936 orientations.
+Confirm those properties from the loaded graph, including its six cuts and
+19 threshold variants. Keep raw-point replay separate from proposal testing:
+the former has no channel or sampling Jacobian and tests the physical sum.
+
+The historical six-channel pilot is **not** the numerical baseline for the new
+sampler. Its cut-dependent inverse-Jacobian partition has been removed; the
+canonical bridge uses exact densities in the common raw frame. Reusing the
+old option spelling does not restore that distribution. Start a fresh control
+with `sampling_channel_weight="map_density"` and six named `lmb(...)` channels
+whose edge lists are `[6,12,13,14]`, `[4,12,13,14]`, `[6,7,13,14]`,
+`[4,7,13,14]`, `[6,10,13,14]`, and `[4,10,13,14]`. Their explicit output
+`parent_lmb` is the generation frame `[3,4,7,10]`. Resolve these lists against
+the loaded graph instead of assuming that historical numeric basis IDs remain
+stable. Compare this control, `auto:optimized_lmb`, and candidate surface
+channels with the same physical settings and fresh workspaces. Historical
+errors and maxima remain context, not matched-control measurements.
+
+Preserve the original f64 coordinate tokens when replaying recorded maxima and
+H/Z/soft points. Inspect finiteness, every precision attempt, each cut, and both
+complex components. Exact A/P coincidence is an expected unresolved diagnostic,
+not a successful zero or a regression in proposal normalization. Record current
+binary/source hashes and all runtime overrides with the new results; a prepared
+card or an archived replay cannot count as a current-binary validation.
+
 ## The conditional correctness boundary
 
 At warmup, certify that every active displacement has zero signed coefficient

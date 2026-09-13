@@ -13,6 +13,7 @@ use crate::momentum::sample::LoopMomenta;
 use crate::settings::runtime::{
     ParameterizationMapping, ParameterizationMode, ParameterizationSettings,
 };
+use crate::utils::newton_solver::safeguarded_newton_iteration_and_derivative;
 use crate::utils::{F, FloatLike, global_inv_parameterize, global_parameterize};
 use color_eyre::eyre::{Result, eyre};
 use serde::{Deserialize, Serialize};
@@ -274,6 +275,48 @@ pub struct SamplingMapPoint<T: FloatLike> {
     pub residual: F<T>,
 }
 
+/// Numerical sampling failures which may be retried from the original source
+/// at higher precision. Structural metadata and capability errors deliberately
+/// keep their existing error types and must not enter the rescue stack.
+#[derive(Clone, Debug)]
+pub enum SamplingEvaluationError {
+    Unrepresentable {
+        operation: &'static str,
+        detail: String,
+    },
+    UncertifiedRoot {
+        detail: String,
+    },
+    UncertainGeometry {
+        detail: String,
+    },
+}
+
+impl std::fmt::Display for SamplingEvaluationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unrepresentable { operation, detail } => write!(
+                formatter,
+                "sampling {operation} is not representable at the current precision: {detail}"
+            ),
+            Self::UncertifiedRoot { detail } => {
+                write!(
+                    formatter,
+                    "sampling root is not certified at the current precision: {detail}"
+                )
+            }
+            Self::UncertainGeometry { detail } => {
+                write!(
+                    formatter,
+                    "sampling geometry is uncertain at the current precision: {detail}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for SamplingEvaluationError {}
+
 /// Result of evaluating one graph-independent sampling component.
 ///
 /// The point is represented as a flat vector in the master raw coordinate
@@ -282,26 +325,54 @@ pub struct SamplingMapPoint<T: FloatLike> {
 /// it is deliberately data rather than logging so acceptance tests can audit
 /// every branch taken by a map.
 #[derive(Clone, Debug, PartialEq)]
-pub struct SamplingMapEvaluation {
-    pub coordinates: Vec<f64>,
-    pub point: Vec<f64>,
-    pub jacobian: f64,
-    pub inverse_jacobian: f64,
-    pub residual: f64,
+pub struct SamplingMapEvaluation<T: FloatLike = f64> {
+    pub coordinates: Vec<T>,
+    pub point: Vec<T>,
+    pub jacobian: T,
+    pub inverse_jacobian: T,
+    pub residual: T,
     pub support: SamplingSupport,
     pub diagnostics: Vec<String>,
+}
+
+impl<T: FloatLike> SamplingMapEvaluation<T> {
+    /// Certify the complete numerical result after composition or affine
+    /// routing, where individually finite child determinants may overflow.
+    pub(crate) fn validate(self, operation: &'static str) -> Result<Self> {
+        if self
+            .coordinates
+            .iter()
+            .chain(&self.point)
+            .any(|value| !value.is_finite())
+            || !self.residual.is_finite()
+            || self.residual < self.residual.zero()
+            || [&self.jacobian, &self.inverse_jacobian]
+                .iter()
+                .any(|value| !value.is_finite() || **value <= value.zero())
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation,
+                detail: format!(
+                    "non-finite coordinates/residual or nonpositive Jacobian pair ({}, {})",
+                    self.jacobian, self.inverse_jacobian
+                ),
+            }
+            .into());
+        }
+        Ok(self)
+    }
 }
 
 /// A graph-independent map component which can participate in a product or
 /// ordered conditional composition.  `context` contains previously produced
 /// raw coordinates for `then` maps and is empty for independent products.
-pub trait SamplingMapComponent: std::fmt::Debug + Send + Sync {
+pub trait SamplingMapComponent<T: FloatLike = f64>: std::fmt::Debug + Send + Sync {
     fn dimensions(&self) -> usize;
     fn output_dimensions(&self) -> usize;
     fn contract(&self) -> SamplingMapContract;
     fn name(&self) -> &'static str;
-    fn forward(&self, coordinates: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation>;
-    fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation>;
+    fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>>;
+    fn inverse(&self, point: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>>;
 }
 
 /// An exact affine change of coordinates between two equal-dimensional frames.
@@ -311,21 +382,21 @@ pub trait SamplingMapComponent: std::fmt::Debug + Send + Sync {
 /// a selected LMB into a parent frame; graph code supplies the matrix and
 /// translation after resolving the relevant edge signatures and external data.
 #[derive(Clone, Debug, PartialEq)]
-pub struct SamplingMapAffine {
-    matrix: Vec<f64>,
-    inverse_matrix: Vec<f64>,
-    translation: Vec<f64>,
+pub struct SamplingMapAffine<T: FloatLike = f64> {
+    matrix: Vec<T>,
+    inverse_matrix: Vec<T>,
+    translation: Vec<T>,
     dimension: usize,
-    determinant: f64,
+    determinant: T,
 }
 
-impl SamplingMapAffine {
+impl<T: FloatLike> SamplingMapAffine<T> {
     /// Construct an affine map from a square matrix and translation vector.
     ///
     /// Partial pivoting is used while constructing the inverse.  Singular and
     /// numerically rank-deficient matrices are rejected before a map can enter
     /// a sampling composition, since they have no valid push-forward density.
-    pub fn new(matrix: Vec<Vec<f64>>, translation: Vec<f64>) -> Result<Self> {
+    pub fn new(matrix: Vec<Vec<T>>, translation: Vec<T>) -> Result<Self> {
         let dimension = matrix.len();
         if dimension == 0 {
             return Err(eyre!("affine sampling map requires a non-empty matrix"));
@@ -355,27 +426,31 @@ impl SamplingMapAffine {
             ));
         }
 
-        let mut augmented = vec![vec![0.0; 2 * dimension]; dimension];
-        let mut scale = 0.0_f64;
+        let zero = F(matrix[0][0].zero());
+        let one = zero.one();
+        let mut augmented = vec![vec![zero.clone(); 2 * dimension]; dimension];
+        let mut scale = zero.clone();
         for (row_index, row) in matrix.iter().enumerate() {
-            for (column_index, value) in row.iter().copied().enumerate() {
-                augmented[row_index][column_index] = value;
-                scale = scale.max(value.abs());
+            for (column_index, value) in row.iter().cloned().enumerate() {
+                augmented[row_index][column_index] = F(value.clone());
+                scale = scale.max(F(value).abs());
             }
-            augmented[row_index][dimension + row_index] = 1.0;
+            augmented[row_index][dimension + row_index] = one.clone();
         }
-        if scale == 0.0 {
+        if scale == zero {
             return Err(eyre!("affine sampling map matrix is singular"));
         }
-        let pivot_tolerance = scale * f64::EPSILON * dimension as f64 * 32.0;
-        let mut determinant = 1.0;
-        let mut row_sign = 1.0;
+        let pivot_tolerance = &scale * scale.epsilon() * scale.from_usize(dimension * 32);
+        let mut determinant = one.clone();
+        let mut row_sign = one.clone();
         for pivot_column in 0..dimension {
             let (pivot_row, pivot_abs) = (pivot_column..dimension)
                 .map(|row| (row, augmented[row][pivot_column].abs()))
-                .max_by(|(_, left), (_, right)| left.total_cmp(right))
+                .max_by(|(_, left), (_, right)| {
+                    left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal)
+                })
                 .expect("non-empty pivot range");
-            if pivot_abs <= pivot_tolerance || !pivot_abs.is_finite() {
+            if pivot_abs <= pivot_tolerance || !pivot_abs.0.is_finite() {
                 return Err(eyre!(
                     "affine sampling map matrix is singular or rank-deficient at pivot {} (|pivot| = {}, tolerance = {})",
                     pivot_column,
@@ -387,37 +462,38 @@ impl SamplingMapAffine {
                 augmented.swap(pivot_row, pivot_column);
                 row_sign = -row_sign;
             }
-            let pivot = augmented[pivot_column][pivot_column];
-            determinant *= pivot;
-            let inverse_pivot = 1.0 / pivot;
+            let pivot = augmented[pivot_column][pivot_column].clone();
+            determinant *= &pivot;
+            let inverse_pivot = &one / pivot;
             for value in &mut augmented[pivot_column] {
-                *value *= inverse_pivot;
+                *value *= &inverse_pivot;
             }
             for row in 0..dimension {
                 if row == pivot_column {
                     continue;
                 }
-                let factor = augmented[row][pivot_column];
-                if factor == 0.0 {
+                let factor = augmented[row][pivot_column].clone();
+                if factor == zero {
                     continue;
                 }
                 for column in 0..2 * dimension {
-                    augmented[row][column] -= factor * augmented[pivot_column][column];
+                    let term = &factor * &augmented[pivot_column][column];
+                    augmented[row][column] -= term;
                 }
             }
         }
         determinant *= row_sign;
-        if !determinant.is_finite() || determinant == 0.0 {
+        if !determinant.0.is_finite() || determinant == zero {
             return Err(eyre!(
                 "affine sampling map determinant is not finite and non-zero: {determinant}"
             ));
         }
         let inverse_matrix = augmented
             .into_iter()
-            .flat_map(|row| row.into_iter().skip(dimension))
+            .flat_map(|row| row.into_iter().skip(dimension).map(|value| value.0))
             .collect::<Vec<_>>();
         let determinant = determinant.abs();
-        if !determinant.is_finite() || determinant <= 0.0 {
+        if !determinant.0.is_finite() || determinant <= zero {
             return Err(eyre!(
                 "affine sampling map Jacobian is not finite and positive: {determinant}"
             ));
@@ -427,7 +503,7 @@ impl SamplingMapAffine {
             inverse_matrix,
             translation,
             dimension,
-            determinant,
+            determinant: determinant.0,
         })
     }
 
@@ -435,36 +511,37 @@ impl SamplingMapAffine {
         self.dimension
     }
 
-    pub fn determinant(&self) -> f64 {
-        self.determinant
+    pub fn determinant(&self) -> T {
+        self.determinant.clone()
     }
 
-    pub fn matrix(&self) -> &[f64] {
+    pub fn matrix(&self) -> &[T] {
         &self.matrix
     }
 
-    pub fn inverse_matrix(&self) -> &[f64] {
+    pub fn inverse_matrix(&self) -> &[T] {
         &self.inverse_matrix
     }
 
-    pub fn translation(&self) -> &[f64] {
+    pub fn translation(&self) -> &[T] {
         &self.translation
     }
 
-    fn apply(&self, matrix: &[f64], input: &[f64], translation: &[f64]) -> Vec<f64> {
+    fn apply(&self, matrix: &[T], input: &[T], translation: &[T]) -> Vec<T> {
         (0..self.dimension)
             .map(|row| {
-                translation[row]
-                    + matrix[row * self.dimension..(row + 1) * self.dimension]
-                        .iter()
-                        .zip(input)
-                        .map(|(coefficient, value)| coefficient * value)
-                        .sum::<f64>()
+                matrix[row * self.dimension..(row + 1) * self.dimension]
+                    .iter()
+                    .zip(input)
+                    .fold(F(translation[row].clone()), |sum, (coefficient, value)| {
+                        sum + F(coefficient.clone()) * F(value.clone())
+                    })
+                    .0
             })
             .collect()
     }
 
-    fn validate_dimension(&self, values: &[f64], role: &str) -> Result<()> {
+    fn validate_dimension(&self, values: &[T], role: &str) -> Result<()> {
         if values.len() != self.dimension {
             return Err(eyre!(
                 "affine sampling map {role} has dimension {}, expected {}",
@@ -481,7 +558,7 @@ impl SamplingMapAffine {
     }
 }
 
-impl SamplingMapComponent for SamplingMapAffine {
+impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapAffine<T> {
     fn dimensions(&self) -> usize {
         self.dimension
     }
@@ -501,52 +578,54 @@ impl SamplingMapComponent for SamplingMapAffine {
         "affine"
     }
 
-    fn forward(&self, coordinates: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+    fn forward(&self, coordinates: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
         self.validate_dimension(coordinates, "input")?;
         let point = self.apply(&self.matrix, coordinates, &self.translation);
         let translated = point
             .iter()
             .zip(&self.translation)
-            .map(|(value, shift)| value - shift)
+            .map(|(value, shift)| (F(value.clone()) - F(shift.clone())).0)
             .collect::<Vec<_>>();
         let recovered = self.apply(
             &self.inverse_matrix,
             &translated,
-            &vec![0.0; self.dimension],
+            &vec![self.determinant.zero(); self.dimension],
         );
-        Ok(SamplingMapEvaluation {
+        SamplingMapEvaluation {
             coordinates: coordinates.to_vec(),
             point,
-            jacobian: self.determinant,
-            inverse_jacobian: 1.0 / self.determinant,
-            residual: max_coordinate_residual_f64(coordinates, &recovered),
+            jacobian: self.determinant.clone(),
+            inverse_jacobian: (F(self.determinant.one()) / F(self.determinant.clone())).0,
+            residual: max_coordinate_residual_scalar(coordinates, &recovered),
             support: SamplingSupport::Full,
             diagnostics: vec![format!("affine dimension={}", self.dimension)],
-        })
+        }
+        .validate("affine map")
     }
 
-    fn inverse(&self, point: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+    fn inverse(&self, point: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
         self.validate_dimension(point, "point")?;
         let translated = point
             .iter()
             .zip(&self.translation)
-            .map(|(value, shift)| value - shift)
+            .map(|(value, shift)| (F(value.clone()) - F(shift.clone())).0)
             .collect::<Vec<_>>();
         let coordinates = self.apply(
             &self.inverse_matrix,
             &translated,
-            &vec![0.0; self.dimension],
+            &vec![self.determinant.zero(); self.dimension],
         );
         let recovered = self.apply(&self.matrix, &coordinates, &self.translation);
-        Ok(SamplingMapEvaluation {
+        SamplingMapEvaluation {
             coordinates,
             point: point.to_vec(),
-            jacobian: self.determinant,
-            inverse_jacobian: 1.0 / self.determinant,
-            residual: max_coordinate_residual_f64(&recovered, point),
+            jacobian: self.determinant.clone(),
+            inverse_jacobian: (F(self.determinant.one()) / F(self.determinant.clone())).0,
+            residual: max_coordinate_residual_scalar(&recovered, point),
             support: SamplingSupport::Full,
             diagnostics: vec![format!("affine dimension={}", self.dimension)],
-        })
+        }
+        .validate("affine map")
     }
 }
 
@@ -663,9 +742,9 @@ fn halton(mut index: usize, base: u64) -> f64 {
 /// determinants.  Ordered compositions pass all previous output blocks as
 /// context to each child; their derivative is block triangular, so the exact
 /// determinant is still the product of the diagonal child determinants.
-pub struct SamplingMapComposition {
+pub struct SamplingMapComposition<T: FloatLike = f64> {
     kind: SamplingCompositionKind,
-    children: Vec<Box<dyn SamplingMapComponent>>,
+    children: Vec<Box<dyn SamplingMapComponent<T>>>,
     dimensions: usize,
     output_dimensions: usize,
 }
@@ -677,13 +756,13 @@ pub struct SamplingMapComposition {
 /// permutes complete three-momentum blocks.  The permutation has unit
 /// absolute determinant, so the product Jacobian is unchanged.
 #[derive(Clone)]
-pub struct SamplingMapEmbedding {
-    map: Arc<SamplingMapComposition>,
+pub struct SamplingMapEmbedding<T: FloatLike = f64> {
+    map: Arc<SamplingMapComposition<T>>,
     /// Product-output index -> master-frame output index.
     output_indices: Vec<usize>,
 }
 
-impl std::fmt::Debug for SamplingMapEmbedding {
+impl<T: FloatLike> std::fmt::Debug for SamplingMapEmbedding<T> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("SamplingMapEmbedding")
@@ -693,13 +772,13 @@ impl std::fmt::Debug for SamplingMapEmbedding {
     }
 }
 
-impl SamplingMapEmbedding {
+impl<T: FloatLike> SamplingMapEmbedding<T> {
     /// Build an embedded map from either a direct product or an ordered
     /// conditional composition.  The latter preserves the block context
     /// passed by `then(...)` while this wrapper only permutes its complete
     /// output into the master frame.
     pub fn from_composition(
-        map: SamplingMapComposition,
+        map: SamplingMapComposition<T>,
         output_indices: Vec<usize>,
     ) -> Result<Self> {
         if output_indices.len() != map.output_dimensions {
@@ -734,7 +813,7 @@ impl SamplingMapEmbedding {
     /// permutation of `0..sum(child.output_dimensions())`; duplicate or
     /// missing frame coordinates are rejected before any numerical use.
     pub fn product(
-        children: Vec<Box<dyn SamplingMapComponent>>,
+        children: Vec<Box<dyn SamplingMapComponent<T>>>,
         output_indices: Vec<usize>,
     ) -> Result<Self> {
         let map = SamplingMapComposition::product(children)?;
@@ -745,23 +824,23 @@ impl SamplingMapEmbedding {
         &self.output_indices
     }
 
-    fn embed_point(&self, product_point: &[f64]) -> Vec<f64> {
-        let mut point = vec![0.0; product_point.len()];
+    fn embed_point(&self, product_point: &[T]) -> Vec<T> {
+        let mut point = vec![product_point[0].zero(); product_point.len()];
         for (product_index, master_index) in self.output_indices.iter().enumerate() {
-            point[*master_index] = product_point[product_index];
+            point[*master_index] = product_point[product_index].clone();
         }
         point
     }
 
-    fn unembed_point(&self, master_point: &[f64]) -> Vec<f64> {
+    fn unembed_point(&self, master_point: &[T]) -> Vec<T> {
         self.output_indices
             .iter()
-            .map(|master_index| master_point[*master_index])
+            .map(|master_index| master_point[*master_index].clone())
             .collect()
     }
 }
 
-impl SamplingMapComponent for SamplingMapEmbedding {
+impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapEmbedding<T> {
     fn dimensions(&self) -> usize {
         self.map.dimensions()
     }
@@ -778,7 +857,7 @@ impl SamplingMapComponent for SamplingMapEmbedding {
         "embedded_product"
     }
 
-    fn forward(&self, coordinates: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+    fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
         let mut evaluation = self.map.forward(coordinates, context)?;
         evaluation.point = self.embed_point(&evaluation.point);
         evaluation
@@ -787,7 +866,7 @@ impl SamplingMapComponent for SamplingMapEmbedding {
         Ok(evaluation)
     }
 
-    fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+    fn inverse(&self, point: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
         if point.len() != self.output_dimensions() {
             return Err(eyre!(
                 "sampling-map embedding inverse received output dimension {}, expected {}",
@@ -811,7 +890,7 @@ enum SamplingCompositionKind {
     Then,
 }
 
-impl std::fmt::Debug for SamplingMapComposition {
+impl<T: FloatLike> std::fmt::Debug for SamplingMapComposition<T> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("SamplingMapComposition")
@@ -823,18 +902,18 @@ impl std::fmt::Debug for SamplingMapComposition {
     }
 }
 
-impl SamplingMapComposition {
-    pub fn product(children: Vec<Box<dyn SamplingMapComponent>>) -> Result<Self> {
+impl<T: FloatLike> SamplingMapComposition<T> {
+    pub fn product(children: Vec<Box<dyn SamplingMapComponent<T>>>) -> Result<Self> {
         Self::new(SamplingCompositionKind::Product, children)
     }
 
-    pub fn then(children: Vec<Box<dyn SamplingMapComponent>>) -> Result<Self> {
+    pub fn then(children: Vec<Box<dyn SamplingMapComponent<T>>>) -> Result<Self> {
         Self::new(SamplingCompositionKind::Then, children)
     }
 
     fn new(
         kind: SamplingCompositionKind,
-        children: Vec<Box<dyn SamplingMapComponent>>,
+        children: Vec<Box<dyn SamplingMapComponent<T>>>,
     ) -> Result<Self> {
         if children.is_empty() {
             return Err(eyre!(
@@ -877,7 +956,7 @@ impl SamplingMapComposition {
         self.kind == SamplingCompositionKind::Then
     }
 
-    pub fn children(&self) -> &[Box<dyn SamplingMapComponent>] {
+    pub fn children(&self) -> &[Box<dyn SamplingMapComponent<T>>] {
         &self.children
     }
 
@@ -906,9 +985,9 @@ impl SamplingMapComposition {
 
     fn evaluate_forward(
         &self,
-        coordinates: &[f64],
-        initial_context: &[f64],
-    ) -> Result<SamplingMapEvaluation> {
+        coordinates: &[T],
+        initial_context: &[T],
+    ) -> Result<SamplingMapEvaluation<T>> {
         self.validate_input(coordinates.len(), "composition")?;
         let mut offset = 0;
         let mut context = if self.is_then() {
@@ -930,16 +1009,16 @@ impl SamplingMapComposition {
             evaluations.push(evaluation);
             offset = end;
         }
-        let mut evaluation = combine_evaluations(evaluations);
+        let mut evaluation = combine_evaluations(evaluations)?;
         evaluation.support = self.contract().support;
         Ok(evaluation)
     }
 
     fn evaluate_inverse(
         &self,
-        point: &[f64],
-        initial_context: &[f64],
-    ) -> Result<SamplingMapEvaluation> {
+        point: &[T],
+        initial_context: &[T],
+    ) -> Result<SamplingMapEvaluation<T>> {
         self.validate_output(point.len())?;
         let mut offset = 0;
         let mut context = if self.is_then() {
@@ -962,13 +1041,13 @@ impl SamplingMapComposition {
             evaluations.push(evaluation);
             offset = end;
         }
-        let mut evaluation = combine_evaluations(evaluations);
+        let mut evaluation = combine_evaluations(evaluations)?;
         evaluation.support = self.contract().support;
         Ok(evaluation)
     }
 }
 
-impl SamplingMapComponent for SamplingMapComposition {
+impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapComposition<T> {
     fn dimensions(&self) -> usize {
         self.dimensions
     }
@@ -1014,11 +1093,11 @@ impl SamplingMapComponent for SamplingMapComposition {
         }
     }
 
-    fn forward(&self, coordinates: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+    fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
         self.evaluate_forward(coordinates, context)
     }
 
-    fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+    fn inverse(&self, point: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
         self.evaluate_inverse(point, context)
     }
 }
@@ -1048,20 +1127,23 @@ pub(crate) fn combine_contracts(
     SamplingMapContract { support, jacobian }
 }
 
-fn combine_evaluations(evaluations: Vec<SamplingMapEvaluation>) -> SamplingMapEvaluation {
+fn combine_evaluations<T: FloatLike>(
+    evaluations: Vec<SamplingMapEvaluation<T>>,
+) -> Result<SamplingMapEvaluation<T>> {
     let mut coordinates = Vec::new();
     let mut point = Vec::new();
-    let mut jacobian = 1.0;
-    let mut inverse_jacobian = 1.0;
-    let mut residual = 0.0_f64;
+    let one = F(evaluations[0].jacobian.one());
+    let mut jacobian = one.clone();
+    let mut inverse_jacobian = one.clone();
+    let mut residual = one.zero();
     let mut support = SamplingSupport::Full;
     let mut diagnostics = Vec::new();
     for evaluation in evaluations {
         coordinates.extend(evaluation.coordinates);
         point.extend(evaluation.point);
-        jacobian *= evaluation.jacobian;
-        inverse_jacobian *= evaluation.inverse_jacobian;
-        residual = residual.max(evaluation.residual);
+        jacobian *= F(evaluation.jacobian);
+        inverse_jacobian *= F(evaluation.inverse_jacobian);
+        residual = residual.max(F(evaluation.residual));
         support = match (support, evaluation.support) {
             (SamplingSupport::Branched, _) | (_, SamplingSupport::Branched) => {
                 SamplingSupport::Branched
@@ -1076,12 +1158,13 @@ fn combine_evaluations(evaluations: Vec<SamplingMapEvaluation>) -> SamplingMapEv
     SamplingMapEvaluation {
         coordinates,
         point,
-        jacobian,
-        inverse_jacobian,
-        residual,
+        jacobian: jacobian.0,
+        inverse_jacobian: inverse_jacobian.0,
+        residual: residual.0,
         support,
         diagnostics,
     }
+    .validate("map composition")
 }
 
 /// A graph-independent spherical radial proxy around an energy-surface centre.
@@ -1102,10 +1185,10 @@ fn combine_evaluations(evaluations: Vec<SamplingMapEvaluation>) -> SamplingMapEv
 /// supplies the actual energy equation's directional radius when needed;
 /// physical focusing and exact proposal-density accounting are distinct.
 #[derive(Clone, Debug, PartialEq)]
-pub struct SurfaceRadialMap {
+pub struct SurfaceRadialMap<T: FloatLike = f64> {
     dimension: usize,
-    center: Vec<f64>,
-    threshold_radius: Option<f64>,
+    center: Vec<T>,
+    threshold_radius: Option<T>,
     beta: f64,
     power: f64,
 }
@@ -1131,14 +1214,14 @@ pub struct SurfaceRadialMap {
 /// a `then` composition whose earlier blocks are full-support can expose a
 /// full-support chart: context derivatives are off-diagonal and do not alter
 /// the product of active-block determinants.
-pub type ImplicitSurfaceRadialEvaluator =
-    Arc<dyn Fn(&[f64], f64) -> Result<(f64, f64)> + Send + Sync + 'static>;
+pub type ImplicitSurfaceRadialEvaluator<T = f64> =
+    Arc<dyn Fn(&[T], T) -> Result<(T, T)> + Send + Sync + 'static>;
 
 /// Context-aware variant used by conditional surface charts. The context is
 /// the output of an earlier `then(...)`/complement map and may contain the
 /// sampled spectator loop momenta needed to solve a partial-subspace surface.
-pub type ImplicitSurfaceRadialContextEvaluator =
-    Arc<dyn Fn(&[f64], f64, &[f64]) -> Result<(f64, f64)> + Send + Sync + 'static>;
+pub type ImplicitSurfaceRadialContextEvaluator<T = f64> =
+    Arc<dyn Fn(&[T], T, &[T]) -> Result<(T, T)> + Send + Sync + 'static>;
 
 /// Context-dependent centre of a directional energy-surface chart.
 ///
@@ -1148,22 +1231,22 @@ pub type ImplicitSurfaceRadialContextEvaluator =
 /// to the active radial coordinates remain block diagonal, while centre and
 /// root changes with the complement occupy only the off-diagonal Jacobian
 /// block.  The returned vector must have the map's active dimension.
-pub type ImplicitSurfaceCenterEvaluator =
-    Arc<dyn Fn(&[f64]) -> Result<Vec<f64>> + Send + Sync + 'static>;
+pub type ImplicitSurfaceCenterEvaluator<T = f64> =
+    Arc<dyn Fn(&[T]) -> Result<Vec<T>> + Send + Sync + 'static>;
 
 #[derive(Clone)]
-pub struct ImplicitSurfaceRadialMap {
+pub struct ImplicitSurfaceRadialMap<T: FloatLike = f64> {
     dimension: usize,
-    center: Vec<f64>,
+    center: Vec<T>,
     beta: f64,
     power: f64,
-    evaluator: ImplicitSurfaceRadialEvaluator,
-    context_evaluator: Option<ImplicitSurfaceRadialContextEvaluator>,
-    center_evaluator: Option<ImplicitSurfaceCenterEvaluator>,
+    evaluator: ImplicitSurfaceRadialEvaluator<T>,
+    context_evaluator: Option<ImplicitSurfaceRadialContextEvaluator<T>>,
+    center_evaluator: Option<ImplicitSurfaceCenterEvaluator<T>>,
     root_tolerance: f64,
 }
 
-impl std::fmt::Debug for ImplicitSurfaceRadialMap {
+impl<T: FloatLike> std::fmt::Debug for ImplicitSurfaceRadialMap<T> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("ImplicitSurfaceRadialMap")
@@ -1178,13 +1261,13 @@ impl std::fmt::Debug for ImplicitSurfaceRadialMap {
     }
 }
 
-impl ImplicitSurfaceRadialMap {
+impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
     pub fn new(
         dimension: usize,
-        center: Vec<f64>,
+        center: Vec<T>,
         beta: f64,
         power: f64,
-        evaluator: ImplicitSurfaceRadialEvaluator,
+        evaluator: ImplicitSurfaceRadialEvaluator<T>,
     ) -> Result<Self> {
         if dimension < 2 {
             return Err(eyre!(
@@ -1237,7 +1320,7 @@ impl ImplicitSurfaceRadialMap {
     /// context and therefore advertises conditional support.
     pub fn with_context_evaluator(
         mut self,
-        evaluator: ImplicitSurfaceRadialContextEvaluator,
+        evaluator: ImplicitSurfaceRadialContextEvaluator<T>,
     ) -> Self {
         self.context_evaluator = Some(evaluator);
         self
@@ -1249,7 +1332,7 @@ impl ImplicitSurfaceRadialMap {
     /// determinant factor in an ordered composition.
     pub fn with_context_center_evaluator(
         mut self,
-        evaluator: ImplicitSurfaceCenterEvaluator,
+        evaluator: ImplicitSurfaceCenterEvaluator<T>,
     ) -> Self {
         self.center_evaluator = Some(evaluator);
         self
@@ -1259,7 +1342,7 @@ impl ImplicitSurfaceRadialMap {
         self.dimension
     }
 
-    pub fn center(&self) -> &[f64] {
+    pub fn center(&self) -> &[T] {
         &self.center
     }
 
@@ -1271,7 +1354,7 @@ impl ImplicitSurfaceRadialMap {
         self.power
     }
 
-    fn center_for_context(&self, context: &[f64]) -> Result<Vec<f64>> {
+    fn center_for_context(&self, context: &[T]) -> Result<Vec<T>> {
         let center = if let Some(evaluator) = &self.center_evaluator {
             evaluator(context)?
         } else {
@@ -1303,49 +1386,60 @@ impl ImplicitSurfaceRadialMap {
         }
     }
 
-    pub fn forward(&self, coordinates: &[f64]) -> Result<SamplingMapEvaluation> {
+    pub fn forward(&self, coordinates: &[T]) -> Result<SamplingMapEvaluation<T>> {
         self.forward_with_context(coordinates, &[])
     }
 
     pub fn forward_with_context(
         &self,
-        coordinates: &[f64],
-        context: &[f64],
-    ) -> Result<SamplingMapEvaluation> {
+        coordinates: &[T],
+        context: &[T],
+    ) -> Result<SamplingMapEvaluation<T>> {
         self.validate_coordinates(coordinates)?;
         let (direction, angular_jacobian) = direction_from_coordinates(coordinates)?;
         let center = self.center_for_context(context)?;
         let root = self.root_for_direction(&direction, context)?;
-        let (radius, radial_jacobian) = self.radius_from_coordinate(coordinates[0], root);
-        if self.power != 1.0 && root.is_some_and(|(threshold, _)| radius == threshold) {
-            return Err(eyre!(
-                "implicit surface radial-map radius rounds to the singular threshold seam at the current precision"
-            ));
+        let (radius, radial_jacobian) =
+            self.radius_from_coordinate(coordinates[0].clone(), root.clone());
+        let radius = F(radius);
+        if self.power != 1.0
+            && root
+                .as_ref()
+                .is_some_and(|(threshold, _)| &radius.0 == threshold)
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "implicit radial map",
+                detail: "radius rounds to the singular threshold seam".to_owned(),
+            }
+            .into());
         }
         let point = center
             .iter()
             .zip(&direction)
-            .map(|(center, direction)| center + radius * direction)
+            .map(|(center, direction)| (F(center.clone()) + &radius * F(direction.clone())).0)
             .collect::<Vec<_>>();
-        let jacobian = radial_jacobian * angular_jacobian * radius.powi(self.dimension as i32 - 1);
-        let inverse_jacobian = 1.0 / jacobian;
-        if !radius.is_finite()
-            || radius <= 0.0
+        let jacobian =
+            F(radial_jacobian) * F(angular_jacobian) * radius.powi(self.dimension as i32 - 1);
+        let inverse_jacobian = jacobian.clone().inv();
+        if !radius.0.is_finite()
+            || radius <= radius.zero()
             || point.iter().any(|component| !component.is_finite())
-            || [jacobian, inverse_jacobian]
+            || [&jacobian, &inverse_jacobian]
                 .iter()
-                .any(|value| !value.is_finite() || *value <= 0.0)
+                .any(|value| !value.0.is_finite() || **value <= value.zero())
         {
-            return Err(eyre!(
-                "implicit surface radial-map point or positive Jacobian pair ({jacobian}, {inverse_jacobian}) is not representable at the current precision"
-            ));
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "implicit radial map",
+                detail: format!("point or positive Jacobian pair ({jacobian}, {inverse_jacobian})"),
+            }
+            .into());
         }
         Ok(SamplingMapEvaluation {
             coordinates: coordinates.to_vec(),
             point,
-            jacobian,
-            inverse_jacobian,
-            residual: 0.0,
+            jacobian: jacobian.0,
+            inverse_jacobian: inverse_jacobian.0,
+            residual: radius.zero().0,
             support: self.contract().support,
             diagnostics: vec![if root.is_some() {
                 "implicit_surface:regular_root".to_owned()
@@ -1355,15 +1449,15 @@ impl ImplicitSurfaceRadialMap {
         })
     }
 
-    pub fn inverse(&self, point: &[f64]) -> Result<SamplingMapEvaluation> {
+    pub fn inverse(&self, point: &[T]) -> Result<SamplingMapEvaluation<T>> {
         self.inverse_with_context(point, &[])
     }
 
     pub fn inverse_with_context(
         &self,
-        point: &[f64],
-        context: &[f64],
-    ) -> Result<SamplingMapEvaluation> {
+        point: &[T],
+        context: &[T],
+    ) -> Result<SamplingMapEvaluation<T>> {
         if point.len() != self.dimension {
             return Err(eyre!(
                 "implicit surface radial-map inverse received dimension {}, expected {}",
@@ -1380,32 +1474,38 @@ impl ImplicitSurfaceRadialMap {
         let displacement = point
             .iter()
             .zip(&center)
-            .map(|(point, center)| point - center)
+            .map(|(point, center)| F(point.clone()) - F(center.clone()))
             .collect::<Vec<_>>();
         let radius = displacement
             .iter()
-            .map(|value| value * value)
-            .sum::<f64>()
+            .map(F::square)
+            .fold(displacement[0].zero(), |sum, value| sum + value)
             .sqrt();
-        if !radius.is_finite() || radius <= 0.0 {
-            return Err(eyre!(
-                "implicit surface radial-map inverse is undefined at its centre"
-            ));
+        if !radius.0.is_finite() || radius <= radius.zero() {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "implicit radial inverse",
+                detail: "radius is non-finite or at the chart centre".to_owned(),
+            }
+            .into());
         }
         let direction = displacement
             .iter()
-            .map(|value| value / radius)
+            .map(|value| (value / &radius).0)
             .collect::<Vec<_>>();
         let root = self.root_for_direction(&direction, context)?;
-        let coordinate = self.coordinate_from_radius(radius, root);
+        let coordinate = self.coordinate_from_radius(radius.0, root);
         let mut coordinates = coordinates_from_direction(&direction)?;
         coordinates[0] = coordinate;
+        self.validate_coordinates(&coordinates).map_err(|error| {
+            SamplingEvaluationError::Unrepresentable {
+                operation: "implicit radial inverse coordinates",
+                detail: error.to_string(),
+            }
+        })?;
         let mapped = self.forward_with_context(&coordinates, context)?;
-        let residual = max_coordinate_residual_f64(point, &mapped.point);
+        let residual = max_coordinate_residual_scalar(point, &mapped.point);
         if !residual.is_finite() {
-            return Err(eyre!(
-                "implicit surface radial-map inverse residual is not representable at the current precision"
-            ));
+            return Err(SamplingEvaluationError::Unrepresentable { operation: "radial map", detail: "implicit surface radial-map inverse residual is not representable at the current precision".to_owned() }.into());
         }
         Ok(SamplingMapEvaluation {
             coordinates,
@@ -1418,7 +1518,7 @@ impl ImplicitSurfaceRadialMap {
         })
     }
 
-    fn validate_coordinates(&self, coordinates: &[f64]) -> Result<()> {
+    fn validate_coordinates(&self, coordinates: &[T]) -> Result<()> {
         if coordinates.len() != self.dimension {
             return Err(eyre!(
                 "implicit surface radial-map forward received {}, expected {} coordinates",
@@ -1426,10 +1526,11 @@ impl ImplicitSurfaceRadialMap {
                 self.dimension
             ));
         }
-        if coordinates
-            .iter()
-            .any(|coordinate| !coordinate.is_finite() || *coordinate <= 0.0 || *coordinate >= 1.0)
-        {
+        if coordinates.iter().any(|coordinate| {
+            !coordinate.is_finite()
+                || *coordinate <= coordinate.zero()
+                || *coordinate >= coordinate.one()
+        }) {
             return Err(eyre!(
                 "implicit surface radial-map coordinates must be finite and strictly inside the unit cube"
             ));
@@ -1437,7 +1538,7 @@ impl ImplicitSurfaceRadialMap {
         Ok(())
     }
 
-    fn evaluate(&self, direction: &[f64], radius: f64, context: &[f64]) -> Result<(f64, f64)> {
+    fn evaluate(&self, direction: &[T], radius: T, context: &[T]) -> Result<(T, T)> {
         if let Some(evaluator) = &self.context_evaluator {
             evaluator(direction, radius, context)
         } else {
@@ -1445,180 +1546,167 @@ impl ImplicitSurfaceRadialMap {
         }
     }
 
-    fn root_for_direction(&self, direction: &[f64], context: &[f64]) -> Result<Option<(f64, f64)>> {
-        let (origin_value, origin_derivative) = self.evaluate(direction, 0.0, context)?;
-        if !origin_value.is_finite() || !origin_derivative.is_finite() {
-            return Err(eyre!(
-                "implicit surface evaluator returned non-finite origin data"
-            ));
+    fn root_for_direction(&self, direction: &[T], context: &[T]) -> Result<Option<(T, T)>> {
+        let zero = F(direction[0].zero());
+        let (origin_value, origin_derivative) =
+            self.evaluate(direction, zero.0.clone(), context)?;
+        let origin_value = F(origin_value);
+        if !origin_value.0.is_finite() || !origin_derivative.is_finite() {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "implicit root origin",
+                detail: "evaluator returned non-finite origin data".to_owned(),
+            }
+            .into());
         }
-        let scale = origin_value.abs().max(1.0);
-        let residual_tolerance = self.root_tolerance * scale;
-        if origin_value >= 0.0 {
+        let scale = origin_value.abs().max(zero.one());
+        let requested_tolerance = F::<T>::from_f64(self.root_tolerance);
+        let native_tolerance = zero.epsilon() * zero.from_i64(64);
+        let relative_tolerance = if requested_tolerance < native_tolerance {
+            requested_tolerance
+        } else {
+            native_tolerance
+        };
+        let residual_tolerance = &relative_tolerance * &scale;
+        if origin_value.abs() <= residual_tolerance {
+            return Err(SamplingEvaluationError::UncertainGeometry {
+                detail: format!("center sign is not certified at the current root tolerance: value={origin_value}, tolerance={residual_tolerance}"),
+            }.into());
+        }
+        if origin_value > zero {
             return Ok(None);
         }
-        if origin_value >= -residual_tolerance {
-            return Err(eyre!(
-                "implicit surface interior center is not certified at the current root tolerance: value={origin_value}, tolerance={residual_tolerance}"
-            ));
+        // Reuse the native bracket-preserving solver. Callback failures keep
+        // their original structural/numerical classification across its scalar
+        // interface; no failed equation evaluation becomes a rootless branch.
+        let callback_error = std::cell::RefCell::new(None);
+        let result = safeguarded_newton_iteration_and_derivative(
+            &zero,
+            &F::<T>::from_f64(self.beta.max(1.0)),
+            |radius| match self.evaluate(direction, radius.0.clone(), context) {
+                Ok((value, derivative)) => (F(value), F(derivative)),
+                Err(error) => {
+                    *callback_error.borrow_mut() = Some(error);
+                    (F::<T>::from_f64(f64::NAN), F::<T>::from_f64(f64::NAN))
+                }
+            },
+            &(&relative_tolerance / zero.epsilon()),
+            2048,
+            96,
+            &scale,
+        );
+        if let Some(error) = callback_error.into_inner() {
+            return Err(error);
         }
-        let mut lower = 0.0;
-        let mut upper = self.beta.max(1.0);
-        let mut upper_value = None;
-        for _ in 0..96 {
-            let (value, derivative) = self.evaluate(direction, upper, context)?;
-            if !value.is_finite() || !derivative.is_finite() {
-                return Err(eyre!(
-                    "implicit surface evaluator returned non-finite bracket data"
-                ));
-            }
-            if value >= 0.0 {
-                upper_value = Some((value, derivative));
-                break;
-            }
-            upper *= 2.0;
-            if !upper.is_finite() {
-                return Err(eyre!(
-                    "implicit surface radial root could not be bracketed before the radius overflowed"
-                ));
-            }
-        }
-        let Some((_, _)) = upper_value else {
-            return Err(eyre!(
-                "implicit surface radial root could not be bracketed after 96 radius expansions"
-            ));
-        };
-        let mut value_at_lower = origin_value;
-        let mut root = 0.5 * (lower + upper);
-        for _ in 0..128 {
-            let (value, derivative) = self.evaluate(direction, root, context)?;
-            if !value.is_finite() || !derivative.is_finite() {
-                return Err(eyre!(
-                    "implicit surface evaluator returned non-finite root data"
-                ));
-            }
-            if value.abs() <= residual_tolerance {
-                break;
-            }
-            if value > 0.0 {
-                upper = root;
-            } else {
-                lower = root;
-                value_at_lower = value;
-            }
-            let newton = if derivative.abs() > f64::MIN_POSITIVE {
-                root - value / derivative
-            } else {
-                f64::NAN
-            };
-            root = if newton.is_finite() && newton > lower && newton < upper {
-                newton
-            } else {
-                0.5 * (lower + upper)
-            };
-        }
-        let (value, derivative) = self.evaluate(direction, root, context)?;
-        if !value.is_finite() || !derivative.is_finite() || derivative <= 0.0 {
-            return Err(eyre!(
-                "implicit surface radial root is not regular: value={value}, derivative={derivative}, bracket_lower={value_at_lower}"
-            ));
-        }
-        if !root.is_finite() || root <= 0.0 || value.abs() > residual_tolerance {
-            return Err(eyre!(
-                "implicit surface radial root failed residual certification: radius={root}, value={value}, tolerance={residual_tolerance}, bracket=[{lower}, {upper}]"
-            ));
-        }
-        Ok(Some((root, derivative)))
+        let result = result.map_err(|error| SamplingEvaluationError::UncertifiedRoot {
+            detail: format!("implicit surface radial root failed residual certification: {error}"),
+        })?;
+        Ok(Some((result.solution.0, result.derivative_at_solution.0)))
     }
 
-    fn radius_from_coordinate(&self, coordinate: f64, root: Option<(f64, f64)>) -> (f64, f64) {
-        let (radius, jacobian) = SurfaceRadialMap::radius_from_coordinate(
+    fn radius_from_coordinate(&self, coordinate: T, root: Option<(T, T)>) -> (T, T) {
+        let threshold = root
+            .map(|(radius, _)| radius)
+            .unwrap_or_else(|| coordinate.zero());
+        let (radius, jacobian) = SurfaceRadialMap::<T>::radius_from_coordinate(
             &F(coordinate),
-            F(root.map(|(radius, _)| radius).unwrap_or(0.0)),
-            F(self.beta),
-            F(self.power),
+            F(threshold),
+            F::from_f64(self.beta),
+            F::from_f64(self.power),
         );
         (radius.0, jacobian.0)
     }
 
-    fn coordinate_from_radius(&self, radius: f64, root: Option<(f64, f64)>) -> f64 {
-        SurfaceRadialMap::coordinate_from_radius(
+    fn coordinate_from_radius(&self, radius: T, root: Option<(T, T)>) -> T {
+        let threshold = root
+            .map(|(radius, _)| radius)
+            .unwrap_or_else(|| radius.zero());
+        SurfaceRadialMap::<T>::coordinate_from_radius(
             &F(radius),
-            F(root.map(|(radius, _)| radius).unwrap_or(0.0)),
-            F(self.beta),
-            F(self.power),
+            F(threshold),
+            F::from_f64(self.beta),
+            F::from_f64(self.power),
         )
         .0
     }
 }
 
-fn direction_from_coordinates(coordinates: &[f64]) -> Result<(Vec<f64>, f64)> {
+fn direction_from_coordinates<T: FloatLike>(coordinates: &[T]) -> Result<(Vec<T>, T)> {
     if coordinates.len() < 2 {
         return Err(eyre!(
             "spherical direction requires at least two coordinates"
         ));
     }
     let dimension = coordinates.len();
-    let mut direction = vec![0.0; dimension];
-    let mut angular_jacobian = std::f64::consts::TAU;
-    let mut base = 1.0;
+    let zero = F(coordinates[0].zero());
+    let one = zero.one();
+    let two = zero.from_i64(2);
+    let mut direction = vec![zero.clone(); dimension];
+    let mut angular_jacobian = zero.TAU();
+    let mut base = one.clone();
     for (i, coordinate) in coordinates[2..].iter().enumerate() {
-        let cos_theta = -1.0 + 2.0 * coordinate;
-        if cos_theta <= -1.0 || cos_theta >= 1.0 {
-            return Err(eyre!(
-                "polar coordinate rounds to a singular spherical chart boundary at the current precision"
-            ));
+        let cos_theta = -&one + &two * F(coordinate.clone());
+        if cos_theta <= -&one || cos_theta >= one {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "spherical direction",
+                detail: "polar coordinate rounds to a singular spherical chart boundary".to_owned(),
+            }
+            .into());
         }
-        let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
-        angular_jacobian *= 2.0;
+        let sin_theta = (&one - cos_theta.square()).sqrt();
+        angular_jacobian *= &two;
         let angular_power = dimension - 3 - i;
         if angular_power > 0 {
             angular_jacobian *= sin_theta.powi(angular_power as i32);
         }
-        direction[i] = base * cos_theta;
+        direction[i] = &base * cos_theta;
         base *= sin_theta;
     }
-    let phi = std::f64::consts::TAU * coordinates[1];
-    direction[dimension - 2] = base * phi.cos();
-    direction[dimension - 1] = base * phi.sin();
-    Ok((direction, angular_jacobian))
+    let phi = zero.TAU() * F(coordinates[1].clone());
+    direction[dimension - 2] = &base * F(phi.0.cos());
+    direction[dimension - 1] = &base * F(phi.0.sin());
+    Ok((
+        direction.into_iter().map(|value| value.0).collect(),
+        angular_jacobian.0,
+    ))
 }
 
-fn coordinates_from_direction(direction: &[f64]) -> Result<Vec<f64>> {
+fn coordinates_from_direction<T: FloatLike>(direction: &[T]) -> Result<Vec<T>> {
     if direction.len() < 2 {
         return Err(eyre!(
             "spherical direction requires at least two components"
         ));
     }
     let dimension = direction.len();
-    let mut coordinates = vec![0.0; dimension];
-    let mut base = 1.0;
+    let zero = F(direction[0].zero());
+    let one = zero.one();
+    let two = zero.from_i64(2);
+    let mut coordinates = vec![zero.clone(); dimension];
+    let mut base = one.clone();
     for i in 0..dimension - 2 {
-        if base <= 0.0 {
-            return Err(eyre!(
-                "direction lies on a singular spherical chart boundary"
-            ));
+        let cos_theta = F(direction[i].clone()) / &base;
+        if base <= zero || !cos_theta.0.is_finite() || cos_theta <= -&one || cos_theta >= one {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "spherical inverse",
+                detail: "direction lies on a singular spherical chart boundary".to_owned(),
+            }
+            .into());
         }
-        let cos_theta = direction[i] / base;
-        if !cos_theta.is_finite() || cos_theta <= -1.0 || cos_theta >= 1.0 {
-            return Err(eyre!(
-                "direction lies on a singular spherical chart boundary at the current precision"
-            ));
+        coordinates[2 + i] = (&one + &cos_theta) / &two;
+        base *= (&one - cos_theta.square()).sqrt();
+    }
+    let mut phi = F(direction[dimension - 1].atan2(&direction[dimension - 2]));
+    if phi < zero {
+        phi += zero.TAU();
+    }
+    coordinates[1] = phi / zero.TAU();
+    if !coordinates[1].0.is_finite() || coordinates[1] <= zero || coordinates[1] >= one {
+        return Err(SamplingEvaluationError::Unrepresentable {
+            operation: "spherical inverse",
+            detail: "direction lies on the spherical azimuth seam".to_owned(),
         }
-        coordinates[2 + i] = (1.0 + cos_theta) / 2.0;
-        base *= (1.0 - cos_theta * cos_theta).sqrt();
+        .into());
     }
-    let mut phi = direction[dimension - 1].atan2(direction[dimension - 2]);
-    if phi < 0.0 {
-        phi += std::f64::consts::TAU;
-    }
-    coordinates[1] = phi / std::f64::consts::TAU;
-    if !coordinates[1].is_finite() || coordinates[1] <= 0.0 || coordinates[1] >= 1.0 {
-        return Err(eyre!(
-            "direction lies on the spherical azimuth seam at the current precision"
-        ));
-    }
-    Ok(coordinates)
+    Ok(coordinates.into_iter().map(|value| value.0).collect())
 }
 
 /// Values returned by [`SurfaceRadialMap::forward`] and `inverse`.
@@ -1635,7 +1723,7 @@ pub struct SurfaceRadialPoint<T: FloatLike> {
     pub residual: F<T>,
 }
 
-impl SurfaceRadialMap {
+impl<T: FloatLike> SurfaceRadialMap<T> {
     /// Construct a radial map in `dimension >= 2` dimensions.
     ///
     /// `threshold_radius = Some(r*)` places the surface at `r*`; `None` is the
@@ -1646,8 +1734,8 @@ impl SurfaceRadialMap {
     /// Ordinary soft channels retain separate coverage of the origin.
     pub fn new(
         dimension: usize,
-        center: Vec<f64>,
-        threshold_radius: Option<f64>,
+        center: Vec<T>,
+        threshold_radius: Option<T>,
         beta: f64,
         power: f64,
     ) -> Result<Self> {
@@ -1663,7 +1751,10 @@ impl SurfaceRadialMap {
         if center.iter().any(|component| !component.is_finite()) {
             return Err(eyre!("surface radial-map centre must be finite"));
         }
-        if threshold_radius.is_some_and(|radius| !radius.is_finite() || radius < 0.0) {
+        if threshold_radius
+            .as_ref()
+            .is_some_and(|radius| !radius.is_finite() || radius < &radius.zero())
+        {
             return Err(eyre!(
                 "surface radial-map threshold radius must be finite and non-negative"
             ));
@@ -1688,7 +1779,7 @@ impl SurfaceRadialMap {
     }
 
     /// Construct the absent-fibre full-support fallback directly.
-    pub fn absent(dimension: usize, center: Vec<f64>, beta: f64, power: f64) -> Result<Self> {
+    pub fn absent(dimension: usize, center: Vec<T>, beta: f64, power: f64) -> Result<Self> {
         Self::new(dimension, center, None, beta, power)
     }
 
@@ -1696,12 +1787,12 @@ impl SurfaceRadialMap {
         self.dimension
     }
 
-    pub fn center(&self) -> &[f64] {
+    pub fn center(&self) -> &[T] {
         &self.center
     }
 
-    pub fn threshold_radius(&self) -> Option<f64> {
-        self.threshold_radius
+    pub fn threshold_radius(&self) -> Option<T> {
+        self.threshold_radius.clone()
     }
 
     pub fn beta(&self) -> f64 {
@@ -1720,15 +1811,13 @@ impl SurfaceRadialMap {
     }
 
     /// Map a unit-cube point to a point around the surface centre.
-    pub fn forward<T: FloatLike>(&self, coordinates: &[F<T>]) -> Result<SurfaceRadialPoint<T>> {
+    pub fn forward(&self, coordinates: &[F<T>]) -> Result<SurfaceRadialPoint<T>> {
         self.validate_coordinates(coordinates)?;
         let (threshold, beta, power) = self.radial_parameters();
         let (radius, radial_jacobian) =
             Self::radius_from_coordinate(&coordinates[0], threshold.clone(), beta, power);
         if self.power != 1.0 && threshold > threshold.zero() && radius == threshold {
-            return Err(eyre!(
-                "surface radial-map radius rounds to the singular threshold seam at the current precision"
-            ));
+            return Err(SamplingEvaluationError::Unrepresentable { operation: "radial map", detail: "surface radial-map radius rounds to the singular threshold seam at the current precision".to_owned() }.into());
         }
         let one = radius.one();
         let two = radius.from_i64(2);
@@ -1739,9 +1828,12 @@ impl SurfaceRadialMap {
         for (i, coordinate) in coordinates[2..].iter().enumerate() {
             let cos_theta = -&one + &two * coordinate;
             if cos_theta <= -&one || cos_theta >= one {
-                return Err(eyre!(
-                    "polar coordinate rounds to a singular spherical chart boundary at the current precision"
-                ));
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "surface radial direction",
+                    detail: "polar coordinate rounds to a singular spherical chart boundary"
+                        .to_owned(),
+                }
+                .into());
             }
             let sin_theta = (&one - cos_theta.square()).sqrt();
             angular_jacobian *= &two;
@@ -1759,7 +1851,7 @@ impl SurfaceRadialMap {
 
         let mut point = Vec::with_capacity(self.dimension);
         for (component, centre) in direction.iter().zip(&self.center) {
-            point.push(component + F::from_f64(*centre));
+            point.push(component + F(centre.clone()));
         }
         let jacobian =
             radial_jacobian * angular_jacobian * radius.powi((self.dimension - 1) as i32);
@@ -1771,9 +1863,7 @@ impl SurfaceRadialMap {
                 .iter()
                 .any(|value| !value.0.is_finite() || **value <= value.zero())
         {
-            return Err(eyre!(
-                "surface radial-map point or positive Jacobian pair is not representable at the current precision"
-            ));
+            return Err(SamplingEvaluationError::Unrepresentable { operation: "radial map", detail: "surface radial-map point or positive Jacobian pair is not representable at the current precision".to_owned() }.into());
         }
         Ok(SurfaceRadialPoint {
             coordinates: coordinates.to_vec(),
@@ -1786,7 +1876,7 @@ impl SurfaceRadialMap {
     }
 
     /// Invert a point in the map's full-support domain.
-    pub fn inverse<T: FloatLike>(&self, point: &[F<T>]) -> Result<SurfaceRadialPoint<T>> {
+    pub fn inverse(&self, point: &[F<T>]) -> Result<SurfaceRadialPoint<T>> {
         if point.len() != self.dimension {
             return Err(eyre!(
                 "surface radial-map inverse received dimension {}, expected {}",
@@ -1799,7 +1889,7 @@ impl SurfaceRadialMap {
         }
         let mut displacement = Vec::with_capacity(self.dimension);
         for (component, centre) in point.iter().zip(&self.center) {
-            displacement.push(component - F::from_f64(*centre));
+            displacement.push(component - F(centre.clone()));
         }
         let mut radius_squared = displacement[0].square();
         for component in &displacement[1..] {
@@ -1807,10 +1897,18 @@ impl SurfaceRadialMap {
         }
         let radius = radius_squared.sqrt();
         let zero = radius.zero();
-        if !radius.0.is_finite() || radius <= zero {
+        if displacement.iter().all(|component| component == &zero) {
             return Err(eyre!(
-                "surface radial-map inverse radius must be finite and positive; it is undefined at its centre"
+                "surface radial-map inverse is undefined at its centre"
             ));
+        }
+        if !radius.0.is_finite() || radius <= zero {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "surface radial inverse radius",
+                detail: "finite nonzero displacement has an unrepresentable positive norm"
+                    .to_owned(),
+            }
+            .into());
         }
         let (threshold, beta, power) = self.radial_parameters();
         let radial_coordinate = Self::coordinate_from_radius(&radius, threshold, beta, power);
@@ -1831,12 +1929,16 @@ impl SurfaceRadialMap {
         }
         coordinates[0] = radial_coordinate;
         coordinates[1] = phi / radius.TAU();
+        self.validate_coordinates(&coordinates).map_err(|error| {
+            SamplingEvaluationError::Unrepresentable {
+                operation: "surface radial inverse coordinates",
+                detail: error.to_string(),
+            }
+        })?;
         let mapped = self.forward(&coordinates)?;
         let residual = max_coordinate_residual(point, &mapped.point);
         if !residual.0.is_finite() {
-            return Err(eyre!(
-                "surface radial-map inverse residual is not representable at the current precision"
-            ));
+            return Err(SamplingEvaluationError::Unrepresentable { operation: "radial map", detail: "surface radial-map inverse residual is not representable at the current precision".to_owned() }.into());
         }
         Ok(SurfaceRadialPoint {
             coordinates,
@@ -1848,7 +1950,7 @@ impl SurfaceRadialMap {
         })
     }
 
-    fn validate_coordinates<T: FloatLike>(&self, coordinates: &[F<T>]) -> Result<()> {
+    fn validate_coordinates(&self, coordinates: &[F<T>]) -> Result<()> {
         if coordinates.len() != self.dimension {
             return Err(eyre!(
                 "surface radial-map forward received dimension {}, expected {}",
@@ -1869,15 +1971,18 @@ impl SurfaceRadialMap {
         Ok(())
     }
 
-    fn radial_parameters<T: FloatLike>(&self) -> (F<T>, F<T>, F<T>) {
+    fn radial_parameters(&self) -> (F<T>, F<T>, F<T>) {
         (
-            F::from_f64(self.threshold_radius.unwrap_or(0.0)),
+            F(self
+                .threshold_radius
+                .clone()
+                .unwrap_or_else(|| self.center[0].zero())),
             F::from_f64(self.beta),
             F::from_f64(self.power),
         )
     }
 
-    fn radius_from_coordinate<T: FloatLike>(
+    fn radius_from_coordinate(
         coordinate: &F<T>,
         threshold: F<T>,
         beta: F<T>,
@@ -1901,12 +2006,7 @@ impl SurfaceRadialMap {
         }
     }
 
-    fn coordinate_from_radius<T: FloatLike>(
-        radius: &F<T>,
-        threshold: F<T>,
-        beta: F<T>,
-        power: F<T>,
-    ) -> F<T> {
+    fn coordinate_from_radius(radius: &F<T>, threshold: F<T>, beta: F<T>, power: F<T>) -> F<T> {
         let one = radius.one();
         let split = &threshold / (&threshold + &beta);
         if split > radius.zero() && radius < &threshold {
@@ -1921,7 +2021,7 @@ impl SurfaceRadialMap {
     /// The existing native hyperbolic operations preserve small arguments;
     /// direct subtraction is safe once its result is bounded away from zero.
     /// These native operations are not yet registered as eager primitives.
-    fn power_complement<T: FloatLike>(fraction: &F<T>, power: &F<T>) -> F<T> {
+    fn power_complement(fraction: &F<T>, power: &F<T>) -> F<T> {
         let one = fraction.one();
         if power == &one {
             return fraction.clone();
@@ -2059,9 +2159,7 @@ impl SamplingMapKernel {
                 .flatten()
                 .any(|component| !component.0.is_finite())
         {
-            return Err(eyre!(
-                "sampling-map forward point or positive Jacobian is not representable at the current precision"
-            ));
+            return Err(SamplingEvaluationError::Unrepresentable { operation: "radial map", detail: "sampling-map forward point or positive Jacobian is not representable at the current precision".to_owned() }.into());
         }
         let loop_momenta = LoopMomenta(
             raw.into_iter()
@@ -2070,11 +2168,13 @@ impl SamplingMapKernel {
         );
         let (inverse_coordinates, inverse_jacobian) =
             global_inv_parameterize(&loop_momenta.0, e_cm, &self.settings);
-        self.validate_coordinates(&inverse_coordinates)?;
+        self.validate_coordinates(&inverse_coordinates)
+            .map_err(|error| SamplingEvaluationError::Unrepresentable {
+                operation: "ordinary forward round-trip inverse",
+                detail: error.to_string(),
+            })?;
         if !inverse_jacobian.0.is_finite() || inverse_jacobian <= inverse_jacobian.zero() {
-            return Err(eyre!(
-                "sampling-map inverse Jacobian must be finite and positive at the current precision"
-            ));
+            return Err(SamplingEvaluationError::Unrepresentable { operation: "radial map", detail: "sampling-map inverse Jacobian must be finite and positive at the current precision".to_owned() }.into());
         }
         let residual = max_coordinate_residual(coordinates, &inverse_coordinates);
         Ok(SamplingMapPoint {
@@ -2108,11 +2208,14 @@ impl SamplingMapKernel {
         let e_cm = F::<T>::from_f64(self.e_cm);
         let (coordinates, inverse_jacobian) =
             global_inv_parameterize(&loop_momenta.0, e_cm.clone(), &self.settings);
-        self.validate_coordinates(&coordinates)?;
+        self.validate_coordinates(&coordinates).map_err(|error| {
+            SamplingEvaluationError::Unrepresentable {
+                operation: "ordinary inverse",
+                detail: error.to_string(),
+            }
+        })?;
         if !inverse_jacobian.0.is_finite() || inverse_jacobian <= inverse_jacobian.zero() {
-            return Err(eyre!(
-                "sampling-map inverse Jacobian must be finite and positive at the current precision"
-            ));
+            return Err(SamplingEvaluationError::Unrepresentable { operation: "radial map", detail: "sampling-map inverse Jacobian must be finite and positive at the current precision".to_owned() }.into());
         }
         let (mapped, jacobian) = global_parameterize(&coordinates, e_cm, &self.settings);
         let residual = max_momentum_residual(&loop_momenta.0, &mapped);
@@ -2124,9 +2227,7 @@ impl SamplingMapKernel {
                 .any(|component| !component.0.is_finite())
             || !residual.0.is_finite()
         {
-            return Err(eyre!(
-                "sampling-map inverse point, positive Jacobian or residual is not representable at the current precision"
-            ));
+            return Err(SamplingEvaluationError::Unrepresentable { operation: "radial map", detail: "sampling-map inverse point, positive Jacobian or residual is not representable at the current precision".to_owned() }.into());
         }
         Ok(SamplingMapPoint {
             coordinates,
@@ -2159,7 +2260,7 @@ impl SamplingMapKernel {
     }
 }
 
-impl SamplingMapComponent for SamplingMapKernel {
+impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapKernel {
     fn dimensions(&self) -> usize {
         self.dimensions()
     }
@@ -2176,14 +2277,20 @@ impl SamplingMapComponent for SamplingMapKernel {
         "lmb"
     }
 
-    fn forward(&self, coordinates: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
-        let coordinates = coordinates.iter().copied().map(F).collect::<Vec<_>>();
+    fn forward(&self, coordinates: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+        let coordinates = coordinates.iter().cloned().map(F).collect::<Vec<_>>();
         let evaluation = SamplingMapKernel::forward(self, &coordinates)?;
         let point = evaluation
             .loop_momenta
             .0
             .iter()
-            .flat_map(|momentum| [momentum.px.0, momentum.py.0, momentum.pz.0])
+            .flat_map(|momentum| {
+                [
+                    momentum.px.0.clone(),
+                    momentum.py.0.clone(),
+                    momentum.pz.0.clone(),
+                ]
+            })
             .collect();
         Ok(SamplingMapEvaluation {
             coordinates: evaluation
@@ -2200,19 +2307,23 @@ impl SamplingMapComponent for SamplingMapKernel {
         })
     }
 
-    fn inverse(&self, point: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
-        if point.len() != self.output_dimensions() {
+    fn inverse(&self, point: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+        if point.len() != self.dimensions() {
             return Err(eyre!(
                 "lmb sampling-map inverse received output dimension {}, expected {}",
                 point.len(),
-                self.output_dimensions()
+                self.dimensions()
             ));
         }
         let loop_momenta = LoopMomenta(
             point
                 .chunks_exact(3)
                 .map(|components| {
-                    ThreeMomentum::new(F(components[0]), F(components[1]), F(components[2]))
+                    ThreeMomentum::new(
+                        F(components[0].clone()),
+                        F(components[1].clone()),
+                        F(components[2].clone()),
+                    )
                 })
                 .collect(),
         );
@@ -2221,7 +2332,13 @@ impl SamplingMapComponent for SamplingMapKernel {
             .loop_momenta
             .0
             .iter()
-            .flat_map(|momentum| [momentum.px.0, momentum.py.0, momentum.pz.0])
+            .flat_map(|momentum| {
+                [
+                    momentum.px.0.clone(),
+                    momentum.py.0.clone(),
+                    momentum.pz.0.clone(),
+                ]
+            })
             .collect();
         Ok(SamplingMapEvaluation {
             coordinates: evaluation
@@ -2239,7 +2356,7 @@ impl SamplingMapComponent for SamplingMapKernel {
     }
 }
 
-impl SamplingMapComponent for SurfaceRadialMap {
+impl<T: FloatLike> SamplingMapComponent<T> for SurfaceRadialMap<T> {
     fn dimensions(&self) -> usize {
         self.dimension()
     }
@@ -2256,8 +2373,8 @@ impl SamplingMapComponent for SurfaceRadialMap {
         "surface"
     }
 
-    fn forward(&self, coordinates: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
-        let coordinates = coordinates.iter().copied().map(F).collect::<Vec<_>>();
+    fn forward(&self, coordinates: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+        let coordinates = coordinates.iter().cloned().map(F).collect::<Vec<_>>();
         let evaluation = SurfaceRadialMap::forward(self, &coordinates)?;
         Ok(SamplingMapEvaluation {
             coordinates: evaluation
@@ -2274,8 +2391,8 @@ impl SamplingMapComponent for SurfaceRadialMap {
         })
     }
 
-    fn inverse(&self, point: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
-        let point_f = point.iter().copied().map(F).collect::<Vec<_>>();
+    fn inverse(&self, point: &[T], _context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+        let point_f = point.iter().cloned().map(F).collect::<Vec<_>>();
         let evaluation = SurfaceRadialMap::inverse(self, &point_f)?;
         Ok(SamplingMapEvaluation {
             coordinates: evaluation
@@ -2293,7 +2410,7 @@ impl SamplingMapComponent for SurfaceRadialMap {
     }
 }
 
-impl SamplingMapComponent for ImplicitSurfaceRadialMap {
+impl<T: FloatLike> SamplingMapComponent<T> for ImplicitSurfaceRadialMap<T> {
     fn dimensions(&self) -> usize {
         self.dimension
     }
@@ -2310,11 +2427,11 @@ impl SamplingMapComponent for ImplicitSurfaceRadialMap {
         "implicit_surface"
     }
 
-    fn forward(&self, coordinates: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+    fn forward(&self, coordinates: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
         ImplicitSurfaceRadialMap::forward_with_context(self, coordinates, context)
     }
 
-    fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation> {
+    fn inverse(&self, point: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
         ImplicitSurfaceRadialMap::inverse_with_context(self, point, context)
     }
 }
@@ -2327,11 +2444,12 @@ fn max_coordinate_residual<T: FloatLike>(a: &[F<T>], b: &[F<T>]) -> F<T> {
         .unwrap_or_else(|| F::<T>::from_f64(0.0))
 }
 
-fn max_coordinate_residual_f64(a: &[f64], b: &[f64]) -> f64 {
+fn max_coordinate_residual_scalar<T: FloatLike>(a: &[T], b: &[T]) -> T {
     a.iter()
         .zip(b)
-        .map(|(x, y)| (x - y).abs())
-        .fold(0.0, f64::max)
+        .map(|(x, y)| (F(x.clone()) - F(y.clone())).abs())
+        .fold(F(a[0].zero()), F::max)
+        .0
 }
 
 fn max_momentum_residual<T: FloatLike>(a: &[ThreeMomentum<F<T>>], b: &[[F<T>; 3]]) -> F<T> {
@@ -2518,13 +2636,63 @@ mod tests {
     }
 
     #[test]
+    fn native_composition_rejects_combined_overflow_and_recovers() {
+        fn evaluate<T: FloatLike>() -> Result<SamplingMapEvaluation<T>> {
+            let one = F::<T>::default().one();
+            let scale = one.from_i64(10).powi(160);
+            let make = || SamplingMapAffine::new(vec![vec![scale.0.clone()]], vec![one.zero().0]);
+            let first = make()?;
+            let second = make()?;
+            let coordinate = (&one / one.from_i64(4)).0;
+            assert!(
+                first
+                    .forward(std::slice::from_ref(&coordinate), &[])?
+                    .jacobian
+                    .is_finite()
+            );
+            assert!(
+                second
+                    .forward(std::slice::from_ref(&coordinate), &[])?
+                    .jacobian
+                    .is_finite()
+            );
+            SamplingMapComposition::product(vec![Box::new(first), Box::new(second)])?
+                .forward(&[coordinate.clone(), coordinate], &[])
+        }
+        let error = evaluate::<f64>().unwrap_err();
+        assert!(error.downcast_ref::<SamplingEvaluationError>().is_some());
+        // QuadFloat extends the mantissa with two f64 components; its exponent
+        // range remains binary64, so this range failure requires Arb precision.
+        let quad_error = evaluate::<crate::utils::QuadFloat>().unwrap_err();
+        assert!(
+            quad_error
+                .downcast_ref::<SamplingEvaluationError>()
+                .is_some()
+        );
+        let arb = evaluate::<crate::utils::ArbPrec>().unwrap();
+        assert!(!F(arb.jacobian.clone()).is_infinite());
+        let one = F(arb.jacobian.clone()).one();
+        assert!(
+            (F(arb.jacobian) * F(arb.inverse_jacobian) - &one).abs()
+                < one.epsilon() * one.from_i64(64)
+        );
+    }
+
+    #[test]
     fn surface_radial_profiles_preserve_tiny_native_coordinates() {
         fn check<T: FloatLike>(decimal_exponent: i32) {
             let one = F::<T>::default().one();
             let tiny = &one / one.from_usize(10).powi(decimal_exponent);
             let tolerance = one.epsilon() * one.from_usize(1024);
             for power in [1.0, 2.0, 3.0] {
-                let map = SurfaceRadialMap::new(3, vec![0.0; 3], Some(3.0), 2.0, power).unwrap();
+                let map = SurfaceRadialMap::new(
+                    3,
+                    vec![one.zero().0; 3],
+                    Some(one.from_usize(3).0),
+                    2.0,
+                    power,
+                )
+                .unwrap();
                 let coordinates = [
                     tiny.clone(),
                     &one / one.from_usize(3),
@@ -2646,7 +2814,7 @@ mod tests {
 
     #[test]
     fn affine_map_rejects_malformed_and_singular_matrices() {
-        assert!(SamplingMapAffine::new(vec![], vec![]).is_err());
+        assert!(SamplingMapAffine::<f64>::new(vec![], vec![]).is_err());
         assert!(SamplingMapAffine::new(vec![vec![1.0, 0.0]], vec![0.0]).is_err());
         assert!(SamplingMapAffine::new(vec![vec![1.0, 0.0], vec![0.0, 1.0]], vec![0.0]).is_err());
         assert!(
@@ -2924,6 +3092,51 @@ mod tests {
     }
 
     #[test]
+    fn inverse_rounded_endpoints_are_retryable_but_original_endpoints_are_not() {
+        let kernel = SamplingMapKernel::new(
+            SamplingMapDefinition::Lmb(vec![0]),
+            ParameterizationSettings {
+                mode: ParameterizationMode::Spherical,
+                ..Default::default()
+            },
+            1.0,
+            1,
+        )
+        .unwrap();
+        let surface = SurfaceRadialMap::absent(3, vec![0.0; 3], 1.0, 1.0).unwrap();
+        let implicit = ImplicitSurfaceRadialMap::new(
+            3,
+            vec![0.0; 3],
+            1.0,
+            1.0,
+            Arc::new(|_, radius| Ok((radius + 1.0, 1.0))),
+        )
+        .unwrap();
+        for map in [&kernel as &dyn SamplingMapComponent, &surface, &implicit] {
+            let original = map.forward(&[1.0, 0.3, 0.6], &[]).unwrap_err();
+            assert!(original.downcast_ref::<SamplingEvaluationError>().is_none());
+            let recovered = map.inverse(&[1.0e20, 2.0e20, 3.0e20], &[]).unwrap_err();
+            assert!(
+                matches!(
+                    recovered.downcast_ref::<SamplingEvaluationError>(),
+                    Some(SamplingEvaluationError::Unrepresentable { .. })
+                ),
+                "{recovered}"
+            );
+        }
+        let one = F::<crate::utils::QuadFloat>::default().one();
+        let surface = SurfaceRadialMap::absent(3, vec![one.zero().0; 3], 1.0, 1.0).unwrap();
+        let point = [1, 2, 3].map(|value| one.from_i64(value) * one.from_i64(10).powi(20));
+        let inverse = surface.inverse(&point).unwrap();
+        assert!(
+            inverse
+                .coordinates
+                .iter()
+                .all(|coordinate| coordinate > &one.zero() && coordinate < &one)
+        );
+    }
+
+    #[test]
     fn ordinary_kernel_preserves_finite_tails_at_native_rescue_precision() {
         let kernel = SamplingMapKernel::new(
             SamplingMapDefinition::Lmb(vec![0]),
@@ -2960,20 +3173,36 @@ mod tests {
             let error = map.forward(&[0.3, 0.4]).unwrap_err();
             assert!(error.to_string().contains("residual"), "{error}");
         }
-        let shallow = ImplicitSurfaceRadialMap::new(
+        for offset in [-1.0e-14, 0.0, 1.0e-14] {
+            let shallow = ImplicitSurfaceRadialMap::new(
+                2,
+                vec![0.0; 2],
+                1.0,
+                1.0,
+                Arc::new(move |_, radius| Ok((radius + offset, 1.0))),
+            )
+            .unwrap();
+            let error = shallow.forward(&[0.3, 0.4]).unwrap_err();
+            assert!(matches!(
+                error.downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::UncertainGeometry { .. })
+            ));
+        }
+        let absent = ImplicitSurfaceRadialMap::new(
             2,
             vec![0.0; 2],
             1.0,
             1.0,
-            Arc::new(|_, radius| Ok((radius - 1.0e-14, 1.0))),
+            Arc::new(|_, radius| Ok((radius + 1.0, 1.0))),
         )
         .unwrap();
         assert!(
-            shallow
+            absent
                 .forward(&[0.3, 0.4])
-                .unwrap_err()
-                .to_string()
-                .contains("interior center is not certified")
+                .unwrap()
+                .diagnostics
+                .iter()
+                .any(|value| value.contains("absent_fallback"))
         );
     }
 
@@ -3027,7 +3256,7 @@ mod tests {
         let error = map
             .forward(&[0.29, 0.71])
             .expect_err("negative surface value without a root must be an error");
-        assert!(error.to_string().contains("could not be bracketed"));
+        assert!(error.to_string().contains("bracket expansions"));
     }
 
     #[test]
@@ -3553,7 +3782,7 @@ mod tests {
 
     #[test]
     fn compositions_report_empty_and_dimension_errors() {
-        assert!(SamplingMapComposition::product(Vec::new()).is_err());
+        assert!(SamplingMapComposition::<f64>::product(Vec::new()).is_err());
         let composition = SamplingMapComposition::product(vec![Box::new(ContextShiftMap)])
             .expect("valid product");
         let error = composition

@@ -27,9 +27,11 @@ A product currently supports disjoint blocks with at most one explicit surface;
 ordered maps derive later centers/root contexts from earlier blocks and their
 inverse. Root residuals must be certified; narrow brackets alone do not suffice.
 Inverse maps no longer clip recovered coordinates, and native finiteness checks
-retain arbitrary precision. The implicit kernel has a normalized fallback when
-its supplied center is outside or on the surface; that alone does not establish
-global absence. The amplitude host now classifies existence separately and
+retain arbitrary precision. The implicit kernel has a normalized fallback for
+a clearly positive origin residual under its increasing-root contract; that
+alone does not establish global absence. Numerically uncertain origin signs
+raise a precision error, while explicitly classified pinched/absent surfaces
+retain their fallback. The amplitude host classifies existence separately and
 rejects existing surfaces with an unsuitable zero center. Generic interior-center
 selection remains necessary, especially with boosted external kinematics.
 Soft/collinear primitives and general joint normal/star charts remain unfinished.
@@ -94,14 +96,25 @@ coordinates, six-dimensional determinants, Gaussian moments and physical kite/
 cut charts. This verifies the map law; it does not yet establish physical
 variance improvement or remove the precision boundary below.
 
-Strong focusing also exposes a production precision boundary: the component/
-bridge API still maps in f64 before constructing a higher-precision momentum
-sample. A radius rounded onto the threshold must raise a precision error,
+The component, affine/composition, context, bridge, eager/dual and partition
+owners now preserve native Double/Quad/Arb values. Their 122-test numerical gate
+covers actual six-dimensional E-surface geometry, native cut data, composed
+Jacobians and all foreign inverse densities. Tiny positive scores cannot become
+zero support: unrepresentable values raise typed numerical errors. Original
+invalid cube endpoints remain structural errors, whereas endpoints produced by
+rounding an inverse are retryable. Quad adds mantissa precision with Double's
+exponent range; extreme range tests correctly require Arb recovery.
+The broader 162-test sampling suite and both API regressions also pass, including
+saved-state reference acceptance and physical summed/explicit-channel equality.
+
+Strong focusing still exposes a production precision boundary: callers bind the
+f64 bridge before constructing a higher-precision momentum sample. A radius
+rounded onto the threshold must raise a precision error,
 never discard a finite band or return a zero contribution. Connect such errors
 to native map/foreign-density recomputation in the existing stability stack
 before long integrations. For `R=3`, `beta=2`, an independent half-ULP estimate
 of the combined radial-coordinate band is about `9.38e-9` at power 2 and
-`4.44e-6` at power 3; arithmetic cancellation can enlarge it. Native kernel
+`4.44e-6` at power 3; arithmetic cancellation can enlarge it. Native component
 tests alone do not establish production map rescue. Structural map errors must
 still fail immediately rather than being mistaken for numerical instability.
 The owner-by-owner migration, root-localization versus density-accuracy criteria,
@@ -292,6 +305,15 @@ subspaces, interior centers, partitions and the acceptance driver are shared
 work. Their gates must include real amplitude **and** real cut geometry.
 Amplitude benchmarks provide inexpensive independent checks; the completion
 target remains a measured GL638 improvement with the full physical calculation.
+
+For rapid development, generate a single orientation when it materially reduces
+fixture cost. Record the selected orientation explicitly and use that state for
+focused map, rescue and diagnostic tests. This is a development shortcut only:
+repeat end-to-end acceptance and physical comparisons on unrestricted states,
+including all amplitude orientations and all 936 GL638 orientations with the
+complete cut/counterterm sums. A selected-orientation result never satisfies an
+all-orientation gate. Prefer the existing compatible full state when reusing it
+is faster than generating a reduced one.
 
 | Work | Concrete deliverable and acceptance | Parallel work / stopping point |
 | --- | --- | --- |
