@@ -127,13 +127,17 @@ to represent any of the channels.
 ```toml
 [sampling.channel_definitions.GL638.HZ]
 around = "intersect(cut(2,4,12), cut(3,10,13))"
+subspace_lmb = [3]
+parent_lmb = [3, 4, 7, 10]
 on_cut = [2,6,10]
 ```
 
 This names the direct H/Z geometry; exact CT-star images need their own
 unambiguous catalogue selectors. `on_cut` supplies a frame, not a restriction
-of the physical cut sum. The compiler chooses and exports the complete sampling
-parent, signed active cycles, complements, profile and normalization. It must
+of the physical cut sum. `subspace_lmb` identifies the loop coordinates in
+which the joint normal chart is solved; it is independent of the physical
+energy-edge list in `around`. The compiler chooses and exports the complete
+sampling parent, signed active cycles, complements, profile and normalization. It must
 diagnose ambiguous energy shifts, orientations, host frames or star instances.
 Choosing a sampling parent does not change the mandatory supplied parent of any
 threshold subtraction metadata.
