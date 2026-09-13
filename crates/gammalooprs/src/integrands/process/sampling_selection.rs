@@ -188,7 +188,7 @@ pub struct SamplingSurfaceGeometry {
 /// A caller must identify the master graph explicitly.  This prevents a
 /// surface block from being mistaken for a coordinate block in a different
 /// graph when channel definitions are shared across a graph group.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct SamplingChannelCompileContext {
     pub master_graph: String,
     /// Complete ordered parent LMB in the master graph frame. Every named
@@ -198,6 +198,10 @@ pub struct SamplingChannelCompileContext {
     pub e_cm: f64,
     pub n_loop_momenta: usize,
     pub surfaces: BTreeMap<Vec<usize>, SamplingSurfaceGeometry>,
+    /// Optional exact direction-dependent surface maps prepared by the
+    /// process layer. Their evaluators already capture the relevant external
+    /// and cut data, so compilation does not infer kinematics from edge lists.
+    pub implicit_surfaces: BTreeMap<Vec<usize>, ImplicitSurfaceRadialMap>,
     /// Host cut identity for metadata whose `on_cut` list is explicit.
     pub cut_id: Option<usize>,
     pub orientation: Option<usize>,
@@ -227,12 +231,33 @@ impl SamplingChannelCompileContext {
             e_cm,
             n_loop_momenta,
             surfaces: BTreeMap::new(),
+            implicit_surfaces: BTreeMap::new(),
             lmb_frame_maps: BTreeMap::new(),
             lmb_frame_maps_by_edges: BTreeMap::new(),
             cut_id: None,
             orientation: None,
             side: None,
         }
+    }
+
+    pub fn insert_implicit_surface(
+        &mut self,
+        edges: Vec<usize>,
+        map: ImplicitSurfaceRadialMap,
+    ) -> Result<()> {
+        if edges.is_empty() {
+            return Err(eyre!("implicit surface map edge list must not be empty"));
+        }
+        if map.dimension() != 3 * edges.len() {
+            return Err(eyre!(
+                "implicit surface map has dimension {}, expected {} for edges {:?}",
+                map.dimension(),
+                3 * edges.len(),
+                edges
+            ));
+        }
+        self.implicit_surfaces.insert(edges, map);
+        Ok(())
     }
 }
 
@@ -853,37 +878,52 @@ fn compile_surface_map(
             ),
         });
     }
-    let Some(geometry) = context.surfaces.get(edges) else {
-        return Err(SamplingChannelCompileError::MissingSurfaceGeometry {
-            channel: channel.to_owned(),
-            edges: edges.to_vec(),
-        });
-    };
     let expected_dimension = 3 * edges.len();
-    if geometry.center.len() != expected_dimension {
-        return Err(SamplingChannelCompileError::InvalidChannel {
+    let surface = if let Some(surface) = context.implicit_surfaces.get(edges) {
+        if surface.dimension() != expected_dimension {
+            return Err(SamplingChannelCompileError::InvalidChannel {
+                channel: channel.to_owned(),
+                error: format!(
+                    "prepared implicit surface has dimension {}, expected {}",
+                    surface.dimension(),
+                    expected_dimension
+                ),
+            });
+        }
+        CompiledSamplingMap::ImplicitSurface(surface.clone())
+    } else {
+        let Some(geometry) = context.surfaces.get(edges) else {
+            return Err(SamplingChannelCompileError::MissingSurfaceGeometry {
+                channel: channel.to_owned(),
+                edges: edges.to_vec(),
+            });
+        };
+        if geometry.center.len() != expected_dimension {
+            return Err(SamplingChannelCompileError::InvalidChannel {
+                channel: channel.to_owned(),
+                error: format!(
+                    "surface centre has dimension {}, expected {} for edges {edges:?}",
+                    geometry.center.len(),
+                    expected_dimension
+                ),
+            });
+        }
+        let surface = SurfaceRadialMap::new(
+            expected_dimension,
+            geometry.center.clone(),
+            geometry.threshold_radius,
+            geometry.beta,
+            geometry.power,
+        )
+        .map_err(|error| SamplingChannelCompileError::InvalidChannel {
             channel: channel.to_owned(),
-            error: format!(
-                "surface centre has dimension {}, expected {} for edges {edges:?}",
-                geometry.center.len(),
-                expected_dimension
-            ),
-        });
-    }
-    let surface = SurfaceRadialMap::new(
-        expected_dimension,
-        geometry.center.clone(),
-        geometry.threshold_radius,
-        geometry.beta,
-        geometry.power,
-    )
-    .map_err(|error| SamplingChannelCompileError::InvalidChannel {
-        channel: channel.to_owned(),
-        error: error.to_string(),
-    })?;
+            error: error.to_string(),
+        })?;
+        CompiledSamplingMap::Surface(surface)
+    };
     if edges.len() == context.n_loop_momenta {
         if edges == context.parent_lmb {
-            return Ok(CompiledSamplingMap::Surface(surface));
+            return Ok(surface);
         }
         let output_indices = edges
             .iter()
@@ -1540,6 +1580,8 @@ pub fn graph_channel_definitions(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use crate::settings::runtime::ParameterizationSettings;
 
@@ -1800,6 +1842,50 @@ mod tests {
         assert!(matches!(compiled[1].map, CompiledSamplingMap::Surface(_)));
         assert_eq!(compiled[1].master_graph, "G");
         assert_eq!(compiled[1].dimensions(), 6);
+    }
+
+    #[test]
+    fn catalogue_accepts_prepared_exact_implicit_surface_map() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["threshold".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("threshold".into(), definition("surface(1,2)"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context
+            .insert_implicit_surface(
+                vec![1, 2],
+                ImplicitSurfaceRadialMap::new(
+                    6,
+                    vec![0.0; 6],
+                    2.0,
+                    2.0,
+                    Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let compiled = catalogue.compile(&context).unwrap();
+        assert!(matches!(
+            compiled[0].map,
+            CompiledSamplingMap::ImplicitSurface(_)
+        ));
+        let bridge = SamplingChannelBridge::new(compiled).unwrap();
+        let mapped = bridge.forward(
+            SamplingChannelId::from(0),
+            &[0.31, 0.42, 0.57, 0.23, 0.68, 0.81],
+        );
+        assert!(mapped.is_ok());
     }
 
     #[test]
