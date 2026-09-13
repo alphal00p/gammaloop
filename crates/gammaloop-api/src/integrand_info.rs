@@ -497,7 +497,7 @@ fn cut_raising_powers(
     raising_powers
 }
 
-fn lmb_channel_ids(
+fn sampling_channel_ids(
     lmbs: &typed_index_collections::TiVec<
         gammalooprs::graph::LmbIndex,
         gammalooprs::graph::LoopMomentumBasis,
@@ -556,7 +556,7 @@ fn amplitude_graph_groups(
                 .next()
                 .expect("graph group should not be empty");
             let master_graph = &integrand.data.graph_terms[master_graph_id];
-            let channel_ids = lmb_channel_ids(
+            let channel_ids = sampling_channel_ids(
                 &master_graph.lmbs,
                 &master_graph.multi_channeling_setup,
                 &master_graph.graph.name,
@@ -722,7 +722,7 @@ fn cross_section_graph_groups(
             let mut active_model_param_builder: ParamBuilder =
                 master_graph.graph.param_builder.clone();
             active_model_param_builder.update_model_values(model);
-            let channel_ids = lmb_channel_ids(
+            let channel_ids = sampling_channel_ids(
                 &master_graph.lmbs,
                 &master_graph.multi_channeling_setup,
                 &master_graph.graph.name,

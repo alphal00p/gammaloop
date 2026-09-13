@@ -168,6 +168,13 @@ temporary LMB compatibility route and the mapped route.  No separate
 is a migration seam only and must disappear when cross-section LU/`t*`
 preparation can feed the compiled maps per sample.
 
+Event metadata and observable axes now use `sampling_channel_id` and
+`sampling_channel_edge_ids` (with corresponding `SamplingChannel*` enum
+variants).  These values describe the canonical catalogue position and
+selected map edges, including surface channels; the remaining LMB-specific
+names are restricted to temporary basis/weight internals slated for the same
+retirement sequence.
+
 The retirement sequence is explicit: first route direct momentum evaluation
 through compiled parent-frame maps for every catalogue entry; then remove the
 `DiscreteGraphSample::DiscreteMultiChanneling` compatibility route and the

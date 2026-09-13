@@ -334,7 +334,7 @@ struct EventRecord {
     orientation_id: Option<usize>,
     cut_id: usize,
     cut_edges: Vec<usize>,
-    lmb_channel_id: Option<usize>,
+    sampling_channel_id: Option<usize>,
     lmb_sample_id: Option<usize>,
     weight: ComplexJson,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1083,8 +1083,8 @@ fn approach_evaluation_record(
             let graph_group_id = integrand.graph_group_id_by_graph_id(graph_id);
             let cut_id = event.cut_info.cut_id;
             let cut_edges = integrand.cut_edge_ids(graph_id, cut_id).unwrap_or_default();
-            let lmb_channel_id = event.cut_info.lmb_channel_id;
-            let lmb_sample_id = lmb_channel_id
+            let sampling_channel_id = event.cut_info.sampling_channel_id;
+            let lmb_sample_id = sampling_channel_id
                 .map(|channel_id| {
                     integrand.lmb_sample_id_for_channel(
                         graph_id,
@@ -1164,7 +1164,7 @@ fn approach_evaluation_record(
                 orientation_id: event.cut_info.orientation_id,
                 cut_id,
                 cut_edges,
-                lmb_channel_id,
+                sampling_channel_id,
                 lmb_sample_id,
                 weight: complex_json(event.weight),
                 full_multiplicative_factor: full_multiplicative_factor.map(complex_json),

@@ -873,10 +873,10 @@ pub struct PyCutInfo {
     pub graph_group_id: Option<usize>,
     /// Causal-flow orientation identifier, when sampled explicitly.
     pub orientation_id: Option<usize>,
-    /// Loop-momentum-basis multichannel identifier, when sampled explicitly.
-    pub lmb_channel_id: Option<usize>,
-    /// Edge identifiers defining the selected loop-momentum basis, when available.
-    pub lmb_channel_edge_ids: Option<Vec<usize>>,
+    /// Canonical sampling channel identifier, when sampled explicitly.
+    pub sampling_channel_id: Option<usize>,
+    /// Edge identifiers defining the selected sampling channel basis, when available.
+    pub sampling_channel_edge_ids: Option<Vec<usize>>,
 }
 
 /// Identity and master-graph status of one graph in an integrand.
@@ -2300,10 +2300,10 @@ fn py_event_from_event(event: &Event) -> PyEvent {
             graph_id: event.cut_info.graph_id,
             graph_group_id: event.cut_info.graph_group_id,
             orientation_id: event.cut_info.orientation_id,
-            lmb_channel_id: event.cut_info.lmb_channel_id,
-            lmb_channel_edge_ids: event
+            sampling_channel_id: event.cut_info.sampling_channel_id,
+            sampling_channel_edge_ids: event
                 .cut_info
-                .lmb_channel_edge_ids
+                .sampling_channel_edge_ids
                 .as_ref()
                 .map(|edge_ids| edge_ids.iter().copied().collect()),
         },
@@ -2418,10 +2418,10 @@ fn event_from_py_event(event: &PyEvent) -> Event {
             graph_id: event.cut_info.graph_id,
             graph_group_id: event.cut_info.graph_group_id,
             orientation_id: event.cut_info.orientation_id,
-            lmb_channel_id: event.cut_info.lmb_channel_id,
-            lmb_channel_edge_ids: event
+            sampling_channel_id: event.cut_info.sampling_channel_id,
+            sampling_channel_edge_ids: event
                 .cut_info
-                .lmb_channel_edge_ids
+                .sampling_channel_edge_ids
                 .as_ref()
                 .map(|edge_ids| edge_ids.iter().copied().collect()),
         },

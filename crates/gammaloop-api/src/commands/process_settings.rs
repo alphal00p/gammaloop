@@ -126,7 +126,7 @@ fn quantity_templates() -> &'static [KindedTemplate<QuantitySettings>] {
                 "orientation-id quantity template",
             ),
             build_kinded_template(
-                QuantitySettings::LmbChannelId {},
+                QuantitySettings::SamplingChannelId {},
                 "type",
                 "lmb-channel-id quantity template",
             ),
@@ -329,7 +329,7 @@ pub(crate) fn quantity_kind(settings: &QuantitySettings) -> &'static str {
         QuantitySettings::GraphId {} => "graph_id",
         QuantitySettings::GraphGroupId {} => "graph_group_id",
         QuantitySettings::OrientationId {} => "orientation_id",
-        QuantitySettings::LmbChannelId {} => "lmb_channel_id",
+        QuantitySettings::SamplingChannelId {} => "sampling_channel_id",
     }
 }
 
@@ -354,7 +354,7 @@ pub(crate) fn summarize_quantity(settings: &QuantitySettings) -> String {
         QuantitySettings::GraphId {} => "graph id metadata".to_string(),
         QuantitySettings::GraphGroupId {} => "graph-group id metadata".to_string(),
         QuantitySettings::OrientationId {} => "orientation id metadata".to_string(),
-        QuantitySettings::LmbChannelId {} => "LMB channel id metadata".to_string(),
+        QuantitySettings::SamplingChannelId {} => "Sampling channel id metadata".to_string(),
     }
 }
 
