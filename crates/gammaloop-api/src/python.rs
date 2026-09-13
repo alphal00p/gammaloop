@@ -620,7 +620,8 @@ mod settings_wrapper_tests {
     #[test]
     fn runtime_settings_wrapper_exposes_canonical_sampling_names() {
         use gammalooprs::settings::runtime::{
-            MultiChannelingSettings, SamplingChannelWeight, SamplingSettings,
+            MultiChannelingSettings, SamplingChannelDefinition, SamplingChannelWeight,
+            SamplingSettings,
         };
 
         Python::initialize();
@@ -631,6 +632,26 @@ mod settings_wrapper_tests {
             .parameterization_settings
             .sampling_channels
             .weight = SamplingChannelWeight::SingularityProxy;
+        let selection = &mut multi_channeling.parameterization_settings.sampling_channels;
+        selection.default_channel_selection = vec!["auto:surfaces".to_owned()];
+        selection
+            .channel_selection
+            .insert("GL638".to_owned(), vec!["HZ".to_owned()]);
+        selection.channel_definitions.insert(
+            "GL638".to_owned(),
+            [(
+                "HZ".to_owned(),
+                SamplingChannelDefinition {
+                    around: "surface(2,4,12)".to_owned(),
+                    subspace_lmb: vec![3],
+                    parent_lmb: vec![3, 6, 7, 10],
+                    on_cut: vec![2, 6, 10],
+                    singularity_proxy: None,
+                },
+            )]
+            .into_iter()
+            .collect(),
+        );
         settings.sampling = SamplingSettings::MultiChanneling(multi_channeling);
 
         let wrapped =
@@ -650,6 +671,33 @@ mod settings_wrapper_tests {
                     .extract::<String>()
                     .unwrap(),
                 "singularity_proxy"
+            );
+            assert_eq!(
+                sampling
+                    .getattr("default_channel_selection")
+                    .unwrap()
+                    .extract::<Vec<String>>()
+                    .unwrap(),
+                vec!["auto:surfaces"]
+            );
+            let channel_selection = sampling.getattr("channel_selection").unwrap();
+            assert_eq!(
+                channel_selection
+                    .getattr("GL638")
+                    .unwrap()
+                    .extract::<Vec<String>>()
+                    .unwrap(),
+                vec!["HZ"]
+            );
+            let definitions = sampling.getattr("channel_definitions").unwrap();
+            let gl638 = definitions.getattr("GL638").unwrap();
+            let hz = gl638.getattr("HZ").unwrap();
+            assert_eq!(
+                hz.getattr("parent_lmb")
+                    .unwrap()
+                    .extract::<Vec<usize>>()
+                    .unwrap(),
+                vec![3, 6, 7, 10]
             );
             assert!(sampling.getattr("lmb_multichanneling").is_err());
         });
@@ -826,10 +874,10 @@ pub struct PyCutInfo {
     pub graph_group_id: Option<usize>,
     /// Causal-flow orientation identifier, when sampled explicitly.
     pub orientation_id: Option<usize>,
-    /// Loop-momentum-basis multichannel identifier, when sampled explicitly.
-    pub lmb_channel_id: Option<usize>,
-    /// Edge identifiers defining the selected loop-momentum basis, when available.
-    pub lmb_channel_edge_ids: Option<Vec<usize>>,
+    /// Canonical sampling channel identifier, when sampled explicitly.
+    pub sampling_channel_id: Option<usize>,
+    /// Edge identifiers defining the selected sampling channel basis, when available.
+    pub sampling_channel_edge_ids: Option<Vec<usize>>,
 }
 
 /// Identity and master-graph status of one graph in an integrand.
@@ -2253,10 +2301,10 @@ fn py_event_from_event(event: &Event) -> PyEvent {
             graph_id: event.cut_info.graph_id,
             graph_group_id: event.cut_info.graph_group_id,
             orientation_id: event.cut_info.orientation_id,
-            lmb_channel_id: event.cut_info.lmb_channel_id,
-            lmb_channel_edge_ids: event
+            sampling_channel_id: event.cut_info.sampling_channel_id,
+            sampling_channel_edge_ids: event
                 .cut_info
-                .lmb_channel_edge_ids
+                .sampling_channel_edge_ids
                 .as_ref()
                 .map(|edge_ids| edge_ids.iter().copied().collect()),
         },
@@ -2371,10 +2419,10 @@ fn event_from_py_event(event: &PyEvent) -> Event {
             graph_id: event.cut_info.graph_id,
             graph_group_id: event.cut_info.graph_group_id,
             orientation_id: event.cut_info.orientation_id,
-            lmb_channel_id: event.cut_info.lmb_channel_id,
-            lmb_channel_edge_ids: event
+            sampling_channel_id: event.cut_info.sampling_channel_id,
+            sampling_channel_edge_ids: event
                 .cut_info
-                .lmb_channel_edge_ids
+                .sampling_channel_edge_ids
                 .as_ref()
                 .map(|edge_ids| edge_ids.iter().copied().collect()),
         },

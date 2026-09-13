@@ -1316,16 +1316,30 @@ impl SamplingChannelWeight {
 #[serde(default, deny_unknown_fields)]
 pub struct SamplingChannelDefinition {
     pub around: String,
+    /// Ordered loop edges spanning the coordinates in which a surface or
+    /// joint constraint is solved.  This is distinct from the edge set in
+    /// `around`, which identifies the physical energy constraints.
+    pub subspace_lmb: Vec<usize>,
     pub parent_lmb: Vec<usize>,
     pub on_cut: Vec<usize>,
+    /// Optional positive singularity proxy used when
+    /// `sampling_channel_weight = "singularity_proxy"`.  The expression is
+    /// parsed by Symbolica and evaluated in the complete master raw frame;
+    /// its variables are `x0`, `x1`, ... in coordinate order.  A proxy is
+    /// never inferred from the map, since doing so could hide an incomplete
+    /// singularity model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub singularity_proxy: Option<String>,
 }
 
 impl Default for SamplingChannelDefinition {
     fn default() -> Self {
         Self {
             around: String::new(),
+            subspace_lmb: Vec::new(),
             parent_lmb: Vec::new(),
             on_cut: Vec::new(),
+            singularity_proxy: None,
         }
     }
 }
@@ -1485,6 +1499,26 @@ fn validate_sampling_channel_selection(
             if definition.parent_lmb.iter().any(|edge| !seen.insert(edge)) {
                 return Err(format!(
                     "Invalid sampling settings: channel definition '{graph}.{name}' contains duplicate parent_lmb edge ids."
+                ));
+            }
+            let mut seen_subspace = BTreeSet::new();
+            if definition
+                .subspace_lmb
+                .iter()
+                .any(|edge| !seen_subspace.insert(edge))
+            {
+                return Err(format!(
+                    "Invalid sampling settings: channel definition '{graph}.{name}' contains duplicate subspace_lmb edge ids."
+                ));
+            }
+            let mut seen_on_cut = BTreeSet::new();
+            if definition
+                .on_cut
+                .iter()
+                .any(|edge| !seen_on_cut.insert(edge))
+            {
+                return Err(format!(
+                    "Invalid sampling settings: channel definition '{graph}.{name}' contains duplicate on_cut edge ids."
                 ));
             }
             SamplingMapDefinition::parse(&definition.around).map_err(|error| {
@@ -1650,7 +1684,7 @@ impl SamplingSettings {
                                 .clone(),
                         }
                     }
-                    DiscreteGraphSamplingType::DiscreteMultiChanneling(
+                    DiscreteGraphSamplingType::SamplingMultiChanneling(
                         multichanneling_settings,
                     ) => SamplingSettingsParser {
                         graphs: SumMode::MonteCarlo,
@@ -1916,7 +1950,7 @@ impl SamplingSettings {
                     match sampling_channels {
                         SumMode::Summed => DiscreteGraphSamplingType::MultiChanneling(settings),
                         SumMode::MonteCarlo => {
-                            DiscreteGraphSamplingType::DiscreteMultiChanneling(settings)
+                            DiscreteGraphSamplingType::SamplingMultiChanneling(settings)
                         }
                     }
                 } else {
@@ -2018,7 +2052,7 @@ impl SamplingSettings {
                 DiscreteGraphSamplingType::MultiChanneling(settings) => {
                     Some(settings.parameterization_settings.clone())
                 }
-                DiscreteGraphSamplingType::DiscreteMultiChanneling(settings) => {
+                DiscreteGraphSamplingType::SamplingMultiChanneling(settings) => {
                     Some(settings.parameterization_settings.clone())
                 }
                 DiscreteGraphSamplingType::TropicalSampling(_) => None,
@@ -2036,7 +2070,7 @@ impl SamplingSettings {
                 match &settings.sampling_type {
                     DiscreteGraphSamplingType::Default(_) => 1 + depth_from_orientations,
                     DiscreteGraphSamplingType::MultiChanneling(_) => 1 + depth_from_orientations,
-                    DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => {
+                    DiscreteGraphSamplingType::SamplingMultiChanneling(_) => {
                         2 + depth_from_orientations
                     }
                     DiscreteGraphSamplingType::TropicalSampling(_) => 1 + depth_from_orientations,
@@ -2086,7 +2120,7 @@ impl SamplingSettings {
                             orientation_sampling_string,
                         )
                     }
-                    DiscreteGraphSamplingType::DiscreteMultiChanneling(settings) => {
+                    DiscreteGraphSamplingType::SamplingMultiChanneling(settings) => {
                         format!(
                             "{}, {} and monte carlo over lmbs in {} coordinates",
                             discrete_graph_string,
@@ -2180,7 +2214,7 @@ pub enum DiscreteGraphSamplingType {
     #[serde(rename = "multi_channeling")]
     MultiChanneling(MultiChannelingSettings),
     #[serde(rename = "discrete_multi_channeling")]
-    DiscreteMultiChanneling(MultiChannelingSettings),
+    SamplingMultiChanneling(MultiChannelingSettings),
     #[serde(rename = "tropical")]
     TropicalSampling(GammaloopTropicalSamplingSettings),
 }

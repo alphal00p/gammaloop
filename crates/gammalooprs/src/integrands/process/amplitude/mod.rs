@@ -45,9 +45,9 @@ use crate::{
         HasIntegrand,
         evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
-            LmbChannelWeightingSettings, ParamBuilder, SamplingChannelId,
+            ParamBuilder, SamplingChannelBridge, SamplingChannelCompileContext, SamplingChannelId,
             evaluators::{ActiveF64Backend, EvaluatorStack},
-            graph_to_group_id_for_group_structure,
+            graph_to_group_id_for_group_structure, resolve_sampling_channel_selection,
             threshold_multiplier::ThresholdMultiplierEvaluatorCollection,
         },
     },
@@ -87,7 +87,7 @@ use crate::{
 use super::{
     GraphTerm, GraphTermEvaluationContext, LmbMultiChannelingSetup, ProcessIntegrandImpl,
     RuntimeCache, create_grid, evaluate_sample, filtered_orientation_count,
-    format_lmb_channel_label, format_orientation_label, histogram_process_info_for_integrand,
+    format_orientation_label, format_sampling_channel_label, histogram_process_info_for_integrand,
     prepare_buffered_event, resolve_visible_orientation_id, validate_group_orientation_catalogs,
     validate_process_runtime_settings,
 };
@@ -736,20 +736,28 @@ impl AmplitudeGraphTerm {
         } else {
             orientation_id
         };
-        event.cut_info.lmb_channel_id = channel_id.map(usize::from);
-        event.cut_info.lmb_channel_edge_ids = channel_id
-            .map(|channel_id| {
-                let parameterization_settings = settings
-                    .sampling
-                    .get_parameterization_settings()
-                    .expect("LMB channel event metadata requires a parameterization.");
-                self.multi_channeling_setup.effective_channel_edge_ids(
+        event.cut_info.sampling_channel_id = channel_id.map(usize::from);
+        event.cut_info.sampling_channel_edge_ids = if let Some(channel_id) = channel_id {
+            let parameterization_settings = settings
+                .sampling
+                .get_parameterization_settings()
+                .expect("sampling channel event metadata requires a parameterization.");
+            if self.multi_channeling_setup.sampling_channel_is_lmb(
+                channel_id,
+                &self.multi_channeling_setup.graph.name,
+                &parameterization_settings,
+            )? {
+                Some(self.multi_channeling_setup.sampling_channel_edge_ids(
                     channel_id,
                     &self.multi_channeling_setup.graph.name,
                     &parameterization_settings,
-                )
-            })
-            .transpose()?;
+                )?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         for ((sign, momentum), pdg) in self
             .master_external_signature
@@ -781,46 +789,21 @@ impl AmplitudeGraphTerm {
     fn evaluate_impl<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        context: &mut GraphTermEvaluationContext<'_, '_, T>,
+        context: &mut GraphTermEvaluationContext<'_, '_>,
     ) -> Result<AmplitudeGraphTermEvaluation<T>> {
-        let (momentum_sample, prefactor) =
-            if let Some((channel_id, alpha, channel_weight)) = &context.channel_id {
-                let parameterization_settings = context
-                    .settings
-                    .sampling
-                    .get_parameterization_settings()
-                    .expect("LMB multichanneling requires a parameterization.");
-                let weighting_settings = LmbChannelWeightingSettings {
-                    graph_name: &self.multi_channeling_setup.graph.name,
-                    model: context.model,
-                    alpha,
-                    channel_weight: *channel_weight,
-                    parameterization_settings: &parameterization_settings,
-                    e_cm: context.settings.kinematics.e_cm,
-                };
-
+        let (momentum_sample, prefactor) = if let Some(lmb_basis_id) = context.lmb_basis_id {
+            (
                 self.multi_channeling_setup
-                    .reinterpret_loop_momenta_and_compute_prefactor(
-                        *channel_id,
+                    .reinterpret_loop_momenta_for_lmb(
+                        lmb_basis_id,
                         momentum_sample,
-                        0,
-                        weighting_settings,
-                    )?
-            } else {
-                if let Some(lmb_basis_id) = context.lmb_basis_id {
-                    (
-                        self.multi_channeling_setup
-                            .reinterpret_loop_momenta_for_lmb(
-                                lmb_basis_id,
-                                momentum_sample,
-                                momentum_sample.sample.loop_mom_cache_id,
-                            ),
-                        momentum_sample.one(),
-                    )
-                } else {
-                    (momentum_sample.clone(), momentum_sample.one())
-                }
-            };
+                        momentum_sample.sample.loop_mom_cache_id,
+                    ),
+                momentum_sample.one(),
+            )
+        } else {
+            (momentum_sample.clone(), momentum_sample.one())
+        };
 
         let hel = context.settings.kinematics.externals.get_helicities();
         let orientations =
@@ -1104,29 +1087,34 @@ impl GraphTerm for AmplitudeGraphTerm {
             .map(format_orientation_label)
     }
 
-    fn lmb_channel_label(
+    fn sampling_channel_label(
         &self,
         channel_id: SamplingChannelId,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<Option<String>> {
-        Ok(Some(format_lmb_channel_label(
-            &self.multi_channeling_setup.effective_channel_edge_ids(
+        if self.multi_channeling_setup.sampling_channel_is_lmb(
+            channel_id,
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )? {
+            Ok(Some(format_sampling_channel_label(
+                &self.multi_channeling_setup.sampling_channel_edge_ids(
+                    channel_id,
+                    &self.multi_channeling_setup.graph.name,
+                    parameterization_settings,
+                )?,
+            )))
+        } else {
+            Ok(Some(self.multi_channeling_setup.sampling_channel_label(
                 channel_id,
                 &self.multi_channeling_setup.graph.name,
                 parameterization_settings,
-            )?,
-        )))
+            )?))
+        }
     }
 
     fn get_graph(&self) -> &Graph {
         &self.graph
-    }
-
-    fn get_num_channels(&self, parameterization_settings: &ParameterizationSettings) -> usize {
-        self.multi_channeling_setup.effective_channel_count(
-            &self.multi_channeling_setup.graph.name,
-            parameterization_settings,
-        )
     }
 
     fn selected_lmb_basis_id(
@@ -1139,15 +1127,65 @@ impl GraphTerm for AmplitudeGraphTerm {
         )
     }
 
+    fn compile_sampling_bridge(
+        &self,
+        parameterization_settings: &ParameterizationSettings,
+        e_cm: f64,
+        external_momenta: &[[f64; 4]],
+        orientation: Option<usize>,
+    ) -> Result<SamplingChannelBridge> {
+        let parent_lmb = self
+            .multi_channeling_setup
+            .graph
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .map(|edge| edge.0)
+            .collect();
+        let mut context = SamplingChannelCompileContext::new(
+            self.multi_channeling_setup.graph.name.clone(),
+            parent_lmb,
+            parameterization_settings.clone(),
+            e_cm,
+            self.graph.get_loop_number(),
+        );
+        context.orientation = orientation;
+        let resolved = resolve_sampling_channel_selection(
+            &self.multi_channeling_setup.graph.name,
+            &parameterization_settings.sampling_channels,
+        )?;
+        self.multi_channeling_setup
+            .compile_sampling_channel_bridge_with_external(&resolved, &context, external_momenta)
+    }
+
+    fn sampling_channel_is_lmb(
+        &self,
+        channel_id: SamplingChannelId,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<bool> {
+        self.multi_channeling_setup.sampling_channel_is_lmb(
+            channel_id,
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
+    }
+
+    fn sampling_channel_ids(
+        &self,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<Vec<SamplingChannelId>> {
+        self.multi_channeling_setup.sampling_channel_ids(
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
+    }
+
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        mut context: GraphTermEvaluationContext<'_, '_, T>,
+        mut context: GraphTermEvaluationContext<'_, '_>,
     ) -> Result<GraphEvaluationResult<T>> {
-        let event_channel_id = context
-            .channel_id
-            .as_ref()
-            .map(|(channel_id, _, _)| *channel_id);
+        let event_channel_id = context.sampling_channel;
         let prepared_event = prepare_buffered_event(
             context.settings,
             context.rotation,

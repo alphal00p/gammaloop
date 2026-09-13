@@ -3464,7 +3464,7 @@ mod tests {
     use gammalooprs::{
         graph::Graph,
         initialisation::test_initialise,
-        integrands::process::ActiveF64Backend,
+        integrands::process::{ActiveF64Backend, GaussianReferenceFunction},
         model::InputParamCard,
         momentum::{Dep, ExternalMomenta, Helicity},
         processes::{
@@ -4912,6 +4912,214 @@ commands = ["quit -n"]
                 }
             }
         }
+    }
+
+    #[test]
+    fn saved_generated_process_runs_reference_acceptance_after_reload() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let mut state = build_generated_scalar_bubble_state_with_external_backend();
+        let temp = tempdir()?;
+        let saved = temp.path().join("saved");
+        state.save(&saved, true, false)?;
+
+        let mut loaded = State::load(saved, None, None)?;
+        loaded.activate_loaded_integrand_backends(false)?;
+        let integrand = loaded.process_list.get_integrand_mut(0, "default")?;
+        let reference = GaussianReferenceFunction::centered(2.0, 1)?;
+
+        // Exercise the complete saved-process parameterization with a compact,
+        // deterministic unit-cube quadrature.  The acceptance report checks
+        // finiteness and Jacobian propagation; this deliberately avoids
+        // coupling persistence coverage to a particular integration grid.
+        let coordinates = (0..256)
+            .map(|index| {
+                let x = (index as f64 + 0.5) / 256.0;
+                vec![
+                    x,
+                    (0.618_033_988_75 * x).fract(),
+                    (0.414_213_562_37 * x).fract(),
+                ]
+            })
+            .collect::<Vec<_>>();
+        let report = integrand.evaluate_reference_coordinates(&coordinates, &reference)?;
+
+        assert_eq!(report.sample_count, coordinates.len());
+        assert_eq!(report.finite_sample_count, coordinates.len());
+        assert!(report.normalization.is_finite());
+        assert!(report.second_moment.is_finite());
+        assert!(report.normalization_stderr.is_finite());
+        assert!(report.second_moment_stderr.is_finite());
+        assert!((report.normalization - 1.0).abs() < 2.0e-2);
+        assert!((report.second_moment - report.expected_second_moment).abs() < 2.0e-1);
+        Ok(())
+    }
+
+    #[test]
+    fn summed_sampling_matches_explicit_canonical_channels() -> Result<()> {
+        use gammalooprs::{
+            graph::GroupId,
+            settings::runtime::{
+                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
+                StabilityLevelSetting,
+            },
+        };
+        use symbolica::numerical_integration::Sample;
+
+        use gammalooprs::integrands::evaluation::StabilityStatus;
+
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let mut state = build_generated_scalar_bubble_state_with_external_backend();
+        state.activate_loaded_integrand_backends(false)?;
+        let integrand = state.process_list.get_integrand_mut(0, "default")?;
+        let mut settings: RuntimeSettings = toml::from_str(
+            r#"
+[kinematics]
+e_cm = 2.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[0.5, 0.2, 0.3, 0.1], "dependent"]
+helicities = [0, 0]
+[sampling]
+graphs = "summed"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "summed"
+default_channel_selection = ["auto:lmb"]
+[stability]
+rotation_axis = [{type = "x"}, {type = "y"}]
+"#,
+        )?;
+        settings.stability.levels = vec![StabilityLevelSetting::default_double()];
+        let SamplingSettings::MultiChanneling(multichanneling) = settings.sampling.clone() else {
+            panic!("expected summed sampling settings");
+        };
+        let channel_ids = integrand
+            .group_sampling_channel_ids(GroupId(0), &multichanneling.parameterization_settings)?;
+        assert_eq!(
+            channel_ids.len(),
+            2,
+            "bubble must exercise two distinct affine LMB charts"
+        );
+        let coordinates = vec![
+            vec![F(0.27), F(0.36), F(0.71)],
+            vec![F(0.62), F(0.24), F(0.53)],
+        ];
+        let samples = coordinates
+            .iter()
+            .map(|xs| Sample::Continuous(F(1.0), xs.clone()))
+            .collect::<Vec<_>>();
+        *integrand.get_mut_settings() = settings.clone();
+        integrand.warm_up(&state.model)?;
+        let reference = GaussianReferenceFunction::centered(2.0, 1)?;
+        assert!(integrand
+            .evaluate_reference_sample(&samples[0], &reference)
+            .unwrap_err()
+            .to_string()
+            .contains("per-channel momentum moments"));
+        let summed = integrand.evaluate_samples_raw(
+            &state.model,
+            &samples,
+            0,
+            false,
+            false,
+            Complex::new_zero(),
+        )?;
+
+        settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            sample_orientations: false,
+            sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(
+                multichanneling.clone(),
+            ),
+            ..Default::default()
+        });
+        *integrand.get_mut_settings() = settings.clone();
+        integrand.warm_up(&state.model)?;
+        let mut expected = vec![Complex::<F<f64>>::new_zero(); coordinates.len()];
+        for channel_id in channel_ids {
+            let samples = coordinates
+                .iter()
+                .map(|xs| {
+                    Sample::Discrete(
+                        F(1.0),
+                        0,
+                        Some(Box::new(Sample::Discrete(
+                            F(1.0),
+                            channel_id.0,
+                            Some(Box::new(Sample::Continuous(F(1.0), xs.clone()))),
+                        ))),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let result = integrand.evaluate_samples_raw(
+                &state.model,
+                &samples,
+                0,
+                false,
+                false,
+                Complex::new_zero(),
+            )?;
+            for (total, sample) in expected.iter_mut().zip(result.samples) {
+                *total +=
+                    sample.integrand_result * sample.parameterization_jacobian.unwrap_or(F(1.0));
+            }
+        }
+        // Check both ways of summing channels. The physical evaluator and
+        // stability rotations must see the same maps as explicit MC selections.
+        settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            sample_orientations: false,
+            sampling_type: DiscreteGraphSamplingType::MultiChanneling(multichanneling),
+            ..Default::default()
+        });
+        *integrand.get_mut_settings() = settings;
+        integrand.warm_up(&state.model)?;
+        let samples = samples
+            .into_iter()
+            .map(|sample| Sample::Discrete(F(1.0), 0, Some(Box::new(sample))))
+            .collect::<Vec<_>>();
+        assert!(integrand
+            .evaluate_reference_sample(&samples[0], &reference)
+            .unwrap_err()
+            .to_string()
+            .contains("per-channel momentum moments"));
+        let group_summed = integrand.evaluate_samples_raw(
+            &state.model,
+            &samples,
+            0,
+            false,
+            false,
+            Complex::new_zero(),
+        )?;
+        for result in [summed, group_summed] {
+            for (sample, expected) in result.samples.iter().zip(&expected) {
+                let value =
+                    sample.integrand_result * sample.parameterization_jacobian.unwrap_or(F(1.0));
+                let scale = expected.re.0.abs() + expected.im.0.abs();
+                assert!(
+                    scale > 1.0e-18 && scale.is_finite(),
+                    "invalid oracle {expected}"
+                );
+                let error = (value - expected).re.0.abs() + (value - expected).im.0.abs();
+                assert!(
+                    error < scale * 1.0e-10,
+                    "summed {value} differs from explicit channels {expected}"
+                );
+                assert!(!sample.evaluation_metadata.is_nan);
+                assert!(
+                    sample
+                        .evaluation_metadata
+                        .stability_results
+                        .iter()
+                        .all(|level| matches!(level.status, StabilityStatus::Stable(_))),
+                    "rotation invariance failed"
+                );
+            }
+        }
+        Ok(())
     }
 
     #[test]

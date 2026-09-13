@@ -27,7 +27,7 @@ pub use crate::cff::surface::EsurfaceID;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::{GammaLoopContext, define_index};
 
-use crate::integrands::process::GenericEvaluator;
+use crate::integrands::process::{GenericEvaluator, ImplicitSurfaceRadialMap};
 use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
@@ -138,6 +138,67 @@ impl PartialEq for Esurface {
 impl Eq for Esurface {}
 
 impl Esurface {
+    /// Compile an exact radial chart around this graph-routed energy surface.
+    /// The callback retains the complete parent frame, masses and external
+    /// data; its ray root is the same cut equation used by LU. This f64 chart
+    /// defines the sampling proposal, not the precision of the integrand.
+    pub(crate) fn sampling_radial_map(
+        &self,
+        lmb: &LoopMomentumBasis,
+        masses: &EdgeVec<F<f64>>,
+        external_momenta: &ExternalFourMomenta<F<f64>>,
+        beta: f64,
+        power: f64,
+    ) -> Result<ImplicitSurfaceRadialMap> {
+        let dimension = 3 * lmb.loop_edges.len();
+        let surface = self.clone();
+        let lmb = lmb.clone();
+        let masses = masses.clone();
+        let external_momenta = external_momenta.clone();
+        let spatial_externals: ExternalThreeMomenta<F<f64>> = external_momenta
+            .iter()
+            .map(|momentum| momentum.spatial)
+            .collect();
+        let center = LoopMomenta::from_iter(
+            (0..dimension / 3).map(|_| ThreeMomentum::new(F(0.0), F(0.0), F(0.0))),
+        );
+        let evaluator = std::sync::Arc::new(move |direction: &[f64], radius: f64| {
+            let unit_loops = LoopMomenta::from_iter(direction.chunks_exact(3).map(|components| {
+                ThreeMomentum::new(F(components[0]), F(components[1]), F(components[2]))
+            }));
+            let (value, mut derivative) = surface.compute_self_and_r_derivative(
+                &F(radius),
+                &unit_loops,
+                &center,
+                &external_momenta,
+                &masses,
+                &lmb,
+            );
+            if radius == 0.0 {
+                // At a massless endpoint E(r)=r|v| the radial right derivative is
+                // |v|, whereas the two-sided formula q.v/E would evaluate 0/0.
+                // Keep this endpoint convention local to the sampling chart.
+                derivative = surface
+                    .energies
+                    .iter()
+                    .map(|&edge| {
+                        let signature = &lmb.edge_signatures[edge];
+                        let momentum = signature.compute_momentum(&center, &spatial_externals);
+                        let velocity = compute_loop_part(&signature.internal, &unit_loops);
+                        let energy = (momentum.norm_squared() + masses[edge].square()).sqrt();
+                        if energy == F(0.0) {
+                            velocity.norm_squared().sqrt()
+                        } else {
+                            momentum * velocity / energy
+                        }
+                    })
+                    .fold(F(0.0), |sum, contribution| sum + contribution);
+            }
+            Ok((value.0, derivative.0))
+        });
+        ImplicitSurfaceRadialMap::new(dimension, vec![0.0; dimension], beta, power, evaluator)
+    }
+
     pub(crate) fn has_radial_dependence_in_subspace(
         &self,
         subspace: &SubspaceData,
@@ -1190,6 +1251,7 @@ mod tests {
     use crate::cff::VertexSet;
     use crate::graph::{Graph, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph};
     use crate::initialisation::test_initialise;
+    use crate::integrands::process::SamplingMapAffine;
     use crate::momentum::{
         FourMomentum, ThreeMomentum,
         sample::{ExternalFourMomenta, LoopMomenta, SubspaceData},
@@ -1295,6 +1357,75 @@ mod tests {
                     assert!(result.derivative_at_solution.0 > 0.0);
                     assert!(result.error_of_function.0.abs() < 1.0e-12);
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn implicit_sampling_map_uses_graph_esurface_root_and_roundtrips() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph implicit_sampling_esurface {
+            ext [style=invis]
+            node [num=1]
+            edge [num=1 mass=0]
+            ext -> a:0 [id=0]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2 lmb_id=1]
+            a -> b [id=3]
+            b:1 -> ext [id=4]
+        })
+        .unwrap();
+        let lmb = graph.loop_momentum_basis.clone();
+        let surface = Esurface {
+            energies: vec![EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let masses = graph
+            .underlying
+            .new_edgevec_from_iter([F(0.0), F(173.0), F(173.0), F(125.0), F(0.0)])
+            .unwrap();
+        let externals = ExternalFourMomenta::from_iter(
+            [FourMomentum::from_args(F(1000.0), F(0.0), F(0.0), F(0.0)); 2],
+        );
+        let map = surface
+            .sampling_radial_map(&lmb, &masses, &externals, 400.0, 2.0)
+            .unwrap();
+        // Exercise both sides of the cut shell with a sizeable branch
+        // split; the outer compactification carries its (1-split) factor.
+        for radial_coordinate in [0.1, 0.9] {
+            let coordinates = [radial_coordinate, 0.27, 0.61, 0.39, 0.72, 0.58];
+            let forward = map.forward(&coordinates).unwrap();
+            let step = 1.0e-5;
+            let mut derivative_matrix = vec![vec![0.0; 6]; 6];
+            for axis in 0..6 {
+                let mut plus = coordinates;
+                let mut minus = coordinates;
+                plus[axis] += step;
+                minus[axis] -= step;
+                let plus = map.forward(&plus).unwrap();
+                let minus = map.forward(&minus).unwrap();
+                for component in 0..6 {
+                    derivative_matrix[component][axis] =
+                        (plus.point[component] - minus.point[component]) / (2.0 * step);
+                }
+            }
+            let numerical_jacobian = SamplingMapAffine::new(derivative_matrix, vec![0.0; 6])
+                .unwrap()
+                .determinant();
+            assert!((numerical_jacobian / forward.jacobian - 1.0).abs() < 1.0e-4);
+
+            assert!(
+                forward
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic == "implicit_surface:regular_root")
+            );
+            assert!(forward.jacobian.is_finite() && forward.jacobian > 0.0);
+            let inverse = map.inverse(&forward.point).unwrap();
+            assert!(inverse.residual < 1.0e-9, "{}", inverse.residual);
+            for (actual, expected) in inverse.coordinates.iter().zip(coordinates) {
+                assert!((actual - expected).abs() < 1.0e-9);
             }
         }
     }

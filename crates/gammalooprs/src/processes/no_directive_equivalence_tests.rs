@@ -87,12 +87,12 @@ fn assert_event_metadata_equivalent(
                 right_event.cut_info.orientation_id,
             );
             assert_eq!(
-                left_event.cut_info.lmb_channel_id,
-                right_event.cut_info.lmb_channel_id,
+                left_event.cut_info.sampling_channel_id,
+                right_event.cut_info.sampling_channel_id,
             );
             assert_eq!(
-                left_event.cut_info.lmb_channel_edge_ids,
-                right_event.cut_info.lmb_channel_edge_ids,
+                left_event.cut_info.sampling_channel_edge_ids,
+                right_event.cut_info.sampling_channel_edge_ids,
             );
         }
     }
