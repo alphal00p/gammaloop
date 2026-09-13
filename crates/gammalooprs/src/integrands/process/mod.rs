@@ -2417,16 +2417,22 @@ impl LmbMultiChannelingSetup {
         graph_name: &str,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<LmbIndex> {
-        let channels = self.effective_channels(graph_name, parameterization_settings)?;
-        channels
-            .get(channel_index.index())
-            .copied()
-            .ok_or_else(|| {
-                eyre!(
-                    "Requested sampling channel {} is out of range for graph '{}'; the canonical catalogue contains {} LMB channels.",
-                    channel_index.index(), graph_name, channels.len()
-                )
-            })
+        // Resolve the ID directly in the canonical catalogue. Filtering the
+        // catalogue to a second, positional LMB list would make channel IDs
+        // drift as soon as a surface or named channel is inserted before an
+        // LMB entry. Legacy LMB-only callers still get a clear diagnostic for
+        // graph-aware channels through `sampling_channel_lmb_id`.
+        self.sampling_channel_lmb_id(
+            channel_index,
+            graph_name,
+            parameterization_settings,
+        )?
+        .ok_or_else(|| {
+            eyre!(
+                "Sampling channel {} for graph '{}' is graph-aware and has no generated LMB basis; use the canonical sampling bridge for this channel.",
+                channel_index.index(), graph_name
+            )
+        })
     }
 
     pub fn effective_channel_edge_ids(
@@ -5362,13 +5368,20 @@ mod tests {
             setup
                 .effective_channels(&setup.graph.name, &override_settings)
                 .unwrap(),
-            vec![LmbIndex::from(1)]
+            // The automatic optimized preset retains the requested basis and
+            // adds the smallest ordinary channels needed to cover the other
+            // massless loop edges.
+            vec![LmbIndex::from(1), LmbIndex::from(0), LmbIndex::from(2)]
         );
         assert_eq!(
             setup
                 .sampling_channel_ids(&setup.graph.name, &override_settings)
                 .unwrap(),
-            vec![SamplingChannelId::from(0)]
+            vec![
+                SamplingChannelId::from(0),
+                SamplingChannelId::from(1),
+                SamplingChannelId::from(2)
+            ]
         );
         assert_eq!(
             setup
