@@ -596,6 +596,199 @@ impl SamplingChannelRuntimeContexts {
     }
 }
 
+/// Per-sample kinematic handoff for deferred cross-section sampling.
+///
+/// Cross-section physical maps cannot be compiled from a graph/cut label alone:
+/// the LU root, its positive `t*`, external momenta, and the native parent LMB
+/// must all come from the same sample. This state keeps that typed preparation
+/// next to the numerical runtime contexts used by map evaluators. It does not
+/// construct a map or infer a context vector from kinematics; the process layer
+/// must supply the map-specific runtime vector explicitly.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeferredCrossSectionSamplingState {
+    master_graph: String,
+    graph_id: usize,
+    orientation: Option<usize>,
+    parent_lmb: Vec<usize>,
+    n_loop_momenta: usize,
+    prepared: Vec<Option<PreparedCutSamplingContext>>,
+    runtime_contexts: SamplingChannelRuntimeContexts,
+}
+
+impl DeferredCrossSectionSamplingState {
+    /// Create an empty state for one master graph and one canonical catalogue.
+    pub fn new(
+        master_graph: impl Into<String>,
+        graph_id: usize,
+        orientation: Option<usize>,
+        parent_lmb: Vec<usize>,
+        n_loop_momenta: usize,
+        channel_count: usize,
+    ) -> Result<Self> {
+        let master_graph = master_graph.into();
+        if master_graph.trim().is_empty() {
+            return Err(eyre!("deferred cross-section state needs a master graph"));
+        }
+        if parent_lmb.is_empty() {
+            return Err(eyre!("deferred cross-section state needs a parent LMB"));
+        }
+        if parent_lmb.len() != n_loop_momenta {
+            return Err(eyre!(
+                "deferred cross-section parent LMB has {} edges, expected {} loop momenta",
+                parent_lmb.len(),
+                n_loop_momenta
+            ));
+        }
+        let mut seen = BTreeSet::new();
+        if parent_lmb.iter().any(|edge| !seen.insert(*edge)) {
+            return Err(eyre!(
+                "deferred cross-section parent LMB contains duplicate edges: {parent_lmb:?}"
+            ));
+        }
+        Ok(Self {
+            master_graph,
+            graph_id,
+            orientation,
+            parent_lmb,
+            n_loop_momenta,
+            prepared: vec![None; channel_count],
+            runtime_contexts: SamplingChannelRuntimeContexts::new(channel_count),
+        })
+    }
+
+    pub fn channel_count(&self) -> usize {
+        self.prepared.len()
+    }
+
+    pub fn master_graph(&self) -> &str {
+        &self.master_graph
+    }
+
+    pub fn graph_id(&self) -> usize {
+        self.graph_id
+    }
+
+    pub fn orientation(&self) -> Option<usize> {
+        self.orientation
+    }
+
+    pub fn parent_lmb(&self) -> &[usize] {
+        &self.parent_lmb
+    }
+
+    pub fn prepared_context(
+        &self,
+        channel_id: SamplingChannelId,
+    ) -> Option<&PreparedCutSamplingContext> {
+        self.prepared.get(channel_id.0).and_then(Option::as_ref)
+    }
+
+    pub fn runtime_contexts(&self) -> &SamplingChannelRuntimeContexts {
+        &self.runtime_contexts
+    }
+
+    /// Attach one solved cut/side and its map-specific evaluator context.
+    /// Validation is transactional: a failed attachment leaves the state
+    /// unchanged, preventing stale LU data from being reused accidentally.
+    pub fn set_channel(
+        &mut self,
+        channel_id: SamplingChannelId,
+        prepared: PreparedCutSamplingContext,
+        map_context: Vec<f64>,
+    ) -> Result<()> {
+        let Some(slot) = self.prepared.get_mut(channel_id.0) else {
+            return Err(eyre!(
+                "deferred cross-section channel id {} is out of range for {} channels",
+                channel_id.0,
+                self.channel_count()
+            ));
+        };
+        if prepared.graph_name != self.master_graph {
+            return Err(eyre!(
+                "deferred cross-section context graph `{}` does not match master graph `{}`",
+                prepared.graph_name,
+                self.master_graph
+            ));
+        }
+        if prepared.graph_id != self.graph_id {
+            return Err(eyre!(
+                "deferred cross-section context graph id {} does not match {}",
+                prepared.graph_id,
+                self.graph_id
+            ));
+        }
+        if prepared.orientation != self.orientation {
+            return Err(eyre!(
+                "deferred cross-section context orientation {:?} does not match {:?}",
+                prepared.orientation,
+                self.orientation
+            ));
+        }
+        if prepared.parent_lmb != self.parent_lmb {
+            return Err(eyre!(
+                "deferred cross-section context parent LMB {:?} does not match {:?}",
+                prepared.parent_lmb,
+                self.parent_lmb
+            ));
+        }
+        prepared.validate_loop_dimension(self.n_loop_momenta)?;
+        if !prepared.rescaling_t_star.is_finite() || prepared.rescaling_t_star <= 0.0 {
+            return Err(eyre!(
+                "deferred cross-section context needs finite positive t*, got {}",
+                prepared.rescaling_t_star
+            ));
+        }
+        // Validate the runtime vector before touching the prepared slot.
+        let mut runtime = self.runtime_contexts.clone();
+        runtime.set(channel_id, map_context)?;
+        *slot = Some(prepared);
+        self.runtime_contexts = runtime;
+        Ok(())
+    }
+
+    /// Require every listed channel to have a solved cut/side context.
+    pub fn validate_channels(
+        &self,
+        channel_ids: impl IntoIterator<Item = SamplingChannelId>,
+    ) -> Result<()> {
+        for channel_id in channel_ids {
+            if channel_id.0 >= self.channel_count() {
+                return Err(eyre!(
+                    "deferred cross-section channel id {} is out of range for {} channels",
+                    channel_id.0,
+                    self.channel_count()
+                ));
+            }
+            if self.prepared[channel_id.0].is_none() {
+                return Err(eyre!(
+                    "deferred cross-section channel {} has no solved cut/side context",
+                    channel_id.0
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_bridge(&self, dimensions: usize, channel_count: usize) -> Result<()> {
+        if channel_count != self.channel_count() {
+            return Err(eyre!(
+                "deferred cross-section state has {} channels, bridge has {}",
+                self.channel_count(),
+                channel_count
+            ));
+        }
+        let expected = 3 * self.n_loop_momenta;
+        if dimensions != expected {
+            return Err(eyre!(
+                "deferred cross-section state has {} loop coordinates, bridge has {} dimensions",
+                expected,
+                dimensions
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// One push-forward/inverse result together with the common raw-frame
 /// multichannel partition.
 #[derive(Clone, Debug, PartialEq)]
@@ -1078,6 +1271,18 @@ impl SamplingChannelBridge {
         SamplingPartition::new(SamplingPartitionMode::MapDensity, &scores, raw_coordinates)
     }
 
+    /// Build a partition from a deferred cross-section state. This only
+    /// forwards the already prepared per-channel runtime contexts; it does not
+    /// solve a cut or infer a physical map from `PreparedCutSamplingContext`.
+    pub fn partition_with_deferred_state(
+        &self,
+        raw_coordinates: &[f64],
+        state: &DeferredCrossSectionSamplingState,
+    ) -> Result<SamplingPartition> {
+        state.validate_bridge(self.dimensions, self.channels.len())?;
+        self.partition_with_contexts(raw_coordinates, state.runtime_contexts())
+    }
+
     pub fn forward(
         &self,
         channel_id: SamplingChannelId,
@@ -1131,6 +1336,20 @@ impl SamplingChannelBridge {
         })
     }
 
+    /// Forward a channel using the per-sample deferred cross-section state.
+    /// The host must have attached a solved cut/side context for the selected
+    /// channel before this method is called.
+    pub fn forward_with_deferred_state(
+        &self,
+        channel_id: SamplingChannelId,
+        coordinates: &[f64],
+        state: &DeferredCrossSectionSamplingState,
+    ) -> Result<SamplingChannelBridgeEvaluation> {
+        state.validate_bridge(self.dimensions, self.channels.len())?;
+        state.validate_channels([channel_id])?;
+        self.forward_with_runtime_contexts(channel_id, coordinates, state.runtime_contexts())
+    }
+
     pub fn inverse(
         &self,
         channel_id: SamplingChannelId,
@@ -1172,6 +1391,18 @@ impl SamplingChannelBridge {
             map,
             partition,
         })
+    }
+
+    /// Invert a channel using the per-sample deferred cross-section state.
+    pub fn inverse_with_deferred_state(
+        &self,
+        channel_id: SamplingChannelId,
+        raw_coordinates: &[f64],
+        state: &DeferredCrossSectionSamplingState,
+    ) -> Result<SamplingChannelBridgeEvaluation> {
+        state.validate_bridge(self.dimensions, self.channels.len())?;
+        state.validate_channels([channel_id])?;
+        self.inverse_with_runtime_contexts(channel_id, raw_coordinates, state.runtime_contexts())
     }
 }
 
@@ -2741,6 +2972,118 @@ mod tests {
             vec![],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn deferred_cross_section_state_validates_and_keeps_cut_contexts_typed() {
+        let mut state =
+            DeferredCrossSectionSamplingState::new("G", 17, Some(2), vec![1, 2], 2, 2).unwrap();
+        let prepared = prepared_cut_context(SamplingCutSide::Left, Some(2), vec![1, 2]);
+        state
+            .set_channel(
+                SamplingChannelId::from(0),
+                prepared.clone(),
+                vec![0.25, 0.5],
+            )
+            .unwrap();
+        assert_eq!(
+            state.prepared_context(SamplingChannelId::from(0)),
+            Some(&prepared)
+        );
+        assert!(state.prepared_context(SamplingChannelId::from(1)).is_none());
+        assert!(
+            state
+                .validate_channels([SamplingChannelId::from(0)])
+                .is_ok()
+        );
+        let error = state
+            .validate_channels([SamplingChannelId::from(1)])
+            .unwrap_err();
+        assert!(error.to_string().contains("has no solved cut/side context"));
+    }
+
+    #[test]
+    fn deferred_cross_section_state_rejects_identity_mismatch_transactionally() {
+        let mut state =
+            DeferredCrossSectionSamplingState::new("G", 17, Some(2), vec![1, 2], 2, 1).unwrap();
+        let mut wrong_graph = prepared_cut_context(SamplingCutSide::Left, Some(2), vec![1, 2]);
+        wrong_graph.graph_name = "other".into();
+        assert!(
+            state
+                .set_channel(SamplingChannelId::from(0), wrong_graph, vec![0.1])
+                .is_err()
+        );
+        assert!(state.prepared_context(SamplingChannelId::from(0)).is_none());
+        assert_eq!(
+            state.runtime_contexts(),
+            &SamplingChannelRuntimeContexts::new(1)
+        );
+
+        let wrong_orientation = prepared_cut_context(SamplingCutSide::Left, Some(3), vec![1, 2]);
+        let error = state
+            .set_channel(SamplingChannelId::from(0), wrong_orientation, vec![0.1])
+            .unwrap_err();
+        assert!(error.to_string().contains("orientation"));
+        assert!(state.prepared_context(SamplingChannelId::from(0)).is_none());
+
+        let prepared = prepared_cut_context(SamplingCutSide::Left, Some(2), vec![1, 2]);
+        let unchanged = state.clone();
+        assert!(
+            state
+                .set_channel(SamplingChannelId::from(0), prepared.clone(), vec![f64::NAN])
+                .is_err()
+        );
+        assert_eq!(state, unchanged);
+
+        let mut nonpositive_root = prepared;
+        nonpositive_root.rescaling_t_star = 0.0;
+        assert!(
+            state
+                .set_channel(SamplingChannelId::from(0), nonpositive_root, vec![0.1])
+                .is_err()
+        );
+        assert_eq!(state, unchanged);
+    }
+
+    #[test]
+    fn deferred_cross_section_state_checks_bridge_shape_and_catalogue_count() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["ordinary".into()];
+        let mut ordinary = definition("lmb(1,2)");
+        ordinary.parent_lmb = vec![1, 2];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("ordinary".into(), ordinary);
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+
+        let state =
+            DeferredCrossSectionSamplingState::new("G", 17, Some(2), vec![1, 2], 2, 2).unwrap();
+        let error = bridge
+            .partition_with_deferred_state(&[0.1; 6], &state)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("state has 2 channels, bridge has 1")
+        );
+
+        let wrong_dimension =
+            DeferredCrossSectionSamplingState::new("G", 17, Some(2), vec![1], 1, 1).unwrap();
+        let error = bridge
+            .partition_with_deferred_state(&[0.1; 6], &wrong_dimension)
+            .unwrap_err();
+        assert!(error.to_string().contains("state has 3 loop coordinates"));
     }
 
     #[test]

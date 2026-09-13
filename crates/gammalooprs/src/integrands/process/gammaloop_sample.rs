@@ -278,6 +278,10 @@ pub enum DiscreteGraphSample<T: FloatLike> {
     MultiChanneling {
         alpha: F<T>,
         channel_weight: LmbChannelWeight,
+        /// Unit-cube coordinates retained for canonical amplitude routing.
+        /// Cross-section terms may still use the compatibility path until
+        /// their per-cut LU/t* context is available.
+        sampling_coordinates: Option<Vec<F<T>>>,
         sample: MomentumSample<T>,
     },
     /// This variant is equivalent to Default, but needs to be handled differently in the evaluation.
@@ -357,10 +361,12 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::MultiChanneling {
                 alpha,
                 channel_weight,
+                sampling_coordinates,
                 sample,
             } => DiscreteGraphSample::MultiChanneling {
                 alpha: alpha.clone(),
                 channel_weight: *channel_weight,
+                sampling_coordinates: sampling_coordinates.clone(),
                 sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
             },
             DiscreteGraphSample::Tropical(sample) => DiscreteGraphSample::Tropical(sample.rotate(
@@ -399,10 +405,14 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::MultiChanneling {
                 alpha,
                 channel_weight,
+                sampling_coordinates,
                 sample,
             } => DiscreteGraphSample::MultiChanneling {
                 alpha: Into::<F<T2>>::into(alpha.clone()),
                 channel_weight: *channel_weight,
+                sampling_coordinates: sampling_coordinates
+                    .as_ref()
+                    .map(|coordinates| coordinates.iter().cloned().map(F::<T2>::from).collect()),
                 sample: sample.cast_sample(),
             },
             DiscreteGraphSample::Tropical(sample) => {
@@ -442,10 +452,17 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::MultiChanneling {
                 alpha,
                 channel_weight,
+                sampling_coordinates,
                 sample,
             } => DiscreteGraphSample::MultiChanneling {
                 alpha: alpha.higher(),
                 channel_weight: *channel_weight,
+                sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
+                    coordinates
+                        .iter()
+                        .map(|coordinate| coordinate.higher())
+                        .collect()
+                }),
                 sample: sample.higher_precision(),
             },
             DiscreteGraphSample::Tropical(sample) => {
@@ -486,10 +503,17 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::MultiChanneling {
                 alpha,
                 channel_weight,
+                sampling_coordinates,
                 sample,
             } => DiscreteGraphSample::MultiChanneling {
                 alpha: alpha.lower(),
                 channel_weight: *channel_weight,
+                sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
+                    coordinates
+                        .iter()
+                        .map(|coordinate| coordinate.lower())
+                        .collect()
+                }),
                 sample: sample.lower_precision(),
             },
             DiscreteGraphSample::Tropical(sample) => {
@@ -531,7 +555,11 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
     #[allow(dead_code)]
     pub(crate) fn sampling_coordinates(&self) -> Option<&[F<T>]> {
         match self {
-            Self::SamplingChannel {
+            Self::MultiChanneling {
+                sampling_coordinates,
+                ..
+            }
+            | Self::SamplingChannel {
                 sampling_coordinates,
                 ..
             } => sampling_coordinates.as_deref(),
@@ -564,8 +592,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
             let graph = integrand.get_master_graph(GroupId(group_id));
             graph.sampling_channel_ids(parameterization_settings)?;
             if is_summed_multichanneling(&settings.sampling)
-                && (!matches!(&settings.sampling, SamplingSettings::MultiChanneling(_))
-                    || !graph.supports_canonical_summed_sampling())
+                && !graph.supports_canonical_summed_sampling()
             {
                 for channel_id in graph.sampling_channel_ids(parameterization_settings)? {
                     if !graph.sampling_channel_is_lmb(channel_id, parameterization_settings)? {
@@ -654,6 +681,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                         sample: DiscreteGraphSample::MultiChanneling {
                             alpha: F::from_f64(multichanneling_settings.alpha),
                             channel_weight: multichanneling_settings.channel_weight,
+                            sampling_coordinates: Some(xs.clone()),
                             sample: default_parametrize(
                                 &xs,
                                 dependent_momenta_constructor,
@@ -957,5 +985,30 @@ mod tests {
             sample,
         };
         assert!(sampling_channel.sampling_coordinates().is_none());
+    }
+
+    #[test]
+    fn summed_sampling_retains_coordinates_for_canonical_amplitude_routing() {
+        let sample = MomentumSample::new(
+            LoopMomenta::from(vec![]),
+            0,
+            &Externals::default(),
+            0,
+            F(1.0),
+            DependentMomentaConstructor::CrossSection,
+            None,
+        )
+        .expect("empty cross-section sample is valid for metadata test");
+        let coordinates = vec![F(0.125), F(0.625), F(0.875)];
+        let summed = DiscreteGraphSample::MultiChanneling {
+            alpha: F(1.0),
+            channel_weight: crate::settings::runtime::LmbChannelWeight::Ose,
+            sampling_coordinates: Some(coordinates.clone()),
+            sample,
+        };
+        assert_eq!(
+            summed.cast_sample::<f64>().sampling_coordinates(),
+            Some(coordinates.as_slice())
+        );
     }
 }
