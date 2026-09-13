@@ -429,6 +429,9 @@ mod tests {
             (HFunction::PolyExponential, None),
             (HFunction::PolyExponential, Some(4)),
             (HFunction::PolyExponential, Some(16)),
+            (HFunction::PolyLeftRightExponential, None),
+            (HFunction::PolyLeftRightExponential, Some(4)),
+            (HFunction::PolyLeftRightExponential, Some(16)),
         ] {
             for sigma in [0.5, 2.0] {
                 let settings = IntegratedCounterTermSettings {

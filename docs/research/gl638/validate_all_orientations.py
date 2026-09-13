@@ -104,6 +104,8 @@ def check_orientation_keys(
         fail("standalone orientation keys are not unique")
     if not all(len(row) == ORIENTATION_WIDTH for row in orientations):
         fail(f"orientation keys must have width {ORIENTATION_WIDTH}")
+    if not all(type(value) is int for row in orientations for value in row):
+        fail("orientation keys contain non-integer values")
     if not all(value in (-1, 0, 1) for row in orientations for value in row):
         fail("orientation keys contain values outside {-1, 0, 1}")
     for field in ("orientation_count", "unique_orientation_count"):
