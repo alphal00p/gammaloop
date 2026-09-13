@@ -852,6 +852,15 @@ impl SamplingChannelCatalogue {
                 SamplingCatalogueEntry::Lmb {
                     basis_id, edges, ..
                 } => {
+                    if edges != &context.parent_lmb {
+                        return Err(SamplingChannelCompileError::InvalidChannel {
+                            channel: format!("lmb[{basis_id}]"),
+                            error: format!(
+                                "LMB edges {edges:?} do not match master parent LMB {:?}; the graph-frame affine routing must be compiled before this channel can be sampled",
+                                context.parent_lmb
+                            ),
+                        });
+                    }
                     let definition = SamplingMapDefinition::Lmb(edges.clone());
                     let map = SamplingMapKernel::new(
                         definition.clone(),
@@ -898,17 +907,30 @@ impl SamplingChannelCatalogue {
                     }
                     let definition = channel.map.clone();
                     let map = match &definition {
-                        SamplingMapDefinition::Lmb(_edges) => SamplingMapKernel::new(
-                            definition.clone(),
-                            context.parameterization_settings.clone(),
-                            context.e_cm,
-                            context.n_loop_momenta,
-                        )
-                        .map(CompiledSamplingMap::Lmb)
-                        .map_err(|error| SamplingChannelCompileError::InvalidChannel {
-                            channel: channel.name.clone(),
-                            error: error.to_string(),
-                        })?,
+                        SamplingMapDefinition::Lmb(edges) => {
+                            if edges != &context.parent_lmb {
+                                return Err(SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: format!(
+                                        "LMB edges {edges:?} do not match master parent LMB {:?}; the graph-frame affine routing must be compiled before this channel can be sampled",
+                                        context.parent_lmb
+                                    ),
+                                });
+                            }
+                            SamplingMapKernel::new(
+                                definition.clone(),
+                                context.parameterization_settings.clone(),
+                                context.e_cm,
+                                context.n_loop_momenta,
+                            )
+                            .map(CompiledSamplingMap::Lmb)
+                            .map_err(|error| {
+                                SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: error.to_string(),
+                                }
+                            })?
+                        }
                         SamplingMapDefinition::Surface(edges) => {
                             compile_surface_map(&channel.name, edges, context)?
                         }
@@ -1479,8 +1501,7 @@ mod tests {
             .or_default()
             .insert("threshold".into(), definition("surface(1,2)"));
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue =
-            build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2]), (1, vec![2, 4])], &[0]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2])], &[0]);
         let mut context = SamplingChannelCompileContext::new(
             "G",
             vec![1, 2],
@@ -1498,12 +1519,34 @@ mod tests {
             },
         );
         let compiled = catalogue.compile(&context).unwrap();
-        assert_eq!(compiled.len(), 3);
+        assert_eq!(compiled.len(), 2);
         assert!(matches!(compiled[0].map, CompiledSamplingMap::Lmb(_)));
         assert_eq!(compiled[0].embedded_edges, vec![1, 2]);
-        assert!(matches!(compiled[2].map, CompiledSamplingMap::Surface(_)));
-        assert_eq!(compiled[2].master_graph, "G");
-        assert_eq!(compiled[2].dimensions(), 6);
+        assert!(matches!(compiled[1].map, CompiledSamplingMap::Surface(_)));
+        assert_eq!(compiled[1].master_graph, "G");
+        assert_eq!(compiled[1].dimensions(), 6);
+    }
+
+    #[test]
+    fn catalogue_rejects_non_parent_lmb_until_affine_routing_is_compiled() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:lmb".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2]), (1, vec![2, 4])], &[0]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        let error = catalogue.compile(&context).unwrap_err();
+        assert!(matches!(
+            error,
+            SamplingChannelCompileError::InvalidChannel { .. }
+        ));
+        assert!(error.to_string().contains("graph-frame affine routing"));
     }
 
     #[test]
