@@ -1,9 +1,11 @@
 # Sampling bridge compilation during warmup
 
-Status: ownership design audited on 2026-09-13; the following implementation
-retains the f64 bridge in the existing setup cache and removes per-draw
-construction. All 154 library sampling tests, both saved-state/summed API tests,
-core/API test checking and clippy pass. No throughput
+Status: ownership design audited on 2026-09-13. The initial cached f64 bridge
+milestone passed 154 library sampling tests, both saved-state/summed API tests,
+core/API test checking and clippy. The native host extension now binds configured
+precisions and lazy explicit requests from one catalogue/program cache; its
+eight focused production gates, 169-test broader core suite, both saved-state/
+summed API regressions and six event/precise integration API tests pass. No throughput
 or physical variance improvement is claimed before measurement.
 It extends [the implementation plan](../../../ADVANCED_SAMPLING_PLAN.md) and
 the [amplitude benchmark study](AMPLITUDE_BENCHMARK_CANDIDATES.md).
@@ -12,8 +14,9 @@ the [amplitude benchmark study](AMPLITUDE_BENCHMARK_CANDIDATES.md).
 
 Compile each currently supported graph's sampling bridge once per successful
 warmup, then reuse it across draws, orientations, rotations, and precision
-evaluations. The bridge remains the sole runtime catalogue of canonical
-`SamplingChannelId` values; do not cache a second channel enumeration.
+evaluations. The setup owns one resolved catalogue of canonical
+`SamplingChannelId` values; native bridges retain bindings indexed by those
+same entries and never independently select or enumerate channels.
 
 The initial scope is existing LMB maps, full-rank amplitude surface maps, and
 standalone full-parent `phase_space(cut(...))` maps. Their equations depend on
@@ -25,9 +28,9 @@ Relevant existing owners and call sites:
 
 | Responsibility | Existing source |
 | --- | --- |
-| Nonpersistent, cloneable cache | `process/mod.rs`: `RuntimeCache<T>` |
+| Nonpersistent, cloneable cache | `utils/mod.rs`: `RuntimeCache<T>` |
 | Process and graph warmup | `ProcessIntegrand::warm_up`, `ProcessIntegrandImpl::warm_up`, `GraphTerm::warm_up` |
-| Physical map construction | `GraphTerm::compile_sampling_bridge`; amplitude/cross-section implementations |
+| Physical map construction | Fresh `GraphTerm::compile_sampling_bridge`, native `bind_sampling_bridge`; amplitude/cross-section implementations |
 | Discrete forward map | `process/gammaloop_sample.rs`: `parameterize` |
 | Summed and direct-momentum map use | `process/mod.rs`: common evaluation paths |
 | Stateful Symbolica proxy | `sampling_partition.rs`: `SamplingScoreFunction` |
@@ -58,9 +61,9 @@ from the same bridge. UI/grid inspection may retain explicit metadata resolution
 Only modes that actually use bridges need a runtime bridge; do not accidentally
 activate unsupported map definitions in unrelated sampling modes.
 
-The graph's existing `LmbMultiChannelingSetup` owns
-`RuntimeCache<SamplingChannelBridge>`, instead of an `Arc` around the entire
-bridge. The hot path borrows it; the summed loop can finish an owned
+The graph's existing `LmbMultiChannelingSetup` owns the catalogue, compiled
+proxy programs and typed Double/Quad/Arb bridges in `RuntimeCache` fields,
+instead of an `Arc` around the entire bridge. The hot path borrows it; the summed loop can finish an owned
 forward-map result before mutably evaluating the graph. No per-draw bridge clone
 is necessary. Existing immutable geometry callbacks may continue sharing `Arc`s.
 
@@ -157,7 +160,7 @@ conversion of mapped samples do not justify copying an unchanged sampling progra
 - Settings mutation must reject cached evaluation until warmup. Cover selection,
   radial profile, frame, externals, model masses, and filtered graph views.
 - Check failed warmup clears old/partial bridges, in-place external mutation
-  clears both numeric caches, and saved/reloaded states warm to identical results.
+clears every numeric cache, and saved/reloaded states warm to identical results.
 - Check worker clones reuse programs without shared mutable proxy buffers;
   threaded proxy outputs must match serial outputs without compiling per point.
 - Measure warmup cost, repeated-draw cost, memory, and 1/20-worker throughput with

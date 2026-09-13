@@ -308,7 +308,7 @@ fn event_signature(event: &gammalooprs::observables::Event) -> String {
         .join("|");
     let lmb_channel = event
         .cut_info
-        .lmb_channel_edge_ids
+        .sampling_channel_edge_ids
         .as_ref()
         .map(|edge_ids| {
             edge_ids
@@ -588,7 +588,7 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
                 .map(|(event_index, event)| {
                     let channel_edges = event
                         .cut_info
-                        .lmb_channel_edge_ids
+                        .sampling_channel_edge_ids
                         .as_ref()
                         .expect("summed LMB events must carry their effective channel basis")
                         .iter()
@@ -1174,7 +1174,7 @@ lmb_channels = "summed"
         .map(|event| {
             event
                 .cut_info
-                .lmb_channel_edge_ids
+                .sampling_channel_edge_ids
                 .as_ref()
                 .expect("explicit multi-channeling events should carry LMB channel metadata")
                 .iter()
@@ -1219,7 +1219,7 @@ lmb_channels = "monte_carlo"
             for event in group.iter() {
                 let lmb_channel_edge_ids = event
                     .cut_info
-                    .lmb_channel_edge_ids
+                    .sampling_channel_edge_ids
                     .as_ref()
                     .expect("discrete multi-channeling events should carry LMB channel metadata")
                     .iter()
@@ -1278,7 +1278,7 @@ lmb_basis_ids = {{ {master_graph_name} = [1, 0] }}
         let result = results.samples.remove(0);
         let lmb_channel_edge_ids = result.evaluation.event_groups[0][0]
             .cut_info
-            .lmb_channel_edge_ids
+            .sampling_channel_edge_ids
             .as_ref()
             .expect("overridden discrete LMB channel events should carry channel metadata")
             .iter()
@@ -1425,7 +1425,7 @@ lmb_basis_ids = {{ "{master_name}" = [{override_basis_id}] }}
         assert_eq!(
             event
                 .cut_info
-                .lmb_channel_edge_ids
+                .sampling_channel_edge_ids
                 .as_ref()
                 .expect("grouped LMB events should carry channel metadata")
                 .iter()

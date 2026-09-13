@@ -49,7 +49,7 @@ use crate::{
             ParamBuilder, SamplingChannelBridge, SamplingChannelCompileContext, SamplingChannelId,
             SamplingMapDefinition, SamplingSurfaceGeometry,
             evaluators::{ActiveF64Backend, EvaluatorStack},
-            graph_to_group_id_for_group_structure, resolve_sampling_channel_selection,
+            graph_to_group_id_for_group_structure,
             threshold_multiplier::ThresholdMultiplierEvaluatorCollection,
         },
     },
@@ -82,16 +82,16 @@ use crate::{
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
     utils::{
-        ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, W_, compute_shift_part,
+        ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, RuntimeCache, W_, compute_shift_part,
         serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS,
     },
 };
 
 use super::{
     GraphTerm, GraphTermEvaluationContext, LmbMultiChannelingSetup, ProcessIntegrandImpl,
-    RuntimeCache, create_grid, evaluate_sample, filtered_orientation_count,
-    format_orientation_label, format_sampling_channel_label, histogram_process_info_for_integrand,
-    prepare_buffered_event, resolve_visible_orientation_id, validate_group_orientation_catalogs,
+    create_grid, evaluate_sample, filtered_orientation_count, format_orientation_label,
+    format_sampling_channel_label, histogram_process_info_for_integrand, prepare_buffered_event,
+    resolve_visible_orientation_id, validate_group_orientation_catalogs,
     validate_process_runtime_settings,
 };
 
@@ -626,6 +626,10 @@ impl AmplitudeGraphTerm {
                 graph: graph.graph.clone(),
                 multi_channeling_setup: LmbMultiChannelingSetup {
                     sampling_bridge: Default::default(),
+                    sampling_bridge_quad: Default::default(),
+                    sampling_bridge_arb: Default::default(),
+                    sampling_catalogue: Default::default(),
+                    sampling_proxies: Default::default(),
                     lmb_basis_ids: TiVec::new(),
                     graph: graph.graph.clone(), // will be overwritten later,
                     all_bases: TiVec::new(),
@@ -756,27 +760,32 @@ impl AmplitudeGraphTerm {
             orientation_id
         };
         event.cut_info.sampling_channel_id = channel_id.map(usize::from);
-        event.cut_info.sampling_channel_edge_ids = if let Some(channel_id) = channel_id {
-            let parameterization_settings = settings
-                .sampling
-                .get_parameterization_settings()
-                .expect("sampling channel event metadata requires a parameterization.");
-            if self.multi_channeling_setup.sampling_channel_is_lmb(
-                channel_id,
-                &self.multi_channeling_setup.graph.name,
-                &parameterization_settings,
-            )? {
-                Some(self.multi_channeling_setup.sampling_channel_edge_ids(
-                    channel_id,
-                    &self.multi_channeling_setup.graph.name,
-                    &parameterization_settings,
-                )?)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        event.cut_info.sampling_channel_edge_ids = channel_id
+            .map(|channel_id| {
+                let catalogue = self
+                    .multi_channeling_setup
+                    .sampling_catalogue
+                    .as_ref()
+                    .ok_or_else(|| {
+                        eyre!(
+                            "sampling event metadata for graph '{}' requires warm_up",
+                            self.graph.name
+                        )
+                    })?;
+                match catalogue.entries.get(channel_id.index()) {
+                    Some(super::SamplingCatalogueEntry::Lmb { edges, .. }) => {
+                        Ok(Some(edges.iter().copied().collect()))
+                    }
+                    Some(_) => Ok(None),
+                    None => Err(eyre!(
+                        "sampling event channel {} is absent from graph '{}'",
+                        channel_id.index(),
+                        self.graph.name
+                    )),
+                }
+            })
+            .transpose()?
+            .flatten();
 
         for ((sign, momentum), pdg) in self
             .master_external_signature
@@ -970,7 +979,7 @@ impl GraphTerm for AmplitudeGraphTerm {
           err
     )]
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
-        self.multi_channeling_setup.sampling_bridge.invalidate();
+        self.multi_channeling_setup.invalidate_sampling();
         if self.explicit_orientation_sum_only {
             self.orientation_filter = SubSet::full(self.orientations.len());
         } else {
@@ -1143,13 +1152,15 @@ impl GraphTerm for AmplitudeGraphTerm {
         )
     }
 
-    fn compile_sampling_bridge(
+    fn bind_sampling_bridge<T: FloatLike>(
         &self,
+        catalogue: &super::SamplingChannelCatalogue,
+        proxies: &[Option<super::SamplingExpressionEvaluator>],
         parameterization_settings: &ParameterizationSettings,
         e_cm: f64,
-        external_momenta: &[[f64; 4]],
+        external_momenta: &[[T; 4]],
         orientation: Option<usize>,
-    ) -> Result<SamplingChannelBridge> {
+    ) -> Result<SamplingChannelBridge<T>> {
         let parent_lmb = self
             .multi_channeling_setup
             .graph
@@ -1158,6 +1169,7 @@ impl GraphTerm for AmplitudeGraphTerm {
             .iter()
             .map(|edge| edge.0)
             .collect();
+        let zero = F::<T>::default().zero();
         let mut context = SamplingChannelCompileContext::new(
             self.multi_channeling_setup.graph.name.clone(),
             parent_lmb,
@@ -1166,13 +1178,8 @@ impl GraphTerm for AmplitudeGraphTerm {
             self.graph.get_loop_number(),
         );
         context.orientation = orientation;
-        let resolved = resolve_sampling_channel_selection(
-            &self.multi_channeling_setup.graph.name,
-            &parameterization_settings.sampling_channels,
-        )?;
-        let surface_channels = resolved
-            .named_channels
-            .iter()
+        let surface_channels = catalogue
+            .named_entries()
             .filter(|channel| matches!(channel.map, SamplingMapDefinition::Surface(_)))
             .collect_vec();
         if !surface_channels.is_empty() {
@@ -1206,20 +1213,23 @@ impl GraphTerm for AmplitudeGraphTerm {
                     self.graph.name
                 )
             })?;
-            let masses = self
-                .graph
-                .new_edgevec(|_, edge, _| cached_masses[edge].unwrap_or(F(0.0)));
+            let masses = self.graph.new_edgevec(|_, edge, _| {
+                cached_masses[edge]
+                    .map(F::<T>::from_ff64)
+                    .unwrap_or_else(|| zero.clone())
+            });
             let externals =
                 ExternalFourMomenta::from_iter(external_momenta.iter().map(|momentum| {
                     FourMomentum::from_args(
-                        F(momentum[0]),
-                        F(momentum[1]),
-                        F(momentum[2]),
-                        F(momentum[3]),
+                        F(momentum[0].clone()),
+                        F(momentum[1].clone()),
+                        F(momentum[2].clone()),
+                        F(momentum[3].clone()),
                     )
                 }));
             let origin = LoopMomenta::from_iter(
-                (0..context.n_loop_momenta).map(|_| ThreeMomentum::new(F(0.0), F(0.0), F(0.0))),
+                (0..context.n_loop_momenta)
+                    .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
             );
             for channel in surface_channels {
                 let SamplingMapDefinition::Surface(edges) = &channel.map else {
@@ -1296,7 +1306,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                     .iter()
                     .copied()
                     .filter(|(_, surface)| {
-                        surface.compute_shift_part_from_momenta(&externals, lmb) < F(0.0)
+                        surface.compute_shift_part_from_momenta(&externals, lmb) < zero
                     })
                     .unique_by(|(_, surface)| surface.external_shift.iter().sorted().collect_vec())
                     .collect_vec();
@@ -1323,8 +1333,8 @@ impl GraphTerm for AmplitudeGraphTerm {
                             &externals,
                             lmb,
                             &masses,
-                            &F(e_cm),
-                            &F(DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+                            &F::<T>::from_f64(e_cm),
+                            &F::<T>::from_f64(DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
                         )
                         .is_existing()
                 });
@@ -1332,7 +1342,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                 if let Some((id, surface)) = existing {
                     let origin_value =
                         surface.compute_from_momenta(lmb, &masses, &origin, &externals);
-                    if !origin_value.0.is_finite() || origin_value >= F(0.0) {
+                    if !origin_value.0.is_finite() || origin_value >= zero {
                         return Err(eyre!(
                             "amplitude surface channel '{}' for graph '{}' targets existing E-surface {} with edges {:?}, but its value at the current zero center is {}; a nonzero interior-center chart is required",
                             channel.name,
@@ -1358,7 +1368,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                     context.surfaces.insert(
                         (edges.clone(), context.parent_lmb.clone()),
                         SamplingSurfaceGeometry {
-                            center: vec![0.0; 3 * context.n_loop_momenta],
+                            center: vec![zero.0.clone(); 3 * context.n_loop_momenta],
                             threshold_radius: None,
                             beta,
                             power: parameterization_settings.power,
@@ -1368,7 +1378,12 @@ impl GraphTerm for AmplitudeGraphTerm {
             }
         }
         self.multi_channeling_setup
-            .compile_sampling_channel_bridge_with_external(&resolved, &context, external_momenta)
+            .compile_sampling_channel_bridge_with_external(
+                catalogue,
+                proxies,
+                &context,
+                external_momenta,
+            )
     }
 
     fn sampling_channel_is_lmb(
@@ -2005,7 +2020,7 @@ impl AmplitudeIntegrand {
     pub(crate) fn invalidate_runtime_caches(&mut self) {
         self.event_processing_runtime.invalidate();
         for term in &mut self.data.graph_terms {
-            term.multi_channeling_setup.sampling_bridge.invalidate();
+            term.multi_channeling_setup.invalidate_sampling();
         }
     }
 
@@ -3149,9 +3164,9 @@ parent_lmb = [4,6]
                 unreachable!()
             };
             let setup = &amplitude.data.graph_terms[0].multi_channeling_setup;
-            let address = setup.sampling_bridge()? as *const _ as usize;
+            let address = setup.sampling_bridge::<f64>()? as *const _ as usize;
             let original = setup
-                .sampling_bridge()?
+                .sampling_bridge::<f64>()?
                 .forward(SamplingChannelId(0), &[0.19, 0.27, 0.61, 0.39, 0.72, 0.58])?;
             let first = runtime.evaluate_reference_sample_detailed(&point, &reference)?;
             for _ in 0..3 {
@@ -3166,7 +3181,7 @@ parent_lmb = [4,6]
                 assert_eq!(
                     amplitude.data.graph_terms[0]
                         .multi_channeling_setup
-                        .sampling_bridge()? as *const _ as usize,
+                        .sampling_bridge::<f64>()? as *const _ as usize,
                     address
                 );
             }
@@ -3212,7 +3227,7 @@ parent_lmb = [4,6]
             );
             let moved = amplitude.data.graph_terms[0]
                 .multi_channeling_setup
-                .sampling_bridge()?
+                .sampling_bridge::<f64>()?
                 .forward(SamplingChannelId(0), &[0.19, 0.27, 0.61, 0.39, 0.72, 0.58])?;
             assert_ne!(original.raw_coordinates, moved.raw_coordinates);
             // The public shared warmup helper also clears a previous bridge
@@ -3225,7 +3240,7 @@ parent_lmb = [4,6]
             assert!(
                 amplitude.data.graph_terms[0]
                     .multi_channeling_setup
-                    .sampling_bridge()
+                    .sampling_bridge::<f64>()
                     .is_err()
             );
             amplitude.data.graph_terms[0].real_mass_vec = masses;
@@ -3256,6 +3271,8 @@ parent_lmb = [4,6]
                 first.evaluation.integrand_result
             );
         }
+        let mut runtime_for_rescue = integrand.clone();
+        let mut seam_coordinates = None;
         let ProcessIntegrand::Amplitude(integrand) = integrand else {
             unreachable!("generated an amplitude")
         };
@@ -3269,7 +3286,7 @@ parent_lmb = [4,6]
             let bridge = term.compile_sampling_bridge(&parameterization, 5.0, &externals, None)?;
             let cached = term
                 .multi_channeling_setup
-                .sampling_bridge()?
+                .sampling_bridge::<f64>()?
                 .forward(SamplingChannelId(0), &coordinates)?;
             let fresh = bridge.forward(SamplingChannelId(0), &coordinates)?;
             if external[3] == 0.0 {
@@ -3367,6 +3384,13 @@ parent_lmb = [4,6]
             let root = 0.5 * (lower + upper);
             assert!(physical_surface(root).abs() < 1.0e-12);
             let split = root / (root + 5.0 * parameterization.b);
+            if external[3] == 0.0 {
+                let mut seam = coordinates;
+                seam[0] = split + 1.0e-10;
+                let error = bridge.forward(SamplingChannelId(0), &seam).unwrap_err();
+                assert!(error.downcast_ref::<crate::integrands::process::sampling_maps::SamplingEvaluationError>().is_some(), "{error}");
+                seam_coordinates = Some(seam);
+            }
             let mut near_shell = coordinates;
             near_shell[0] = split + 1.0e-5;
             let mapped = bridge.forward(SamplingChannelId(0), &near_shell)?;
@@ -3524,6 +3548,150 @@ parent_lmb = [4,6]
                 && error.contains("evaluated shift")
                 && error.contains("equation")
         );
+        // Replay the original binary64 cube draw through the complete physical
+        // host, including every foreign C/D/LMB density and threshold CT. A
+        // Double map collapses the focused distance; Quad must rebuild it.
+        {
+            use crate::{
+                integrands::evaluation::{PreciseEvaluationResult, StabilityStatus},
+                settings::runtime::{Precision, StabilityLevelSetting},
+                utils::QuadFloat,
+            };
+            use symbolica::prelude::SingleFloat;
+            let stability = &mut runtime_for_rescue.get_mut_settings().stability;
+            stability.rotation_axis.clear();
+            stability.levels = vec![
+                StabilityLevelSetting::default_double(),
+                StabilityLevelSetting::default_quad(),
+            ];
+            runtime_for_rescue.warm_up(&model)?;
+            let source = Sample::Continuous(F(1.0), seam_coordinates.unwrap().map(F).to_vec());
+            let rescued = runtime_for_rescue.evaluate_sample_precise(
+                &source,
+                &model,
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )?;
+            let PreciseEvaluationResult::Quad(rescued) = rescued else {
+                panic!("the actual kite surface must reconstruct at Quad precision");
+            };
+            assert_eq!(
+                rescued.evaluation_metadata.final_precision(),
+                Some(Precision::Quad)
+            );
+            assert_eq!(rescued.evaluation_metadata.stability_results.len(), 2);
+            assert!(matches!(
+                rescued.evaluation_metadata.stability_results[0].status,
+                StabilityStatus::Unstable(0)
+            ));
+            assert!(
+                rescued.integrand_result.re.0.is_finite()
+                    && rescued.integrand_result.im.0.is_finite()
+            );
+            assert_ne!(
+                rescued.integrand_result,
+                Complex::new_re(rescued.integrand_result.re.zero())
+            );
+            assert_eq!(
+                rescued.parameterization_jacobian,
+                Some(F::<QuadFloat>::default().one())
+            );
+            runtime_for_rescue.get_mut_settings().stability.levels =
+                vec![StabilityLevelSetting::default_quad()];
+            runtime_for_rescue.warm_up(&model)?;
+            let direct = runtime_for_rescue.evaluate_sample_precise(
+                &source,
+                &model,
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )?;
+            let PreciseEvaluationResult::Quad(direct) = direct else {
+                unreachable!()
+            };
+            assert_eq!(rescued.integrand_result, direct.integrand_result);
+            let ProcessIntegrand::Amplitude(runtime) = &mut runtime_for_rescue else {
+                unreachable!()
+            };
+            let setup = &runtime.data.graph_terms[0].multi_channeling_setup;
+            assert!(
+                setup.sampling_bridge::<f64>().is_err(),
+                "Quad-only warmup must not require Double geometry"
+            );
+            assert!(setup.sampling_bridge::<QuadFloat>().is_ok());
+            assert!(setup.sampling_bridge::<crate::utils::ArbPrec>().is_err());
+            let catalogue = setup.sampling_catalogue.as_ref().unwrap() as *const _ as usize;
+            let proxies = setup.sampling_proxies.as_ref().unwrap() as *const _ as usize;
+            runtime.prepare_sampling_precision::<crate::utils::ArbPrec>()?;
+            let setup = &runtime.data.graph_terms[0].multi_channeling_setup;
+            assert_eq!(
+                setup.sampling_catalogue.as_ref().unwrap() as *const _ as usize,
+                catalogue
+            );
+            assert_eq!(
+                setup.sampling_proxies.as_ref().unwrap() as *const _ as usize,
+                proxies
+            );
+            assert!(setup.sampling_bridge::<crate::utils::ArbPrec>().is_ok());
+        }
+        // Reuse the generated amplitude at fixed raw momenta, so this range
+        // regression is independent of a focused map or root certificate.
+        // The mass input and its square fit binary64; the full amplitude does not.
+        {
+            use crate::{
+                integrands::evaluation::PreciseEvaluationResult,
+                integrands::process::MomentumSpaceEvaluationInput,
+                settings::runtime::StabilityLevelSetting,
+            };
+            use symbolica::prelude::SingleFloat;
+            let mut heavy_model = model.clone();
+            heavy_model.get_parameter_mut("mass_scalar_1")?.value =
+                Some(Complex::new_re(F(1.0e60)));
+            runtime_for_rescue.get_mut_settings().stability.levels =
+                vec![StabilityLevelSetting::default_arb()];
+            runtime_for_rescue.warm_up(&heavy_model)?;
+            let input = MomentumSpaceEvaluationInput {
+                loop_momenta: vec![
+                    ThreeMomentum::new(F(0.7), F(0.2), F(-0.4)),
+                    ThreeMomentum::new(F(-0.3), F(0.8), F(0.1)),
+                ],
+                integrator_weight: F(1.0),
+                graph_id: Some(0),
+                group_id: None,
+                orientation: None,
+                channel_id: None,
+            };
+            let result = runtime_for_rescue.evaluate_momentum_configuration_precise(
+                &heavy_model,
+                &input,
+                true,
+            )?;
+            let PreciseEvaluationResult::Arb(result) = result else {
+                panic!("explicit Arb output was not retained")
+            };
+            assert!(
+                result.integrand_result.re.0.is_finite()
+                    && result.integrand_result.im.0.is_finite()
+            );
+            assert_ne!(
+                result.integrand_result,
+                Complex::new_re(result.integrand_result.re.zero())
+            );
+            assert!(
+                [&result.integrand_result.re, &result.integrand_result.im]
+                    .into_iter()
+                    .any(|value| value != &value.zero() && value.clone().into_ff64().0 == 0.0)
+            );
+            assert!(!result.evaluation_metadata.is_nan);
+            assert!(
+                runtime_for_rescue
+                    .evaluate_momentum_configuration(&heavy_model, &input, true)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("f64 integration/reporting boundary")
+            );
+        }
         Ok(())
     }
 }

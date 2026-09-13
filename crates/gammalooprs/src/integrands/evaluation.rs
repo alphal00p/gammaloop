@@ -101,8 +101,9 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
 /// The result of an evaluation of the integrand
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationResult {
-    /// Integrand value before the separately reported top-level Jacobian is
-    /// applied. Summed sampling channels already include their individual
+    /// Native map/partition/physics contribution, including its Jacobian.
+    /// The separately reported unapplied top-level Jacobian is unity. Summed
+    /// sampling channels likewise include their individual
     /// map Jacobians and partition factors and report a unit top-level Jacobian.
     pub integrand_result: Complex<F<f64>>,
     pub parameterization_jacobian: Option<F<f64>>,
@@ -140,6 +141,40 @@ pub struct GenericEvaluationResultOutput<T: FloatLike> {
 }
 
 impl<T: FloatLike> GenericEvaluationResult<T> {
+    /// Narrow only the final native map/partition/physics contribution at the
+    /// ordinary integration/reporting boundary. Precise APIs retain this value.
+    pub(crate) fn try_into_f64(self) -> eyre::Result<EvaluationResult> {
+        let weights = std::iter::once(&self.integrand_result).chain(
+            self.event_groups.iter().flat_map(|group| {
+                group.iter().flat_map(|event| {
+                    std::iter::once(&event.weight).chain(event.additional_weights.weights.values())
+                })
+            }),
+        );
+        for value in weights.flat_map(|weight| [&weight.re, &weight.im]) {
+            let reported = value.into_f64();
+            if value.0.is_finite()
+                && (!reported.is_finite() || (reported == 0.0 && value != &value.zero()))
+            {
+                return Err(eyre::eyre!(
+                    "native sampling contribution or event weight {value} cannot be represented by the f64 integration/reporting boundary"
+                ));
+            }
+        }
+        Ok(EvaluationResult {
+            integrand_result: Complex::new(
+                self.integrand_result.re.into_ff64(),
+                self.integrand_result.im.into_ff64(),
+            ),
+            parameterization_jacobian: self
+                .parameterization_jacobian
+                .map(|value| value.into_ff64()),
+            integrator_weight: self.integrator_weight.into_ff64(),
+            event_groups: self.event_groups.to_f64(),
+            evaluation_metadata: self.evaluation_metadata,
+        })
+    }
+
     pub fn into_output(self, minimal_output: bool) -> GenericEvaluationResultOutput<T> {
         GenericEvaluationResultOutput {
             integrand_result: self.integrand_result,
@@ -166,6 +201,14 @@ pub enum PreciseEvaluationResult {
 }
 
 impl PreciseEvaluationResult {
+    pub(crate) fn try_into_f64(self) -> eyre::Result<EvaluationResult> {
+        match self {
+            Self::Double(result) => result.try_into_f64(),
+            Self::Quad(result) => result.try_into_f64(),
+            Self::Arb(result) => result.try_into_f64(),
+        }
+    }
+
     pub fn into_output(self, minimal_output: bool) -> PreciseEvaluationResultOutput {
         match self {
             PreciseEvaluationResult::Double(result) => {

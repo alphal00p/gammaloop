@@ -18,10 +18,10 @@ use symbolica::{atom::Atom, symbol, try_parse};
 
 use super::sampling_maps::combine_contracts;
 use super::{
-    ImplicitSurfaceRadialMap, PreparedCutSamplingContext, SamplingMapAffine, SamplingMapComponent,
-    SamplingMapComposition, SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding,
-    SamplingMapEvaluation, SamplingMapKernel, SamplingPartition, SamplingPartitionMode,
-    SamplingScoreFunction, SurfaceRadialMap,
+    ImplicitSurfaceRadialMap, PreparedCutSamplingContext, SamplingExpressionEvaluator,
+    SamplingMapAffine, SamplingMapComponent, SamplingMapComposition, SamplingMapContract,
+    SamplingMapDefinition, SamplingMapEmbedding, SamplingMapEvaluation, SamplingMapKernel,
+    SamplingPartition, SamplingPartitionMode, SamplingScoreFunction, SurfaceRadialMap,
 };
 use crate::momentum::sample::{LoopMomenta, MomentumSample};
 use crate::settings::runtime::ParameterizationSettings;
@@ -118,33 +118,7 @@ pub struct ResolvedNamedSamplingChannel {
     pub name: String,
     pub definition: SamplingChannelDefinition,
     pub map: SamplingMapDefinition,
-}
-
-/// Parse and eagerly compile a user supplied singularity proxy in the
-/// complete master raw frame.  Proxy expressions use the canonical coordinate
-/// names `x0`, `x1`, ...; using a fixed ordered parameter list keeps the
-/// expression independent of Rust-side map implementation details.
-fn compile_sampling_proxy<T: FloatLike>(
-    source: &str,
-    dimensions: usize,
-) -> Result<SamplingScoreFunction<T>> {
-    let source = source.trim();
-    if source.is_empty() {
-        return Err(eyre!(
-            "sampling singularity proxy expression cannot be empty"
-        ));
-    }
-    if dimensions == 0 {
-        return Err(eyre!(
-            "sampling singularity proxy requires a non-empty raw coordinate frame"
-        ));
-    }
-    let expression = try_parse!(source)
-        .map_err(|error| eyre!("failed to parse sampling singularity proxy `{source}`: {error}"))?;
-    let parameters = (0..dimensions)
-        .map(|index| Atom::var(symbol!(format!("x{index}"))))
-        .collect::<Vec<_>>();
-    SamplingScoreFunction::from_symbolica_positive_expression(expression, parameters)
+    pub singularity_proxy: Option<Atom>,
 }
 
 /// The complete selection for one graph after applying the settings' fallback.
@@ -988,10 +962,7 @@ impl SamplingChannelBridgeAcceptanceReport {
                     .sum::<f64>();
                 let weight = gaussian_normalization
                     * (-0.5 * radius_squared / width.powi(2)).exp()
-                    * evaluation.map.jacobian
-                    * evaluation.partition.weight(channel_index).ok_or_else(|| {
-                        eyre!("sampling bridge partition has no channel {channel_index}")
-                    })?
+                    * evaluation.selected_factor()?
                     * channel_count as f64;
                 report.jacobian_min = report.jacobian_min.min(evaluation.map.jacobian);
                 report.jacobian_max = report.jacobian_max.max(evaluation.map.jacobian);
@@ -1053,14 +1024,46 @@ pub struct SamplingMomentumSampleContext<'a> {
 }
 
 impl<T: FloatLike> SamplingChannelBridgeEvaluation<T> {
+    /// Exact positive map determinant times the selected partition weight.
+    /// A numerical zero here is never a physical cancellation or selector zero.
+    pub fn selected_factor(&self) -> Result<T> {
+        let weight = self
+            .partition
+            .weight(self.channel_id.index())
+            .ok_or_else(|| {
+                eyre!(
+                    "sampling partition has no channel {}",
+                    self.channel_id.index()
+                )
+            })?;
+        let jacobian = F(self.map.jacobian.clone());
+        let weight = F(weight);
+        let factor = &jacobian * &weight;
+        if [&jacobian, &weight, &factor]
+            .iter()
+            .any(|value| !value.0.is_finite() || **value <= value.zero())
+        {
+            return Err(
+                super::sampling_maps::SamplingEvaluationError::Unrepresentable {
+                    operation: "selected sampling factor",
+                    detail: format!(
+                        "channel '{}' has a nonpositive or unrepresentable J*w product {factor}",
+                        self.channel_name
+                    ),
+                }
+                .into(),
+            );
+        }
+        Ok(factor.0)
+    }
+
     /// Materialize this exact full-frame bridge point as a graph-evaluator
     /// momentum sample. The production sampler uses the same conversion after
     /// graph-level channel and cut preparation.
-    pub fn to_momentum_sample<U: FloatLike>(
+    pub fn to_momentum_sample(
         &self,
         context: SamplingMomentumSampleContext<'_>,
-        convert: impl Fn(&T) -> F<U>,
-    ) -> Result<MomentumSample<U>> {
+    ) -> Result<MomentumSample<T>> {
         if self.raw_coordinates.len() != self.map.point.len() {
             return Err(eyre!(
                 "sampling bridge point has {} coordinates but its raw frame has {}",
@@ -1089,9 +1092,9 @@ impl<T: FloatLike> SamplingChannelBridgeEvaluation<T> {
         let loop_momenta =
             LoopMomenta::from_iter(self.raw_coordinates.chunks_exact(3).map(|components| {
                 ThreeMomentum::new(
-                    convert(&components[0]),
-                    convert(&components[1]),
-                    convert(&components[2]),
+                    F(components[0].clone()),
+                    F(components[1].clone()),
+                    F(components[2].clone()),
                 )
             }));
         MomentumSample::new(
@@ -1099,7 +1102,7 @@ impl<T: FloatLike> SamplingChannelBridgeEvaluation<T> {
             context.loop_mom_cache_id,
             context.external_moms,
             context.external_mom_cache_id,
-            convert(&self.map.jacobian),
+            F(self.map.jacobian.clone()),
             context.dependent_momenta_constructor,
             context.orientation,
         )
@@ -2358,6 +2361,28 @@ impl SamplingChannelCatalogue {
         }
     }
 
+    /// Compile user supplied proxies once in canonical channel order. Every
+    /// native geometry binding borrows these same precision-independent programs.
+    /// Proxy expressions use the complete master raw frame's ordered x0, x1, ...
+    /// coordinates, independently of the numerical map implementation.
+    pub fn compile_proxies(
+        &self,
+        dimensions: usize,
+    ) -> Result<Vec<Option<SamplingExpressionEvaluator>>> {
+        self.entries.iter().map(|entry| {
+            let SamplingCatalogueEntry::Named(channel) = entry else { return Ok(None); };
+            channel.singularity_proxy.as_ref().map(|expression| {
+                if dimensions == 0 {
+                    return Err(eyre!("sampling singularity proxy requires a non-empty raw coordinate frame"));
+                }
+                let parameters = (0..dimensions)
+                    .map(|index| Atom::var(symbol!(format!("x{index}"))))
+                    .collect::<Vec<_>>();
+                SamplingExpressionEvaluator::new_positive_proxy(expression.clone(), parameters)
+            }).transpose()
+        }).collect()
+    }
+
     /// Compile ordinary LMB/surface entries and the bounded conditional
     /// `then(lmb|complement, surface?)` route in this catalogue.
     ///
@@ -2370,7 +2395,18 @@ impl SamplingChannelCatalogue {
     pub fn compile<T: FloatLike>(
         &self,
         context: &SamplingChannelCompileContext<T>,
+        proxies: &[Option<SamplingExpressionEvaluator>],
     ) -> Result<Vec<CompiledSamplingChannel<T>>, SamplingChannelCompileError> {
+        if proxies.len() != self.entries.len() {
+            return Err(SamplingChannelCompileError::InvalidChannel {
+                channel: self.graph_name.clone(),
+                error: format!(
+                    "compiled proxy vector has {} entries, expected {} canonical channels",
+                    proxies.len(),
+                    self.entries.len()
+                ),
+            });
+        }
         if context.master_graph.trim().is_empty() {
             return Err(SamplingChannelCompileError::EmptyMasterGraph);
         }
@@ -2390,7 +2426,7 @@ impl SamplingChannelCatalogue {
             });
         }
         let mut compiled = Vec::with_capacity(self.entries.len());
-        for entry in &self.entries {
+        for (entry, proxy) in self.entries.iter().zip(proxies) {
             let (name, basis_id, definition, map, singularity_proxy) = match entry {
                 SamplingCatalogueEntry::Lmb {
                     basis_id, edges, ..
@@ -2594,19 +2630,34 @@ impl SamplingChannelCatalogue {
                             ));
                         }
                     };
-                    let singularity_proxy = channel
-                        .definition
-                        .singularity_proxy
-                        .as_deref()
-                        .map(|source| {
-                            compile_sampling_proxy(source, 3 * context.n_loop_momenta).map_err(
-                                |error| SamplingChannelCompileError::InvalidChannel {
+                    if proxy.is_some() != channel.singularity_proxy.is_some() {
+                        return Err(SamplingChannelCompileError::InvalidChannel {
+                            channel: channel.name.clone(),
+                            error:
+                                "compiled proxy presence does not match the canonical definition"
+                                    .into(),
+                        });
+                    }
+                    let singularity_proxy = proxy
+                        .as_ref()
+                        .map(|program| {
+                            if program.parameter_count() != 3 * context.n_loop_momenta {
+                                return Err(SamplingChannelCompileError::InvalidChannel {
                                     channel: channel.name.clone(),
-                                    error: format!(
-                                        "invalid singularity_proxy expression `{source}`: {error}"
-                                    ),
-                                },
+                                    error:
+                                        "compiled proxy does not use the complete master raw frame"
+                                            .into(),
+                                });
+                            }
+                            SamplingScoreFunction::from_compiled_symbolica_positive_expression(
+                                program.clone(),
                             )
+                            .map_err(|error| {
+                                SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: format!("invalid compiled singularity_proxy: {error}"),
+                                }
+                            })
                         })
                         .transpose()?;
                     (
@@ -3049,17 +3100,21 @@ fn resolve_selection(
                 error: error.to_string(),
             }
         })?;
-        if let Some(proxy) = definition.singularity_proxy.as_deref() {
-            let _ = try_parse!(proxy.trim()).map_err(|error| {
-                SamplingSelectionError::InvalidChannelDefinition {
-                    graph: graph_name.to_owned(),
-                    channel: name.clone(),
-                    error: format!(
-                        "failed to parse singularity_proxy `{proxy}` with Symbolica: {error}"
-                    ),
-                }
-            })?;
-        }
+        let singularity_proxy = definition
+            .singularity_proxy
+            .as_deref()
+            .map(|proxy| {
+                try_parse!(proxy.trim()).map_err(|error| {
+                    SamplingSelectionError::InvalidChannelDefinition {
+                        graph: graph_name.to_owned(),
+                        channel: name.clone(),
+                        error: format!(
+                            "failed to parse singularity_proxy `{proxy}` with Symbolica: {error}"
+                        ),
+                    }
+                })
+            })
+            .transpose()?;
         if contains_surface_map(&map) {
             if definition.subspace_lmb.is_empty() {
                 return Err(SamplingSelectionError::MissingSubspaceLmb {
@@ -3087,6 +3142,7 @@ fn resolve_selection(
             name: name.clone(),
             definition: definition.clone(),
             map,
+            singularity_proxy,
         });
     }
 
@@ -3126,6 +3182,89 @@ mod tests {
     use crate::initialisation::test_initialise;
     use crate::integrands::process::{SamplingCutSide, SamplingSupport};
     use crate::settings::runtime::ParameterizationSettings;
+
+    #[test]
+    fn selected_sampling_factor_rejects_underflow_before_physical_cancellation() {
+        use super::super::sampling_maps::{SamplingEvaluationError, SamplingSupport};
+        use crate::utils::ArbPrec;
+        let evaluation = SamplingChannelBridgeEvaluation {
+            channel_id: SamplingChannelId(0),
+            channel_name: "focused".into(),
+            raw_coordinates: vec![1.0; 3],
+            map: SamplingMapEvaluation {
+                coordinates: vec![0.5; 3],
+                point: vec![1.0; 3],
+                jacobian: 1.0e-200,
+                inverse_jacobian: 1.0e200,
+                residual: 0.0,
+                support: SamplingSupport::Full,
+                diagnostics: Vec::new(),
+            },
+            partition: SamplingPartition {
+                mode: SamplingPartitionMode::SingularityProxy,
+                log_scores: vec![Some(1.0e-200_f64.ln()), Some(0.0)],
+                weights: vec![1.0e-200, 1.0],
+                log_denominator: 0.0,
+            },
+        };
+        assert!(evaluation.map.jacobian.is_finite() && evaluation.map.jacobian > 0.0);
+        assert!(
+            evaluation.partition.weights[0].is_finite() && evaluation.partition.weights[0] > 0.0
+        );
+        let error = evaluation.selected_factor().unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<SamplingEvaluationError>(),
+            Some(SamplingEvaluationError::Unrepresentable { .. })
+        ));
+        let native = SamplingChannelBridgeEvaluation {
+            channel_id: evaluation.channel_id,
+            channel_name: evaluation.channel_name,
+            raw_coordinates: evaluation
+                .raw_coordinates
+                .into_iter()
+                .map(|value| F::<ArbPrec>::from_f64(value).0)
+                .collect(),
+            map: SamplingMapEvaluation {
+                coordinates: evaluation
+                    .map
+                    .coordinates
+                    .into_iter()
+                    .map(|value| F::<ArbPrec>::from_f64(value).0)
+                    .collect(),
+                point: evaluation
+                    .map
+                    .point
+                    .into_iter()
+                    .map(|value| F::<ArbPrec>::from_f64(value).0)
+                    .collect(),
+                jacobian: F::<ArbPrec>::from_f64(evaluation.map.jacobian).0,
+                inverse_jacobian: F::<ArbPrec>::from_f64(evaluation.map.inverse_jacobian).0,
+                residual: F::<ArbPrec>::from_f64(0.0).0,
+                support: evaluation.map.support,
+                diagnostics: Vec::new(),
+            },
+            partition: SamplingPartition {
+                mode: evaluation.partition.mode,
+                log_scores: evaluation
+                    .partition
+                    .log_scores
+                    .into_iter()
+                    .map(|value| value.map(|value| F::<ArbPrec>::from_f64(value).0))
+                    .collect(),
+                weights: evaluation
+                    .partition
+                    .weights
+                    .into_iter()
+                    .map(|value| F::<ArbPrec>::from_f64(value).0)
+                    .collect(),
+                log_denominator: F::<ArbPrec>::from_f64(0.0).0,
+            },
+        };
+        let factor = F(native.selected_factor().unwrap());
+        assert!(factor > factor.zero());
+        let expected = factor.one().from_usize(10).powi(-400);
+        assert!((&factor / expected - factor.one()).abs() < factor.one().from_usize(10).powi(-15));
+    }
 
     #[test]
     fn native_bridge_preserves_composed_points_and_foreign_inverse_densities() {
@@ -3328,7 +3467,8 @@ mod tests {
             100.0,
             1,
         );
-        let channels = catalogue.compile(&context)?;
+        let proxies = catalogue.compile_proxies(3 * context.n_loop_momenta)?;
+        let channels = catalogue.compile(&context, &proxies)?;
         SamplingChannelBridge::new_with_partition_mode(
             channels,
             SamplingPartitionMode::SingularityProxy,
@@ -3468,7 +3608,17 @@ mod tests {
             100.0,
             2,
         );
-        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let bridge = SamplingChannelBridge::new(
+            catalogue
+                .compile(
+                    &context,
+                    &catalogue
+                        .compile_proxies(3 * context.n_loop_momenta)
+                        .unwrap(),
+                )
+                .unwrap(),
+        )
+        .unwrap();
 
         let state =
             DeferredCrossSectionSamplingState::new("G", 17, Some(2), vec![1, 2], 2, 2).unwrap();
@@ -3884,7 +4034,14 @@ mod tests {
                 power: 1.0,
             },
         );
-        let compiled = catalogue.compile(&context).unwrap();
+        let compiled = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap();
         assert_eq!(compiled.len(), 2);
         assert!(matches!(compiled[0].map, CompiledSamplingMap::Lmb(_)));
         assert_eq!(compiled[0].embedded_edges, vec![1, 2]);
@@ -3931,7 +4088,14 @@ mod tests {
                 100.0,
                 2,
             );
-            let error = catalogue.compile(&context).unwrap_err();
+            let error = catalogue
+                .compile(
+                    &context,
+                    &catalogue
+                        .compile_proxies(3 * context.n_loop_momenta)
+                        .unwrap(),
+                )
+                .unwrap_err();
             match error {
                 SamplingChannelCompileError::UnsupportedSingularPrimitive {
                     primitive,
@@ -3979,7 +4143,14 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-        let compiled = catalogue.compile(&context).unwrap();
+        let compiled = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap();
         assert!(matches!(
             compiled[0].map,
             CompiledSamplingMap::ImplicitSurface(_)
@@ -4030,7 +4201,14 @@ mod tests {
                 })),
             )
             .unwrap();
-        let compiled = catalogue.compile(&context).unwrap();
+        let compiled = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap();
         assert_eq!(compiled.len(), 1);
         let channel = &compiled[0];
         assert_eq!(channel.embedded_edges, vec![1, 2]);
@@ -4094,7 +4272,17 @@ mod tests {
                 })),
             )
             .unwrap();
-        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let bridge = SamplingChannelBridge::new(
+            catalogue
+                .compile(
+                    &context,
+                    &catalogue
+                        .compile_proxies(3 * context.n_loop_momenta)
+                        .unwrap(),
+                )
+                .unwrap(),
+        )
+        .unwrap();
         let mut contexts = SamplingChannelRuntimeContexts::new(bridge.channels().len());
         contexts.set(SamplingChannelId::from(0), vec![0.0]).unwrap();
         contexts.set(SamplingChannelId::from(1), vec![0.2]).unwrap();
@@ -4160,7 +4348,14 @@ mod tests {
                 )
                 .unwrap();
         }
-        let compiled = catalogue.compile(&context).unwrap();
+        let compiled = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap();
         assert_eq!(compiled.len(), 2);
         assert_eq!(compiled[0].name, "h");
         assert_eq!(compiled[1].name, "z");
@@ -4198,7 +4393,14 @@ mod tests {
             100.0,
             2,
         );
-        let error = catalogue.compile(&context).unwrap_err();
+        let error = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap_err();
         assert!(matches!(
             error,
             SamplingChannelCompileError::MissingLmbFrameMap { .. }
@@ -4234,7 +4436,14 @@ mod tests {
             )
             .unwrap(),
         );
-        let compiled = catalogue.compile(&context).unwrap();
+        let compiled = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap();
         assert!(matches!(
             compiled[0].map,
             CompiledSamplingMap::AffineLmb { .. }
@@ -4286,7 +4495,14 @@ mod tests {
         );
         let coordinates = [0.31, 0.42, 0.57, 0.23, 0.68, 0.81]
             .map(|value| F::<crate::utils::f128>::from_f64(value).0);
-        let native = catalogue.compile(&native_context).unwrap();
+        let native = catalogue
+            .compile(
+                &native_context,
+                &catalogue
+                    .compile_proxies(3 * native_context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap();
         let original = native[0].forward(&coordinates).unwrap();
         let mut matrix = identity;
         matrix[0][0] = (one + displacement).0;
@@ -4294,7 +4510,14 @@ mod tests {
             0,
             SamplingMapAffine::new(matrix, vec![displacement.0; 6]).unwrap(),
         );
-        let shifted = catalogue.compile(&native_context).unwrap();
+        let shifted = catalogue
+            .compile(
+                &native_context,
+                &catalogue
+                    .compile_proxies(3 * native_context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap();
         assert_eq!(shifted[0].name, native[0].name);
         assert_eq!(shifted[0].embedded_edges, native[0].embedded_edges);
         let mapped = shifted[0].forward(&coordinates).unwrap();
@@ -4355,7 +4578,14 @@ mod tests {
             )
             .unwrap(),
         );
-        let compiled = catalogue.compile(&context).unwrap();
+        let compiled = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap();
         assert!(matches!(
             compiled[0].map,
             CompiledSamplingMap::AffineLmb { .. }
@@ -4399,7 +4629,14 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-        let compiled = catalogue.compile(&context).unwrap();
+        let compiled = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap();
         assert_eq!(compiled.len(), 1);
         assert!(matches!(compiled[0].map, CompiledSamplingMap::Embedded(_)));
         assert_eq!(compiled[0].embedded_edges, vec![1, 2]);
@@ -4430,14 +4667,39 @@ mod tests {
             100.0,
             2,
         );
-        let error = catalogue.compile(&context).unwrap_err();
+        let error = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap_err();
         assert!(error.to_string().contains("on_cut [3]"));
 
         let mut matching = context.clone();
         matching.cut_id = Some(3);
-        assert!(catalogue.compile(&matching).is_ok());
+        assert!(
+            catalogue
+                .compile(
+                    &matching,
+                    &catalogue
+                        .compile_proxies(3 * matching.n_loop_momenta)
+                        .unwrap()
+                )
+                .is_ok()
+        );
         matching.cut_id = Some(4);
-        assert!(catalogue.compile(&matching).is_err());
+        assert!(
+            catalogue
+                .compile(
+                    &matching,
+                    &catalogue
+                        .compile_proxies(3 * matching.n_loop_momenta)
+                        .unwrap()
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -4458,12 +4720,24 @@ mod tests {
             100.0,
             2,
         );
-        let error = catalogue.compile(&context).unwrap_err();
+        let error = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap_err();
         assert!(error.to_string().contains("requires prepared side Right"));
 
         let mut left = context.clone();
         left.side = Some(crate::integrands::process::SamplingCutSide::Left);
-        let error = catalogue.compile(&left).unwrap_err();
+        let error = catalogue
+            .compile(
+                &left,
+                &catalogue.compile_proxies(3 * left.n_loop_momenta).unwrap(),
+            )
+            .unwrap_err();
         assert!(error.to_string().contains("requires prepared side Right"));
     }
 
@@ -4485,7 +4759,14 @@ mod tests {
             100.0,
             2,
         );
-        let error = catalogue.compile(&context).unwrap_err();
+        let error = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap_err();
         assert!(matches!(
             error,
             SamplingChannelCompileError::MissingPreparedCutContext { .. }
@@ -4536,7 +4817,17 @@ mod tests {
                 )
                 .unwrap();
         }
-        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let bridge = SamplingChannelBridge::new(
+            catalogue
+                .compile(
+                    &context,
+                    &catalogue
+                        .compile_proxies(3 * context.n_loop_momenta)
+                        .unwrap(),
+                )
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(bridge.channels().len(), 2);
         for (id, channel) in bridge.channels().iter().enumerate() {
             assert_eq!(channel.embedded_edges, vec![1]);
@@ -4565,11 +4856,25 @@ mod tests {
         // Neither a cut label without a map nor a map without a graph cut
         // registration is sufficient to enable the physical-cut syntax.
         context.physical_cut_ids.remove(&vec![4, 7]);
-        assert!(catalogue.compile(&context).is_err());
+        assert!(
+            catalogue
+                .compile(
+                    &context,
+                    &catalogue
+                        .compile_proxies(3 * context.n_loop_momenta)
+                        .unwrap()
+                )
+                .is_err()
+        );
         context.physical_cut_ids.insert(vec![4, 7], vec![9]);
         assert!(
             catalogue
-                .compile(&context)
+                .compile(
+                    &context,
+                    &catalogue
+                        .compile_proxies(3 * context.n_loop_momenta)
+                        .unwrap()
+                )
                 .unwrap_err()
                 .to_string()
                 .contains("on_cut [3]")
@@ -4617,7 +4922,7 @@ mod tests {
             });
 
             assert!(matches!(
-                catalogue.compile(&context),
+                catalogue.compile(&context, &catalogue.compile_proxies(3 * context.n_loop_momenta).unwrap()),
                 Err(SamplingChannelCompileError::MissingPreparedCutContext {
                     channel,
                     ..
@@ -4655,7 +4960,12 @@ mod tests {
         assert_eq!(context.orientation, Some(2));
         assert_eq!(context.side, Some(SamplingCutSide::Left));
         assert!(matches!(
-            catalogue.compile(&context),
+            catalogue.compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap()
+            ),
             Err(SamplingChannelCompileError::InvalidChannel { .. })
         ));
 
@@ -4727,7 +5037,14 @@ mod tests {
             vec![1, 2],
         ))
         .unwrap();
-        let error = catalogue.compile(&missing_orientation).unwrap_err();
+        let error = catalogue
+            .compile(
+                &missing_orientation,
+                &catalogue
+                    .compile_proxies(3 * missing_orientation.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap_err();
         assert!(error.to_string().contains("explicit orientation"));
 
         let wrong_side = SamplingChannelCompileContext::<f64>::new(
@@ -4743,7 +5060,14 @@ mod tests {
             vec![1, 2],
         ))
         .unwrap();
-        let error = catalogue.compile(&wrong_side).unwrap_err();
+        let error = catalogue
+            .compile(
+                &wrong_side,
+                &catalogue
+                    .compile_proxies(3 * wrong_side.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap_err();
         assert!(error.to_string().contains("requires prepared side Left"));
     }
 
@@ -4766,7 +5090,12 @@ mod tests {
             2,
         );
         assert!(matches!(
-            catalogue.compile(&context),
+            catalogue.compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap()
+            ),
             Err(SamplingChannelCompileError::MissingSurfaceGeometry { .. })
         ));
     }
@@ -4799,7 +5128,15 @@ mod tests {
                 power: 1.0,
             },
         );
-        let error = catalogue.compile(&context).unwrap_err().to_string();
+        let error = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("overlaps child"));
         assert!(error.contains("parent LMB [1, 2]"));
     }
@@ -4838,7 +5175,14 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-        let compiled = catalogue.compile(&context).unwrap();
+        let compiled = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap();
         assert!(matches!(compiled[0].map, CompiledSamplingMap::Embedded(_)));
         assert_eq!(compiled[0].embedded_edges, vec![1, 2]);
         assert_eq!(
@@ -4890,7 +5234,14 @@ mod tests {
                 power: 1.0,
             },
         );
-        let error = catalogue.compile(&context).unwrap_err();
+        let error = catalogue
+            .compile(
+                &context,
+                &catalogue
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+            )
+            .unwrap_err();
         let diagnostic = error.to_string();
         assert!(diagnostic.contains("overlaps child 0"));
         assert!(diagnostic.contains("parent LMB [1, 2]"));
@@ -4950,16 +5301,13 @@ mod tests {
 
         let externals = Externals::default();
         let sample = evaluation
-            .to_momentum_sample::<f64>(
-                SamplingMomentumSampleContext {
-                    loop_mom_cache_id: 4,
-                    external_moms: &externals,
-                    external_mom_cache_id: 7,
-                    dependent_momenta_constructor: DependentMomentaConstructor::CrossSection,
-                    orientation: Some(2),
-                },
-                |value| F(*value),
-            )
+            .to_momentum_sample(SamplingMomentumSampleContext {
+                loop_mom_cache_id: 4,
+                external_moms: &externals,
+                external_mom_cache_id: 7,
+                dependent_momenta_constructor: DependentMomentaConstructor::CrossSection,
+                orientation: Some(2),
+            })
             .unwrap();
         assert_eq!(sample.loop_moms().0.len(), 1);
         assert_eq!(sample.sample.orientation, Some(2));
@@ -4984,7 +5332,17 @@ mod tests {
             2.0,
             1,
         );
-        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let bridge = SamplingChannelBridge::new(
+            catalogue
+                .compile(
+                    &context,
+                    &catalogue
+                        .compile_proxies(3 * context.n_loop_momenta)
+                        .unwrap(),
+                )
+                .unwrap(),
+        )
+        .unwrap();
 
         let bins = 24usize;
         let normalisation = (2.0 * std::f64::consts::PI).powf(-1.5);
@@ -5032,7 +5390,17 @@ mod tests {
             2.0,
             1,
         );
-        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let bridge = SamplingChannelBridge::new(
+            catalogue
+                .compile(
+                    &context,
+                    &catalogue
+                        .compile_proxies(3 * context.n_loop_momenta)
+                        .unwrap(),
+                )
+                .unwrap(),
+        )
+        .unwrap();
         let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
             &bridge,
             1024,
@@ -5089,7 +5457,17 @@ mod tests {
                 power: 1.0,
             },
         );
-        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let bridge = SamplingChannelBridge::new(
+            catalogue
+                .compile(
+                    &context,
+                    &catalogue
+                        .compile_proxies(3 * context.n_loop_momenta)
+                        .unwrap(),
+                )
+                .unwrap(),
+        )
+        .unwrap();
         let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
             &bridge,
             512,
@@ -5118,7 +5496,17 @@ mod tests {
             2.0,
             1,
         );
-        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let bridge = SamplingChannelBridge::new(
+            catalogue
+                .compile(
+                    &context,
+                    &catalogue
+                        .compile_proxies(3 * context.n_loop_momenta)
+                        .unwrap(),
+                )
+                .unwrap(),
+        )
+        .unwrap();
         let report = SamplingChannelBridgeAcceptanceReport::normalized_gaussian(
             &bridge,
             512,

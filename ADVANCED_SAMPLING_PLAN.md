@@ -14,8 +14,9 @@ numbers remain graph-routing metadata; they never define another channel axis.
 Summed and Monte-Carlo sampling now use the same canonical bridge for amplitudes
 and cross sections. The `LegacyLmb` request and its LMB-only partition/prefactor
 implementation have been removed. Summed sampling applies `J_c w_c` once per
-channel to the graph result and event weight, with outer Jacobian one; Monte
-Carlo keeps its selected-map factor and separate grid probability. Mapping is
+channel to the graph result and event weight, with outer Jacobian one. Monte
+Carlo also combines its selected map/partition factor with the physical value
+at native precision, keeping only grid probability separate. Mapping is
 performed before applying each stability rotation. Direct momentum input retains
 its supplied raw point. The remaining default single-basis reinterpretation and
 obsolete weight-setting aliases still require cleanup; they are not an
@@ -107,19 +108,36 @@ exponent range; extreme range tests correctly require Arb recovery.
 The broader 162-test sampling suite and both API regressions also pass, including
 saved-state reference acceptance and physical summed/explicit-channel equality.
 
-Strong focusing still exposes a production precision boundary: callers bind the
-f64 bridge before constructing a higher-precision momentum sample. A radius
-rounded onto the threshold must raise a precision error,
-never discard a finite band or return a zero contribution. Connect such errors
-to native map/foreign-density recomputation in the existing stability stack
-before long integrations. For `R=3`, `beta=2`, an independent half-ULP estimate
+The production sampler now binds native geometry and recomputes maps and foreign
+densities from the original binary64 draw through the existing stability stack.
+Eight focused tests pass, including real kite and cut Double-to-Quad rescue,
+Arb external improvement and cache invalidation, a positive sampling-factor
+underflow guard, and precise API output outside f64 range. Ordinary reporting
+rejects unrepresentable contributions/events; it does not silently zero them.
+The broader 169-test core gate and both saved-state/summed API regressions pass;
+six integration API tests also pass for precise output, grouped events and
+X-space/momentum-space event and histogram weights. Formatting, core/API checks,
+the integration API check and clippy pass, with no warnings on changed lines.
+A radius rounded onto the threshold
+raises a typed precision error, never discards a finite band or returns zero.
+For `R=3`, `beta=2`, an independent half-ULP estimate
 of the combined radial-coordinate band is about `9.38e-9` at power 2 and
 `4.44e-6` at power 3; arithmetic cancellation can enlarge it. Native component
-tests alone do not establish production map rescue. Structural map errors must
-still fail immediately rather than being mistaken for numerical instability.
+tests alone do not establish production map rescue. The new physical tests
+establish native reconstruction; they do not yet certify root uncertainty
+against the requested signed distance and density accuracy. That certificate,
+native retry in the reference harness, and final adaptive-grid range handling
+remain prerequisites for their corresponding long-run acceptance claims.
+Structural map errors still fail immediately rather than retrying as numerical
+instability.
 The owner-by-owner migration, root-localization versus density-accuracy criteria,
 and original-source rescue gates are specified in
 [SAMPLING_PRECISION_RESCUE.md](docs/research/advanced_sampling/SAMPLING_PRECISION_RESCUE.md).
+The native host audit also found that the existing `EdgeMass::Evaluator` owner
+computes derived mass expressions in f64, even through its generic accessor.
+Direct model masses are the original input boundary; native derived-expression
+masses require a later extension of that shared physical/sampling owner. Do not
+describe promoted derived masses as fully native geometry.
 
 The driver now retains the bridge in the existing `RuntimeCache`/warmup owner
 and borrows its catalogue on the hot path. Settings mutation invalidates it;
@@ -535,12 +553,18 @@ Jacobians and partitions remain outside all residue derivatives. The physics
 Require adequate broad coverage, not just positivity. Pure exact-h proposals
 can give the Gaussian reference infinite variance at the raw origin; some
 high-power log-logistic fits do too. Include a normalized broad component such
-as `s/(s+t)^2`, or certify equivalent coverage from a selected ordinary channel
+as `a/(a+t)^2` with `a=R_c/beta` and `beta=e_cm*b`. This induces the existing
+ordinary raw-radius density `beta/(beta+r)^2`, independently of the cut root.
+Alternatively, certify equivalent coverage from a selected ordinary channel
 with a positive probability. A mixture must use its actual full density and
 CDF/inverse (or all inverse branches), rather than an artificial denominator
 floor. Users may disable the component only with explicit diagnostics about
 the resulting reference-moment assumptions. Use the same deterministic ordinary
-fallback in forward and inverse when the cut has no regular radial root.
+fallback with power one in forward and inverse when the cut has no regular
+radial root. The first mixture implementation inverts its monotone analytic CDF
+with the existing scalar solver, bracketed by its two component quantiles.
+Splitting the cube interval between two full-support maps would introduce two
+preimages and is not compatible with returning only one branch's determinant.
 
 Each selected host contributes a canonical channel, while every channel still
 evaluates the full physical cut/CT sum. Evaluate all foreign densities at the
@@ -548,7 +572,9 @@ same raw momentum point with their own `t_c`; never substitute the selected
 host's t into another cut's density. Validate radial normalization, tails,
 independent Cartesian determinants, simple-residue radial flattening, and the
 raised-residue oracle `integral t^j h^(j)(t) dt = (-1)^j j!` where endpoint
-terms vanish. Exercise the loaded-state reference harness with broad coverage.
+terms vanish. For existing tabulated h normalizers, check the derivative-packet
+identity relative to the same measured zeroth moment, and test normalization
+separately at the table's accuracy. Exercise the loaded-state reference harness with broad coverage.
 Then compare all-orientation GL638 absolute/signed moments, maximum weights,
 root ratios, precision-rescue rate and time at equal work budgets. This radial
 optimization complements the H/Z and CT-star shape channels; its one-dimensional

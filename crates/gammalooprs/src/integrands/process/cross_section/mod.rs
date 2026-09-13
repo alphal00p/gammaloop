@@ -17,7 +17,7 @@ use crate::{
             evaluators::{ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single},
             graph_to_group_id_for_group_structure,
             param_builder::LUParams,
-            prepare_buffered_event, resolve_sampling_channel_selection,
+            prepare_buffered_event,
             threshold_multiplier::{
                 ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierExpression,
                 ThresholdMultiplierLayout,
@@ -53,7 +53,7 @@ use crate::{
         },
     },
     utils::{
-        F, FloatLike, Length, h, h_dual,
+        F, FloatLike, Length, RuntimeCache, h, h_dual,
         hyperdual_utils::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape,
@@ -96,11 +96,10 @@ use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
 use super::{
-    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
-    evaluate_sample, filtered_orientation_count, format_orientation_label,
-    format_sampling_channel_label, histogram_process_info_for_integrand,
-    resolve_visible_orientation_id, validate_group_orientation_catalogs,
-    validate_process_runtime_settings,
+    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, create_grid, evaluate_sample,
+    filtered_orientation_count, format_orientation_label, format_sampling_channel_label,
+    histogram_process_info_for_integrand, resolve_visible_orientation_id,
+    validate_group_orientation_catalogs, validate_process_runtime_settings,
 };
 
 pub mod export;
@@ -422,7 +421,7 @@ impl CrossSectionIntegrand {
     pub(crate) fn invalidate_runtime_caches(&mut self) {
         self.event_processing_runtime.invalidate();
         for term in &mut self.data.graph_terms {
-            term.multi_channeling_setup.sampling_bridge.invalidate();
+            term.multi_channeling_setup.invalidate_sampling();
         }
     }
 }
@@ -610,7 +609,6 @@ pub struct CrossSectionGraphTerm {
 }
 
 struct CutEventGenerationContext<'a> {
-    settings: &'a RuntimeSettings,
     model: &'a Model,
     channel_id: Option<SamplingChannelId>,
 }
@@ -1357,6 +1355,10 @@ impl CrossSectionGraphTerm {
                 cut_threshold_associations: graph.derived_data.cut_threshold_associations.clone(),
                 multi_channeling_setup: LmbMultiChannelingSetup {
                     sampling_bridge: Default::default(),
+                    sampling_bridge_quad: Default::default(),
+                    sampling_bridge_arb: Default::default(),
+                    sampling_catalogue: Default::default(),
+                    sampling_proxies: Default::default(),
                     lmb_basis_ids: TiVec::new(),
                     graph: graph.graph.clone(), // will be overwritten later,
                     all_bases: TiVec::new(),
@@ -1472,18 +1474,30 @@ impl CrossSectionGraphTerm {
         new_event.cut_info.sampling_channel_edge_ids = event_context
             .channel_id
             .map(|channel_id| {
-                let parameterization_settings = event_context
-                    .settings
-                    .sampling
-                    .get_parameterization_settings()
-                    .expect("LMB channel event metadata requires a parameterization.");
-                self.multi_channeling_setup.sampling_channel_edge_ids(
-                    channel_id,
-                    &self.multi_channeling_setup.graph.name,
-                    &parameterization_settings,
-                )
+                let catalogue = self
+                    .multi_channeling_setup
+                    .sampling_catalogue
+                    .as_ref()
+                    .ok_or_else(|| {
+                        eyre!(
+                            "sampling event metadata for graph '{}' requires warm_up",
+                            self.graph.name
+                        )
+                    })?;
+                match catalogue.entries.get(channel_id.index()) {
+                    Some(super::SamplingCatalogueEntry::Lmb { edges, .. }) => {
+                        Ok(Some(edges.iter().copied().collect()))
+                    }
+                    Some(_) => Ok(None),
+                    None => Err(eyre!(
+                        "sampling event channel {} is absent from graph '{}'",
+                        channel_id.index(),
+                        self.graph.name
+                    )),
+                }
             })
-            .transpose()?;
+            .transpose()?
+            .flatten();
         // Set initial momenta and PDGs for the event
         new_event
             .kinematic_configuration
@@ -1615,13 +1629,15 @@ impl GraphTerm for CrossSectionGraphTerm {
         )
     }
 
-    fn compile_sampling_bridge(
+    fn bind_sampling_bridge<T: FloatLike>(
         &self,
+        catalogue: &super::SamplingChannelCatalogue,
+        proxies: &[Option<super::SamplingExpressionEvaluator>],
         parameterization_settings: &ParameterizationSettings,
         e_cm: f64,
-        external_momenta: &[[f64; 4]],
+        external_momenta: &[[T; 4]],
         orientation: Option<usize>,
-    ) -> Result<SamplingChannelBridge> {
+    ) -> Result<SamplingChannelBridge<T>> {
         let parent_lmb = self
             .multi_channeling_setup
             .graph
@@ -1630,6 +1646,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             .iter()
             .map(|edge| edge.0)
             .collect();
+        let zero = F::<T>::default().zero();
         let mut context = SamplingChannelCompileContext::new(
             self.multi_channeling_setup.graph.name.clone(),
             parent_lmb,
@@ -1638,11 +1655,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             self.graph.get_loop_number(),
         );
         context.orientation = orientation;
-        let resolved = resolve_sampling_channel_selection(
-            &self.multi_channeling_setup.graph.name,
-            &parameterization_settings.sampling_channels,
-        )?;
-        if resolved.named_channels.iter().any(|channel| {
+        if catalogue.named_entries().any(|channel| {
             matches!(&channel.map, super::SamplingMapDefinition::PhaseSpace(inner)
                 if matches!(inner.as_ref(), super::SamplingMapDefinition::Cut(_)))
         }) {
@@ -1652,16 +1665,18 @@ impl GraphTerm for CrossSectionGraphTerm {
                     self.graph.name
                 )
             })?;
-            let masses = self
-                .graph
-                .new_edgevec(|_, edge, _| cached_masses[edge].unwrap_or(F(0.0)));
+            let masses = self.graph.new_edgevec(|_, edge, _| {
+                cached_masses[edge]
+                    .map(F::<T>::from_ff64)
+                    .unwrap_or_else(|| zero.clone())
+            });
             let externals = crate::momentum::sample::ExternalFourMomenta::from_iter(
                 external_momenta.iter().map(|momentum| {
                     FourMomentum::from_args(
-                        F(momentum[0]),
-                        F(momentum[1]),
-                        F(momentum[2]),
-                        F(momentum[3]),
+                        F(momentum[0].clone()),
+                        F(momentum[1].clone()),
+                        F(momentum[2].clone()),
+                        F(momentum[3].clone()),
                     )
                 }),
             );
@@ -1677,7 +1692,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .map(|edge| edge.0)
                         .sorted()
                         .collect::<Vec<_>>();
-                    let selected = resolved.named_channels.iter().any(|channel| {
+                    let selected = catalogue.named_entries().any(|channel| {
                         matches!(&channel.map, super::SamplingMapDefinition::PhaseSpace(inner)
                             if matches!(inner.as_ref(), super::SamplingMapDefinition::Cut(selected) if selected == &edges))
                     });
@@ -1714,7 +1729,12 @@ impl GraphTerm for CrossSectionGraphTerm {
             }
         }
         self.multi_channeling_setup
-            .compile_sampling_channel_bridge_with_external(&resolved, &context, external_momenta)
+            .compile_sampling_channel_bridge_with_external(
+                catalogue,
+                proxies,
+                &context,
+                external_momenta,
+            )
     }
 
     fn sampling_channel_is_lmb(
@@ -1799,7 +1819,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     }
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
-        self.multi_channeling_setup.sampling_bridge.invalidate();
+        self.multi_channeling_setup.invalidate_sampling();
         self.graph.validate_real_masses(model)?;
         self.estimated_scale = Some(
             self.graph
@@ -2061,7 +2081,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                 || {
                     let mut generated = self.generate_event_for_cut::<T>(
                         CutEventGenerationContext {
-                            settings: context.settings,
                             model: context.model,
                             // Mapped sampling channels have already been mapped into the
                             // parent frame; preserve their canonical id in event

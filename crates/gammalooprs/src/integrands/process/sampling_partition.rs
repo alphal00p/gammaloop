@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use color_eyre::Result;
 use eyre::eyre;
-use symbolica::atom::{Atom, AtomView};
+use symbolica::atom::Atom;
 
 use super::sampling_maps::SamplingEvaluationError;
 use crate::utils::{F, FloatLike};
@@ -144,15 +144,26 @@ impl<T: FloatLike> SamplingScoreFunction<T> {
         expression: Atom,
         parameters: impl IntoIterator<Item = Atom>,
     ) -> Result<Self> {
-        if let AtomView::Num(number) = expression.as_view() {
-            let coefficient = number.get_coeff_view().to_owned();
-            if !coefficient.is_real() || coefficient.is_zero() || coefficient.is_negative() {
-                return Err(eyre!(
-                    "sampling Symbolica score constant must be real and strictly positive: {expression}"
-                ));
-            }
+        Self::from_compiled_symbolica_positive_expression(
+            SamplingExpressionEvaluator::new_positive_proxy(expression, parameters)?,
+        )
+    }
+
+    /// Bind an owned warmup program to this score's native precision.
+    ///
+    /// The supplied program is prepared by
+    /// [`SamplingExpressionEvaluator::new_positive_proxy`]. Its native programs
+    /// and mutable buffers are retained without recompilation; cloning the
+    /// neutral program before binding gives every worker an independent mutex.
+    pub(crate) fn from_compiled_symbolica_positive_expression(
+        evaluator: SamplingExpressionEvaluator,
+    ) -> Result<Self> {
+        if evaluator.output_count() != 1 {
+            return Err(eyre!(
+                "sampling Symbolica score requires exactly one output, got {}",
+                evaluator.output_count()
+            ));
         }
-        let evaluator = SamplingExpressionEvaluator::new([expression], parameters, false)?;
         Ok(Self {
             evaluator: SamplingScoreEvaluator::Symbolica(Box::new(Mutex::new(evaluator))),
         })
@@ -567,6 +578,18 @@ mod tests {
         .unwrap_err();
         assert!(error.to_string().contains("strictly positive"));
         assert!(error.downcast_ref::<SamplingEvaluationError>().is_none());
+
+        let parameter = Atom::var(symbol!("sampling_proxy_multiple_outputs"));
+        let evaluator = SamplingExpressionEvaluator::new(
+            [parameter.clone(), parameter.clone()],
+            [parameter],
+            false,
+        )
+        .unwrap();
+        let error =
+            SamplingScoreFunction::<f64>::from_compiled_symbolica_positive_expression(evaluator)
+                .unwrap_err();
+        assert!(error.to_string().contains("exactly one output"));
     }
 
     #[test]
@@ -574,9 +597,10 @@ mod tests {
         test_initialise().unwrap();
         let x = Atom::var(symbol!("sampling_native_proxy_x"));
         let expression = (-x.clone()).exp();
-        let proxy = SamplingScoreFunction::<f64>::from_symbolica_positive_expression(
-            expression.clone(),
-            [x.clone()],
+        let program =
+            SamplingExpressionEvaluator::new_positive_proxy(expression, [x.clone()]).unwrap();
+        let proxy = SamplingScoreFunction::<f64>::from_compiled_symbolica_positive_expression(
+            program.clone(),
         )
         .unwrap();
         let error = proxy.evaluate(&[1000.0]).unwrap_err();
@@ -588,17 +612,20 @@ mod tests {
         assert!(error.downcast_ref::<SamplingEvaluationError>().is_some());
 
         fn check<T: FloatLike>(
-            expression: &Atom,
+            program: &SamplingExpressionEvaluator,
             parameter: &Atom,
             has_extended_exponent_range: bool,
         ) {
             let one = F::<T>::default().one();
             let x = one.from_usize(1000);
-            let proxy = SamplingScoreFunction::<T>::from_symbolica_positive_expression(
-                expression.clone(),
-                [parameter.clone()],
+            let proxy = SamplingScoreFunction::<T>::from_compiled_symbolica_positive_expression(
+                program.clone(),
             )
             .unwrap();
+            let SamplingScoreEvaluator::Symbolica(evaluator) = &proxy.evaluator else {
+                panic!("expected a compiled Symbolica score")
+            };
+            assert!(evaluator.try_lock().is_ok());
             let callback = SamplingScoreFunction::from_positive_function(|coordinates: &[T]| {
                 Ok(Some((-F(coordinates[0].clone())).0.exp()))
             });
@@ -625,8 +652,14 @@ mod tests {
             assert!(error.to_string().contains("strictly positive"));
             assert!(error.downcast_ref::<SamplingEvaluationError>().is_none());
         }
-        check::<crate::utils::QuadFloat>(&expression, &x, false);
-        check::<crate::utils::ArbPrec>(&expression, &x, true);
+        // Bind the same compiled payload at native precisions without reparsing
+        // or optimization. The original worker's lock must remain independent.
+        let SamplingScoreEvaluator::Symbolica(evaluator) = &proxy.evaluator else {
+            panic!("expected a compiled Symbolica score")
+        };
+        let _original_guard = evaluator.lock().unwrap();
+        check::<crate::utils::QuadFloat>(&program, &x, false);
+        check::<crate::utils::ArbPrec>(&program, &x, true);
     }
 
     #[test]

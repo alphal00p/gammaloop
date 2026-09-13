@@ -23,7 +23,7 @@ use crate::{
     integrands::{
         evaluation::EvaluationMetaData,
         process::{
-            GenericEvaluator, ParamBuilder, RuntimeCache, ThresholdParams,
+            GenericEvaluator, ParamBuilder, ThresholdParams,
             evaluators::{
                 EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator,
                 evaluate_evaluator_single,
@@ -60,7 +60,7 @@ use crate::{
         },
     },
     utils::{
-        F, FloatLike,
+        F, FloatLike, RuntimeCache,
         hyperdual_utils::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape,

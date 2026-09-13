@@ -422,3 +422,125 @@ The decisive tests are:
 [^bessel]: NIST Digital Library of Mathematical Functions,
     [Eq. 10.32.10](https://dlmf.nist.gov/10.32.E10), integral representation of
     the modified Bessel K function.
+
+## Bounded X1 implementation decision (2026-09-13)
+
+This section specifies the next implementation slice; these controls are not
+implemented yet. X1 changes the auxiliary radial proposal for the existing
+full-parent, zero-centered `phase_space(cut(...))` map. Conditional side maps,
+threshold-distance focusing certificates, exact h CDFs, and automatic channel
+discovery remain separate work.
+
+Use the simple `radial_profile="lu_h"` spelling and an equivalent table with
+`kind="lu_h"`, `broad_fraction` (default 0.02), and optional positive `scale`
+and `shape` overrides. The scale and shape affect the proposal alone. Omission
+of `radial_profile` retains the existing signed-distance power profile. A LU-h
+profile replaces that power transformation entirely; it must not inherit its
+`power != 1 && r == R` seam rejection, since r=R is a regular point here.
+
+The focused component is the fitted log-logistic law above for the two
+polynomial families. For `exponential`, start with the endpoint-safe rational
+law (log-logistic shape 1) and scale sigma/2. Among rational laws this minimizes
+the simple half-Gaussian h's radial second moment: it is
+`sqrt(2/pi)+2/pi`, approximately 1.4345. Keep the supported polynomial powers
+identical to h/h_dual; `exponential` ignores `power`, as the actual h does.
+Reject `exponential_ct`, invalid sigma, or unsupported polynomial powers at
+warmup with a diagnostic rather than reaching h's panic. Arbitrary algebraic
+h families are not part of this claim.
+
+### A broad floor independent of the physical root
+
+Improve the earlier fixed-t broad example by using the existing raw scale
+`beta=e_cm*b`. For each direction and physical root R, define a=R/beta and
+
+```
+p(t|R) = (1-epsilon) p_loglogistic(t;s,kappa) + epsilon a/(a+t)^2,
+G(t|R) = (1-epsilon) (t/s)^kappa/(1+(t/s)^kappa) + epsilon t/(a+t).
+```
+
+The broad component then induces exactly
+`q_r,broad(r)=beta/(beta+r)^2`, independently of R. For epsilon>0 the raw
+proposal has an ordinary radial floor even when a cut root is very large or
+small. This gives stronger reference-function coverage than fixing the broad
+scale in t. There is no additional user scale knob in X1. A certified absent
+or pinched surface uses this same normalized raw law with power 1, in both
+forward and inverse, rather than inheriting a focused power. Numerical failure
+to establish a root remains an error, not an absent classification.
+
+Invert G monotonically using the existing safeguarded scalar owner. The two
+analytic component quantiles give an immediate bracket:
+
+```
+Q_f(u)=s (u/(1-u))^(1/kappa), Q_b(u)=a u/(1-u),
+min(Q_f,Q_b) <= G^-1(u) <= max(Q_f,Q_b).
+```
+
+The epsilon=0/1 cases use their analytic quantiles directly; epsilon=1 is
+exactly the ordinary raw law and need not solve R. Evaluate the lower CDF for u<=1/2 and the survival probability for u>1/2, using positive reciprocal
+forms in the tails. Scale residuals by u or 1-u; a fixed absolute CDF tolerance
+must not erase a small tail. Inverse evaluation at a raw point is direct:
+`t=R/r`, `u=G(t|R)`. Preserve native arithmetic and typed numerical retries.
+
+Do not split the input interval into a focused branch and a broad branch and
+return only that branch's determinant. Both branches cover the entire positive
+t axis, so that would introduce two preimages and the wrong estimator under
+the existing single-map contract. The monotone mixture CDF avoids new branch
+accounting and avoids another canonical channel domain.
+
+### Existing-owner implementation boundary
+
+Compile the CDF, its stable tail forms, and r=R/t through the existing
+`SamplingExpressionEvaluator` during the same warmup epoch as proxy programs.
+Use its dual derivative `partial_t G=p(t|R)` and implicit differentiation:
+`dt/du=1/p`, `|dr/du|=R/(t^2 p)`. The Cartesian determinant is still
+`J_Omega R^D/(t^(D+1) p)`. Do not differentiate the scalar root iterations.
+Angular derivatives of R remain radial-column contributions and cancel from
+this determinant. Test any eager conditional/tail expressions in all native
+precisions; do not evaluate an overflowing inactive expression eagerly.
+
+Extend the existing setup's compiled-program cache to hold these neutral
+profile programs alongside proxies. Native bindings clone evaluator buffers;
+they do not reparse strings, refit parameters in binary64, or compile programs
+again. Build the default fit algebraically from the h input parameters in the
+symbolic expression, then evaluate it natively. One catalogue remains the
+source of IDs. A typed radial-profile option containing floats will require
+removing now-inapplicable Eq derives from the settings/catalogue records.
+
+Pass the actual runtime `lu_h_function` to the fresh compile/warmup owner;
+never substitute defaults because its current argument list lacks h. The
+cross-section binder must aggregate `max_occurence` over every active,
+geometrically equivalent cut group before deduplicating its root map. Preserve
+its existing incompatible-external-shift diagnostic. Store the actual maximum
+order with the bound profile for inspection and tests. The initial fitted
+proposal does not invent order-dependent tuning: its tails cover every finite
+h derivative packet for the supported families, but large raised-order interior
+weights remain possible.
+
+Keep the cut geometry registration independent of a particular named profile.
+After cloning a registered implicit map, the canonical channel compiler attaches
+that named channel's profile. Thus two names may target the same cut with
+narrower/wider proposals without overwriting each other or introducing a second
+target resolver. Physical LU evaluation still sums every active cut and CT;
+all sampling factors remain outside h_dual/residue differentiation.
+
+### Required X1 gates
+
+- Native profile normalization, both-tail round trips, positive J and selected
+  factor, analytic-quantile endpoints, and mixture inversion residuals.
+- Independent Cartesian finite differences for the actual bubble cut and a
+  direction-dependent massive graph; compare eager/dual derivatives directly.
+- On a generated simple cut, verify at fixed shape that the complete weighted
+  result is proportional to h(t)/p(t|R). Approximate matching does not predict
+  a constant weight. Vary inherited h family, sigma, and every supported power.
+- Use `extract_t_derivatives` to undo HyperDual factorial normalization when
+  checking `integral t^j h^(j)(t) dt = (-1)^j j! integral h(t) dt`; separately
+  check h normalization to the accuracy of its current tabulated constants.
+  Several powers use binary64 normalization constants even in Arb, so exact
+  Arb-epsilon agreement with one would be a false fixture expectation. Retain
+  a generated raised-cut comparison using the existing triple-dotted bubble.
+- Saved-state Gaussian/moment acceptance with the broad floor, common-frame
+  multiple-cut density checks, warmup invalidation, and two names sharing one
+  cut geometry but carrying different profiles.
+- Only then run a fixed-budget GL638 A/B pilot. This can improve auxiliary radial
+  variance or rescue cost; it does not change the H/Z shape singularity and
+  does not establish bounded GL638 weights.

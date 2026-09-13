@@ -1,0 +1,1153 @@
+{
+  "format_version": 1,
+  "date_utc": "2026-09-13",
+  "scope": "Six CLI/card functionality smokes at checkpoint06d470409 only. No variance improvement, root-distance accuracy, new native-host milestone, or event-processing validation is claimed.",
+  "binary": {
+    "source_commit": "06d470409cd34d8d57afa11b04a3fb208ca20890",
+    "path": "/common/dev/gammaloop_advanced_sampling_checkpoint/target/release/gammaloop",
+    "sha256": "583cfd7134b1cf3307b2b22e01dfbfe47bcf4b95fd07cbf4116326fa5234ecf5",
+    "build_profile": "release",
+    "physics_backend": "eager (generation compile=false)",
+    "source_tree": "581e6fb35dc3c9ab504536e6eb39c32ad22cfd1d",
+    "source_manifest_sha256": {
+      "Cargo.toml": "fe8547f2ab2130e3c7ffd6d57b6a1d0c5df3bf4f0e6dfd5b0a5d7780ff5ac3a9",
+      "Cargo.lock": "b61a47c74debca9bfdea2dd5347bd19264bbd0971cb0dba8dfa7298fd1c4da0d"
+    }
+  },
+  "reproduction": {
+    "repository_checkout": "06d470409cd34d8d57afa11b04a3fb208ca20890",
+    "instructions": [
+      "Use the pinned repository checkout and its documented build environment plus Symbolica license. Build the release gammaloop CLI; a rebuild need not reproduce the recorded executable hash.",
+      "Use the repository-relative massive_kite.dot below. Write the embedded double-box DOT into a fresh reproduction directory.",
+      "Write each state generation_card_reproduction_toml, replacing @REPRO_ROOT@ with that directory. Run its generation_argv from the repository root to generate all orientations and threshold counterterms.",
+      "Materialize smoke_card_template by literal UTF-8 replacement of every token using each run card_bindings. For portable execution, choose new workspace paths and point -s to the corresponding regenerated state; the original recorded argv and hashes remain provenance, not expected regenerated checksums.",
+      "Run each CLI with power=1, n_start=n_max=64, seed=101 and one core in read-only-state/no-save-state mode. Supply the Symbolica license via the environment. No more than the six recorded cases are needed.",
+      "Check integration_result.json neval=64, both finite complex components, the displayed orientation keys below and saved physical settings. These small runs establish functionality only."
+    ],
+    "smoke_card_template": "# Prepared only: use a freshly gated native-sampling milestone binary.\n# Strong focusing (power>1) remains gated on signed-distance root certification.\ncommands = [\"run configure\", \"display integrand -p @PROCESS@ -i default\"]\n\n[[command_blocks]]\nname = \"configure\"\ncommands = [\"\"\"set process -p @PROCESS@ -i default string '\n[general]\nevaluator_method = \"SummedFunctionMap\"\n[subtraction]\ndisable_threshold_subtraction = false\n[sampling]\ngraphs = \"monte_carlo\"\norientations = \"summed\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\nsampling_channel_weight = \"map_density\"\ncoordinate_system = \"spherical\"\nmapping = \"linear\"\nb = 1.0\npower = $(power:2.0)\ndefault_channel_selection = @SELECTION_TOML@\n[sampling.channel_definitions.@PROCESS@.C]\naround = \"surface(@SURFACE_EDGES@)\"\nparent_lmb = @PARENT_LMB_TOML@\nsubspace_lmb = @PARENT_LMB_TOML@\n[integrator]\nintegrated_phase = \"real\"\nn_start = $(n_start:2000)\nn_increase = 0\nn_max = $(n_max:10000)\nseed = $(seed:101)\nn_bins = 16\nmin_samples_for_update = 64\ncontinuous_dim_learning_rate = 0.25\ndiscrete_dim_learning_rate = 0.25\ntrain_on_avg = false\n[integrator.observables_output]\nformat = [\"json\"]\n[stability]\ncheck_on_norm = true\nrotation_axis = [{ type = \"euler_angles\", alpha = 0.1, beta = 0.2, gamma = 0.3 }]\nlevels = [\n { precision = \"Double\", required_precision_for_re = 1e-6, required_precision_for_im = 1e-6, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Quad\", required_precision_for_re = 1e-10, required_precision_for_im = 1e-10, escalate_for_large_weight_threshold = -1.0 },\n { precision = \"Arb\", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 },\n]\n'\"\"\"]\n\n[[command_blocks]]\nname = \"integrate\"\ncommands = [\n \"run configure\",\n \"\"\"integrate -p @PROCESS@ -i default --n-cores $(cores:1)\n --workspace-path $(workspace:@DEFAULT_WORKSPACE@)\n --restart --renderer tabled --show-phase both\n --show-max-weight-info --show-max-weight-info-for-discrete-bins\n --show-top-discrete-grid --show-discrete-contributions-sum\n --write-results-for-each-iteration --batch-timing 2\"\"\",\n]\n",
+    "graph_inputs": {
+      "kite": {
+        "repository_relative_path": "tests/resources/graphs/massive_kite.dot",
+        "sha256": "b230cd731776df1324240a79f42bef124e58e48334683151d58b64f4d2378472",
+        "original_scratch_sha256": "4dba9513cbd37adcc920746a0dca29abca23220d9d12f85e6769097eb1167f32",
+        "original_vs_repository_difference": "Whitespace only; removing whitespace makes the texts identical."
+      },
+      "box": {
+        "origin_topology": "tests/resources/graphs/boxes_2L4P.dot",
+        "reproduction_path": "@REPRO_ROOT@/massive_double_box.dot",
+        "sha256": "cd654726e23f92f10f728770b30cbaeb59f225b885d07fe3e5faf8c651522931",
+        "dot": "digraph massive_double_box {\nnum=1; overall_factor=1;\nnode [num=1]; edge [num=1];\next0 [style=invis]; ext1 [style=invis]; ext2 [style=invis]; ext3 [style=invis];\next0 -> A:0 [id=0, particle=scalar_0];\next1 -> B:1 [id=1, particle=scalar_0];\nE:2 -> ext2 [id=2, particle=scalar_0];\nF:3 -> ext3 [id=3, particle=scalar_0];\nA -> B [id=4, particle=scalar_1];\nB -> D [id=5, particle=scalar_1, lmb_id=0];\nD -> C [id=6, particle=scalar_1];\nC -> A [id=7, particle=scalar_1];\nD -> E [id=8, particle=scalar_1, lmb_id=1];\nE -> F [id=9, particle=scalar_1];\nF -> C [id=10, particle=scalar_1];\n}\n"
+      }
+    }
+  },
+  "common_run_settings": {
+    "samples": 64,
+    "seed": 101,
+    "cores": 1,
+    "power": 1.0,
+    "training_phase": "real",
+    "reported_phases": [
+      "real",
+      "imag"
+    ],
+    "sampling_channel_weight": "map_density",
+    "orientations": "summed",
+    "threshold_subtraction": true,
+    "state_read_only": true,
+    "workspace_fresh": true
+  },
+  "state_inputs": {
+    "kite_rest": {
+      "original_state_path": "/tmp/advanced-sampling-amplitude-research/state",
+      "archive_manifest_version": 7,
+      "state_file_manifest_sha256": "e4905ee243e077d6d9880b307d25120ed2b2e883299228a01532987797f47a54",
+      "state_files": {
+        "default_runtime_settings.toml": {
+          "bytes": 2868,
+          "sha256": "ca587329d8aac386dd0454e7e0cb3a54ddc8e2fed72d1c743d17c0bc83442f94"
+        },
+        "global_settings.toml": {
+          "bytes": 2799,
+          "sha256": "214891db5fe78b8eae4ae5116e64329e120d6cf838260e6f8115142e177b99e9"
+        },
+        "model.json": {
+          "bytes": 126844,
+          "sha256": "f77f42cf6f424b1296db36c9492de41bedba519ea0deb3f3813f025aaecd8b94"
+        },
+        "model_parameters.json": {
+          "bytes": 235,
+          "sha256": "4e0f746e2bad41c02a83239013f896735305c86b8dc10e1c05b609a65620d3e7"
+        },
+        "processes/amplitudes/massive_kite/def.bin": {
+          "bytes": 66,
+          "sha256": "1fd264a786ae277bd40c4f32353bf272e205615203dfa4101ef3624a0a58fcef"
+        },
+        "processes/amplitudes/massive_kite/default/amp.bin": {
+          "bytes": 59061,
+          "sha256": "738838fafcf73349d62b722de8d1307042170b6bb2b3d360afcaa62428da887c"
+        },
+        "processes/amplitudes/massive_kite/default/generation_summary.json": {
+          "bytes": 581,
+          "sha256": "281705b63b368f3466ed7a4788809b657f2a9be329319abfd5a02c4f9512151c"
+        },
+        "processes/amplitudes/massive_kite/default/integrand/integrand.bin": {
+          "bytes": 278492,
+          "sha256": "526980b22c3b07887991d1a63474a4d3651752062448ce213cc98e0cc2377293"
+        },
+        "processes/amplitudes/massive_kite/default/integrand/settings.toml": {
+          "bytes": 407,
+          "sha256": "62e820e2e3998999b494bc7fde039fe250a69290bdb8f0a8ed5c9806bd557163"
+        },
+        "processes/amplitudes/massive_kite/settings_history.toml": {
+          "bytes": 275,
+          "sha256": "c8239156bc91388f66a07d76eafc7bff6a9550c4735ee41cf1b6daef8c5a0836"
+        },
+        "run.toml": {
+          "bytes": 1161,
+          "sha256": "9ffb06d05a68dfa98ced9dad5a7e9ab140a2a74a4cfdd2734b63415aac66157e"
+        },
+        "state_manifest.toml": {
+          "bytes": 12,
+          "sha256": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8"
+        },
+        "symbolica_state.bin": {
+          "bytes": 27304,
+          "sha256": "6dce48b8ae93a07961e8348746a408487de6fb704cf06799c55a91dc15ad6670"
+        }
+      },
+      "original_generation_card_sha256": "2590d7c4ce293683c649490a3ee3fcba32cd955a8df72663977edd014473e0a5",
+      "generation_card_reproduction_toml": "commands = [\n  \"import model scalars-default.json\",\n  \"set model mass_scalar_1=1.0\",\n  \"import graphs tests/resources/graphs/massive_kite.dot -p massive_kite -i default -o\",\n  \"generate existing -p massive_kite -i default\",\n  \"display integrand -p massive_kite -i default\",\n]\n[cli_settings.global.generation]\noverride_lmb_heuristics=true\n[cli_settings.global.generation.uv]\nsubtract_uv=false\ngenerate_integrated=false\n[cli_settings.global.generation.threshold_subtraction]\nenable_thresholds=true\ncheck_esurface_at_generation=true\n[cli_settings.global.generation.evaluator]\ncompile=false\nstore_atom=true\nsummed=false\nsummed_function_map=true\niterative_orientation_optimization=false\n[default_runtime_settings.general]\nevaluator_method=\"SummedFunctionMap\"\nintegral_unit=\"none\"\n[default_runtime_settings.kinematics]\ne_cm=5.0\n[default_runtime_settings.kinematics.externals]\ntype=\"constant\"\n[default_runtime_settings.kinematics.externals.data]\nmomenta=[[5.0,0.0,0.0,0.0],\"dependent\"]\nhelicities=[0,0]\n[default_runtime_settings.subtraction]\ndisable_threshold_subtraction=false\n[default_runtime_settings.sampling]\ngraphs=\"summed\"\norientations=\"summed\"\nsampling_multichanneling=false\nsampling_channels=\"summed\"\ncoordinate_system=\"spherical\"\nmapping=\"linear\"\nb=1.0\n",
+      "generation_argv": [
+        "@GAMMALOOP_BIN@",
+        "-s",
+        "@REPRO_ROOT@/states/kite_rest",
+        "@REPRO_ROOT@/kite_rest_generation.toml",
+        "quit"
+      ],
+      "graph_input": "kite",
+      "physical_runtime_inputs": {
+        "general": {
+          "evaluator_method": "SummedFunctionMap",
+          "integral_unit": "none"
+        },
+        "kinematics": {
+          "e_cm": 5.0,
+          "externals": {
+            "type": "constant",
+            "data": {
+              "momenta": [
+                [
+                  5.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "dependent"
+              ],
+              "helicities": [
+                0,
+                0
+              ]
+            }
+          }
+        },
+        "subtraction": {
+          "disable_threshold_subtraction": false
+        },
+        "sampling": {
+          "graphs": "summed",
+          "orientations": "summed",
+          "sampling_multichanneling": false,
+          "sampling_channels": "summed",
+          "coordinate_system": "spherical",
+          "mapping": "linear",
+          "b": 1.0
+        }
+      },
+      "global_generation_settings": {
+        "override_lmb_heuristics": true,
+        "uv": {
+          "subtract_uv": false,
+          "generate_integrated": false
+        },
+        "threshold_subtraction": {
+          "enable_thresholds": true,
+          "check_esurface_at_generation": true
+        },
+        "evaluator": {
+          "compile": false,
+          "store_atom": true,
+          "summed": false,
+          "summed_function_map": true,
+          "iterative_orientation_optimization": false
+        }
+      },
+      "model_parameters": {
+        "Gf": [
+          1.16639e-05,
+          0.0
+        ],
+        "aEWM1": [
+          132.507,
+          0.0
+        ],
+        "aS": [
+          0.118,
+          0.0
+        ],
+        "lam": [
+          1.0,
+          0.0
+        ],
+        "mass_scalar_1": [
+          1.0,
+          0.0
+        ],
+        "mass_scalar_2": [
+          2.0,
+          0.0
+        ]
+      },
+      "orientation_key_proof": {
+        "count": 18,
+        "ids": "contiguous zero-based IDs, matching array positions",
+        "keys": [
+          "0 0 - + + + +",
+          "0 0 - - + + +",
+          "0 0 - + - + +",
+          "0 0 + + + - +",
+          "0 0 - + + - +",
+          "0 0 + - + - +",
+          "0 0 - - + - +",
+          "0 0 + + - - +",
+          "0 0 - + - - +",
+          "0 0 + - + + -",
+          "0 0 - - + + -",
+          "0 0 + + - + -",
+          "0 0 - + - + -",
+          "0 0 + - - + -",
+          "0 0 - - - + -",
+          "0 0 + - + - -",
+          "0 0 + + - - -",
+          "0 0 + - - - -"
+        ],
+        "keys_sha256": "9588ef2626223bd28a2ecca633f49c421e862c5321c8ae20718f4f7fc38c86f0",
+        "source": "display integrand on the same loaded process before integration"
+      }
+    },
+    "kite_boost": {
+      "original_state_path": "/tmp/advanced-sampling-amplitude-research/kite_boosted_state",
+      "archive_manifest_version": 7,
+      "state_file_manifest_sha256": "47aec8acb4aa8f1a36c83a2dc77706c1720d70244744b75dace6e5fe228cca47",
+      "state_files": {
+        "default_runtime_settings.toml": {
+          "bytes": 2883,
+          "sha256": "451bff8cbbfc2fc45392248b11faa915d47b0e3dbe00e05a331a70a7a7e74940"
+        },
+        "global_settings.toml": {
+          "bytes": 2811,
+          "sha256": "d4386cc09a39c1ee1d64881e3e1856012f0ad84a29f219418eeca612fd971824"
+        },
+        "model.json": {
+          "bytes": 126844,
+          "sha256": "f77f42cf6f424b1296db36c9492de41bedba519ea0deb3f3813f025aaecd8b94"
+        },
+        "model_parameters.json": {
+          "bytes": 235,
+          "sha256": "4e0f746e2bad41c02a83239013f896735305c86b8dc10e1c05b609a65620d3e7"
+        },
+        "processes/amplitudes/massive_kite/def.bin": {
+          "bytes": 66,
+          "sha256": "1fd264a786ae277bd40c4f32353bf272e205615203dfa4101ef3624a0a58fcef"
+        },
+        "processes/amplitudes/massive_kite/default/amp.bin": {
+          "bytes": 59237,
+          "sha256": "ddb3767a22c2cb64203e601dba4c7bd0234947a24914f26e4c75a2ee55c5713e"
+        },
+        "processes/amplitudes/massive_kite/default/generation_summary.json": {
+          "bytes": 581,
+          "sha256": "955e3b7f3e844495f464b0fdf4ea42aeda9b490ee68f7222a8d2beee21710e13"
+        },
+        "processes/amplitudes/massive_kite/default/integrand/integrand.bin": {
+          "bytes": 291895,
+          "sha256": "311782d8879a751cfc2d09480259411977b1d9cf5d15b658d804233f17907536"
+        },
+        "processes/amplitudes/massive_kite/default/integrand/settings.toml": {
+          "bytes": 422,
+          "sha256": "a3897ac7839c7d344c2b4c6468bd9fb14567d1ee91995b9d0480b74069ff6dbc"
+        },
+        "processes/amplitudes/massive_kite/settings_history.toml": {
+          "bytes": 293,
+          "sha256": "6fe3a883257515a35833e4182969902d3826b5a47595be92a9ea1f6de6475f51"
+        },
+        "run.toml": {
+          "bytes": 1197,
+          "sha256": "bcf01598d8b4f3cbb6a73081f1a1e3d1f88ae27127abc99c4916e7e0734b7588"
+        },
+        "state_manifest.toml": {
+          "bytes": 12,
+          "sha256": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8"
+        },
+        "symbolica_state.bin": {
+          "bytes": 27304,
+          "sha256": "6dce48b8ae93a07961e8348746a408487de6fb704cf06799c55a91dc15ad6670"
+        }
+      },
+      "original_generation_card_sha256": "36cab7c4a44c260b781fe450e34e3ae7277279a61e315e59128557979ae337f3",
+      "generation_card_reproduction_toml": "commands = [\n  \"import model scalars-default.json\",\n  \"set model mass_scalar_1=1.0\",\n  \"import graphs tests/resources/graphs/massive_kite.dot -p massive_kite -i default -o\",\n  \"generate existing -p massive_kite -i default\",\n  \"display integrand -p massive_kite -i default\",\n]\n[cli_settings.global.generation]\noverride_lmb_heuristics=true\n[cli_settings.global.generation.uv]\nsubtract_uv=false\ngenerate_integrated=false\n[cli_settings.global.generation.threshold_subtraction]\nenable_thresholds=true\ncheck_esurface_at_generation=true\n[cli_settings.global.generation.evaluator]\ncompile=false\nstore_atom=true\nsummed=false\nsummed_function_map=true\niterative_orientation_optimization=false\n[default_runtime_settings.general]\nevaluator_method=\"SummedFunctionMap\"\nintegral_unit=\"none\"\n[default_runtime_settings.kinematics]\ne_cm=5.0\n[default_runtime_settings.kinematics.externals]\ntype=\"constant\"\n[default_runtime_settings.kinematics.externals.data]\nmomenta=[[5.0990195135927845,0.0,0.0,1.0],\"dependent\"]\nhelicities=[0,0]\n[default_runtime_settings.subtraction]\ndisable_threshold_subtraction=false\n[default_runtime_settings.sampling]\ngraphs=\"summed\"\norientations=\"summed\"\nsampling_multichanneling=false\nsampling_channels=\"summed\"\ncoordinate_system=\"spherical\"\nmapping=\"linear\"\nb=1.0\n",
+      "generation_argv": [
+        "@GAMMALOOP_BIN@",
+        "-s",
+        "@REPRO_ROOT@/states/kite_boost",
+        "@REPRO_ROOT@/kite_boost_generation.toml",
+        "quit"
+      ],
+      "graph_input": "kite",
+      "physical_runtime_inputs": {
+        "general": {
+          "evaluator_method": "SummedFunctionMap",
+          "integral_unit": "none"
+        },
+        "kinematics": {
+          "e_cm": 5.0,
+          "externals": {
+            "type": "constant",
+            "data": {
+              "momenta": [
+                [
+                  5.0990195135927845,
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "dependent"
+              ],
+              "helicities": [
+                0,
+                0
+              ]
+            }
+          }
+        },
+        "subtraction": {
+          "disable_threshold_subtraction": false
+        },
+        "sampling": {
+          "graphs": "summed",
+          "orientations": "summed",
+          "sampling_multichanneling": false,
+          "sampling_channels": "summed",
+          "coordinate_system": "spherical",
+          "mapping": "linear",
+          "b": 1.0
+        }
+      },
+      "global_generation_settings": {
+        "override_lmb_heuristics": true,
+        "uv": {
+          "subtract_uv": false,
+          "generate_integrated": false
+        },
+        "threshold_subtraction": {
+          "enable_thresholds": true,
+          "check_esurface_at_generation": true
+        },
+        "evaluator": {
+          "compile": false,
+          "store_atom": true,
+          "summed": false,
+          "summed_function_map": true,
+          "iterative_orientation_optimization": false
+        }
+      },
+      "model_parameters": {
+        "Gf": [
+          1.16639e-05,
+          0.0
+        ],
+        "aEWM1": [
+          132.507,
+          0.0
+        ],
+        "aS": [
+          0.118,
+          0.0
+        ],
+        "lam": [
+          1.0,
+          0.0
+        ],
+        "mass_scalar_1": [
+          1.0,
+          0.0
+        ],
+        "mass_scalar_2": [
+          2.0,
+          0.0
+        ]
+      },
+      "orientation_key_proof": {
+        "count": 18,
+        "ids": "contiguous zero-based IDs, matching array positions",
+        "keys": [
+          "0 0 - + + + +",
+          "0 0 - - + + +",
+          "0 0 - + - + +",
+          "0 0 + + + - +",
+          "0 0 - + + - +",
+          "0 0 + - + - +",
+          "0 0 - - + - +",
+          "0 0 + + - - +",
+          "0 0 - + - - +",
+          "0 0 + - + + -",
+          "0 0 - - + + -",
+          "0 0 + + - + -",
+          "0 0 - + - + -",
+          "0 0 + - - + -",
+          "0 0 - - - + -",
+          "0 0 + - + - -",
+          "0 0 + + - - -",
+          "0 0 + - - - -"
+        ],
+        "keys_sha256": "9588ef2626223bd28a2ecca633f49c421e862c5321c8ae20718f4f7fc38c86f0",
+        "source": "display integrand on the same loaded process before integration"
+      }
+    },
+    "box_rest": {
+      "original_state_path": "/tmp/advanced-sampling-amplitude-research/double_box_state",
+      "archive_manifest_version": 7,
+      "state_file_manifest_sha256": "639c1937ad9a88eada2c157aecc072286d063471cdb46f43597159e5f16e987c",
+      "state_files": {
+        "default_runtime_settings.toml": {
+          "bytes": 2973,
+          "sha256": "8f1c3487269b260f2287467d1106956cb1b57ce87e7077de9fe8e6ec6b6a0c24"
+        },
+        "global_settings.toml": {
+          "bytes": 2810,
+          "sha256": "650f75737080667a623a2993a8a622e2ac96306f6508da7f193b4253a20b4245"
+        },
+        "model.json": {
+          "bytes": 126844,
+          "sha256": "f77f42cf6f424b1296db36c9492de41bedba519ea0deb3f3813f025aaecd8b94"
+        },
+        "model_parameters.json": {
+          "bytes": 235,
+          "sha256": "4e0f746e2bad41c02a83239013f896735305c86b8dc10e1c05b609a65620d3e7"
+        },
+        "processes/amplitudes/massive_double_box/def.bin": {
+          "bytes": 78,
+          "sha256": "5a0d8edf20a233308c30805c0dc363930eb5b36c6a6afe5ff67522a1ba3e0eb8"
+        },
+        "processes/amplitudes/massive_double_box/default/amp.bin": {
+          "bytes": 312223,
+          "sha256": "42fc6de46bf7a79b9d7518b06011cc0c0b2d18f5413c28dfaa8d46a6ee4df871"
+        },
+        "processes/amplitudes/massive_double_box/default/generation_summary.json": {
+          "bytes": 588,
+          "sha256": "65da3f6f2296d673b930e5eaf7cd9f1cbc1ecae4e41a52c773d51461dce25134"
+        },
+        "processes/amplitudes/massive_double_box/default/integrand/integrand.bin": {
+          "bytes": 1147480,
+          "sha256": "3157b2a080b5638b34b6c268a8e8f5353f879ca8b0172cdd3632b1a32decb6f0"
+        },
+        "processes/amplitudes/massive_double_box/default/integrand/settings.toml": {
+          "bytes": 512,
+          "sha256": "9e5203bb3c275148a4abece883d658f4dd1b966584c1e093ab9d124248c5596d"
+        },
+        "processes/amplitudes/massive_double_box/settings_history.toml": {
+          "bytes": 275,
+          "sha256": "c8239156bc91388f66a07d76eafc7bff6a9550c4735ee41cf1b6daef8c5a0836"
+        },
+        "run.toml": {
+          "bytes": 1293,
+          "sha256": "b25c4f4b88bb399ef53232367727d7896293b2d5414c0a4b8f3382c761a04e6c"
+        },
+        "state_manifest.toml": {
+          "bytes": 12,
+          "sha256": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8"
+        },
+        "symbolica_state.bin": {
+          "bytes": 27304,
+          "sha256": "6dce48b8ae93a07961e8348746a408487de6fb704cf06799c55a91dc15ad6670"
+        }
+      },
+      "original_generation_card_sha256": "fa782916065131edc51ae50be93d0355d41d3f63487eb4377d9e76771d690c97",
+      "generation_card_reproduction_toml": "commands = [\n  \"import model scalars-default.json\",\n  \"set model mass_scalar_1=1.0\",\n  \"import graphs @REPRO_ROOT@/massive_double_box.dot -p massive_double_box -i default -o\",\n  \"generate existing -p massive_double_box -i default\",\n  \"display integrand -p massive_double_box -i default\",\n]\n[cli_settings.global.generation]\noverride_lmb_heuristics=true\n[cli_settings.global.generation.uv]\nsubtract_uv=false\ngenerate_integrated=false\n[cli_settings.global.generation.threshold_subtraction]\nenable_thresholds=true\ncheck_esurface_at_generation=true\n[cli_settings.global.generation.evaluator]\ncompile=false\nstore_atom=false\nsummed=false\nsummed_function_map=true\niterative_orientation_optimization=false\n[default_runtime_settings.general]\nevaluator_method=\"SummedFunctionMap\"\nintegral_unit=\"none\"\n[default_runtime_settings.kinematics]\ne_cm=6.0\n[default_runtime_settings.kinematics.externals]\ntype=\"constant\"\n[default_runtime_settings.kinematics.externals.data]\nmomenta=[[3.0,0.0,0.0,3.0],[3.0,0.0,0.0,-3.0],[3.0,3.0,0.0,0.0],\"dependent\"]\nhelicities=[0,0,0,0]\n[default_runtime_settings.subtraction]\ndisable_threshold_subtraction=false\n[default_runtime_settings.sampling]\ngraphs=\"summed\"\norientations=\"summed\"\nsampling_multichanneling=false\nsampling_channels=\"summed\"\ncoordinate_system=\"spherical\"\nmapping=\"linear\"\nb=1.0\n",
+      "generation_argv": [
+        "@GAMMALOOP_BIN@",
+        "-s",
+        "@REPRO_ROOT@/states/box_rest",
+        "@REPRO_ROOT@/box_rest_generation.toml",
+        "quit"
+      ],
+      "graph_input": "box",
+      "physical_runtime_inputs": {
+        "general": {
+          "evaluator_method": "SummedFunctionMap",
+          "integral_unit": "none"
+        },
+        "kinematics": {
+          "e_cm": 6.0,
+          "externals": {
+            "type": "constant",
+            "data": {
+              "momenta": [
+                [
+                  3.0,
+                  0.0,
+                  0.0,
+                  3.0
+                ],
+                [
+                  3.0,
+                  0.0,
+                  0.0,
+                  -3.0
+                ],
+                [
+                  3.0,
+                  3.0,
+                  0.0,
+                  0.0
+                ],
+                "dependent"
+              ],
+              "helicities": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          }
+        },
+        "subtraction": {
+          "disable_threshold_subtraction": false
+        },
+        "sampling": {
+          "graphs": "summed",
+          "orientations": "summed",
+          "sampling_multichanneling": false,
+          "sampling_channels": "summed",
+          "coordinate_system": "spherical",
+          "mapping": "linear",
+          "b": 1.0
+        }
+      },
+      "global_generation_settings": {
+        "override_lmb_heuristics": true,
+        "uv": {
+          "subtract_uv": false,
+          "generate_integrated": false
+        },
+        "threshold_subtraction": {
+          "enable_thresholds": true,
+          "check_esurface_at_generation": true
+        },
+        "evaluator": {
+          "compile": false,
+          "store_atom": false,
+          "summed": false,
+          "summed_function_map": true,
+          "iterative_orientation_optimization": false
+        }
+      },
+      "model_parameters": {
+        "Gf": [
+          1.16639e-05,
+          0.0
+        ],
+        "aEWM1": [
+          132.507,
+          0.0
+        ],
+        "aS": [
+          0.118,
+          0.0
+        ],
+        "lam": [
+          1.0,
+          0.0
+        ],
+        "mass_scalar_1": [
+          1.0,
+          0.0
+        ],
+        "mass_scalar_2": [
+          2.0,
+          0.0
+        ]
+      },
+      "orientation_key_proof": {
+        "count": 98,
+        "ids": "contiguous zero-based IDs, matching array positions",
+        "keys": [
+          "0 0 0 0 - + + + + + +",
+          "0 0 0 0 + - + + + + +",
+          "0 0 0 0 - - + + + + +",
+          "0 0 0 0 + + + - + + +",
+          "0 0 0 0 - + + - + + +",
+          "0 0 0 0 + - + - + + +",
+          "0 0 0 0 - - + - + + +",
+          "0 0 0 0 - + + + - + +",
+          "0 0 0 0 + - + + - + +",
+          "0 0 0 0 - - + + - + +",
+          "0 0 0 0 + + - + - + +",
+          "0 0 0 0 - + - + - + +",
+          "0 0 0 0 + - - + - + +",
+          "0 0 0 0 - - - + - + +",
+          "0 0 0 0 + + + - - + +",
+          "0 0 0 0 - + + - - + +",
+          "0 0 0 0 + - + - - + +",
+          "0 0 0 0 - - + - - + +",
+          "0 0 0 0 + + - - - + +",
+          "0 0 0 0 - + - - - + +",
+          "0 0 0 0 + - - - - + +",
+          "0 0 0 0 - + + + + - +",
+          "0 0 0 0 + - + + + - +",
+          "0 0 0 0 - - + + + - +",
+          "0 0 0 0 + + - + + - +",
+          "0 0 0 0 - + - + + - +",
+          "0 0 0 0 + - - + + - +",
+          "0 0 0 0 - - - + + - +",
+          "0 0 0 0 + + + - + - +",
+          "0 0 0 0 - + + - + - +",
+          "0 0 0 0 + - + - + - +",
+          "0 0 0 0 - - + - + - +",
+          "0 0 0 0 + + - - + - +",
+          "0 0 0 0 - + - - + - +",
+          "0 0 0 0 + - - - + - +",
+          "0 0 0 0 - + + + - - +",
+          "0 0 0 0 + - + + - - +",
+          "0 0 0 0 - - + + - - +",
+          "0 0 0 0 + + - + - - +",
+          "0 0 0 0 - + - + - - +",
+          "0 0 0 0 + - - + - - +",
+          "0 0 0 0 - - - + - - +",
+          "0 0 0 0 + + + - - - +",
+          "0 0 0 0 - + + - - - +",
+          "0 0 0 0 + - + - - - +",
+          "0 0 0 0 - - + - - - +",
+          "0 0 0 0 + + - - - - +",
+          "0 0 0 0 - + - - - - +",
+          "0 0 0 0 + - - - - - +",
+          "0 0 0 0 - + + + + + -",
+          "0 0 0 0 + - + + + + -",
+          "0 0 0 0 - - + + + + -",
+          "0 0 0 0 + + - + + + -",
+          "0 0 0 0 - + - + + + -",
+          "0 0 0 0 + - - + + + -",
+          "0 0 0 0 - - - + + + -",
+          "0 0 0 0 + + + - + + -",
+          "0 0 0 0 - + + - + + -",
+          "0 0 0 0 + - + - + + -",
+          "0 0 0 0 - - + - + + -",
+          "0 0 0 0 + + - - + + -",
+          "0 0 0 0 - + - - + + -",
+          "0 0 0 0 + - - - + + -",
+          "0 0 0 0 - + + + - + -",
+          "0 0 0 0 + - + + - + -",
+          "0 0 0 0 - - + + - + -",
+          "0 0 0 0 + + - + - + -",
+          "0 0 0 0 - + - + - + -",
+          "0 0 0 0 + - - + - + -",
+          "0 0 0 0 - - - + - + -",
+          "0 0 0 0 + + + - - + -",
+          "0 0 0 0 - + + - - + -",
+          "0 0 0 0 + - + - - + -",
+          "0 0 0 0 - - + - - + -",
+          "0 0 0 0 + + - - - + -",
+          "0 0 0 0 - + - - - + -",
+          "0 0 0 0 + - - - - + -",
+          "0 0 0 0 - + + + + - -",
+          "0 0 0 0 + - + + + - -",
+          "0 0 0 0 - - + + + - -",
+          "0 0 0 0 + + - + + - -",
+          "0 0 0 0 - + - + + - -",
+          "0 0 0 0 + - - + + - -",
+          "0 0 0 0 - - - + + - -",
+          "0 0 0 0 + + + - + - -",
+          "0 0 0 0 - + + - + - -",
+          "0 0 0 0 + - + - + - -",
+          "0 0 0 0 - - + - + - -",
+          "0 0 0 0 + + - - + - -",
+          "0 0 0 0 - + - - + - -",
+          "0 0 0 0 + - - - + - -",
+          "0 0 0 0 + + - + - - -",
+          "0 0 0 0 - + - + - - -",
+          "0 0 0 0 + - - + - - -",
+          "0 0 0 0 - - - + - - -",
+          "0 0 0 0 + + - - - - -",
+          "0 0 0 0 - + - - - - -",
+          "0 0 0 0 + - - - - - -"
+        ],
+        "keys_sha256": "433bccc49cc858993b8a3dd30335c2b03e1671152068ebb0ebf1fea55ef12399",
+        "source": "display integrand on the same loaded process before integration"
+      }
+    }
+  },
+  "runs": [
+    {
+      "case": "box_rest",
+      "profile": "mixed",
+      "state_input": "box_rest",
+      "card_bindings": {
+        "@PROCESS@": "massive_double_box",
+        "@SURFACE_EDGES@": "5,6,10",
+        "@PARENT_LMB_TOML@": "[5, 8]",
+        "@SELECTION_TOML@": "[\"auto:optimized_lmb\", \"C\"]",
+        "@DEFAULT_WORKSPACE@": "/tmp/advanced-sampling-amplitude-matrix/box_rest_mixed_seed101"
+      },
+      "card_sha256": "39c6de00030474d66260283ee26f2af875b71d58ca016e01185f01669ff99e35",
+      "argv": [
+        "/common/dev/gammaloop_advanced_sampling_checkpoint/target/release/gammaloop",
+        "--read-only-state",
+        "--no-save-state",
+        "-s",
+        "/tmp/advanced-sampling-amplitude-research/double_box_state",
+        "/tmp/advanced-sampling-amplitude-matrix/smoke_checkpoint06d/box_rest_mixed.toml",
+        "run",
+        "integrate",
+        "-D",
+        "seed=101",
+        "-D",
+        "power=1",
+        "-D",
+        "n_start=64",
+        "-D",
+        "n_max=64",
+        "-D",
+        "cores=1",
+        "-D",
+        "workspace=/tmp/advanced-sampling-amplitude-matrix/smoke_checkpoint06d/box_rest_mixed_seed101_n64"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "wall_seconds_including_load": 0.5561665499117225,
+      "observed_orientations": 98,
+      "orientation_keys_sha256": "433bccc49cc858993b8a3dd30335c2b03e1671152068ebb0ebf1fea55ef12399",
+      "neval": 64,
+      "resolved_settings_sha256": "f8d5bce8e869e69ea11db4bae98c024df1d92b6c1107e12c0e55183550813c40",
+      "resolved_settings_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/06d470409cd34d8d57afa11b04a3fb208ca20890/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 6.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    3.0,\n    0.0,\n    0.0,\n    3.0,\n],\n    [\n    3.0,\n    0.0,\n    0.0,\n    -3.0,\n],\n    [\n    3.0,\n    3.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 64\nn_increase = 0\nn_max = 64\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 101\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\ndefault_channel_selection = [\n    \"auto:optimized_lmb\",\n    \"C\",\n]\n\n[sampling.channel_definitions.massive_double_box.C]\naround = \"surface(5,6,10)\"\nsubspace_lmb = [\n    5,\n    8,\n]\nparent_lmb = [\n    5,\n    8,\n]\non_cut = []\n",
+      "result_sha256": "85d5bc0fc9528fb029a340a21e94944f1a473ddbadeba7939b192b2a2e8689c9",
+      "log_sha256": "c41097212dccbba46df0fcb0239fdc817244032f784e2b96da1dd573a0b9d5cf",
+      "integral": {
+        "neval": 64,
+        "real_zero": 0,
+        "im_zero": 1,
+        "result": {
+          "re": -3.947554681345905e-08,
+          "im": -2.5975451809797875e-07
+        },
+        "error": {
+          "re": 5.305497837199066e-08,
+          "im": 2.439022668481037e-07
+        },
+        "real_chisq": 0.0,
+        "im_chisq": 0.0
+      },
+      "integration_statistics": {
+        "num_evals": 64,
+        "average_total_time_seconds": 8.0094e-05,
+        "average_parameterization_time_seconds": 1.4164e-05,
+        "average_integrand_time_seconds": 3.3906e-05,
+        "average_evaluator_time_seconds": 6.122e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 4.677e-06,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    },
+    {
+      "case": "box_rest",
+      "profile": "surface",
+      "state_input": "box_rest",
+      "card_bindings": {
+        "@PROCESS@": "massive_double_box",
+        "@SURFACE_EDGES@": "5,6,10",
+        "@PARENT_LMB_TOML@": "[5, 8]",
+        "@SELECTION_TOML@": "[\"C\"]",
+        "@DEFAULT_WORKSPACE@": "/tmp/advanced-sampling-amplitude-matrix/box_rest_surface_seed101"
+      },
+      "card_sha256": "599ef397029444da9d22e389c67d53d1a7f64cbbbe01ec0c90e01b5cfcfd1666",
+      "argv": [
+        "/common/dev/gammaloop_advanced_sampling_checkpoint/target/release/gammaloop",
+        "--read-only-state",
+        "--no-save-state",
+        "-s",
+        "/tmp/advanced-sampling-amplitude-research/double_box_state",
+        "/tmp/advanced-sampling-amplitude-matrix/smoke_checkpoint06d/box_rest_surface.toml",
+        "run",
+        "integrate",
+        "-D",
+        "seed=101",
+        "-D",
+        "power=1",
+        "-D",
+        "n_start=64",
+        "-D",
+        "n_max=64",
+        "-D",
+        "cores=1",
+        "-D",
+        "workspace=/tmp/advanced-sampling-amplitude-matrix/smoke_checkpoint06d/box_rest_surface_seed101_n64"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "wall_seconds_including_load": 0.5498240810120478,
+      "observed_orientations": 98,
+      "orientation_keys_sha256": "433bccc49cc858993b8a3dd30335c2b03e1671152068ebb0ebf1fea55ef12399",
+      "neval": 64,
+      "resolved_settings_sha256": "6067f1c39175a738f7902223600841e85ec5dda7fdc86adf76d045cf609ac2e9",
+      "resolved_settings_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/06d470409cd34d8d57afa11b04a3fb208ca20890/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 6.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    3.0,\n    0.0,\n    0.0,\n    3.0,\n],\n    [\n    3.0,\n    0.0,\n    0.0,\n    -3.0,\n],\n    [\n    3.0,\n    3.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 64\nn_increase = 0\nn_max = 64\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 101\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\ndefault_channel_selection = [\"C\"]\n\n[sampling.channel_definitions.massive_double_box.C]\naround = \"surface(5,6,10)\"\nsubspace_lmb = [\n    5,\n    8,\n]\nparent_lmb = [\n    5,\n    8,\n]\non_cut = []\n",
+      "result_sha256": "2ff88dc3e2928be63bc8f5ab527a8ee7f9daeee2910cc56588b5b32b6d9be925",
+      "log_sha256": "29d24fb640520750dcbeb9eab49bf8fdadf7747c0c6bfbeeea1672f1cdba5123",
+      "integral": {
+        "neval": 64,
+        "real_zero": 0,
+        "im_zero": 0,
+        "result": {
+          "re": 6.3840619362492375e-09,
+          "im": -2.3396611921493343e-08
+        },
+        "error": {
+          "re": 8.768802197729224e-09,
+          "im": 3.0452488473596136e-08
+        },
+        "real_chisq": 0.0,
+        "im_chisq": 0.0
+      },
+      "integration_statistics": {
+        "num_evals": 64,
+        "average_total_time_seconds": 7.2476e-05,
+        "average_parameterization_time_seconds": 6.491e-06,
+        "average_integrand_time_seconds": 3.3792e-05,
+        "average_evaluator_time_seconds": 6.174e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.898e-06,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    },
+    {
+      "case": "kite_boost",
+      "profile": "mixed",
+      "state_input": "kite_boost",
+      "card_bindings": {
+        "@PROCESS@": "massive_kite",
+        "@SURFACE_EDGES@": "2,4,6",
+        "@PARENT_LMB_TOML@": "[4, 6]",
+        "@SELECTION_TOML@": "[\"auto:optimized_lmb\", \"C\"]",
+        "@DEFAULT_WORKSPACE@": "/tmp/advanced-sampling-amplitude-matrix/kite_boost_mixed_seed101"
+      },
+      "card_sha256": "a32d255bf4e4f3d610f6fbbf8dc174fe435038302ef1891409b674815a43ff67",
+      "argv": [
+        "/common/dev/gammaloop_advanced_sampling_checkpoint/target/release/gammaloop",
+        "--read-only-state",
+        "--no-save-state",
+        "-s",
+        "/tmp/advanced-sampling-amplitude-research/kite_boosted_state",
+        "/tmp/advanced-sampling-amplitude-matrix/smoke_checkpoint06d/kite_boost_mixed.toml",
+        "run",
+        "integrate",
+        "-D",
+        "seed=101",
+        "-D",
+        "power=1",
+        "-D",
+        "n_start=64",
+        "-D",
+        "n_max=64",
+        "-D",
+        "cores=1",
+        "-D",
+        "workspace=/tmp/advanced-sampling-amplitude-matrix/smoke_checkpoint06d/kite_boost_mixed_seed101_n64"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "wall_seconds_including_load": 0.5077579900389537,
+      "observed_orientations": 18,
+      "orientation_keys_sha256": "9588ef2626223bd28a2ecca633f49c421e862c5321c8ae20718f4f7fc38c86f0",
+      "neval": 64,
+      "resolved_settings_sha256": "1293b6bd3321db6035d9d2da5ad272ba7a9f6aaf939250e73a90c11353653fa0",
+      "resolved_settings_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/06d470409cd34d8d57afa11b04a3fb208ca20890/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0990195135927845,\n    0.0,\n    0.0,\n    1.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 64\nn_increase = 0\nn_max = 64\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 101\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\ndefault_channel_selection = [\n    \"auto:optimized_lmb\",\n    \"C\",\n]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+      "result_sha256": "39b8ac860e91d7702261ed32cde802c16d1d12e6ed054001e6a7343c5e4306da",
+      "log_sha256": "6b9f5119f8ad7658bc2174f649179c1804746b0050c776b577af2113056b6118",
+      "integral": {
+        "neval": 64,
+        "real_zero": 0,
+        "im_zero": 2,
+        "result": {
+          "re": -6.936741472978142e-06,
+          "im": 4.290592969012603e-06
+        },
+        "error": {
+          "re": 2.8308323302652478e-06,
+          "im": 9.374883089953204e-06
+        },
+        "real_chisq": 0.0,
+        "im_chisq": 0.0
+      },
+      "integration_statistics": {
+        "num_evals": 64,
+        "average_total_time_seconds": 7.096e-05,
+        "average_parameterization_time_seconds": 1.0463e-05,
+        "average_integrand_time_seconds": 3.1214e-05,
+        "average_evaluator_time_seconds": 2.865e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 4.683e-06,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    },
+    {
+      "case": "kite_boost",
+      "profile": "surface",
+      "state_input": "kite_boost",
+      "card_bindings": {
+        "@PROCESS@": "massive_kite",
+        "@SURFACE_EDGES@": "2,4,6",
+        "@PARENT_LMB_TOML@": "[4, 6]",
+        "@SELECTION_TOML@": "[\"C\"]",
+        "@DEFAULT_WORKSPACE@": "/tmp/advanced-sampling-amplitude-matrix/kite_boost_surface_seed101"
+      },
+      "card_sha256": "3b890f1d5a22d439a09c7239819b484a47f4b2a61b1785b7dee42aad2372c8a4",
+      "argv": [
+        "/common/dev/gammaloop_advanced_sampling_checkpoint/target/release/gammaloop",
+        "--read-only-state",
+        "--no-save-state",
+        "-s",
+        "/tmp/advanced-sampling-amplitude-research/kite_boosted_state",
+        "/tmp/advanced-sampling-amplitude-matrix/smoke_checkpoint06d/kite_boost_surface.toml",
+        "run",
+        "integrate",
+        "-D",
+        "seed=101",
+        "-D",
+        "power=1",
+        "-D",
+        "n_start=64",
+        "-D",
+        "n_max=64",
+        "-D",
+        "cores=1",
+        "-D",
+        "workspace=/tmp/advanced-sampling-amplitude-matrix/smoke_checkpoint06d/kite_boost_surface_seed101_n64"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "wall_seconds_including_load": 0.5057234329869971,
+      "observed_orientations": 18,
+      "orientation_keys_sha256": "9588ef2626223bd28a2ecca633f49c421e862c5321c8ae20718f4f7fc38c86f0",
+      "neval": 64,
+      "resolved_settings_sha256": "5404b6c1f8c9fcd1f6588426be0fb21dba147802eba23ab4f85c96b17881fddb",
+      "resolved_settings_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/06d470409cd34d8d57afa11b04a3fb208ca20890/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0990195135927845,\n    0.0,\n    0.0,\n    1.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 64\nn_increase = 0\nn_max = 64\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 101\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\ndefault_channel_selection = [\"C\"]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+      "result_sha256": "841e01a6f0fc055c6c4aa86c1388bc80970cf38ddbffcdca1b4ad25e932bca0b",
+      "log_sha256": "6ba7e035f0a61e7984d84b7ad93f570ba3104113ee6feeb9f3ef4b3b6194e19f",
+      "integral": {
+        "neval": 64,
+        "real_zero": 0,
+        "im_zero": 2,
+        "result": {
+          "re": -1.0479462773534748e-05,
+          "im": 1.3732400921920618e-05
+        },
+        "error": {
+          "re": 4.145436811035095e-06,
+          "im": 1.3926853890236232e-05
+        },
+        "real_chisq": 0.0,
+        "im_chisq": 0.0
+      },
+      "integration_statistics": {
+        "num_evals": 64,
+        "average_total_time_seconds": 6.6568e-05,
+        "average_parameterization_time_seconds": 6.348e-06,
+        "average_integrand_time_seconds": 3.0716e-05,
+        "average_evaluator_time_seconds": 2.878e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.745e-06,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    },
+    {
+      "case": "kite_rest",
+      "profile": "mixed",
+      "state_input": "kite_rest",
+      "card_bindings": {
+        "@PROCESS@": "massive_kite",
+        "@SURFACE_EDGES@": "2,4,6",
+        "@PARENT_LMB_TOML@": "[4, 6]",
+        "@SELECTION_TOML@": "[\"auto:optimized_lmb\", \"C\"]",
+        "@DEFAULT_WORKSPACE@": "/tmp/advanced-sampling-amplitude-matrix/kite_rest_mixed_seed101"
+      },
+      "card_sha256": "a2ae3cb9ea7daa047517f0babc63e50812827af8d5583a04f6360ed6f98b7a0e",
+      "argv": [
+        "/common/dev/gammaloop_advanced_sampling_checkpoint/target/release/gammaloop",
+        "--read-only-state",
+        "--no-save-state",
+        "-s",
+        "/tmp/advanced-sampling-amplitude-research/state",
+        "/tmp/advanced-sampling-amplitude-matrix/smoke_checkpoint06d/kite_rest_mixed.toml",
+        "run",
+        "integrate",
+        "-D",
+        "seed=101",
+        "-D",
+        "power=1",
+        "-D",
+        "n_start=64",
+        "-D",
+        "n_max=64",
+        "-D",
+        "cores=1",
+        "-D",
+        "workspace=/tmp/advanced-sampling-amplitude-matrix/smoke_checkpoint06d/kite_rest_mixed_seed101_n64"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "wall_seconds_including_load": 0.5307960959617049,
+      "observed_orientations": 18,
+      "orientation_keys_sha256": "9588ef2626223bd28a2ecca633f49c421e862c5321c8ae20718f4f7fc38c86f0",
+      "neval": 64,
+      "resolved_settings_sha256": "e78ba3b41bb14f64018ecb176048fae3e09c959ba32e92f7ff28b2914c9bdf96",
+      "resolved_settings_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/06d470409cd34d8d57afa11b04a3fb208ca20890/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 64\nn_increase = 0\nn_max = 64\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 101\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\ndefault_channel_selection = [\n    \"auto:optimized_lmb\",\n    \"C\",\n]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+      "result_sha256": "0c2780c85f071ddfd103981ca171dc69d89574b2a509c2687ccdb09e43fe644c",
+      "log_sha256": "4f7c51d386d1cefd929ee5e9399d455b97620a17f2c84b7ff69f72abedf43370",
+      "integral": {
+        "neval": 64,
+        "real_zero": 0,
+        "im_zero": 2,
+        "result": {
+          "re": -9.026251936735733e-06,
+          "im": 7.895237105005704e-07
+        },
+        "error": {
+          "re": 3.70660968356577e-06,
+          "im": 1.1577788833372334e-05
+        },
+        "real_chisq": 0.0,
+        "im_chisq": 0.0
+      },
+      "integration_statistics": {
+        "num_evals": 64,
+        "average_total_time_seconds": 6.5255e-05,
+        "average_parameterization_time_seconds": 1.0069e-05,
+        "average_integrand_time_seconds": 2.8309e-05,
+        "average_evaluator_time_seconds": 2.866e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 4.382e-06,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    },
+    {
+      "case": "kite_rest",
+      "profile": "surface",
+      "state_input": "kite_rest",
+      "card_bindings": {
+        "@PROCESS@": "massive_kite",
+        "@SURFACE_EDGES@": "2,4,6",
+        "@PARENT_LMB_TOML@": "[4, 6]",
+        "@SELECTION_TOML@": "[\"C\"]",
+        "@DEFAULT_WORKSPACE@": "/tmp/advanced-sampling-amplitude-matrix/kite_rest_surface_seed101"
+      },
+      "card_sha256": "8bc1484b2a1f84333a3fa64ba146bd8a6f06f29c78cab0d8e4144b25eb8b0345",
+      "argv": [
+        "/common/dev/gammaloop_advanced_sampling_checkpoint/target/release/gammaloop",
+        "--read-only-state",
+        "--no-save-state",
+        "-s",
+        "/tmp/advanced-sampling-amplitude-research/state",
+        "/tmp/advanced-sampling-amplitude-matrix/smoke_checkpoint06d/kite_rest_surface.toml",
+        "run",
+        "integrate",
+        "-D",
+        "seed=101",
+        "-D",
+        "power=1",
+        "-D",
+        "n_start=64",
+        "-D",
+        "n_max=64",
+        "-D",
+        "cores=1",
+        "-D",
+        "workspace=/tmp/advanced-sampling-amplitude-matrix/smoke_checkpoint06d/kite_rest_surface_seed101_n64"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "wall_seconds_including_load": 0.47401518002152443,
+      "observed_orientations": 18,
+      "orientation_keys_sha256": "9588ef2626223bd28a2ecca633f49c421e862c5321c8ae20718f4f7fc38c86f0",
+      "neval": 64,
+      "resolved_settings_sha256": "ffa69b0e1bc19ef0ad7b42aa3141ace6dfba4689b50dc9c9fe59808d73859e32",
+      "resolved_settings_toml": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/06d470409cd34d8d57afa11b04a3fb208ca20890/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 5.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [\n    [\n    5.0,\n    0.0,\n    0.0,\n    0.0,\n],\n    \"dependent\",\n]\nhelicities = [\n    0,\n    0,\n]\n\n[integrator]\nn_bins = 16\nmin_samples_for_update = 64\nn_start = 64\nn_increase = 0\nn_max = 64\ndiscrete_dim_learning_rate = 0.25\ncontinuous_dim_learning_rate = 0.25\nseed = 101\n\n[stability]\nescalate_if_exact_zero = false\n\n[[stability.levels]]\nprecision = \"Double\"\nrequired_precision_for_re = 0.000001\nrequired_precision_for_im = 0.000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Quad\"\nrequired_precision_for_re = 0.0000000001\nrequired_precision_for_im = 0.0000000001\nescalate_for_large_weight_threshold = -1.0\n\n[[stability.levels]]\nprecision = \"Arb\"\nrequired_precision_for_re = 0.000000000001\nrequired_precision_for_im = 0.000000000001\nescalate_for_large_weight_threshold = -1.0\n\n[sampling]\ngraphs = \"monte_carlo\"\nsampling_multichanneling = true\nsampling_channels = \"monte_carlo\"\ndefault_channel_selection = [\"C\"]\n\n[sampling.channel_definitions.massive_kite.C]\naround = \"surface(2,4,6)\"\nsubspace_lmb = [\n    4,\n    6,\n]\nparent_lmb = [\n    4,\n    6,\n]\non_cut = []\n",
+      "result_sha256": "e7e1e6fd6ac3aa1c3f3ce4140c2a08cd9891dc06212e2701bdba0ae79815f01a",
+      "log_sha256": "f2ba46697c0a688ecd85fded819625dbbdaf8c030f16d09c22c9ce7ff5eeb52f",
+      "integral": {
+        "neval": 64,
+        "real_zero": 0,
+        "im_zero": 2,
+        "result": {
+          "re": -1.0322738162938604e-05,
+          "im": 1.0335907117950323e-05
+        },
+        "error": {
+          "re": 4.34645091274709e-06,
+          "im": 1.1983126425031468e-05
+        },
+        "real_chisq": 0.0,
+        "im_chisq": 0.0
+      },
+      "integration_statistics": {
+        "num_evals": 64,
+        "average_total_time_seconds": 6.542e-05,
+        "average_parameterization_time_seconds": 7.088e-06,
+        "average_integrand_time_seconds": 3.0812e-05,
+        "average_evaluator_time_seconds": 3.605e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 4.515e-06,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    }
+  ]
+}
