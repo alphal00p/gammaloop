@@ -90,10 +90,12 @@ pub use sampling_selection::{
     CompiledSamplingChannel, CompiledSamplingMap, ResolvedNamedSamplingChannel,
     ResolvedSamplingChannelSelection, SamplingCatalogueEntry, SamplingChannelBridge,
     SamplingChannelBridgeError, SamplingChannelBridgeEvaluation, SamplingChannelCatalogue,
-    SamplingChannelCompileContext, SamplingChannelCompileError, SamplingChannelPreset,
-    SamplingChannelSelector, SamplingSelectionError, SamplingSurfaceGeometry,
-    build_sampling_channel_catalogue, explicitly_selected_graphs, graph_channel_definitions,
-    resolve_sampling_channel_selection, resolve_sampling_channel_selection_replacing_default,
+    SamplingChannelCompileContext, SamplingChannelCompileError, SamplingChannelId,
+    SamplingChannelPreset, SamplingChannelSelector, SamplingSelectionError,
+    SamplingSurfaceGeometry, build_sampling_channel_catalogue,
+    build_sampling_channel_catalogue_with_surfaces, explicitly_selected_graphs,
+    graph_channel_definitions, resolve_sampling_channel_selection,
+    resolve_sampling_channel_selection_replacing_default,
 };
 
 pub mod threshold_multiplier;
@@ -2057,6 +2059,18 @@ impl LmbMultiChannelingSetup {
         resolved: &ResolvedSamplingChannelSelection,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<SamplingChannelCatalogue> {
+        self.sampling_channel_catalogue_with_surfaces(resolved, parameterization_settings, &[])
+    }
+
+    /// Resolve the same selection while supplying E-surface candidates already
+    /// enumerated in the master graph frame. Surface existence and geometry are
+    /// still prepared per cut/orientation before compilation.
+    pub fn sampling_channel_catalogue_with_surfaces(
+        &self,
+        resolved: &ResolvedSamplingChannelSelection,
+        parameterization_settings: &ParameterizationSettings,
+        surface_edges: &[Vec<usize>],
+    ) -> Result<SamplingChannelCatalogue> {
         let all_lmbs = self
             .all_bases
             .iter_enumerated()
@@ -2072,10 +2086,19 @@ impl LmbMultiChannelingSetup {
             .into_iter()
             .map(usize::from)
             .collect::<Vec<_>>();
-        Ok(build_sampling_channel_catalogue(
+        let parent_lmb = self
+            .graph
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .map(|edge| edge.0)
+            .collect::<Vec<_>>();
+        Ok(build_sampling_channel_catalogue_with_surfaces(
             resolved,
             &all_lmbs,
             &optimized_lmbs,
+            surface_edges,
+            &parent_lmb,
         ))
     }
 

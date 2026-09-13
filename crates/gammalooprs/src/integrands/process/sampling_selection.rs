@@ -250,6 +250,29 @@ pub struct CompiledSamplingChannel {
     pub map: CompiledSamplingMap,
 }
 
+/// Identifier for an advanced sampling channel. This is distinct from the
+/// legacy LMB `ChannelIndex`, so both selection schemes can coexist.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
+pub struct SamplingChannelId(pub usize);
+
+impl SamplingChannelId {
+    pub const fn index(self) -> usize {
+        self.0
+    }
+}
+
+impl From<usize> for SamplingChannelId {
+    fn from(index: usize) -> Self {
+        Self(index)
+    }
+}
+
+impl From<SamplingChannelId> for usize {
+    fn from(index: SamplingChannelId) -> Self {
+        index.0
+    }
+}
+
 /// A bounded bridge from compiled graph channels to the existing graph
 /// evaluator.  The bridge deliberately deals in the complete master raw
 /// frame: it never silently embeds a lower-dimensional surface block or
@@ -265,7 +288,7 @@ pub struct SamplingChannelBridge {
 /// multichannel partition.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SamplingChannelBridgeEvaluation {
-    pub channel_index: usize,
+    pub channel_id: SamplingChannelId,
     pub channel_name: String,
     /// The complete master raw coordinate frame passed to graph evaluation.
     pub raw_coordinates: Vec<f64>,
@@ -304,7 +327,7 @@ pub enum SamplingChannelBridgeError {
         error: String,
     },
     UnknownChannel {
-        channel: usize,
+        channel: SamplingChannelId,
     },
 }
 
@@ -355,7 +378,8 @@ impl fmt::Display for SamplingChannelBridgeError {
             Self::UnknownChannel { channel } => {
                 write!(
                     formatter,
-                    "sampling channel index {channel} is out of range"
+                    "sampling channel index {} is out of range",
+                    channel.0
                 )
             }
         }
@@ -461,14 +485,15 @@ impl SamplingChannelBridge {
 
     pub fn forward(
         &self,
-        channel_index: usize,
+        channel_id: SamplingChannelId,
         coordinates: &[f64],
     ) -> Result<SamplingChannelBridgeEvaluation> {
+        let channel_index = channel_id.0;
         let channel =
             self.channels
                 .get(channel_index)
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
-                    channel: channel_index,
+                    channel: channel_id,
                 })?;
         let map = channel.forward(coordinates)?;
         if map.point.len() != self.dimensions {
@@ -481,7 +506,7 @@ impl SamplingChannelBridge {
         }
         let partition = self.partition(&map.point)?;
         Ok(SamplingChannelBridgeEvaluation {
-            channel_index,
+            channel_id,
             channel_name: channel.name.clone(),
             raw_coordinates: map.point.clone(),
             map,
@@ -491,19 +516,20 @@ impl SamplingChannelBridge {
 
     pub fn inverse(
         &self,
-        channel_index: usize,
+        channel_id: SamplingChannelId,
         raw_coordinates: &[f64],
     ) -> Result<SamplingChannelBridgeEvaluation> {
+        let channel_index = channel_id.0;
         let channel =
             self.channels
                 .get(channel_index)
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
-                    channel: channel_index,
+                    channel: channel_id,
                 })?;
         let map = channel.inverse(raw_coordinates)?;
         let partition = self.partition(raw_coordinates)?;
         Ok(SamplingChannelBridgeEvaluation {
-            channel_index,
+            channel_id,
             channel_name: channel.name.clone(),
             raw_coordinates: raw_coordinates.to_vec(),
             map,
@@ -635,6 +661,58 @@ impl SamplingChannelCatalogue {
                         CompiledSamplingMap::Lmb(map),
                     )
                 }
+                SamplingCatalogueEntry::Surface { edges, parent_lmb } => {
+                    if parent_lmb != &context.parent_lmb {
+                        return Err(SamplingChannelCompileError::InvalidChannel {
+                            channel: format!("surface:{edges:?}"),
+                            error: format!(
+                                "parent LMB {:?} does not match master context {:?}",
+                                parent_lmb, context.parent_lmb
+                            ),
+                        });
+                    }
+                    if edges.len() != context.n_loop_momenta {
+                        return Err(SamplingChannelCompileError::UnsupportedMap {
+                            channel: format!("surface:{edges:?}"),
+                            map: format!(
+                                "surface({edges:?}) is only a full-frame map; supply an explicit product(surface(...), complement(...)) with prepared embedding for a proper subspace"
+                            ),
+                        });
+                    }
+                    let Some(geometry) = context.surfaces.get(edges) else {
+                        return Err(SamplingChannelCompileError::MissingSurfaceGeometry {
+                            channel: format!("surface:{edges:?}"),
+                            edges: edges.clone(),
+                        });
+                    };
+                    let expected_dimension = 3 * edges.len();
+                    if geometry.center.len() != expected_dimension {
+                        return Err(SamplingChannelCompileError::InvalidChannel {
+                            channel: format!("surface:{edges:?}"),
+                            error: format!(
+                                "surface centre has dimension {}, expected {} for edges {edges:?}",
+                                geometry.center.len(),
+                                expected_dimension
+                            ),
+                        });
+                    }
+                    let definition = SamplingMapDefinition::Surface(edges.clone());
+                    let map = SurfaceRadialMap::new(
+                        expected_dimension,
+                        geometry.center.clone(),
+                        geometry.threshold_radius,
+                        geometry.beta,
+                        geometry.power,
+                    )
+                    .map(CompiledSamplingMap::Surface)
+                    .map_err(|error| {
+                        SamplingChannelCompileError::InvalidChannel {
+                            channel: format!("surface:{edges:?}"),
+                            error: error.to_string(),
+                        }
+                    })?;
+                    (format!("surface:{edges:?}"), None, definition, map)
+                }
                 SamplingCatalogueEntry::Named(channel) => {
                     if channel.definition.parent_lmb != context.parent_lmb {
                         return Err(SamplingChannelCompileError::InvalidChannel {
@@ -743,6 +821,9 @@ impl SamplingChannelCatalogue {
                     "{index}: lmb basis={basis_id} edges={edges:?} source={}",
                     preset.as_str()
                 ),
+                SamplingCatalogueEntry::Surface { edges, parent_lmb } => {
+                    format!("{index}: surface edges={edges:?} parent_lmb={parent_lmb:?}")
+                }
                 SamplingCatalogueEntry::Named(channel) => format!(
                     "{index}: {} around={} parent_lmb={:?} on_cut={:?}",
                     channel.name,
@@ -832,7 +913,7 @@ pub fn build_sampling_channel_catalogue_with_surfaces(
                 {
                     entries.push(SamplingCatalogueEntry::Surface {
                         edges: edges.clone(),
-                        parent_lmb: parent_lmb.clone(),
+                        parent_lmb: parent_lmb.to_vec(),
                     });
                 }
             }
@@ -1161,6 +1242,25 @@ mod tests {
     }
 
     #[test]
+    fn surface_preset_appends_master_frame_surface_candidates() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:surfaces".into()];
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue_with_surfaces(
+            &resolved,
+            &[(0, vec![1, 2])],
+            &[0],
+            &[vec![1, 2], vec![2, 3]],
+            &[1, 2],
+        );
+        assert!(catalogue.entries.iter().any(|entry| matches!(
+            entry,
+            SamplingCatalogueEntry::Surface { edges, parent_lmb }
+                if edges == &vec![1, 2] && parent_lmb == &vec![1, 2]
+        )));
+    }
+
+    #[test]
     fn catalogue_compiles_lmb_and_surface_with_master_embedding() {
         let mut selection = SamplingChannelSelection {
             default_channel_selection: vec!["auto:lmb".into(), "threshold".into()],
@@ -1279,7 +1379,9 @@ mod tests {
             },
         ])
         .unwrap();
-        let evaluation = bridge.forward(1, &[0.31, 0.42, 0.57]).unwrap();
+        let evaluation = bridge
+            .forward(SamplingChannelId::from(1), &[0.31, 0.42, 0.57])
+            .unwrap();
         assert_eq!(evaluation.raw_coordinates, evaluation.map.point);
         assert_eq!(evaluation.partition.weights.len(), 2);
         assert!((evaluation.partition.weight_sum() - 1.0).abs() < 1.0e-12);
@@ -1290,7 +1392,9 @@ mod tests {
                 .iter()
                 .all(|weight| *weight > 0.0)
         );
-        let inverse = bridge.inverse(1, &evaluation.raw_coordinates).unwrap();
+        let inverse = bridge
+            .inverse(SamplingChannelId::from(1), &evaluation.raw_coordinates)
+            .unwrap();
         assert!(inverse.map.residual < 1.0e-10);
     }
 
@@ -1308,7 +1412,11 @@ mod tests {
             map: CompiledSamplingMap::Lmb(map),
         };
         let bridge = SamplingChannelBridge::new(vec![channel.clone()]).unwrap();
-        assert!(bridge.forward(1, &[0.2, 0.3, 0.4]).is_err());
+        assert!(
+            bridge
+                .forward(SamplingChannelId::from(1), &[0.2, 0.3, 0.4])
+                .is_err()
+        );
         let mut malformed = channel;
         malformed.name = "wrong".into();
         // A map with a different loop count cannot be put into the common raw frame.
