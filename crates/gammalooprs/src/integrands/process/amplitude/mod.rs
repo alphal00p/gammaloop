@@ -45,7 +45,7 @@ use crate::{
         HasIntegrand,
         evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
-            ChannelIndex, LmbChannelWeightingSettings, ParamBuilder,
+            LmbChannelWeightingSettings, ParamBuilder, SamplingChannelId,
             evaluators::{ActiveF64Backend, EvaluatorStack},
             graph_to_group_id_for_group_structure,
             threshold_multiplier::ThresholdMultiplierEvaluatorCollection,
@@ -607,7 +607,7 @@ impl AmplitudeGraphTerm {
                 tropical_sampler: graph.derived_data.tropical_sampler.clone(),
                 graph: graph.graph.clone(),
                 multi_channeling_setup: LmbMultiChannelingSetup {
-                    channels: TiVec::new(),
+                    lmb_basis_ids: TiVec::new(),
                     graph: graph.graph.clone(), // will be overwritten later,
                     all_bases: TiVec::new(),
                 }, // to be taken from froup master
@@ -705,7 +705,7 @@ impl AmplitudeGraphTerm {
         &self,
         settings: &RuntimeSettings,
         orientation_id: Option<usize>,
-        channel_id: Option<ChannelIndex>,
+        channel_id: Option<SamplingChannelId>,
     ) -> Result<GenericEvent<T>> {
         let externals = settings
             .kinematics
@@ -1106,7 +1106,7 @@ impl GraphTerm for AmplitudeGraphTerm {
 
     fn lmb_channel_label(
         &self,
-        channel_id: ChannelIndex,
+        channel_id: SamplingChannelId,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<Option<String>> {
         Ok(Some(format_lmb_channel_label(

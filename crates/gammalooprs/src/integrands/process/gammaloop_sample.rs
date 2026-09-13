@@ -16,7 +16,7 @@ use itertools::Itertools;
 use momtrop::vector::Vector;
 use symbolica::numerical_integration::Sample;
 
-use super::{ChannelIndex, ProcessIntegrandImpl, resolve_discrete_selection_for_sampling};
+use super::{ProcessIntegrandImpl, SamplingChannelId, resolve_discrete_selection_for_sampling};
 
 // discrete dimensions, continious dimensions
 fn unwrap_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> (Vec<usize>, Vec<F<T>>) {
@@ -260,7 +260,7 @@ pub enum DiscreteGraphSample<T: FloatLike> {
     DiscreteMultiChanneling {
         alpha: F<T>,
         channel_weight: LmbChannelWeight,
-        channel_id: ChannelIndex,
+        channel_id: SamplingChannelId,
         sample: MomentumSample<T>,
     },
 }
