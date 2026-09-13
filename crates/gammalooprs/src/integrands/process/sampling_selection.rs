@@ -8,8 +8,13 @@
 use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use crate::settings::runtime::{SamplingChannelDefinition, SamplingChannelSelection};
+use color_eyre::eyre::Result;
 
-use super::SamplingMapDefinition;
+use super::{
+    SamplingMapComponent, SamplingMapContract, SamplingMapDefinition, SamplingMapEvaluation,
+    SamplingMapKernel, SurfaceRadialMap,
+};
+use crate::settings::runtime::ParameterizationSettings;
 
 /// Built-in selectors understood by the channel catalogue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -131,6 +136,154 @@ pub struct SamplingChannelCatalogue {
     pub entries: Vec<SamplingCatalogueEntry>,
 }
 
+/// Kinematic data needed when compiling a graph-local surface channel.
+///
+/// The centre and threshold radius are intentionally supplied by the process
+/// layer: they depend on the prepared external/cut kinematics and cannot be
+/// inferred from a symbolic `surface(...)` expression alone.  `loop_edges`
+/// are master-graph edge ids and define the local raw-frame embedding of the
+/// compiled block.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SamplingSurfaceGeometry {
+    pub center: Vec<f64>,
+    pub threshold_radius: Option<f64>,
+    pub beta: f64,
+    pub power: f64,
+}
+
+/// Input context for graph-independent compilation of catalogue entries.
+///
+/// A caller must identify the master graph explicitly.  This prevents a
+/// surface block from being mistaken for a coordinate block in a different
+/// graph when channel definitions are shared across a graph group.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SamplingChannelCompileContext {
+    pub master_graph: String,
+    pub parameterization_settings: ParameterizationSettings,
+    pub e_cm: f64,
+    pub n_loop_momenta: usize,
+    pub surfaces: BTreeMap<Vec<usize>, SamplingSurfaceGeometry>,
+}
+
+impl SamplingChannelCompileContext {
+    pub fn new(
+        master_graph: impl Into<String>,
+        parameterization_settings: ParameterizationSettings,
+        e_cm: f64,
+        n_loop_momenta: usize,
+    ) -> Self {
+        Self {
+            master_graph: master_graph.into(),
+            parameterization_settings,
+            e_cm,
+            n_loop_momenta,
+            surfaces: BTreeMap::new(),
+        }
+    }
+}
+
+/// The map kernels currently compilable without a graph-specific implicit
+/// solver.  Composite/cut maps stay in the typed catalogue until their
+/// prepared kinematic context is supplied by the process layer.
+#[derive(Clone, Debug)]
+pub enum CompiledSamplingMap {
+    Lmb(SamplingMapKernel),
+    Surface(SurfaceRadialMap),
+}
+
+impl CompiledSamplingMap {
+    pub fn contract(&self) -> SamplingMapContract {
+        match self {
+            Self::Lmb(map) => map.contract(),
+            Self::Surface(map) => map.contract(),
+        }
+    }
+
+    pub fn dimensions(&self) -> usize {
+        match self {
+            Self::Lmb(map) => map.dimensions(),
+            Self::Surface(map) => map.dimension(),
+        }
+    }
+
+    pub fn as_component(&self) -> &dyn SamplingMapComponent {
+        match self {
+            Self::Lmb(map) => map,
+            Self::Surface(map) => map,
+        }
+    }
+
+    pub fn forward(&self, coordinates: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.as_component().forward(coordinates, &[])
+    }
+
+    pub fn inverse(&self, point: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.as_component().inverse(point, &[])
+    }
+}
+
+/// A compiled graph channel and the master-graph raw-frame block it occupies.
+#[derive(Clone, Debug)]
+pub struct CompiledSamplingChannel {
+    pub name: String,
+    pub master_graph: String,
+    pub basis_id: Option<usize>,
+    pub definition: SamplingMapDefinition,
+    /// Ordered master-graph edge ids for this raw coordinate block.
+    pub embedded_edges: Vec<usize>,
+    pub map: CompiledSamplingMap,
+}
+
+impl CompiledSamplingChannel {
+    pub fn contract(&self) -> SamplingMapContract {
+        self.map.contract()
+    }
+
+    pub fn dimensions(&self) -> usize {
+        self.map.dimensions()
+    }
+
+    pub fn forward(&self, coordinates: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.map.forward(coordinates)
+    }
+
+    pub fn inverse(&self, point: &[f64]) -> Result<SamplingMapEvaluation> {
+        self.map.inverse(point)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SamplingChannelCompileError {
+    EmptyMasterGraph,
+    UnsupportedMap { channel: String, map: String },
+    MissingSurfaceGeometry { channel: String, edges: Vec<usize> },
+    InvalidChannel { channel: String, error: String },
+}
+
+impl fmt::Display for SamplingChannelCompileError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyMasterGraph => {
+                formatter.write_str("sampling channel compilation requires a master graph")
+            }
+            Self::UnsupportedMap { channel, map } => write!(
+                formatter,
+                "sampling channel `{channel}` uses map `{map}`, which needs prepared graph context before it can be compiled"
+            ),
+            Self::MissingSurfaceGeometry { channel, edges } => write!(
+                formatter,
+                "sampling channel `{channel}` has no prepared surface geometry for master-graph edges {edges:?}"
+            ),
+            Self::InvalidChannel { channel, error } => write!(
+                formatter,
+                "sampling channel `{channel}` could not be compiled: {error}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for SamplingChannelCompileError {}
+
 impl SamplingChannelCatalogue {
     pub fn lmb_entries(&self) -> impl Iterator<Item = (usize, &[usize])> {
         self.entries.iter().filter_map(|entry| match entry {
@@ -146,6 +299,121 @@ impl SamplingChannelCatalogue {
             SamplingCatalogueEntry::Named(channel) => Some(channel),
             SamplingCatalogueEntry::Lmb { .. } => None,
         })
+    }
+
+    /// Compile the ordinary LMB and radial surface entries in this catalogue.
+    ///
+    /// Surface geometry is looked up by its canonical master-graph edge list.
+    /// Maps such as `cut`, `intersect` and `then` are deliberately rejected
+    /// here until the process has prepared their conditional kinematics; this
+    /// avoids creating a numerically plausible map with an incorrect frame.
+    pub fn compile(
+        &self,
+        context: &SamplingChannelCompileContext,
+    ) -> Result<Vec<CompiledSamplingChannel>, SamplingChannelCompileError> {
+        if context.master_graph.trim().is_empty() {
+            return Err(SamplingChannelCompileError::EmptyMasterGraph);
+        }
+        let mut compiled = Vec::with_capacity(self.entries.len());
+        for entry in &self.entries {
+            let (name, basis_id, definition, map) = match entry {
+                SamplingCatalogueEntry::Lmb {
+                    basis_id, edges, ..
+                } => {
+                    let definition = SamplingMapDefinition::Lmb(edges.clone());
+                    let map = SamplingMapKernel::new(
+                        definition.clone(),
+                        context.parameterization_settings.clone(),
+                        context.e_cm,
+                        context.n_loop_momenta,
+                    )
+                    .map_err(|error| {
+                        SamplingChannelCompileError::InvalidChannel {
+                            channel: format!("lmb[{basis_id}]"),
+                            error: error.to_string(),
+                        }
+                    })?;
+                    (
+                        format!("lmb[{basis_id}]"),
+                        Some(*basis_id),
+                        definition,
+                        CompiledSamplingMap::Lmb(map),
+                    )
+                }
+                SamplingCatalogueEntry::Named(channel) => {
+                    let definition = channel.map.clone();
+                    let map = match &definition {
+                        SamplingMapDefinition::Lmb(_edges) => SamplingMapKernel::new(
+                            definition.clone(),
+                            context.parameterization_settings.clone(),
+                            context.e_cm,
+                            context.n_loop_momenta,
+                        )
+                        .map(CompiledSamplingMap::Lmb)
+                        .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+                            channel: channel.name.clone(),
+                            error: error.to_string(),
+                        })?,
+                        SamplingMapDefinition::Surface(edges) => {
+                            let Some(geometry) = context.surfaces.get(edges) else {
+                                return Err(SamplingChannelCompileError::MissingSurfaceGeometry {
+                                    channel: channel.name.clone(),
+                                    edges: edges.clone(),
+                                });
+                            };
+                            let expected_dimension = 3 * edges.len();
+                            if geometry.center.len() != expected_dimension {
+                                return Err(SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: format!(
+                                        "surface centre has dimension {}, expected {} for edges {edges:?}",
+                                        geometry.center.len(),
+                                        expected_dimension
+                                    ),
+                                });
+                            }
+                            SurfaceRadialMap::new(
+                                expected_dimension,
+                                geometry.center.clone(),
+                                geometry.threshold_radius,
+                                geometry.beta,
+                                geometry.power,
+                            )
+                            .map(CompiledSamplingMap::Surface)
+                            .map_err(|error| {
+                                SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: error.to_string(),
+                                }
+                            })?
+                        }
+                        unsupported => {
+                            return Err(SamplingChannelCompileError::UnsupportedMap {
+                                channel: channel.name.clone(),
+                                map: format!("{unsupported:?}"),
+                            });
+                        }
+                    };
+                    (channel.name.clone(), None, definition, map)
+                }
+            };
+            let embedded_edges = match &definition {
+                SamplingMapDefinition::Lmb(edges)
+                | SamplingMapDefinition::Surface(edges)
+                | SamplingMapDefinition::Complement(edges)
+                | SamplingMapDefinition::Cut(edges) => edges.clone(),
+                _ => Vec::new(),
+            };
+            compiled.push(CompiledSamplingChannel {
+                name,
+                master_graph: context.master_graph.clone(),
+                basis_id,
+                definition,
+                embedded_edges,
+                map,
+            });
+        }
+        Ok(compiled)
     }
 
     /// Human-readable inspection rows, stable across runs and suitable for
@@ -417,6 +685,7 @@ pub fn graph_channel_definitions(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::runtime::ParameterizationSettings;
 
     fn definition(around: &str) -> SamplingChannelDefinition {
         SamplingChannelDefinition {
@@ -548,5 +817,77 @@ mod tests {
         let catalogue =
             build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![2])], &[0, 1]);
         assert_eq!(catalogue.lmb_entries().count(), 2);
+    }
+
+    #[test]
+    fn catalogue_compiles_lmb_and_surface_with_master_embedding() {
+        let mut selection = SamplingChannelSelection {
+            default_channel_selection: vec!["auto:lmb".into(), "threshold".into()],
+            ..Default::default()
+        };
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("threshold".into(), definition("surface(1,2)"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2]), (1, vec![2, 4])], &[0]);
+        let mut context =
+            SamplingChannelCompileContext::new("G", ParameterizationSettings::default(), 100.0, 2);
+        context.surfaces.insert(
+            vec![1, 2],
+            SamplingSurfaceGeometry {
+                center: vec![0.0; 6],
+                threshold_radius: Some(3.0),
+                beta: 2.0,
+                power: 1.0,
+            },
+        );
+        let compiled = catalogue.compile(&context).unwrap();
+        assert_eq!(compiled.len(), 3);
+        assert!(matches!(compiled[0].map, CompiledSamplingMap::Lmb(_)));
+        assert_eq!(compiled[0].embedded_edges, vec![1, 2]);
+        assert!(matches!(compiled[2].map, CompiledSamplingMap::Surface(_)));
+        assert_eq!(compiled[2].master_graph, "G");
+        assert_eq!(compiled[2].dimensions(), 6);
+    }
+
+    #[test]
+    fn surface_compilation_requires_prepared_geometry() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["threshold".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("threshold".into(), definition("surface(1,2)"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context =
+            SamplingChannelCompileContext::new("G", ParameterizationSettings::default(), 100.0, 2);
+        assert!(matches!(
+            catalogue.compile(&context),
+            Err(SamplingChannelCompileError::MissingSurfaceGeometry { .. })
+        ));
+    }
+
+    #[test]
+    fn unresolved_composite_map_is_rejected_without_context() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["joint".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("joint".into(), definition("product(surface(1), lmb(1,2))"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context =
+            SamplingChannelCompileContext::new("G", ParameterizationSettings::default(), 100.0, 2);
+        assert!(matches!(
+            catalogue.compile(&context),
+            Err(SamplingChannelCompileError::UnsupportedMap { .. })
+        ));
     }
 }
