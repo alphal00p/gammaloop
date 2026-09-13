@@ -1367,7 +1367,7 @@ impl ImplicitSurfaceRadialMap {
     fn coordinate_from_radius(&self, radius: f64, root: Option<(f64, f64)>) -> f64 {
         let threshold = root.map(|(radius, _)| radius).unwrap_or(0.0);
         let split = threshold / (threshold + self.beta);
-        if split > 0.0 && radius < threshold {
+        let coordinate = if split > 0.0 && radius < threshold {
             split * (radius / threshold).powf(1.0 / self.power)
         } else {
             let z = ((radius - threshold) / self.beta)
@@ -1378,7 +1378,8 @@ impl ImplicitSurfaceRadialMap {
             } else {
                 z / (1.0 + z)
             }
-        }
+        };
+        coordinate.clamp(1.0e-15, 1.0 - 1.0e-15)
     }
 }
 
