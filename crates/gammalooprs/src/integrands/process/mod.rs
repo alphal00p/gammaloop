@@ -4864,8 +4864,9 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 #[cfg(test)]
 mod tests {
     use super::{
-        SamplingChannelId, LmbChannelWeightingSettings, LmbMultiChannelingSetup, RuntimeCache,
-        create_stability_iterator, filtered_orientation_count, resolve_visible_orientation_id,
+        LmbChannelWeightingSettings, LmbMultiChannelingSetup, RuntimeCache,
+        SamplingChannelCompileContext, SamplingChannelId, create_stability_iterator, filtered_orientation_count,
+        resolve_sampling_channel_selection, resolve_visible_orientation_id,
         validate_orientation_catalog_group, validate_process_runtime_settings,
     };
     use crate::cff::expression::OrientationID;
@@ -4881,7 +4882,7 @@ mod tests {
         settings::{
             RuntimeSettings,
             global::OrientationPattern,
-            runtime::{LmbChannelWeight, ParameterizationSettings, Precision, StabilitySettings},
+            runtime::{LmbChannelWeight, ParameterizationSettings, SamplingChannelSelection, Precision, StabilitySettings},
         },
         utils::{F, load_generic_model},
     };
@@ -5463,5 +5464,94 @@ mod tests {
             )
             .unwrap();
         assert_eq!(single_channel_partition.weights, vec![1.0]);
+    }
+
+    #[test]
+    fn process_catalogue_bridge_integrates_normalized_gaussian() {
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(
+            digraph process_sampling_acceptance {
+                edge [num=1 mass=0]
+                node [num=1]
+                ext [style=invis]
+                ext -> A [id=0]
+                A -> B [id=1]
+                A -> B [id=2]
+                B -> ext [id=3]
+            }
+        )
+        .unwrap();
+        let generated_bases = graph.generate_loop_momentum_bases();
+        assert!(!generated_bases.is_empty());
+        graph.loop_momentum_basis = generated_bases[LmbIndex::from(0)].clone();
+        let all_bases = vec![graph.loop_momentum_basis.clone()].into();
+        let parent_lmb = graph
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .map(|edge| edge.0)
+            .collect::<Vec<_>>();
+        let setup = LmbMultiChannelingSetup {
+            lmb_basis_ids: vec![LmbIndex::from(0)].into(),
+            graph: graph.clone(),
+            all_bases,
+        };
+
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["auto:optimized_lmb".into()];
+        let resolved = resolve_sampling_channel_selection(&graph.name, &selection).unwrap();
+        let mut parameterization_settings = ParameterizationSettings::default();
+        parameterization_settings.sampling_channels = selection;
+        let context = SamplingChannelCompileContext::new(
+            graph.name.clone(),
+            parent_lmb,
+            parameterization_settings,
+            100.0,
+            graph.loop_momentum_basis.loop_edges.len(),
+        );
+        let bridge = setup
+            .compile_sampling_channel_bridge(&resolved, &context)
+            .unwrap();
+        assert_eq!(bridge.channels().len(), 1);
+
+        let dimensions = bridge.dimensions();
+        let width = 1.5;
+        let normalisation =
+            (2.0 * std::f64::consts::PI * width * width).powf(-0.5 * dimensions as f64);
+        let samples = 2048usize;
+        let mut integral = 0.0;
+        for sample in 1..=samples {
+            let coordinates = (0..dimensions)
+                .map(|axis| {
+                    let base = [2_u64, 3, 5, 7, 11, 13, 17, 19][axis];
+                    let mut index = sample;
+                    let mut fraction = 1.0;
+                    let mut value = 0.0;
+                    while index > 0 {
+                        fraction /= base as f64;
+                        value += fraction * (index as u64 % base) as f64;
+                        index /= base as usize;
+                    }
+                    value
+                })
+                .collect::<Vec<_>>();
+            let evaluation = bridge
+                .forward(SamplingChannelId::from(0), &coordinates)
+                .unwrap();
+            assert!((evaluation.partition.weights.iter().sum::<f64>() - 1.0).abs() < 1.0e-14);
+            let radius_squared = evaluation
+                .raw_coordinates
+                .iter()
+                .map(|component| component * component)
+                .sum::<f64>();
+            integral += normalisation
+                * (-0.5 * radius_squared / width.powi(2)).exp()
+                * evaluation.map.jacobian;
+        }
+        integral /= samples as f64;
+        assert!(
+            (integral - 1.0).abs() < 5.0e-2,
+            "process sampling bridge Gaussian integral = {integral}"
+        );
     }
 }
