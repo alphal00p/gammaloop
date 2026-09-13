@@ -1591,16 +1591,6 @@ impl GraphTerm for CrossSectionGraphTerm {
         &mut self.param_builder
     }
 
-    fn get_num_channels(
-        &self,
-        parameterization_settings: &ParameterizationSettings,
-    ) -> Result<usize> {
-        self.multi_channeling_setup.effective_channel_count(
-            &self.multi_channeling_setup.graph.name,
-            parameterization_settings,
-        )
-    }
-
     fn selected_lmb_basis_id(
         &self,
         parameterization_settings: &ParameterizationSettings,

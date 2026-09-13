@@ -508,7 +508,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
         // instead of silently treating them as an empty legacy channel axis.
         for group_id in 0..integrand.get_group_structure().len() {
             let graph = integrand.get_master_graph(GroupId(group_id));
-            graph.get_num_channels(parameterization_settings)?;
+            graph.sampling_channel_ids(parameterization_settings)?;
             if matches!(&settings.sampling, SamplingSettings::MultiChanneling(_)) {
                 for channel_id in graph.sampling_channel_ids(parameterization_settings)? {
                     if !graph.sampling_channel_is_lmb(channel_id, parameterization_settings)? {
@@ -532,7 +532,8 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                 .map(|settings| {
                     integrand
                         .get_master_graph(group_id)
-                        .get_num_channels(settings)
+                        .sampling_channel_ids(settings)
+                        .map(|channel_ids| channel_ids.len())
                 })
                 .transpose()
         },

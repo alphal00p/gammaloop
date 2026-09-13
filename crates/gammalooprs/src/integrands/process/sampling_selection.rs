@@ -366,11 +366,27 @@ impl CompiledSamplingMap {
     }
 
     pub fn forward(&self, coordinates: &[f64]) -> Result<SamplingMapEvaluation> {
-        <Self as SamplingMapComponent>::forward(self, coordinates, &[])
+        self.forward_with_context(coordinates, &[])
+    }
+
+    pub fn forward_with_context(
+        &self,
+        coordinates: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingMapEvaluation> {
+        <Self as SamplingMapComponent>::forward(self, coordinates, context)
     }
 
     pub fn inverse(&self, point: &[f64]) -> Result<SamplingMapEvaluation> {
-        <Self as SamplingMapComponent>::inverse(self, point, &[])
+        self.inverse_with_context(point, &[])
+    }
+
+    pub fn inverse_with_context(
+        &self,
+        point: &[f64],
+        context: &[f64],
+    ) -> Result<SamplingMapEvaluation> {
+        <Self as SamplingMapComponent>::inverse(self, point, context)
     }
 }
 
@@ -860,7 +876,7 @@ impl CompiledSamplingChannel {
         coordinates: &[f64],
         context: &[f64],
     ) -> Result<SamplingMapEvaluation> {
-        <CompiledSamplingMap as SamplingMapComponent>::forward(&self.map, coordinates, context)
+        self.map.forward_with_context(coordinates, context)
     }
 
     pub fn inverse(&self, point: &[f64]) -> Result<SamplingMapEvaluation> {
@@ -872,7 +888,7 @@ impl CompiledSamplingChannel {
         point: &[f64],
         context: &[f64],
     ) -> Result<SamplingMapEvaluation> {
-        <CompiledSamplingMap as SamplingMapComponent>::inverse(&self.map, point, context)
+        self.map.inverse_with_context(point, context)
     }
 }
 
