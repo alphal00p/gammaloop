@@ -1902,3 +1902,42 @@ If a gate fails, use the measurements to continue the generic implementation, in
   not additive stages or whole-generation percentages. Remaining root-matcher
   guards are under read-only review; no numerical implementation change is
   made while the full generation result remains pending.
+
+- CLI18 completes all ten GL262 forest nodes. Completed nonroot local-UV time is
+  879.897 s; full dispatch/selection/cache accounting is 23.444 s (2.6644%).
+  All losing-candidate preparation is included: 74 additional candidate
+  templates take 17.164 s, bringing candidate-template builds to 201. Structural
+  work remains 27 canonical buckets, 17 component waves, 127 source requests,
+  201 scored candidates, 15 native CFF generations and 8,494 selected row
+  mappings. Fifteen distinct source/ordered-capacity projections and fifteen
+  native calls give matching uniqueness bounds. These completed-forest
+  observations await a successful whole-generation receipt before certification.
+- Full evaluator preprocessing passes the first two large summands: preparation
+  and contraction respectively take 59.776/221.433 s and 47.406/309.390 s.
+  Peak process memory reaches approximately 28.9 GB before the next summand.
+  This establishes progress beyond the former tensor-allocation failures, not
+  completed evaluator generation or numerical acceptance.
+- At 11:38:52 UTC, the running direct diagnostic receives the authorized
+  100,000,000,000-byte RSS guard without pausing or restarting generation. The
+  replacement watcher is armed against the same verified executable/PID before
+  the original watcher is suspended; the original supervisor retains ownership
+  and its watcher resumes after generation ends. Original receipts are preserved,
+  and `guard_handover.json` plus `rss_guard_100gb_receipt.json` record the change.
+  The generation driver continues recording the complete-run peak independently.
+  Both direct and prepared erased diagnostics now allow 100 GB and 7,200 s;
+  executable, cards, assignment policy and physical tolerances are unchanged.
+
+- At 12:02:36 UTC, all 3,050 GL262 summands finish tensor preprocessing. The
+  complete Atom scope takes 2,325.890 s: normalization 4.643 s, parsing and
+  preparation 339.637 s (including 144.301 s of boundary preparation), execution
+  1,785.673 s, and final scalar composition/network cleanup/loop overhead
+  195.938 s. Boundary time is a subset of preparation, not an additional term.
+  The complete scope has no missing or out-of-order stages in
+  `preprocessing_observed_profile.json`. Peak process RSS reaches
+  68,568,248,320 bytes before evaluator optimization; full generation is ongoing.
+- A separate 20-second, 894-sample contraction profile records inclusive stack
+  shares of 34.70% in contraction, 21.68% in root caching and 12.44% in ready
+  operation preparation. These overlapping sampled scopes are not additive
+  whole-generation timings. Read-only follow-up identifies existing earlier
+  graph deletion and alias/function-map APIs as conditional next experiments;
+  neither is implemented without evidence from the pending full comparison.
