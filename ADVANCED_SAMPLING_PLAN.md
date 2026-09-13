@@ -514,6 +514,26 @@ Represent stable overlap-membership branches in the same canonical catalogue,
 with a finite expansion cap and normalized fallback for absent branches. This
 is an unimplemented X4 requirement; direct-H validation does not cover it.
 
+The next bounded allocation keeps physical measurements and shared source work
+moving together. The GL638 owner uses the frozen optimized `f2f64fb17` binary
+for reference gates, saved physical H/Z and soft replays, then a fresh-grid
+comparison of optimized LMB, direct-H powers 1 and 2, and power 2 mixed with
+optimized LMB. Begin with three seeds and 2048 draws each on 20 cores; expand
+only after the reference and physical gates pass. Preserve each maximum's full
+stored integration `Sample`, including its historical grid weight, for exact
+replay. Printed coordinates alone are insufficient. All these physical runs use
+the compatible unrestricted state with 936 production orientations and full UV.
+
+In parallel, the subtraction owner has separated representative overlap
+kinematics from the raised derivative packets, using the existing sample and
+group types. The foreign-cut/radial-derivative regression and generated raised
+component/roundtrip fixture pass. The acceptance owner exposes the existing
+reference target through the normal loaded-state integration workflow, retaining its grids, workspaces,
+statistics and resume checks. Root audits these boundaries and the eventual
+star selector before assigning further map changes. Neither this overlap
+extraction nor a reference-only full-state run establishes star alignment or
+all-orientation physical improvement.
+
 
 The shared fiber slice reuses `Esurface`, `SubspaceData`, the current implicit
 radial kernel and the existing overlap center solver. The solver may propose a
@@ -671,8 +691,11 @@ that physical host. Its explicit host/frame binding and the joint-map compiler
 remain implementation work; the runtime must continue to reject this example
 until those contracts are satisfied.
 
-Supported function heads are `lmb`, `surface`, `cut`, `soft`, `collinear`,
-`complement`, `product`, `intersect`, `then`, `phase_space`, `left` and `right`.
+The Symbolica vocabulary includes `lmb`, `surface`, `cut`, `soft`, `collinear`,
+`complement`, `product`, `intersect`, `then`, `phase_space`, `left`, `right`,
+`at_cut` and `block`. Parsing a constructor does not imply that every geometry
+it can describe has a compiled map; unsupported primitives remain explicit
+errors until their implementation and acceptance gates are complete.
 `cut` denotes a physical Cutkosky cut; `surface` denotes an energy equation.
 The shorthand `cut(...) x cut(...) x complement(...)` is display sugar for a
 validated `product`, and never silently means an intersection or conditional
