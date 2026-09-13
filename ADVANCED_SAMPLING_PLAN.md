@@ -53,6 +53,14 @@ code must attach the solved LU/\(t^\star\) context before evaluating a
 conditional map. This is a carrier within the one catalogue axis, not a
 second channel enumeration.
 
+The exact-result boundary is represented by `PreparedCrossSectionMapEvaluation<T>`.
+It keeps the canonical channel identity, mapped sample, forward and inverse
+Jacobians, runtime map context, and solved cut context together. Stability
+rotations transform both the mapped momenta and the prepared kinematic context
+as one value, preserving the frame in which projections and Jacobians are
+interpreted. This is an interface and invariant for the eventual physical maps;
+it does not claim that the cut, left, and right maps are implemented yet.
+
 The partition also supports the explicit `singularity_proxy` weight. A named
 channel may supply a Symbolica expression in the complete parent-frame raw
 coordinates (`x0`, `x1`, ...); it is compiled eagerly and must be finite, real
