@@ -13,6 +13,7 @@ use std::{
 
 use crate::settings::runtime::{SamplingChannelDefinition, SamplingChannelSelection};
 use color_eyre::eyre::{Result, eyre};
+use serde::{Deserialize, Serialize};
 
 use super::{
     SamplingChannelScore, SamplingMapComponent, SamplingMapContract, SamplingMapDefinition,
@@ -254,9 +255,12 @@ pub struct CompiledSamplingChannel {
     pub map: CompiledSamplingMap,
 }
 
-/// Identifier for an advanced sampling channel. This is distinct from the
-/// legacy LMB `ChannelIndex`, so both selection schemes can coexist.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
+/// Canonical identifier for a compiled sampling channel.
+///
+/// The same id is used by the graph evaluator and by the sampling catalogue;
+/// no second legacy channel-index domain is maintained.  The deprecated
+/// `integrands::process::ChannelIndex` name is only a compatibility alias.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct SamplingChannelId(pub usize);
 
 impl SamplingChannelId {
