@@ -920,6 +920,44 @@ impl ProcessIntegrand {
         }
     }
 
+    /// Evaluate a normalized reference function from unit-cube coordinates.
+    ///
+    /// This convenience entry point is intended for saved-state acceptance
+    /// harnesses: callers can load a process normally, generate deterministic
+    /// coordinates (for example Halton points), and exercise the complete
+    /// process parameterization without constructing Symbolica `Sample`
+    /// values themselves. The coordinate batch is interpreted as an equally
+    /// weighted quadrature rule, so each sample receives weight `1/N`; the
+    /// canonical sampling channel selected by
+    /// the loaded settings remains responsible for its map and Jacobian.
+    pub fn evaluate_reference_coordinates(
+        &mut self,
+        coordinates: &[Vec<f64>],
+        reference: &GaussianReferenceFunction,
+    ) -> Result<ReferenceSamplingReport> {
+        let sample_weight = if coordinates.is_empty() {
+            0.0
+        } else {
+            1.0 / coordinates.len() as f64
+        };
+        let samples = coordinates
+            .iter()
+            .enumerate()
+            .map(|(sample_index, coordinate)| {
+                if coordinate.iter().any(|value| !value.is_finite()) {
+                    return Err(eyre!(
+                        "reference acceptance sample {sample_index} contains a non-finite coordinate"
+                    ));
+                }
+                Ok(Sample::Continuous(
+                    F(sample_weight),
+                    coordinate.iter().copied().map(F).collect(),
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        self.evaluate_reference_samples(&samples, reference)
+    }
+
     /// Evaluate a batch of samples with a normalized reference function while
     /// retaining the process maps, Jacobians and sampling-grid weights.
     pub fn evaluate_reference_samples(
