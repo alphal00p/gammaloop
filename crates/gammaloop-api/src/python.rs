@@ -646,6 +646,7 @@ mod settings_wrapper_tests {
                     subspace_lmb: vec![3],
                     parent_lmb: vec![3, 6, 7, 10],
                     on_cut: vec![2, 6, 10],
+                    singularity_proxy: None,
                 },
             )]
             .into_iter()

@@ -2969,6 +2969,17 @@ fn resolve_selection(
                 error: error.to_string(),
             }
         })?;
+        if let Some(proxy) = definition.singularity_proxy.as_deref() {
+            let _ = try_parse!(proxy.trim()).map_err(|error| {
+                SamplingSelectionError::InvalidChannelDefinition {
+                    graph: graph_name.to_owned(),
+                    channel: name.clone(),
+                    error: format!(
+                        "failed to parse singularity_proxy `{proxy}` with Symbolica: {error}"
+                    ),
+                }
+            })?;
+        }
         if contains_surface_map(&map) {
             if definition.subspace_lmb.is_empty() {
                 return Err(SamplingSelectionError::MissingSubspaceLmb {
@@ -3132,11 +3143,11 @@ mod tests {
     #[test]
     fn singularity_proxy_reports_symbolica_parse_and_positivity_errors() {
         let invalid = proxy_selection(Some("x0 + ("), Some("1"));
-        let error = proxy_bridge(&invalid).unwrap_err();
+        let error = resolve_sampling_channel_selection("G", &invalid).unwrap_err();
         assert!(
             error
                 .to_string()
-                .contains("invalid singularity_proxy expression")
+                .contains("failed to parse singularity_proxy")
         );
 
         let non_positive = proxy_selection(Some("x0 - x0"), Some("1"));
