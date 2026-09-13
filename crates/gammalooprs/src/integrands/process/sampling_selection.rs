@@ -1340,6 +1340,10 @@ pub enum SamplingSelectionError {
         channel: String,
         available: Vec<String>,
     },
+    MissingParentLmb {
+        graph: String,
+        channel: String,
+    },
     InvalidChannelDefinition {
         graph: String,
         channel: String,
@@ -1367,6 +1371,10 @@ impl fmt::Display for SamplingSelectionError {
             } => write!(
                 formatter,
                 "sampling channel `{graph}.{channel}` was selected but has no channel definition; available definitions: {available:?}"
+            ),
+            Self::MissingParentLmb { graph, channel } => write!(
+                formatter,
+                "sampling channel `{graph}.{channel}` must declare a non-empty parent_lmb"
             ),
             Self::InvalidChannelDefinition {
                 graph,
@@ -1467,6 +1475,12 @@ fn resolve_selection(
                 available: available.clone(),
             });
         };
+        if definition.parent_lmb.is_empty() {
+            return Err(SamplingSelectionError::MissingParentLmb {
+                graph: graph_name.to_owned(),
+                channel: name.clone(),
+            });
+        }
         let map = SamplingMapDefinition::parse(&definition.around).map_err(|error| {
             SamplingSelectionError::InvalidChannelDefinition {
                 graph: graph_name.to_owned(),
@@ -1569,6 +1583,11 @@ mod tests {
             .channel_definitions
             .entry("G".into())
             .or_default()
+            .insert("common".into(), definition("lmb(1,2)"));
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
             .insert("named".into(), definition("surface(1,2)"));
 
         let resolved = resolve_sampling_channel_selection_with_defaults("G", &selection).unwrap();
@@ -1636,6 +1655,28 @@ mod tests {
                 available: vec!["available".into()]
             }
         );
+    }
+
+    #[test]
+    fn named_channel_requires_explicit_parent_lmb() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["named".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert(
+                "named".into(),
+                SamplingChannelDefinition {
+                    around: "lmb(1,2)".into(),
+                    parent_lmb: Vec::new(),
+                    on_cut: Vec::new(),
+                },
+            );
+        assert!(matches!(
+            resolve_sampling_channel_selection("G", &selection),
+            Err(SamplingSelectionError::MissingParentLmb { .. })
+        ));
     }
 
     #[test]
