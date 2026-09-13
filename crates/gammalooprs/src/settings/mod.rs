@@ -738,7 +738,7 @@ mod tests {
         let sampling_settings = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
             graph_names: Vec::new(),
             sample_orientations: true,
-            sampling_type: DiscreteGraphSamplingType::DiscreteMultiChanneling(
+            sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(
                 crate::settings::runtime::MultiChannelingSettings::default(),
             ),
         });

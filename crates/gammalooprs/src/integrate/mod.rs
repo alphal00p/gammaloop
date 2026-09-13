@@ -839,7 +839,7 @@ fn discrete_axis_labels(sampling: &SamplingSettings) -> Vec<&'static str> {
                         labels.push("orientation");
                     }
                 }
-                DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => {
+                DiscreteGraphSamplingType::SamplingMultiChanneling(_) => {
                     if settings.sample_orientations {
                         labels.push("orientation");
                     }

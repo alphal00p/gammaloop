@@ -179,6 +179,11 @@ The discrete sample representation is likewise named `SamplingChannel`; the
 old `Advanced` variant is gone, so callers cannot mistake mapped channel
 samples for a second enumeration.
 
+The discrete settings variant formerly called `DiscreteMultiChanneling` is
+now `SamplingMultiChanneling`.  It remains a temporary dispatch mode for
+per-channel sampling and is scheduled for removal once all graph terms use
+conditional compiled maps; it does not define a separate channel index type.
+
 The retirement sequence is explicit: first route direct momentum evaluation
 through compiled parent-frame maps for every catalogue entry; then remove the
 `DiscreteGraphSamplingType::DiscreteMultiChanneling` compatibility mode and
