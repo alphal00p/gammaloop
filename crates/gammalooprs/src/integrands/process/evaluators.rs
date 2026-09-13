@@ -555,7 +555,7 @@ impl EvaluatorStack {
             &fn_map,
             entries,
             settings.optimization_settings(),
-            dual_shape.clone(),
+            dual_shape.clone().map(|shape| (shape, Vec::new())),
             settings,
         )?;
         evaluator.fn_map_entries.extend(alias_entries);
@@ -2547,6 +2547,9 @@ impl EvaluatorStack {
     }
 }
 
+/// Dual shape and statically zero `(parameter, derivative component)` seeds.
+type EvaluatorDualConfig = (Vec<Vec<usize>>, Vec<(usize, usize)>);
+
 #[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GenericEvaluator {
@@ -2720,7 +2723,7 @@ impl GenericEvaluator {
             &builder.fn_map,
             builder.reps.clone(),
             optimization_settings,
-            dual_shape,
+            dual_shape.map(|shape| (shape, Vec::new())),
             settings,
         )
     }
@@ -2731,9 +2734,25 @@ impl GenericEvaluator {
         fn_map: &FunctionMap,
         mut fn_map_entries: Vec<FnMapEntry>,
         optimization_settings: OptimizationSettings,
-        dual_shape: Option<Vec<Vec<usize>>>,
+        dual_config: Option<EvaluatorDualConfig>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
+        // Known-zero seed components belong to the compiled program. Supplying
+        // them to Symbolica avoids evaluating a zero tangent times a singular
+        // derivative of a prepared-only subexpression, such as sqrt(m) at m=0.
+        // The serialized shape and input layout stay unchanged; simplification
+        // is retained in the rational program and every native specialization.
+        let (dual_shape, zero_components) =
+            dual_config.map_or((None, Vec::new()), |(shape, zeros)| (Some(shape), zeros));
+        if let Some(shape) = &dual_shape
+            && zero_components.iter().any(|&(parameter, component)| {
+                parameter >= params.len() || component == 0 || component >= shape.len()
+            })
+        {
+            return Err(eyre!(
+                "statically zero dual seeds must refer to valid derivative components"
+            ));
+        }
         let evaluator_replacements = if settings.do_fn_map_replacements {
             fn_map_entries
                 .iter()
@@ -2931,7 +2950,7 @@ impl GenericEvaluator {
         );
         if let Some(dual_shape) = &dual_shape {
             let dual = HyperDual::<SymComplex<Rational>>::new(dual_shape.clone());
-            let dualizer = Dualizer::new(dual, vec![]);
+            let dualizer = Dualizer::new(dual, zero_components);
             tree = tree.vectorize(&dualizer).unwrap();
         }
 
@@ -5176,7 +5195,7 @@ mod tests {
             &function_map,
             vec![entry],
             OptimizationSettings::default(),
-            dual_shape.clone(),
+            dual_shape.clone().map(|shape| (shape, Vec::new())),
             &settings,
         )
         .unwrap();
@@ -5186,7 +5205,7 @@ mod tests {
             &FunctionMap::default(),
             vec![],
             OptimizationSettings::default(),
-            dual_shape,
+            dual_shape.map(|shape| (shape, Vec::new())),
             &settings,
         )
         .unwrap();

@@ -557,6 +557,15 @@ The shared radial profile focuses on both signed distances to the threshold
 with a common analytic inverse. Native kernel tests cover Quad and arbitrary
 precision. Components, affine/composed maps, conditional cut data, eager/dual
 evaluations and foreign-density partitions now retain native values throughout.
+The existing eager Jacobian evaluator can select ordered active parameter
+columns while other prepared parameters remain fixed. Its single compiled
+first-derivative program receives the statically zero components of the
+identity seeds through Symbolica's `Dualizer`. This prevents an unused
+derivative of a prepared-only expression such as `sqrt(m)` at `m=0` from
+contaminating a valid active derivative. Requested singular derivatives and
+singular intermediates involving active inputs still produce typed numerical
+errors. The constructor change preserves the stored evaluator layout and the
+empty-mask behavior of existing physical evaluators.
 Typed numerical errors distinguish unrepresentable derived coordinates/scores
 from invalid original inputs. The implicit root uses the existing native
 safeguarded solver, with callback errors preserved. Production retries rebuild

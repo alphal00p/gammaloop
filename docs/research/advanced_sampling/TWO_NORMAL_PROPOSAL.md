@@ -316,11 +316,15 @@ The current fixed-partition estimator is not changed to a mixture-PDF estimator.
    Its current Full/Conditional/Branched enum conflates these facts. Maintain
    one support contract and migrate it, rather than adding an independent
    domain registry. Require ordinary coverage for a selected compact chart.
-3. `sampling_evaluator.rs` retains the common eager/dual program. Its current
-   square-Jacobian method counts all parameters, so allow selecting the three
-   cube derivative columns while holding prepared parameters fixed, using the
-   existing determinant owner. Compile expressions once in the current program
-   cache; clone worker buffers and bind native parameters as already done.
+3. `sampling_evaluator.rs` retains the common eager/dual program. This prerequisite
+   is now implemented: select the three cube derivative columns while holding
+   prepared parameters fixed, using the existing determinant owner. Static
+   identity-zero seed metadata is supplied to Symbolica during vectorization,
+   so a prepared-only singular derivative cannot contaminate an active column.
+   The `u+sqrt(m)` boundary at `m=0` passes in Double, Quad and Arb; an actually
+   requested singular derivative or a singular intermediate depending on active
+   inputs still gives a typed numerical error. Expressions remain compiled once
+   in the current program cache, with worker-local buffers and native parameters.
 4. `cff/esurface.rs` supplies the routed-energy matcher and prepared constants;
    `sampling_selection.rs` admits exactly `intersect(surface(...),surface(...))`
    as one existing block/registry key. Resolve both leaves under one host/frame,
