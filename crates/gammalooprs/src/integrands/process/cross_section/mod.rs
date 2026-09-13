@@ -1358,7 +1358,7 @@ impl CrossSectionGraphTerm {
                     sampling_bridge_quad: Default::default(),
                     sampling_bridge_arb: Default::default(),
                     sampling_catalogue: Default::default(),
-                    sampling_proxies: Default::default(),
+                    sampling_programs: Default::default(),
                     lmb_basis_ids: TiVec::new(),
                     graph: graph.graph.clone(), // will be overwritten later,
                     all_bases: TiVec::new(),
@@ -1632,7 +1632,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     fn bind_sampling_bridge<T: FloatLike>(
         &self,
         catalogue: &super::SamplingChannelCatalogue,
-        proxies: &[Option<super::SamplingExpressionEvaluator>],
+        programs: &[super::sampling_selection::SamplingChannelPrograms],
         parameterization_settings: &ParameterizationSettings,
         e_cm: f64,
         external_momenta: &[[T; 4]],
@@ -1714,6 +1714,16 @@ impl GraphTerm for CrossSectionGraphTerm {
                         }
                     }
                     cut_ids.push(cut_id.0);
+                    // Equivalent geometries can belong to several raised groups.
+                    // Keep their largest derivative packet before deduplicating
+                    // the root evaluator; a named profile inherits this bound.
+                    context
+                        .physical_cut_max_occurrences
+                        .entry(edges.clone())
+                        .and_modify(|order| {
+                            *order = (*order).max(cut_group.related_esurface_group.max_occurence)
+                        })
+                        .or_insert(cut_group.related_esurface_group.max_occurence);
                     if !selected || cut_ids.len() > 1 {
                         continue;
                     }
@@ -1731,7 +1741,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         self.multi_channeling_setup
             .compile_sampling_channel_bridge_with_external(
                 catalogue,
-                proxies,
+                programs,
                 &context,
                 external_momenta,
             )

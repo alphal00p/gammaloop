@@ -263,7 +263,7 @@ impl Graph {
             sampling_bridge_quad: Default::default(),
             sampling_bridge_arb: Default::default(),
             sampling_catalogue: Default::default(),
-            sampling_proxies: Default::default(),
+            sampling_programs: Default::default(),
             lmb_basis_ids: channels,
             graph: self.clone(),
             all_bases: lmbs.clone(),

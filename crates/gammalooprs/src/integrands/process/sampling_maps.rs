@@ -6,12 +6,13 @@
 //! checked recursively, so a valid nested call cannot hide an invalid root or
 //! sibling.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
+use super::sampling_evaluator::{SamplingDualValue, SamplingExpressionEvaluator};
 use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::LoopMomenta;
 use crate::settings::runtime::{
-    ParameterizationMapping, ParameterizationMode, ParameterizationSettings,
+    ParameterizationMapping, ParameterizationMode, ParameterizationSettings, SamplingRadialProfile,
 };
 use crate::utils::newton_solver::safeguarded_newton_iteration_and_derivative;
 use crate::utils::{F, FloatLike, global_inv_parameterize, global_parameterize};
@@ -1234,6 +1235,34 @@ pub type ImplicitSurfaceRadialContextEvaluator<T = f64> =
 pub type ImplicitSurfaceCenterEvaluator<T = f64> =
     Arc<dyn Fn(&[T]) -> Result<Vec<T>> + Send + Sync + 'static>;
 
+/// Native fit and worker-local buffers for the optional LU-scale proposal.
+/// The physical surface and the scalar inversion remain owned by the same
+/// implicit radial map; this record carries no second channel enumeration.
+struct LuHProfile<T: FloatLike> {
+    settings: SamplingRadialProfile,
+    program: Mutex<SamplingExpressionEvaluator>,
+    log_scale: F<T>,
+    shape: F<T>,
+    max_occurrence: usize,
+}
+
+impl<T: FloatLike> Clone for LuHProfile<T> {
+    fn clone(&self) -> Self {
+        Self {
+            settings: self.settings.clone(),
+            program: Mutex::new(
+                self.program
+                    .lock()
+                    .expect("LU profile evaluator lock poisoned")
+                    .clone(),
+            ),
+            log_scale: self.log_scale.clone(),
+            shape: self.shape.clone(),
+            max_occurrence: self.max_occurrence,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ImplicitSurfaceRadialMap<T: FloatLike = f64> {
     dimension: usize,
@@ -1244,6 +1273,7 @@ pub struct ImplicitSurfaceRadialMap<T: FloatLike = f64> {
     context_evaluator: Option<ImplicitSurfaceRadialContextEvaluator<T>>,
     center_evaluator: Option<ImplicitSurfaceCenterEvaluator<T>>,
     root_tolerance: f64,
+    lu_h_profile: Option<LuHProfile<T>>,
 }
 
 impl<T: FloatLike> std::fmt::Debug for ImplicitSurfaceRadialMap<T> {
@@ -1302,7 +1332,55 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
             context_evaluator: None,
             center_evaluator: None,
             root_tolerance: 1.0e-11,
+            lu_h_profile: None,
         })
+    }
+
+    /// Bind one named proposal after cloning the shared physical geometry.
+    /// Only an origin-centred full LU dilation has t*=R/r; shifted or conditional
+    /// charts must not silently use this auxiliary-scale construction.
+    pub(crate) fn with_lu_h_profile(
+        mut self,
+        mut program: SamplingExpressionEvaluator,
+        settings: &SamplingRadialProfile,
+        max_occurrence: usize,
+    ) -> Result<Self> {
+        if self.center.iter().any(|value| *value != value.zero())
+            || self.context_evaluator.is_some()
+            || self.center_evaluator.is_some()
+            || max_occurrence == 0
+        {
+            return Err(eyre!(
+                "LU-h sampling requires an origin-centred full-frame physical cut and a positive residue order"
+            ));
+        }
+        if program.parameter_count() != 5
+            || program.output_count() != 5
+            || !program.has_derivatives()
+        {
+            return Err(eyre!("invalid compiled LU-h profile program"));
+        }
+        let zero = self.center[0].zero();
+        let fit = program.evaluate(&vec![zero; 5])?;
+        let log_scale = fit[0].re.clone();
+        let shape = fit[1].re.clone();
+        if !log_scale.0.is_finite() || !shape.0.is_finite() || shape <= shape.zero() {
+            return Err(eyre!("LU-h profile fit is not finite with positive shape"));
+        }
+        self.lu_h_profile = Some(LuHProfile {
+            settings: settings.clone(),
+            program: Mutex::new(program),
+            log_scale,
+            shape,
+            max_occurrence,
+        });
+        Ok(self)
+    }
+
+    pub fn lu_h_max_occurrence(&self) -> Option<usize> {
+        self.lu_h_profile
+            .as_ref()
+            .map(|profile| profile.max_occurrence)
     }
 
     pub fn with_root_tolerance(mut self, root_tolerance: f64) -> Result<Self> {
@@ -1400,9 +1478,10 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
         let center = self.center_for_context(context)?;
         let root = self.root_for_direction(&direction, context)?;
         let (radius, radial_jacobian) =
-            self.radius_from_coordinate(coordinates[0].clone(), root.clone());
+            self.radius_from_coordinate(coordinates[0].clone(), root.clone())?;
         let radius = F(radius);
-        if self.power != 1.0
+        if self.lu_h_profile.is_none()
+            && self.power != 1.0
             && root
                 .as_ref()
                 .is_some_and(|(threshold, _)| &radius.0 == threshold)
@@ -1441,11 +1520,29 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
             inverse_jacobian: inverse_jacobian.0,
             residual: radius.zero().0,
             support: self.contract().support,
-            diagnostics: vec![if root.is_some() {
-                "implicit_surface:regular_root".to_owned()
-            } else {
-                "implicit_surface:absent_fallback".to_owned()
-            }],
+            diagnostics: {
+                let mut diagnostics = vec![if self
+                    .lu_h_profile
+                    .as_ref()
+                    .is_some_and(|profile| profile.settings.broad_fraction == 1.0)
+                {
+                    "lu_h:broad_only_root_not_required".to_owned()
+                } else if root.is_some() {
+                    "implicit_surface:regular_root".to_owned()
+                } else {
+                    "implicit_surface:absent_fallback".to_owned()
+                }];
+                if let Some(profile) = &self.lu_h_profile {
+                    diagnostics.push(format!(
+                        "lu_h:log_scale={},shape={},broad_fraction={},max_occurrence={}",
+                        profile.log_scale,
+                        profile.shape,
+                        profile.settings.broad_fraction,
+                        profile.max_occurrence
+                    ));
+                }
+                diagnostics
+            },
         })
     }
 
@@ -1493,7 +1590,7 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
             .map(|value| (value / &radius).0)
             .collect::<Vec<_>>();
         let root = self.root_for_direction(&direction, context)?;
-        let coordinate = self.coordinate_from_radius(radius.0, root);
+        let (coordinate, radial_jacobian) = self.coordinate_from_radius(radius.0.clone(), root)?;
         let mut coordinates = coordinates_from_direction(&direction)?;
         coordinates[0] = coordinate;
         self.validate_coordinates(&coordinates).map_err(|error| {
@@ -1507,11 +1604,27 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
         if !residual.is_finite() {
             return Err(SamplingEvaluationError::Unrepresentable { operation: "radial map", detail: "implicit surface radial-map inverse residual is not representable at the current precision".to_owned() }.into());
         }
+        // Evaluate the density at the supplied momentum. Reprojecting its
+        // recovered cube coordinate can move it on a sharply varying map.
+        let (_, angular) = direction_from_coordinates(&coordinates)?;
+        let jacobian = F(radial_jacobian) * F(angular) * radius.powi(self.dimension as i32 - 1);
+        let inverse_jacobian = jacobian.inv();
+        if [&jacobian, &inverse_jacobian]
+            .iter()
+            .any(|value| !value.0.is_finite() || **value <= value.zero())
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "implicit radial inverse density",
+                detail: "positive Jacobian pair is not representable at the supplied momentum"
+                    .to_owned(),
+            }
+            .into());
+        }
         Ok(SamplingMapEvaluation {
             coordinates,
             point: point.to_vec(),
-            jacobian: mapped.jacobian,
-            inverse_jacobian: mapped.inverse_jacobian,
+            jacobian: jacobian.0,
+            inverse_jacobian: inverse_jacobian.0,
             residual,
             support: self.contract().support,
             diagnostics: mapped.diagnostics,
@@ -1547,6 +1660,14 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
     }
 
     fn root_for_direction(&self, direction: &[T], context: &[T]) -> Result<Option<(T, T)>> {
+        if self
+            .lu_h_profile
+            .as_ref()
+            .is_some_and(|profile| profile.settings.broad_fraction == 1.0)
+        {
+            // The normalized raw broad law has no R dependence at all.
+            return Ok(None);
+        }
         let zero = F(direction[0].zero());
         let (origin_value, origin_derivative) =
             self.evaluate(direction, zero.0.clone(), context)?;
@@ -1603,30 +1724,165 @@ impl<T: FloatLike> ImplicitSurfaceRadialMap<T> {
         Ok(Some((result.solution.0, result.derivative_at_solution.0)))
     }
 
-    fn radius_from_coordinate(&self, coordinate: T, root: Option<(T, T)>) -> (T, T) {
-        let threshold = root
-            .map(|(radius, _)| radius)
-            .unwrap_or_else(|| coordinate.zero());
+    fn lu_h_values(&self, y: &F<T>, log_root: &F<T>) -> Result<Vec<SamplingDualValue<T>>> {
+        let profile = self.lu_h_profile.as_ref().expect("bound LU profile");
+        let log_beta = F::<T>::from_f64(self.beta).ln();
+        let one = y.one();
+        let focus_sign = if y <= &profile.log_scale {
+            one.clone()
+        } else {
+            -&one
+        };
+        let broad_sign = if y <= &(log_root - &log_beta) {
+            one.clone()
+        } else {
+            -one
+        };
+        profile
+            .program
+            .lock()
+            .map_err(|_| eyre!("LU profile evaluator lock poisoned"))?
+            .evaluate_with_derivatives(&[
+                y.0.clone(),
+                log_root.0.clone(),
+                log_beta.0,
+                focus_sign.0,
+                broad_sign.0,
+            ])
+    }
+
+    fn radius_from_coordinate(&self, coordinate: T, root: Option<(T, T)>) -> Result<(T, T)> {
+        let u = F(coordinate);
+        if let Some(profile) = &self.lu_h_profile {
+            let one = u.one();
+            let beta = F::<T>::from_f64(self.beta);
+            let Some((root, _)) = root else {
+                // Keep the CDF convention u=G(t) even for the root-independent
+                // power-one fallback: r=beta*(1-u)/u.
+                return Ok(((&beta * (&one - &u) / &u).0, (beta / u.square()).0));
+            };
+            let log_root = F(root).ln();
+            let log_odds = u.ln() - (&one - &u).ln();
+            let focused = &profile.log_scale + &log_odds / &profile.shape;
+            let broad = &log_root - beta.ln() + log_odds;
+            let y = if profile.settings.broad_fraction == 0.0 || focused == broad {
+                focused
+            } else {
+                let lower = if focused < broad {
+                    focused.clone()
+                } else {
+                    broad.clone()
+                };
+                let upper = focused.max(broad);
+                let upper_tail = u > &one / u.from_i64(2);
+                let tail = if upper_tail { &one - &u } else { u.clone() };
+                let equation = |y: &F<T>| -> Result<(F<T>, F<T>)> {
+                    let values = self.lu_h_values(y, &log_root)?;
+                    let value = &values[if upper_tail { 3 } else { 2 }];
+                    Ok(if upper_tail {
+                        (
+                            &one - &value.value.re / &tail,
+                            -&value.derivatives[0].re / &tail,
+                        )
+                    } else {
+                        (
+                            &value.value.re / &tail - &one,
+                            &value.derivatives[0].re / &tail,
+                        )
+                    })
+                };
+                let tolerance = u.from_i64(64);
+                let maximum_residual = u.epsilon() * &tolerance;
+                let (lower_value, _) = equation(&lower)?;
+                let (upper_value, _) = equation(&upper)?;
+                // Coincident component quantiles and an endpoint root are
+                // legitimate; the shared solver otherwise needs strict signs.
+                if lower_value.abs() <= maximum_residual {
+                    lower
+                } else if upper_value.abs() <= maximum_residual {
+                    upper
+                } else {
+                    let callback_error = std::cell::RefCell::new(None);
+                    let result = safeguarded_newton_iteration_and_derivative(
+                        &lower,
+                        &upper,
+                        |y| match equation(y) {
+                            Ok(values) => values,
+                            Err(error) => {
+                                *callback_error.borrow_mut() = Some(error);
+                                (F::<T>::from_f64(f64::NAN), F::<T>::from_f64(f64::NAN))
+                            }
+                        },
+                        &tolerance,
+                        2048,
+                        0,
+                        &one,
+                    );
+                    if let Some(error) = callback_error.into_inner() {
+                        return Err(error);
+                    }
+                    result
+                        .map_err(|error| SamplingEvaluationError::UncertifiedRoot {
+                            detail: format!("LU-h mixture inverse CDF failed: {error}"),
+                        })?
+                        .solution
+                }
+            };
+            let values = self.lu_h_values(&y, &log_root)?;
+            let radius = F(values[4].value.re.0.exp());
+            let derivative = &values[2].derivatives[0].re;
+            if !derivative.0.is_finite() || derivative <= &u.zero() {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "LU-h inverse CDF",
+                    detail: "positive CDF derivative is not representable".to_owned(),
+                }
+                .into());
+            }
+            // dr/du = r*|d(log r)/dy|/(dG/dy), obtained from the same eager
+            // dual program as G. No derivative of Newton iterations is used.
+            let jacobian = &radius * values[4].derivatives[0].re.abs() / derivative;
+            return Ok((radius.0, jacobian.0));
+        }
+        let threshold = root.map(|(radius, _)| radius).unwrap_or_else(|| u.0.zero());
         let (radius, jacobian) = SurfaceRadialMap::<T>::radius_from_coordinate(
-            &F(coordinate),
+            &u,
             F(threshold),
             F::from_f64(self.beta),
             F::from_f64(self.power),
         );
-        (radius.0, jacobian.0)
+        Ok((radius.0, jacobian.0))
     }
 
-    fn coordinate_from_radius(&self, radius: T, root: Option<(T, T)>) -> T {
-        let threshold = root
+    fn coordinate_from_radius(&self, radius: T, root: Option<(T, T)>) -> Result<(T, T)> {
+        let radius = F(radius);
+        let beta = F::<T>::from_f64(self.beta);
+        if self.lu_h_profile.is_some() {
+            let Some((root, _)) = root else {
+                return Ok((
+                    (&beta / (&beta + &radius)).0,
+                    ((&beta + &radius).square() / beta).0,
+                ));
+            };
+            let log_root = F(root).ln();
+            let y = &log_root - radius.ln();
+            let values = self.lu_h_values(&y, &log_root)?;
+            let derivative = &values[2].derivatives[0].re;
+            if !derivative.0.is_finite() || derivative <= &radius.zero() {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "LU-h density",
+                    detail: "positive CDF derivative is not representable".to_owned(),
+                }
+                .into());
+            }
+            return Ok((values[2].value.re.0.clone(), (radius / derivative).0));
+        }
+        let threshold = F(root
             .map(|(radius, _)| radius)
-            .unwrap_or_else(|| radius.zero());
-        SurfaceRadialMap::<T>::coordinate_from_radius(
-            &F(radius),
-            F(threshold),
-            F::from_f64(self.beta),
-            F::from_f64(self.power),
-        )
-        .0
+            .unwrap_or_else(|| radius.0.zero()));
+        let power = F::<T>::from_f64(self.power);
+        let (coordinate, jacobian) =
+            SurfaceRadialMap::<T>::coordinate_from_radius(&radius, threshold, beta, power);
+        Ok((coordinate.0, jacobian.0))
     }
 }
 
@@ -1911,15 +2167,23 @@ impl<T: FloatLike> SurfaceRadialMap<T> {
             .into());
         }
         let (threshold, beta, power) = self.radial_parameters();
-        let radial_coordinate = Self::coordinate_from_radius(&radius, threshold, beta, power);
+        let (radial_coordinate, radial_jacobian) =
+            Self::coordinate_from_radius(&radius, threshold, beta, power);
         let one = radius.one();
         let two = radius.from_i64(2);
         let mut coordinates = vec![zero.clone(); self.dimension];
         let mut base = radius.clone();
+        let mut angular_jacobian = radius.TAU();
         for i in 0..self.dimension - 2 {
             let cos_theta = &displacement[i] / &base;
             coordinates[2 + i] = (&one + &cos_theta) / &two;
-            base *= (&one - cos_theta.square()).sqrt();
+            let sine = (&one - cos_theta.square()).sqrt();
+            angular_jacobian *= &two;
+            let angular_power = self.dimension - 3 - i;
+            if angular_power > 0 {
+                angular_jacobian *= sine.powi(angular_power as i32);
+            }
+            base *= sine;
         }
         let mut phi = F(displacement[self.dimension - 1]
             .0
@@ -1940,12 +2204,27 @@ impl<T: FloatLike> SurfaceRadialMap<T> {
         if !residual.0.is_finite() {
             return Err(SamplingEvaluationError::Unrepresentable { operation: "radial map", detail: "surface radial-map inverse residual is not representable at the current precision".to_owned() }.into());
         }
+        // Use the actual supplied radius and angles for its density; forward
+        // reconstruction above is only an independent round-trip diagnostic.
+        let jacobian = radial_jacobian * angular_jacobian * radius.powi(self.dimension as i32 - 1);
+        let inverse_jacobian = jacobian.inv();
+        if [&jacobian, &inverse_jacobian]
+            .iter()
+            .any(|value| !value.0.is_finite() || **value <= value.zero())
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "surface radial inverse density",
+                detail: "positive Jacobian pair is not representable at the supplied momentum"
+                    .to_owned(),
+            }
+            .into());
+        }
         Ok(SurfaceRadialPoint {
             coordinates,
             point: point.to_vec(),
             radius,
-            jacobian: mapped.jacobian,
-            inverse_jacobian: mapped.inverse_jacobian,
+            jacobian,
+            inverse_jacobian,
             residual,
         })
     }
@@ -2006,14 +2285,30 @@ impl<T: FloatLike> SurfaceRadialMap<T> {
         }
     }
 
-    fn coordinate_from_radius(radius: &F<T>, threshold: F<T>, beta: F<T>, power: F<T>) -> F<T> {
+    /// Inverse coordinate and positive dr/du evaluated at the supplied radius.
+    /// The density depends on its signed distance, not the rounded recovered u.
+    fn coordinate_from_radius(
+        radius: &F<T>,
+        threshold: F<T>,
+        beta: F<T>,
+        power: F<T>,
+    ) -> (F<T>, F<T>) {
         let one = radius.one();
         let split = &threshold / (&threshold + &beta);
+        let alpha = &one - power.inv();
         if split > radius.zero() && radius < &threshold {
-            &split * Self::power_complement(&(radius / &threshold), &(&one / &power))
+            let coordinate =
+                &split * Self::power_complement(&(radius / &threshold), &(&one / &power));
+            let jacobian =
+                &power * (&threshold + &beta) * ((&threshold - radius) / &threshold).powf(&alpha);
+            (coordinate, jacobian)
         } else {
-            let z = ((radius - &threshold) / &beta).powf(&(&one / &power));
-            (&z + &split) / (&one + &z)
+            let distance = (radius - &threshold) / &beta;
+            let z = distance.powf(&(&one / &power));
+            let coordinate = (&z + &split) / (&one + &z);
+            let jacobian =
+                &power * (&threshold + &beta) * distance.powf(&alpha) * (&one + &z).square();
+            (coordinate, jacobian)
         }
     }
 
@@ -2485,6 +2780,221 @@ mod tests {
     use super::*;
 
     #[test]
+    fn lu_h_radial_profile_has_native_exact_density_and_inverse() {
+        // Eager/dual compilation needs a larger development-build stack, as
+        // in the generated graph fixtures; this leaves all numeric checks intact.
+        std::thread::Builder::new()
+            .name("lu-h-profile-test".to_owned())
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                crate::initialisation::test_initialise().unwrap();
+
+                use crate::settings::runtime::{HFunctionSettings, SamplingRadialProfile};
+                use crate::utils::{ArbPrec, QuadFloat};
+
+                fn check<T: FloatLike>(
+                    program: &SamplingExpressionEvaluator,
+                    profile: &SamplingRadialProfile,
+                ) {
+                    let zero = F::<T>::from_f64(0.0);
+                    let map = ImplicitSurfaceRadialMap::new(
+                        3,
+                        vec![zero.0.clone(); 3],
+                        1.0,
+                        2.0,
+                        Arc::new(|_, radius: T| {
+                            let r = F(radius);
+                            Ok(((&r - r.from_i64(2)).0, r.one().0))
+                        }),
+                    )
+                    .unwrap()
+                    .with_lu_h_profile(program.clone(), profile, 2)
+                    .unwrap();
+                    assert_eq!(map.lu_h_max_occurrence(), Some(2));
+                    for radial in [1e-8, 0.07, 0.5, 0.91, 1.0 - 1e-8] {
+                        let coordinates =
+                            [radial, 0.31, 0.64].map(|value| F::<T>::from_f64(value).0);
+                        let forward = map.forward(&coordinates).unwrap();
+                        let inverse = map.inverse(&forward.point).unwrap();
+                        let tolerance = F::<T>::from_f64(1e-7);
+                        assert!(
+                            (F(forward.jacobian.clone()) * F(inverse.inverse_jacobian)
+                                - zero.one())
+                            .abs()
+                                < tolerance
+                        );
+                        assert!(
+                            (F(inverse.coordinates[0].clone()) - F(coordinates[0].clone())).abs()
+                                < F::<T>::from_f64(1e-12)
+                        );
+                        let radius = forward
+                            .point
+                            .iter()
+                            .map(|value| F(value.clone()).square())
+                            .fold(zero.clone(), |sum, term| sum + term)
+                            .sqrt();
+                        let t = radius.from_i64(2) / &radius;
+                        let fit = map.lu_h_profile.as_ref().unwrap();
+                        let z = (t.ln() - &fit.log_scale).0.exp();
+                        let z = F(z).powf(&fit.shape);
+                        let focused = &fit.shape * &z / (&t * (zero.one() + &z).square());
+                        let broad = zero.from_i64(2) / (zero.from_i64(2) + &t).square();
+                        let epsilon = F::<T>::from_f64(profile.broad_fraction);
+                        let density = (zero.one() - &epsilon) * focused + epsilon * broad;
+                        let expected =
+                            zero.from_i64(2) * zero.TAU() * radius.powi(3) / (&t * density);
+                        assert!((F(forward.jacobian) / expected - zero.one()).abs() < tolerance);
+                    }
+                }
+                for broad_fraction in [0.0, 0.02, 1.0] {
+                    let profile = SamplingRadialProfile {
+                        broad_fraction,
+                        ..Default::default()
+                    };
+                    let program = SamplingExpressionEvaluator::new_lu_h_profile(
+                        &profile,
+                        &HFunctionSettings::default(),
+                    )
+                    .unwrap();
+                    check::<f64>(&program, &profile);
+                    check::<QuadFloat>(&program, &profile);
+                    check::<ArbPrec>(&program, &profile);
+                }
+                // The two component quantiles coincide everywhere. A strict-sign
+                // scalar bracket is unnecessary and would reject this exact solution.
+                let profile = SamplingRadialProfile {
+                    scale: Some(2.0),
+                    shape: Some(1.0),
+                    ..Default::default()
+                };
+                let program = SamplingExpressionEvaluator::new_lu_h_profile(
+                    &profile,
+                    &HFunctionSettings::default(),
+                )
+                .unwrap();
+                check::<f64>(&program, &profile);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn lu_h_radial_profile_uses_root_independent_broad_and_absent_laws() {
+        // Eager/dual compilation needs a larger development-build stack, as
+        // in the generated graph fixtures; this leaves all numeric checks intact.
+        std::thread::Builder::new()
+            .name("lu-h-profile-test".to_owned())
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                crate::initialisation::test_initialise().unwrap();
+
+                use crate::settings::runtime::{HFunctionSettings, SamplingRadialProfile};
+                for broad_only in [false, true] {
+                    let profile = SamplingRadialProfile {
+                        broad_fraction: if broad_only { 1.0 } else { 0.02 },
+                        ..Default::default()
+                    };
+                    let program = SamplingExpressionEvaluator::new_lu_h_profile(
+                        &profile,
+                        &HFunctionSettings::default(),
+                    )
+                    .unwrap();
+                    let map = ImplicitSurfaceRadialMap::new(
+                        3,
+                        vec![0.0; 3],
+                        3.0,
+                        2.5,
+                        Arc::new(move |_, _| {
+                            assert!(
+                                !broad_only,
+                                "broad-only proposal must never evaluate its cut root"
+                            );
+                            Ok((1.0, 0.0))
+                        }),
+                    )
+                    .unwrap()
+                    .with_lu_h_profile(program, &profile, 1)
+                    .unwrap();
+                    for u in [0.1, 0.5, 0.9] {
+                        let forward = map.forward(&[u, 0.31, 0.64]).unwrap();
+                        let radius = forward
+                            .point
+                            .iter()
+                            .map(|value| value * value)
+                            .sum::<f64>()
+                            .sqrt();
+                        assert!((radius / (3.0 * (1.0 - u) / u) - 1.0).abs() < 1e-13);
+                        let expected_j =
+                            4.0 * std::f64::consts::PI * radius * radius * 3.0 / (u * u);
+                        assert!((forward.jacobian / expected_j - 1.0).abs() < 1e-13);
+                        assert!(
+                            (map.inverse(&forward.point).unwrap().coordinates[0] - u).abs() < 1e-14
+                        );
+                    }
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn lu_h_radial_profile_jacobian_matches_full_finite_difference() {
+        // Eager/dual compilation needs a larger development-build stack, as
+        // in the generated graph fixtures; this leaves all numeric checks intact.
+        std::thread::Builder::new()
+            .name("lu-h-profile-test".to_owned())
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                crate::initialisation::test_initialise().unwrap();
+
+                use crate::settings::runtime::{HFunctionSettings, SamplingRadialProfile};
+                let profile = SamplingRadialProfile::default();
+                let program = SamplingExpressionEvaluator::new_lu_h_profile(
+                    &profile,
+                    &HFunctionSettings::default(),
+                )
+                .unwrap();
+                let map = ImplicitSurfaceRadialMap::new(
+                    3,
+                    vec![0.0; 3],
+                    1.7,
+                    2.0,
+                    Arc::new(|direction, radius| Ok((radius - (2.0 + 0.4 * direction[0]), 1.0))),
+                )
+                .unwrap()
+                .with_lu_h_profile(program, &profile, 1)
+                .unwrap();
+                for u in [0.15, 0.5, 0.87] {
+                    let x = [u, 0.31, 0.64];
+                    let step = 1e-5;
+                    let mut jac = [[0.0; 3]; 3];
+                    for col in 0..3 {
+                        let mut plus = x;
+                        plus[col] += step;
+                        let mut minus = x;
+                        minus[col] -= step;
+                        let a = map.forward(&plus).unwrap();
+                        let b = map.forward(&minus).unwrap();
+                        for (row, entries) in jac.iter_mut().enumerate() {
+                            entries[col] = (a.point[row] - b.point[row]) / (2.0 * step);
+                        }
+                    }
+                    let determinant = jac[0][0] * (jac[1][1] * jac[2][2] - jac[1][2] * jac[2][1])
+                        - jac[0][1] * (jac[1][0] * jac[2][2] - jac[1][2] * jac[2][0])
+                        + jac[0][2] * (jac[1][0] * jac[2][1] - jac[1][1] * jac[2][0]);
+                    assert!(
+                        (map.forward(&x).unwrap().jacobian / determinant.abs() - 1.0).abs() < 2e-7
+                    );
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
     fn radial_profiles_include_the_outer_branch_interval_in_the_jacobian() {
         for threshold in [None, Some(2.0)] {
             for power in [1.0, 1.5, 2.0, 3.0] {
@@ -2512,7 +3022,8 @@ mod tests {
                     let finite_difference = (plus.0 - minus.0) / (2.0 * step);
                     assert!((jacobian.0 / finite_difference - 1.0).abs() < 1.0e-8);
                     let (implicit_radius, implicit_jacobian) = implicit
-                        .radius_from_coordinate(coordinate, threshold.map(|radius| (radius, 1.0)));
+                        .radius_from_coordinate(coordinate, threshold.map(|radius| (radius, 1.0)))
+                        .unwrap();
                     assert!((implicit_radius - radius.0).abs() < 1.0e-12);
                     assert!((implicit_jacobian / finite_difference - 1.0).abs() < 1.0e-8);
 

@@ -4946,6 +4946,79 @@ rotation_axis = [{type = "x"}, {type = "y"}]
         runtime.stability.levels = vec![StabilityLevelSetting::default_double()];
         kite.generate_integrands(&global, (&runtime).into())?;
 
+        // Reuse the same saved-process acceptance path for a physical cut. Two
+        // names deliberately share its geometry while retaining distinct radial
+        // proposals; the broad components give the shifted Gaussian full support.
+        let mut cut = State::new_test();
+        cut.model = kite.model.clone();
+        cut.model_parameters = InputParamCard::default_from_model(&cut.model);
+        cut.import_graphs(
+            Graph::from_string(
+                r#"digraph sampling_cut_bubble {
+                    num=1; edge [pdg=1001]; node [num=1];
+                    ext [style=invis, is_cut=0];
+                    ext -> a [id=0];
+                    a -> b [id=1, lmb_id=0];
+                    a -> b [id=2];
+                    b -> ext [id=3];
+                }"#,
+                &cut.model,
+            )?,
+            GraphImportOptions {
+                process_name: Some("sampling_cut".into()),
+                process_id: None,
+                process_definition: None,
+                integrand_name: Some("default".into()),
+                overwrite: false,
+                append: false,
+            },
+        )?;
+        let mut cut_runtime: RuntimeSettings = toml::from_str(
+            r#"
+[general]
+evaluator_method = "SummedFunctionMap"
+integral_unit = "none"
+enable_cache = false
+[kinematics]
+e_cm = 5.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[5.0, 0.0, 0.0, 0.0]]
+helicities = ["summed_averaged"]
+[sampling]
+graphs = "summed"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "summed"
+sampling_channel_weight = "map_density"
+power = 2.0
+default_channel_selection = ["matched", "wide"]
+[sampling.channel_definitions.sampling_cut_bubble.matched]
+around = "phase_space(cut(1,2))"
+parent_lmb = [1]
+subspace_lmb = [1]
+radial_profile = "lu_h"
+[sampling.channel_definitions.sampling_cut_bubble.wide]
+around = "phase_space(cut(1,2))"
+parent_lmb = [1]
+subspace_lmb = [1]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, shape = 1.5, broad_fraction = 0.08 }
+"#,
+        )?;
+        cut_runtime.stability.levels = vec![StabilityLevelSetting::default_double()];
+        // Eager dual-program construction in an unoptimized test build needs
+        // the same larger stack as the graph-generation fixtures.
+        std::thread::scope(|scope| {
+            std::thread::Builder::new()
+                .stack_size(64 * 1024 * 1024)
+                .spawn_scoped(scope, || {
+                    cut.generate_integrands(&global, (&cut_runtime).into())
+                })?
+                .join()
+                .unwrap()
+        })?;
+
         for (mut state, reference) in [
             (
                 bubble,
@@ -4955,6 +5028,10 @@ rotation_axis = [{type = "x"}, {type = "y"}]
                 kite,
                 GaussianReferenceFunction::new(1.2, vec![0.4, -0.3, 0.2, -0.2, 0.1, 0.35])?,
             ),
+            (
+                cut,
+                GaussianReferenceFunction::new(1.5, vec![0.2, -0.3, 0.1])?,
+            ),
         ] {
             let temp = tempdir()?;
             let saved = temp.path().join("saved");
@@ -4962,7 +5039,13 @@ rotation_axis = [{type = "x"}, {type = "y"}]
             let mut loaded = State::load(saved, None, None)?;
             loaded.activate_loaded_integrand_backends(false)?;
             let integrand = loaded.process_list.get_integrand_mut(0, "default")?;
-            integrand.warm_up(&loaded.model)?;
+            std::thread::scope(|scope| {
+                std::thread::Builder::new()
+                    .stack_size(64 * 1024 * 1024)
+                    .spawn_scoped(scope, || integrand.warm_up(&loaded.model))?
+                    .join()
+                    .unwrap()
+            })?;
 
             // Exercise the complete saved-process parameterization with genuine
             // multidimensional Halton points. Finiteness, normalization, moments

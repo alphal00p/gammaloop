@@ -58,6 +58,7 @@ use crate::{
     settings::RuntimeSettings,
     settings::runtime::DiscreteGraphSamplingSettings,
     settings::runtime::DiscreteGraphSamplingType,
+    settings::runtime::HFunctionSettings,
     settings::runtime::IntegratorSettings,
     settings::runtime::ParameterizationSettings,
     settings::runtime::Precision,
@@ -66,6 +67,7 @@ use crate::{
     settings::runtime::{SamplingChannelWeight, SamplingSettings},
 };
 use color_eyre::Result;
+use sampling_selection::SamplingChannelPrograms;
 
 pub mod evaluators;
 pub use evaluators::ActiveF64Backend;
@@ -2019,7 +2021,7 @@ pub struct LmbMultiChannelingSetup {
     pub(crate) sampling_bridge_quad: RuntimeCache<SamplingChannelBridge<f128>>,
     pub(crate) sampling_bridge_arb: RuntimeCache<SamplingChannelBridge<ArbPrec>>,
     pub(crate) sampling_catalogue: RuntimeCache<SamplingChannelCatalogue>,
-    pub(crate) sampling_proxies: RuntimeCache<Vec<Option<SamplingExpressionEvaluator>>>,
+    pub(crate) sampling_programs: RuntimeCache<Vec<SamplingChannelPrograms>>,
 }
 
 impl LmbMultiChannelingSetup {
@@ -2040,7 +2042,7 @@ impl LmbMultiChannelingSetup {
         self.sampling_bridge_quad.invalidate();
         self.sampling_bridge_arb.invalidate();
         self.sampling_catalogue.invalidate();
-        self.sampling_proxies.invalidate();
+        self.sampling_programs.invalidate();
     }
 
     /// Expand a graph-resolved selection into the canonical catalogue used by
@@ -2156,7 +2158,7 @@ impl LmbMultiChannelingSetup {
     pub fn compile_sampling_channels<T: FloatLike>(
         &self,
         catalogue: &SamplingChannelCatalogue,
-        proxies: &[Option<SamplingExpressionEvaluator>],
+        programs: &[SamplingChannelPrograms],
         context: &SamplingChannelCompileContext<T>,
     ) -> Result<Vec<CompiledSamplingChannel<T>>> {
         if context.master_graph != self.graph.name {
@@ -2166,7 +2168,7 @@ impl LmbMultiChannelingSetup {
                 self.graph.name
             ));
         }
-        catalogue.compile(context, proxies).map_err(Into::into)
+        catalogue.compile(context, programs).map_err(Into::into)
     }
 
     /// Compile channels after preparing the external data needed by every
@@ -2177,7 +2179,7 @@ impl LmbMultiChannelingSetup {
     pub fn compile_sampling_channels_with_external<T: FloatLike>(
         &self,
         catalogue: &SamplingChannelCatalogue,
-        proxies: &[Option<SamplingExpressionEvaluator>],
+        programs: &[SamplingChannelPrograms],
         context: &SamplingChannelCompileContext<T>,
         external_momenta: &[[T; 4]],
     ) -> Result<Vec<CompiledSamplingChannel<T>>> {
@@ -2215,7 +2217,7 @@ impl LmbMultiChannelingSetup {
                 self.lmb_frame_map(basis_id, external_momenta)?,
             );
         }
-        catalogue.compile(&context, proxies).map_err(Into::into)
+        catalogue.compile(&context, programs).map_err(Into::into)
     }
 
     /// Compile the selected channels and bind them to the raw-frame bridge.
@@ -2223,10 +2225,10 @@ impl LmbMultiChannelingSetup {
     pub fn compile_sampling_channel_bridge<T: FloatLike>(
         &self,
         catalogue: &SamplingChannelCatalogue,
-        proxies: &[Option<SamplingExpressionEvaluator>],
+        programs: &[SamplingChannelPrograms],
         context: &SamplingChannelCompileContext<T>,
     ) -> Result<SamplingChannelBridge<T>> {
-        let channels = self.compile_sampling_channels(catalogue, proxies, context)?;
+        let channels = self.compile_sampling_channels(catalogue, programs, context)?;
         let mode = match context.parameterization_settings.sampling_channels.weight {
             SamplingChannelWeight::MapDensity | SamplingChannelWeight::InverseJacobian => {
                 SamplingPartitionMode::MapDensity
@@ -2240,13 +2242,13 @@ impl LmbMultiChannelingSetup {
     pub fn compile_sampling_channel_bridge_with_external<T: FloatLike>(
         &self,
         catalogue: &SamplingChannelCatalogue,
-        proxies: &[Option<SamplingExpressionEvaluator>],
+        programs: &[SamplingChannelPrograms],
         context: &SamplingChannelCompileContext<T>,
         external_momenta: &[[T; 4]],
     ) -> Result<SamplingChannelBridge<T>> {
         let channels = self.compile_sampling_channels_with_external(
             catalogue,
-            proxies,
+            programs,
             context,
             external_momenta,
         )?;
@@ -2633,14 +2635,17 @@ pub trait ProcessIntegrandImpl {
                     &parameterization.sampling_channels,
                 )?;
                 let catalogue = setup.sampling_channel_catalogue(&resolved, &parameterization)?;
-                let proxies = catalogue.compile_proxies(3 * graph.get_graph().get_loop_number())?;
-                Ok((catalogue, proxies))
+                let programs = catalogue.compile_programs(
+                    3 * graph.get_graph().get_loop_number(),
+                    &self.get_settings().lu_h_function,
+                )?;
+                Ok((catalogue, programs))
             })
             .collect::<Result<Vec<_>>>()?;
-        for (graph, (catalogue, proxies)) in self.get_terms_mut().zip(prepared) {
+        for (graph, (catalogue, programs)) in self.get_terms_mut().zip(prepared) {
             let setup = graph.sampling_setup_mut();
             setup.sampling_catalogue.set(catalogue);
-            setup.sampling_proxies.set(proxies);
+            setup.sampling_programs.set(programs);
         }
         let precisions = self
             .get_settings()
@@ -2703,6 +2708,22 @@ pub trait ProcessIntegrandImpl {
                 ]
             })
             .collect_vec();
+        // Reserve one tenth of the requested physical accuracy for the map's
+        // forward/inverse density agreement. An unconfigured native request
+        // retains the bridge's precision-derived default.
+        let density_tolerance = self
+            .get_settings()
+            .stability
+            .levels
+            .iter()
+            .filter(|level| level.precision == T::sampling_precision())
+            .map(|level| {
+                level
+                    .required_precision_for_re
+                    .min(level.required_precision_for_im)
+            })
+            .reduce(f64::min)
+            .map(|tolerance| 0.1 * tolerance);
         let bridges = (0..self.graph_count()).map(|id| {
             let graph = self.get_graph(id);
             let setup = graph.sampling_setup();
@@ -2710,10 +2731,14 @@ pub trait ProcessIntegrandImpl {
             let catalogue = setup.sampling_catalogue.as_ref().ok_or_else(|| eyre!(
                 "sampling catalogue for graph '{}' is not initialized; call warm_up after loading or changing runtime settings, model parameters, or graph routing", graph.name()
             ))?;
-            let proxies = setup.sampling_proxies.as_ref().ok_or_else(|| eyre!(
+            let programs = setup.sampling_programs.as_ref().ok_or_else(|| eyre!(
                 "sampling programs for graph '{}' are not initialized; call warm_up", graph.name()
             ))?;
-            graph.bind_sampling_bridge(catalogue, proxies, &parameterization, e_cm, &external_momenta, None).map(Some)
+            let bridge = graph.bind_sampling_bridge(catalogue, programs, &parameterization, e_cm, &external_momenta, None)?;
+            match density_tolerance {
+                Some(tolerance) => bridge.with_relative_density_tolerance(tolerance).map(Some),
+                None => Ok(Some(bridge)),
+            }
         }).collect::<Result<Vec<_>>>()?;
         for (graph, bridge) in self.get_terms_mut().zip(bridges) {
             if let Some(bridge) = bridge {
@@ -3078,6 +3103,7 @@ pub trait GraphTerm {
         parameterization_settings: &ParameterizationSettings,
         e_cm: f64,
         external_momenta: &[[T; 4]],
+        lu_h_function: &HFunctionSettings,
         orientation: Option<usize>,
     ) -> Result<SamplingChannelBridge<T>> {
         let resolved = resolve_sampling_channel_selection(
@@ -3087,10 +3113,11 @@ pub trait GraphTerm {
         let catalogue = self
             .sampling_setup()
             .sampling_channel_catalogue(&resolved, parameterization_settings)?;
-        let proxies = catalogue.compile_proxies(3 * self.get_graph().get_loop_number())?;
+        let programs =
+            catalogue.compile_programs(3 * self.get_graph().get_loop_number(), lu_h_function)?;
         self.bind_sampling_bridge(
             &catalogue,
-            &proxies,
+            &programs,
             parameterization_settings,
             e_cm,
             external_momenta,
@@ -3103,7 +3130,7 @@ pub trait GraphTerm {
     fn bind_sampling_bridge<T: FloatLike>(
         &self,
         catalogue: &SamplingChannelCatalogue,
-        proxies: &[Option<SamplingExpressionEvaluator>],
+        programs: &[SamplingChannelPrograms],
         parameterization_settings: &ParameterizationSettings,
         e_cm: f64,
         external_momenta: &[[T; 4]],
@@ -4697,8 +4724,8 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 #[cfg(test)]
 mod tests {
     use super::{
-        LmbMultiChannelingSetup, RuntimeCache, SamplingChannelCompileContext, SamplingChannelId,
-        filtered_orientation_count, resolve_sampling_channel_selection,
+        HFunctionSettings, LmbMultiChannelingSetup, RuntimeCache, SamplingChannelCompileContext,
+        SamplingChannelId, filtered_orientation_count, resolve_sampling_channel_selection,
         resolve_visible_orientation_id, validate_orientation_catalog_group,
         validate_process_runtime_settings,
     };
@@ -5166,7 +5193,7 @@ mod tests {
             sampling_bridge_quad: Default::default(),
             sampling_bridge_arb: Default::default(),
             sampling_catalogue: Default::default(),
-            sampling_proxies: Default::default(),
+            sampling_programs: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(2), LmbIndex::from(0)].into(),
             graph,
             all_bases,
@@ -5275,6 +5302,7 @@ mod tests {
                     parent_lmb,
                     on_cut: vec![],
                     singularity_proxy: None,
+                    radial_profile: None,
                 },
             );
         assert!(
@@ -5307,6 +5335,7 @@ mod tests {
                     parent_lmb: vec![0],
                     on_cut: Vec::new(),
                     singularity_proxy: None,
+                    radial_profile: None,
                 },
             );
         assert_eq!(
@@ -5364,7 +5393,7 @@ mod tests {
             sampling_bridge_quad: Default::default(),
             sampling_bridge_arb: Default::default(),
             sampling_catalogue: Default::default(),
-            sampling_proxies: Default::default(),
+            sampling_programs: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(0), LmbIndex::from(1)].into(),
             graph: graph.clone(),
             all_bases,
@@ -5438,7 +5467,7 @@ mod tests {
                 &setup
                     .sampling_channel_catalogue(&resolved, &context.parameterization_settings)
                     .unwrap()
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
                 &context,
                 &external,
@@ -5519,7 +5548,7 @@ mod tests {
             sampling_bridge_quad: Default::default(),
             sampling_bridge_arb: Default::default(),
             sampling_catalogue: Default::default(),
-            sampling_proxies: Default::default(),
+            sampling_programs: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(0)].into(),
             graph: graph.clone(),
             all_bases,
@@ -5544,7 +5573,7 @@ mod tests {
                 &setup
                     .sampling_channel_catalogue(&resolved, &context.parameterization_settings)
                     .unwrap()
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
                 &context,
             )

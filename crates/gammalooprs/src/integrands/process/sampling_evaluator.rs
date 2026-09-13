@@ -17,6 +17,7 @@ use symbolica::{
 use crate::{
     integrands::process::{GenericEvaluator, GenericEvaluatorFloat},
     processes::EvaluatorSettings,
+    settings::runtime::{HFunction, HFunctionSettings, SamplingRadialProfile},
     utils::{F, FloatLike, hyperdual_utils::DualOrNot},
 };
 use symbolica::evaluate::OptimizationSettings;
@@ -128,6 +129,103 @@ impl SamplingExpressionEvaluator {
             }
         }
         Self::new([expression], parameters, false)
+    }
+
+    /// Compile the auxiliary-scale proposal once, including its native fit and
+    /// first derivatives. The two sign inputs select algebraically equivalent
+    /// stable tails: every evaluated exponential has a nonpositive argument.
+    /// Inputs are log(t), log(R), log(beta), focused sign and broad sign;
+    /// outputs are fitted log-scale, shape, CDF, survival and log(raw radius).
+    pub(crate) fn new_lu_h_profile(
+        profile: &SamplingRadialProfile,
+        h: &HFunctionSettings,
+    ) -> Result<Self> {
+        if !h.sigma.is_finite() || h.sigma <= 0.0 {
+            return Err(eyre!(
+                "LU-h sampling requires a positive finite h_function.sigma"
+            ));
+        }
+        if !profile.broad_fraction.is_finite()
+            || !(0.0..=1.0).contains(&profile.broad_fraction)
+            || [profile.scale, profile.shape]
+                .into_iter()
+                .flatten()
+                .any(|value| !value.is_finite() || value <= 0.0)
+        {
+            return Err(eyre!(
+                "LU-h sampling requires broad_fraction in [0,1] and positive finite scale/shape overrides"
+            ));
+        }
+        let power = h.power.unwrap_or(0);
+        let (log_scale, shape) = match h.function {
+            HFunction::PolyExponential | HFunction::PolyLeftRightExponential => {
+                if ![0, 1, 3, 4, 6, 7, 9, 10, 12, 13, 15, 16].contains(&power) {
+                    return Err(eyre!(
+                        "unsupported LU h-function power {power}; supported powers are 0,1,3,4,6,7,9,10,12,13,15,16"
+                    ));
+                }
+                let a = if matches!(h.function, HFunction::PolyExponential) {
+                    2
+                } else {
+                    1
+                };
+                let b = format!("((1-{power})/(2*{a}))");
+                // asinh(b) written with positive arguments, evaluated in the
+                // requested native precision rather than fitted in binary64.
+                (
+                    format!("log({})+log({b}+sqrt(1+({b})^2))/{a}", h.sigma),
+                    format!("2*{a}*(1+({b})^2)^(1/4)"),
+                )
+            }
+            HFunction::Exponential => (format!("log({}/2)", h.sigma), "1".to_owned()),
+            HFunction::ExponentialCT => {
+                return Err(eyre!(
+                    "exponential_ct is a local threshold localization, not a normalized auxiliary LU h-function"
+                ));
+            }
+        };
+        let log_scale = profile
+            .scale
+            .map_or(log_scale, |scale| format!("log({scale})"));
+        let shape = profile.shape.map_or(shape, |shape| shape.to_string());
+        let parameters = [
+            "lu_profile_y",
+            "lu_profile_log_root",
+            "lu_profile_log_beta",
+            "lu_profile_focus_sign",
+            "lu_profile_broad_sign",
+        ];
+        let x = format!("exp(lu_profile_focus_sign*({shape})*(lu_profile_y-({log_scale})))");
+        let b = "exp(lu_profile_broad_sign*(lu_profile_y-lu_profile_log_root+lu_profile_log_beta))";
+        let focused_cdf =
+            format!("((1+lu_profile_focus_sign)*({x})+1-lu_profile_focus_sign)/(2*(1+({x})))");
+        let focused_survival =
+            format!("(1+lu_profile_focus_sign+(1-lu_profile_focus_sign)*({x}))/(2*(1+({x})))");
+        let broad_cdf =
+            format!("((1+lu_profile_broad_sign)*({b})+1-lu_profile_broad_sign)/(2*(1+({b})))");
+        let broad_survival =
+            format!("(1+lu_profile_broad_sign+(1-lu_profile_broad_sign)*({b}))/(2*(1+({b})))");
+        let epsilon = profile.broad_fraction;
+        let expressions = [
+            log_scale,
+            shape,
+            format!("(1-{epsilon})*({focused_cdf})+{epsilon}*({broad_cdf})"),
+            format!("(1-{epsilon})*({focused_survival})+{epsilon}*({broad_survival})"),
+            "lu_profile_log_root-lu_profile_y".to_owned(),
+        ];
+        Self::new(
+            expressions
+                .iter()
+                .map(|expression| try_parse!(expression))
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| eyre!(error))?,
+            parameters
+                .iter()
+                .map(|parameter| try_parse!(*parameter))
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| eyre!(error))?,
+            true,
+        )
     }
 
     pub fn parameter_count(&self) -> usize {
@@ -400,6 +498,65 @@ fn first_derivative_shape(parameter_count: usize) -> Vec<Vec<usize>> {
 mod tests {
     use super::*;
     use crate::initialisation::test_initialise;
+
+    #[test]
+    fn sampling_lu_h_profile_rejects_unsupported_physical_and_proposal_settings() {
+        let profile = SamplingRadialProfile::default();
+        for h in [
+            HFunctionSettings {
+                function: HFunction::ExponentialCT,
+                ..Default::default()
+            },
+            HFunctionSettings {
+                power: Some(2),
+                ..Default::default()
+            },
+            HFunctionSettings {
+                sigma: 0.0,
+                ..Default::default()
+            },
+        ] {
+            assert!(SamplingExpressionEvaluator::new_lu_h_profile(&profile, &h).is_err());
+            // Broad-only sampling still validates the actual inherited h at
+            // warmup, even though its map subsequently skips the root solve.
+            assert!(
+                SamplingExpressionEvaluator::new_lu_h_profile(
+                    &SamplingRadialProfile {
+                        broad_fraction: 1.0,
+                        ..profile.clone()
+                    },
+                    &h
+                )
+                .is_err()
+            );
+        }
+        for invalid in [
+            SamplingRadialProfile {
+                broad_fraction: -0.1,
+                ..profile.clone()
+            },
+            SamplingRadialProfile {
+                broad_fraction: 1.1,
+                ..profile.clone()
+            },
+            SamplingRadialProfile {
+                scale: Some(0.0),
+                ..profile.clone()
+            },
+            SamplingRadialProfile {
+                shape: Some(f64::INFINITY),
+                ..profile.clone()
+            },
+        ] {
+            assert!(
+                SamplingExpressionEvaluator::new_lu_h_profile(
+                    &invalid,
+                    &HFunctionSettings::default()
+                )
+                .is_err()
+            );
+        }
+    }
 
     #[test]
     fn eager_evaluation_returns_all_outputs() {

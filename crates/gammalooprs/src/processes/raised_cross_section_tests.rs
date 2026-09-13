@@ -697,6 +697,171 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
             );
             let before_occurrences =
                 assert_runtime_decomposition(&before_save, &metadata, &target_component_ids);
+            // Sampling is a proposal for the complete raised-cut/CT sum. Its
+            // Jacobian must multiply the result and every event only after
+            // residue differentiation, independently of the chosen profile.
+            {
+                use crate::{
+                    integrands::process::{MomentumSpaceEvaluationInput, SamplingChannelId},
+                    momentum::ThreeMomentum,
+                    settings::runtime::{
+                        MultiChannelingSettings, SamplingChannelDefinition, SamplingRadialProfile,
+                        SamplingSettings, StabilityLevelSetting,
+                    },
+                };
+                let mut matched = cross_section.integrand.as_ref().unwrap().clone();
+                let ProcessIntegrand::CrossSection(prepared) = &matched else {
+                    unreachable!()
+                };
+                let term = &prepared.data.graph_terms[0];
+                let graph_name = term.graph.name.clone();
+                let parent_lmb = term
+                    .graph
+                    .loop_momentum_basis
+                    .loop_edges
+                    .iter()
+                    .map(|edge| edge.0)
+                    .collect::<Vec<_>>();
+                let cut = term.cut_esurface.iter().next().unwrap();
+                let edges = cut
+                    .energies
+                    .iter()
+                    .map(|edge| edge.0.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                for scale in [None, Some(1.8)] {
+                    let mut parameterization =
+                        crate::settings::runtime::ParameterizationSettings::default();
+                    parameterization.sampling_channels.default_channel_selection =
+                        vec!["raised_cut".to_owned()];
+                    parameterization
+                        .sampling_channels
+                        .channel_definitions
+                        .entry(graph_name.clone())
+                        .or_default()
+                        .insert(
+                            "raised_cut".to_owned(),
+                            SamplingChannelDefinition {
+                                around: format!("phase_space(cut({edges}))"),
+                                parent_lmb: parent_lmb.clone(),
+                                subspace_lmb: parent_lmb.clone(),
+                                radial_profile: Some(SamplingRadialProfile {
+                                    scale,
+                                    ..Default::default()
+                                }),
+                                ..Default::default()
+                            },
+                        );
+                    let settings = matched.get_mut_settings();
+                    settings.sampling =
+                        SamplingSettings::MultiChanneling(MultiChannelingSettings {
+                            parameterization_settings: parameterization,
+                            ..Default::default()
+                        });
+                    settings.stability.rotation_axis.clear();
+                    settings.stability.levels = vec![StabilityLevelSetting::default_double()];
+                    matched.warm_up(&model).unwrap();
+                    let ProcessIntegrand::CrossSection(prepared) = &matched else {
+                        unreachable!()
+                    };
+                    let bridge = prepared.data.graph_terms[0]
+                        .multi_channeling_setup
+                        .sampling_bridge::<f64>()
+                        .unwrap()
+                        .clone();
+                    for sample in &samples {
+                        let Sample::Continuous(_, coordinates) = sample else {
+                            unreachable!()
+                        };
+                        let point = bridge
+                            .forward(
+                                SamplingChannelId(0),
+                                &coordinates.iter().map(|x| x.0).collect::<Vec<_>>(),
+                            )
+                            .unwrap();
+                        assert!(
+                            point
+                                .map
+                                .diagnostics
+                                .iter()
+                                .any(|message| message.contains("max_occurrence=2")),
+                            "{:?}",
+                            point.map.diagnostics
+                        );
+                        let raw = matched
+                            .evaluate_momentum_configuration(
+                                &model,
+                                &MomentumSpaceEvaluationInput {
+                                    loop_momenta: point
+                                        .raw_coordinates
+                                        .chunks_exact(3)
+                                        .map(|k| ThreeMomentum::new(F(k[0]), F(k[1]), F(k[2])))
+                                        .collect(),
+                                    integrator_weight: F(1.0),
+                                    graph_id: Some(0),
+                                    group_id: None,
+                                    orientation: None,
+                                    channel_id: None,
+                                },
+                                false,
+                            )
+                            .unwrap();
+                        let mapped = matched
+                            .evaluate_samples_raw(
+                                &model,
+                                std::slice::from_ref(sample),
+                                0,
+                                false,
+                                false,
+                                Complex::new(F(0.0), F(0.0)),
+                            )
+                            .unwrap()
+                            .samples
+                            .remove(0);
+                        let factor = point.selected_factor().unwrap();
+                        assert_eq!(mapped.parameterization_jacobian, Some(F(1.0)));
+                        for (left, right) in [
+                            (
+                                mapped.integrand_result.re.0,
+                                raw.integrand_result.re.0 * factor,
+                            ),
+                            (
+                                mapped.integrand_result.im.0,
+                                raw.integrand_result.im.0 * factor,
+                            ),
+                        ] {
+                            assert!(
+                                (left - right).abs() <= 1.0e-8 * left.abs().max(right.abs()),
+                                "{left} != {right}"
+                            );
+                        }
+                        let raw_events = raw
+                            .event_groups
+                            .iter()
+                            .flat_map(|group| group.iter())
+                            .collect::<Vec<_>>();
+                        let mapped_events = mapped
+                            .event_groups
+                            .iter()
+                            .flat_map(|group| group.iter())
+                            .collect::<Vec<_>>();
+                        assert!(!raw_events.is_empty());
+                        assert_eq!(raw_events.len(), mapped_events.len());
+                        for (raw, mapped) in raw_events.iter().zip(mapped_events) {
+                            for (left, right) in [
+                                (mapped.weight.re.0, raw.weight.re.0 * factor),
+                                (mapped.weight.im.0, raw.weight.im.0 * factor),
+                            ] {
+                                assert!(
+                                    (left - right).abs() <= 1.0e-8 * left.abs().max(right.abs()),
+                                    "event {left} != {right}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
             for component_id in &target_component_ids {
                 let component = &metadata.components[*component_id];
                 let expected = match component.kind {
@@ -869,6 +1034,7 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                         &parameterization,
                         runtime.kinematics.e_cm,
                         &externals,
+                        &runtime.lu_h_function,
                         None,
                     )
                     .unwrap();
@@ -932,6 +1098,153 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                 .unwrap();
                 assert!((report.normalization - 1.0).abs() < 0.02, "{report:?}");
                 assert!(report.round_trip_residual_max < 1.0e-8, "{report:?}");
+
+                // At fixed angular shape, simple-cut LU physics carries h(t),
+                // whereas this proposal carries p(t|R). Their ratio is not
+                // constant; multiplying the complete estimator by p/h must be.
+                // The independent analytic density also checks that warmup uses
+                // the actual runtime h family, width and every supported power.
+                if mass == 1.0 {
+                    use crate::settings::runtime::{
+                        HFunction, HFunctionSettings, MultiChannelingSettings,
+                        SamplingRadialProfile, SamplingSettings, StabilityLevelSetting,
+                    };
+                    for function in [
+                        HFunction::Exponential,
+                        HFunction::PolyExponential,
+                        HFunction::PolyLeftRightExponential,
+                    ] {
+                        for power in [
+                            None,
+                            Some(0),
+                            Some(1),
+                            Some(3),
+                            Some(4),
+                            Some(6),
+                            Some(7),
+                            Some(9),
+                            Some(10),
+                            Some(12),
+                            Some(13),
+                            Some(15),
+                            Some(16),
+                        ] {
+                            if function == HFunction::Exponential && power.is_some() {
+                                continue;
+                            }
+                            for sigma in [0.6, 1.4] {
+                                let h_settings = HFunctionSettings {
+                                    function: function.clone(),
+                                    sigma,
+                                    power,
+                                    ..Default::default()
+                                };
+                                let mut matched = ProcessIntegrand::CrossSection(integrand.clone());
+                                let mut parameterization = parameterization.clone();
+                                let profile = SamplingRadialProfile::default();
+                                parameterization
+                                    .sampling_channels
+                                    .channel_definitions
+                                    .get_mut(&term.graph.name)
+                                    .unwrap()
+                                    .get_mut("physical_cut")
+                                    .unwrap()
+                                    .radial_profile = Some(profile.clone());
+                                let settings = matched.get_mut_settings();
+                                settings.lu_h_function = h_settings.clone();
+                                settings.sampling =
+                                    SamplingSettings::MultiChanneling(MultiChannelingSettings {
+                                        parameterization_settings: parameterization.clone(),
+                                        ..Default::default()
+                                    });
+                                settings.stability.rotation_axis.clear();
+                                settings.stability.levels =
+                                    vec![StabilityLevelSetting::default_double()];
+                                matched.warm_up(&model).unwrap();
+                                let ProcessIntegrand::CrossSection(prepared) = &matched else {
+                                    unreachable!()
+                                };
+                                let bridge = prepared.data.graph_terms[0]
+                                    .multi_channeling_setup
+                                    .sampling_bridge::<f64>()
+                                    .unwrap()
+                                    .clone();
+                                let (scale, shape) = if function == HFunction::Exponential {
+                                    (sigma / 2.0, 1.0)
+                                } else {
+                                    let exponent = if function == HFunction::PolyExponential {
+                                        2.0
+                                    } else {
+                                        1.0
+                                    };
+                                    let shift =
+                                        (1.0 - power.unwrap_or(0) as f64) / (2.0 * exponent);
+                                    (
+                                        sigma * (shift.asinh() / exponent).exp(),
+                                        2.0 * exponent * (1.0 + shift * shift).powf(0.25),
+                                    )
+                                };
+                                let mut ratios = Vec::new();
+                                for u in [0.23, 0.47, 0.71] {
+                                    let coordinates = [u, 0.31, 0.47];
+                                    let point = bridge
+                                        .forward(
+                                            crate::integrands::process::SamplingChannelId(0),
+                                            &coordinates,
+                                        )
+                                        .unwrap();
+                                    let radius = point
+                                        .raw_coordinates
+                                        .iter()
+                                        .map(|value| value * value)
+                                        .sum::<f64>()
+                                        .sqrt();
+                                    let t = threshold_radius / radius;
+                                    let z = t / scale;
+                                    let a = threshold_radius
+                                        / (runtime.kinematics.e_cm * parameterization.b);
+                                    let density = (1.0 - profile.broad_fraction) * shape / scale
+                                        * z.powf(shape - 1.0)
+                                        / (1.0 + z.powf(shape)).powi(2)
+                                        + profile.broad_fraction * a / (a + t).powi(2);
+                                    let value = matched
+                                        .evaluate_samples_raw(
+                                            &model,
+                                            &[Sample::Continuous(
+                                                F(1.0),
+                                                coordinates.into_iter().map(F).collect(),
+                                            )],
+                                            0,
+                                            false,
+                                            false,
+                                            Complex::new(F(0.0), F(0.0)),
+                                        )
+                                        .unwrap()
+                                        .samples
+                                        .remove(0);
+                                    assert_eq!(value.parameterization_jacobian, Some(F(1.0)));
+                                    let h = crate::utils::h(&F(t), None, None, &h_settings).0;
+                                    ratios.push([
+                                        value.integrand_result.re.0 * density / h,
+                                        value.integrand_result.im.0 * density / h,
+                                    ]);
+                                }
+                                let norm = ratios[0][0].hypot(ratios[0][1]);
+                                assert!(
+                                    norm > 0.0 && norm.is_finite(),
+                                    "{h_settings:?}: {ratios:?}"
+                                );
+                                for ratio in &ratios[1..] {
+                                    assert!(
+                                        (ratio[0] - ratios[0][0]).hypot(ratio[1] - ratios[0][1])
+                                            < 2.0e-7 * norm,
+                                        "{h_settings:?}: {ratios:?}"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // The same actual cut chart is used by the complete physical
                 // source/stability route. Keep the draw binary64 and reconstruct
@@ -1048,6 +1361,7 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                         &parameterization,
                         runtime.kinematics.e_cm,
                         &externals,
+                        &runtime.lu_h_function,
                         None,
                     )
                     .unwrap_err()
@@ -1059,4 +1373,96 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
         .unwrap()
         .join()
         .unwrap();
+}
+
+#[test]
+fn lu_h_sampling_preserves_normalization_and_raised_derivative_integrals() {
+    use crate::{
+        settings::runtime::{HFunction, HFunctionSettings},
+        utils::{
+            h, h_dual,
+            hyperdual_utils::{extract_t_derivatives, simple_n_deriv_shape},
+        },
+    };
+    use symbolica::domains::dual::HyperDual;
+
+    test_initialise().unwrap();
+    let shape = HyperDual::<F<f64>>::new(simple_n_deriv_shape(4));
+    for function in [
+        HFunction::Exponential,
+        HFunction::PolyExponential,
+        HFunction::PolyLeftRightExponential,
+    ] {
+        for power in [
+            None,
+            Some(0),
+            Some(1),
+            Some(3),
+            Some(4),
+            Some(6),
+            Some(7),
+            Some(9),
+            Some(10),
+            Some(12),
+            Some(13),
+            Some(15),
+            Some(16),
+        ] {
+            if function == HFunction::Exponential && power.is_some() {
+                continue;
+            }
+            for sigma in [0.4, 1.7] {
+                let settings = HFunctionSettings {
+                    function: function.clone(),
+                    sigma,
+                    power,
+                    ..Default::default()
+                };
+                // Integrate in log(t/sigma), independently of the sampling map.
+                // The exponential family has nonzero density at t=0 and needs
+                // a longer lower tail; both polynomial families suppress it.
+                let lower = if function == HFunction::Exponential {
+                    -30.0
+                } else {
+                    -8.0
+                };
+                let steps = 8192;
+                let step = (8.0 - lower) / steps as f64;
+                let mut integrals = [0.0; 5];
+                for index in 0..=steps {
+                    let t = F(sigma * (lower + index as f64 * step).exp());
+                    let derivatives =
+                        extract_t_derivatives(h_dual(&shape.variable(0, t), None, None, &settings));
+                    assert!(
+                        (derivatives[0].0 - h(&t, None, None, &settings).0).abs() < 1.0e-12 / sigma
+                    );
+                    let quadrature = if index == 0 || index == steps {
+                        1.0
+                    } else if index % 2 == 0 {
+                        2.0
+                    } else {
+                        4.0
+                    };
+                    for (order, derivative) in derivatives.iter().enumerate() {
+                        integrals[order] +=
+                            quadrature * t.0.powi(order as i32 + 1) * derivative.0 * step / 3.0;
+                    }
+                }
+                // Existing h tables contain rounded binary64 normalizations;
+                // their agreement with one is independent of the IBP identity.
+                assert!(
+                    (integrals[0] - 1.0).abs() < 2.0e-8,
+                    "{settings:?}: {integrals:?}"
+                );
+                let mut factorial = 1.0;
+                for order in 1..=4 {
+                    factorial *= -(order as f64);
+                    assert!(
+                        (integrals[order] / factorial - integrals[0]).abs() < 2.0e-8,
+                        "{settings:?}, derivative {order}: {integrals:?}"
+                    );
+                }
+            }
+        }
+    }
 }

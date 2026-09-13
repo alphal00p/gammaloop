@@ -488,6 +488,7 @@ mod settings_wrapper_tests {
                 "HZ".to_owned(),
                 SamplingChannelDefinition {
                     around: "surface(2,4,12)".to_owned(),
+                    radial_profile: None,
                     subspace_lmb: vec![3],
                     parent_lmb: vec![3, 6, 7, 10],
                     on_cut: vec![2, 6, 10],

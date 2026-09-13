@@ -1,8 +1,8 @@
 # Cross-section delivery path alongside amplitude sampling
 
-Read-only source audit, 2026-09-13. This note proposes bounded implementation
-slices under [the accepted plan](../../../ADVANCED_SAMPLING_PLAN.md); it adds
-no maps or new physical integration evidence. Consult
+Delivery sequence and evidence ledger, updated 2026-09-13. This note distinguishes
+implemented boundaries from proposed slices under
+[the accepted plan](../../../ADVANCED_SAMPLING_PLAN.md). Consult
 [GL638 geometry](gl638.md), [LU h matching](LU_H_MATCHED_SAMPLING.md),
 [joint normals](TWO_NORMAL_PROPOSAL.md), and
 [recorded physical replays](../gl638/runtime-followup.md) at each relevant slice.
@@ -11,10 +11,13 @@ no maps or new physical integration evidence. Consult
 
 The canonical bridge, cached warmup, exact raw-frame partition, real amplitude
 surfaces and standalone full-parent `phase_space(cut(...))` are implemented.
-The common native-precision migration remains a prerequisite for long runs
-with strongly concentrated densities. It must rescue maps and foreign densities
-from original inputs, with consistent improved external data in physical and
-sampling evaluation, including Arb precision.
+The common native-precision migration landed in `882f80eb0`: physical amplitude
+and cut tests rescue maps and foreign densities from original inputs through the
+existing stability stack, including improved native external data. Root/density
+accuracy certification, native reference retry and outer-grid range handling
+remain separate limits; the migration alone does not authorize all strongly
+concentrated long-run claims. See
+[the precision audit](SAMPLING_PRECISION_RESCUE.md).
 
 `PreparedCutSamplingContext::from_lu_sample`,
 `PreparedCrossSectionMapEvaluation::new`, and
@@ -109,12 +112,12 @@ the explicit/inherited host; it never silently changes the target frame.
 | X6: automatic catalogue | Existing `SamplingChannelCatalogue`/selection owner; pass fully resolved physical targets from amplitude and cross-section hosts. | Initial discovery covers supported single surfaces/cuts with deterministic ordinary soft coverage, then adds already-supported side/joint/star candidates under caps. Stable IDs/aliases, current-context fallback, explicit omissions and no-surface graphs. Do not claim complete auto support while conditional candidates are unimplemented. |
 | X7: demonstrated GL638 gain | Existing integration engine, runtime cards and replay/acceptance reports. Compare frozen catalogues at equal evaluations and equal wall time on 20 cores. | Independent seeds, signed/absolute moments, second moments, maxima, rescue/NaN counts, map/physics cost and soft cancellation. Long runs start only after native rescue and map/reference gates. Report neutral or worse outcomes honestly. |
 
-X1 needs one additional binding at the existing compile owner: the current
-`GraphTerm::compile_sampling_bridge` arguments do not include the runtime LU h.
-Pass its resolved settings from process warmup, together with the existing
-`cut_group.related_esurface_group.max_occurence`, rather than inventing defaults
-or looking up settings per draw. Ordinary cache invalidation already covers
-changes to those runtime settings.
+X1 now passes the resolved runtime LU h through the existing compile owner and
+process warmup, together with the largest
+`cut_group.related_esurface_group.max_occurence` among equivalent cut groups.
+It does not invent defaults or look up settings per draw. Ordinary cache
+invalidation covers changes to those runtime settings. The physical and
+saved-state gates are recorded in [the X1 evidence ledger](LU_H_MATCHED_SAMPLING.md#x1-validation-milestone).
 
 ### Baseline comparability
 
