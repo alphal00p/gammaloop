@@ -175,6 +175,10 @@ selected map edges, including surface channels; the remaining LMB-specific
 names are restricted to temporary basis/weight internals slated for the same
 retirement sequence.
 
+The discrete sample representation is likewise named `SamplingChannel`; the
+old `Advanced` variant is gone, so callers cannot mistake mapped channel
+samples for a second enumeration.
+
 The retirement sequence is explicit: first route direct momentum evaluation
 through compiled parent-frame maps for every catalogue entry; then remove the
 `DiscreteGraphSamplingType::DiscreteMultiChanneling` compatibility mode and

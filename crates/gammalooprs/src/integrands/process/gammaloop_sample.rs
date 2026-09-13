@@ -286,7 +286,7 @@ pub enum DiscreteGraphSample<T: FloatLike> {
     /// sampling-channel bridge. The bridge owns the parent-frame map and its
     /// partition; graph evaluation must therefore not reinterpret this point
     /// through an LMB a second time.
-    Advanced {
+    SamplingChannel {
         channel_id: SamplingChannelId,
         /// Original unit-cube coordinates used by the canonical channel map.
         /// They are preserved so a future physical channel can run its
@@ -325,7 +325,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::Default { sample, .. } => sample.zero(),
             DiscreteGraphSample::MultiChanneling { sample, .. } => sample.zero(),
             DiscreteGraphSample::Tropical(sample) => sample.zero(),
-            DiscreteGraphSample::Advanced { sample, .. } => sample.zero(),
+            DiscreteGraphSample::SamplingChannel { sample, .. } => sample.zero(),
         }
     }
 
@@ -334,7 +334,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::Default { sample, .. } => sample.one(),
             DiscreteGraphSample::MultiChanneling { sample, .. } => sample.one(),
             DiscreteGraphSample::Tropical(sample) => sample.one(),
-            DiscreteGraphSample::Advanced { sample, .. } => sample.one(),
+            DiscreteGraphSample::SamplingChannel { sample, .. } => sample.one(),
         }
     }
 
@@ -368,12 +368,12 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                 loop_mom_cache_id,
                 external_mom_cache_id,
             )),
-            DiscreteGraphSample::Advanced {
+            DiscreteGraphSample::SamplingChannel {
                 channel_id,
                 sampling_coordinates,
                 partition_weight,
                 sample,
-            } => DiscreteGraphSample::Advanced {
+            } => DiscreteGraphSample::SamplingChannel {
                 channel_id: *channel_id,
                 sampling_coordinates: sampling_coordinates.clone(),
                 partition_weight: partition_weight.clone(),
@@ -408,12 +408,12 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::Tropical(sample) => {
                 DiscreteGraphSample::Tropical(sample.cast_sample())
             }
-            DiscreteGraphSample::Advanced {
+            DiscreteGraphSample::SamplingChannel {
                 channel_id,
                 sampling_coordinates,
                 partition_weight,
                 sample,
-            } => DiscreteGraphSample::Advanced {
+            } => DiscreteGraphSample::SamplingChannel {
                 channel_id: *channel_id,
                 sampling_coordinates: sampling_coordinates
                     .as_ref()
@@ -451,12 +451,12 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::Tropical(sample) => {
                 DiscreteGraphSample::Tropical(sample.higher_precision())
             }
-            DiscreteGraphSample::Advanced {
+            DiscreteGraphSample::SamplingChannel {
                 channel_id,
                 sampling_coordinates,
                 partition_weight,
                 sample,
-            } => DiscreteGraphSample::Advanced {
+            } => DiscreteGraphSample::SamplingChannel {
                 channel_id: *channel_id,
                 sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
                     coordinates
@@ -495,12 +495,12 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::Tropical(sample) => {
                 DiscreteGraphSample::Tropical(sample.lower_precision())
             }
-            DiscreteGraphSample::Advanced {
+            DiscreteGraphSample::SamplingChannel {
                 channel_id,
                 sampling_coordinates,
                 partition_weight,
                 sample,
-            } => DiscreteGraphSample::Advanced {
+            } => DiscreteGraphSample::SamplingChannel {
                 channel_id: *channel_id,
                 sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
                     coordinates
@@ -521,17 +521,17 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             DiscreteGraphSample::Default { sample, .. } => sample,
             DiscreteGraphSample::MultiChanneling { sample, .. } => sample,
             DiscreteGraphSample::Tropical(sample) => sample,
-            DiscreteGraphSample::Advanced { sample, .. } => sample,
+            DiscreteGraphSample::SamplingChannel { sample, .. } => sample,
         }
     }
 
-    /// Unit-cube coordinates retained for a canonical advanced channel.
+    /// Unit-cube coordinates retained for a canonical sampling channel.
     /// `None` identifies a direct momentum-space sample, which has no
     /// parameterization coordinates to replay for a deferred physical map.
     #[allow(dead_code)]
     pub(crate) fn sampling_coordinates(&self) -> Option<&[F<T>]> {
         match self {
-            Self::Advanced {
+            Self::SamplingChannel {
                 sampling_coordinates,
                 ..
             } => sampling_coordinates.as_deref(),
@@ -784,7 +784,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                     sample.sample.jacobian = sample.sample.jacobian * F::from_f64(partition_weight);
                     Ok(GammaLoopSample::DiscreteGraph {
                         group_id,
-                        sample: DiscreteGraphSample::Advanced {
+                        sample: DiscreteGraphSample::SamplingChannel {
                             channel_id,
                             sampling_coordinates: Some(xs.clone()),
                             partition_weight: None,
@@ -894,7 +894,7 @@ mod tests {
     }
 
     #[test]
-    fn advanced_sample_coordinates_survive_precision_conversion() {
+    fn sampling_channel_coordinates_survive_precision_conversion() {
         let sample = MomentumSample::new(
             LoopMomenta::from(vec![]),
             0,
@@ -906,7 +906,7 @@ mod tests {
         )
         .expect("empty cross-section sample is valid for metadata test");
         let coordinates = vec![F(0.125), F(0.625), F(0.875)];
-        let advanced = DiscreteGraphSample::Advanced {
+        let sampling_channel = DiscreteGraphSample::SamplingChannel {
             channel_id: SamplingChannelId::from(3),
             sampling_coordinates: Some(coordinates.clone()),
             partition_weight: None,
@@ -914,12 +914,12 @@ mod tests {
         };
 
         assert_eq!(
-            advanced.sampling_coordinates(),
+            sampling_channel.sampling_coordinates(),
             Some(coordinates.as_slice())
         );
-        let cast = advanced.cast_sample::<f64>();
+        let cast = sampling_channel.cast_sample::<f64>();
         assert_eq!(cast.sampling_coordinates(), Some(coordinates.as_slice()));
-        let higher = advanced.higher_precision();
+        let higher = sampling_channel.higher_precision();
         assert_eq!(
             higher
                 .sampling_coordinates()
@@ -937,7 +937,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_momentum_advanced_samples_have_no_replay_coordinates() {
+    fn direct_momentum_sampling_channels_have_no_replay_coordinates() {
         // The direct-momentum route intentionally cannot replay a unit-cube
         // map; a deferred physical channel must reject that route explicitly.
         let sample = MomentumSample::new(
@@ -950,12 +950,12 @@ mod tests {
             None,
         )
         .unwrap();
-        let advanced = DiscreteGraphSample::Advanced {
+        let sampling_channel = DiscreteGraphSample::SamplingChannel {
             channel_id: SamplingChannelId::from(0),
             sampling_coordinates: None,
             partition_weight: None,
             sample,
         };
-        assert!(advanced.sampling_coordinates().is_none());
+        assert!(sampling_channel.sampling_coordinates().is_none());
     }
 }

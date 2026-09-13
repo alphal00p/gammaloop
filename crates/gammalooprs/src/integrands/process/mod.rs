@@ -3481,7 +3481,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     selected_lmb_basis_for_default_sampling(integrand, graph_id, *use_lmb_basis)?;
                 evaluate_graph_term(integrand, graph_id, sample, context, None, lmb_basis_id)
             }
-            DiscreteGraphSample::Advanced {
+            DiscreteGraphSample::SamplingChannel {
                 channel_id,
                 sampling_coordinates: _,
                 partition_weight,
@@ -4517,7 +4517,7 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                             "sampling channel partition has invalid weight {partition_weight}"
                         ));
                     }
-                    DiscreteGraphSample::Advanced {
+                    DiscreteGraphSample::SamplingChannel {
                         channel_id,
                         sampling_coordinates: None,
                         partition_weight: Some(F::from_f64(partition_weight)),
