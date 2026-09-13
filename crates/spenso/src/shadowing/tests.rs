@@ -74,6 +74,87 @@ fn collect_tensors_keeps_scalar_products_factored() {
 }
 
 #[test]
+fn collect_tensors_preserves_symbolic_powers_and_repeated_coefficients() {
+    let (a, b, c) = symbol!("coefficient_a", "coefficient_b", "coefficient_c");
+    let sum = Atom::var(a) + Atom::var(b);
+    let coefficient = Atom::var(c).pow(sum.clone()) * sum.pow(3);
+    let expression = coefficient.clone() * p!(mink!(4)) + coefficient * q!(mink!(4));
+
+    let collected = expression.collect_tensors();
+    assert_eq!(collected, expression);
+    assert_eq!(collected.collect_tensors(), collected);
+}
+
+#[test]
+fn collect_tensors_coefficient_aliases_do_not_capture_input_symbols() {
+    let (reserved, a, b) = symbol!(
+        "spenso::collect_coefficient_0",
+        "coefficient_capture_a",
+        "coefficient_capture_b"
+    );
+    let coefficient = (Atom::var(reserved) + Atom::var(a)).pow(3) * (Atom::var(a) + Atom::var(b));
+    let expression = coefficient * p!(mink!(4));
+
+    let collected = expression.collect_tensors();
+    assert_eq!(collected, expression);
+    assert!(collected.contains_symbol(reserved));
+}
+
+#[test]
+fn collect_tensors_restores_linear_coefficient_cancellation() {
+    let (a, b) = symbol!("coefficient_cancel_a", "coefficient_cancel_b");
+    let tensor = p!(mink!(4));
+    let expression =
+        (Atom::var(a) + Atom::var(b)) * &tensor - Atom::var(a) * &tensor - Atom::var(b) * tensor;
+
+    assert!(expression.collect_tensors().is_zero());
+}
+
+#[test]
+fn collect_tensors_keeps_opaque_polynomial_coefficients_intact() {
+    let (a, b) = symbol!("coefficient_zero_a", "coefficient_zero_b");
+    let a = Atom::var(a);
+    let b = Atom::var(b);
+    let coefficient = (&a + &b).pow(2) - a.pow(2) - Atom::num(2) * &a * &b - b.pow(2);
+    let expression = coefficient * p!(mink!(4));
+
+    // Tensor collection groups tensor factors; it does not expand a protected
+    // coefficient merely to prove a polynomial identity inside that factor.
+    assert_eq!(expression.collect_tensors(), expression);
+}
+
+#[test]
+fn collect_rep_callback_receives_complete_unaliased_tensor_payload() {
+    use crate::shadowing::Collectable;
+    use symbolica::atom::FunctionBuilder;
+
+    let (a, b, c, target) = symbol!(
+        "coefficient_callback_a",
+        "coefficient_callback_b",
+        "coefficient_callback_c",
+        "coefficient_callback_tensor"
+    );
+    let sum = Atom::var(a) + Atom::var(b);
+    let tensor = FunctionBuilder::new(target)
+        .add_arg(sum.clone().pow(3))
+        .add_arg(mink!(4, mu))
+        .finish();
+    let coefficient = Atom::var(c).pow(sum);
+    let expression = coefficient.clone() * &tensor + Atom::var(a) * &tensor;
+    let replacement = p!(mink!(4));
+    let mut visits = 0;
+    let collected =
+        expression.collect_rep_with_map(LibraryRep::from(Minkowski {}), |wrapped, _, out| {
+            visits += 1;
+            assert_eq!(wrapped, tensor.clone().wrap_in_collect().as_view());
+            **out = replacement.clone();
+        });
+
+    assert_eq!(visits, 1);
+    assert_eq!(collected, (coefficient + Atom::var(a)) * replacement);
+}
+
+#[test]
 fn collect_tensors_marks_chain_like_forms_as_maximal_factors() {
     let (a, b) = symbol!("a", "b");
     let mu = mink!(4, mu);

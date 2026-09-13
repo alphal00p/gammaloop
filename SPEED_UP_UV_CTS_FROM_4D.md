@@ -894,3 +894,57 @@ If a gate fails, use the measurements to continue the generic implementation, in
   `diagnostic_color_invariants/GL262_4d_direct_r1`. The run remains incomplete;
   the next investigation concerns factorized coefficient handling in the
   existing shared tensor collector, not another scalar-invariant assumption.
+
+### 2026-09-13 — Factorized coefficients during tensor collection
+
+- Milestone `c4acf58a0` is committed and pushed as ValentinHirschi. CLI8's
+  DOD2 diagnostic was deliberately stopped once the new bottleneck was
+  established: 412.881438 s wall time, exit -15, peak RSS 1,085,669,376 bytes.
+  It produced no evaluator, saved state or production forest export.
+- An artifact-only experiment on that exact mapped input protects maximal
+  unselected composite coefficients before the existing polynomial collector.
+  After the existing scalar invariant conversion, the input is 24,533,304 Atom
+  bytes. Wrapping takes 552 ms, protection 173 ms, collection 992 ms and
+  restoration 290 ms. Its 344 structurally interned aliases reduce the temporary
+  expression to 1,043,079 bytes; the restored result is 23,982,068 bytes.
+  Exact restoration before collection reproduces the full wrapped input in
+  64 ms. The entire process, including parsing and canonical export, takes
+  6.68 s. Source, binary/input hashes, receipts and seven tiny algebraic checks
+  are retained in `color_coefficient_shielding`.
+- Six tiny outputs exactly match the previous collector. The intentional
+  boundary distinction is explicit: an opaque coefficient such as
+  `(x+y)^2-x^2-2*x*y-y^2` remains factorized, whereas the previous collector
+  could statistically recognize it as zero. Equal scalar terms still cancel
+  on restoration; the tensor collector does not expand the numerator to prove
+  scalar polynomial identities. Existing physical zero checks remain required.
+- The shared `Collectable::collect_with_map` now uses this protection through
+  the existing Symbolica `AliasedAtom` owner. It preserves complete selected
+  tensors, avoids input-symbol capture, groups through the same collector, and
+  restores all aliases before public tensor callbacks. No graph-specific rule,
+  persistent table, setting or parallel mapper is introduced. Check43 passes
+  in 11.86 s. Focused tests and complete physical generation remain pending.
+- Check44 passes in 9.79 s; nextest16 passes **644/644 tests** in 58.558 s
+  after a 1m12s build. Existing color polynomial/physical-zero snapshots and
+  checks pass without expectation changes. Five new Spenso tests cover symbolic
+  powers, repeated coefficients, input-symbol collisions, structural
+  cancellation, opaque polynomial coefficients and complete callback payloads.
+- CLI9 builds in 1m02s and is frozen with SHA-256
+  `3e061d56ce138250b1c2cd707780abd296ec552ba6e7205c6f567316414f569a`,
+  based on `c4acf58a0aca1f901d2cf231ef3d79a5abc283b0` plus recorded patch
+  `df4ceedfd759fe4c8ec22a06f7581e2f0f824078be5102c93d7ebb7b61084b4c`.
+  Fresh GL262 generation is running under the shared measurement lock; no
+  generation/runtime gate is inferred from the captured-input improvement.
+- Clippy5 succeeds with the same three type-complexity warnings. Check45 and
+  integration build3 also pass (14.29 s / 3m24s). The new `uv` and `test_runs`
+  binaries are preserved under `diagnostic_coefficient_protection/integration_binaries`
+  with complete source/patch/binary receipts; these builds are not executions.
+- The next CLI9 profile, on a DOD1 region rather than the DOD2 bubble, finds
+  no collector or statistical-zero-test frames. Its sampled work is ordinary
+  final substitutions (59.09%) and integrand addition/copying (22.73%). The
+  DOD1 mapped expression is 72,021,365 Atom bytes. Forest traversal indices
+  differ between runs, so stage comparisons use DOD and subgraph masks; the
+  association remains separate from the still-pending production DOT export.
+- Existing scalar-suite coverage is precisely 166 three-route cases across
+  49 labels, GL00–GL48, plus one standalone sampling-scale test. This matches
+  `test_LU_scalar_xs` and the historical suite inventory. It must not be reported
+  as 167 distinct topologies. The complete existing suite remains required.

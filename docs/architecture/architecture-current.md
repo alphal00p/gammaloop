@@ -165,6 +165,16 @@ scalar Casimirs and indices therefore do not cause collection over a factorized
 residue sum; newly produced invariants follow the same rule. Raw
 graph storage and parse-time validation are unchanged.
 
+Tensor collection temporarily aliases maximal unselected composite coefficients
+before polynomial grouping. Selected tensors retain their complete slots and
+payloads; structurally equal coefficients share an alias, with collision checks
+against input symbols. The existing Symbolica alias owner restores definitions
+before tensor-group callbacks run. This preserves factorized powers and sums and
+avoids statistical zero tests on large momentum coefficients. Collection does
+not promise polynomial simplification of those opaque coefficients; structural
+cancellations and tensor-algebra zeros still apply. Aliases live only for the
+collection call and are never serialized or retained in generation caches.
+
 Rational-shell extraction groups equal denominator multisets through sums,
 products and powers while leaving denominator-free numerator subtrees opaque.
 It adds powers and numerators, prunes exact zeros, and never constructs a global
