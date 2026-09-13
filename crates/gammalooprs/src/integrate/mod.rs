@@ -260,7 +260,8 @@ impl SamplingSlotState {
                     .map(str::to_string)
                     .collect_vec()
             }
-            _ => Vec::new(),
+            #[cfg(test)]
+            Integrand::TestProbe(_) => Vec::new(),
         };
         Self::new(grid, discrete_axis_labels)
     }
@@ -716,7 +717,7 @@ fn discrete_grid_at_path<'a>(
             .sub_grid
             .as_ref()
             .and_then(|sub_grid| discrete_grid_at_path(sub_grid, rest)),
-        _ => None,
+        (Grid::Continuous(_) | Grid::Uniform(_, _), _) => None,
     }
 }
 
@@ -1000,7 +1001,8 @@ fn first_non_trivial_discrete_bin_descriptions_for_integrand(
                 axis_label,
             )
         }
-        _ => None,
+        #[cfg(test)]
+        Integrand::TestProbe(_) => None,
     }
 }
 
@@ -3337,8 +3339,10 @@ fn numerical_stability_output_path(
 }
 
 fn user_facing_observables_output_formats(integrand: &Integrand) -> Vec<ObservableFileFormat> {
-    let Integrand::ProcessIntegrand(process_integrand) = integrand else {
-        return Vec::new();
+    let process_integrand = match integrand {
+        Integrand::ProcessIntegrand(process_integrand) => process_integrand,
+        #[cfg(test)]
+        Integrand::TestProbe(_) => return Vec::new(),
     };
     if !integrand.has_observables() {
         return Vec::new();
@@ -3352,8 +3356,10 @@ fn user_facing_observables_output_formats(integrand: &Integrand) -> Vec<Observab
 }
 
 fn user_facing_observables_output_enabled(integrand: &Integrand) -> bool {
-    let Integrand::ProcessIntegrand(process_integrand) = integrand else {
-        return false;
+    let process_integrand = match integrand {
+        Integrand::ProcessIntegrand(process_integrand) => process_integrand,
+        #[cfg(test)]
+        Integrand::TestProbe(_) => return false,
     };
     if !integrand.has_observables() {
         return false;
@@ -4254,7 +4260,7 @@ fn render_integral_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{UnitVolumeIntegrand, UnitVolumeSettings};
+    use crate::integrands::TestProbeIntegrand;
     use colored::control;
     use ratatui::{Terminal, backend::TestBackend};
     use std::fs;
@@ -4447,10 +4453,7 @@ mod tests {
             false,
         ));
         let settings = RuntimeSettings::default();
-        let integrand = Integrand::UnitVolume(UnitVolumeIntegrand::new(
-            settings,
-            UnitVolumeSettings { n_3d_momenta: 1 },
-        ));
+        let integrand = Integrand::TestProbe(TestProbeIntegrand::new(settings, 3));
         let mut without_monitor = CoreIterationState::new(
             vec![integrand.clone()],
             SamplingCorrelationMode::Correlated,
@@ -4589,10 +4592,7 @@ mod tests {
                     meta,
                     settings.clone(),
                     Model::default(),
-                    Integrand::UnitVolume(UnitVolumeIntegrand::new(
-                        settings,
-                        UnitVolumeSettings { n_3d_momenta: 1 },
-                    )),
+                    Integrand::TestProbe(TestProbeIntegrand::new(settings, 3)),
                     None,
                 )
             })
@@ -4849,14 +4849,8 @@ mod tests {
     fn correlated_core_iteration_state_populates_slot_statistics() {
         let settings_a = RuntimeSettings::default();
         let settings_b = RuntimeSettings::default();
-        let integrand_a = Integrand::UnitVolume(UnitVolumeIntegrand::new(
-            settings_a.clone(),
-            UnitVolumeSettings { n_3d_momenta: 1 },
-        ));
-        let integrand_b = Integrand::UnitVolume(UnitVolumeIntegrand::new(
-            settings_b.clone(),
-            UnitVolumeSettings { n_3d_momenta: 1 },
-        ));
+        let integrand_a = Integrand::TestProbe(TestProbeIntegrand::new(settings_a.clone(), 3));
+        let integrand_b = Integrand::TestProbe(TestProbeIntegrand::new(settings_b.clone(), 3));
         let sampling_grid_template = SamplingSlotState::from_integrand(&integrand_a).grid;
         let mut core_state = CoreIterationState::new(
             vec![integrand_a, integrand_b],
@@ -5824,10 +5818,7 @@ mod tests {
             },
             settings.clone(),
             Model::default(),
-            Integrand::UnitVolume(UnitVolumeIntegrand::new(
-                settings,
-                UnitVolumeSettings { n_3d_momenta: 1 },
-            )),
+            Integrand::TestProbe(TestProbeIntegrand::new(settings, 3)),
             None,
         );
         let rendered = render_results_output_summary_table(
@@ -5868,10 +5859,7 @@ mod tests {
             },
             settings.clone(),
             Model::default(),
-            Integrand::UnitVolume(UnitVolumeIntegrand::new(
-                settings,
-                UnitVolumeSettings { n_3d_momenta: 1 },
-            )),
+            Integrand::TestProbe(TestProbeIntegrand::new(settings, 3)),
             None,
         );
         let rendered = render_results_output_summary_table(
