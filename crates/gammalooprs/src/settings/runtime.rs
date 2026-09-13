@@ -1316,6 +1316,10 @@ impl SamplingChannelWeight {
 #[serde(default, deny_unknown_fields)]
 pub struct SamplingChannelDefinition {
     pub around: String,
+    /// Ordered loop edges spanning the coordinates in which a surface or
+    /// joint constraint is solved.  This is distinct from the edge set in
+    /// `around`, which identifies the physical energy constraints.
+    pub subspace_lmb: Vec<usize>,
     pub parent_lmb: Vec<usize>,
     pub on_cut: Vec<usize>,
 }
@@ -1324,6 +1328,7 @@ impl Default for SamplingChannelDefinition {
     fn default() -> Self {
         Self {
             around: String::new(),
+            subspace_lmb: Vec::new(),
             parent_lmb: Vec::new(),
             on_cut: Vec::new(),
         }

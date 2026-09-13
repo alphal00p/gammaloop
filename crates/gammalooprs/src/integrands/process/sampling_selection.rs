@@ -17,10 +17,10 @@ use serde::{Deserialize, Serialize};
 
 use super::sampling_maps::combine_contracts;
 use super::{
-    ImplicitSurfaceRadialMap, SamplingChannelScore, SamplingMapAffine, SamplingMapComponent,
-    SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding, SamplingMapEvaluation,
-    SamplingMapKernel, SamplingPartition, SamplingPartitionMode, SamplingScoreFunction,
-    SurfaceRadialMap,
+    ImplicitSurfaceRadialMap, PreparedCutSamplingContext, SamplingChannelScore, SamplingMapAffine,
+    SamplingMapComponent, SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding,
+    SamplingMapEvaluation, SamplingMapKernel, SamplingPartition, SamplingPartitionMode,
+    SamplingScoreFunction, SurfaceRadialMap,
 };
 use crate::momentum::sample::{LoopMomenta, MomentumSample};
 use crate::settings::runtime::ParameterizationSettings;
@@ -191,21 +191,29 @@ pub struct SamplingSurfaceGeometry {
 #[derive(Clone, Debug)]
 pub struct SamplingChannelCompileContext {
     pub master_graph: String,
+    /// Optional graph identity used to validate prepared physical-cut
+    /// contexts. A cut/side map requires this to be supplied explicitly.
+    pub graph_id: Option<usize>,
     /// Complete ordered parent LMB in the master graph frame. Every named
     /// channel is resolved against this exact list before compilation.
     pub parent_lmb: Vec<usize>,
     pub parameterization_settings: ParameterizationSettings,
     pub e_cm: f64,
     pub n_loop_momenta: usize,
-    pub surfaces: BTreeMap<Vec<usize>, SamplingSurfaceGeometry>,
+    /// Geometry keyed by (physical energy edges, ordered active LMB edges).
+    pub surfaces: BTreeMap<(Vec<usize>, Vec<usize>), SamplingSurfaceGeometry>,
     /// Optional exact direction-dependent surface maps prepared by the
     /// process layer. Their evaluators already capture the relevant external
     /// and cut data, so compilation does not infer kinematics from edge lists.
-    pub implicit_surfaces: BTreeMap<Vec<usize>, ImplicitSurfaceRadialMap>,
+    pub implicit_surfaces: BTreeMap<(Vec<usize>, Vec<usize>), ImplicitSurfaceRadialMap>,
     /// Host cut identity for metadata whose `on_cut` list is explicit.
     pub cut_id: Option<usize>,
     pub orientation: Option<usize>,
     pub side: Option<super::SamplingCutSide>,
+    /// Kinematics prepared by the physical-cut host. This remains optional
+    /// for ordinary LMB/surface channels, but is mandatory for phase-space
+    /// and side-qualified maps.
+    pub prepared_cut_context: Option<PreparedCutSamplingContext>,
     /// Exact affine maps routing a generated LMB into the master frame. The
     /// key is the generated catalogue basis id; absent entries are diagnosed
     /// when a non-master LMB is selected.
@@ -226,6 +234,7 @@ impl SamplingChannelCompileContext {
     ) -> Self {
         Self {
             master_graph: master_graph.into(),
+            graph_id: None,
             parent_lmb,
             parameterization_settings,
             e_cm,
@@ -237,26 +246,81 @@ impl SamplingChannelCompileContext {
             cut_id: None,
             orientation: None,
             side: None,
+            prepared_cut_context: None,
         }
+    }
+
+    /// Attach a graph/cut/orientation/side context prepared from one solved
+    /// Cutkosky cut. The checks are transactional: conflicting context data
+    /// leave this compile context unchanged.
+    pub fn with_prepared_cut_context(
+        mut self,
+        prepared: PreparedCutSamplingContext,
+    ) -> std::result::Result<Self, SamplingChannelCompileError> {
+        self.set_prepared_cut_context(prepared)?;
+        Ok(self)
+    }
+
+    /// Attach prepared cut data and populate the corresponding host fields.
+    /// Named phase-space/left/right maps therefore cannot accidentally reuse
+    /// a stale cut, orientation, side, parent LMB, or t* value.
+    pub fn set_prepared_cut_context(
+        &mut self,
+        prepared: PreparedCutSamplingContext,
+    ) -> std::result::Result<(), SamplingChannelCompileError> {
+        validate_prepared_context_identity(self, &prepared, "<prepared-context>")?;
+        self.graph_id = Some(prepared.graph_id);
+        self.cut_id = Some(prepared.cut_id);
+        self.orientation = prepared.orientation;
+        self.side = Some(prepared.side);
+        self.prepared_cut_context = Some(prepared);
+        Ok(())
+    }
+
+    /// Set the graph id needed when compiling a physical-cut channel.
+    pub fn with_graph_id(mut self, graph_id: usize) -> Self {
+        self.graph_id = Some(graph_id);
+        self
     }
 
     pub fn insert_implicit_surface(
         &mut self,
-        edges: Vec<usize>,
+        surface_edges: Vec<usize>,
+        subspace_lmb: Vec<usize>,
         map: ImplicitSurfaceRadialMap,
     ) -> Result<()> {
-        if edges.is_empty() {
-            return Err(eyre!("implicit surface map edge list must not be empty"));
-        }
-        if map.dimension() != 3 * edges.len() {
+        if surface_edges.is_empty() || subspace_lmb.is_empty() {
             return Err(eyre!(
-                "implicit surface map has dimension {}, expected {} for edges {:?}",
-                map.dimension(),
-                3 * edges.len(),
-                edges
+                "implicit surface map needs non-empty physical and subspace edge lists"
             ));
         }
-        self.implicit_surfaces.insert(edges, map);
+        let mut surface_seen = BTreeSet::new();
+        if surface_edges.iter().any(|edge| !surface_seen.insert(*edge)) {
+            return Err(eyre!(
+                "implicit surface map physical edge list contains duplicates: {surface_edges:?}"
+            ));
+        }
+        let mut subspace_seen = BTreeSet::new();
+        if subspace_lmb.iter().any(|edge| !subspace_seen.insert(*edge))
+            || subspace_lmb
+                .iter()
+                .any(|edge| !self.parent_lmb.contains(edge))
+        {
+            return Err(eyre!(
+                "implicit surface map subspace_lmb {subspace_lmb:?} must be unique and contained in parent LMB {:?}",
+                self.parent_lmb
+            ));
+        }
+        if map.dimension() != 3 * subspace_lmb.len() {
+            return Err(eyre!(
+                "implicit surface map has dimension {}, expected {} for subspace {:?}",
+                map.dimension(),
+                3 * subspace_lmb.len(),
+                subspace_lmb
+            ));
+        }
+        self.implicit_surfaces
+            .insert((surface_edges, subspace_lmb), map);
         Ok(())
     }
 }
@@ -779,6 +843,14 @@ impl CompiledSamplingChannel {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SamplingChannelCompileError {
     EmptyMasterGraph,
+    MissingPreparedCutContext {
+        channel: String,
+        map: String,
+    },
+    InvalidPreparedCutContext {
+        channel: String,
+        error: String,
+    },
     UnsupportedMap {
         channel: String,
         map: String,
@@ -786,6 +858,7 @@ pub enum SamplingChannelCompileError {
     MissingSurfaceGeometry {
         channel: String,
         edges: Vec<usize>,
+        subspace_lmb: Vec<usize>,
     },
     MissingLmbFrameMap {
         channel: String,
@@ -810,13 +883,25 @@ impl fmt::Display for SamplingChannelCompileError {
             Self::EmptyMasterGraph => {
                 formatter.write_str("sampling channel compilation requires a master graph")
             }
+            Self::MissingPreparedCutContext { channel, map } => write!(
+                formatter,
+                "sampling channel `{channel}` uses `{map}` but no prepared cut context was supplied (graph, cut, orientation, side, parent LMB and t* are required)"
+            ),
+            Self::InvalidPreparedCutContext { channel, error } => write!(
+                formatter,
+                "sampling channel `{channel}` has invalid prepared cut context: {error}"
+            ),
             Self::UnsupportedMap { channel, map } => write!(
                 formatter,
                 "sampling channel `{channel}` uses map `{map}`, which needs prepared graph context before it can be compiled"
             ),
-            Self::MissingSurfaceGeometry { channel, edges } => write!(
+            Self::MissingSurfaceGeometry {
+                channel,
+                edges,
+                subspace_lmb,
+            } => write!(
                 formatter,
-                "sampling channel `{channel}` has no prepared surface geometry for master-graph edges {edges:?}"
+                "sampling channel `{channel}` has no prepared surface geometry for energy edges {edges:?} in subspace_lmb {subspace_lmb:?}"
             ),
             Self::MissingLmbFrameMap {
                 channel,
@@ -845,12 +930,194 @@ impl fmt::Display for SamplingChannelCompileError {
 
 impl std::error::Error for SamplingChannelCompileError {}
 
+fn validate_prepared_context_identity(
+    context: &SamplingChannelCompileContext,
+    prepared: &PreparedCutSamplingContext,
+    channel: &str,
+) -> std::result::Result<(), SamplingChannelCompileError> {
+    if context.master_graph != prepared.graph_name {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "prepared graph `{}` does not match master graph `{}`",
+                prepared.graph_name, context.master_graph
+            ),
+        });
+    }
+    if let Some(graph_id) = context.graph_id {
+        if graph_id != prepared.graph_id {
+            return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+                channel: channel.to_owned(),
+                error: format!(
+                    "prepared graph id {} does not match compile-context graph id {}",
+                    prepared.graph_id, graph_id
+                ),
+            });
+        }
+    }
+    if prepared.parent_lmb != context.parent_lmb {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "prepared parent LMB {:?} does not match compile context {:?}",
+                prepared.parent_lmb, context.parent_lmb
+            ),
+        });
+    }
+    if let Some(cut_id) = context.cut_id {
+        if cut_id != prepared.cut_id {
+            return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+                channel: channel.to_owned(),
+                error: format!(
+                    "prepared cut id {} does not match compile-context cut id {}",
+                    prepared.cut_id, cut_id
+                ),
+            });
+        }
+    }
+    if context.orientation.is_some() && context.orientation != prepared.orientation {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "prepared orientation {:?} does not match compile-context orientation {:?}",
+                prepared.orientation, context.orientation
+            ),
+        });
+    }
+    if context.side.is_some() && context.side != Some(prepared.side) {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "prepared side {:?} does not match compile-context side {:?}",
+                prepared.side, context.side
+            ),
+        });
+    }
+    if !prepared.rescaling_t_star.is_finite() || prepared.rescaling_t_star <= 0.0 {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "cut rescaling t* must be finite and positive, got {}",
+                prepared.rescaling_t_star
+            ),
+        });
+    }
+    Ok(())
+}
+
+fn prepared_map_name(definition: &SamplingMapDefinition) -> Option<&'static str> {
+    match definition {
+        SamplingMapDefinition::PhaseSpace(_) => Some("phase_space"),
+        SamplingMapDefinition::Left(_) => Some("left"),
+        SamplingMapDefinition::Right(_) => Some("right"),
+        SamplingMapDefinition::Product(maps)
+        | SamplingMapDefinition::Intersect(maps)
+        | SamplingMapDefinition::Then(maps) => maps.iter().find_map(prepared_map_name),
+        _ => None,
+    }
+}
+
+/// Validate the physical-cut boundary before any graph-independent map is
+/// compiled. The numerical relocation of these maps is intentionally still a
+/// later runtime milestone; accepting them without this boundary would make
+/// stale cut or t* data indistinguishable from valid sampling coordinates.
+fn validate_prepared_map_context(
+    channel: &str,
+    definition: &SamplingMapDefinition,
+    context: &SamplingChannelCompileContext,
+) -> std::result::Result<(), SamplingChannelCompileError> {
+    let Some(map_name) = prepared_map_name(definition) else {
+        return Ok(());
+    };
+    let Some(prepared) = context.prepared_cut_context.as_ref() else {
+        return Err(SamplingChannelCompileError::MissingPreparedCutContext {
+            channel: channel.to_owned(),
+            map: map_name.to_owned(),
+        });
+    };
+    validate_prepared_context_identity(context, prepared, channel)?;
+    if context.graph_id.is_none() {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: "compile context omitted graph id for a physical-cut map".to_owned(),
+        });
+    }
+    if prepared.orientation.is_none() || context.orientation.is_none() {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: "physical-cut map requires an explicit orientation".to_owned(),
+        });
+    }
+    if context.cut_id != Some(prepared.cut_id) {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "physical-cut map requires cut id {}, compile context supplies {:?}",
+                prepared.cut_id, context.cut_id
+            ),
+        });
+    }
+    if context.side != Some(prepared.side) {
+        return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+            channel: channel.to_owned(),
+            error: format!(
+                "physical-cut map requires prepared side {:?}, compile context supplies {:?}",
+                prepared.side, context.side
+            ),
+        });
+    }
+    match definition {
+        SamplingMapDefinition::PhaseSpace(inner) => {
+            if !matches!(inner.as_ref(), SamplingMapDefinition::Cut(_)) {
+                return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+                    channel: channel.to_owned(),
+                    error: "phase_space(...) must wrap exactly one cut(...) map".to_owned(),
+                });
+            }
+        }
+        SamplingMapDefinition::Left(inner) => {
+            if context.side != Some(super::SamplingCutSide::Left) {
+                return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+                    channel: channel.to_owned(),
+                    error: format!(
+                        "left(...) requires the left prepared side, got {:?}",
+                        context.side
+                    ),
+                });
+            }
+            validate_prepared_map_context(channel, inner, context)?;
+        }
+        SamplingMapDefinition::Right(inner) => {
+            if context.side != Some(super::SamplingCutSide::Right) {
+                return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
+                    channel: channel.to_owned(),
+                    error: format!(
+                        "right(...) requires the right prepared side, got {:?}",
+                        context.side
+                    ),
+                });
+            }
+            validate_prepared_map_context(channel, inner, context)?;
+        }
+        SamplingMapDefinition::Product(maps)
+        | SamplingMapDefinition::Intersect(maps)
+        | SamplingMapDefinition::Then(maps) => {
+            for map in maps {
+                validate_prepared_map_context(channel, map, context)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 /// Compile one radial surface in its native subspace and embed it together
 /// with the ordinary map on the complementary parent-LMB edges.  The output
 /// permutation is explicit, so sharing a surface across graph channels never
 /// relies on an implicit edge ordering or a silent local-frame assumption.
 fn compile_surface_map(
     channel: &str,
+    surface_edges: &[usize],
     edges: &[usize],
     context: &SamplingChannelCompileContext,
 ) -> Result<CompiledSamplingMap, SamplingChannelCompileError> {
@@ -879,7 +1146,8 @@ fn compile_surface_map(
         });
     }
     let expected_dimension = 3 * edges.len();
-    let surface = if let Some(surface) = context.implicit_surfaces.get(edges) {
+    let key = (surface_edges.to_vec(), edges.to_vec());
+    let surface = if let Some(surface) = context.implicit_surfaces.get(&key) {
         if surface.dimension() != expected_dimension {
             return Err(SamplingChannelCompileError::InvalidChannel {
                 channel: channel.to_owned(),
@@ -892,10 +1160,11 @@ fn compile_surface_map(
         }
         CompiledSamplingMap::ImplicitSurface(surface.clone())
     } else {
-        let Some(geometry) = context.surfaces.get(edges) else {
+        let Some(geometry) = context.surfaces.get(&key) else {
             return Err(SamplingChannelCompileError::MissingSurfaceGeometry {
                 channel: channel.to_owned(),
-                edges: edges.to_vec(),
+                edges: surface_edges.to_vec(),
+                subspace_lmb: edges.to_vec(),
             });
         };
         if geometry.center.len() != expected_dimension {
@@ -1105,7 +1374,8 @@ impl SamplingChannelCatalogue {
                         });
                     }
                     let definition = SamplingMapDefinition::Surface(edges.clone());
-                    let map = compile_surface_map(&format!("surface:{edges:?}"), edges, context)?;
+                    let map =
+                        compile_surface_map(&format!("surface:{edges:?}"), edges, edges, context)?;
                     (format!("surface:{edges:?}"), None, definition, map)
                 }
                 SamplingCatalogueEntry::Named(channel) => {
@@ -1161,6 +1431,7 @@ impl SamplingChannelCatalogue {
                         }
                         _ => {}
                     }
+                    validate_prepared_map_context(&channel.name, &definition, context)?;
                     let map = match &definition {
                         SamplingMapDefinition::Lmb(edges) => {
                             let map = SamplingMapKernel::new(
@@ -1204,7 +1475,19 @@ impl SamplingChannelCatalogue {
                             }
                         }
                         SamplingMapDefinition::Surface(edges) => {
-                            compile_surface_map(&channel.name, edges, context)?
+                            let subspace = &channel.definition.subspace_lmb;
+                            if subspace.is_empty() {
+                                return Err(SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(),
+                                    error: "surface channel is missing subspace_lmb metadata"
+                                        .to_owned(),
+                                });
+                            }
+                            // `edges` identifies the physical energy constraints;
+                            // the radial chart itself is solved only in the
+                            // explicitly supplied active loop subspace.
+                            let _ = edges;
+                            compile_surface_map(&channel.name, edges, subspace, context)?
                         }
                         unsupported => {
                             return Err(SamplingChannelCompileError::UnsupportedMap {
@@ -1259,9 +1542,10 @@ impl SamplingChannelCatalogue {
                     format!("{index}: surface edges={edges:?} parent_lmb={parent_lmb:?}")
                 }
                 SamplingCatalogueEntry::Named(channel) => format!(
-                    "{index}: {} around={} parent_lmb={:?} on_cut={:?}",
+                    "{index}: {} around={} subspace_lmb={:?} parent_lmb={:?} on_cut={:?}",
                     channel.name,
                     channel.definition.around,
+                    channel.definition.subspace_lmb,
                     channel.definition.parent_lmb,
                     channel.definition.on_cut
                 ),
@@ -1399,6 +1683,10 @@ pub enum SamplingSelectionError {
         graph: String,
         channel: String,
     },
+    MissingSubspaceLmb {
+        graph: String,
+        channel: String,
+    },
     InvalidChannelDefinition {
         graph: String,
         channel: String,
@@ -1430,6 +1718,10 @@ impl fmt::Display for SamplingSelectionError {
             Self::MissingParentLmb { graph, channel } => write!(
                 formatter,
                 "sampling channel `{graph}.{channel}` must declare a non-empty parent_lmb"
+            ),
+            Self::MissingSubspaceLmb { graph, channel } => write!(
+                formatter,
+                "sampling channel `{graph}.{channel}` contains a surface map and must declare a non-empty subspace_lmb"
             ),
             Self::InvalidChannelDefinition {
                 graph,
@@ -1476,6 +1768,19 @@ pub fn resolve_sampling_channel_selection_replacing_default(
     selection: &SamplingChannelSelection,
 ) -> Result<ResolvedSamplingChannelSelection, SamplingSelectionError> {
     resolve_selection(graph_name, selection, true)
+}
+
+fn contains_surface_map(map: &SamplingMapDefinition) -> bool {
+    match map {
+        SamplingMapDefinition::Surface(_) => true,
+        SamplingMapDefinition::Product(maps)
+        | SamplingMapDefinition::Intersect(maps)
+        | SamplingMapDefinition::Then(maps) => maps.iter().any(contains_surface_map),
+        SamplingMapDefinition::PhaseSpace(map)
+        | SamplingMapDefinition::Left(map)
+        | SamplingMapDefinition::Right(map) => contains_surface_map(map),
+        _ => false,
+    }
 }
 
 fn resolve_selection(
@@ -1543,6 +1848,29 @@ fn resolve_selection(
                 error: error.to_string(),
             }
         })?;
+        if contains_surface_map(&map) {
+            if definition.subspace_lmb.is_empty() {
+                return Err(SamplingSelectionError::MissingSubspaceLmb {
+                    graph: graph_name.to_owned(),
+                    channel: name.clone(),
+                });
+            }
+            let mut seen = BTreeSet::new();
+            if definition
+                .subspace_lmb
+                .iter()
+                .any(|edge| !seen.insert(*edge) || !definition.parent_lmb.contains(edge))
+            {
+                return Err(SamplingSelectionError::InvalidChannelDefinition {
+                    graph: graph_name.to_owned(),
+                    channel: name.clone(),
+                    error: format!(
+                        "subspace_lmb {:?} must be unique and contained in parent_lmb {:?}",
+                        definition.subspace_lmb, definition.parent_lmb
+                    ),
+                });
+            }
+        }
         named_channels.push(ResolvedNamedSamplingChannel {
             name: name.clone(),
             definition: definition.clone(),
@@ -1583,14 +1911,36 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::integrands::process::SamplingCutSide;
     use crate::settings::runtime::ParameterizationSettings;
 
     fn definition(around: &str) -> SamplingChannelDefinition {
         SamplingChannelDefinition {
             around: around.to_owned(),
+            subspace_lmb: vec![1, 2],
             parent_lmb: vec![1, 2],
             on_cut: vec![],
         }
+    }
+
+    fn prepared_cut_context(
+        side: SamplingCutSide,
+        orientation: Option<usize>,
+        parent_lmb: Vec<usize>,
+    ) -> PreparedCutSamplingContext {
+        PreparedCutSamplingContext::new(
+            "G",
+            17,
+            3,
+            orientation,
+            side,
+            parent_lmb,
+            0.75,
+            vec![[0.0, 0.0, 0.0]],
+            vec![[100.0, 0.0, 0.0, 100.0]],
+            vec![],
+        )
+        .unwrap()
     }
 
     #[test]
@@ -1721,6 +2071,7 @@ mod tests {
                 "named".into(),
                 SamplingChannelDefinition {
                     around: "lmb(1,2)".into(),
+                    subspace_lmb: Vec::new(),
                     parent_lmb: Vec::new(),
                     on_cut: Vec::new(),
                 },
@@ -1728,6 +2079,29 @@ mod tests {
         assert!(matches!(
             resolve_sampling_channel_selection("G", &selection),
             Err(SamplingSelectionError::MissingParentLmb { .. })
+        ));
+    }
+
+    #[test]
+    fn named_surface_requires_explicit_active_subspace() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["threshold".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert(
+                "threshold".into(),
+                SamplingChannelDefinition {
+                    around: "surface(2,4)".into(),
+                    subspace_lmb: Vec::new(),
+                    parent_lmb: vec![1, 2, 4],
+                    on_cut: Vec::new(),
+                },
+            );
+        assert!(matches!(
+            resolve_sampling_channel_selection("G", &selection),
+            Err(SamplingSelectionError::MissingSubspaceLmb { .. })
         ));
     }
 
@@ -1827,7 +2201,7 @@ mod tests {
             2,
         );
         context.surfaces.insert(
-            vec![1, 2],
+            (vec![1, 2], vec![1, 2]),
             SamplingSurfaceGeometry {
                 center: vec![0.0; 6],
                 threshold_radius: Some(3.0),
@@ -1864,6 +2238,7 @@ mod tests {
         );
         context
             .insert_implicit_surface(
+                vec![1, 2],
                 vec![1, 2],
                 ImplicitSurfaceRadialMap::new(
                     6,
@@ -1974,6 +2349,7 @@ mod tests {
                 "named".into(),
                 SamplingChannelDefinition {
                     around: "lmb(2,4)".into(),
+                    subspace_lmb: Vec::new(),
                     parent_lmb: vec![1, 2],
                     on_cut: Vec::new(),
                 },
@@ -2018,7 +2394,11 @@ mod tests {
             .channel_definitions
             .entry("G".into())
             .or_default()
-            .insert("threshold".into(), definition("surface(2)"));
+            .insert("threshold".into(), {
+                let mut channel = definition("surface(2)");
+                channel.subspace_lmb = vec![2];
+                channel
+            });
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
         let mut context = SamplingChannelCompileContext::new(
@@ -2029,7 +2409,7 @@ mod tests {
             2,
         );
         context.surfaces.insert(
-            vec![2],
+            (vec![2], vec![2]),
             SamplingSurfaceGeometry {
                 center: vec![0.0; 3],
                 threshold_radius: Some(3.0),
@@ -2103,6 +2483,125 @@ mod tests {
         left.side = Some(crate::integrands::process::SamplingCutSide::Left);
         let error = catalogue.compile(&left).unwrap_err();
         assert!(error.to_string().contains("requires prepared side Right"));
+    }
+
+    #[test]
+    fn phase_space_channel_requires_prepared_cut_context() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["cut_chart".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("cut_chart".into(), definition("phase_space(cut(4,7))"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        let error = catalogue.compile(&context).unwrap_err();
+        assert!(matches!(
+            error,
+            SamplingChannelCompileError::MissingPreparedCutContext { .. }
+        ));
+        assert!(error.to_string().contains("graph, cut, orientation"));
+    }
+
+    #[test]
+    fn prepared_cut_context_populates_and_validates_host_metadata() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["cut_chart".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("cut_chart".into(), definition("phase_space(cut(4,7))"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        )
+        .with_prepared_cut_context(prepared_cut_context(
+            SamplingCutSide::Left,
+            Some(2),
+            vec![1, 2],
+        ))
+        .unwrap();
+        assert_eq!(context.graph_id, Some(17));
+        assert_eq!(context.cut_id, Some(3));
+        assert_eq!(context.orientation, Some(2));
+        assert_eq!(context.side, Some(SamplingCutSide::Left));
+        assert!(matches!(
+            catalogue.compile(&context),
+            Err(SamplingChannelCompileError::UnsupportedMap { .. })
+        ));
+
+        let mismatch = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        )
+        .with_prepared_cut_context(prepared_cut_context(
+            SamplingCutSide::Left,
+            Some(2),
+            vec![1, 3],
+        ))
+        .unwrap_err();
+        assert!(mismatch.to_string().contains("parent LMB"));
+    }
+
+    #[test]
+    fn side_map_rejects_missing_orientation_and_wrong_prepared_side() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["left_target".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("left_target".into(), definition("left(lmb(1,2))"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let missing_orientation = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        )
+        .with_prepared_cut_context(prepared_cut_context(
+            SamplingCutSide::Left,
+            None,
+            vec![1, 2],
+        ))
+        .unwrap();
+        let error = catalogue.compile(&missing_orientation).unwrap_err();
+        assert!(error.to_string().contains("explicit orientation"));
+
+        let wrong_side = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        )
+        .with_prepared_cut_context(prepared_cut_context(
+            SamplingCutSide::Right,
+            Some(2),
+            vec![1, 2],
+        ))
+        .unwrap();
+        let error = catalogue.compile(&wrong_side).unwrap_err();
+        assert!(error.to_string().contains("requires prepared side Left"));
     }
 
     #[test]

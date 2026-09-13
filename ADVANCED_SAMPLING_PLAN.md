@@ -6,15 +6,16 @@ follows. It applies to arbitrary loop order and topology, to amplitudes and
 cross sections, and to both ordinary and threshold-adapted sampling.
 
 Current implementation status: the canonical `SamplingChannelId` catalogue,
-Symbolica selection parser, explicit parent-LMB validation, prepared cut/side
-guards, exact affine LMB routing, and the discrete map-density bridge are
-implemented and pushed on `advanced_sampling`. The old LMB-only enum variant is
-kept only for direct momentum-space LMB reinterpretation during migration;
-direct named/surface selections are checked against the same catalogue and use
-the parent-frame route, while x-space discrete sampling enters through the
-canonical bridge for every channel.
-Physical directional E-surface maps, prepared cross-section `t*` context
-construction, and final old standalone-integrand removal remain open milestones.
+Symbolica selection parser, explicit parent-LMB validation, explicit active
+`subspace_lmb` metadata for named surface channels, prepared cut/side guards,
+exact affine LMB routing, and the discrete map-density bridge are implemented
+and pushed on `advanced_sampling`. There is one channel catalogue and one ID
+domain: the remaining LMB reinterpretation branch is an evaluation detail of
+that catalogue during migration, never a second enumeration or index space.
+It is scheduled for removal once all momentum-space consumers use compiled
+parent-frame maps. Physical directional E-surface maps, prepared cross-section
+`t*` context construction, and final old standalone-integrand removal remain
+open milestones.
 
 The portable research bundle is in
 [`docs/research/advanced_sampling/README.md`](docs/research/advanced_sampling/README.md).
@@ -76,6 +77,10 @@ partitions and samples the complete already-subtracted physical integrand.
   `ValentinHirschi`; use SSH `git push`, not an alternate `gh` identity.
 * Make coherent milestone commits on `advanced_sampling` and push only after
   the root agent has reviewed each milestone. Do not force-push.
+* Do not introduce a parallel LMB/channel enumeration while migrating. Every
+  grid, evaluator, diagnostic and API consumer must resolve through the same
+  `SamplingChannelCatalogue` and `SamplingChannelId`; legacy LMB fields may be
+  consumed only as catalogue inputs until deleted.
 
 ### Milestones
 
