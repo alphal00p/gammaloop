@@ -2735,7 +2735,7 @@ impl LmbMultiChannelingSetup {
                 usize::from(selected_lmb)
             ));
         }
-        let effective_channels = channel_entries
+        let lmb_basis_ids_for_partition = channel_entries
             .iter()
             .map(|(_, lmb_index)| *lmb_index)
             .collect::<Vec<_>>();
@@ -2743,14 +2743,14 @@ impl LmbMultiChannelingSetup {
         match weighting_settings.channel_weight {
             LmbChannelWeight::Ose => Ok(self.compute_ose_prefactor_impl(
                 selected_lmb,
-                &effective_channels,
+                &lmb_basis_ids_for_partition,
                 momentum_sample,
                 weighting_settings.model,
                 weighting_settings.alpha,
             )),
             LmbChannelWeight::InverseJacobian => Ok(self.compute_inverse_jacobian_prefactor_impl(
                 selected_lmb,
-                &effective_channels,
+                &lmb_basis_ids_for_partition,
                 momentum_sample,
                 weighting_settings.parameterization_settings,
                 weighting_settings.e_cm,
@@ -2761,7 +2761,7 @@ impl LmbMultiChannelingSetup {
     fn compute_ose_prefactor_impl<T: FloatLike>(
         &self,
         selected_lmb: LmbIndex,
-        effective_channels: &[LmbIndex],
+        lmb_basis_ids_for_partition: &[LmbIndex],
         momentum_sample: &MomentumSample<T>,
         model: &Model,
         alpha: &F<T>,
@@ -2775,7 +2775,7 @@ impl LmbMultiChannelingSetup {
 
         let mut numerator = momentum_sample.zero();
 
-        let denominators = effective_channels
+        let denominators = lmb_basis_ids_for_partition
             .iter()
             .map(|&lmb_index| {
                 let channel_product = self.all_bases[lmb_index]
@@ -2799,18 +2799,18 @@ impl LmbMultiChannelingSetup {
     fn compute_inverse_jacobian_prefactor_impl<T: FloatLike>(
         &self,
         selected_lmb: LmbIndex,
-        effective_channels: &[LmbIndex],
+        lmb_basis_ids_for_partition: &[LmbIndex],
         momentum_sample: &MomentumSample<T>,
         parameterization_settings: &ParameterizationSettings,
         e_cm: f64,
     ) -> F<T> {
         let scores = self.compute_inverse_jacobian_scores_impl(
-            effective_channels,
+            lmb_basis_ids_for_partition,
             momentum_sample,
             parameterization_settings,
             e_cm,
         );
-        let numerator = effective_channels
+        let numerator = lmb_basis_ids_for_partition
             .iter()
             .zip(scores.iter())
             .filter(|(lmb_index, _)| **lmb_index == selected_lmb)
@@ -2834,7 +2834,7 @@ impl LmbMultiChannelingSetup {
     /// prefactor, including the two-branch common-radial parameterization.
     fn compute_inverse_jacobian_scores_impl<T: FloatLike>(
         &self,
-        effective_channels: &[LmbIndex],
+        lmb_basis_ids_for_partition: &[LmbIndex],
         momentum_sample: &MomentumSample<T>,
         parameterization_settings: &ParameterizationSettings,
         e_cm: f64,
@@ -2862,7 +2862,7 @@ impl LmbMultiChannelingSetup {
                 sampling_channels: Default::default(),
             };
             let sampled_branch = momentum_sample.sample.parameterization_branch;
-            effective_channels
+            lmb_basis_ids_for_partition
                 .iter()
                 .map(|&lmb_index| {
                     let basis_momenta = self.basis_momenta_for_lmb(lmb_index, momentum_sample);
@@ -2881,7 +2881,7 @@ impl LmbMultiChannelingSetup {
                 })
                 .collect()
         } else {
-            effective_channels
+            lmb_basis_ids_for_partition
                 .iter()
                 .map(|&lmb_index| {
                     let basis_momenta = self.basis_momenta_for_lmb(lmb_index, momentum_sample);
@@ -2940,12 +2940,12 @@ impl LmbMultiChannelingSetup {
             ));
         }
 
-        let effective_channels = channel_entries
+        let lmb_basis_ids_for_partition = channel_entries
             .iter()
             .map(|(_, lmb_index)| *lmb_index)
             .collect::<Vec<_>>();
         let scores = self.compute_inverse_jacobian_scores_impl(
-            &effective_channels,
+            &lmb_basis_ids_for_partition,
             momentum_sample,
             parameterization_settings,
             e_cm,
