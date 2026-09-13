@@ -11,7 +11,9 @@ use std::{
     str::FromStr,
 };
 
-use crate::settings::runtime::{SamplingChannelDefinition, SamplingChannelSelection};
+use crate::settings::runtime::{
+    HFunctionSettings, SamplingChannelDefinition, SamplingChannelSelection,
+};
 use color_eyre::eyre::{Result, eyre};
 use serde::{Deserialize, Serialize};
 use symbolica::{atom::Atom, symbol, try_parse};
@@ -28,6 +30,12 @@ use crate::settings::runtime::ParameterizationSettings;
 use crate::settings::runtime::kinematic::Externals;
 use crate::utils::{F, FloatLike};
 use crate::{DependentMomentaConstructor, momentum::ThreeMomentum};
+
+/// Precision-independent proxy and radial-profile programs in canonical order.
+pub(crate) type SamplingChannelPrograms = (
+    Option<SamplingExpressionEvaluator>,
+    Option<SamplingExpressionEvaluator>,
+);
 
 /// Built-in selectors understood by the channel catalogue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -113,7 +121,7 @@ impl FromStr for SamplingChannelSelector {
 }
 
 /// A named channel together with its parsed Symbolica map definition.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedNamedSamplingChannel {
     pub name: String,
     pub definition: SamplingChannelDefinition,
@@ -122,7 +130,7 @@ pub struct ResolvedNamedSamplingChannel {
 }
 
 /// The complete selection for one graph after applying the settings' fallback.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedSamplingChannelSelection {
     pub graph_name: String,
     pub selectors: Vec<SamplingChannelSelector>,
@@ -133,7 +141,7 @@ pub struct ResolvedSamplingChannelSelection {
 /// migration target for grid construction and evaluation. The existing setup
 /// only supplies generated entries until that runtime migration is complete;
 /// it is not a second production channel universe.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SamplingCatalogueEntry {
     Lmb {
         basis_id: usize,
@@ -150,7 +158,7 @@ pub enum SamplingCatalogueEntry {
 }
 
 /// Graph-scoped, deterministically ordered channel catalogue.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SamplingChannelCatalogue {
     pub graph_name: String,
     pub selectors: Vec<SamplingChannelSelector>,
@@ -228,6 +236,8 @@ pub struct SamplingChannelCompileContext<T: FloatLike = f64> {
     /// Physical cut IDs resolved by the graph, keyed by their energy edges.
     /// These identify cut kinematics, not entries in the channel catalogue.
     pub physical_cut_ids: BTreeMap<Vec<usize>, Vec<usize>>,
+    /// Highest physical residue order across all equivalent active cut groups.
+    pub physical_cut_max_occurrences: BTreeMap<Vec<usize>, usize>,
     /// Host cut identity for metadata whose `on_cut` list is explicit.
     pub cut_id: Option<usize>,
     pub orientation: Option<usize>,
@@ -266,6 +276,7 @@ impl<T: FloatLike> SamplingChannelCompileContext<T> {
             lmb_frame_maps: BTreeMap::new(),
             lmb_frame_maps_by_edges: BTreeMap::new(),
             physical_cut_ids: BTreeMap::new(),
+            physical_cut_max_occurrences: BTreeMap::new(),
             cut_id: None,
             orientation: None,
             side: None,
@@ -559,6 +570,8 @@ pub struct SamplingChannelBridge<T: FloatLike = f64> {
     channels: Vec<CompiledSamplingChannel<T>>,
     dimensions: usize,
     partition_mode: SamplingPartitionMode,
+    /// Explicit runtime accuracy budget; fresh numerical bridges use native sqrt(epsilon).
+    relative_density_tolerance: Option<f64>,
 }
 
 /// Per-sample context supplied to conditional channel maps and to every
@@ -1265,7 +1278,20 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
             channels,
             dimensions,
             partition_mode,
+            relative_density_tolerance: None,
         })
+    }
+
+    /// Reserve a fraction of the configured precision target for consistency
+    /// between the selected forward determinant and its actual inverse density.
+    pub(crate) fn with_relative_density_tolerance(mut self, tolerance: f64) -> Result<Self> {
+        if !tolerance.is_finite() || tolerance <= 0.0 {
+            return Err(eyre!(
+                "sampling inverse density tolerance must be positive and finite"
+            ));
+        }
+        self.relative_density_tolerance = Some(tolerance);
+        Ok(self)
     }
 
     pub fn channels(&self) -> &[CompiledSamplingChannel<T>] {
@@ -1314,7 +1340,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                     SamplingPartitionMode::MapDensity => {
                         let context = contexts.get(SamplingChannelId::from(index))?;
                         let evaluation = channel.map.inverse_with_context(raw_coordinates, context)?;
-                        let density = F(evaluation.inverse_jacobian).abs();
+                        let density = F(evaluation.inverse_jacobian);
                         if !density.0.is_finite() || density <= density.zero() {
                             return Err(eyre!(
                                 "inverse map density is not finite and positive: {density}"
@@ -1393,6 +1419,58 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
             .into());
         }
         let partition = self.partition_with_contexts(&map.point, contexts)?;
+        // A small Cartesian round-trip residual does not certify the density
+        // near a focused shell. Compare the selected determinant to the inverse
+        // density at the actual generated point, reusing the partition score
+        // when it already evaluates that inverse. Proxy partitions need only
+        // the selected inverse, never every foreign map's inverse.
+        let log_density = match self.partition_mode {
+            SamplingPartitionMode::MapDensity => F(partition.log_scores[channel_index]
+                .clone()
+                .ok_or_else(|| eyre!("selected sampling channel has no inverse density"))?),
+            SamplingPartitionMode::SingularityProxy => {
+                let inverse = channel
+                    .map
+                    .inverse_with_context(&map.point, contexts.get(channel_id)?)?;
+                F(inverse.inverse_jacobian).ln()
+            }
+        };
+        let jacobian = F(map.jacobian.clone());
+        let one = jacobian.one();
+        let tolerance = self
+            .relative_density_tolerance
+            .map(F::<T>::from_f64)
+            .unwrap_or_else(|| one.epsilon().sqrt());
+        let log_ratio = jacobian.ln() + log_density;
+        let two = &one + &one;
+        // log(1 +/- tolerance) must retain a sub-epsilon budget. The atanh
+        // identity avoids forming 1 +/- tolerance in that small-budget regime.
+        let upper = if tolerance < &one / &two {
+            &two * F((&tolerance / (&two + &tolerance)).0.atanh())
+        } else {
+            (&one + &tolerance).ln()
+        };
+        let lower = if tolerance < &one / &two {
+            Some(-&two * F((&tolerance / (&two - &tolerance)).0.atanh()))
+        } else if tolerance < one {
+            Some((&one - &tolerance).ln())
+        } else {
+            None
+        };
+        if !jacobian.0.is_finite()
+            || jacobian <= jacobian.zero()
+            || !log_ratio.0.is_finite()
+            || log_ratio > upper
+            || lower.is_some_and(|lower| log_ratio < lower)
+        {
+            return Err(super::sampling_maps::SamplingEvaluationError::Unrepresentable {
+                operation: "sampling inverse density consistency",
+                detail: format!(
+                    "channel '{}' has log(J_forward * q_inverse)={log_ratio}, outside relative tolerance {tolerance}",
+                    channel.name
+                ),
+            }.into());
+        }
         Ok(SamplingChannelBridgeEvaluation {
             channel_id,
             channel_name: channel.name.clone(),
@@ -2361,17 +2439,18 @@ impl SamplingChannelCatalogue {
         }
     }
 
-    /// Compile user supplied proxies once in canonical channel order. Every
-    /// native geometry binding borrows these same precision-independent programs.
-    /// Proxy expressions use the complete master raw frame's ordered x0, x1, ...
-    /// coordinates, independently of the numerical map implementation.
-    pub fn compile_proxies(
+    /// Compile user supplied proxies and radial profiles once in canonical
+    /// channel order. Native geometry bindings borrow these same programs.
+    /// Proxy expressions use the complete master raw frame's x0, x1, ...;
+    /// LU profiles inherit the actual physical runtime h-function settings.
+    pub fn compile_programs(
         &self,
         dimensions: usize,
-    ) -> Result<Vec<Option<SamplingExpressionEvaluator>>> {
+        lu_h: &HFunctionSettings,
+    ) -> Result<Vec<SamplingChannelPrograms>> {
         self.entries.iter().map(|entry| {
-            let SamplingCatalogueEntry::Named(channel) = entry else { return Ok(None); };
-            channel.singularity_proxy.as_ref().map(|expression| {
+            let SamplingCatalogueEntry::Named(channel) = entry else { return Ok((None,None)); };
+            let proxy = channel.singularity_proxy.as_ref().map(|expression| {
                 if dimensions == 0 {
                     return Err(eyre!("sampling singularity proxy requires a non-empty raw coordinate frame"));
                 }
@@ -2379,7 +2458,14 @@ impl SamplingChannelCatalogue {
                     .map(|index| Atom::var(symbol!(format!("x{index}"))))
                     .collect::<Vec<_>>();
                 SamplingExpressionEvaluator::new_positive_proxy(expression.clone(), parameters)
-            }).transpose()
+            }).transpose()?;
+            let radial = channel.definition.radial_profile.as_ref().map(|profile| {
+                if !matches!(&channel.map, SamplingMapDefinition::PhaseSpace(inner) if matches!(inner.as_ref(), SamplingMapDefinition::Cut(_))) {
+                    return Err(eyre!("channel {}: radial_profile=lu_h requires standalone phase_space(cut(...))", channel.name));
+                }
+                SamplingExpressionEvaluator::new_lu_h_profile(profile, lu_h)
+            }).transpose()?;
+            Ok((proxy,radial))
         }).collect()
     }
 
@@ -2395,14 +2481,14 @@ impl SamplingChannelCatalogue {
     pub fn compile<T: FloatLike>(
         &self,
         context: &SamplingChannelCompileContext<T>,
-        proxies: &[Option<SamplingExpressionEvaluator>],
+        programs: &[SamplingChannelPrograms],
     ) -> Result<Vec<CompiledSamplingChannel<T>>, SamplingChannelCompileError> {
-        if proxies.len() != self.entries.len() {
+        if programs.len() != self.entries.len() {
             return Err(SamplingChannelCompileError::InvalidChannel {
                 channel: self.graph_name.clone(),
                 error: format!(
-                    "compiled proxy vector has {} entries, expected {} canonical channels",
-                    proxies.len(),
+                    "compiled sampling program vector has {} entries, expected {} canonical channels",
+                    programs.len(),
                     self.entries.len()
                 ),
             });
@@ -2426,7 +2512,7 @@ impl SamplingChannelCatalogue {
             });
         }
         let mut compiled = Vec::with_capacity(self.entries.len());
-        for (entry, proxy) in self.entries.iter().zip(proxies) {
+        for (entry, (proxy, radial)) in self.entries.iter().zip(programs) {
             let (name, basis_id, definition, map, singularity_proxy) = match entry {
                 SamplingCatalogueEntry::Lmb {
                     basis_id, edges, ..
@@ -2593,7 +2679,24 @@ impl SamplingChannelCatalogue {
                                     channel: channel.name.clone(),
                                     error: format!("phase_space(cut({edges:?})) requires a graph-resolved physical cut and its exact full-frame radial evaluator"),
                                 })?;
-                            CompiledSamplingMap::ImplicitSurface(map.clone())
+                            let map = match (&channel.definition.radial_profile, radial) {
+                                (Some(profile), Some(program)) => {
+                                    let max_occurrence = context.physical_cut_max_occurrences.get(edges)
+                                        .copied().ok_or_else(|| SamplingChannelCompileError::InvalidChannel {
+                                            channel: channel.name.clone(),
+                                            error: "LU-h profile requires the actual maximum physical cut residue order".to_owned(),
+                                        })?;
+                                    map.clone().with_lu_h_profile(program.clone(), profile, max_occurrence)
+                                        .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+                                            channel: channel.name.clone(), error: error.to_string(),
+                                        })?
+                                }
+                                (None, None) => map.clone(),
+                                _ => return Err(SamplingChannelCompileError::InvalidChannel {
+                                    channel: channel.name.clone(), error: "compiled radial-profile presence does not match the canonical definition".to_owned(),
+                                }),
+                            };
+                            CompiledSamplingMap::ImplicitSurface(map)
                         }
                         SamplingMapDefinition::Surface(edges) => {
                             let subspace = &channel.definition.subspace_lmb;
@@ -3184,6 +3287,158 @@ mod tests {
     use crate::settings::runtime::ParameterizationSettings;
 
     #[test]
+    fn bridge_certifies_selected_inverse_density_in_both_partition_modes() {
+        use super::super::sampling_maps::SamplingEvaluationError;
+        use crate::utils::{ArbPrec, QuadFloat};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        // Isolate a faulty inverse determinant from coordinate round trips:
+        // the underlying affine map remains exactly invertible with zero residual.
+        #[derive(Debug)]
+        struct InverseDensityProbe<T: FloatLike> {
+            map: SamplingMapAffine<T>,
+            multiplier: T,
+            calls: Arc<AtomicUsize>,
+            unavailable: bool,
+        }
+        impl<T: FloatLike> SamplingMapComponent<T> for InverseDensityProbe<T> {
+            fn dimensions(&self) -> usize {
+                self.map.dimensions()
+            }
+            fn output_dimensions(&self) -> usize {
+                self.map.output_dimensions()
+            }
+            fn contract(&self) -> SamplingMapContract {
+                self.map.contract()
+            }
+            fn name(&self) -> &'static str {
+                "inverse_density_probe"
+            }
+            fn forward(
+                &self,
+                coordinates: &[T],
+                context: &[T],
+            ) -> Result<SamplingMapEvaluation<T>> {
+                self.map.forward(coordinates, context)
+            }
+            fn inverse(&self, point: &[T], context: &[T]) -> Result<SamplingMapEvaluation<T>> {
+                self.calls.fetch_add(1, Ordering::Relaxed);
+                if self.unavailable {
+                    return Err(eyre!("foreign inverse must not be evaluated"));
+                }
+                let mut inverse = self.map.inverse(point, context)?;
+                inverse.inverse_jacobian =
+                    (F(inverse.inverse_jacobian) * F(self.multiplier.clone())).0;
+                Ok(inverse)
+            }
+        }
+        fn check<T: FloatLike>(exponent: i32) {
+            let one = F::<T>::default().one();
+            let delta = one.from_i64(10).powi(exponent);
+            let coordinates = vec![(&one / one.from_i64(3)).0; 3];
+            let selected_calls = Arc::new(AtomicUsize::new(0));
+            let foreign_calls = Arc::new(AtomicUsize::new(0));
+            let channel = |name: &str, multiplier: F<T>, calls, unavailable| {
+                let map = SamplingMapAffine::new(
+                    (0..3)
+                        .map(|i| {
+                            (0..3)
+                                .map(|j| if i == j { one.0.clone() } else { one.zero().0 })
+                                .collect()
+                        })
+                        .collect(),
+                    vec![one.zero().0; 3],
+                )
+                .unwrap();
+                let map = SamplingMapComposition::product(vec![Box::new(InverseDensityProbe {
+                    map,
+                    multiplier: multiplier.0,
+                    calls,
+                    unavailable,
+                })])
+                .unwrap();
+                CompiledSamplingChannel {
+                    name: name.into(),
+                    master_graph: "G".into(),
+                    basis_id: None,
+                    definition: SamplingMapDefinition::Lmb(vec![1]),
+                    embedded_edges: vec![1],
+                    map: CompiledSamplingMap::Embedded(
+                        SamplingMapEmbedding::from_composition(map, vec![0, 1, 2]).unwrap(),
+                    ),
+                    singularity_proxy: Some(SamplingScoreFunction::from_log_function(|_| {
+                        Ok(Some(F::<T>::default().zero().0))
+                    })),
+                }
+            };
+            for mode in [
+                SamplingPartitionMode::MapDensity,
+                SamplingPartitionMode::SingularityProxy,
+            ] {
+                let channels = vec![
+                    channel("selected", &one + &delta, selected_calls.clone(), false),
+                    channel(
+                        "foreign",
+                        one.clone(),
+                        foreign_calls.clone(),
+                        mode == SamplingPartitionMode::SingularityProxy,
+                    ),
+                ];
+                let bridge =
+                    SamplingChannelBridge::new_with_partition_mode(channels, mode).unwrap();
+                for invalid in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+                    assert!(
+                        bridge
+                            .clone()
+                            .with_relative_density_tolerance(invalid)
+                            .is_err()
+                    );
+                }
+                selected_calls.store(0, Ordering::Relaxed);
+                foreign_calls.store(0, Ordering::Relaxed);
+                let loose = 10.0_f64.powi(exponent + 1);
+                let evaluation = bridge
+                    .clone()
+                    .with_relative_density_tolerance(loose)
+                    .unwrap()
+                    .forward(SamplingChannelId(0), &coordinates)
+                    .unwrap();
+                assert_eq!(evaluation.map.residual, one.zero().0);
+                assert_eq!(
+                    selected_calls.load(Ordering::Relaxed),
+                    1,
+                    "selected inverse must be reused from map-density partition"
+                );
+                assert_eq!(
+                    foreign_calls.load(Ordering::Relaxed),
+                    usize::from(mode == SamplingPartitionMode::MapDensity)
+                );
+                let strict = 10.0_f64.powi(exponent - 1);
+                let error = bridge
+                    .clone()
+                    .with_relative_density_tolerance(strict)
+                    .unwrap()
+                    .forward(SamplingChannelId(0), &coordinates)
+                    .unwrap_err();
+                assert!(matches!(
+                    error.downcast_ref::<SamplingEvaluationError>(),
+                    Some(SamplingEvaluationError::Unrepresentable {
+                        operation: "sampling inverse density consistency",
+                        ..
+                    })
+                ));
+                assert_eq!(
+                    bridge.forward(SamplingChannelId(0), &coordinates).is_ok(),
+                    delta < one.epsilon().sqrt()
+                );
+            }
+        }
+        check::<f64>(-6);
+        check::<QuadFloat>(-20);
+        check::<ArbPrec>(-20);
+    }
+
+    #[test]
     fn selected_sampling_factor_rejects_underflow_before_physical_cancellation() {
         use super::super::sampling_maps::{SamplingEvaluationError, SamplingSupport};
         use crate::utils::ArbPrec;
@@ -3410,6 +3665,7 @@ mod tests {
 
     fn definition(around: &str) -> SamplingChannelDefinition {
         SamplingChannelDefinition {
+            radial_profile: None,
             around: around.to_owned(),
             subspace_lmb: vec![1, 2],
             parent_lmb: vec![1, 2],
@@ -3445,6 +3701,7 @@ mod tests {
         let definitions = selection.channel_definitions.entry("G".into()).or_default();
         for (name, proxy) in [("first", first), ("second", second)] {
             let channel = SamplingChannelDefinition {
+                radial_profile: None,
                 around: "lmb(1)".into(),
                 subspace_lmb: Vec::new(),
                 parent_lmb: vec![1],
@@ -3467,7 +3724,8 @@ mod tests {
             100.0,
             1,
         );
-        let proxies = catalogue.compile_proxies(3 * context.n_loop_momenta)?;
+        let proxies = catalogue
+            .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())?;
         let channels = catalogue.compile(&context, &proxies)?;
         SamplingChannelBridge::new_with_partition_mode(
             channels,
@@ -3613,7 +3871,7 @@ mod tests {
                 .compile(
                     &context,
                     &catalogue
-                        .compile_proxies(3 * context.n_loop_momenta)
+                        .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                         .unwrap(),
                 )
                 .unwrap(),
@@ -3799,6 +4057,7 @@ mod tests {
             .insert(
                 "named".into(),
                 SamplingChannelDefinition {
+                    radial_profile: None,
                     around: "lmb(1,2)".into(),
                     subspace_lmb: Vec::new(),
                     parent_lmb: Vec::new(),
@@ -3823,6 +4082,7 @@ mod tests {
             .insert(
                 "threshold".into(),
                 SamplingChannelDefinition {
+                    radial_profile: None,
                     around: "surface(2,4)".into(),
                     subspace_lmb: Vec::new(),
                     parent_lmb: vec![1, 2, 4],
@@ -4038,7 +4298,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap();
@@ -4092,7 +4352,7 @@ mod tests {
                 .compile(
                     &context,
                     &catalogue
-                        .compile_proxies(3 * context.n_loop_momenta)
+                        .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                         .unwrap(),
                 )
                 .unwrap_err();
@@ -4147,7 +4407,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap();
@@ -4205,7 +4465,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap();
@@ -4277,7 +4537,7 @@ mod tests {
                 .compile(
                     &context,
                     &catalogue
-                        .compile_proxies(3 * context.n_loop_momenta)
+                        .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                         .unwrap(),
                 )
                 .unwrap(),
@@ -4352,7 +4612,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap();
@@ -4397,7 +4657,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap_err();
@@ -4440,7 +4700,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap();
@@ -4499,7 +4759,10 @@ mod tests {
             .compile(
                 &native_context,
                 &catalogue
-                    .compile_proxies(3 * native_context.n_loop_momenta)
+                    .compile_programs(
+                        3 * native_context.n_loop_momenta,
+                        &HFunctionSettings::default(),
+                    )
                     .unwrap(),
             )
             .unwrap();
@@ -4514,7 +4777,10 @@ mod tests {
             .compile(
                 &native_context,
                 &catalogue
-                    .compile_proxies(3 * native_context.n_loop_momenta)
+                    .compile_programs(
+                        3 * native_context.n_loop_momenta,
+                        &HFunctionSettings::default(),
+                    )
                     .unwrap(),
             )
             .unwrap();
@@ -4547,6 +4813,7 @@ mod tests {
             .insert(
                 "named".into(),
                 SamplingChannelDefinition {
+                    radial_profile: None,
                     around: "lmb(2,4)".into(),
                     subspace_lmb: Vec::new(),
                     parent_lmb: vec![1, 2],
@@ -4582,7 +4849,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap();
@@ -4633,7 +4900,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap();
@@ -4671,7 +4938,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap_err();
@@ -4684,7 +4951,10 @@ mod tests {
                 .compile(
                     &matching,
                     &catalogue
-                        .compile_proxies(3 * matching.n_loop_momenta)
+                        .compile_programs(
+                            3 * matching.n_loop_momenta,
+                            &HFunctionSettings::default()
+                        )
                         .unwrap()
                 )
                 .is_ok()
@@ -4695,7 +4965,10 @@ mod tests {
                 .compile(
                     &matching,
                     &catalogue
-                        .compile_proxies(3 * matching.n_loop_momenta)
+                        .compile_programs(
+                            3 * matching.n_loop_momenta,
+                            &HFunctionSettings::default()
+                        )
                         .unwrap()
                 )
                 .is_err()
@@ -4724,7 +4997,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap_err();
@@ -4735,7 +5008,9 @@ mod tests {
         let error = catalogue
             .compile(
                 &left,
-                &catalogue.compile_proxies(3 * left.n_loop_momenta).unwrap(),
+                &catalogue
+                    .compile_programs(3 * left.n_loop_momenta, &HFunctionSettings::default())
+                    .unwrap(),
             )
             .unwrap_err();
         assert!(error.to_string().contains("requires prepared side Right"));
@@ -4763,7 +5038,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap_err();
@@ -4822,7 +5097,7 @@ mod tests {
                 .compile(
                     &context,
                     &catalogue
-                        .compile_proxies(3 * context.n_loop_momenta)
+                        .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                         .unwrap(),
                 )
                 .unwrap(),
@@ -4861,7 +5136,7 @@ mod tests {
                 .compile(
                     &context,
                     &catalogue
-                        .compile_proxies(3 * context.n_loop_momenta)
+                        .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                         .unwrap()
                 )
                 .is_err()
@@ -4872,7 +5147,7 @@ mod tests {
                 .compile(
                     &context,
                     &catalogue
-                        .compile_proxies(3 * context.n_loop_momenta)
+                        .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                         .unwrap()
                 )
                 .unwrap_err()
@@ -4922,7 +5197,7 @@ mod tests {
             });
 
             assert!(matches!(
-                catalogue.compile(&context, &catalogue.compile_proxies(3 * context.n_loop_momenta).unwrap()),
+                catalogue.compile(&context, &catalogue.compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default()).unwrap()),
                 Err(SamplingChannelCompileError::MissingPreparedCutContext {
                     channel,
                     ..
@@ -4963,7 +5238,7 @@ mod tests {
             catalogue.compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap()
             ),
             Err(SamplingChannelCompileError::InvalidChannel { .. })
@@ -5041,7 +5316,10 @@ mod tests {
             .compile(
                 &missing_orientation,
                 &catalogue
-                    .compile_proxies(3 * missing_orientation.n_loop_momenta)
+                    .compile_programs(
+                        3 * missing_orientation.n_loop_momenta,
+                        &HFunctionSettings::default(),
+                    )
                     .unwrap(),
             )
             .unwrap_err();
@@ -5064,7 +5342,7 @@ mod tests {
             .compile(
                 &wrong_side,
                 &catalogue
-                    .compile_proxies(3 * wrong_side.n_loop_momenta)
+                    .compile_programs(3 * wrong_side.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap_err();
@@ -5093,7 +5371,7 @@ mod tests {
             catalogue.compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap()
             ),
             Err(SamplingChannelCompileError::MissingSurfaceGeometry { .. })
@@ -5132,7 +5410,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap_err()
@@ -5179,7 +5457,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap();
@@ -5238,7 +5516,7 @@ mod tests {
             .compile(
                 &context,
                 &catalogue
-                    .compile_proxies(3 * context.n_loop_momenta)
+                    .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                     .unwrap(),
             )
             .unwrap_err();
@@ -5337,7 +5615,7 @@ mod tests {
                 .compile(
                     &context,
                     &catalogue
-                        .compile_proxies(3 * context.n_loop_momenta)
+                        .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                         .unwrap(),
                 )
                 .unwrap(),
@@ -5395,7 +5673,7 @@ mod tests {
                 .compile(
                     &context,
                     &catalogue
-                        .compile_proxies(3 * context.n_loop_momenta)
+                        .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                         .unwrap(),
                 )
                 .unwrap(),
@@ -5462,7 +5740,7 @@ mod tests {
                 .compile(
                     &context,
                     &catalogue
-                        .compile_proxies(3 * context.n_loop_momenta)
+                        .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                         .unwrap(),
                 )
                 .unwrap(),
@@ -5501,7 +5779,7 @@ mod tests {
                 .compile(
                     &context,
                     &catalogue
-                        .compile_proxies(3 * context.n_loop_momenta)
+                        .compile_programs(3 * context.n_loop_momenta, &HFunctionSettings::default())
                         .unwrap(),
                 )
                 .unwrap(),

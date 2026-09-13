@@ -51,6 +51,12 @@ filter = "test(bench) or test(benchmark)"
 filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/)"
 slow-timeout = { period = "5m", terminate-after = 2 }
 
+[[profile.default.overrides]]
+# Saved-state acceptance evaluates 8192 points per fixture, including two LU-h
+# mixture inverses. The unoptimized build takes about two minutes locally.
+filter = "test(=state::tests::saved_generated_process_runs_reference_acceptance_after_reload)"
+slow-timeout = { period = "1m", terminate-after = 5 }
+
 [profile.default.junit]
 # Default JUnit output location
 path = "target/nextest/default/junit.xml"

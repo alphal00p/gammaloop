@@ -1265,6 +1265,10 @@ impl FloatLike for f128 {
         Self::from_f64_exact_binary(x)
     }
 
+    fn sampling_precision() -> crate::settings::runtime::Precision {
+        crate::settings::runtime::Precision::Quad
+    }
+
     fn sampling_bridge_cache(
         setup: &LmbMultiChannelingSetup,
     ) -> &RuntimeCache<SamplingChannelBridge<Self>> {
@@ -1354,6 +1358,10 @@ impl FloatLike for ArbPrec {
 
     fn from_f64_exact_binary(x: f64) -> Self {
         Self::from_f64_exact_binary(x)
+    }
+
+    fn sampling_precision() -> crate::settings::runtime::Precision {
+        crate::settings::runtime::Precision::Arb
     }
 
     fn sampling_bridge_cache(
@@ -1736,6 +1744,8 @@ pub trait FloatLike:
     /// coordinate. User-authored settings retain the existing decimal policy.
     fn from_f64_exact_binary(x: f64) -> Self;
 
+    /// Runtime stability level represented by this native scalar type.
+    fn sampling_precision() -> crate::settings::runtime::Precision;
     fn sampling_bridge_cache(setup: &LmbMultiChannelingSetup) -> &RuntimeCache<SamplingChannelBridge<Self>>;
     fn sampling_bridge_cache_mut(setup: &mut LmbMultiChannelingSetup) -> &mut RuntimeCache<SamplingChannelBridge<Self>>;
 
@@ -2685,6 +2695,10 @@ impl FloatLike for f64 {
         x
     }
 
+    fn sampling_precision() -> crate::settings::runtime::Precision {
+        crate::settings::runtime::Precision::Double
+    }
+
     fn sampling_bridge_cache(
         setup: &LmbMultiChannelingSetup,
     ) -> &RuntimeCache<SamplingChannelBridge<Self>> {
@@ -3131,8 +3145,8 @@ pub(crate) fn h_dual<T: FloatLike>(
                 Some(10) => new_constant(t, &F::<T>::from_f64(263_205.217_049_469)) * &sig,
                 Some(12) => new_constant(t, &F::<T>::from_f64(2.427_503_717_893_097_5e7)) * &sig,
                 Some(13) => new_constant(t, &F::<T>::from_f64(2.694_265_921_644_289e8)) * &sig,
-                Some(15) => new_constant(t, &F::<T>::from_f64(9.040_742_057_760_125e12)) * &sig,
-                Some(16) => new_constant(t, &F::<T>::from_f64(1.452_517_480_246_491_3e14)) * &sig,
+                Some(15) => new_constant(t, &F::<T>::from_f64(4.261_555_045_314_143e10)) * &sig,
+                Some(16) => new_constant(t, &F::<T>::from_f64(5.998_751_004_871_322e11)) * &sig,
                 _ => panic!(
                     "Value {} of power in poly exponential h function not supported",
                     power.unwrap()
@@ -3242,8 +3256,8 @@ pub(crate) fn h<T: FloatLike>(
                 Some(10) => F::<T>::from_f64(263_205.217_049_469) * &sig,
                 Some(12) => F::<T>::from_f64(2.427_503_717_893_097_5e7) * &sig,
                 Some(13) => F::<T>::from_f64(2.694_265_921_644_289e8) * &sig,
-                Some(15) => F::<T>::from_f64(9.040_742_057_760_125e12) * &sig,
-                Some(16) => F::<T>::from_f64(1.452_517_480_246_491_3e14) * &sig,
+                Some(15) => F::<T>::from_f64(4.261_555_045_314_143e10) * &sig,
+                Some(16) => F::<T>::from_f64(5.998_751_004_871_322e11) * &sig,
                 _ => panic!(
                     "Value {} of power in poly exponential h function not supported",
                     power.unwrap()

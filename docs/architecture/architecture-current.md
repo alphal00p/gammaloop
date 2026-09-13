@@ -483,13 +483,14 @@ The same pattern is now also used for evaluator execution backends:
 summed evaluation, explicit channel evaluation and event metadata. Generated
 LMB basis IDs describe graph routing only. Both amplitudes and cross sections
 use `SamplingChannelBridge` to map each selected unit-cube point into the parent
-frame and evaluate the partition at that raw point. Summed evaluation applies
-`J_c w_c` once per graph result and event before summing; Monte-Carlo evaluation
-retains its selected factor and separate grid probability. Stability rotations
+frame and evaluate the partition at that raw point. Summed and Monte-Carlo
+evaluation apply `J_c w_c` once per graph result and event at native precision,
+before reporting, and retain a separate grid probability. Stability rotations
 act on the resulting mapped point and external frame together.
 
-The existing graph sampling setup retains a nonserialized bridge cache. Process
-warmup constructs it transactionally after numeric masses/externals are ready;
+The existing graph sampling setup retains a nonserialized canonical catalogue,
+compiled programs and native Double/Quad/Arb bridges. Process warmup constructs
+the configured precisions transactionally after numeric masses/externals are ready;
 mutable settings invalidate it and evaluation then requires warmup. Fresh bridge
 construction remains separate for inspection with explicit inputs. Workers clone
 compiled eager score buffers into separate mutexes, while each point borrows
@@ -502,6 +503,17 @@ They retain the auxiliary raw radial variable. Conditional cut/left/right maps
 remain guarded until their geometry and all foreign-channel densities use the
 correct cut data. The old LMB-specific partition implementation is removed.
 Default single-basis routing and obsolete weight settings remain migration work.
+
+A named standalone cut channel accepts `radial_profile="lu_h"`, or its detailed
+table form. Warmup fits a normalized log-logistic proposal to the actual runtime
+LU h-function and compiles its CDF and derivatives alongside that channel's
+proxy program. A positive broad component induces the ordinary raw-radius law
+independently of the cut root. The map inverts the full mixture CDF, and inverse
+density uses the supplied raw radius. Named proposals share registered cut
+geometry without overwriting each other's settings. The largest raised order
+is collected before equivalent cut geometries are deduplicated; this initial
+fit does not optimize derivative envelopes. Physical h and all residue/CT
+derivatives remain unchanged. The profile is rejected on amplitude channels.
 
 Explicit full-rank amplitude E-surfaces populate the production compile context
 from real catalogue equations, masses and external momenta. Ambiguous shifts,
@@ -520,10 +532,22 @@ precision. Components, affine/composed maps, prepared cut records, eager/dual
 evaluations and foreign-density partitions now retain native values throughout.
 Typed numerical errors distinguish unrepresentable derived coordinates/scores
 from invalid original inputs. The implicit root uses the existing native
-safeguarded solver, with callback errors preserved. Production callers still
-bind the f64 bridge; native bindings and original-source stability retry remain
-the next gate before long strongly focused runs. Root localization relative to
-the sampled threshold distance also needs its stronger accuracy certificate.
+safeguarded solver, with callback errors preserved. Production retries rebuild
+maps and foreign densities from the original binary64 cube draw through the
+existing stability stack, with matching improved native external data. A typed
+map failure discards partial values and events before retry. Precise output
+retains native values; ordinary output rejects unrepresentable finite values
+instead of silently zeroing them. Root uncertainty relative to the sampled
+threshold distance and density accuracy still needs its stronger certificate.
+Native reference retry, derived-expression mass evaluation and final outer-grid
+range handling remain separate precision limits.
+The bridge checks the selected forward determinant against its inverse density
+at the actual mapped point. It reuses the selected exact partition score, or
+evaluates only the selected inverse in proxy mode. Warmup assigns one tenth of
+the strictest matching stability-level relative tolerance as its density budget;
+standalone constructors use native square-root epsilon. Failure is a typed
+precision-retry condition. This is numerical proposal consistency, not a
+rigorous enclosure of the physical surface or of floating-point errors.
 
 Physical and Gaussian-reference targets share graph traversal and default-LMB
 routing. Summed reference evaluation aggregates values and raw-frame moments
@@ -534,7 +558,7 @@ which require summation or inverse-selection probabilities for unit normalizatio
 See [the implementation plan](../../ADVANCED_SAMPLING_PLAN.md) for the remaining
 harness and channel milestones, and
 [the LU localization study](../research/advanced_sampling/LU_H_MATCHED_SAMPLING.md)
-for proposed h-matched radial profiles, which are not implemented settings yet.
+for the implemented h-matched profile and its remaining optimization limits.
 
 ### 3.2 Differential event model
 

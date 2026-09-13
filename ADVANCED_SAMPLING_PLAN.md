@@ -125,9 +125,17 @@ of the combined radial-coordinate band is about `9.38e-9` at power 2 and
 `4.44e-6` at power 3; arithmetic cancellation can enlarge it. Native component
 tests alone do not establish production map rescue. The new physical tests
 establish native reconstruction; they do not yet certify root uncertainty
-against the requested signed distance and density accuracy. That certificate,
-native retry in the reference harness, and final adaptive-grid range handling
-remain prerequisites for their corresponding long-run acceptance claims.
+against the requested signed distance and density accuracy. The new bounded
+gate evaluates inverse density at the supplied raw point and checks selected
+forward/inverse density consistency against the requested stability accuracy.
+A deterministic approximate directional root can define a valid proposal even
+when its focus is displaced from the physical surface. After these consistency
+gates and independent physical kite/cut localization checks, proceed with the
+bounded power-2 amplitude measurements and report their focusing accuracy.
+Do not delay those numerical measurements for a formal global enclosure proof,
+or describe them as such a proof. Rigorous true-surface asymptotic claims still
+need a justified physical-root enclosure. Native retry in the reference harness
+and final adaptive-grid range handling remain separate acceptance requirements.
 Structural map errors still fail immediately rather than retrying as numerical
 instability.
 The owner-by-owner migration, root-localization versus density-accuracy criteria,
@@ -162,11 +170,36 @@ physical propagator sets remain distinct from the common output-coordinate
 frame. Proper subspace/complement registration, arbitrary native parents and
 automatic amplitude surface discovery still require work.
 
-LU-h-matched profiles are now part of the goal, with a dedicated independently
-reviewed research note and portable one-dimensional checks. They are proposed
-profiles, not implemented settings or evidence of a GL638 improvement. General
-conditional sides, automatic channel construction, the complete saved-state
-acceptance harness and all-orientation GL638 improvement remain open.
+Named standalone cut channels now accept `radial_profile="lu_h"` and its expert
+table. They inherit actual runtime h settings, compile the fitted log-logistic
+mixture CDF and dual derivatives once, and invert that full normalized mixture.
+The broad component preserves the ordinary raw radial law independently of the
+cut root. Each name retains its own proposal; equivalent physical cut groups
+contribute their largest raised order before geometry deduplication. This
+initial fit does not yet tune a derivative envelope. Physical h, CT weights and
+residue differentiation remain separate from sampling. The new independent
+normalization tests found and corrected existing `poly_left_right_exponential`
+table entries for powers 15 and 16 in both h evaluators; other entries are intact.
+
+The analytic and implicit radial inverses now share a density derivative
+evaluated at the supplied radius. The bridge checks selected forward/inverse
+density consistency with a budget derived from configured stability precision;
+proxy mode needs only the selected inverse. Numerical inconsistency triggers
+native rescue. This practical check does not enclose the true physical root or
+certify arbitrary sub-epsilon floating-point errors.
+
+The X1 validation milestone passes the 177 selected core tests across broad and
+focused runs, both physical/saved-state API regressions, core/API and Python-
+feature test checking, formatting and clippy with no warnings on changed lines.
+The saved-state reference test includes two LU-h profiles on the same cut and
+8192 points per fixture. The detailed evidence and reproduction commands are in
+[the X1 ledger](docs/research/advanced_sampling/LU_H_MATCHED_SAMPLING.md#x1-validation-milestone).
+
+These source changes do not establish a GL638 sampling improvement. Conditional
+sides, physical pinched-root classification, automatic channel construction,
+the complete saved-state acceptance harness and all-orientation GL638 improvement
+remain open. See the independently reviewed
+[LU profile study](docs/research/advanced_sampling/LU_H_MATCHED_SAMPLING.md).
 
 The portable research bundle is in
 [`docs/research/advanced_sampling/README.md`](docs/research/advanced_sampling/README.md).

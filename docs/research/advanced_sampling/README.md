@@ -1,9 +1,10 @@
 # Advanced sampling research archive
 
-This is a portable snapshot of the research supporting
-[ADVANCED_SAMPLING_PLAN.md](../../../ADVANCED_SAMPLING_PLAN.md). These are research
-proposals and recorded arithmetic checks, not an implemented sampling system or
-new GammaLoop integration results.
+This archive contains the research supporting
+[ADVANCED_SAMPLING_PLAN.md](../../../ADVANCED_SAMPLING_PLAN.md), subsequent
+implementation audits, and explicitly labelled numerical evidence. The plan
+records current implementation status; a proposal or arithmetic check alone is
+not evidence that the corresponding production feature works.
 
 ## Reading order and precedence
 
@@ -63,6 +64,8 @@ The small records included here are:
 | [normal_plane_moments.csv](normal_plane_moments.csv) | Analytically normalized model comparisons for a codimension-two singularity |
 | [hard_hz_points.json](hard_hz_points.json) | Frozen inputs and derived geometry for the H/Z approach |
 | [a_star_pullback_points.json](a_star_pullback_points.json) | Frozen actual center, complements and A-star points |
+| [AMPLITUDE_CHECKPOINT06D_SMOKES.json](AMPLITUDE_CHECKPOINT06D_SMOKES.json) | Six all-orientation kite/box smoke runs at a fixed checkpoint; no variance claim |
+| [GL638_CHECKPOINT06D_BASELINE.json](GL638_CHECKPOINT06D_BASELINE.json) | Fresh full-UV baseline, all 936 orientations, six cuts and native registry/reload checks; no sampling improvement claim |
 
 The frozen inputs and equations preserve the numerical setup without requiring
 the original machine. They are not executable acceptance tests. The original

@@ -150,8 +150,10 @@ beta=2 the combined f64 width is about 9.38e-9 for p=2 and 4.44e-6 for p=3.
 Translations/angular reconstruction can add cancellation. This is an arithmetic
 limit, not permission to clip a band.
 
-Root tolerance must also resolve the intended signed distance delta=r-R. A
-fixed `1e-11` energy residual can misalign the density by much more than delta.
+For faithful focusing on the true physical surface, root tolerance must resolve
+the intended signed distance delta=r-R. A fixed `1e-11` energy residual can
+misalign the density by much more than delta. This is a stronger requirement
+than consistency of the actual numerical proposal, distinguished below.
 Reuse `utils/newton_solver.rs` native safeguarded solver, `RadialRootIdentity`
 and precision-carrying `RadialRootDiagnostics`; migrate the sampling solver
 rather than copying its iteration loop. Add a sampling-local accuracy target:
@@ -179,6 +181,121 @@ terms cancel in the wedge product), but exact proposal bookkeeping alone does
 not establish localization on the true physical surface. The mathematical root
 must depend only on direction/context: u may request tighter numerical accuracy,
 not redefine the chart through an uncontrolled u-dependent stopping error.
+
+### Minimum practical proposal-consistency gate
+
+A deterministic numerical root `Rhat(n, context, T)` can itself define a valid
+proposal. Its angular derivatives cancel from the radial determinant whether
+or not it is the exact physical root. A small physical-root displacement then
+changes efficiency and asymptotic alignment, rather than inherently biasing the
+proposal. Keep this root independent of the sampled radial coordinate `u`;
+adapting its numerical stopping rule to `u` without corresponding inverse
+semantics would undermine that simple map definition. Raising the precision
+rebuilds the whole proposal from the original draw as already implemented.
+
+The 13 September audit found an inverse reconstructing coordinates, calling
+forward on them and returning that nearby point's inverse determinant, with
+only a finite coordinate-residual check. Small coordinate errors near a shell
+can still change the density substantially. The bounded correction is:
+
+1. Extend the existing radial inverse owner to return its derivative at the
+   **supplied radius**, using its fixed recovered direction/root/context. Reuse
+   this owner in analytic and implicit charts. Forward reconstruction becomes a
+   checked diagnostic, not the source of an unchecked nearby-point density.
+2. In the canonical bridge forward path compare `J_forward*q_selected` with one
+   at the actual raw point. Map-density partitions already compute the selected
+   inverse log score; reuse it. In proxy mode check only the selected channel's
+   exact inverse, without requiring unrelated foreign inverses or replacing
+   the supplied proxy scores. A failed finite/positive or relative-accuracy check
+   raises the existing typed numerical error and retries the original sample.
+3. Thread a relative-density budget from the configured stability requirement,
+   retaining the stricter budget when the same precision occurs more than once.
+   A native `sqrt(epsilon)` default is suitable for fresh standalone constructors;
+   it is not a replacement for stricter user requests. Compare in log space to
+   avoid overflow of individually representable Jacobian/density factors.
+   The implementation uses `log(1 +/- tau)=+/-2*atanh(tau/(2 +/- tau))`
+   for small budgets. This preserves the budget, but native logarithm rounding
+   still limits what the numerical comparison establishes; it is not an
+   interval proof of arbitrarily sub-epsilon accuracy.
+
+For the signed-distance profile, let `alpha=1-1/p`, `beta>0`, and fix the actual
+inverse radius `r` and root `Rhat`. Its positive radial density is
+
+```
+r < Rhat: q_r = ((Rhat-r)/Rhat)^(-alpha) / [p (Rhat+beta)],
+r > Rhat: z = ((r-Rhat)/beta)^(1/p),
+          q_r = ((r-Rhat)/beta)^(-alpha) / [p (Rhat+beta) (1+z)^2].
+```
+
+The same outer formula at `Rhat=0` preserves the existing rootless power law.
+For `p=1` its ordinary limit is `beta/(beta+r)^2`. Evaluate from the supplied
+signed distance, avoiding a second subtraction of recovered `u` and its split.
+The Cartesian density includes `1/[J_Omega*r^(D-1)]` in the same angular chart.
+A true pole/angle seam keeps its explicit measure-zero convention; a finite band
+of failed arithmetic may never be clipped away or assigned zero support.
+
+Decisive tests are: a reversible wrong-inverse fixture rejected in both density
+and proxy modes; a proxy fixture whose foreign inverse is unavailable but whose
+selected inverse is correct; native reconstruction where Double fails and Quad
+or Arb passes; and the generated kite C surface plus the physical bubble cut at
+representable distances that are small enough to expose normal-density errors.
+For the massive rest kite with k=-l, the C equation is
+`2*sqrt(1+|k|^2)+1-5=0`, giving a six-dimensional radius `sqrt(6)` when the shared
+spatial direction is unit-normalized. Use the actual routed equation, and
+account for the represented direction norm in a high-precision oracle. This
+provides an independent localization check rather than another copy of the map.
+Repeat direct Jacobians, all foreign densities, rotations, and shifted Gaussian
+normalization/moments. After these bounded gates, the power-2 amplitude matrix
+can measure efficiency while reporting near-surface/high-precision comparisons;
+it need not wait for a formal global bounded-weight theorem.
+
+The generated rest-kite gate supplied a concrete numerical check on 13 September:
+with angular cube coordinates `[0.27,0.61,0.39,0.72,0.58]` and `u=s+1e-5`,
+a fresh f64 C bridge measured `log(J*q)=1.553046278e-7`, exceeding its native
+`sqrt(epsilon)=1.490116119e-8` budget although the mapped radius was finite.
+The fixture now requires that typed failure and checks the same original draw
+in Quad. Production bridges use their configured stability-derived budget;
+this fresh-constructor result is not a claim that every production budget fails.
+
+A stronger **rigorous physical-root certificate** still requires reliable
+function enclosures. The smallest addition can use the current safeguarded
+solver for a candidate and prove opposite signs at `Rhat +/- e` using the
+existing physical E-surface owner. No second root solver is needed. Floating
+energy evaluation must supply a justified roundoff enclosure; an arbitrary
+multiple of epsilon, a Newton correction, or agreement between two precisions
+is not by itself a proof. For a certified root interval, bound the radial
+density over that interval at the actual raw point; an interval crossing r
+cannot certify the shell side. Arbitrary callbacks lacking an enclosure retain
+that explicit limitation. This stronger evidence is needed for rigorous
+true-surface asymptotic claims, not to label the preceding numerical measurements
+as measurements of the implemented proposal.
+
+### Smooth LU-h profile cross-check
+
+For X1's full-parent zero-centered cut map, `t=R/r` and
+`q_r=p(t|R)*R/r^2`; equivalently `|dr/du|=r/G_y` for `y=log(t)` and
+`G_y=partial_y G`. The broad scale `a=R/beta` induces the normalized raw floor
+`epsilon*beta/(beta+r)^2`, independent of the root. Positive epsilon therefore
+protects the smooth Gaussian reference's radial variance at the origin and
+infinity; it does not bound physical angular, soft or threshold weights.
+
+With the documented `u=G(t)` convention, broad-only sampling is
+`r=beta*(1-u)/u`. Recognize coincident component quantiles before invoking a
+solver requiring strict endpoint signs. Upper-tail inversion should solve
+`(1-u)-S(t)=0`, whose derivative is positive; solve in log(t) and avoid evaluating
+overflowing inactive formulas. These choices preserve one monotone map and the
+full mixture density, with no latent branch/channel axis.
+
+For log-logistic shape kappa, its log-density derivative in y lies between
+`-kappa-1` and `kappa-1`; the broad component lies between -2 and 0. The mixture
+log derivative is their positive weighted average. Consequently
+`|partial_y log J_K| <= D+max(kappa,1)`. A log-quantile enclosure of width e_y
+bounds determinant variation by `exp((D+max(kappa,1))*e_y)-1`. A scaled CDF
+residual alone is not a uniform quantile/density certificate for arbitrarily
+small user-supplied shape. The direct inverse-density and bridge consistency
+checks apply to this smooth profile too, without inheriting the threshold-seam
+veto. Existing absent/pinched classification remains separate from failed
+numerical root evaluation.
 
 Introduce one typed numerical sampling-error classification at the existing map
 boundary, carrying channel, operation, precision and root/coordinate evidence.

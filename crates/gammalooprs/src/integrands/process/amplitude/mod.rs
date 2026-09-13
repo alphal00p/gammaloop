@@ -614,7 +614,7 @@ impl AmplitudeGraphTerm {
                     sampling_bridge_quad: Default::default(),
                     sampling_bridge_arb: Default::default(),
                     sampling_catalogue: Default::default(),
-                    sampling_proxies: Default::default(),
+                    sampling_programs: Default::default(),
                     lmb_basis_ids: TiVec::new(),
                     graph: graph.graph.clone(), // will be overwritten later,
                     all_bases: TiVec::new(),
@@ -1140,12 +1140,22 @@ impl GraphTerm for AmplitudeGraphTerm {
     fn bind_sampling_bridge<T: FloatLike>(
         &self,
         catalogue: &super::SamplingChannelCatalogue,
-        proxies: &[Option<super::SamplingExpressionEvaluator>],
+        programs: &[super::sampling_selection::SamplingChannelPrograms],
         parameterization_settings: &ParameterizationSettings,
         e_cm: f64,
         external_momenta: &[[T; 4]],
         orientation: Option<usize>,
     ) -> Result<SamplingChannelBridge<T>> {
+        if let Some(channel) = catalogue
+            .named_entries()
+            .find(|channel| channel.definition.radial_profile.is_some())
+        {
+            return Err(eyre!(
+                "sampling channel '{}' for amplitude '{}' requests a LU h profile, but amplitudes have no auxiliary Cutkosky-cut LU scale",
+                channel.name,
+                self.graph.name
+            ));
+        }
         let parent_lmb = self
             .multi_channeling_setup
             .graph
@@ -1365,7 +1375,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.multi_channeling_setup
             .compile_sampling_channel_bridge_with_external(
                 catalogue,
-                proxies,
+                programs,
                 &context,
                 external_momenta,
             )
@@ -3262,13 +3272,68 @@ parent_lmb = [4,6]
             unreachable!("generated an amplitude")
         };
         let term = integrand.data.graph_terms.first_mut().unwrap();
+        assert_eq!(term.production_orientation_keys.len(), 18);
         let parameterization = settings.sampling.get_parameterization_settings().unwrap();
+        // Amplitudes have no auxiliary LU variable even if supplied an h
+        // configuration; the same profile spelling must reject here explicitly.
+        for (around, diagnostic) in [
+            (
+                "surface(2,4,6)",
+                "radial_profile=lu_h requires standalone phase_space(cut(...))",
+            ),
+            (
+                "phase_space(cut(2,4,6))",
+                "amplitudes have no auxiliary Cutkosky-cut LU scale",
+            ),
+        ] {
+            let mut invalid_lu = parameterization.clone();
+            let definition = invalid_lu
+                .sampling_channels
+                .channel_definitions
+                .get_mut("massive_kite")
+                .unwrap()
+                .values_mut()
+                .next()
+                .unwrap();
+            definition.around = around.to_owned();
+            definition.radial_profile = Some(Default::default());
+            // This rejection compiles the eager profile before binding its
+            // physical host, so use the same development-build stack allowance
+            // as the isolated LU-profile compilation tests.
+            let error = std::thread::scope(|scope| {
+                let term = &mut *term;
+                let lu_h_function = &settings.lu_h_function;
+                std::thread::Builder::new()
+                    .stack_size(64 * 1024 * 1024)
+                    .spawn_scoped(scope, move || {
+                        term.compile_sampling_bridge(
+                            &invalid_lu,
+                            5.0,
+                            &[[5.0, 0.0, 0.0, 0.0]; 2],
+                            lu_h_function,
+                            None,
+                        )
+                        .unwrap_err()
+                        .to_string()
+                    })
+                    .unwrap()
+                    .join()
+                    .unwrap()
+            });
+            assert!(error.contains(diagnostic), "{error}");
+        }
         let coordinates = [0.19, 0.27, 0.61, 0.39, 0.72, 0.58];
         let mut rest_point = Vec::new();
 
         for external in [[5.0, 0.0, 0.0, 0.0], [26.0_f64.sqrt(), 0.0, 0.0, 1.0]] {
             let externals = [external; 2];
-            let bridge = term.compile_sampling_bridge(&parameterization, 5.0, &externals, None)?;
+            let bridge = term.compile_sampling_bridge(
+                &parameterization,
+                5.0,
+                &externals,
+                &settings.lu_h_function,
+                None,
+            )?;
             let cached = term
                 .multi_channeling_setup
                 .sampling_bridge::<f64>()?
@@ -3378,17 +3443,80 @@ parent_lmb = [4,6]
             }
             let mut near_shell = coordinates;
             near_shell[0] = split + 1.0e-5;
-            let mapped = bridge.forward(SamplingChannelId(0), &near_shell)?;
+            // This binary64 draw has a representable radius but insufficient
+            // normal-density accuracy in Double. Keep the strict bridge guard
+            // and establish the same physical localization at Quad precision.
+            if external[3] == 0.0 {
+                let error = bridge
+                    .forward(SamplingChannelId(0), &near_shell)
+                    .unwrap_err();
+                assert!(matches!(error.downcast_ref::<crate::integrands::process::sampling_maps::SamplingEvaluationError>(),
+                    Some(crate::integrands::process::sampling_maps::SamplingEvaluationError::Unrepresentable {
+                        operation: "sampling inverse density consistency", ..
+                    })));
+            }
+            use crate::utils::QuadFloat;
+            let quad_bridge = term.compile_sampling_bridge(
+                &parameterization,
+                5.0,
+                &[external.map(|value| F::<QuadFloat>::from_f64(value).0); 2],
+                &settings.lu_h_function,
+                None,
+            )?;
+            let mapped = quad_bridge.forward(
+                SamplingChannelId(0),
+                &near_shell.map(QuadFloat::from_f64_exact_binary),
+            )?;
             let mapped_radius = mapped
                 .raw_coordinates
                 .iter()
-                .map(|x| x * x)
-                .sum::<f64>()
-                .sqrt();
+                .map(|x| F(*x).square())
+                .fold(F::<QuadFloat>::default(), |sum, value| sum + value)
+                .sqrt()
+                .into_ff64()
+                .0;
             assert!(
                 physical_surface(mapped_radius).abs() < 1.0e-7,
                 "production surface profile must focus on the real C equation"
             );
+
+            // Both sides must approach the independently routed physical
+            // threshold with the intended square-root radial determinant.
+            let angular = coordinates[2..].iter().enumerate().fold(
+                std::f64::consts::TAU,
+                |jacobian, (i, u)| {
+                    jacobian * 2.0 * (1.0 - (2.0 * u - 1.0).powi(2)).sqrt().powi(3 - i as i32)
+                },
+            );
+            let beta = 5.0 * parameterization.b;
+            for side in [-1.0, 1.0] {
+                for offset in [1.0e-2, 2.0e-3, 4.0e-4] {
+                    let mut cube = coordinates;
+                    cube[0] = split + side * offset;
+                    let point = bridge.forward(SamplingChannelId(0), &cube)?;
+                    let r = point
+                        .raw_coordinates
+                        .iter()
+                        .map(|v| v * v)
+                        .sum::<f64>()
+                        .sqrt();
+                    let delta = r - root;
+                    assert!(side * delta > 0.0 && side * physical_surface(r) > 0.0);
+                    let radial = point.map.jacobian / (angular * r.powi(5));
+                    let expected = if delta < 0.0 {
+                        2.0 * (root + beta) * (-delta / root).sqrt()
+                    } else {
+                        2.0 * (root + beta)
+                            * (delta / beta).sqrt()
+                            * (1.0 + (delta / beta).sqrt()).powi(2)
+                    };
+                    assert!((radial / expected - 1.0).abs() < 1.0e-7);
+                    let inverse = bridge.inverse(SamplingChannelId(0), &point.raw_coordinates)?;
+                    assert!(
+                        (point.map.jacobian * inverse.map.inverse_jacobian - 1.0).abs() < 1.0e-7
+                    );
+                }
+            }
 
             let step = 1.0e-5;
             let mut matrix = vec![vec![0.0; 6]; 6];
@@ -3412,8 +3540,13 @@ parent_lmb = [4,6]
         // Below threshold, at the pinch, and with no negative-shift member,
         // the same canonical channel retains its normalized full-space map.
         for external in [[2.0, 0.0, 0.0, 0.0], [3.0, 0.0, 0.0, 0.0], [0.0; 4]] {
-            let bridge =
-                term.compile_sampling_bridge(&parameterization, 5.0, &[external; 2], None)?;
+            let bridge = term.compile_sampling_bridge(
+                &parameterization,
+                5.0,
+                &[external; 2],
+                &settings.lu_h_function,
+                None,
+            )?;
             assert!(matches!(
                 bridge.channels()[0].map,
                 CompiledSamplingMap::Surface(_)
@@ -3427,7 +3560,13 @@ parent_lmb = [4,6]
         let externals = [[5.0, 0.0, 0.0, 0.0]; 2];
         model.get_parameter_mut("mass_scalar_1")?.value = Some(Complex::new_re(F(2.0)));
         term.warm_up(&settings, &model)?;
-        let bridge = term.compile_sampling_bridge(&parameterization, 5.0, &externals, None)?;
+        let bridge = term.compile_sampling_bridge(
+            &parameterization,
+            5.0,
+            &externals,
+            &settings.lu_h_function,
+            None,
+        )?;
         assert!(
             matches!(bridge.channels()[0].map, CompiledSamplingMap::Surface(_)),
             "rewarming after a mass update must invalidate the old physical surface"
@@ -3440,18 +3579,30 @@ parent_lmb = [4,6]
             (vec![[f64::NAN; 4]; 2], "finite external"),
         ] {
             assert!(
-                term.compile_sampling_bridge(&parameterization, 5.0, &momenta, None)
-                    .unwrap_err()
-                    .to_string()
-                    .contains(diagnostic)
+                term.compile_sampling_bridge(
+                    &parameterization,
+                    5.0,
+                    &momenta,
+                    &settings.lu_h_function,
+                    None
+                )
+                .unwrap_err()
+                .to_string()
+                .contains(diagnostic)
             );
         }
         let cached_masses = term.real_mass_vec.take();
         assert!(
-            term.compile_sampling_bridge(&parameterization, 5.0, &externals, None)
-                .unwrap_err()
-                .to_string()
-                .contains("warmup mass data")
+            term.compile_sampling_bridge(
+                &parameterization,
+                5.0,
+                &externals,
+                &settings.lu_h_function,
+                None
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("warmup mass data")
         );
         term.real_mass_vec = cached_masses;
         assert!(
@@ -3459,6 +3610,7 @@ parent_lmb = [4,6]
                 &parameterization,
                 5.0,
                 &[[125.0_f64.sqrt(), 0.0, 0.0, 10.0]; 2],
+                &settings.lu_h_function,
                 None,
             )
             .unwrap_err()
@@ -3476,10 +3628,16 @@ parent_lmb = [4,6]
             .edge_signatures[EdgeIndex(6)]
         .internal = [1_isize, 1].into_iter().collect();
         assert!(
-            term.compile_sampling_bridge(&parameterization, 5.0, &externals, None)
-                .unwrap_err()
-                .to_string()
-                .contains("same cycles")
+            term.compile_sampling_bridge(
+                &parameterization,
+                5.0,
+                &externals,
+                &settings.lu_h_function,
+                None
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("same cycles")
         );
         term.multi_channeling_setup.graph.loop_momentum_basis = master_lmb;
         for (around, subspace, diagnostic) in [
@@ -3498,10 +3656,16 @@ parent_lmb = [4,6]
             definition.around = around.into();
             definition.subspace_lmb = subspace;
             assert!(
-                term.compile_sampling_bridge(&invalid, 5.0, &externals, None)
-                    .unwrap_err()
-                    .to_string()
-                    .contains(diagnostic)
+                term.compile_sampling_bridge(
+                    &invalid,
+                    5.0,
+                    &externals,
+                    &settings.lu_h_function,
+                    None
+                )
+                .unwrap_err()
+                .to_string()
+                .contains(diagnostic)
             );
         }
         // The CFF cache includes positive and negative shifts; only conflicting
@@ -3525,7 +3689,13 @@ parent_lmb = [4,6]
         }
         term.esurfaces.push(conflicting);
         let error = term
-            .compile_sampling_bridge(&parameterization, 5.0, &externals, None)
+            .compile_sampling_bridge(
+                &parameterization,
+                5.0,
+                &externals,
+                &settings.lu_h_function,
+                None,
+            )
             .unwrap_err()
             .to_string();
         assert!(
@@ -3607,7 +3777,7 @@ parent_lmb = [4,6]
             assert!(setup.sampling_bridge::<QuadFloat>().is_ok());
             assert!(setup.sampling_bridge::<crate::utils::ArbPrec>().is_err());
             let catalogue = setup.sampling_catalogue.as_ref().unwrap() as *const _ as usize;
-            let proxies = setup.sampling_proxies.as_ref().unwrap() as *const _ as usize;
+            let programs = setup.sampling_programs.as_ref().unwrap() as *const _ as usize;
             runtime.prepare_sampling_precision::<crate::utils::ArbPrec>()?;
             let setup = &runtime.data.graph_terms[0].multi_channeling_setup;
             assert_eq!(
@@ -3615,10 +3785,61 @@ parent_lmb = [4,6]
                 catalogue
             );
             assert_eq!(
-                setup.sampling_proxies.as_ref().unwrap() as *const _ as usize,
-                proxies
+                setup.sampling_programs.as_ref().unwrap() as *const _ as usize,
+                programs
             );
             assert!(setup.sampling_bridge::<crate::utils::ArbPrec>().is_ok());
+            // Compare the very same binary draw in Quad and Arb, evaluating
+            // C independently at both resulting momenta before any narrowing.
+            // This checks localization/density numerically, not a root enclosure.
+            use crate::utils::ArbPrec;
+            let one = F::<ArbPrec>::default().one();
+            let eta = |point: &[ArbPrec]| {
+                let energy = |vectors: &[&[ArbPrec]]| {
+                    (one.clone()
+                        + (0..3)
+                            .map(|i| {
+                                vectors
+                                    .iter()
+                                    .fold(one.zero(), |sum, vector| sum + F(vector[i].clone()))
+                                    .square()
+                            })
+                            .fold(one.zero(), |sum, square| sum + square))
+                    .sqrt()
+                };
+                energy(&[&point[..3]])
+                    + energy(&[&point[3..]])
+                    + energy(&[&point[..3], &point[3..]])
+                    - one.from_i64(5)
+            };
+            for sign in [-1.0, 1.0] {
+                let mut cube = seam_coordinates.unwrap();
+                cube[0] -= if sign < 0.0 { 2.0e-10 } else { 0.0 };
+                let quad = setup.sampling_bridge::<QuadFloat>()?.forward(
+                    SamplingChannelId(0),
+                    &cube.map(QuadFloat::from_f64_exact_binary),
+                )?;
+                let arb = setup.sampling_bridge::<ArbPrec>()?.forward(
+                    SamplingChannelId(0),
+                    &cube.map(ArbPrec::from_f64_exact_binary),
+                )?;
+                let quad_point = quad
+                    .raw_coordinates
+                    .iter()
+                    .map(|v| F(*v).higher().0)
+                    .collect_vec();
+                let eta_quad = eta(&quad_point);
+                let eta_arb = eta(&arb.raw_coordinates);
+                assert!(eta_arb.clone().into_ff64().0 * sign > 0.0);
+                assert!(((&eta_quad / &eta_arb - &one).abs()).into_ff64().0 < 1.0e-6);
+                // Foreign scores must be evaluated at this common supplied
+                // Quad point, rather than at the nearby Arb forward point.
+                let arb_inverse = setup
+                    .sampling_bridge::<ArbPrec>()?
+                    .inverse(SamplingChannelId(0), &quad_point)?;
+                let ratio = F(quad.map.jacobian).higher() * F(arb_inverse.map.inverse_jacobian);
+                assert!((ratio - &one).abs().into_ff64().0 < 1.0e-6);
+            }
         }
         // Reuse the generated amplitude at fixed raw momenta, so this range
         // regression is independent of a focused map or root certificate.

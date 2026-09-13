@@ -425,18 +425,39 @@ The decisive tests are:
 
 ## Bounded X1 implementation decision (2026-09-13)
 
-This section specifies the next implementation slice; these controls are not
-implemented yet. X1 changes the auxiliary radial proposal for the existing
+This section records the implemented X1 design. X1 changes the auxiliary radial
+proposal for the existing
 full-parent, zero-centered `phase_space(cut(...))` map. Conditional side maps,
 threshold-distance focusing certificates, exact h CDFs, and automatic channel
 discovery remain separate work.
 
 Use the simple `radial_profile="lu_h"` spelling and an equivalent table with
-`kind="lu_h"`, `broad_fraction` (default 0.02), and optional positive `scale`
+`kind="lu_h"`, `approximation="log_logistic"`, `broad_fraction` (default 0.02),
+and optional positive `scale`
 and `shape` overrides. The scale and shape affect the proposal alone. Omission
 of `radial_profile` retains the existing signed-distance power profile. A LU-h
 profile replaces that power transformation entirely; it must not inherit its
 `power != 1 && r == R` seam rejection, since r=R is a regular point here.
+
+For the generated one-loop `sampling_cut_bubble` acceptance fixture, a complete
+selection can mix its cut proposal with ordinary optimized LMB channels:
+
+```toml
+[sampling]
+sampling_multichanneling = true
+sampling_channel_weight = "map_density"
+default_channel_selection = ["matched", "auto:optimized_lmb"]
+
+[sampling.channel_definitions.sampling_cut_bubble.matched]
+around = "phase_space(cut(1,2))"
+parent_lmb = [1]
+subspace_lmb = [1]
+radial_profile = "lu_h"
+```
+
+Use the loaded graph's name and actual cut/parent edges in other states. The
+current explicit surface/cut compiler requires `subspace_lmb` even for the full
+parent space. Sampling a named cut still evaluates every physical cut and CT.
 
 The focused component is the fitted log-logistic law above for the two
 polynomial families. For `exponential`, start with the endpoint-safe rational
@@ -544,3 +565,70 @@ all sampling factors remain outside h_dual/residue differentiation.
 - Only then run a fixed-budget GL638 A/B pilot. This can improve auxiliary radial
   variance or rescue cost; it does not change the H/Z shape singularity and
   does not establish bounded GL638 weights.
+
+
+### Existing h normalization defect found by the X1 acceptance gate
+
+The independent log-coordinate quadrature and raised-derivative IBP test found
+an existing coefficient error in **both** `utils::h` and `utils::h_dual` for
+`poly_left_right_exponential` powers 15 and 16. For the dimensionless integral
+
+```
+I_p = integral_0^infinity x^(-p) exp(2-x-1/x) dx
+    = 2 exp(2) K_(p-1)(2),
+I_(p+1) = I_(p-1) + (p-1) I_p,
+```
+
+integration by parts gives the displayed recurrence independently of the
+sampling map. A 65,536-panel trapezoidal integral in `y=log(x)` on `[-8,8]`
+and recurrence from the independently normalized p=0,1 coefficients agree:
+
+| Power | Correct dimensionless normalization | Previous coefficient | Previous integral of h |
+|---|---:|---:|---:|
+| 15 | 42615550453.14143 | 9040742057760.125 (belongs to p=17) | 0.004713722632597659 |
+| 16 | 599875100487.1322 | 145251748024649.12 (belongs to p=18) | 0.004129899355051712 |
+
+Both scalar and dual tables now use the corrected coefficients; the test's
+normalization and derivative assertions remain unchanged. The derivative
+relations already held with the erroneous common normalization, which is why
+checking IBP alone would miss this defect. This changes the physical LU weight
+for those two previously misnormalized choices. GL638's baseline
+`poly_exponential`, power 3 is unaffected. To reproduce the independent
+quadrature, sum `exp((1-p)*y + 2-exp(y)-exp(-y))*dy` with half endpoint weights;
+this requires neither the production h implementation nor its sampler.
+
+### X1 validation milestone
+
+On 2026-09-13 the 177 selected core tests passed across the broad run and the
+focused rerun of the corrected kite fixture. They cover native Double/Quad/Arb
+profiles, independent Cartesian determinants, simple and raised physical cuts,
+h normalization and derivative integrals, and selected inverse-density rescue.
+The kite checks retain all 18 orientations and test physical localization on
+both sides of the threshold; a failing Double consistency check is rescued using
+the same original draw in Quad, rather than relaxing the tolerance.
+
+Both API regressions pass: summed/explicit physical channel agreement and
+saved/reloaded Gaussian normalization and moments. The latter evaluates 8192
+points per fixture, including two LU-h profiles sharing one physical cut, and
+took 103.313 seconds in the unoptimized build. Its explicit five-minute nextest
+timeout accommodates that work without changing its acceptance tolerances.
+Core/API test checking, Python-feature test checking, formatting and clippy
+also pass; clippy reports no warnings on changed lines. Python-feature checking
+is a compilation gate, not a Python subprocess end-to-end run.
+
+Focused reproduction commands (after loading the development environment and
+Symbolica license):
+
+```sh
+cargo nextest run -p gammalooprs --lib --retries 0 -E 'test(lu_h) | test(bridge_certifies_selected_inverse_density) | test(generated_kite_sampling_uses_physical_six_dimensional_surfaces) | test(standalone_cut_sampling_compiles_from_production_cut_and_mass_data) | test(generalized_raised_cross_section_covers_derivative_components_and_roundtrips)'
+cargo nextest run -p gammaloop-api --lib --retries 0 -E 'test(saved_generated_process_runs_reference_acceptance_after_reload)'
+cargo check -p gammaloop-api --features python_api --tests
+```
+
+The optimized GL638 comparison has not yet run. Its matched controls must use
+the same new binary, all 936 orientations and the unchanged physical CT setup.
+Compare ordinary full-parent cut charts with LU-h cut charts as well as the
+six-LMB control: changing the angular chart together with the radial law would
+otherwise obscure the source of any gain. Single-orientation smoke runs are
+development checks only. The new optional profile is part of serialized named
+channel definitions; compatibility with older saved definitions is not promised.
