@@ -20,6 +20,14 @@ coverage. Physical directional E-surface maps, prepared cross-section `t*`
 context construction, and final old standalone-integrand removal remain open
 milestones.
 
+A bounded `product(...)` compiler is now available as one canonical channel
+entry when its `lmb(...)`/`complement(...)` blocks, and at most one explicit
+surface block, form a disjoint cover of the parent LMB. Each block is compiled
+in its local dimension and embedded by an explicit parent-frame permutation.
+Ordered conditional `then(...)` compilation, multiple per-child surface
+metadata, and prepared cut maps remain guarded until their context and
+partition-density contracts are complete.
+
 The first process-level acceptance probe now integrates a normalized Gaussian
 through the canonical compiled bridge and checks the map partition. The full
 amplitude/cross-section saved-state harness, moments, absent/pinched branches,
