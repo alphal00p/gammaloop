@@ -302,6 +302,108 @@ pub trait SamplingMapComponent: std::fmt::Debug {
     fn inverse(&self, point: &[f64], context: &[f64]) -> Result<SamplingMapEvaluation>;
 }
 
+/// Report from integrating a normalized Gaussian through one sampling map.
+///
+/// This is intentionally independent of a process integrand. It exercises the
+/// map's complete unit-cube-to-raw push-forward and its exact Jacobian, making
+/// it suitable for acceptance tests of ordinary, surface and composed maps.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SamplingMapAcceptanceReport {
+    pub sample_count: usize,
+    pub finite_sample_count: usize,
+    pub normalization: f64,
+    pub normalization_stderr: f64,
+    pub jacobian_min: f64,
+    pub jacobian_max: f64,
+}
+
+impl SamplingMapAcceptanceReport {
+    pub fn normalized_gaussian(
+        map: &dyn SamplingMapComponent,
+        sample_count: usize,
+        width: f64,
+        center: &[f64],
+    ) -> Result<Self> {
+        if sample_count == 0 {
+            return Err(eyre!(
+                "sampling acceptance harness needs at least one sample"
+            ));
+        }
+        if !width.is_finite() || width <= 0.0 {
+            return Err(eyre!(
+                "sampling acceptance Gaussian width must be positive and finite"
+            ));
+        }
+        if center.len() != map.output_dimensions() {
+            return Err(eyre!(
+                "sampling acceptance Gaussian has dimension {}, expected {}",
+                center.len(),
+                map.output_dimensions()
+            ));
+        }
+        if center.iter().any(|component| !component.is_finite()) {
+            return Err(eyre!("sampling acceptance Gaussian centre must be finite"));
+        }
+        let dimension = map.output_dimensions() as f64;
+        let gaussian_normalization =
+            (2.0 * std::f64::consts::PI * width * width).powf(-0.5 * dimension);
+        let mut report = Self {
+            sample_count,
+            finite_sample_count: 0,
+            normalization: 0.0,
+            normalization_stderr: 0.0,
+            jacobian_min: f64::INFINITY,
+            jacobian_max: f64::NEG_INFINITY,
+        };
+        let mut square_sum = 0.0;
+        for sample in 1..=sample_count {
+            let coordinates = (0..map.dimensions())
+                .map(|dimension| halton(sample, prime(dimension)))
+                .collect::<Vec<_>>();
+            let evaluation = map.forward(&coordinates, &[])?;
+            let value = evaluation
+                .point
+                .iter()
+                .zip(center)
+                .map(|(point, centre)| (point - centre).powi(2))
+                .sum::<f64>();
+            let weight =
+                gaussian_normalization * (-0.5 * value / width.powi(2)).exp() * evaluation.jacobian;
+            report.jacobian_min = report.jacobian_min.min(evaluation.jacobian);
+            report.jacobian_max = report.jacobian_max.max(evaluation.jacobian);
+            if !weight.is_finite() {
+                continue;
+            }
+            report.finite_sample_count += 1;
+            report.normalization += weight;
+            square_sum += weight * weight;
+        }
+        if report.finite_sample_count > 0 {
+            let count = report.finite_sample_count as f64;
+            report.normalization /= count;
+            report.normalization_stderr =
+                ((square_sum / count - report.normalization.powi(2)).max(0.0) / count).sqrt();
+        }
+        Ok(report)
+    }
+}
+
+fn prime(index: usize) -> u64 {
+    const PRIMES: [u64; 16] = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53];
+    PRIMES.get(index).copied().unwrap_or(59 + 2 * index as u64)
+}
+
+fn halton(mut index: usize, base: u64) -> f64 {
+    let mut fraction = 1.0;
+    let mut value = 0.0;
+    while index > 0 {
+        fraction /= base as f64;
+        value += fraction * (index as u64 % base) as f64;
+        index /= base as usize;
+    }
+    value
+}
+
 /// A block-triangular composition of graph-independent map components.
 ///
 /// Products split both input and output blocks and multiply the exact child
@@ -1581,5 +1683,16 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("received output dimension 2, expected 1"));
+    }
+
+    #[test]
+    fn generic_acceptance_harness_checks_normalized_surface_map() {
+        let map = SurfaceRadialMap::absent(3, vec![0.0; 3], 2.0, 1.0).unwrap();
+        let report =
+            SamplingMapAcceptanceReport::normalized_gaussian(&map, 4096, 1.5, &[0.0, 0.0, 0.0])
+                .unwrap();
+        assert_eq!(report.finite_sample_count, report.sample_count);
+        assert!((report.normalization - 1.0).abs() < 2.0e-2);
+        assert!(report.normalization_stderr.is_finite());
     }
 }

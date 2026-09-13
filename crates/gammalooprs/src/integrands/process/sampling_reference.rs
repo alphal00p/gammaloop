@@ -42,7 +42,7 @@ pub struct ReferenceSamplingReport {
 }
 
 impl ReferenceSamplingReport {
-    pub(crate) fn from_evaluations(
+    pub fn from_evaluations(
         evaluations: impl IntoIterator<Item = ReferenceSampleEvaluation>,
         reference: &GaussianReferenceFunction,
     ) -> Self {
@@ -92,8 +92,8 @@ impl ReferenceSamplingReport {
             moment_square_sum += moment * moment;
         }
 
-        if report.sample_count > 0 {
-            let count = report.sample_count as f64;
+        if report.finite_sample_count > 0 {
+            let count = report.finite_sample_count as f64;
             report.normalization = normalization_sum;
             report.normalization_squared = normalization_square_sum;
             report.normalization_stderr =
