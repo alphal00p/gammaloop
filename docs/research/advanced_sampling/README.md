@@ -66,6 +66,9 @@ The small records included here are:
 | [a_star_pullback_points.json](a_star_pullback_points.json) | Frozen actual center, complements and A-star points |
 | [AMPLITUDE_CHECKPOINT06D_SMOKES.json](AMPLITUDE_CHECKPOINT06D_SMOKES.json) | Six all-orientation kite/box smoke runs at a fixed checkpoint; no variance claim |
 | [GL638_CHECKPOINT06D_BASELINE.json](GL638_CHECKPOINT06D_BASELINE.json) | Fresh full-UV baseline, all 936 orientations, six cuts and native registry/reload checks; no sampling improvement claim |
+| [AMPLITUDE_X1_KITE_MATRIX.md](AMPLITUDE_X1_KITE_MATRIX.md), [data](AMPLITUDE_X1_KITE_MATRIX.json) | All-18-orientation normalized-reference and three-seed physical comparison; mixed channels improve the real-component pilot, surface alone worsens it |
+| [AMPLITUDE_X1_DOUBLE_BOX_MATRIX.md](AMPLITUDE_X1_DOUBLE_BOX_MATRIX.md), [data](AMPLITUDE_X1_DOUBLE_BOX_MATRIX.json) | All-98-orientation reference and three-seed physical comparison; gains depend on the selected complex component |
+| [GL638_X1_PILOT.md](GL638_X1_PILOT.md), [data](GL638_X1_PILOT.json) | All-936-orientation, full-UV, 20-core matched radial pilot; no consistent three-seed LU-h gain |
 
 The frozen inputs and equations preserve the numerical setup without requiring
 the original machine. They are not executable acceptance tests. The original

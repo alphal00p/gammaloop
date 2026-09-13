@@ -48,12 +48,24 @@ impl<T: FloatLike> ReferenceMoments<T> {
         self.jacobian_max = self.jacobian_max.max(other.jacobian_max);
     }
 
-    pub(crate) fn into_f64(self) -> ReferenceMoments<f64> {
-        ReferenceMoments {
-            second_moment: self.second_moment.into_ff64(),
+    pub(crate) fn try_into_f64(self) -> Result<ReferenceMoments<f64>> {
+        let narrowed = self.second_moment.into_ff64();
+        if !self.second_moment.0.is_finite()
+            || !narrowed.0.is_finite()
+            || (narrowed == narrowed.zero() && self.second_moment != self.second_moment.zero())
+            || !self.jacobian_min.is_finite()
+            || !self.jacobian_max.is_finite()
+        {
+            return Err(eyre!(
+                "native reference moment {} or its Jacobian diagnostics cannot be represented by the f64 acceptance reporting boundary",
+                self.second_moment
+            ));
+        }
+        Ok(ReferenceMoments {
+            second_moment: narrowed,
             jacobian_min: self.jacobian_min,
             jacobian_max: self.jacobian_max,
-        }
+        })
     }
 }
 
@@ -242,6 +254,9 @@ impl GaussianReferenceFunction {
             distance_squared += dx.square() + dy.square() + dz.square();
         }
         let exponent = -distance_squared / (two * width_squared);
+        // Native map rescue does not certify arbitrarily small Gaussian tails:
+        // this existing body may underflow before weighting. Log-domain reference
+        // weighting and heavier-tailed normalized probes remain separate work.
         Ok(normalization * F(exponent.0.exp()))
     }
 }
@@ -252,6 +267,37 @@ mod tests {
     use crate::integrands::evaluation::EvaluationResult;
     use crate::momentum::ThreeMomentum;
     use spenso::algebra::complex::Complex;
+
+    #[test]
+    fn native_reference_moments_reject_loss_at_reporting_boundary() {
+        use crate::utils::ArbPrec;
+        let one = F::<ArbPrec>::default().one();
+        for exponent in [-400, 400] {
+            let moments = ReferenceMoments {
+                second_moment: one.from_i64(10).powi(exponent),
+                jacobian_min: 1.0,
+                jacobian_max: 1.0,
+            };
+            assert!(!moments.second_moment.is_nan() && !moments.second_moment.is_infinite());
+            assert!(
+                moments
+                    .try_into_f64()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("f64 acceptance reporting boundary")
+            );
+        }
+        for second_moment in [one.zero(), one.from_i64(10).powi(-200), one.clone()] {
+            let moments = ReferenceMoments {
+                second_moment: second_moment.clone(),
+                jacobian_min: 0.5,
+                jacobian_max: 2.0,
+            }
+            .try_into_f64()
+            .unwrap();
+            assert_eq!(moments.second_moment, second_moment.into_ff64());
+        }
+    }
 
     #[test]
     fn centered_gaussian_is_normalized_at_the_origin() {

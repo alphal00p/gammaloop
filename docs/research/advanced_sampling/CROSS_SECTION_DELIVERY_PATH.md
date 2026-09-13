@@ -14,8 +14,9 @@ surfaces and standalone full-parent `phase_space(cut(...))` are implemented.
 The common native-precision migration landed in `882f80eb0`: physical amplitude
 and cut tests rescue maps and foreign densities from original inputs through the
 existing stability stack, including improved native external data. Root/density
-accuracy certification, native reference retry and outer-grid range handling
-remain separate limits; the migration alone does not authorize all strongly
+accuracy certification and outer-grid range handling remain separate limits;
+native reference retry is now implemented, with Gaussian-body underflow still
+requiring separate treatment; the migration alone does not authorize all strongly
 concentrated long-run claims. See
 [the precision audit](SAMPLING_PRECISION_RESCUE.md).
 
@@ -30,6 +31,19 @@ The first useful GL638 H target is **another cut equation evaluated on cut 1**,
 not a generated threshold CT of cut 1. H must therefore come from the full
 physical energy-equation catalogue, independently of the threshold CT registry.
 Only an explicit CT-star target requires a CT variant and its overlap centers.
+
+The production threshold owner already copies its left/right equations from the
+global CFF surface cache and evaluates them on the solved, rescaled host sample.
+Its subspace evaluator splits the same equation into active energies and a shift
+containing every fixed/complement energy. For target H and host C, at the host
+root this gives `eta_H = sum(H minus C) E - sum(C minus H) E + chi_H - chi_C`,
+with multiplicities retained. Cross-section ST candidates built from the same
+initial-state cut have identical external-shift lists, so the last difference
+vanishes structurally, including in boosted alternate frames. Keep the complete
+global equation in the generic map; using only the target-side boundary energies
+would omit the negative host-cut energy shift. X2 tests must compare the global
+equation, existing subspace evaluator and independent boundary-energy difference
+on the actual host root before checking the map determinant.
 
 ## One explicit host/frame and per-child block representation
 
@@ -77,6 +91,16 @@ The H map operates in prepared p and returns raw p, with the factor `t*^-3`.
 Current production still requires the graph's own full parent; supporting this
 native alternative parent is a shared frame-binding extension, not a GL exception.
 
+Keep the affine external shift when changing the LU parent. If the native
+coordinates are `L = A K + B Q`, while physical LU rescales the generation-parent
+coordinates `K` at fixed external data Q, then the prepared native coordinates
+are `A(t* K) + B Q = t* L + (1-t*) B Q`. They are not generally `t* L`.
+Construct this frame from the actual prepared LU sample through the existing
+affine LMB owner. The inverse active volume factor remains `t*^-3` per loop,
+but its center includes the shift. A rest-frame GL638 test can hide the omitted
+term; add a boosted-external, alternate-parent regression before claiming that
+the conditional host works in arbitrary external kinematics.
+
 For a general cut plus both sides, the corresponding structure is
 `then(block(lmb(cut_coordinates...), phase_space(cut(...))),
 block(lmb(left_coordinates...), left(surface(...))),
@@ -99,6 +123,41 @@ cut. Recorded GL638 cut 1 has edges `(2,6,10)`; resolve and validate that identi
 against the loaded graph before exporting an ID. A restriction must agree with
 the explicit/inherited host; it never silently changes the target frame.
 
+### Shared implementation boundary for X2
+
+Extend the existing Symbolica AST and compile traversal once. Each block exposes
+its qualified target, complete native parent, active edges, ordered preceding
+edges and remaining edges to both graph binding and compilation. The geometry
+registry key includes that qualified target (host and optional side), the routed
+native parent and canonical active edges. This prevents collisions between equal
+energy-edge selectors on different cut hosts or cycles. It migrates the existing
+registry; it is not a second catalogue. Named channels remain distinct proposals.
+
+The existing map embedding prepares a conditional affine transformation from
+actual preceding raw coordinates. It returns the physical preceding coordinates
+and the active physical-to-raw affine map. Forward and every foreign inverse
+prepare independently at their supplied point. Multiply forward determinants by
+the affine determinant and divide inverse densities by it. Dependence on preceding
+coordinates occupies the off-diagonal block of the ordered Jacobian; later
+unsampled dependencies must be excluded by exact signed routing, including every
+fixed-energy term. Do not assume the right side was sampled before the left.
+
+Wrap the complete compiled native map in the existing native-to-master affine
+owner. Generalize that owner to wrap any compiled map rather than retaining an
+LMB-only numerical path. One unique cut block/profile per channel is the first
+scope cap; its LU-h profile uses the actual host h and raised order. A direct
+`at_cut` target can instead infer an ordinary complement block when its routing
+certificate permits it.
+
+The earlier test-only complete prepared-sample handoff cannot describe unsampled
+active coordinates. Migrate its validation responsibilities to the immutable
+qualified block and the existing context-affine preparation boundary. Retain or
+reshape the prepared-cut record only for actual fixed/cut data needed there;
+never fill a supposedly complete physical sample with guessed zeros or keep two
+permanent preparation engines. Preserve its native-precision, invalid-t*, host
+identity and foreign-context checks in production tests. Proven spectator values
+may be represented algebraically without claiming they were sampled.
+
 ## Prioritized owner and test matrix
 
 | Slice | Existing owners and bounded deliverable | Decisive tests and scope cap |
@@ -118,6 +177,40 @@ process warmup, together with the largest
 It does not invent defaults or look up settings per draw. Ordinary cache
 invalidation covers changes to those runtime settings. The physical and
 saved-state gates are recorded in [the X1 evidence ledger](LU_H_MATCHED_SAMPLING.md#x1-validation-milestone).
+
+The [completed frozen-X1 pilot](GL638_X1_PILOT.md) compares four proposals on
+all 936 orientations, with three paired seeds and 20 cores. It records no final
+invalid samples, but no consistent LU-h improvement across seeds. The next
+measurement therefore targets conditional H geometry after X2 correctness gates;
+longer runs of the radial profile alone are not the next dependency.
+
+### Reuse the existing serial-bubble fixture for conditional sides
+
+The existing `tests/resources/graphs/ir_safe_thresholds/triple_dotted_bubble.dot`
+and `processes/raised_cross_section_tests.rs` provide a cheap X2/X3 host fixture.
+Its complete parent is `[1,4,7]`: three serial one-loop bubbles with a raised
+line in each. The existing preprocessing assertion identifies a middle cut
+group with threshold CTs on both sides and checks that every discovered cut
+remains grouped. Resolve the middle cut and both thresholds from those existing
+records; do not assume that one of the repeated-line cut IDs is representative.
+
+The left `[1]` and right `[7]` cycles do not change the middle bubble's cut
+momenta. Thus a three-dimensional middle-cut block can prepare its LU scale,
+followed by three-dimensional left and right maps, for exactly nine variables.
+For equal masses and a rest-frame external energy Q, each simple geometric
+threshold has prepared radius `sqrt(Q^2/4-m^2)`. Its raw active radius is divided
+by the middle cut's `t*`, giving `t*^-3` for each side's volume conversion.
+This is an independent oracle for the routing and scale factors, not the
+production surface implementation. Vary the middle-cut coordinates when taking
+the full nine-dimensional finite-difference determinant, so the off-diagonal
+derivatives of both conditional radii are exercised too.
+
+Start with one side, then both; retain the complete physical cut sum and raised
+derivatives in the summed/Monte-Carlo comparisons. The existing fixture disables
+UV subtraction, which is adequate for map normalization and fixed-point routing
+checks, not a substitute for the final full-UV GL638 comparison. It also has
+simple always-existing side thresholds at the chosen kinematics; changing-
+existence coverage comes from the shared kite fiber and GL638 target gates.
 
 ### Baseline comparability
 

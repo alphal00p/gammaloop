@@ -82,20 +82,6 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
             &factor,
         );
     }
-
-    pub fn into_f64(self) -> GraphEvaluationResult<f64> {
-        GraphEvaluationResult {
-            integrand_result: Complex::new(
-                self.integrand_result.re.into_ff64(),
-                self.integrand_result.im.into_ff64(),
-            ),
-            reference_moments: self.reference_moments.map(ReferenceMoments::into_f64),
-            event_groups: self.event_groups.to_f64(),
-            event_processing_time: self.event_processing_time,
-            generated_event_count: self.generated_event_count,
-            accepted_event_count: self.accepted_event_count,
-        }
-    }
 }
 
 /// The result of an evaluation of the integrand
@@ -124,6 +110,9 @@ pub struct EvaluationResultOutput {
 
 #[derive(Clone, Debug)]
 pub struct GenericEvaluationResult<T: FloatLike> {
+    /// Runtime-only acceptance data, retained until the selected native precision
+    /// has passed both value and moment checks. Physical output schemas omit it.
+    pub(crate) reference_moments: Option<ReferenceMoments<T>>,
     pub integrand_result: Complex<F<T>>,
     pub parameterization_jacobian: Option<F<T>>,
     pub integrator_weight: F<T>,

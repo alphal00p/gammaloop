@@ -23,7 +23,8 @@ use super::{
     ImplicitSurfaceRadialMap, PreparedCutSamplingContext, SamplingExpressionEvaluator,
     SamplingMapAffine, SamplingMapComponent, SamplingMapComposition, SamplingMapContract,
     SamplingMapDefinition, SamplingMapEmbedding, SamplingMapEvaluation, SamplingMapKernel,
-    SamplingPartition, SamplingPartitionMode, SamplingScoreFunction, SurfaceRadialMap,
+    SamplingPartition, SamplingPartitionMode, SamplingScoreFunction, SamplingSupport,
+    SurfaceRadialMap,
 };
 use crate::momentum::sample::{LoopMomenta, MomentumSample};
 use crate::settings::runtime::ParameterizationSettings;
@@ -314,7 +315,7 @@ impl<T: FloatLike> SamplingChannelCompileContext<T> {
         self.graph_id = Some(prepared.graph_id);
         self.cut_id = Some(prepared.cut_id);
         self.orientation = prepared.orientation;
-        self.side = Some(prepared.side);
+        self.side = prepared.side;
         self.prepared_cut_context = Some(prepared);
         Ok(())
     }
@@ -1746,7 +1747,7 @@ fn validate_prepared_context_identity<T: FloatLike>(
             ),
         });
     }
-    if context.side.is_some() && context.side != Some(prepared.side) {
+    if context.side.is_some() && context.side != prepared.side {
         return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
             channel: channel.to_owned(),
             error: format!(
@@ -1849,7 +1850,7 @@ fn validate_prepared_map_context<T: FloatLike>(
             ),
         });
     }
-    if context.side != Some(prepared.side) {
+    if context.side != prepared.side {
         return Err(SamplingChannelCompileError::InvalidPreparedCutContext {
             channel: channel.to_owned(),
             error: format!(
@@ -1939,8 +1940,24 @@ fn compile_surface_map<T: FloatLike>(
         });
     }
     let expected_dimension = 3 * edges.len();
-    let key = (surface_edges.to_vec(), edges.to_vec());
-    let surface = if let Some(surface) = context.implicit_surfaces.get(&key) {
+    let requested_key = (surface_edges.to_vec(), edges.to_vec());
+    let canonical_edges = context
+        .parent_lmb
+        .iter()
+        .copied()
+        .filter(|edge| edges.contains(edge))
+        .collect::<Vec<_>>();
+    // Physical subspace geometry uses canonical parent order. Explicit synthetic
+    // bindings may retain another local order, so prefer that exact key first.
+    let native_edges = if context.implicit_surfaces.contains_key(&requested_key)
+        || context.surfaces.contains_key(&requested_key)
+    {
+        edges
+    } else {
+        canonical_edges.as_slice()
+    };
+    let key = (surface_edges.to_vec(), native_edges.to_vec());
+    let mut surface = if let Some(surface) = context.implicit_surfaces.get(&key) {
         if surface.dimension() != expected_dimension {
             return Err(SamplingChannelCompileError::InvalidChannel {
                 channel: channel.to_owned(),
@@ -1983,6 +2000,27 @@ fn compile_surface_map<T: FloatLike>(
         })?;
         CompiledSamplingMap::Surface(surface)
     };
+    if native_edges != edges {
+        let output_indices = native_edges
+            .iter()
+            .flat_map(|edge| {
+                let position = edges
+                    .iter()
+                    .position(|candidate| candidate == edge)
+                    .unwrap();
+                [3 * position, 3 * position + 1, 3 * position + 2]
+            })
+            .collect();
+        // A one-child ordered embedding preserves any supplied complement
+        // context while permuting only the active output coordinates.
+        surface = SamplingMapComposition::then(vec![Box::new(surface)])
+            .and_then(|map| SamplingMapEmbedding::from_composition(map, output_indices))
+            .map(CompiledSamplingMap::Embedded)
+            .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+                channel: channel.to_owned(),
+                error: error.to_string(),
+            })?;
+    }
     if !embed_complement {
         return Ok(surface);
     }
@@ -2026,22 +2064,34 @@ fn compile_surface_map<T: FloatLike>(
         error: format!("complement LMB {complement:?} could not be compiled: {error}"),
     })?;
 
-    // Product order is surface block followed by complement block.  Convert
-    // each block's edge ordering to the complete parent-LMB component frame.
-    let mut output_indices = Vec::with_capacity(3 * context.n_loop_momenta);
-    for edge in edges.iter().chain(complement.iter()) {
-        let position = parent_positions[edge];
-        output_indices.extend([3 * position, 3 * position + 1, 3 * position + 2]);
-    }
-    SamplingMapEmbedding::product(
-        vec![Box::new(surface), Box::new(complement_map)],
-        output_indices,
-    )
-    .map(CompiledSamplingMap::Embedded)
-    .map_err(|error| SamplingChannelCompileError::InvalidChannel {
-        channel: channel.to_owned(),
-        error: error.to_string(),
-    })
+    // Independent surfaces retain product order (active, complement). A
+    // physical fiber first samples its complement, then receives that output
+    // as context. Both routes explicitly restore the complete parent frame.
+    let conditional = surface.contract().support == SamplingSupport::Conditional;
+    let ordered_edges = if conditional {
+        complement.iter().chain(edges.iter()).collect::<Vec<_>>()
+    } else {
+        edges.iter().chain(complement.iter()).collect::<Vec<_>>()
+    };
+    let output_indices = ordered_edges
+        .into_iter()
+        .flat_map(|edge| {
+            let position = parent_positions[edge];
+            [3 * position, 3 * position + 1, 3 * position + 2]
+        })
+        .collect();
+    let composition = if conditional {
+        SamplingMapComposition::then(vec![Box::new(complement_map), Box::new(surface)])
+    } else {
+        SamplingMapComposition::product(vec![Box::new(surface), Box::new(complement_map)])
+    };
+    composition
+        .and_then(|map| SamplingMapEmbedding::from_composition(map, output_indices))
+        .map(CompiledSamplingMap::Embedded)
+        .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+            channel: channel.to_owned(),
+            error: error.to_string(),
+        })
 }
 
 #[derive(Clone, Copy)]
@@ -2142,6 +2192,23 @@ fn compile_partitioned_children<T: FloatLike>(
             }
         };
 
+        if compiled.contract().support == SamplingSupport::Conditional {
+            let preceding = child_blocks.iter().flatten().copied().collect::<Vec<_>>();
+            let complement = context
+                .parent_lmb
+                .iter()
+                .copied()
+                .filter(|edge| !block_edges.contains(edge))
+                .collect::<Vec<_>>();
+            if matches!(kind, PartitionedMapKind::Product) || preceding != complement {
+                return Err(SamplingChannelCompileError::InvalidChannel {
+                    channel: channel.to_owned(),
+                    error: format!(
+                        "conditional surface child {child_index} requires then(complement, surface) with prior parent-ordered complement {complement:?}; {map_name} provides {preceding:?}; arbitrary prerequisite routing is not yet supported"
+                    ),
+                });
+            }
+        }
         for edge in &block_edges {
             if !parent_positions.contains_key(edge) {
                 return Err(SamplingChannelCompileError::InvalidChannel {
@@ -3567,7 +3634,12 @@ mod tests {
                 }),
             )
             .unwrap()
-            .with_context_center_evaluator(Arc::new(|context: &[T]| Ok(context[..3].to_vec())));
+            .with_context_preparer(Arc::new(|context: &[T]| {
+                Ok((
+                    context[..3].to_vec(),
+                    crate::integrands::process::PreparedSurfaceStatus::existing(None)?,
+                ))
+            }));
             let ordered = SamplingMapEmbedding::from_composition(
                 SamplingMapComposition::then(vec![Box::new(first), Box::new(conditional)]).unwrap(),
                 (0..6).collect(),
@@ -3685,7 +3757,7 @@ mod tests {
             17,
             3,
             orientation,
-            side,
+            Some(side),
             parent_lmb,
             0.75,
             vec![[0.0, 0.0, 0.0]; n_loop_momenta],
@@ -4455,7 +4527,7 @@ mod tests {
                     Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
                 )
                 .unwrap()
-                .with_context_evaluator(Arc::new(|_, radius, context| {
+                .with_context_evaluator(Arc::new(|_, radius, _, context| {
                     let shift = context.first().copied().unwrap_or_default().abs().min(0.2);
                     Ok((radius - (1.0 + shift), 1.0))
                 })),
@@ -4526,7 +4598,7 @@ mod tests {
                     Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
                 )
                 .unwrap()
-                .with_context_evaluator(Arc::new(|_, radius, context| {
+                .with_context_evaluator(Arc::new(|_, radius, _, context| {
                     let shift = context.first().copied().unwrap_or_default();
                     Ok((radius - (1.0 + shift), 1.0))
                 })),
@@ -5267,7 +5339,7 @@ mod tests {
             17,
             3,
             Some(2),
-            SamplingCutSide::Left,
+            Some(SamplingCutSide::Left),
             vec![1, 2],
             0.75,
             vec![[0.0, 0.0, 0.0]; 2],
