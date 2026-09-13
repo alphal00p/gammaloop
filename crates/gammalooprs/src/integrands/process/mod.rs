@@ -2131,10 +2131,10 @@ impl LmbMultiChannelingSetup {
         catalogue.compile(context).map_err(Into::into)
     }
 
-    /// Compile the selected channels and bind them to the opt-in raw-frame
-    /// bridge used by callers that want advanced map-density multichanneling.
-    /// The ordinary LMB sampler does not call this method and therefore keeps
-    /// its existing channel-index semantics unchanged.
+    /// Compile the selected channels and bind them to the raw-frame bridge.
+    /// Runtime integration is staged: callers must not mix this bridge with
+    /// the pre-catalogue channel loop until its frame and prepared cut context
+    /// are supplied.
     pub fn compile_sampling_channel_bridge(
         &self,
         resolved: &ResolvedSamplingChannelSelection,
