@@ -27,8 +27,9 @@ physical parameterization. The
 loaded-process coordinate-batch hook with exact `1/N` weights and diagnostics;
 `evaluate_reference_discrete_coordinates` and `group_sampling_channel_ids` add
 the corresponding explicit canonical `(group, orientation, channel)` route.
-Focused discrete decoding/order coverage is in place; the full saved-state
-amplitude/cross-section assertions remain open.
+Focused discrete decoding/order coverage and a saved/reloaded scalar-bubble
+amplitude acceptance fixture are in place; the full saved-state
+amplitude/cross-section assertions, including physical cut maps, remain open.
 discrete graph sampler now carries the selected canonical partition factor
 with the parent-frame map Jacobian, including for the direct momentum route;
 the obsolete separate per-channel sample representation has been removed
@@ -95,6 +96,12 @@ not a sampling map or a substitute for the LU implicit Jacobian. Physical
 cut/left/right channels remain guarded until a complete composition supplies
 the same conditional data to both forward maps and every inverse density in
 the canonical partition.
+
+The bridge now exposes `SamplingChannelRuntimeContexts`, indexed by the same
+catalogue IDs. Context-aware forward, inverse and partition calls evaluate
+every denominator score with that channel's context, so a selected cut cannot
+silently reuse its kinematics for another cut or side. This is the runtime
+boundary used by the deferred cross-section implementation.
 
 The portable research bundle is in
 [`docs/research/advanced_sampling/README.md`](docs/research/advanced_sampling/README.md).
@@ -186,7 +193,7 @@ conditional compiled maps; it does not define a separate channel index type.
 
 The retirement sequence is explicit: first route direct momentum evaluation
 through compiled parent-frame maps for every catalogue entry; then remove the
-`DiscreteGraphSamplingType::DiscreteMultiChanneling` compatibility mode and
+`DiscreteGraphSamplingType::SamplingMultiChanneling` compatibility mode and
 the LMB-only prefactor/reinterpretation helpers; finally remove
 `LmbMultiChannelingSetup` and remaining LMB-specific labels/API quantities
 where they describe a generic sampling channel. The ordinal

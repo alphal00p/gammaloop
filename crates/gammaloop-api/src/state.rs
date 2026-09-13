@@ -35,7 +35,7 @@ use gammalooprs::{
     feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
-    integrands::process::ProcessIntegrand,
+    integrands::process::{GaussianReferenceFunction, ProcessIntegrand},
     is_interrupt_requested,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{
@@ -4856,6 +4856,48 @@ commands = ["quit -n"]
                 }
             }
         }
+    }
+
+    #[test]
+    fn saved_generated_process_runs_reference_acceptance_after_reload() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let mut state = build_generated_scalar_bubble_state_with_external_backend();
+        let temp = tempdir()?;
+        let saved = temp.path().join("saved");
+        state.save(&saved, true, false)?;
+
+        let mut loaded = State::load(saved, None, None)?;
+        loaded.activate_loaded_integrand_backends(false)?;
+        let integrand = loaded.process_list.get_integrand_mut(0, "default")?;
+        let reference = GaussianReferenceFunction::centered(2.0, 1)?;
+
+        // Exercise the complete saved-process parameterization with a compact,
+        // deterministic unit-cube quadrature.  The acceptance report checks
+        // finiteness and Jacobian propagation; this deliberately avoids
+        // coupling persistence coverage to a particular integration grid.
+        let coordinates = (0..256)
+            .map(|index| {
+                let x = (index as f64 + 0.5) / 256.0;
+                vec![
+                    x,
+                    (0.618_033_988_75 * x).fract(),
+                    (0.414_213_562_37 * x).fract(),
+                ]
+            })
+            .collect::<Vec<_>>();
+        let report = integrand.evaluate_reference_coordinates(&coordinates, &reference)?;
+
+        assert_eq!(report.sample_count, coordinates.len());
+        assert_eq!(report.finite_sample_count, coordinates.len());
+        assert!(report.normalization.is_finite());
+        assert!(report.second_moment.is_finite());
+        assert!(report.normalization_stderr.is_finite());
+        assert!(report.second_moment_stderr.is_finite());
+        assert!((report.normalization - 1.0).abs() < 2.0e-2);
+        assert!((report.second_moment - report.expected_second_moment).abs() < 2.0e-1);
+        Ok(())
     }
 
     #[test]

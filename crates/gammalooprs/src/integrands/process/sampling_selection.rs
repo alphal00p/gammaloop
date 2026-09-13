@@ -540,8 +540,60 @@ impl From<SamplingChannelId> for usize {
 #[derive(Clone, Debug)]
 pub struct SamplingChannelBridge {
     channels: Vec<CompiledSamplingChannel>,
-    scores: Vec<SamplingChannelScore>,
     dimensions: usize,
+}
+
+/// Per-sample context supplied to conditional channel maps and to every
+/// inverse-density score in a common partition.  Contexts are indexed by the
+/// canonical catalogue position; they are never compacted into a second
+/// channel list.  An absent context means the ordinary empty context and is
+/// valid for maps which do not depend on earlier blocks.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SamplingChannelRuntimeContexts {
+    contexts: Vec<Option<Vec<f64>>>,
+}
+
+impl SamplingChannelRuntimeContexts {
+    pub fn new(channel_count: usize) -> Self {
+        Self {
+            contexts: vec![None; channel_count],
+        }
+    }
+
+    pub fn channel_count(&self) -> usize {
+        self.contexts.len()
+    }
+
+    pub fn set(&mut self, channel_id: SamplingChannelId, context: Vec<f64>) -> Result<()> {
+        let Some(slot) = self.contexts.get_mut(channel_id.0) else {
+            return Err(eyre!(
+                "sampling channel context id {} is out of range for {} channels",
+                channel_id.0,
+                self.contexts.len()
+            ));
+        };
+        if context.iter().any(|value| !value.is_finite()) {
+            return Err(eyre!(
+                "sampling channel context {} contains a non-finite value",
+                channel_id.0
+            ));
+        }
+        *slot = Some(context);
+        Ok(())
+    }
+
+    fn get(&self, channel_id: SamplingChannelId) -> Result<&[f64]> {
+        self.contexts
+            .get(channel_id.0)
+            .ok_or_else(|| {
+                eyre!(
+                    "sampling channel context id {} is out of range for {} channels",
+                    channel_id.0,
+                    self.contexts.len()
+                )
+            })
+            .map(|context| context.as_deref().unwrap_or(&[]))
+    }
 }
 
 /// One push-forward/inverse result together with the common raw-frame
@@ -919,7 +971,6 @@ impl SamplingChannelBridge {
         let dimensions = first.dimensions();
         let frame = &first.embedded_edges;
         let master_graph = &first.master_graph;
-        let mut scores = Vec::with_capacity(channels.len());
         for channel in &channels {
             if channel.master_graph != *master_graph {
                 return Err(SamplingChannelBridgeError::MasterGraphMismatch {
@@ -955,25 +1006,9 @@ impl SamplingChannelBridge {
                     jacobian: contract.jacobian,
                 });
             }
-            let map = channel.map.clone();
-            let name = channel.name.clone();
-            scores.push(SamplingChannelScore::map_density(
-                name,
-                SamplingScoreFunction::from_positive_function(move |raw| {
-                    let evaluation = map.inverse(raw)?;
-                    let density = evaluation.inverse_jacobian.abs();
-                    if !density.is_finite() || density <= 0.0 {
-                        return Err(color_eyre::eyre::eyre!(
-                            "inverse map density is not finite and positive: {density}"
-                        ));
-                    }
-                    Ok(Some(density))
-                }),
-            ));
         }
         Ok(Self {
             channels,
-            scores,
             dimensions,
         })
     }
@@ -987,6 +1022,21 @@ impl SamplingChannelBridge {
     }
 
     pub fn partition(&self, raw_coordinates: &[f64]) -> Result<SamplingPartition> {
+        self.partition_with_contexts(
+            raw_coordinates,
+            &SamplingChannelRuntimeContexts::new(self.channels.len()),
+        )
+    }
+
+    /// Build the common inverse-density partition using the context belonging
+    /// to every canonical channel.  A selected channel's context alone is
+    /// insufficient: all denominator scores must describe the same raw point
+    /// and their own map branches.
+    pub fn partition_with_contexts(
+        &self,
+        raw_coordinates: &[f64],
+        contexts: &SamplingChannelRuntimeContexts,
+    ) -> Result<SamplingPartition> {
         if raw_coordinates.len() != self.dimensions {
             return Err(color_eyre::eyre::eyre!(
                 "raw sampling frame has {}, expected {} dimensions",
@@ -994,11 +1044,38 @@ impl SamplingChannelBridge {
                 self.dimensions
             ));
         }
-        SamplingPartition::new(
-            SamplingPartitionMode::MapDensity,
-            &self.scores,
-            raw_coordinates,
-        )
+        if contexts.channel_count() != self.channels.len() {
+            return Err(eyre!(
+                "sampling channel runtime context has {} channels, expected {}",
+                contexts.channel_count(),
+                self.channels.len()
+            ));
+        }
+        let scores = self
+            .channels
+            .iter()
+            .enumerate()
+            .map(|(index, channel)| {
+                let map = channel.map.clone();
+                let context = contexts
+                    .get(SamplingChannelId::from(index))
+                    .map(ToOwned::to_owned)?;
+                Ok(SamplingChannelScore::map_density(
+                    channel.name.clone(),
+                    SamplingScoreFunction::from_positive_function(move |raw| {
+                        let evaluation = map.inverse_with_context(raw, &context)?;
+                        let density = evaluation.inverse_jacobian.abs();
+                        if !density.is_finite() || density <= 0.0 {
+                            return Err(eyre!(
+                                "inverse map density is not finite and positive: {density}"
+                            ));
+                        }
+                        Ok(Some(density))
+                    }),
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        SamplingPartition::new(SamplingPartitionMode::MapDensity, &scores, raw_coordinates)
     }
 
     pub fn forward(
@@ -1017,6 +1094,17 @@ impl SamplingChannelBridge {
         coordinates: &[f64],
         context: &[f64],
     ) -> Result<SamplingChannelBridgeEvaluation> {
+        let mut contexts = SamplingChannelRuntimeContexts::new(self.channels.len());
+        contexts.set(channel_id, context.to_vec())?;
+        self.forward_with_runtime_contexts(channel_id, coordinates, &contexts)
+    }
+
+    pub fn forward_with_runtime_contexts(
+        &self,
+        channel_id: SamplingChannelId,
+        coordinates: &[f64],
+        contexts: &SamplingChannelRuntimeContexts,
+    ) -> Result<SamplingChannelBridgeEvaluation> {
         let channel_index = channel_id.0;
         let channel =
             self.channels
@@ -1024,7 +1112,7 @@ impl SamplingChannelBridge {
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
                     channel: channel_id,
                 })?;
-        let map = channel.forward_with_context(coordinates, context)?;
+        let map = channel.forward_with_context(coordinates, contexts.get(channel_id)?)?;
         if map.point.len() != self.dimensions {
             return Err(SamplingChannelBridgeError::DimensionMismatch {
                 channel: channel.name.clone(),
@@ -1033,7 +1121,7 @@ impl SamplingChannelBridge {
             }
             .into());
         }
-        let partition = self.partition(&map.point)?;
+        let partition = self.partition_with_contexts(&map.point, contexts)?;
         Ok(SamplingChannelBridgeEvaluation {
             channel_id,
             channel_name: channel.name.clone(),
@@ -1057,6 +1145,17 @@ impl SamplingChannelBridge {
         raw_coordinates: &[f64],
         context: &[f64],
     ) -> Result<SamplingChannelBridgeEvaluation> {
+        let mut contexts = SamplingChannelRuntimeContexts::new(self.channels.len());
+        contexts.set(channel_id, context.to_vec())?;
+        self.inverse_with_runtime_contexts(channel_id, raw_coordinates, &contexts)
+    }
+
+    pub fn inverse_with_runtime_contexts(
+        &self,
+        channel_id: SamplingChannelId,
+        raw_coordinates: &[f64],
+        contexts: &SamplingChannelRuntimeContexts,
+    ) -> Result<SamplingChannelBridgeEvaluation> {
         let channel_index = channel_id.0;
         let channel =
             self.channels
@@ -1064,8 +1163,8 @@ impl SamplingChannelBridge {
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
                     channel: channel_id,
                 })?;
-        let map = channel.inverse_with_context(raw_coordinates, context)?;
-        let partition = self.partition(raw_coordinates)?;
+        let map = channel.inverse_with_context(raw_coordinates, contexts.get(channel_id)?)?;
+        let partition = self.partition_with_contexts(raw_coordinates, contexts)?;
         Ok(SamplingChannelBridgeEvaluation {
             channel_id,
             channel_name: channel.name.clone(),
@@ -3135,6 +3234,74 @@ mod tests {
             .forward(SamplingChannelId::from(0), &coordinates)
             .unwrap();
         assert!((bridged.partition.weight_sum() - 1.0).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn runtime_context_partition_uses_each_canonical_channel_context() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["left_chart".into(), "right_chart".into()];
+        for name in ["left_chart", "right_chart"] {
+            let mut channel = definition("then(lmb(1),surface(2,4))");
+            channel.subspace_lmb = vec![2];
+            selection
+                .channel_definitions
+                .entry("G".into())
+                .or_default()
+                .insert(name.into(), channel);
+        }
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context
+            .insert_implicit_surface(
+                vec![2, 4],
+                vec![2],
+                ImplicitSurfaceRadialMap::new(
+                    3,
+                    vec![0.0; 3],
+                    1.0,
+                    1.0,
+                    Arc::new(|_, radius| Ok((radius - 1.0, 1.0))),
+                )
+                .unwrap()
+                .with_context_evaluator(Arc::new(|_, radius, context| {
+                    let shift = context.first().copied().unwrap_or_default();
+                    Ok((radius - (1.0 + shift), 1.0))
+                })),
+            )
+            .unwrap();
+        let bridge = SamplingChannelBridge::new(catalogue.compile(&context).unwrap()).unwrap();
+        let mut contexts = SamplingChannelRuntimeContexts::new(bridge.channels().len());
+        contexts.set(SamplingChannelId::from(0), vec![0.0]).unwrap();
+        contexts.set(SamplingChannelId::from(1), vec![0.2]).unwrap();
+        let coordinates = [0.31, 0.42, 0.57, 0.23, 0.68, 0.81];
+        let mapped = bridge
+            .forward_with_runtime_contexts(SamplingChannelId::from(0), &coordinates, &contexts)
+            .unwrap();
+        assert!((mapped.partition.weight_sum() - 1.0).abs() < 1.0e-12);
+        assert!(mapped.partition.weights.iter().all(|weight| *weight > 0.0));
+        let inverse = bridge
+            .inverse_with_runtime_contexts(
+                SamplingChannelId::from(0),
+                &mapped.raw_coordinates,
+                &contexts,
+            )
+            .unwrap();
+        assert!(inverse.map.residual < 1.0e-9, "{}", inverse.map.residual);
+        assert!(
+            inverse
+                .map
+                .coordinates
+                .iter()
+                .zip(coordinates)
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-9)
+        );
     }
 
     #[test]
