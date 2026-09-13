@@ -82,6 +82,14 @@ partitions and samples the complete already-subtracted physical integrand.
   `SamplingChannelCatalogue` and `SamplingChannelId`; legacy LMB fields may be
   consumed only as catalogue inputs until deleted.
 
+The retirement sequence is explicit: first route direct momentum evaluation
+through compiled parent-frame maps for every catalogue entry; then remove the
+`DiscreteGraphSample::DiscreteMultiChanneling` compatibility route and the
+LMB-only prefactor/reinterpretation helpers; finally rename or remove remaining
+LMB-specific labels and API quantities where they describe a generic sampling
+channel. The ordinal `SamplingChannelId` remains only as the catalogue's stable
+position, never as an independently generated LMB index.
+
 ### Milestones
 
 0. **Plan and research snapshot.** Land this plan and the portable research
