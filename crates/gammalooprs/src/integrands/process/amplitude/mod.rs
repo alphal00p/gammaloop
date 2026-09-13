@@ -748,7 +748,7 @@ impl AmplitudeGraphTerm {
                 &self.multi_channeling_setup.graph.name,
                 &parameterization_settings,
             )? {
-                Some(self.multi_channeling_setup.effective_channel_edge_ids(
+                Some(self.multi_channeling_setup.sampling_channel_edge_ids(
                     channel_id,
                     &self.multi_channeling_setup.graph.name,
                     &parameterization_settings,
@@ -1128,7 +1128,7 @@ impl GraphTerm for AmplitudeGraphTerm {
             parameterization_settings,
         )? {
             Ok(Some(format_sampling_channel_label(
-                &self.multi_channeling_setup.effective_channel_edge_ids(
+                &self.multi_channeling_setup.sampling_channel_edge_ids(
                     channel_id,
                     &self.multi_channeling_setup.graph.name,
                     parameterization_settings,
