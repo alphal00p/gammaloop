@@ -61,6 +61,11 @@ pub enum GammaLoopSample<T: FloatLike> {
     MultiChanneling {
         alpha: F<T>,
         channel_weight: LmbChannelWeight,
+        /// Unit-cube coordinates retained for canonical summed channels.
+        /// Amplitude graph terms replay these coordinates through the one
+        /// canonical bridge; cross-section terms retain them for the guarded
+        /// legacy route until their conditional LU/t* context is available.
+        sampling_coordinates: Option<Vec<F<T>>>,
         sample: MomentumSample<T>,
     },
     DiscreteGraph {
@@ -95,10 +100,12 @@ impl<T: FloatLike> GammaLoopSample<T> {
             GammaLoopSample::MultiChanneling {
                 alpha,
                 channel_weight,
+                sampling_coordinates,
                 sample,
             } => GammaLoopSample::MultiChanneling {
                 alpha: alpha.clone(),
                 channel_weight: *channel_weight,
+                sampling_coordinates: sampling_coordinates.clone(),
                 sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
             },
             GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
@@ -150,10 +157,14 @@ impl<T: FloatLike> GammaLoopSample<T> {
             GammaLoopSample::MultiChanneling {
                 alpha,
                 channel_weight,
+                sampling_coordinates,
                 sample,
             } => GammaLoopSample::MultiChanneling {
                 alpha: alpha.clone().into(),
                 channel_weight: *channel_weight,
+                sampling_coordinates: sampling_coordinates
+                    .as_ref()
+                    .map(|coordinates| coordinates.iter().cloned().map(F::<T2>::from).collect()),
                 sample: sample.cast_sample(),
             },
             GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
@@ -184,10 +195,17 @@ impl<T: FloatLike> GammaLoopSample<T> {
             GammaLoopSample::MultiChanneling {
                 alpha,
                 channel_weight,
+                sampling_coordinates,
                 sample,
             } => GammaLoopSample::MultiChanneling {
                 alpha: alpha.higher(),
                 channel_weight: *channel_weight,
+                sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
+                    coordinates
+                        .iter()
+                        .map(|coordinate| coordinate.higher())
+                        .collect()
+                }),
                 sample: sample.higher_precision(),
             },
             GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
@@ -218,10 +236,17 @@ impl<T: FloatLike> GammaLoopSample<T> {
             GammaLoopSample::MultiChanneling {
                 alpha,
                 channel_weight,
+                sampling_coordinates,
                 sample,
             } => GammaLoopSample::MultiChanneling {
                 alpha: alpha.lower(),
                 channel_weight: *channel_weight,
+                sampling_coordinates: sampling_coordinates.as_ref().map(|coordinates| {
+                    coordinates
+                        .iter()
+                        .map(|coordinate| coordinate.lower())
+                        .collect()
+                }),
                 sample: sample.lower_precision(),
             },
             GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
@@ -538,7 +563,10 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
         for group_id in 0..integrand.get_group_structure().len() {
             let graph = integrand.get_master_graph(GroupId(group_id));
             graph.sampling_channel_ids(parameterization_settings)?;
-            if is_summed_multichanneling(&settings.sampling) {
+            if is_summed_multichanneling(&settings.sampling)
+                && (!matches!(&settings.sampling, SamplingSettings::MultiChanneling(_))
+                    || !graph.supports_canonical_summed_sampling())
+            {
                 for channel_id in graph.sampling_channel_ids(parameterization_settings)? {
                     if !graph.sampling_channel_is_lmb(channel_id, parameterization_settings)? {
                         return Err(eyre!(
@@ -585,6 +613,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
             Ok(GammaLoopSample::MultiChanneling {
                 alpha: F::from_f64(multichanneling_settings.alpha),
                 channel_weight: multichanneling_settings.channel_weight,
+                sampling_coordinates: Some(xs.clone()),
                 sample: default_parametrize(
                     &xs,
                     dependent_momenta_constructor,

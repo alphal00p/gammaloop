@@ -3348,6 +3348,13 @@ pub trait GraphTerm {
         external_momenta: &[[f64; 4]],
         orientation: Option<usize>,
     ) -> Result<SamplingChannelBridge>;
+
+    /// Whether summed sampling may replay unit-cube coordinates through the
+    /// canonical bridge for this graph term. Cross-section terms require
+    /// per-sample LU/t* preparation and remain on their guarded legacy route.
+    fn supports_canonical_summed_sampling(&self) -> bool {
+        false
+    }
     fn sampling_channel_is_lmb(
         &self,
         channel_id: SamplingChannelId,
@@ -3993,6 +4000,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
             GammaLoopSample::MultiChanneling {
                 alpha,
                 channel_weight,
+                sampling_coordinates,
                 sample,
             } => (0..integrand.graph_count()).try_fold(
                 GraphEvaluationResult::zero(zero.clone()),
@@ -4005,27 +4013,115 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                     let channel_ids = integrand
                         .get_graph(graph_id)
                         .sampling_channel_ids(&parameterization_settings)?;
+                    let use_canonical_bridge = integrand
+                        .get_graph(graph_id)
+                        .supports_canonical_summed_sampling();
+                    let coordinates = sampling_coordinates.as_ref().map(|coordinates| {
+                        coordinates
+                            .iter()
+                            .map(|coordinate| coordinate.clone().into_ff64().0)
+                            .collect_vec()
+                    });
+                    let bridge = if use_canonical_bridge {
+                        let externals = context
+                            .settings
+                            .kinematics
+                            .externals
+                            .get_dependent_externals::<f64>(
+                                integrand.get_dependent_momenta_constructor(),
+                            )?;
+                        let external_momenta = externals
+                            .iter()
+                            .map(|momentum| {
+                                [
+                                    momentum.temporal.value.0,
+                                    momentum.spatial.px.0,
+                                    momentum.spatial.py.0,
+                                    momentum.spatial.pz.0,
+                                ]
+                            })
+                            .collect_vec();
+                        Some(integrand.get_graph(graph_id).compile_sampling_bridge(
+                            &parameterization_settings,
+                            context.settings.kinematics.e_cm,
+                            &external_momenta,
+                            None,
+                        )?)
+                    } else {
+                        None
+                    };
+                    let channel_count = channel_ids.len() as f64;
                     let graph_result = channel_ids.into_iter().try_fold(
+                        // Each summed channel is sampled from the same base
+                        // coordinate point; bridge partitioning therefore
+                        // carries the channel-count normalization once.
                         GraphEvaluationResult::zero(zero.clone()),
                         |mut channel_sum, channel_index| {
-                            if !integrand
-                                .get_graph(graph_id)
-                                .sampling_channel_is_lmb(channel_index, &parameterization_settings)?
-                            {
-                                return Err(eyre!(
-                                    "summed sampling multichanneling cannot evaluate graph-aware channel {}; use discrete multi-channeling",
-                                    channel_index.index()
-                                ));
-                            }
-                            let channel_result = evaluate_graph_term(
-                                integrand,
-                                graph_id,
-                                sample,
-                                &mut context,
-                                Some((channel_index, alpha.clone(), *channel_weight)),
-                                None,
-                                None,
-                            )?;
+                            let channel_result = if let Some(bridge) = bridge.as_ref() {
+                                let coordinates = coordinates.as_ref().ok_or_else(|| {
+                                    eyre!(
+                                        "canonical summed amplitude channel {} requires retained unit-cube coordinates",
+                                        channel_index.index()
+                                    )
+                                })?;
+                                let mapped = bridge.forward(channel_index, coordinates)?;
+                                let partition_weight = mapped
+                                    .partition
+                                    .weight(channel_index.index())
+                                    .ok_or_else(|| {
+                                        eyre!(
+                                            "sampling channel partition has no weight for channel {}",
+                                            channel_index.index()
+                                        )
+                                    })?;
+                                if !partition_weight.is_finite() || partition_weight <= 0.0 {
+                                    return Err(eyre!(
+                                        "sampling channel partition has invalid weight {partition_weight}"
+                                    ));
+                                }
+                                let mut mapped_sample = mapped.to_momentum_sample::<T>(
+                                    SamplingMomentumSampleContext {
+                                        loop_mom_cache_id: sample.sample.loop_mom_cache_id,
+                                        external_moms: &context.settings.kinematics.externals,
+                                        external_mom_cache_id: sample.sample.external_mom_cache_id,
+                                        dependent_momenta_constructor: integrand
+                                            .get_dependent_momenta_constructor(),
+                                        orientation: None,
+                                    },
+                                )?;
+                                mapped_sample.sample.parameterization_branch =
+                                    sample.sample.parameterization_branch;
+                                mapped_sample.sample.jacobian = mapped_sample.sample.jacobian
+                                    * F::from_f64(partition_weight * channel_count);
+                                evaluate_graph_term(
+                                    integrand,
+                                    graph_id,
+                                    &mapped_sample,
+                                    &mut context,
+                                    None,
+                                    Some(channel_index),
+                                    None,
+                                )?
+                            } else {
+                                let is_lmb = integrand
+                                    .get_graph(graph_id)
+                                    .sampling_channel_is_lmb(channel_index, &parameterization_settings)?;
+                                if !is_lmb {
+                                    return Err(eyre!(
+                                        "summed sampling cannot evaluate graph-aware channel {}; this graph requires per-sample LU/t* preparation",
+                                        channel_index.index()
+                                    ));
+                                }
+                                evaluate_graph_term(
+                                    integrand,
+                                    graph_id,
+                                    sample,
+                                    &mut context,
+                                    Some((channel_index, alpha.clone(), *channel_weight)),
+                                    None,
+                                    None,
+                                )?
+                            };
                             channel_sum.merge_in_place(channel_result);
                             Ok::<GraphEvaluationResult<T>, eyre::Report>(channel_sum)
                         },
