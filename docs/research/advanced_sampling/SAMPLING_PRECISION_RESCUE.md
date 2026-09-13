@@ -1,21 +1,29 @@
 # Native sampling precision and rescue
 
-Status: native components and geometry pass 122 isolated numerical tests;
-production binding and original-source stability rescue remain to implement.
+Status: native components and geometry pass 122 isolated numerical tests.
+Production native binding and original-source stability rescue now pass eight
+focused tests, including actual kite/cut reconstruction, event factors and
+precise API range. The broader 169-test core suite, both saved-state/summed API
+regressions and six precise/event/histogram integration API tests also pass.
+Formatting, core/API and integration-test checking pass; clippy reports no
+warnings on changed lines.
+Root-distance
+density certification, native reference-harness retry, derived-expression mass
+precision and the final adaptive-grid range boundary remain open.
 This note complements [ADVANCED_SAMPLING_PLAN.md](../../../ADVANCED_SAMPLING_PLAN.md)
 and [LU_H_MATCHED_SAMPLING.md](LU_H_MATCHED_SAMPLING.md).
 
 ## First divergence and required invariant
 
-For an X-space evaluation both routes start with the same original cube sample,
-canonical `SamplingChannelId`, graph and orientation. Ordinary `F<T>` mapping
-preserves T. The compiled route in `gammaloop_sample.rs::parameterize` currently
-converts coordinates and improved externals to f64, calls the f64 bridge, then
-`SamplingChannelBridgeEvaluation::to_momentum_sample<T>` promotes its answer.
-Increasing the physical evaluator precision cannot recover information lost
-there. Summed channels and direct-momentum inverse partitions have the same
-boundary. `evaluate_from_source` also propagates a map error through `?` before
-trying another stability level.
+The first divergence before the native host migration was the compiled route in
+`gammaloop_sample.rs::parameterize`: it converted coordinates and improved
+externals to f64, called the f64 bridge, then promoted the answer. Ordinary
+`F<T>` mapping preserved T. Both started from the same cube sample, canonical
+channel, graph and orientation; increasing only physical evaluator precision
+could not recover information lost at the map boundary. Summed channels and
+direct-momentum inverse partitions shared that loss, while map errors escaped
+before a later stability level. These production paths now use native bindings
+and typed retry from the retained source in one shared precise-result loop.
 
 The invariant is one mathematical proposal evaluated throughout in the active
 precision: source -> native kinematics -> selected map -> every foreign inverse
@@ -80,7 +88,13 @@ Generalize `Esurface::sampling_radial_map` from the actual native graph/model
 mass values and native external cache. Reuse `compute_self_and_r_derivative`,
 including the existing massless-origin right derivative. Exact routing integers
 stay exact; affine shifts, inverse matrices and determinants are computed in T.
-The existing generic graph mass accessor avoids promoting a derived f64 mass.
+Direct model masses retain the repository's original f64 input convention.
+The 13 September owner audit found that `EdgeMass::value<T>` also evaluates
+`EdgeMass::Evaluator` expressions in f64 before converting to T; merely calling
+the generic graph accessor does not recover those derived digits. The current
+sampling binding agrees with the physical evaluator's mass cache. Generalizing
+that existing expression evaluator is a remaining precision requirement for
+derived-expression masses, separate from native kinematics and map rescue.
 
 Generalize `PreparedCutSamplingContext`, `PreparedSurfaceStatus`, prepared
 surfaces and `DeferredCrossSectionSamplingState`: their current f64 `t*`, roots,
@@ -106,6 +120,26 @@ in its own native context. Keep support absence distinct from evaluation errors;
 no failed inverse may silently acquire zero score. Preserve positive denominator
 coverage and test extreme native log-score separations. The final selected
 `J_c*w_c` product stays native even when either f64 factor is unrepresentable.
+
+The selected-channel route must also combine `J_c*w_c*f` before narrowing the
+physical/reference result. For example, a native `J_c=10^400` and
+`w_c*f=10^-400` have a finite product but become `Inf*0` after separate f64
+conversion. Reuse `GraphEvaluationResult::apply_sampling_factor` for values,
+events, full multiplicative factors and reference moments; report a unit
+unapplied outer Jacobian, as summed channels already do. Preserve the actual
+map Jacobian from the bridge map evaluation in replay diagnostics, separately
+from its partition weight; the selected momentum sample carries their product.
+Apply ordinary
+X-space Jacobians at this same boundary; direct momentum input retains unit J.
+
+Outer adaptive-grid weighting is a distinct remaining range boundary: a native
+map/partition/physics product `10^-400` times a representable grid weight
+`10^100` should contribute `10^-300`. Narrowing before the integration
+accumulator applies that weight loses the contribution. Audit this through the
+existing estimator/training owner in the trained-grid acceptance work; native
+map rescue alone does not establish range-safe final grid weighting. Likewise,
+Rust precise-result APIs must not require representability of a preliminary
+f64 reporting pass before returning their native result.
 
 ## Root localization and numerical errors
 

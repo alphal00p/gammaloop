@@ -147,6 +147,46 @@ not a successful zero or a regression in proposal normalization. Record current
 binary/source hashes and all runtime overrides with the new results; a prepared
 card or an archived replay cannot count as a current-binary validation.
 
+The first refresh attempt with commit `06d470409` failed while loading the
+recorded state, before display or any of the 33 queued numerical cases. The
+diagnostic CLI's SHA256 was
+`8fa32d1dac7bea40f623b2f6bf95eb295e92498f978c168105ca39b6e2e1415a`.
+Cross-section decoding reported an empty string where
+`bitvec::order::Lsb0` was expected (`cross_section/mod.rs:384`). The unoptimized
+run took 298.2 seconds and peaked at 4,296,572 KiB; these are loading diagnostics,
+not integration timings. All three recorded state metadata hashes remained
+unchanged. The current saved-state API regressions pass, but this older payload
+is not a usable current baseline. Regenerate from the committed card/metadata,
+first one orientation for a cheap setup check, then the unrestricted graph.
+Do not patch archived bytes or add a second state decoder for this experiment.
+
+Fresh generation at the same `06d470409` checkpoint succeeded with the optimized
+CLI SHA256 `583cfd7134b1cf3307b2b22e01dfbfe47bcf4b95fd07cbf4116326fa5234ecf5`.
+The single-orientation setup generated in 15.37 seconds and reproduced its
+smoke evaluation exactly after a read-only reload. It contains six cut groups
+and 19 threshold variants. Unrestricted generation plus live inspection took
+304.64 seconds; reload took 45.90 seconds. Its 936 distinct production
+orientation signatures match the prior independently exported complete set,
+with contiguous IDs 0 through 935. Reload changed no state file hashes.
+Both configurations retain 3D local UV, integrated UV and the committed graph
+metadata. Native registry inspection confirms all 19 variants are active in the
+full calculation, with 54 components and four metadata evaluators. The existing
+`soft22_euler` raw control returns `(1.4532236519417696e-48,
+-4.798908444994201e-31)` without a sampling Jacobian: Double fails its stability
+check, then Quad passes with reported relative accuracy `5.088e-12` and six
+accepted cut events. All read-only checks preserve the state hashes.
+The [portable baseline inventory](GL638_CHECKPOINT06D_BASELINE.json) records
+commands, hashes, exact registry identities and reporting conventions; full
+local evidence is under `/common/dev/gl638_checkpoint_06d470409`. These timings
+and smoke evaluations establish usable fresh fixtures, not sampling or IR-safety
+improvement.
+
+For comparisons across the native-host milestone, compare the complete
+estimator or direct `-m` raw-point values. Checkpoint `06d470409` reports the
+X-space map factor separately, while the new native host combines it before
+reporting and returns a unit unapplied Jacobian. Comparing the unadjusted
+`integrand_result` fields across those conventions would be incorrect.
+
 ## The conditional correctness boundary
 
 At warmup, certify that every active displacement has zero signed coefficient

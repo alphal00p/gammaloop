@@ -29,11 +29,17 @@ fn unwrap_sample_impl<T: FloatLike>(
 ) -> (Vec<usize>, Vec<F<T>>) {
     match sample {
         Sample::Continuous(_, xs) => {
-            let xs = xs.iter().map(|x| F::from_ff64(*x)).collect();
+            let xs = xs
+                .iter()
+                .map(|x| F(T::from_f64_exact_binary(x.0)))
+                .collect();
             (discrete_dimensions, xs)
         }
         Sample::Uniform(_, discrete, xs) => {
-            let xs = xs.iter().map(|x| F::from_ff64(*x)).collect();
+            let xs = xs
+                .iter()
+                .map(|x| F(T::from_f64_exact_binary(x.0)))
+                .collect();
             (discrete.clone(), xs)
         }
         Sample::Discrete(_, index, sample) => {
@@ -315,8 +321,9 @@ impl<T: FloatLike> DeferredCrossSectionSample<T> {
             ));
         }
         if sampling_coordinates.iter().any(|coordinate| {
-            let coordinate = coordinate.into_f64();
-            !coordinate.is_finite() || !(0.0..=1.0).contains(&coordinate)
+            !coordinate.0.is_finite()
+                || coordinate < &coordinate.zero()
+                || coordinate > &coordinate.one()
         }) {
             return Err(eyre!(
                 "deferred cross-section channel {} has non-finite or non-unit-cube coordinates",
@@ -611,6 +618,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
     sample_point: &Sample<F<f64>>,
     integrand: &mut I,
 ) -> Result<GammaLoopSample<T>> {
+    integrand.prepare_sampling_precision::<T>()?;
     let (discrete_indices, xs) = unwrap_sample(sample_point);
     let settings = integrand.get_settings();
     let loop_mom_cache_id = integrand.loop_cache_id();
@@ -624,7 +632,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
             let graph = integrand.get_master_graph(GroupId(group_id));
             for (id, channel) in graph
                 .sampling_setup()
-                .sampling_bridge()?
+                .sampling_bridge::<T>()?
                 .channels()
                 .iter()
                 .enumerate()
@@ -649,7 +657,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                 integrand
                     .get_master_graph(group_id)
                     .sampling_setup()
-                    .sampling_bridge()?
+                    .sampling_bridge::<T>()?
                     .channels()
                     .len(),
             ))
@@ -797,34 +805,18 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                     })?;
 
                     let graph = integrand.get_master_graph(group_id);
-                    let bridge = graph.sampling_setup().sampling_bridge()?;
-                    let coordinates = xs.iter().map(|x| x.clone().into_ff64().0).collect_vec();
+                    let bridge = graph.sampling_setup().sampling_bridge::<T>()?;
+                    let coordinates = xs.iter().map(|x| x.0.clone()).collect_vec();
                     let mapped = bridge.forward(channel_id, &coordinates)?;
-                    // The host still binds f64 maps here; the native cache migration
-                    // will materialize the sample directly in its evaluation precision.
-                    let mut sample = mapped.to_momentum_sample::<T>(
-                        SamplingMomentumSampleContext {
-                            loop_mom_cache_id,
-                            external_moms: &settings.kinematics.externals,
-                            external_mom_cache_id,
-                            dependent_momenta_constructor,
-                            orientation: orientation_id,
-                        },
-                        |value| F::<T>::from_f64(*value),
-                    )?;
-                    let partition_weight =
-                        mapped.partition.weight(channel_id.0).ok_or_else(|| {
-                            eyre!(
-                                "sampling channel partition has no weight for channel {}",
-                                channel_id.0
-                            )
-                        })?;
-                    if !partition_weight.is_finite() || partition_weight <= 0.0 {
-                        return Err(eyre!(
-                            "sampling channel partition has invalid weight {partition_weight}"
-                        ));
-                    }
-                    sample.sample.jacobian *= F::from_f64(partition_weight);
+                    // The mapped point and physical sample use the same native precision.
+                    let mut sample = mapped.to_momentum_sample(SamplingMomentumSampleContext {
+                        loop_mom_cache_id,
+                        external_moms: &settings.kinematics.externals,
+                        external_mom_cache_id,
+                        dependent_momenta_constructor,
+                        orientation: orientation_id,
+                    })?;
+                    sample.sample.jacobian = F(mapped.selected_factor()?);
                     Ok(GammaLoopSample::DiscreteGraph {
                         group_id,
                         sample: DiscreteGraphSample::SamplingChannel {

@@ -1,0 +1,539 @@
+{
+  "source_commit": "06d470409cd34d8d57afa11b04a3fb208ca20890",
+  "source_worktree": "/common/dev/gammaloop_advanced_sampling_checkpoint",
+  "source_tracked_clean": true,
+  "binary": "/common/dev/gammaloop_advanced_sampling_checkpoint/target/release/gammaloop",
+  "binary_sha256": "583cfd7134b1cf3307b2b22e01dfbfe47bcf4b95fd07cbf4116326fa5234ecf5",
+  "profile": "release (fat LTO)",
+  "build_seconds": 1902.3772005999926,
+  "input_sha256": {
+    "/common/dev/gammaloop_advanced_sampling_checkpoint/examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO_test_GL638.toml": "ab14fb4767e723a737dbca58de438df9e06e22a364c1cec0484951888ff665fe",
+    "/common/dev/gammaloop_advanced_sampling_checkpoint/examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot": "1354c6d854ea66a6298eb1ac9eaad31c3bf8744f0033e83b6e510d0f64602279",
+    "/common/dev/gammaloop_advanced_sampling_checkpoint/assets/models/json/sm/sm.json": "e2d605720392666345939f283b54b0527ddf68890898136f73d27dd976900ed1",
+    "/common/dev/gammaloop_advanced_sampling_checkpoint/assets/models/json/sm/restrict_default.json": "9d357d17c254595dbf612b66d6b531c982eefb71432835360bbfd8b21dcf454b",
+    "/common/dev/gammaloop_advanced_sampling_checkpoint/Cargo.lock": "b61a47c74debca9bfdea2dd5347bd19264bbd0971cb0dba8dfa7298fd1c4da0d"
+  },
+  "full_generation_and_live_seconds": 304.64014364697505,
+  "generation_summary": {
+    "peak_ram_bytes": 4554772480,
+    "reports": [
+      {
+        "process_id": 0,
+        "integrand_name": "NNLO",
+        "graph_name": "GL638",
+        "stats": {
+          "evaluator_count": 30,
+          "total_time": {
+            "secs": 297,
+            "nanos": 420553860
+          },
+          "evaluator_spenso_time": {
+            "secs": 56,
+            "nanos": 354606652
+          },
+          "evaluator_symbolica_time": {
+            "secs": 194,
+            "nanos": 342624313
+          },
+          "evaluator_compile_time": {
+            "secs": 0,
+            "nanos": 0
+          }
+        }
+      }
+    ]
+  },
+  "state_path": "/common/dev/gl638_checkpoint_06d470409/all/state",
+  "state_file_sha256": {
+    "model_parameters.json": "5cf4b422cfe328559dd3cc9322e5e66c264faba54d5d44b4f5772c3a53a43572",
+    "state_manifest.toml": "8e7423074b68d8504aaa62986b8d6499a216f7c144b401fadc5106c2a6faeac8",
+    "global_settings.toml": "95f980a1be61490c716972f0ce6abbc681b99f1308fb675b6e07e64d8cef5a94",
+    "justfile": "49ce845fc918f10f5e41e7d3e13bf8ac862707fdd7144db1221167375556d65c",
+    "model.json": "73bd6a7f4ed3c2a6f5ef35520fd39152483e77d947852ca9d02e913c0296395a",
+    "symbolica_state.bin": "202e160c0e5942aed0ee3679d05d558860cdabe88d24e9b8136405d94a179a6a",
+    "default_runtime_settings.toml": "c233c8791f3745ea736f3643dec6366dd67d8ca561e57356f789dbd272c28eb9",
+    "run.toml": "e874689cffe889735e8454bdb77bb7748b7fda091a46a6d9a3fac0b7e160eeab",
+    "processes/cross_sections/epem_a_tth/settings_history.toml": "cb94f2b51e2ab3b7b586268284dc6076bcc370fc1055956439d7782733104163",
+    "processes/cross_sections/epem_a_tth/def.bin": "0fffb787dcb4198728500a56df9c62f3d625766f3e928e012b9685a3a5a974a3",
+    "processes/cross_sections/epem_a_tth/NNLO/cs.bin": "a843eba496ea639d171b1fa5a14284103dd2e6604ca3ccad320014ede23aeda2",
+    "processes/cross_sections/epem_a_tth/NNLO/GL638.dot": "7fd875ea567fa04e009f20015b14ddaea1f89b3915294858313abc3b062e0942",
+    "processes/cross_sections/epem_a_tth/NNLO/generation_summary.json": "66396569b2ebd19988b3a22a55f3f711803478eb254dbd86a58718843fe1a370",
+    "processes/cross_sections/epem_a_tth/NNLO/integrand/settings.toml": "cdb28893b036e54f3a36b5ce18c1b58caa3ecc92525a2a9794153ee39ed4f022",
+    "processes/cross_sections/epem_a_tth/NNLO/integrand/integrand.bin": "a33d3408acb7a2c5b553bd9fb9669061169f23272b9745009d02a28f65d92c7c",
+    "drawings/templates/figure.typ": "4ab1913e6476ef9f49b4a4bdc07d44589124e5030168fb853963990d7b164672",
+    "drawings/templates/edge-style.typ": "0e961db4de2d939cc0bee8fc59fe82850e220cb96a1fe4d7e938bbbd7e9e0789",
+    "drawings/templates/layout.typ": "069a852cd32f4cb519cbd6eebcc94338ca23e561ad59cee454c89a769ea3568e",
+    "drawings/templates/grid.typ": "a2aea8505809f39564ff2d0ebb1a1c9ac9ee3b46b211d57c72e32c1f1f0ca11d",
+    "drawings/templates/crates/linnest/typst/typst.toml": "899f5436fa4211c3e98fe022a7968623782a5648980ade9d0c8c0e6cf6ecdfa0",
+    "drawings/templates/crates/linnest/typst/linnest.wasm": "655d6c2f3dbdac1d6c8ead2113d0cb576a026e3b9e1bc66b7a6c41439e16cd9d",
+    "drawings/templates/crates/linnest/typst/src/lib.typ": "85d9ce54cad4251140acdea0a153a737b465d346b9668665f53c1db2fa6eb200",
+    "drawings/templates/crates/linnest/typst/src/draw.typ": "7029235345346572dcf7dcd26cf947c9516efdd9828a183d8613b60c6ad8e22f",
+    "drawings/templates/crates/linnest/typst/src/graph.typ": "3b332b75f3212458ef4815010f5ff645c762d09a1fd9798c9637636590f0f392",
+    "drawings/templates/crates/linnest/typst/src/physics-edge-style.typ": "854530edde9152b8adb01cf8e097c4107f0277ac175f6e47c37df97ada735cd7",
+    "drawings/templates/crates/linnest/typst/src/subgraph.typ": "d318d5e98e902e06f412cd8a1f45ebc6f6c8218a7c4063bf3582333616122c53",
+    "drawings/templates/crates/linnest/typst/src/layout.typ": "3c06a8413a62fe124c0731fcb6e0ad354051214d055a682520df5c4186d8301c",
+    "drawings/templates/crates/linnest/typst/src/curve.typ": "4350dfbe4a8e825396e4f476731b9862935d87fb6630c24425350f4071b9e590",
+    "drawings/templates/crates/linnest/typst/src/impl/physics-edge-style.typ": "1e13992babc10e7310fe24bfe0e4f4f67c5ea51afaf08b413418f4d88d269965",
+    "drawings/templates/crates/linnest/typst/src/impl/graph.typ": "1dc82dd0099c0810036992a378042a33f5c162fd919d08d79cf218b8716c08dd",
+    "drawings/templates/crates/linnest/typst/src/impl/draw.typ": "0acb9d50e9f6ac24dbe5b3c9727e3ec4c65843d4dbce57ba5c4f973a0b75f682",
+    "drawings/templates/crates/kurvst/typst/kurvst.wasm": "50619c0dbe6ec78538f9e8a8587b5b8ad33d464672dec974c2c53ab93f7ebd15",
+    "drawings/templates/crates/kurvst/typst/typst.toml": "0d7eec512c399c0beeee8402393b32e489856fbdeb30945feff0ed298dd8bbbd",
+    "drawings/templates/crates/kurvst/typst/src/impl.typ": "0feab4012862ea5020e4bc833861f333d0f68ea2fc3b5420af5709edeaaf10d8",
+    "drawings/templates/crates/kurvst/typst/src/lib.typ": "90fd7952020cb3162f95acb47389e1dafc0516d03d085fa780b084904e9ad636"
+  },
+  "orientations": {
+    "count": 936,
+    "unique_count": 936,
+    "loaded_ids": "contiguous 0..935 (all keys retained in orientations.json and native-integrand-info.json)",
+    "loaded_keys_sha256": "88b4acb37824bde5dd432beb09c38cbc2e6fd20c7c04d5dea8c6751cf9dfc170",
+    "display_equals_native_keys": true,
+    "expected_set_matches": true,
+    "expected_file": "/common/dev/gl638_integration_validation/full/eager/orientations.json",
+    "expected_sha256": "aafa034000e1b5b38e7c0d8b22c3cf58fe8cd72aa9cb9eaec54e07ec2dc502e0"
+  },
+  "cuts": [
+    {
+      "cut_id": 0,
+      "edges": [
+        2,
+        6,
+        12,
+        13
+      ],
+      "raising_power": 1
+    },
+    {
+      "cut_id": 1,
+      "edges": [
+        2,
+        6,
+        10
+      ],
+      "raising_power": 1
+    },
+    {
+      "cut_id": 2,
+      "edges": [
+        2,
+        6,
+        7,
+        13,
+        14
+      ],
+      "raising_power": 1
+    },
+    {
+      "cut_id": 3,
+      "edges": [
+        2,
+        4,
+        12
+      ],
+      "raising_power": 1
+    },
+    {
+      "cut_id": 4,
+      "edges": [
+        2,
+        4,
+        10,
+        13
+      ],
+      "raising_power": 1
+    },
+    {
+      "cut_id": 5,
+      "edges": [
+        2,
+        4,
+        7,
+        14
+      ],
+      "raising_power": 1
+    }
+  ],
+  "thresholds": {
+    "explicit_directive_count": 9,
+    "resolved_variant_count": 19,
+    "component_count": 54,
+    "evaluator_count": 4,
+    "all_generated": true,
+    "all_active": true,
+    "native_registry_identical_to_o0": false,
+    "native_info_path": "/common/dev/gl638_checkpoint_06d470409/all/native-integrand-info.json",
+    "native_info_sha256": "331ef377d7fbdbc5f50d590db405d881431e5e14c2e668494ac735b3e194e678",
+    "variant_identities": [
+      {
+        "variant_id": 0,
+        "name": "default",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          7
+        ],
+        "resolved_parent_lmb": [
+          4,
+          5,
+          7,
+          12
+        ]
+      },
+      {
+        "variant_id": 1,
+        "name": "default",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          7
+        ],
+        "resolved_parent_lmb": [
+          4,
+          5,
+          7,
+          12
+        ]
+      },
+      {
+        "variant_id": 2,
+        "name": "default",
+        "group_id": null,
+        "side": "right",
+        "resolved_subspace": [
+          5
+        ],
+        "resolved_parent_lmb": [
+          4,
+          5,
+          7,
+          12
+        ]
+      },
+      {
+        "variant_id": 3,
+        "name": "default",
+        "group_id": null,
+        "side": "right",
+        "resolved_subspace": [
+          5
+        ],
+        "resolved_parent_lmb": [
+          4,
+          5,
+          7,
+          12
+        ]
+      },
+      {
+        "variant_id": 4,
+        "name": "default",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          7
+        ],
+        "resolved_parent_lmb": [
+          4,
+          7,
+          10,
+          13
+        ]
+      },
+      {
+        "variant_id": 5,
+        "name": "default",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          7
+        ],
+        "resolved_parent_lmb": [
+          4,
+          7,
+          10,
+          13
+        ]
+      },
+      {
+        "variant_id": 6,
+        "name": "native_2l",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          3,
+          7
+        ],
+        "resolved_parent_lmb": [
+          3,
+          6,
+          7,
+          10
+        ]
+      },
+      {
+        "variant_id": 7,
+        "name": "native_2l",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          3,
+          7
+        ],
+        "resolved_parent_lmb": [
+          3,
+          6,
+          7,
+          10
+        ]
+      },
+      {
+        "variant_id": 8,
+        "name": "shared_1l",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          7
+        ],
+        "resolved_parent_lmb": [
+          3,
+          6,
+          7,
+          10
+        ]
+      },
+      {
+        "variant_id": 9,
+        "name": "native_2l",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          3,
+          7
+        ],
+        "resolved_parent_lmb": [
+          3,
+          6,
+          7,
+          10
+        ]
+      },
+      {
+        "variant_id": 10,
+        "name": "shared_1l",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          7
+        ],
+        "resolved_parent_lmb": [
+          3,
+          6,
+          7,
+          10
+        ]
+      },
+      {
+        "variant_id": 11,
+        "name": "native_2l",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          3,
+          7
+        ],
+        "resolved_parent_lmb": [
+          3,
+          6,
+          7,
+          10
+        ]
+      },
+      {
+        "variant_id": 12,
+        "name": "shared_1l",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          7
+        ],
+        "resolved_parent_lmb": [
+          3,
+          6,
+          7,
+          10
+        ]
+      },
+      {
+        "variant_id": 13,
+        "name": "native_2l",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          3,
+          7
+        ],
+        "resolved_parent_lmb": [
+          3,
+          6,
+          7,
+          10
+        ]
+      },
+      {
+        "variant_id": 14,
+        "name": "native_2l",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          3,
+          7
+        ],
+        "resolved_parent_lmb": [
+          3,
+          6,
+          7,
+          10
+        ]
+      },
+      {
+        "variant_id": 15,
+        "name": "default",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          7
+        ],
+        "resolved_parent_lmb": [
+          6,
+          7,
+          12,
+          13
+        ]
+      },
+      {
+        "variant_id": 16,
+        "name": "default",
+        "group_id": null,
+        "side": "left",
+        "resolved_subspace": [
+          7
+        ],
+        "resolved_parent_lmb": [
+          6,
+          7,
+          12,
+          13
+        ]
+      },
+      {
+        "variant_id": 17,
+        "name": "default",
+        "group_id": null,
+        "side": "right",
+        "resolved_subspace": [
+          5
+        ],
+        "resolved_parent_lmb": [
+          4,
+          5,
+          7,
+          14
+        ]
+      },
+      {
+        "variant_id": 18,
+        "name": "default",
+        "group_id": null,
+        "side": "right",
+        "resolved_subspace": [
+          5
+        ],
+        "resolved_parent_lmb": [
+          4,
+          5,
+          7,
+          14
+        ]
+      }
+    ],
+    "identical_to_o0_except_expected_orientation_activation": true,
+    "variants_activated_by_full_orientation_sum": [
+      4,
+      5,
+      6,
+      7,
+      12,
+      13,
+      14,
+      17,
+      18
+    ]
+  },
+  "uv": {
+    "subtract_uv": true,
+    "generate_integrated": true,
+    "final_integrand": "ThreeD",
+    "local_uv_cts_from_expanded_4d_integrands": false
+  },
+  "generation_scope": {
+    "explicit_orientation_sum_only": true,
+    "orientation_pattern": {}
+  },
+  "reload": {
+    "seconds": 45.89840347599238,
+    "identical_live_evaluation": true,
+    "state_unchanged_after_all_read_only_checks": true
+  },
+  "smoke_estimator": {
+    "re": 0.0002367284081342878,
+    "im": 1.410919747480143e-05
+  },
+  "smoke_reporting_convention": "06d reports raw integrand_result and separate J; compare their product across conventions",
+  "raw_control": {
+    "name": "soft22_euler",
+    "input_command": "inspect -p epem_a_tth -i NNLO -m --graph-id 0 --json-output /tmp/advanced-sampling-gl638-baseline/controls-soft22_euler.json --point 37 126 -109 -91 64 83 37.002020305089104 125.99696954236634 -108.99393908473269 36.996969542366344 125.99393908473269 -109.0020203050891",
+    "runtime_card": "/tmp/advanced-sampling-gl638-baseline/controls-runtime.toml",
+    "runtime_card_sha256": "f7d436f0711afd3f9d92d7719f388243757388d1e8966e2663aa78a75de182fb",
+    "source_request_sha256": "6126cef3004aa5b372d9c38143848f4328628f60a1bcf26cca973ceaebe65d7e",
+    "integrand_result": {
+      "re": 1.4532236519417696e-48,
+      "im": -4.798908444994201e-31
+    },
+    "jacobian": null,
+    "finite": true,
+    "is_nan": false,
+    "stability_results": [
+      {
+        "precision": "Double",
+        "estimated_relative_accuracy": 0.9097800846531836,
+        "status": {
+          "Unstable": 2
+        },
+        "total_time": {
+          "secs": 0,
+          "nanos": 15136133
+        }
+      },
+      {
+        "precision": "Quad",
+        "estimated_relative_accuracy": 5.087998559187261e-12,
+        "status": {
+          "Stable": 2
+        },
+        "total_time": {
+          "secs": 0,
+          "nanos": 96588106
+        }
+      }
+    ],
+    "accepted_events": 6,
+    "event_cut_ids": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  "scope": "Fresh-generation and replay baseline only; no sampling-variance or IR-safety improvement claim"
+}

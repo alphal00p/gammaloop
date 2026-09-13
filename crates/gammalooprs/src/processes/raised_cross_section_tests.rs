@@ -933,6 +933,106 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                 assert!((report.normalization - 1.0).abs() < 0.02, "{report:?}");
                 assert!(report.round_trip_residual_max < 1.0e-8, "{report:?}");
 
+                // The same actual cut chart is used by the complete physical
+                // source/stability route. Keep the draw binary64 and reconstruct
+                // it natively after the focused radius collapses in Double.
+                {
+                    use crate::{
+                        integrands::evaluation::{PreciseEvaluationResult, StabilityStatus},
+                        settings::runtime::{
+                            MultiChannelingSettings, SamplingSettings, StabilityLevelSetting,
+                        },
+                    };
+                    use symbolica::prelude::SingleFloat;
+                    let mut runtime = ProcessIntegrand::CrossSection(integrand.clone());
+                    let mut focused = parameterization.clone();
+                    focused.power = 2.0;
+                    let settings = runtime.get_mut_settings();
+                    settings.sampling =
+                        SamplingSettings::MultiChanneling(MultiChannelingSettings {
+                            parameterization_settings: focused,
+                            ..Default::default()
+                        });
+                    settings.stability.rotation_axis.clear();
+                    settings.stability.levels = vec![
+                        StabilityLevelSetting::default_double(),
+                        StabilityLevelSetting::default_quad(),
+                    ];
+                    runtime.warm_up(&model).unwrap();
+                    let source = Sample::Continuous(
+                        F(1.0),
+                        vec![F(shell_coordinate + 1.0e-10), F(0.31), F(0.47)],
+                    );
+                    let rescued = runtime
+                        .evaluate_sample_precise(
+                            &source,
+                            &model,
+                            F(1.0),
+                            false,
+                            Complex::new_zero(),
+                        )
+                        .unwrap();
+                    let PreciseEvaluationResult::Quad(rescued) = rescued else {
+                        panic!("the actual cut chart must reconstruct at Quad precision")
+                    };
+                    assert_eq!(rescued.evaluation_metadata.stability_results.len(), 2);
+                    assert!(matches!(
+                        rescued.evaluation_metadata.stability_results[0].status,
+                        StabilityStatus::Unstable(0)
+                    ));
+                    assert!(
+                        rescued.integrand_result.re.0.is_finite()
+                            && rescued.integrand_result.im.0.is_finite()
+                    );
+                    assert_ne!(
+                        rescued.integrand_result,
+                        Complex::new_re(rescued.integrand_result.re.zero())
+                    );
+                    assert!(
+                        rescued
+                            .parameterization_jacobian
+                            .as_ref()
+                            .is_some_and(|jacobian| jacobian == &jacobian.one())
+                    );
+                    runtime.get_mut_settings().stability.levels =
+                        vec![StabilityLevelSetting::default_quad()];
+                    runtime.warm_up(&model).unwrap();
+                    let direct = runtime
+                        .evaluate_sample_precise(
+                            &source,
+                            &model,
+                            F(1.0),
+                            false,
+                            Complex::new_zero(),
+                        )
+                        .unwrap();
+                    let PreciseEvaluationResult::Quad(direct) = direct else {
+                        unreachable!()
+                    };
+                    assert_eq!(rescued.integrand_result, direct.integrand_result);
+                    let rescued_events = rescued
+                        .event_groups
+                        .iter()
+                        .flat_map(|group| group.iter())
+                        .collect::<Vec<_>>();
+                    let direct_events = direct
+                        .event_groups
+                        .iter()
+                        .flat_map(|group| group.iter())
+                        .collect::<Vec<_>>();
+                    assert!(!rescued_events.is_empty());
+                    assert_eq!(rescued_events.len(), direct_events.len());
+                    for (rescued, direct) in rescued_events.iter().zip(direct_events) {
+                        assert_eq!(rescued.cut_info.sampling_channel_id, Some(0));
+                        assert_eq!(rescued.cut_info.sampling_channel_edge_ids, None);
+                        assert_eq!(rescued.weight, direct.weight);
+                        assert_eq!(
+                            rescued.additional_weights.weights,
+                            direct.additional_weights.weights
+                        );
+                    }
+                }
+
                 // User cut selectors are validated against the production CutId,
                 // even though there is only one canonical channel in this test.
                 parameterization

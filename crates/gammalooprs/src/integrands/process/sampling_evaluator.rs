@@ -9,7 +9,10 @@
 use color_eyre::Result;
 use eyre::eyre;
 use spenso::algebra::complex::Complex;
-use symbolica::{atom::Atom, prelude::*};
+use symbolica::{
+    atom::{Atom, AtomView},
+    prelude::*,
+};
 
 use crate::{
     integrands::process::{GenericEvaluator, GenericEvaluatorFloat},
@@ -104,6 +107,27 @@ impl SamplingExpressionEvaluator {
             output_count: expressions.len(),
             with_derivatives,
         })
+    }
+
+    /// Compile a declared-positive proxy once for all supported precisions.
+    ///
+    /// Non-real and nonpositive constants are rejected before compilation.
+    /// This is not a positivity certificate for arbitrary expressions: native
+    /// score evaluation must still check every result, and the graph compiler
+    /// must separately establish coverage of the intended singular features.
+    pub(crate) fn new_positive_proxy(
+        expression: Atom,
+        parameters: impl IntoIterator<Item = Atom>,
+    ) -> Result<Self> {
+        if let AtomView::Num(number) = expression.as_view() {
+            let coefficient = number.get_coeff_view().to_owned();
+            if !coefficient.is_real() || coefficient.is_zero() || coefficient.is_negative() {
+                return Err(eyre!(
+                    "sampling Symbolica score constant must be real and strictly positive: {expression}"
+                ));
+            }
+        }
+        Self::new([expression], parameters, false)
     }
 
     pub fn parameter_count(&self) -> usize {

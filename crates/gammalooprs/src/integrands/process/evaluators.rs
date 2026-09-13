@@ -84,7 +84,7 @@ use crate::{
         global::{CompilationOptimizationLevel, FrozenCompilationMode},
     },
     utils::{
-        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
+        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, RuntimeCache, TENSORLIB, W_, f128,
         hyperdual_utils::{DualOrNot, new_from_values},
     },
 };
@@ -93,7 +93,7 @@ type ParsingTensorMap<'a> = dyn Fn(ParamTensor<ShadowedStructure<Aind>>) -> Resu
     + 'a;
 
 use super::{
-    ParamBuilder, RuntimeCache,
+    ParamBuilder,
     param_builder::{ThresholdParams, UpdateAndGetParams},
 };
 

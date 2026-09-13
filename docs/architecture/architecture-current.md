@@ -425,12 +425,12 @@ explicit `SmallestDegree` selection is unchanged. The existing
 7. Stability selection still compares only the complex graph weight, but the
    retained branch also carries the final grouped event payload.
 8. The final `EvaluationResult` contains:
-   - the stable `integrand_result`, before the separately reported top-level
-     parameterization Jacobian is applied; summed sampling channels include
-     each channel's map Jacobian and partition factor internally and report
-     a unit top-level Jacobian
-   - the top-level `parameterization_jacobian` when the sample came from
-     x-space parameterization (`None` for direct momentum-space evaluation)
+   - the stable `integrand_result`, including each map's Jacobian and channel
+     partition factor, combined with the physical value at native precision
+   - a unit unapplied `parameterization_jacobian` for x-space evaluation
+     (`None` for direct momentum-space evaluation); the actual map Jacobian
+     remains on the bridge's map evaluation for diagnostics (the selected
+     momentum sample carries the combined map/partition factor)
    - the separate `integrator_weight`, i.e. the Monte Carlo/grid weight only
    - grouped accepted events
    - event-processing timing in `evaluation_metadata`
@@ -438,6 +438,10 @@ explicit `SmallestDegree` selection is unchanged. The existing
    - ordered per-level stability results, each with relative-accuracy and total
      time spent in that stability level
    - evaluation metadata
+   Native reconstruction and stability selection return the same retained
+   precision-tagged result to both API routes. The ordinary route checks final
+   f64 representability of contributions and event weights; the precise Rust
+   route keeps the native result without a preliminary f64 reporting pass.
 9. Observable filling happens only from the final stable `EvaluationResult`
    payload. Unstable branches do not contribute events or observables.
 10. `havana_integrate` runs iterative Monte Carlo updates, merges worker-local

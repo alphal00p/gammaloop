@@ -19,7 +19,7 @@ use crate::{
     },
     settings::runtime::kinematic::improvement::{PhaseSpaceImprovementSettings, improve_ps},
     utils::{
-        F, FloatLike, f128,
+        ArbPrec, F, FloatLike, RuntimeCache, f128,
         serde_utils::{IsDefault, is_float},
     },
 };
@@ -97,6 +97,10 @@ pub enum Externals {
         f_64_cache: Option<TiVec<ExternalIndex, FourMomentum<F<f64>>>>,
         #[serde(skip)]
         f_128_cache: Option<TiVec<ExternalIndex, FourMomentum<F<f128>>>>,
+        // Unlike the historical caches above, this new transient field writes
+        // no bytes, preserving the layout of existing saved state archives.
+        #[serde(skip)]
+        arb_cache: RuntimeCache<TiVec<ExternalIndex, FourMomentum<F<ArbPrec>>>>,
     },
     // add different type of pdfs here when needed
 }
@@ -137,13 +141,19 @@ impl Rotatable for Externals {
                 helicities,
                 f_64_cache,
                 f_128_cache,
+                arb_cache,
                 improvement_settings,
             } => {
                 let momenta = momenta.iter().map(|m| m.rotate(rotation)).collect();
+                let mut rotated_arb = RuntimeCache::default();
+                if let Some(cache) = arb_cache.as_ref() {
+                    rotated_arb.set(cache.iter().map(|m| m.rotate(rotation)).collect());
+                }
                 Externals::Constant {
                     momenta,
                     helicities: helicities.clone(),
                     improvement_settings: improvement_settings.clone(),
+                    arb_cache: rotated_arb,
                     f_64_cache: f_64_cache
                         .as_ref()
                         .map(|cache| cache.iter().map(|m| m.rotate(rotation)).collect()),
@@ -460,12 +470,15 @@ impl Externals {
         let Self::Constant {
             f_64_cache,
             f_128_cache,
+            arb_cache,
             ..
         } = self;
         *f_64_cache = None;
         *f_128_cache = None;
+        arb_cache.invalidate();
         let dep_momenta_f64 = self.get_dependent_externals::<f64>(constructor)?;
         let dep_momenta_f128 = self.get_dependent_externals::<f128>(constructor)?;
+        let dep_momenta_arb = self.get_dependent_externals::<ArbPrec>(constructor)?;
 
         match constructor {
             DependentMomentaConstructor::Amplitude(signature) => match self {
@@ -473,6 +486,7 @@ impl Externals {
                     improvement_settings,
                     f_64_cache,
                     f_128_cache,
+                    arb_cache,
                     ..
                 } => {
                     let improved_f64 = improve_ps(
@@ -492,8 +506,20 @@ impl Externals {
                         &F::<f128>::from_ff64(*e_cm),
                         improvement_settings,
                     )?;
+                    let arb_masses = masses
+                        .iter()
+                        .map(|mass| F::<ArbPrec>::from_ff64(*mass))
+                        .collect();
+                    let improved_arb = improve_ps(
+                        &dep_momenta_arb,
+                        &arb_masses,
+                        signature,
+                        &F::<ArbPrec>::from_ff64(*e_cm),
+                        improvement_settings,
+                    )?;
                     *f_64_cache = Some(improved_f64);
                     *f_128_cache = Some(improved_f128);
+                    arb_cache.set(improved_arb);
                     Ok(())
                 }
             },
@@ -510,6 +536,7 @@ fn external_inv() {
         helicities: vec![Helicity::PLUS; 4],
         f_64_cache: None,
         f_128_cache: None,
+        arb_cache: Default::default(),
         improvement_settings: PhaseSpaceImprovementSettings::default(),
     };
 
@@ -527,6 +554,7 @@ fn external_inv() {
         helicities: vec![Helicity::PLUS; 4],
         f_64_cache: None,
         f_128_cache: None,
+        arb_cache: Default::default(),
         improvement_settings: PhaseSpaceImprovementSettings::default(),
     };
 
@@ -542,6 +570,7 @@ impl Default for Externals {
             helicities: vec![],
             f_64_cache: None,
             f_128_cache: None,
+            arb_cache: Default::default(),
             improvement_settings: PhaseSpaceImprovementSettings::default(),
         }
     }

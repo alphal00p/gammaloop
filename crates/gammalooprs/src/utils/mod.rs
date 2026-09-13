@@ -1,4 +1,6 @@
-use crate::integrands::process::GenericEvaluatorFloat;
+use crate::integrands::process::{
+    GenericEvaluatorFloat, LmbMultiChannelingSetup, SamplingChannelBridge,
+};
 use crate::model::Model;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopMomenta, SubspaceData,
@@ -68,6 +70,56 @@ use vakint::Vakint;
 use crate::MAX_LOOP;
 use ::tracing::debug;
 use typed_index_collections::TiVec;
+
+/// Transient runtime data which contributes no bytes to persisted state.
+/// Decoding always starts empty, so numerical bindings are rebuilt at warmup.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuntimeCache<T>(Option<T>);
+
+impl<T> Default for RuntimeCache<T> {
+    fn default() -> Self {
+        Self(None)
+    }
+}
+
+impl<T> RuntimeCache<T> {
+    pub(crate) fn invalidate(&mut self) {
+        self.0 = None;
+    }
+
+    pub(crate) fn set(&mut self, value: T) {
+        self.0 = Some(value);
+    }
+
+    pub(crate) fn take(&mut self) -> Option<T> {
+        self.0.take()
+    }
+
+    pub(crate) fn as_ref(&self) -> Option<&T> {
+        self.0.as_ref()
+    }
+
+    pub(crate) fn as_mut(&mut self) -> Option<&mut T> {
+        self.0.as_mut()
+    }
+}
+
+impl<T> bincode::Encode for RuntimeCache<T> {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        _encoder: &mut E,
+    ) -> std::result::Result<(), bincode::error::EncodeError> {
+        Ok(())
+    }
+}
+
+impl<C, T> bincode::Decode<C> for RuntimeCache<T> {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        _decoder: &mut D,
+    ) -> std::result::Result<Self, bincode::error::DecodeError> {
+        Ok(Self::default())
+    }
+}
 
 pub const GIT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const VERSION: &str = "0.0.1";
@@ -1209,6 +1261,22 @@ impl FloatLike for f128 {
         Self::TAU()
     }
 
+    fn from_f64_exact_binary(x: f64) -> Self {
+        Self::from_f64_exact_binary(x)
+    }
+
+    fn sampling_bridge_cache(
+        setup: &LmbMultiChannelingSetup,
+    ) -> &RuntimeCache<SamplingChannelBridge<Self>> {
+        &setup.sampling_bridge_quad
+    }
+
+    fn sampling_bridge_cache_mut(
+        setup: &mut LmbMultiChannelingSetup,
+    ) -> &mut RuntimeCache<SamplingChannelBridge<Self>> {
+        &mut setup.sampling_bridge_quad
+    }
+
     fn from_f64(x: f64) -> Self {
         // There are two reasonable f64 -> higher-precision policies:
         // preserve the exact binary64 value or reinterpret the visible decimal
@@ -1284,6 +1352,22 @@ impl FloatLike for ArbPrec {
         Self::TAU()
     }
 
+    fn from_f64_exact_binary(x: f64) -> Self {
+        Self::from_f64_exact_binary(x)
+    }
+
+    fn sampling_bridge_cache(
+        setup: &LmbMultiChannelingSetup,
+    ) -> &RuntimeCache<SamplingChannelBridge<Self>> {
+        &setup.sampling_bridge_arb
+    }
+
+    fn sampling_bridge_cache_mut(
+        setup: &mut LmbMultiChannelingSetup,
+    ) -> &mut RuntimeCache<SamplingChannelBridge<Self>> {
+        &mut setup.sampling_bridge_arb
+    }
+
     fn from_f64(x: f64) -> Self {
         // There are two reasonable f64 -> higher-precision policies:
         // preserve the exact binary64 value or reinterpret the visible decimal
@@ -1313,9 +1397,11 @@ impl FloatLike for ArbPrec {
     }
 
     fn try_extract_externals_from_cache(
-        _externals: &Externals,
+        externals: &Externals,
     ) -> Option<&TiVec<ExternalIndex, FourMomentum<F<Self>>>> {
-        None
+        match externals {
+            Externals::Constant { arb_cache, .. } => arb_cache.as_ref(),
+        }
     }
 
     fn epsilon(&self) -> Self {
@@ -1645,6 +1731,14 @@ pub trait FloatLike:
     fn FRAC_1_PI(&self) -> Self;
 
     fn from_f64(x: f64) -> Self;
+
+    /// Preserve the exact stored binary64 value of an original Monte Carlo
+    /// coordinate. User-authored settings retain the existing decimal policy.
+    fn from_f64_exact_binary(x: f64) -> Self;
+
+    fn sampling_bridge_cache(setup: &LmbMultiChannelingSetup) -> &RuntimeCache<SamplingChannelBridge<Self>>;
+    fn sampling_bridge_cache_mut(setup: &mut LmbMultiChannelingSetup) -> &mut RuntimeCache<SamplingChannelBridge<Self>>;
+
 
     #[allow(clippy::wrong_self_convention)]
     fn into_f64(&self) -> f64; // for inverse gamma in tropical sampling
@@ -2585,6 +2679,22 @@ impl FloatLike for f64 {
 
     fn FRAC_1_PI(&self) -> Self {
         std::f64::consts::FRAC_1_PI
+    }
+
+    fn from_f64_exact_binary(x: f64) -> Self {
+        x
+    }
+
+    fn sampling_bridge_cache(
+        setup: &LmbMultiChannelingSetup,
+    ) -> &RuntimeCache<SamplingChannelBridge<Self>> {
+        &setup.sampling_bridge
+    }
+
+    fn sampling_bridge_cache_mut(
+        setup: &mut LmbMultiChannelingSetup,
+    ) -> &mut RuntimeCache<SamplingChannelBridge<Self>> {
+        &mut setup.sampling_bridge
     }
 
     fn from_f64(x: f64) -> Self {
@@ -4854,6 +4964,25 @@ fn strip_ansi_escape_codes(line: &str) -> String {
 
 pub(crate) fn into_complex_ff64<T: FloatLike>(c: &Complex<F<T>>) -> Complex<F<f64>> {
     Complex::new(c.re.into_ff64(), c.im.into_ff64())
+}
+
+#[test]
+fn exact_binary_cube_promotion_preserves_original_value_and_settings_policy() {
+    fn check<T: FloatLike>() {
+        let one = F::<T>::from_f64(1.0);
+        let exact = F(T::from_f64_exact_binary(0.1));
+        let expected = one.from_i64(3602879701896397) / one.from_i64(2).powi(55);
+        assert_eq!(exact, expected);
+        assert_eq!(exact.into_f64().to_bits(), 0.1_f64.to_bits());
+        if one.epsilon() < F::<T>::from_f64(f64::EPSILON) {
+            let settings_value = F::<T>::from_f64(0.1);
+            assert!(exact > settings_value);
+            assert!((settings_value - &one / one.from_i64(10)).abs() <= one.epsilon());
+        }
+    }
+    check::<f64>();
+    check::<QuadFloat>();
+    check::<ArbPrec>();
 }
 
 #[test]

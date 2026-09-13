@@ -19,7 +19,8 @@ use crate::observables::{
 };
 use crate::processes::{GraphGroupSelectionSpec, StandaloneExportSettings};
 use crate::utils::{
-    ArbPrec, F, FloatLike, f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta,
+    ArbPrec, F, FloatLike, RuntimeCache, f128, format_for_compare_digits,
+    get_n_dim_for_n_loop_momenta,
 };
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::owo_colors::OwoColorize;
@@ -141,54 +142,6 @@ pub struct MomentumSpaceEvaluationInput {
     pub orientation: Option<usize>,
     /// Optional canonical sampling channel selected by discrete sampling.
     pub channel_id: Option<SamplingChannelId>,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct RuntimeCache<T>(Option<T>);
-
-impl<T> Default for RuntimeCache<T> {
-    fn default() -> Self {
-        Self(None)
-    }
-}
-
-impl<T> RuntimeCache<T> {
-    pub(crate) fn invalidate(&mut self) {
-        self.0 = None;
-    }
-
-    pub(crate) fn set(&mut self, value: T) {
-        self.0 = Some(value);
-    }
-
-    pub(crate) fn take(&mut self) -> Option<T> {
-        self.0.take()
-    }
-
-    pub(crate) fn as_ref(&self) -> Option<&T> {
-        self.0.as_ref()
-    }
-
-    pub(crate) fn as_mut(&mut self) -> Option<&mut T> {
-        self.0.as_mut()
-    }
-}
-
-impl<T> bincode::Encode for RuntimeCache<T> {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        _encoder: &mut E,
-    ) -> std::result::Result<(), bincode::error::EncodeError> {
-        Ok(())
-    }
-}
-
-impl<C, T> bincode::Decode<C> for RuntimeCache<T> {
-    fn decode<D: bincode::de::Decoder<Context = C>>(
-        _decoder: &mut D,
-    ) -> std::result::Result<Self, bincode::error::DecodeError> {
-        Ok(Self::default())
-    }
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -1739,33 +1692,6 @@ fn restore_observable_snapshot_bundle<I: ProcessIntegrandImpl>(
     runtime.restore_snapshot_bundle(bundle)
 }
 
-fn full_event_multiplicative_factor(
-    parameterization_jacobian: Option<F<f64>>,
-    integrator_weight: F<f64>,
-) -> Complex<F<f64>> {
-    let jacobian = parameterization_jacobian.unwrap_or(F(1.0));
-    Complex::new_re(jacobian * integrator_weight)
-}
-
-fn apply_full_event_multiplicative_factor(
-    event_groups: &mut crate::observables::EventGroupList,
-    full_factor: &Complex<F<f64>>,
-) {
-    for event_group in event_groups.iter_mut() {
-        for event in event_group.iter_mut() {
-            event.apply_multiplicative_factor(full_factor);
-            if !event.additional_weights.weights.is_empty() {
-                event
-                    .additional_weights
-                    .weights
-                    .entry(AdditionalWeightKey::FullMultiplicativeFactor)
-                    .and_modify(|value| *value *= full_factor)
-                    .or_insert_with(|| *full_factor);
-            }
-        }
-    }
-}
-
 fn full_event_multiplicative_factor_precise<T: FloatLike>(
     parameterization_jacobian: Option<F<T>>,
     integrator_weight: F<T>,
@@ -2081,24 +2007,6 @@ fn stability_check_on_norm<T: FloatLike>(
 }
 
 #[derive(Debug, Clone)]
-pub struct StabilityLevelResult {
-    pub result: Complex<F<f64>>,
-    pub graph_result: GraphEvaluationResult<f64>,
-    pub stability_level_used: Precision,
-    pub estimated_relative_accuracy: Option<F<f64>>,
-    pub estimated_decimal_digits: Option<F<f64>>,
-    pub sample_count: usize,
-    pub total_time: Duration,
-    pub parameterization_time: Duration,
-    pub parameterization_jacobian: Option<F<f64>>,
-    pub integrand_evaluation_time: Duration,
-    pub evaluator_evaluation_time: Duration,
-    pub is_stable: bool,
-    pub instability_reason: Option<StabilityFailureReason>,
-    pub rotated_results: Vec<RotatedEvaluation>,
-}
-
-#[derive(Debug, Clone)]
 struct PreciseStabilityLevelResult<T: FloatLike> {
     pub result: Complex<F<T>>,
     pub graph_result: GraphEvaluationResult<T>,
@@ -2108,40 +2016,24 @@ struct PreciseStabilityLevelResult<T: FloatLike> {
     pub total_time: Duration,
     pub parameterization_time: Duration,
     pub parameterization_jacobian: Option<F<T>>,
-    pub integrand_evaluation_time: Duration,
-    pub evaluator_evaluation_time: Duration,
     pub is_stable: bool,
-    pub instability_reason: Option<StabilityFailureReason>,
     pub rotated_results: Vec<RotatedEvaluation>,
 }
 
 impl<T: FloatLike> PreciseStabilityLevelResult<T> {
-    fn into_f64(self) -> StabilityLevelResult {
+    fn stability_result(&self) -> StabilityResult {
         // Preserve the exponent before a nonzero Arb estimate can underflow to f64 zero.
         let estimated_decimal_digits = self
             .estimated_relative_accuracy
             .as_ref()
             .filter(|value| value.is_non_zero() && !value.is_nan() && !value.is_infinite())
             .map(|value| (-value.abs().log10()).into_ff64());
-        StabilityLevelResult {
-            result: complex_to_f64(&self.result),
-            graph_result: self.graph_result.into_f64(),
-            stability_level_used: self.stability_level_used,
-            estimated_relative_accuracy: self
-                .estimated_relative_accuracy
-                .map(|value| value.into_ff64()),
+        StabilityResult {
+            precision: self.stability_level_used,
+            estimated_relative_accuracy: self.estimated_relative_accuracy.as_ref().map(F::into_ff64),
             estimated_decimal_digits,
-            sample_count: self.sample_count,
+            status: StabilityStatus::from_sample_count(self.sample_count, self.is_stable),
             total_time: self.total_time,
-            parameterization_time: self.parameterization_time,
-            parameterization_jacobian: self
-                .parameterization_jacobian
-                .map(|value| value.into_ff64()),
-            integrand_evaluation_time: self.integrand_evaluation_time,
-            evaluator_evaluation_time: self.evaluator_evaluation_time,
-            is_stable: self.is_stable,
-            instability_reason: self.instability_reason,
-            rotated_results: self.rotated_results,
         }
     }
 }
@@ -2155,18 +2047,31 @@ pub struct LmbMultiChannelingSetup {
     pub graph: Graph,
     pub all_bases: TiVec<LmbIndex, LoopMomentumBasis>,
     pub(crate) sampling_bridge: RuntimeCache<SamplingChannelBridge>,
+    pub(crate) sampling_bridge_quad: RuntimeCache<SamplingChannelBridge<f128>>,
+    pub(crate) sampling_bridge_arb: RuntimeCache<SamplingChannelBridge<ArbPrec>>,
+    pub(crate) sampling_catalogue: RuntimeCache<SamplingChannelCatalogue>,
+    pub(crate) sampling_proxies: RuntimeCache<Vec<Option<SamplingExpressionEvaluator>>>,
 }
 
 impl LmbMultiChannelingSetup {
     /// Borrow the bridge compiled from the last successful process warmup.
     /// Explicit constructors remain fresh and never populate this runtime cache.
-    pub fn sampling_bridge(&self) -> Result<&SamplingChannelBridge> {
-        self.sampling_bridge.as_ref().ok_or_else(|| {
+    pub fn sampling_bridge<T: FloatLike>(&self) -> Result<&SamplingChannelBridge<T>> {
+        T::sampling_bridge_cache(self).as_ref().ok_or_else(|| {
             eyre!(
                 "sampling bridge for graph '{}' is not initialized; call warm_up after loading or changing runtime settings, model parameters, or graph routing",
                 self.graph.name
             )
         })
+    }
+
+    /// Invalidate all numerical bindings and their single canonical program epoch.
+    pub(crate) fn invalidate_sampling(&mut self) {
+        self.sampling_bridge.invalidate();
+        self.sampling_bridge_quad.invalidate();
+        self.sampling_bridge_arb.invalidate();
+        self.sampling_catalogue.invalidate();
+        self.sampling_proxies.invalidate();
     }
 
     /// Expand a graph-resolved selection into the canonical catalogue used by
@@ -2279,11 +2184,12 @@ impl LmbMultiChannelingSetup {
     /// kinematics.  The context is explicit because surface centres and
     /// radii may only be known after cut kinematics (including any `t*`
     /// rescaling) has been solved.
-    pub fn compile_sampling_channels(
+    pub fn compile_sampling_channels<T: FloatLike>(
         &self,
-        resolved: &ResolvedSamplingChannelSelection,
-        context: &SamplingChannelCompileContext,
-    ) -> Result<Vec<CompiledSamplingChannel>> {
+        catalogue: &SamplingChannelCatalogue,
+        proxies: &[Option<SamplingExpressionEvaluator>],
+        context: &SamplingChannelCompileContext<T>,
+    ) -> Result<Vec<CompiledSamplingChannel<T>>> {
         if context.master_graph != self.graph.name {
             return Err(eyre!(
                 "sampling channel master graph `{}` does not match LMB setup graph `{}`",
@@ -2291,9 +2197,7 @@ impl LmbMultiChannelingSetup {
                 self.graph.name
             ));
         }
-        let catalogue =
-            self.sampling_channel_catalogue(resolved, &context.parameterization_settings)?;
-        catalogue.compile(context).map_err(Into::into)
+        catalogue.compile(context, proxies).map_err(Into::into)
     }
 
     /// Compile channels after preparing the external data needed by every
@@ -2301,15 +2205,14 @@ impl LmbMultiChannelingSetup {
     /// point when a channel catalogue contains more than the parent LMB;
     /// callers must pass external data from the same solved cut/orientation
     /// context as the map geometry.
-    pub fn compile_sampling_channels_with_external(
+    pub fn compile_sampling_channels_with_external<T: FloatLike>(
         &self,
-        resolved: &ResolvedSamplingChannelSelection,
-        context: &SamplingChannelCompileContext,
-        external_momenta: &[[f64; 4]],
-    ) -> Result<Vec<CompiledSamplingChannel>> {
+        catalogue: &SamplingChannelCatalogue,
+        proxies: &[Option<SamplingExpressionEvaluator>],
+        context: &SamplingChannelCompileContext<T>,
+        external_momenta: &[[T; 4]],
+    ) -> Result<Vec<CompiledSamplingChannel<T>>> {
         let mut context = context.clone();
-        let catalogue =
-            self.sampling_channel_catalogue(resolved, &context.parameterization_settings)?;
         for (basis_id, edges) in catalogue.lmb_basis_entries() {
             if edges != context.parent_lmb.as_slice() {
                 context.lmb_frame_maps.insert(
@@ -2343,17 +2246,18 @@ impl LmbMultiChannelingSetup {
                 self.lmb_frame_map(basis_id, external_momenta)?,
             );
         }
-        catalogue.compile(&context).map_err(Into::into)
+        catalogue.compile(&context, proxies).map_err(Into::into)
     }
 
     /// Compile the selected channels and bind them to the raw-frame bridge.
     /// The process sampler supplies the prepared frame and external data.
-    pub fn compile_sampling_channel_bridge(
+    pub fn compile_sampling_channel_bridge<T: FloatLike>(
         &self,
-        resolved: &ResolvedSamplingChannelSelection,
-        context: &SamplingChannelCompileContext,
-    ) -> Result<SamplingChannelBridge> {
-        let channels = self.compile_sampling_channels(resolved, context)?;
+        catalogue: &SamplingChannelCatalogue,
+        proxies: &[Option<SamplingExpressionEvaluator>],
+        context: &SamplingChannelCompileContext<T>,
+    ) -> Result<SamplingChannelBridge<T>> {
+        let channels = self.compile_sampling_channels(catalogue, proxies, context)?;
         let mode = match context.parameterization_settings.sampling_channels.weight {
             SamplingChannelWeight::MapDensity | SamplingChannelWeight::InverseJacobian => {
                 SamplingPartitionMode::MapDensity
@@ -2364,14 +2268,19 @@ impl LmbMultiChannelingSetup {
     }
 
     /// External-data variant of [`Self::compile_sampling_channel_bridge`].
-    pub fn compile_sampling_channel_bridge_with_external(
+    pub fn compile_sampling_channel_bridge_with_external<T: FloatLike>(
         &self,
-        resolved: &ResolvedSamplingChannelSelection,
-        context: &SamplingChannelCompileContext,
-        external_momenta: &[[f64; 4]],
-    ) -> Result<SamplingChannelBridge> {
-        let channels =
-            self.compile_sampling_channels_with_external(resolved, context, external_momenta)?;
+        catalogue: &SamplingChannelCatalogue,
+        proxies: &[Option<SamplingExpressionEvaluator>],
+        context: &SamplingChannelCompileContext<T>,
+        external_momenta: &[[T; 4]],
+    ) -> Result<SamplingChannelBridge<T>> {
+        let channels = self.compile_sampling_channels_with_external(
+            catalogue,
+            proxies,
+            context,
+            external_momenta,
+        )?;
         let mode = match context.parameterization_settings.sampling_channels.weight {
             SamplingChannelWeight::MapDensity | SamplingChannelWeight::InverseJacobian => {
                 SamplingPartitionMode::MapDensity
@@ -2607,11 +2516,11 @@ impl LmbMultiChannelingSetup {
     /// Keeping this operation on the graph-aware setup ensures that a compiled
     /// channel never mistakes selected-LMB coordinates for parent-frame
     /// coordinates.
-    pub fn lmb_frame_map(
+    pub fn lmb_frame_map<T: FloatLike>(
         &self,
         basis_id: LmbIndex,
-        external_momenta: &[[f64; 4]],
-    ) -> Result<SamplingMapAffine> {
+        external_momenta: &[[T; 4]],
+    ) -> Result<SamplingMapAffine<T>> {
         let channel_lmb = self
             .all_bases
             .get(basis_id)
@@ -2627,8 +2536,9 @@ impl LmbMultiChannelingSetup {
             ));
         }
         let dimension = 3 * channel_loop_count;
-        let mut matrix = vec![vec![0.0; dimension]; dimension];
-        let mut translation = vec![0.0; dimension];
+        let zero = F::<T>::default().zero();
+        let mut matrix = vec![vec![zero.0.clone(); dimension]; dimension];
+        let mut translation = vec![zero.0.clone(); dimension];
         for (parent_block, &edge_index) in parent_loop_edges.iter().enumerate() {
             let signature = &channel_lmb.edge_signatures[edge_index];
             let internal = signature.internal.to_momtrop_format();
@@ -2654,13 +2564,17 @@ impl LmbMultiChannelingSetup {
             for component in 0..3 {
                 let row = 3 * parent_block + component;
                 for (channel_block, coefficient) in internal.iter().enumerate() {
-                    matrix[row][3 * channel_block + component] = *coefficient as f64;
+                    matrix[row][3 * channel_block + component] =
+                        zero.from_i64(*coefficient as i64).0;
                 }
                 translation[row] = external
                     .iter()
                     .zip(external_momenta)
-                    .map(|(coefficient, momentum)| *coefficient as f64 * momentum[component + 1])
-                    .sum();
+                    .map(|(coefficient, momentum)| {
+                        zero.from_i64(*coefficient as i64) * F(momentum[component + 1].clone())
+                    })
+                    .fold(zero.clone(), |sum, value| sum + value)
+                    .0;
             }
         }
         SamplingMapAffine::new(matrix, translation)
@@ -2731,49 +2645,116 @@ pub trait ProcessIntegrandImpl {
     /// roots and conditional cut contexts remain point-dependent runtime data.
     fn warm_up_sampling(&mut self) -> Result<()> {
         for graph in self.get_terms_mut() {
-            graph.sampling_setup_mut().sampling_bridge.invalidate();
+            graph.sampling_setup_mut().invalidate_sampling();
         }
-        let settings = self.get_settings();
-        if !settings.sampling.uses_sampling_channels() {
+        if !self.get_settings().sampling.uses_sampling_channels() {
             return Ok(());
         }
-        let parameterization = settings
+        let parameterization = self
+            .get_settings()
             .sampling
             .get_parameterization_settings()
             .expect("sampling channels require a parameterization");
-        let externals = settings
+        let prepared = (0..self.graph_count())
+            .map(|id| {
+                let graph = self.get_graph(id);
+                let setup = graph.sampling_setup();
+                let resolved = resolve_sampling_channel_selection(
+                    &setup.graph.name,
+                    &parameterization.sampling_channels,
+                )?;
+                let catalogue = setup.sampling_channel_catalogue(&resolved, &parameterization)?;
+                let proxies = catalogue.compile_proxies(3 * graph.get_graph().get_loop_number())?;
+                Ok((catalogue, proxies))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for (graph, (catalogue, proxies)) in self.get_terms_mut().zip(prepared) {
+            let setup = graph.sampling_setup_mut();
+            setup.sampling_catalogue.set(catalogue);
+            setup.sampling_proxies.set(proxies);
+        }
+        let precisions = self
+            .get_settings()
+            .stability
+            .levels
+            .iter()
+            .map(|level| level.precision)
+            .unique()
+            .collect_vec();
+        let result = precisions
+            .into_iter()
+            .try_for_each(|precision| match precision {
+                Precision::Double => self.prepare_sampling_precision::<f64>(),
+                Precision::Quad => self.prepare_sampling_precision::<f128>(),
+                Precision::Arb => self.prepare_sampling_precision::<ArbPrec>(),
+            });
+        if result.is_err() {
+            // A failed warmup publishes no usable catalogue or partial precision set.
+            for graph in self.get_terms_mut() {
+                graph.sampling_setup_mut().invalidate_sampling();
+            }
+        }
+        result
+    }
+
+    /// Bind a configured or explicitly requested precision once per warmup epoch.
+    /// Programs and canonical IDs are reused; geometry comes from the same native
+    /// improved external data consumed by physical evaluation. Worker clones own
+    /// their evaluator buffers, and a precision request never reparses metadata.
+    fn prepare_sampling_precision<T: FloatLike>(&mut self) -> Result<()> {
+        if !self.get_settings().sampling.uses_sampling_channels() {
+            return Ok(());
+        }
+        if (0..self.graph_count()).all(|id| {
+            T::sampling_bridge_cache(self.get_graph(id).sampling_setup())
+                .as_ref()
+                .is_some()
+        }) {
+            return Ok(());
+        }
+        let parameterization = self
+            .get_settings()
+            .sampling
+            .get_parameterization_settings()
+            .expect("sampling channels require a parameterization");
+        let e_cm = self.get_settings().kinematics.e_cm;
+        let externals = self
+            .get_settings()
             .kinematics
             .externals
-            .get_dependent_externals::<f64>(self.get_dependent_momenta_constructor())?;
+            .get_dependent_externals::<T>(self.get_dependent_momenta_constructor())?;
         let external_momenta = externals
             .iter()
             .map(|momentum| {
                 [
-                    momentum.temporal.value.0,
-                    momentum.spatial.px.0,
-                    momentum.spatial.py.0,
-                    momentum.spatial.pz.0,
+                    momentum.temporal.value.0.clone(),
+                    momentum.spatial.px.0.clone(),
+                    momentum.spatial.py.0.clone(),
+                    momentum.spatial.pz.0.clone(),
                 ]
             })
             .collect_vec();
-        let bridges = (0..self.graph_count())
-            .map(|id| {
-                self.get_graph(id).compile_sampling_bridge(
-                    &parameterization,
-                    settings.kinematics.e_cm,
-                    &external_momenta,
-                    None,
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let bridges = (0..self.graph_count()).map(|id| {
+            let graph = self.get_graph(id);
+            let setup = graph.sampling_setup();
+            if T::sampling_bridge_cache(setup).as_ref().is_some() { return Ok(None); }
+            let catalogue = setup.sampling_catalogue.as_ref().ok_or_else(|| eyre!(
+                "sampling catalogue for graph '{}' is not initialized; call warm_up after loading or changing runtime settings, model parameters, or graph routing", graph.name()
+            ))?;
+            let proxies = setup.sampling_proxies.as_ref().ok_or_else(|| eyre!(
+                "sampling programs for graph '{}' are not initialized; call warm_up", graph.name()
+            ))?;
+            graph.bind_sampling_bridge(catalogue, proxies, &parameterization, e_cm, &external_momenta, None).map(Some)
+        }).collect::<Result<Vec<_>>>()?;
         for (graph, bridge) in self.get_terms_mut().zip(bridges) {
-            crate::debug_tags!(#sampling;
-                stage = "sampling_bridge_warmup",
-                graph = %graph.name(),
-                channels = bridge.channels().len(),
-                "prepared graph sampling bridge"
-            );
-            graph.sampling_setup_mut().sampling_bridge.set(bridge);
+            if let Some(bridge) = bridge {
+                crate::debug_tags!(#sampling;
+                    stage = "sampling_bridge_warmup", graph = %graph.name(),
+                    channels = bridge.channels().len(), precision = std::any::type_name::<T>(),
+                    "prepared graph sampling bridge"
+                );
+                T::sampling_bridge_cache_mut(graph.sampling_setup_mut()).set(bridge);
+            }
         }
         Ok(())
     }
@@ -3123,13 +3104,42 @@ pub trait GraphTerm {
     /// Compile the canonical full-frame sampling bridge for this graph.
     /// Process implementations own the graph-specific external signature and
     /// LMB setup; the sampler only supplies the already-resolved kinematics.
-    fn compile_sampling_bridge(
+    fn compile_sampling_bridge<T: FloatLike>(
         &self,
         parameterization_settings: &ParameterizationSettings,
         e_cm: f64,
-        external_momenta: &[[f64; 4]],
+        external_momenta: &[[T; 4]],
         orientation: Option<usize>,
-    ) -> Result<SamplingChannelBridge>;
+    ) -> Result<SamplingChannelBridge<T>> {
+        let resolved = resolve_sampling_channel_selection(
+            &self.sampling_setup().graph.name,
+            &parameterization_settings.sampling_channels,
+        )?;
+        let catalogue = self
+            .sampling_setup()
+            .sampling_channel_catalogue(&resolved, parameterization_settings)?;
+        let proxies = catalogue.compile_proxies(3 * self.get_graph().get_loop_number())?;
+        self.bind_sampling_bridge(
+            &catalogue,
+            &proxies,
+            parameterization_settings,
+            e_cm,
+            external_momenta,
+            orientation,
+        )
+    }
+
+    /// Bind the already resolved catalogue and compiled programs to native
+    /// graph geometry. Warmup and precision rescue reuse this one definition.
+    fn bind_sampling_bridge<T: FloatLike>(
+        &self,
+        catalogue: &SamplingChannelCatalogue,
+        proxies: &[Option<SamplingExpressionEvaluator>],
+        parameterization_settings: &ParameterizationSettings,
+        e_cm: f64,
+        external_momenta: &[[T; 4]],
+        orientation: Option<usize>,
+    ) -> Result<SamplingChannelBridge<T>>;
 
     fn sampling_channel_is_lmb(
         &self,
@@ -3193,7 +3203,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
         let graph = integrand.get_graph(graph_id);
         let channel = graph
             .sampling_setup()
-            .sampling_bridge()?
+            .sampling_bridge::<T>()?
             .channels()
             .get(channel_id.index())
             .ok_or_else(|| {
@@ -3365,7 +3375,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                 let channel_count = integrand
                     .get_graph(graph_id)
                     .sampling_setup()
-                    .sampling_bridge()?
+                    .sampling_bridge::<T>()?
                     .channels()
                     .len();
                 let coordinates = sampling_coordinates
@@ -3374,7 +3384,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                         eyre!("summed sampling requires retained unit-cube coordinates")
                     })?
                     .iter()
-                    .map(|coordinate| coordinate.clone().into_ff64().0)
+                    .map(|coordinate| coordinate.0.clone())
                     .collect_vec();
                 (0..channel_count).map(SamplingChannelId::from).try_fold(
                     // Summed channels contribute J_c(x) w_c(T_c(x)) f(T_c(x)).
@@ -3385,35 +3395,23 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                         let mapped = integrand
                             .get_graph(graph_id)
                             .sampling_setup()
-                            .sampling_bridge()?
+                            .sampling_bridge::<T>()?
                             .forward(channel_id, &coordinates)?;
-                        let partition_weight =
-                            mapped.partition.weight(channel_id.index()).ok_or_else(|| {
-                                eyre!("sampling partition has no channel {}", channel_id.index())
-                            })?;
-                        if !partition_weight.is_finite() || partition_weight <= 0.0 {
-                            return Err(eyre!(
-                                "sampling partition has invalid weight {partition_weight}"
-                            ));
-                        }
+                        let factor = F(mapped.selected_factor()?);
                         let mapped_sample = mapped
-                            .to_momentum_sample::<T>(
-                                SamplingMomentumSampleContext {
-                                    loop_mom_cache_id: sample.sample.loop_mom_cache_id,
-                                    external_moms: &context.settings.kinematics.externals,
-                                    external_mom_cache_id: sample.sample.external_mom_cache_id,
-                                    dependent_momenta_constructor: integrand
-                                        .get_dependent_momenta_constructor(),
-                                    orientation: sample.sample.orientation,
-                                },
-                                |value| F::<T>::from_f64(*value),
-                            )?
+                            .to_momentum_sample(SamplingMomentumSampleContext {
+                                loop_mom_cache_id: sample.sample.loop_mom_cache_id,
+                                external_moms: &context.settings.kinematics.externals,
+                                external_mom_cache_id: sample.sample.external_mom_cache_id,
+                                dependent_momenta_constructor: integrand
+                                    .get_dependent_momenta_constructor(),
+                                orientation: sample.sample.orientation,
+                            })?
                             .rotate(
                                 context.rotation,
                                 sample.sample.loop_mom_cache_id,
                                 sample.sample.external_mom_cache_id,
                             );
-                        let factor = mapped_sample.jacobian() * F::from_f64(partition_weight);
                         let mut result = evaluate_graph_term(
                             integrand,
                             graph_id,
@@ -3594,8 +3592,6 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
         gammaloop_sample.get_default_sample().jacobian()
     );
 
-    let integrand_time_before = context.evaluation_metadata.integrand_evaluation_time;
-    let evaluator_time_before = context.evaluation_metadata.evaluator_evaluation_time;
     let (graph_results, primary_rotation_index, rotated_results) = evaluate_all_rotations(
         integrand,
         EvaluationTarget::Physical(context.model),
@@ -3625,7 +3621,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
     let max_eval = complex_from_f64::<T>(context.max_eval);
     let wgt = F::<T>::from_ff64(context.wgt);
 
-    let (average_result, estimated_relative_accuracy, is_stable, instability_reason) =
+    let (average_result, estimated_relative_accuracy, is_stable, _instability_reason) =
         if context.check_on_norm {
             stability_check_on_norm(
                 integrand.get_settings(),
@@ -3660,29 +3656,12 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
         total_time: level_start.elapsed(),
         parameterization_time,
         parameterization_jacobian: match context.source {
-            EvaluationSource::XSpace(_) => Some(gammaloop_sample.get_default_sample().jacobian()),
+            EvaluationSource::XSpace(_) => Some(gammaloop_sample.get_default_sample().one()),
             EvaluationSource::Momentum(_) => None,
         },
-        integrand_evaluation_time: context
-            .evaluation_metadata
-            .integrand_evaluation_time
-            .saturating_sub(integrand_time_before),
-        evaluator_evaluation_time: context
-            .evaluation_metadata
-            .evaluator_evaluation_time
-            .saturating_sub(evaluator_time_before),
         is_stable: is_stable && !threshold_counterterm_failed,
-        instability_reason,
         rotated_results,
     })
-}
-
-fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
-    integrand: &mut I,
-    context: &mut StabilityEvaluationContext<'_, '_>,
-) -> Result<StabilityLevelResult> {
-    evaluate_stability_level_precise::<T, I>(integrand, context)
-        .map(PreciseStabilityLevelResult::into_f64)
 }
 
 /// Result of cache validation checks
@@ -3817,7 +3796,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
         record_primary_timing,
     };
     let result = (|| -> Result<GraphEvaluationResult<T>> {
-        let result = match &gammaloop_sample {
+        let mut result = match &gammaloop_sample {
             GammaLoopSample::Default {
                 sample,
                 use_lmb_basis,
@@ -3903,6 +3882,10 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
             }
         };
 
+        // Form the complete map/partition/physics contribution at native precision.
+        // The outer reporting Jacobian is unity; event and reference factors pass
+        // through the same owner exactly once, including ordinary sampling.
+        result.apply_sampling_factor(gammaloop_sample.get_default_sample().jacobian());
         if cache {
             integrand.increment_loop_cache_id(loop_cache_shift);
         }
@@ -4092,14 +4075,20 @@ impl<'a> EvaluationSource<'a> {
     ) -> Result<(GammaLoopSample<T>, Duration)> {
         match self {
             EvaluationSource::XSpace(sample) => {
+                integrand.prepare_sampling_precision::<T>()?;
                 let before_parameterization = std::time::Instant::now();
                 let sample = parameterize::<T, I>(sample, integrand)?;
                 Ok((sample, before_parameterization.elapsed()))
             }
-            EvaluationSource::Momentum(input) => Ok((
-                build_direct_gamma_sample::<T, I>(integrand, input)?,
-                Duration::ZERO,
-            )),
+            EvaluationSource::Momentum(input) => {
+                if input.channel_id.is_some() {
+                    integrand.prepare_sampling_precision::<T>()?;
+                }
+                Ok((
+                    build_direct_gamma_sample::<T, I>(integrand, input)?,
+                    Duration::ZERO,
+                ))
+            }
         }
     }
 
@@ -4270,13 +4259,20 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                         )
                     })?;
                     let graph = integrand.get_master_graph(group_id);
-                    let bridge = graph.sampling_setup().sampling_bridge()?;
+                    let bridge = graph.sampling_setup().sampling_bridge::<T>()?;
                     let mapped = bridge.inverse(
                         channel_id,
-                        &input
-                            .loop_momenta
+                        &sample
+                            .loop_moms()
+                            .0
                             .iter()
-                            .flat_map(|momentum| [momentum.px.0, momentum.py.0, momentum.pz.0])
+                            .flat_map(|momentum| {
+                                [
+                                    momentum.px.0.clone(),
+                                    momentum.py.0.clone(),
+                                    momentum.pz.0.clone(),
+                                ]
+                            })
                             .collect::<Vec<_>>(),
                     )?;
                     let partition_weight =
@@ -4286,7 +4282,8 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                                 channel_id.0
                             )
                         })?;
-                    if !partition_weight.is_finite() || partition_weight <= 0.0 {
+                    if !partition_weight.is_finite() || partition_weight <= partition_weight.zero()
+                    {
                         return Err(eyre!(
                             "sampling channel partition has invalid weight {partition_weight}"
                         ));
@@ -4294,7 +4291,7 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                     DiscreteGraphSample::SamplingChannel {
                         channel_id,
                         sampling_coordinates: None,
-                        partition_weight: Some(F::from_f64(partition_weight)),
+                        partition_weight: Some(F(partition_weight)),
                         sample,
                     }
                 }
@@ -4311,7 +4308,7 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
 fn log_rotated_samples<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     gammaloop_sample: &GammaLoopSample<f64>,
-    level_result: &StabilityLevelResult,
+    rotated_results: &[RotatedEvaluation],
 ) {
     let mut loop_mom_cache_id = integrand.loop_cache_id();
     let mut external_mom_cache_id = integrand.external_cache_id();
@@ -4332,10 +4329,7 @@ fn log_rotated_samples<I: ProcessIntegrandImpl>(
     integrand.increment_external_cache_id(shift);
     integrand.increment_loop_cache_id(shift);
 
-    for (sample, result) in rotated_samples
-        .iter()
-        .zip(level_result.rotated_results.iter())
-    {
+    for (sample, result) in rotated_samples.iter().zip(rotated_results.iter()) {
         let default_sample = sample.get_default_sample();
         debug!(
             "loop_moms: {}, external_moms: {}",
@@ -4350,14 +4344,14 @@ fn log_rotated_samples<I: ProcessIntegrandImpl>(
     }
 }
 
-fn evaluate_from_source<I: ProcessIntegrandImpl>(
+fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
     source: EvaluationSource<'_>,
     wgt: F<f64>,
     use_arb_prec: bool,
     max_eval: Complex<F<f64>>,
-) -> Result<EvaluationResult> {
+) -> Result<PreciseEvaluationResult> {
     let start_eval = std::time::Instant::now();
     let mut escalate_if_exact_zero = integrand.get_settings().stability.escalate_if_exact_zero;
     if escalate_if_exact_zero
@@ -4374,8 +4368,10 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
     let (stability_iterator, loop_momenta_escalation) =
         stability_iterator_for_source(integrand, &source, use_arb_prec);
 
-    let mut results_of_stability_levels = Vec::with_capacity(stability_iterator.len());
+    let mut final_result = None;
 
+    let mut stability_results = Vec::with_capacity(stability_iterator.len());
+    let mut sampling_failures = Vec::new();
     let total_levels = stability_iterator.len();
     for (level_index, stability_level) in stability_iterator.into_iter().enumerate() {
         evaluation_metadata.clear_threshold_counterterm_error();
@@ -4405,140 +4401,111 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
             },
             escalate_if_exact_zero,
         };
+        let level_start = Instant::now();
+        let mut is_stable = false;
+        let mut rotated_results = Vec::new();
+        macro_rules! evaluate_native_level {
+            ($scalar:ty, $variant:ident) => {
+                evaluate_stability_level_precise::<$scalar, I>(integrand, &mut context).map(
+                    |mut result| {
+                        is_stable = result.is_stable;
+                        stability_results.push(result.stability_result());
+                        debug!(
+                            "level: {}. result: {}",
+                            format!("{}", result.stability_level_used).green(),
+                            format!("{:16e}", result.result).blue()
+                        );
+                        rotated_results = std::mem::take(&mut result.rotated_results);
+                        PreciseEvaluationResult::$variant(finalize_precise_evaluation_result(
+                            result,
+                            wgt,
+                            evaluation_metadata.clone(),
+                        ))
+                    },
+                )
+            };
+        }
         let result_of_level = match stability_level.precision {
-            Precision::Double => evaluate_stability_level::<f64, I>(integrand, &mut context),
-            Precision::Quad => evaluate_stability_level::<f128, I>(integrand, &mut context),
-            Precision::Arb => evaluate_stability_level::<ArbPrec, I>(integrand, &mut context),
-        }?;
+            Precision::Double => evaluate_native_level!(f64, Double),
+            Precision::Quad => evaluate_native_level!(f128, Quad),
+            Precision::Arb => evaluate_native_level!(ArbPrec, Arb),
+        };
+        let result_of_level = match result_of_level {
+            Ok(result) => result,
+            Err(error)
+                if error
+                    .downcast_ref::<sampling_maps::SamplingEvaluationError>()
+                    .is_some() =>
+            {
+                stability_results.push(StabilityResult {
+                    precision: stability_level.precision,
+                    estimated_relative_accuracy: None,
+                    estimated_decimal_digits: None,
+                    status: StabilityStatus::Unstable(0),
+                    total_time: level_start.elapsed(),
+                });
+                crate::debug_tags!(#sampling;
+                    stage = "native_sampling_retry", precision = %stability_level.precision,
+                    error = %error, final_level = is_final_level,
+                    "sampling reconstruction failed at this precision"
+                );
+                // A partial rotation/channel pass may have populated numerical
+                // caches. Start the next reconstruction with fresh point IDs;
+                // dropped GraphEvaluationResults contain all its uncommitted events.
+                integrand.increment_loop_cache_id(integrand.get_rotations().count() + 1);
+                integrand.revert_to_base_external_cache_id();
+                sampling_failures.push(format!("{}: {error:#}", stability_level.precision));
+                if is_final_level {
+                    return Err(error.wrap_err(format!(
+                        "sampling reconstruction failed; attempts [{}]; numerical errors [{}]",
+                        stability_results
+                            .iter()
+                            .map(|result| format!("{}: {:?}", result.precision, result.status))
+                            .join("; "),
+                        sampling_failures.join("; ")
+                    )));
+                }
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
 
-        let is_stable = result_of_level.is_stable;
-        results_of_stability_levels.push(result_of_level);
+        final_result = Some(result_of_level);
 
         if is_stable {
             break;
         } else {
             debug!("unstable at level: {}", stability_level.precision);
             if let Ok(gammaloop_sample) = source.debug_sample(integrand) {
-                let level_result = results_of_stability_levels
-                    .last()
-                    .expect("stability level result missing");
-                log_rotated_samples(integrand, &gammaloop_sample, level_result);
+                log_rotated_samples(integrand, &gammaloop_sample, &rotated_results);
             } else {
                 debug!("failed to reconstruct sample for instability logging");
             }
         }
     }
 
-    debug!("result at each level:");
-    for level_result in results_of_stability_levels.iter() {
-        debug!(
-            "level: {}. result: {}",
-            format!("{}", level_result.stability_level_used).green(),
-            format!("{:16e}", level_result.result).blue()
-        );
-    }
+    let mut result = final_result.ok_or_else(|| eyre!("no stability level was evaluated"))?;
+    let metadata = match &mut result {
+        PreciseEvaluationResult::Double(result) => &mut result.evaluation_metadata,
+        PreciseEvaluationResult::Quad(result) => &mut result.evaluation_metadata,
+        PreciseEvaluationResult::Arb(result) => &mut result.evaluation_metadata,
+    };
+    metadata.total_timing = start_eval.elapsed();
+    metadata.loop_momenta_escalation = loop_momenta_escalation;
+    metadata.stability_results = stability_results;
+    Ok(result)
+}
 
-    if let Some(stability_level_result) = results_of_stability_levels.last().cloned() {
-        let re_is_nan = stability_level_result.result.re.is_nan()
-            || stability_level_result.result.re.is_infinite();
-        let im_is_nan = stability_level_result.result.im.is_nan()
-            || stability_level_result.result.im.is_infinite();
-        let is_nan = re_is_nan || im_is_nan;
-        if is_nan {
-            match source {
-                EvaluationSource::XSpace(sample) => {
-                    warn!(
-                        stage = "process_final_nonfinite_sample",
-                        ?sample,
-                        result = %stability_level_result.result,
-                        re_is_nan,
-                        im_is_nan,
-                        "final process evaluation is nonfinite"
-                    );
-                }
-                EvaluationSource::Momentum(input) => {
-                    warn!(
-                        stage = "process_final_nonfinite_sample",
-                        graph_id = ?input.graph_id,
-                        group_id = ?input.group_id,
-                        orientation = ?input.orientation,
-                        channel_id = ?input.channel_id,
-                        loop_momenta = ?input.loop_momenta,
-                        result = %stability_level_result.result,
-                        re_is_nan,
-                        im_is_nan,
-                        "final process evaluation is nonfinite"
-                    );
-                }
-            }
-        }
-
-        let stability_results = results_of_stability_levels
-            .iter()
-            .map(|level| StabilityResult {
-                precision: level.stability_level_used,
-                estimated_relative_accuracy: level.estimated_relative_accuracy,
-                estimated_decimal_digits: level.estimated_decimal_digits,
-                status: StabilityStatus::from_sample_count(level.sample_count, level.is_stable),
-                total_time: level.total_time,
-            })
-            .collect();
-
-        evaluation_metadata.total_timing = start_eval.elapsed();
-        evaluation_metadata.parameterization_time = stability_level_result.parameterization_time;
-        evaluation_metadata.generated_event_count =
-            stability_level_result.graph_result.generated_event_count;
-        evaluation_metadata.accepted_event_count =
-            stability_level_result.graph_result.accepted_event_count;
-        evaluation_metadata.relative_instability_error = Complex::new_zero();
-        evaluation_metadata.is_nan = is_nan;
-        evaluation_metadata.loop_momenta_escalation = loop_momenta_escalation;
-        evaluation_metadata.stability_results = stability_results;
-
-        let nanless_result = if re_is_nan && !im_is_nan {
-            Complex::new(F(0.0), stability_level_result.result.im)
-        } else if im_is_nan && !re_is_nan {
-            Complex::new(stability_level_result.result.re, F(0.0))
-        } else if im_is_nan && re_is_nan {
-            Complex::new(F(0.0), F(0.0))
-        } else {
-            stability_level_result.result
-        };
-        let mut event_groups = stability_level_result.graph_result.event_groups;
-        let parameterization_jacobian = stability_level_result.parameterization_jacobian;
-        let full_factor = full_event_multiplicative_factor(parameterization_jacobian, wgt);
-        apply_full_event_multiplicative_factor(&mut event_groups, &full_factor);
-        Ok(EvaluationResult {
-            integrand_result: nanless_result,
-            parameterization_jacobian,
-            integrator_weight: wgt,
-            event_groups,
-            evaluation_metadata,
-        })
-    } else {
-        println!("Evaluation failed at all stability levels");
-        Ok(EvaluationResult {
-            integrand_result: Complex::new(F(0.0), F(0.0)),
-            parameterization_jacobian: None,
-            integrator_weight: wgt,
-            event_groups: Default::default(),
-            evaluation_metadata: EvaluationMetaData {
-                total_timing: Duration::ZERO,
-                integrand_evaluation_time: Duration::ZERO,
-                evaluator_evaluation_time: Duration::ZERO,
-                parameterization_time: Duration::ZERO,
-                event_processing_time: Duration::ZERO,
-                generated_event_count: 0,
-                accepted_event_count: 0,
-                relative_instability_error: Complex::new(F(0.0), F(0.0)),
-                is_nan: true,
-                loop_momenta_escalation: None,
-                stability_results: Vec::new(),
-                threshold_counterterm_error: None,
-                radial_root_diagnostics: Default::default(),
-            },
-        })
-    }
+fn evaluate_from_source<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    source: EvaluationSource<'_>,
+    wgt: F<f64>,
+    use_arb_prec: bool,
+    max_eval: Complex<F<f64>>,
+) -> Result<EvaluationResult> {
+    evaluate_from_source_precise(integrand, model, source, wgt, use_arb_prec, max_eval)?
+        .try_into_f64()
 }
 
 fn stability_iterator_for_source<I: ProcessIntegrandImpl>(
@@ -4591,10 +4558,24 @@ fn stability_iterator_for_source<I: ProcessIntegrandImpl>(
 fn finalize_precise_evaluation_result<T: FloatLike>(
     result: PreciseStabilityLevelResult<T>,
     integrator_weight: F<f64>,
-    evaluation_metadata: EvaluationMetaData,
+    mut evaluation_metadata: EvaluationMetaData,
 ) -> GenericEvaluationResult<T> {
     let re_is_nan = result.result.re.is_nan() || result.result.re.is_infinite();
     let im_is_nan = result.result.im.is_nan() || result.result.im.is_infinite();
+    if re_is_nan || im_is_nan {
+        warn!(
+            stage = "process_final_nonfinite_sample",
+            result = %result.result,
+            re_is_nan,
+            im_is_nan,
+            "process evaluation is nonfinite"
+        );
+    }
+    evaluation_metadata.parameterization_time = result.parameterization_time;
+    evaluation_metadata.generated_event_count = result.graph_result.generated_event_count;
+    evaluation_metadata.accepted_event_count = result.graph_result.accepted_event_count;
+    evaluation_metadata.relative_instability_error = Complex::new_zero();
+    evaluation_metadata.is_nan = re_is_nan || im_is_nan;
     let nanless_result = if re_is_nan && !im_is_nan {
         Complex::new(result.result.re.zero(), result.result.im)
     } else if im_is_nan && !re_is_nan {
@@ -4620,122 +4601,6 @@ fn finalize_precise_evaluation_result<T: FloatLike>(
         integrator_weight,
         event_groups,
         evaluation_metadata,
-    }
-}
-
-fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
-    integrand: &mut I,
-    model: &Model,
-    source: EvaluationSource<'_>,
-    wgt: F<f64>,
-    use_arb_prec: bool,
-    max_eval: Complex<F<f64>>,
-) -> Result<crate::integrands::evaluation::PreciseEvaluationResult> {
-    let base_result = evaluate_from_source(integrand, model, source, wgt, use_arb_prec, max_eval)?;
-    let final_precision = base_result
-        .evaluation_metadata
-        .final_precision()
-        .unwrap_or(Precision::Double);
-    let base_metadata = base_result.evaluation_metadata.clone();
-    let mut escalate_if_exact_zero = integrand.get_settings().stability.escalate_if_exact_zero;
-    if escalate_if_exact_zero
-        && integrand
-            .get_settings()
-            .selectors
-            .values()
-            .any(|selector| selector.active)
-    {
-        escalate_if_exact_zero = false;
-    }
-
-    match final_precision {
-        Precision::Double => Ok(
-            crate::integrands::evaluation::PreciseEvaluationResult::Double(
-                GenericEvaluationResult {
-                    integrand_result: base_result.integrand_result,
-                    parameterization_jacobian: base_result.parameterization_jacobian,
-                    integrator_weight: base_result.integrator_weight,
-                    event_groups: base_result.event_groups,
-                    evaluation_metadata: base_metadata,
-                },
-            ),
-        ),
-        Precision::Quad => {
-            let (stability_iterator, _) =
-                stability_iterator_for_source(integrand, &source, use_arb_prec);
-            let stability_level = stability_iterator
-                .into_iter()
-                .rev()
-                .find(|level| level.precision == Precision::Quad)
-                .ok_or_else(|| {
-                    eyre!(
-                        "Quad precision was selected for the final result, but no quad stability level is configured."
-                    )
-            })?;
-            let mut evaluation_metadata = EvaluationMetaData::new_empty();
-            evaluation_metadata.radial_root_diagnostics =
-                base_metadata.radial_root_diagnostics.clone();
-            evaluation_metadata
-                .radial_root_diagnostics
-                .restart_precision_pass();
-            let mut context = StabilityEvaluationContext {
-                model,
-                source: &source,
-                stability_level: &stability_level,
-                max_eval: &max_eval,
-                wgt,
-                check_on_norm: integrand.get_settings().stability.check_on_norm,
-                is_final_level: true,
-                is_primary_stability_level: true,
-                evaluation_metadata: &mut evaluation_metadata,
-                record_rotated_results: false,
-                precision_label: "f128",
-                escalate_if_exact_zero,
-            };
-            let result = evaluate_stability_level_precise::<f128, I>(integrand, &mut context)?;
-            Ok(
-                crate::integrands::evaluation::PreciseEvaluationResult::Quad(
-                    finalize_precise_evaluation_result(result, wgt, base_metadata),
-                ),
-            )
-        }
-        Precision::Arb => {
-            let (stability_iterator, _) =
-                stability_iterator_for_source(integrand, &source, use_arb_prec);
-            let stability_level = stability_iterator
-                .into_iter()
-                .rev()
-                .find(|level| level.precision == Precision::Arb)
-                .ok_or_else(|| {
-                    eyre!(
-                        "Arbitrary precision was selected for the final result, but no Arb precision stability level is configured."
-                    )
-            })?;
-            let mut evaluation_metadata = EvaluationMetaData::new_empty();
-            evaluation_metadata.radial_root_diagnostics =
-                base_metadata.radial_root_diagnostics.clone();
-            evaluation_metadata
-                .radial_root_diagnostics
-                .restart_precision_pass();
-            let mut context = StabilityEvaluationContext {
-                model,
-                source: &source,
-                stability_level: &stability_level,
-                max_eval: &max_eval,
-                wgt,
-                check_on_norm: integrand.get_settings().stability.check_on_norm,
-                is_final_level: true,
-                is_primary_stability_level: true,
-                evaluation_metadata: &mut evaluation_metadata,
-                record_rotated_results: false,
-                precision_label: "ArbPrec",
-                escalate_if_exact_zero,
-            };
-            let result = evaluate_stability_level_precise::<ArbPrec, I>(integrand, &mut context)?;
-            Ok(crate::integrands::evaluation::PreciseEvaluationResult::Arb(
-                finalize_precise_evaluation_result(result, wgt, base_metadata),
-            ))
-        }
     }
 }
 
@@ -4811,7 +4676,7 @@ fn evaluate_reference_sample<I: ProcessIntegrandImpl>(
     }
     let mut result = EvaluationResult::zero();
     result.integrand_result = graph_result.integrand_result;
-    result.parameterization_jacobian = Some(gamma_sample.get_default_sample().jacobian());
+    result.parameterization_jacobian = Some(gamma_sample.get_default_sample().one());
     result.integrator_weight = sample.get_weight();
     metadata.parameterization_time = parameterization_time;
     result.evaluation_metadata = metadata;
@@ -4942,19 +4807,12 @@ mod tests {
                 is_stable: true,
                 instability_reason: None,
                 rotated_results: Vec::new(),
-            }
-            .into_f64();
+            };
             let mut evaluation = EvaluationResult::zero();
             evaluation
                 .evaluation_metadata
                 .stability_results
-                .push(StabilityResult {
-                    precision: level.stability_level_used,
-                    estimated_relative_accuracy: level.estimated_relative_accuracy,
-                    estimated_decimal_digits: level.estimated_decimal_digits,
-                    status: StabilityStatus::from_sample_count(level.sample_count, level.is_stable),
-                    total_time: level.total_time,
-                });
+                .push(level.stability_result());
             let metadata = serde_json::to_value(&evaluation.evaluation_metadata).unwrap();
             let reported = metadata["stability_results"][0]["estimated_decimal_digits"]
                 .as_f64()
@@ -5144,6 +5002,105 @@ mod tests {
     }
 
     #[test]
+    fn native_sampling_product_and_precise_reporting_preserve_full_range() {
+        use crate::{
+            integrands::evaluation::{
+                EvaluationMetaData, GraphEvaluationResult, PreciseEvaluationResult,
+            },
+            integrands::process::sampling_reference::ReferenceMoments,
+            observables::{GenericEvent, GenericEventGroup, GenericEventGroupList},
+            settings::runtime::Precision,
+            utils::ArbPrec,
+        };
+        use spenso::algebra::complex::Complex;
+        use std::time::Duration;
+
+        let one = F::<ArbPrec>::default().one();
+        let large = one.from_usize(10).powi(400);
+        let small = large.clone().inv();
+        assert!(large.clone().into_ff64().0.is_infinite());
+        assert_eq!(small.clone().into_ff64().0, 0.0);
+        let mut graph = GraphEvaluationResult::zero(one.zero());
+        graph.integrand_result = Complex::new_re(small.clone());
+        graph.reference_moments = Some(ReferenceMoments {
+            second_moment: small.clone(),
+            jacobian_min: 1.0,
+            jacobian_max: 1.0,
+        });
+        graph.event_groups = GenericEventGroupList(vec![GenericEventGroup(vec![GenericEvent {
+            weight: Complex::new_re(small.clone()),
+            ..Default::default()
+        }])]);
+        // This is the same single owner used by selected and summed physical
+        // maps and reference moments, before any reporting conversion.
+        graph.apply_sampling_factor(large.clone());
+        assert!((&graph.integrand_result.re - &one).abs() < one.epsilon() * one.from_usize(4));
+        assert_eq!(graph.event_groups[0][0].weight, graph.integrand_result);
+        assert_eq!(
+            graph.reference_moments.as_ref().unwrap().second_moment,
+            graph.integrand_result.re
+        );
+        let level = super::PreciseStabilityLevelResult {
+            result: graph.integrand_result.clone(),
+            graph_result: graph,
+            stability_level_used: Precision::Arb,
+            estimated_relative_accuracy: None,
+            sample_count: 1,
+            total_time: Duration::ZERO,
+            parameterization_time: Duration::ZERO,
+            parameterization_jacobian: Some(one.clone()),
+            is_stable: true,
+            rotated_results: Vec::new(),
+        };
+        let result = super::finalize_precise_evaluation_result(
+            level.clone(),
+            F(1.0),
+            EvaluationMetaData::new_empty(),
+        );
+        assert_eq!(
+            result.clone().try_into_f64().unwrap().integrand_result.re,
+            F(1.0)
+        );
+        assert_eq!(result.event_groups[0][0].weight, result.integrand_result);
+        for extreme in [large.clone(), small] {
+            let mut extreme_level = level.clone();
+            extreme_level.result = Complex::new_re(extreme.clone());
+            extreme_level.graph_result.integrand_result = extreme_level.result.clone();
+            let precise = PreciseEvaluationResult::Arb(super::finalize_precise_evaluation_result(
+                extreme_level,
+                F(1.0),
+                EvaluationMetaData::new_empty(),
+            ));
+            let PreciseEvaluationResult::Arb(value) = &precise else {
+                unreachable!()
+            };
+            assert_eq!(value.integrand_result.re, extreme);
+            assert!(!value.evaluation_metadata.is_nan);
+            assert!(
+                precise
+                    .try_into_f64()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("f64 integration/reporting boundary")
+            );
+        }
+        // A cancelling total does not make individually unrepresentable event
+        // weights representable. Native APIs retain them; ordinary output errors.
+        let mut cancelling_events = result;
+        cancelling_events.event_groups[0].0 = vec![
+            GenericEvent {
+                weight: Complex::new_re(large.clone()),
+                ..Default::default()
+            },
+            GenericEvent {
+                weight: Complex::new_re(-large),
+                ..Default::default()
+            },
+        ];
+        assert!(cancelling_events.try_into_f64().is_err());
+    }
+
+    #[test]
     fn explicit_orientation_sum_rejects_runtime_filters_and_ltd() {
         let mut settings = RuntimeSettings::default();
         settings.general.orientation_pat = OrientationPattern::from_user_pattern("(+)").unwrap();
@@ -5218,7 +5175,7 @@ mod tests {
             bincode::decode_from_slice(&encoded, bincode::config::standard())
                 .expect("runtime cache should decode");
         assert_eq!(consumed, 0);
-        assert!(decoded.0.is_none());
+        assert!(decoded.as_ref().is_none());
     }
 
     #[test]
@@ -5325,6 +5282,10 @@ mod tests {
         let all_bases = vec![lmb(0), lmb(1), lmb(2)].into();
         let setup = LmbMultiChannelingSetup {
             sampling_bridge: Default::default(),
+            sampling_bridge_quad: Default::default(),
+            sampling_bridge_arb: Default::default(),
+            sampling_catalogue: Default::default(),
+            sampling_proxies: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(2), LmbIndex::from(0)].into(),
             graph,
             all_bases,
@@ -5519,6 +5480,10 @@ mod tests {
         graph.loop_momentum_basis = all_bases[LmbIndex::from(0)].clone();
         let setup = LmbMultiChannelingSetup {
             sampling_bridge: Default::default(),
+            sampling_bridge_quad: Default::default(),
+            sampling_bridge_arb: Default::default(),
+            sampling_catalogue: Default::default(),
+            sampling_proxies: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(0), LmbIndex::from(1)].into(),
             graph: graph.clone(),
             all_bases,
@@ -5585,7 +5550,18 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let bridge = setup
-            .compile_sampling_channel_bridge_with_external(&resolved, &context, &external)
+            .compile_sampling_channel_bridge_with_external(
+                &setup
+                    .sampling_channel_catalogue(&resolved, &context.parameterization_settings)
+                    .unwrap(),
+                &setup
+                    .sampling_channel_catalogue(&resolved, &context.parameterization_settings)
+                    .unwrap()
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+                &context,
+                &external,
+            )
             .unwrap();
         let raw = sample
             .loop_moms()
@@ -5659,6 +5635,10 @@ mod tests {
             .collect::<Vec<_>>();
         let setup = LmbMultiChannelingSetup {
             sampling_bridge: Default::default(),
+            sampling_bridge_quad: Default::default(),
+            sampling_bridge_arb: Default::default(),
+            sampling_catalogue: Default::default(),
+            sampling_proxies: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(0)].into(),
             graph: graph.clone(),
             all_bases,
@@ -5676,7 +5656,17 @@ mod tests {
             graph.loop_momentum_basis.loop_edges.len(),
         );
         let bridge = setup
-            .compile_sampling_channel_bridge(&resolved, &context)
+            .compile_sampling_channel_bridge(
+                &setup
+                    .sampling_channel_catalogue(&resolved, &context.parameterization_settings)
+                    .unwrap(),
+                &setup
+                    .sampling_channel_catalogue(&resolved, &context.parameterization_settings)
+                    .unwrap()
+                    .compile_proxies(3 * context.n_loop_momenta)
+                    .unwrap(),
+                &context,
+            )
             .unwrap();
         assert_eq!(
             setup

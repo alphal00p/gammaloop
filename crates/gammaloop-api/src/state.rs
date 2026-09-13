@@ -4292,6 +4292,7 @@ mod tests {
                 helicities: vec![Helicity::PLUS, Helicity::MINUS],
                 f_64_cache: None,
                 f_128_cache: None,
+                arb_cache: Default::default(),
             },
         };
 
@@ -5387,6 +5388,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
         let xs = [0.27, 0.36, 0.71];
         let selected = SamplingMapComponent::forward(&kernel, &xs, &[])?;
         let raw = frame.forward(&selected.point, &[])?;
+        let sampling_jacobian = selected.jacobian * raw.jacobian;
         let sample = Sample::Continuous(F(1.0), xs.into_iter().map(F).collect());
         let reference_result = integrand.evaluate_reference_sample_detailed(&sample, &reference)?;
         let distance_squared = raw
@@ -5397,13 +5399,23 @@ rotation_axis = [{type = "x"}, {type = "y"}]
             .sum::<f64>();
         let expected = (-distance_squared / (2.0 * reference.width().powi(2))).exp()
             / (2.0 * std::f64::consts::PI * reference.width().powi(2)).powf(1.5);
+        // X-space results and moments now contain their native Jacobian.
+        // Undo the independently reconstructed map factor for this raw-frame oracle.
+        assert_eq!(
+            reference_result.evaluation.parameterization_jacobian,
+            Some(F(1.0))
+        );
         assert!(
-            (reference_result.evaluation.integrand_result.re.0 - expected).abs()
+            (reference_result.evaluation.integrand_result.re.0 / sampling_jacobian - expected)
+                .abs()
                 < expected * 1.0e-12
         );
         let radius_squared = raw.point.iter().map(|x| x * x).sum::<f64>();
         assert!(
-            (reference_result.moments.second_moment.0 - expected * radius_squared).abs() < 1.0e-12
+            (reference_result.moments.second_moment.0 / sampling_jacobian
+                - expected * radius_squared)
+                .abs()
+                < 1.0e-12
         );
         let physical = integrand
             .evaluate_samples_raw(
@@ -5436,7 +5448,9 @@ rotation_axis = [{type = "x"}, {type = "y"}]
             },
             false,
         )?;
-        let delta = physical.integrand_result - raw_result.integrand_result;
+        assert_eq!(physical.parameterization_jacobian, Some(F(1.0)));
+        let delta = physical.integrand_result / Complex::new_re(F(sampling_jacobian))
+            - raw_result.integrand_result;
         let scale = raw_result.integrand_result.re.0.abs() + raw_result.integrand_result.im.0.abs();
         assert!(scale > 1.0e-18 && scale.is_finite());
         assert!(delta.re.0.abs() + delta.im.0.abs() < 1.0e-10 * scale);

@@ -26,6 +26,24 @@ production fixture. The subsequent implementation adds
 [massive_kite.dot](../../../tests/resources/graphs/massive_kite.dot) and the
 bounded production tests described below.
 
+## Bounded checkpoint CLI smoke
+
+Six saved-state smokes passed with the optimized `06d470409` executable: one C
+surface alone and C plus `auto:optimized_lmb` for the kite at rest, boosted kite,
+and box at rest. Every run used 64 points, seed 101, one core, radial power 1,
+real-component training, explicit `map_density` weights, threshold subtraction,
+and read-only state access. The loaded orientation keys were checked against all
+18 kite or 98 box entries. All runs finished with no unstable/NaN samples or
+precision rescue; no events were generated.
+
+This checks CLI/card functionality at that checkpoint. It is neither variance
+evidence nor validation of the subsequent native-host changes or focused-root
+accuracy. The portable [JSON evidence](AMPLITUDE_CHECKPOINT06D_SMOKES.json)
+contains exact commands, binary/state/card/settings hashes, orientation keys,
+results, generation cards, the repository kite reference and the small box DOT.
+Its embedded template reconstructs all six executed cards exactly, and the
+reproduction instructions permit fresh paths without depending on `/tmp`.
+
 ## Production coverage: initial audit and implementation
 
 The initial audit on 13 September found a production connection missing from
