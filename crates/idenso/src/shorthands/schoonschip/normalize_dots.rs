@@ -351,7 +351,7 @@ mod tests {
         assert_eq!(DotNormalizer::run(vector.pow(-3).as_view()), vector.pow(-3));
 
         let coefficient =
-            Atom::add_many(&(0..256).map(|i| function!(opaque, i)).collect::<Vec<_>>()).pow(7)
+            Atom::add_many((0..256).map(|i| function!(opaque, i)).collect::<Vec<_>>()).pow(7)
                 * (Atom::var(x) + function!(opaque, x)).pow(5);
         let expression = &coefficient * (&closed + &nested);
         let normalized = DotNormalizer::run(expression.as_view());

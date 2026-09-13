@@ -316,8 +316,10 @@ uncertified mixed ownership and soft provenance keep their original rules.
 The full reconstruction invariant, sign argument for `D(Q)=D(-Q)`, and worked
 fixtures are documented in
 [`exact-powered-denominator-cff-lifting.md`](exact-powered-denominator-cff-lifting.md).
-The implementation and pending performance gates are tracked in the repository
-root `SPEED_UP_UV_CTS_FROM_4D.md`.
+Generation/runtime measurements and correctness coverage are recorded in
+[`local-4d-uv-performance.md`](local-4d-uv-performance.md). The original plan and
+dated implementation notes remain in the repository-root
+`SPEED_UP_UV_CTS_FROM_4D.md`.
 
 The production numerator remains factorized. Degree analysis traverses its
 factors without expanding them, each UV step attaches only newly owned factors,

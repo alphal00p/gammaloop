@@ -134,9 +134,10 @@ struct ExactSourceOwnerOccurrence {
 /// one source-local CFF energy map. The source graph is temporary; this owned
 /// value deliberately survives it without introducing production orientation
 /// IDs. Source coordinates follow the same carrier-occurrence maps as the
-/// reference evaluator. Repeated denominators retain their immutable source
-/// owner, and a factor-local energy-power assignment may choose only among the
-/// serial occurrences reconstructed for that owner.
+/// reference evaluator. Physical and soft factors retain their source-owner
+/// restrictions. Completed hard UV factors may use any occurrence in their
+/// certified denominator class, including retained nonadjacent carriers;
+/// source incidence remains an independent reconstruction witness.
 #[derive(Clone, Debug)]
 pub(crate) struct ExactSourceEnergyMapper {
     inactive_loop_count: usize,

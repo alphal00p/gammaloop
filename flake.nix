@@ -452,7 +452,7 @@
       };
 
       workspacePackageTestCompileTimeExtraSourceRoots = {
-        # Unit and integration tests embed these shared graph fixtures with include_str!.
+        # Unit and integration tests embed these graph fixtures and snapshots with include_str!.
         "gammaloop-api" = [
           "tests/resources/graphs"
         ];
@@ -461,6 +461,7 @@
         ];
         "gammaloop-integration-tests" = [
           "tests/resources/graphs"
+          "tests/tests/snapshots/test_evaluation_api__gl20_multichannel_local_inspect_events.snap"
         ];
       };
 

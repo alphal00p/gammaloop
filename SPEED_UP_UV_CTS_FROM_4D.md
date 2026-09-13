@@ -2418,3 +2418,44 @@ If a gate fails, use the measurements to continue the generic implementation, in
   its supervisor have exited. The nonsymmetric `f(x,y)` import reproducer is
   confirmed separately; the large evaluator panic remains without a confirmed
   standalone reproducer. Neither diagnostic invokes evaluator compilation.
+
+### 2026-09-13 — Merge validation and generation boundaries
+
+- The final frozen CLI22 scalar selection passes all 167 tests: 166 three-route
+  comparisons across 49 graph labels, with numerator variants and raised
+  propagators, plus the sampling-scale check. These are not 167 distinct graph
+  topologies. Both physical GL00/GL01 three-route tests also pass, exercising
+  both forest orchestrators through their Compare setting. All fourteen
+  boundary checks also pass, completing the dedicated 183-test selection.
+  The full CI and local merge-quality checks remain separate requirements.
+- GL00 expression construction is 1.983849 s in direct 4D versus 3.065155 s
+  in erased 3D (ratio 0.647226). Including Spenso tensor preprocessing, but
+  excluding Symbolica evaluator construction, the paired medians are 5.364433 s
+  versus 4.955573 s (ratio 1.082505). Thus the original expression-construction
+  slowdown is removed in this benchmark, while the entire pre-Symbolica stage
+  retains an 8.3% cost. The latter remains within the agreed 15% gate; it must
+  not be reported as universally faster. GL01's third repeat remains pending.
+- The scalar matrix's single-run setup/generation ratios have median 0.814800:
+  131 of 166 are below 1.00 and eight exceed 1.15. The largest ratios are GL21
+  at 1.417311 and GL17 at 1.368180. These totals include evaluator construction
+  and the matrix's integrated/threshold subtraction settings. A separate GL21
+  phase profile is pending; these totals alone do not identify a UV-expression
+  bottleneck.
+- Full CI exposed a repeatable `finite_part_ghost_2loop` assertion failure on
+  the closed-quark-loop contribution. Its analytic-renormalization path does
+  not execute canonical 4D projection, CFF dispatch or evaluator construction.
+  Existing physics expectations remain unchanged while the earlier symbolic
+  processing is investigated. The branch is not yet declared green or ready.
+- CI's style findings are addressed with local tuple type aliases and
+  test-only iteration/borrowing cleanup, preserving production algorithms and
+  test expectations. Local workspace format/check/clippy validation is queued
+  behind the isolated measurement work.
+- The full Ubuntu suite ran 2,137 tests: 2,134 passed, while
+  `finite_part_ghost_2loop`, `se1l_uv` and `epem_a_bbx_amp_uv` failed. The latter
+  two disagree on integrated UV mass invariance; their renormalization
+  localization-scale checks pass. These failures remain open and are not
+  attributed to statistical fluctuation or resolved by changing expectations.
+- Nix additionally exposed an inherited compile-time source omission: the
+  integration test embeds a tracked `.snap` with `include_str!`, but only the
+  runtime source set retained it. Add that exact existing fixture to the
+  existing compile-time-extra source owner. Nix syntax validation passes.

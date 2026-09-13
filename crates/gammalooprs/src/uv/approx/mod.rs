@@ -1770,11 +1770,8 @@ mod tests {
                 .map(|value| value.unwrap_real())
                 .collect::<Vec<_>>();
             let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
-            for (stage, pair) in values.chunks_exact(2).enumerate() {
+            for (stage, [direct, projected]) in values.as_chunks::<2>().0.iter().enumerate() {
                 let label = format!("depth {depth}, stage {}", stage + 1);
-                let [direct, projected] = pair else {
-                    unreachable!("each comparison has two values")
-                };
                 assert!(
                     [&direct.re, &direct.im, &projected.re, &projected.im]
                         .into_iter()

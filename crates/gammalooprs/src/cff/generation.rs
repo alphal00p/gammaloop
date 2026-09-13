@@ -803,12 +803,13 @@ impl Graph {
                 },
             )
         };
-        let mut selected: Option<(
+        type Candidate = (
             usize,
             Vec<usize>,
             Arc<PlannedExactSourceNumerator>,
             Option<GeneratedThreeDExpression>,
-        )> = None;
+        );
+        let mut selected: Option<Candidate> = None;
         let mut pending = VecDeque::from(energy_assignment_plans.clone());
         let mut seen_bounds = Vec::new();
         let mut challenged = false;

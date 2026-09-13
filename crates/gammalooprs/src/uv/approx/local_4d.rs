@@ -107,6 +107,11 @@ pub(crate) struct CanonicalUvTerm {
     pub(crate) source_classes: Vec<Option<(UvDenominatorClassId, i32)>>,
 }
 
+type CanonicalUvAlgebraKey = (
+    BTreeMap<UvDenominatorClassId, usize>,
+    Vec<(EdgeIndex, Atom, Atom, Atom)>,
+);
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct UvDenominatorClassKey {
     component: usize,
@@ -768,12 +773,7 @@ impl CanonicalUvSector {
 }
 
 impl CanonicalUvTerm {
-    fn algebra_key(
-        &self,
-    ) -> (
-        BTreeMap<UvDenominatorClassId, usize>,
-        Vec<(EdgeIndex, Atom, Atom, Atom)>,
-    ) {
+    fn algebra_key(&self) -> CanonicalUvAlgebraKey {
         let mut residual = self
             .source_witness
             .iter()

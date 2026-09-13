@@ -291,6 +291,8 @@ impl EquivalentEnergyCandidates {
 // Each factor retains its own signed physical/class-to-occurrence assignment.
 pub(crate) type FactorEnergyAssignments = BTreeMap<EnergyReference, usize>;
 
+type SoftMomentumAssignment = (EnergyPowerCapMap<EnergyReference>, BTreeMap<usize, usize>);
+
 /// One immutable assignment of factor-local energy dependencies to certified
 /// exact occurrences. The same tree supplies generation bounds and numerator
 /// substitutions; repeated assigned cycles remain compressed.
@@ -545,10 +547,7 @@ impl PlannedEnergyExpression {
     fn soft_momentum_assignments(
         &self,
         alternatives: &BTreeMap<Atom, Vec<(Atom, EnergyPowerCapMap<EnergyReference>)>>,
-    ) -> Result<
-        Vec<(EnergyPowerCapMap<EnergyReference>, BTreeMap<usize, usize>)>,
-        EnergyPowerAnalysisError,
-    > {
+    ) -> Result<Vec<SoftMomentumAssignment>, EnergyPowerAnalysisError> {
         match self {
             Self::Factor {
                 id,
