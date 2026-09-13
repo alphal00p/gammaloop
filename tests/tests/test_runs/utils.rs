@@ -575,7 +575,7 @@ pub(super) fn assert_evaluation_outputs_match(
                     event.cut_info.graph_id,
                     event.cut_info.cut_id,
                     event.cut_info.orientation_id,
-                    event.cut_info.lmb_channel_id,
+                    event.cut_info.sampling_channel_id,
                 )
             })
             .collect_vec();
@@ -587,7 +587,7 @@ pub(super) fn assert_evaluation_outputs_match(
                     event.cut_info.graph_id,
                     event.cut_info.cut_id,
                     event.cut_info.orientation_id,
-                    event.cut_info.lmb_channel_id,
+                    event.cut_info.sampling_channel_id,
                 )
             })
             .collect_vec();

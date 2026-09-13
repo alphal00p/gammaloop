@@ -1,3 +1,5 @@
+#[cfg(test)]
+use gammalooprs::integrands::process::EvaluationTarget;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     fs::{self},
@@ -5152,7 +5154,7 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
                 let summed_sample = Sample::Continuous(F(1.0), xs.clone());
                 let summed = integrand
                     .evaluate_samples_raw(
-                        &loaded.model,
+                        EvaluationTarget::Physical(&loaded.model),
                         std::slice::from_ref(&summed_sample),
                         0,
                         false,
@@ -5188,7 +5190,7 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
                     );
                     let result = integrand
                         .evaluate_samples_raw(
-                            &loaded.model,
+                            EvaluationTarget::Physical(&loaded.model),
                             std::slice::from_ref(&sample),
                             0,
                             false,
@@ -5229,6 +5231,224 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
                     assert!((actual - expected).abs() < 1.0e-10 * expected.abs().max(1.0));
                 }
             }
+
+            // The loaded-state command uses the real sampling/training grids,
+            // worker clones, native target and complex statistics. Re and Im
+            // are normalization and normalized raw moment, not physical phases.
+            std::thread::scope(|scope| {
+                std::thread::Builder::new()
+                    .stack_size(64 * 1024 * 1024)
+                    .spawn_scoped(scope, || -> Result<()> {
+                        use crate::commands::integrate::Integrate;
+                        use gammalooprs::integrands::Integrand;
+                        use gammalooprs::integrate::{
+                            havana_integrate, slot_workspace_path, workspace_manifest_path,
+                            workspace_state_path, HavanaIntegrateRequest, IntegrationSlot,
+                            IntegrationState, IntegrationStatusKind, IntegrationWorkspaceManifest,
+                            IterationBatchingSettings, SamplingCorrelationMode, SlotMeta,
+                            WorkspaceSnapshotControl,
+                        };
+                        use gammalooprs::utils::serde_utils::SmartSerde;
+                        use symbolica::numerical_integration::{Grid, MonteCarloRng};
+
+                        let process = loaded.process_list.get_integrand_mut(0, "default")?;
+                        let settings = process.get_mut_settings();
+                        settings.integrator.n_bins = 8;
+                        settings.integrator.min_samples_for_update = 4;
+                        settings.integrator.n_start = 256;
+                        settings.integrator.n_increase = 0;
+                        settings.integrator.n_max = 512;
+                        settings.integrator.seed = 7331;
+                        let mut command = Integrate::from_slots([(ProcessRef::Id(0), "default")]);
+                        command.n_cores = Some(2);
+                        command.workspace_path = Some(temp.path().join("reference_full"));
+                        command.batch_size = Some(64);
+                        command.batch_timing = 0.0;
+                        // Exercise centered shorthand as well as shifted descriptors.
+                        command.reference_gaussian = Some(
+                            if process.kind_name() == "amplitude" && reference.center().len() == 3 {
+                                GaussianReferenceFunction::new(reference.width(), vec![])?
+                            } else {
+                                reference.clone()
+                            },
+                        );
+                        let resolved = command
+                            .reference_gaussian
+                            .as_ref()
+                            .unwrap()
+                            .for_integrand(process)?;
+                        let mut cli = CLISettings::default();
+                        cli.state.folder = temp.path().join("saved");
+                        cli.session.set_user_requested_read_only_state(true);
+                        let source_path = generated_integrand_artifact_path(
+                            &cli.state.folder,
+                            &loaded.process_list.processes[0],
+                            "default",
+                        )
+                        .join("integrand.bin");
+                        let before_source = fs::read(&source_path)?;
+                        let full = command.run(&mut loaded, &cli)?;
+                        let result = full.result.single_slot().unwrap();
+                        assert_eq!(result.integral.neval, 512);
+                        assert_eq!(result.target, Some(Complex::new(F(1.0), F(1.0))));
+                        for (mean, error) in [
+                            (result.integral.result.re.0, result.integral.error.re.0),
+                            (result.integral.result.im.0, result.integral.error.im.0),
+                        ] {
+                            assert!(mean.is_finite() && error.is_finite() && error > 0.0);
+                            assert!(
+                                (mean - 1.0).abs() < 6.0 * error,
+                                "reference mean={mean}, error={error}"
+                            );
+                        }
+                        assert!(full.observables.is_empty());
+                        let meta = SlotMeta {
+                            process_name: result.process.clone(),
+                            integrand_name: result.integrand.clone(),
+                        };
+                        let manifest = IntegrationWorkspaceManifest::from_file(
+                            workspace_manifest_path(&full.workspace_path),
+                            "reference manifest",
+                        )?;
+                        assert_eq!(manifest.reference_gaussians, vec![Some(resolved.clone())]);
+                        assert_eq!(
+                            manifest.reference_observable_convention.as_deref(),
+                            Some(GaussianReferenceFunction::INTEGRATION_CONVENTION)
+                        );
+
+                        // Produce a completed first-iteration checkpoint using the same
+                        // engine and interrupt hook, then resume it through the CLI owner.
+                        let partial = temp.path().join("reference_resume");
+                        fs::create_dir_all(slot_workspace_path(&partial, &meta))?;
+                        fs::copy(
+                            workspace_manifest_path(&full.workspace_path),
+                            workspace_manifest_path(&partial),
+                        )?;
+                        fs::copy(
+                            slot_workspace_path(&full.workspace_path, &meta).join("settings.toml"),
+                            slot_workspace_path(&partial, &meta).join("settings.toml"),
+                        )?;
+                        let process = loaded.process_list.get_integrand_mut(0, "default")?.clone();
+                        let settings = process.get_settings().clone();
+                        let mut slot = IntegrationSlot::new(
+                            meta,
+                            settings.clone(),
+                            loaded.model.clone(),
+                            Integrand::ProcessIntegrand(Box::new(process)),
+                            Some(Complex::new(F(1.0), F(1.0))),
+                        );
+                        slot.reference_gaussian = Some(resolved.clone());
+                        let stopped = havana_integrate(
+                            HavanaIntegrateRequest {
+                                slots: vec![slot],
+                                sampling_correlation_mode: SamplingCorrelationMode::Correlated,
+                                n_cores: 2,
+                                state: None,
+                                workspace: Some(partial.clone()),
+                                output_control: WorkspaceSnapshotControl::default(),
+                                batching: IterationBatchingSettings {
+                                    batch_size: Some(64),
+                                    batch_timing_seconds: 0.0,
+                                    ..Default::default()
+                                },
+                                view_options: command.build_render_options(&[settings], false),
+                            },
+                            |status| {
+                                if status.kind() == IntegrationStatusKind::Iteration {
+                                    gammalooprs::request_interrupt();
+                                }
+                                Ok(())
+                            },
+                        );
+                        gammalooprs::clear_interrupt_request();
+                        stopped?;
+                        let bytes = fs::read(workspace_state_path(&partial))?;
+                        let (checkpoint, _): (IntegrationState, usize) =
+                            bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                        assert_eq!(checkpoint.iter, 1);
+                        assert_eq!(checkpoint.num_points, 256);
+                        // A draw from the trained checkpoint proves that both observables
+                        // retain actual non-unit grid probabilities exactly once.
+                        let serialized = serde_json::to_value(&checkpoint)?;
+                        let mut grid: Grid<F<f64>> = serde_json::from_value(
+                            serialized["sampling_states"][0]["grid"].clone(),
+                        )?;
+                        let mut rng = MonteCarloRng::new(42, 0);
+                        let mut point = Sample::new();
+                        grid.sample(&mut rng, &mut point);
+                        assert!((point.get_weight().0 - 1.0).abs() > 1.0e-6);
+                        let process = loaded.process_list.get_integrand_mut(0, "default")?;
+                        let detailed =
+                            process.evaluate_reference_sample_detailed(&point, &resolved)?;
+                        let pair = process
+                            .evaluate_samples_raw(
+                                EvaluationTarget::Reference(&resolved),
+                                &[point.clone()],
+                                0,
+                                false,
+                                false,
+                                Complex::new_zero(),
+                            )?
+                            .samples
+                            .remove(0);
+                        assert_eq!(pair.integrator_weight, point.get_weight());
+                        assert!(
+                            (pair.integrand_result.re.0
+                                - detailed.evaluation.integrand_result.re.0)
+                                .abs()
+                                < 1.0e-12
+                        );
+                        assert!(
+                            (pair.integrand_result.im.0
+                                - detailed.moments.second_moment.0
+                                    / resolved.expected_second_moment::<f64>().0)
+                                .abs()
+                                < 1.0e-12
+                        );
+
+                        command.workspace_path = Some(partial.clone());
+                        let resumed = command.run(&mut loaded, &cli)?;
+                        let actual = &resumed.result.single_slot().unwrap().integral;
+                        assert_eq!(actual.neval, result.integral.neval);
+                        assert_eq!(actual.result, result.integral.result);
+                        assert_eq!(actual.error, result.integral.error);
+                        assert_eq!(fs::read(&source_path)?, before_source);
+                        // A mismatch must fail before saved settings are restored.
+                        loaded
+                            .process_list
+                            .get_integrand_mut(0, "default")?
+                            .get_mut_settings()
+                            .integrator
+                            .seed = 19;
+                        let mut physical = command.clone();
+                        physical.reference_gaussian = None;
+                        let unchanged = fs::read(workspace_state_path(&partial))?;
+                        assert!(physical
+                            .run(&mut loaded, &cli)
+                            .unwrap_err()
+                            .to_string()
+                            .contains("physical/reference"));
+                        assert_eq!(
+                            loaded
+                                .process_list
+                                .get_integrand_mut(0, "default")?
+                                .get_settings()
+                                .integrator
+                                .seed,
+                            19
+                        );
+                        assert_eq!(fs::read(workspace_state_path(&partial))?, unchanged);
+                        command.target = vec!["1,2".into()];
+                        assert!(command
+                            .run(&mut loaded, &cli)
+                            .unwrap_err()
+                            .to_string()
+                            .contains("contradictory"));
+                        Ok(())
+                    })?
+                    .join()
+                    .unwrap()
+            })?;
         }
         Ok(())
     }
@@ -5298,7 +5518,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
             .map(|sample| integrand.evaluate_reference_sample_detailed(sample, &reference))
             .collect::<Result<Vec<_>>>()?;
         let summed = integrand.evaluate_samples_raw(
-            &state.model,
+            EvaluationTarget::Physical(&state.model),
             &samples,
             0,
             false,
@@ -5339,7 +5559,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
                 expected.1 += result.moments.second_moment.0 * jacobian;
             }
             let result = integrand.evaluate_samples_raw(
-                &state.model,
+                EvaluationTarget::Physical(&state.model),
                 &samples,
                 0,
                 false,
@@ -5386,7 +5606,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
             }
         }
         let group_summed = integrand.evaluate_samples_raw(
-            &state.model,
+            EvaluationTarget::Physical(&state.model),
             &samples,
             0,
             false,
@@ -5503,7 +5723,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
         );
         let physical = integrand
             .evaluate_samples_raw(
-                &state.model,
+                EvaluationTarget::Physical(&state.model),
                 &[sample],
                 0,
                 false,
