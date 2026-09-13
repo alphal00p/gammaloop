@@ -784,7 +784,7 @@ fn combine_evaluations(evaluations: Vec<SamplingMapEvaluation>) -> SamplingMapEv
     }
 }
 
-/// A graph-independent radial map around an energy-surface centre.
+/// A graph-independent spherical radial proxy around an energy-surface centre.
 ///
 /// The first unit-cube coordinate is mapped to a non-negative radius and the
 /// remaining coordinates are uniform hyperspherical angles.  When a regular
@@ -794,6 +794,12 @@ fn combine_evaluations(evaluations: Vec<SamplingMapEvaluation>) -> SamplingMapEv
 /// same compactification with the threshold radius set to zero.  The map is
 /// deliberately independent of graph topology: process code supplies the
 /// centre and the classified radius after its kinematics preparation.
+///
+/// This map is exact for the spherical proxy it defines.  A physical
+/// multi-loop E-surface is generally direction-dependent, so callers must not
+/// use this as an exact map-density channel for a real threshold.  The
+/// contract therefore advertises `ProxyOnly` until an implicit radial-root
+/// kernel supplies the directional derivative of the actual energy equation.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SurfaceRadialMap {
     dimension: usize,
@@ -894,7 +900,7 @@ impl SurfaceRadialMap {
     pub fn contract(&self) -> SamplingMapContract {
         SamplingMapContract {
             support: SamplingSupport::Full,
-            jacobian: SamplingJacobian::ExactForward,
+            jacobian: SamplingJacobian::ProxyOnly,
         }
     }
 
