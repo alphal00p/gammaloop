@@ -4264,8 +4264,8 @@ mod tests {
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = false
-lmb_channels = "summed"
+sampling_multichanneling = false
+sampling_channels = "summed"
 coordinate_system = "tropical"
 mapping = "linear"
 b = 1.0
