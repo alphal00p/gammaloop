@@ -2342,10 +2342,23 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                     MergeOp::Sum => NetworkOp::Sum,
                     MergeOp::Product => NetworkOp::Product,
                 };
-                let (_, sub) = self
-                    .graph
-                    .identify_nodes_without_self_edges::<SuBitGraph>(&nodes, NetworkNode::Op(op));
-                to_del.union_with(&sub);
+                // The union roots already identify every endpoint which this
+                // group will merge. Mark only its new self-edges, preserving
+                // existing loops without allocating or unioning graph-sized
+                // masks for each group.
+                for node in &nodes {
+                    for hedge in self.graph.iter_crown(*node) {
+                        let other = self.graph.node_id(self.graph.inv(hedge));
+                        if other != *node
+                            && op_index
+                                .get(&other)
+                                .is_some_and(|index| parents[*index] == root)
+                        {
+                            to_del.add(hedge);
+                        }
+                    }
+                }
+                self.graph.identify_nodes(&nodes, NetworkNode::Op(op));
             }
         }
         if profile::enabled() {
@@ -2955,6 +2968,68 @@ pub mod test {
         assert_eq!(graph.slot_order.len(), graph.graph.n_hedges());
         assert_eq!(graph.slot_order, [0, 3, 2]);
         graph.graph.check().unwrap();
+    }
+
+    #[test]
+    fn merge_ops_preserves_existing_loops_and_cross_group_slots() {
+        use super::{Flow, NetworkEdge};
+
+        // Structural network fixture: three operator islands, with slot edges
+        // testing incidence independently of any physical tensor numerator.
+        for directed in [false, true] {
+            let (mut builder, root) =
+                NetworkGraph::<i8>::head_builder(NetworkNode::Op(NetworkOp::Product));
+            let product = builder.add_node(NetworkNode::Op(NetworkOp::Product));
+            let product_child = builder.add_node(NetworkNode::Op(NetworkOp::Product));
+            let sum = builder.add_node(NetworkNode::Op(NetworkOp::Sum));
+            let sum_child = builder.add_node(NetworkNode::Op(NetworkOp::Sum));
+            let inner_product = builder.add_node(NetworkNode::Op(NetworkOp::Product));
+            let inner_child = builder.add_node(NetworkNode::Op(NetworkOp::Product));
+            for (child, parent) in [
+                (product, root),
+                (product_child, product),
+                (sum, root),
+                (sum_child, sum),
+                (inner_product, sum),
+                (inner_child, inner_product),
+            ] {
+                builder.add_edge(child, parent, NetworkEdge::Head, directed);
+            }
+            for (index, parent) in [product_child, sum_child, inner_child]
+                .into_iter()
+                .enumerate()
+            {
+                let leaf = builder.add_node(NetworkNode::Leaf(NetworkLeaf::Scalar(index.into())));
+                builder.add_edge(leaf, parent, NetworkEdge::Head, directed);
+            }
+            let slot = NetworkEdge::Slot(Minkowski {}.new_slot(4, 1).to_lib());
+            builder.add_edge(product, product, slot, directed);
+            builder.add_edge(sum_child, sum_child, slot, directed);
+            builder.add_edge(product_child, inner_child, slot, directed);
+            builder.add_edge(product, product_child, slot, directed);
+            builder.add_external_edge(root, slot, directed, Flow::Sink);
+            let mut graph: NetworkGraph<i8> = builder.into();
+            graph.slot_order = (0..graph.graph.n_hedges()).map(|i| i as u8).collect();
+            let mut expected = graph.clone();
+            let mut removed: SuBitGraph = expected.graph.empty_subgraph();
+            for (nodes, op) in [
+                (vec![root, product, product_child], NetworkOp::Product),
+                (vec![sum, sum_child], NetworkOp::Sum),
+                (vec![inner_product, inner_child], NetworkOp::Product),
+            ] {
+                let (_, edges) = expected
+                    .graph
+                    .identify_nodes_without_self_edges::<SuBitGraph>(&nodes, NetworkNode::Op(op));
+                removed.union_with(&edges);
+            }
+            expected.graph.forget_identification_history();
+            expected.delete(&removed);
+            graph.merge_ops();
+            graph.graph.check().unwrap();
+            assert_eq!(graph, expected);
+            graph.merge_ops();
+            assert_eq!(graph, expected, "operator merging is idempotent");
+        }
     }
 
     #[test]

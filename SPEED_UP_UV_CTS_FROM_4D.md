@@ -1203,3 +1203,63 @@ If a gate fails, use the measurements to continue the generic implementation, in
   diagnostic uses the corrected minimal log filter, explicit cold-start
   attestation, a 2,400 s cap and a 30 GiB guard from launch. Its completion,
   actual forest export, pointwise checks and repeated timing gates remain pending.
+- Integration check63 passes in 10.85 s and the four integration executables
+  build in 3m50s from clean revision `9427afbef85325df90835172e5a951866493b6a7`.
+  `validation_candidate_9427/final_build_manifest.json` binds their immutable
+  copies, hashes, compiler and assertion-enabled settings. Fourteen UV,
+  cut/threshold and analytic checks are queued behind CLI12 under the common
+  benchmark lock; they are not yet reported as passed.
+- CLI12 completes nine of ten forest nodes and reaches the final node at
+  05:48:42 UTC. A six-second sample of its second DOD1 node contains 123
+  samples with zero lost: 91.87% include final-integrand `expand_dots`, with
+  network construction, Schoonschip normalization and execution below that
+  boundary. The earlier color reducer and dense edge-reference scan are absent
+  from this sample. The DOD1 node subsequently completes in 249.383 s.
+  This diagnostic overlaps earlier compilation and includes sampling overhead;
+  it is neither a final generation measurement nor a completed ratio.
+- Read-only inspection finds that dot expansion currently constructs a metric
+  network per replacement match. Symbolica offers a per-call RHS match cache,
+  but its default size of zero does not establish repeated inputs in this run.
+  Existing saved pre-color expressions are 58–231 MiB and precede the actual
+  dot-mapping boundary. No speculative cache or replay of those large inputs is
+  introduced on that evidence alone.
+- All ten CLI12 forest nodes finish: 912.777859 s for the complete forest,
+  including 19.830121 s for the root and 892.945160 s for nonroot nodes.
+  Complete dispatch accounting is 6.150606 s, or 0.688800% of that nonroot
+  denominator. Evaluator completion and the successful-run receipt are still
+  required to certify the cold-run gate. The artifact parser passes 27 synthetic
+  controls, including standalone capacity scopes and exact overlap rejection.
+- The completed forest contains 27 bucket visits, 127 source requests/builds,
+  127 template builds, 201 scored candidates and 8,494 selected native rows,
+  each mapped once. The cold context makes 15 native CFF calls; all 15 canonical
+  source/ordered-capacity projections are distinct, certifying 15 complete CFF
+  keys once the cold successful-run receipt is available. Dropping capacities
+  leaves 13 canonical parsed source descriptors. These are distinct from
+  preparation and row misses: 257 preparation evictions and 60,769 row evictions
+  prevent interpreting their miss counts as globally unique keys.
+- Evaluator network parsing finishes in 210.181 s. The next six-second profile
+  has 119 samples, zero lost, and 94.96% inclusive in operator merging's dense
+  bit-vector union. Each operator island allocates a graph-sized mask and unions
+  it into the deletion set. The replacement uses the existing disjoint group
+  identities to mark only newly internal edges from their node crowns, then
+  calls the existing node-identification API. It preserves every edge kind,
+  original self-loop and intergroup connection. No new helper or symbolic
+  representation is introduced. Independent review confirms the invariant;
+  the regression compares complete graphs and slot orders with the existing
+  dense helper, including idempotence, three islands and dangling/loop/crossing
+  slots. Check64 passes in 10.15 s; focused nextest23 is running. CLI12 remains
+  immutable and continues under its existing bounds.
+- Nextest23 builds in 3m06s and passes all 654 focused checks in 57.988 s,
+  including the new operator-merging oracle. Clippy9 passes in 22.50 s with
+  the same three tuple-complexity warnings. CLI check65 passes in 11.09 s;
+  build13 is running. Because operator merging is shared, paired 3D generation
+  will use this new binary as well. The pending CLI12 result cannot establish
+  a timing ratio for that later implementation.
+- CLI13 builds in 3m24s and is frozen in
+  `diagnostic_local_operator_merges/immutable_binary/gammaloop`, SHA-256
+  `f9da9df2cee4077a121b2fb9d6c75e7c04a2a3a073562eae6733295be0d6b045`.
+  Its manifest records base revision `9427afbef`, patch
+  `920ad426ed129b441afec299ca15e97da82dc0210aaab04432e57270ad452b53`,
+  compiler, flags, assertion-enabled profile and immutable byte count. The next
+  diagnostic is queued after the existing frozen-run/check sequence; no new
+  generation or runtime result is implied by this build.

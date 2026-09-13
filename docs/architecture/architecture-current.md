@@ -195,6 +195,10 @@ constructing common denominators.
 Tensor-network edge joins use Linnet's existing dense edge swap, which updates
 the moved edges through their owning half-edges. Each join therefore avoids a
 scan over the growing graph while preserving its edge payloads and merge flow.
+Operator merging uses its existing disjoint union groups to mark newly internal
+half-edges directly from each group's node crowns. One shared deletion set
+preserves original self-loops, dangling slots and edges between groups without
+allocating and combining graph-sized masks for each operator island.
 
 Rational-shell extraction groups equal denominator multisets through sums,
 products and powers while leaving denominator-free numerator subtrees opaque.
