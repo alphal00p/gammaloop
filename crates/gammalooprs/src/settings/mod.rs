@@ -1094,7 +1094,11 @@ power = 2.0
                                 b: 5.0,
                                 power: 2.0,
                                 lmb_basis_ids: Default::default(),
-                                sampling_channels: Default::default(),
+                                sampling_channels: crate::settings::runtime::SamplingChannelSelection {
+                                    weight: crate::settings::runtime::SamplingChannelWeight::InverseJacobian,
+                                    default_channel_selection: vec!["auto:optimized_lmb".to_owned()],
+                                    ..Default::default()
+                                },
                             },
                     },
                 ),
@@ -1133,7 +1137,11 @@ power = 4.0
                                 b: 1.5,
                                 power: 4.0,
                                 lmb_basis_ids: Default::default(),
-                                sampling_channels: Default::default(),
+                                sampling_channels: crate::settings::runtime::SamplingChannelSelection {
+                                    weight: crate::settings::runtime::SamplingChannelWeight::InverseJacobian,
+                                    default_channel_selection: vec!["auto:optimized_lmb".to_owned()],
+                                    ..Default::default()
+                                },
                             },
                     },
                 ),
@@ -1187,7 +1195,11 @@ b = 1.0
                                 b: 1.0,
                                 power: 1.0,
                                 lmb_basis_ids: Default::default(),
-                                sampling_channels: Default::default(),
+                                sampling_channels: crate::settings::runtime::SamplingChannelSelection {
+                                    weight: crate::settings::runtime::SamplingChannelWeight::InverseJacobian,
+                                    default_channel_selection: vec!["auto:optimized_lmb".to_owned()],
+                                    ..Default::default()
+                                },
                             },
                     },
                 ),

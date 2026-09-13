@@ -20,7 +20,6 @@ use crate::observables::{
 use crate::processes::{GraphGroupSelectionSpec, StandaloneExportSettings};
 use crate::utils::{
     ArbPrec, F, FloatLike, f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta,
-    global_inv_parameterize,
 };
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::owo_colors::OwoColorize;
@@ -59,8 +58,6 @@ use crate::{
     settings::runtime::DiscreteGraphSamplingSettings,
     settings::runtime::DiscreteGraphSamplingType,
     settings::runtime::IntegratorSettings,
-    settings::runtime::LmbChannelWeight,
-    settings::runtime::ParameterizationMode,
     settings::runtime::ParameterizationSettings,
     settings::runtime::Precision,
     settings::runtime::StabilityLevelSetting,
@@ -2146,27 +2143,9 @@ pub struct LmbMultiChannelingSetup {
     pub all_bases: TiVec<LmbIndex, LoopMomentumBasis>,
 }
 
-pub(crate) struct LmbChannelWeightingSettings<'a, T: FloatLike> {
-    pub(crate) graph_name: &'a str,
-    pub(crate) model: &'a Model,
-    pub(crate) alpha: &'a F<T>,
-    pub(crate) channel_weight: LmbChannelWeight,
-    pub(crate) parameterization_settings: &'a ParameterizationSettings,
-    pub(crate) e_cm: f64,
-}
-
-impl<'a, T: FloatLike> Copy for LmbChannelWeightingSettings<'a, T> {}
-
-impl<'a, T: FloatLike> Clone for LmbChannelWeightingSettings<'a, T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
 impl LmbMultiChannelingSetup {
-    /// Expand an already graph-resolved advanced selection for inspection and
-    /// future map construction. This deliberately does not alter the existing
-    /// LMB sampling path; callers should resolve with the actual graph name
+    /// Expand a graph-resolved selection into the canonical catalogue used by
+    /// inspection and map construction. Resolve with the actual graph name
     /// before invoking this method (the setup may be shared by a graph group).
     pub fn sampling_channel_catalogue(
         &self,
@@ -2398,13 +2377,10 @@ impl LmbMultiChannelingSetup {
         graph_name: &str,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<SamplingChannelCatalogue> {
-        let mut selection = parameterization_settings.sampling_channels.clone();
-        if selection.default_channel_selection.is_empty()
-            && !selection.channel_selection.contains_key(graph_name)
-        {
-            selection.default_channel_selection = vec![SamplingChannelPreset::OPTIMIZED_LMB.into()];
-        }
-        let resolved = resolve_sampling_channel_selection(graph_name, &selection)?;
+        let resolved = resolve_sampling_channel_selection(
+            graph_name,
+            &parameterization_settings.sampling_channels,
+        )?;
         self.sampling_channel_catalogue(&resolved, parameterization_settings)
     }
 
@@ -2573,12 +2549,9 @@ impl LmbMultiChannelingSetup {
         })
     }
 
-    /// Resolve the canonical channel IDs that can still be evaluated by the
-    /// transitional LMB weighting path. The IDs are retained alongside their
-    /// generated basis instead of compacting into a second positional LMB
-    /// enumeration; this keeps compatibility callers aligned with the one
-    /// canonical channel axis until the per-sample graph-aware route is
-    /// complete.
+    /// Resolve generated bases for default sampling's LMB choice. IDs retain
+    /// their catalogue positions; this view never creates another channel axis.
+    /// Multichannel sampling uses the compiled bridge for every channel.
     fn canonical_lmb_basis_entries(
         &self,
         graph_name: &str,
@@ -2720,310 +2693,6 @@ impl LmbMultiChannelingSetup {
                 loop_mom_cache_id,
             ),
         }
-    }
-
-    /// Computes the prefactor for the given canonical channel ID and momentum sample.
-    pub(crate) fn compute_prefactor_impl<T: FloatLike>(
-        &self,
-        channel_id: SamplingChannelId,
-        selected_lmb: LmbIndex,
-        momentum_sample: &MomentumSample<T>,
-        weighting_settings: LmbChannelWeightingSettings<'_, T>,
-    ) -> Result<F<T>> {
-        let channel_entries = self.canonical_lmb_basis_entries(
-            weighting_settings.graph_name,
-            weighting_settings.parameterization_settings,
-        )?;
-        let Some((_, selected_channel_lmb)) = channel_entries
-            .iter()
-            .find(|(candidate_id, _)| *candidate_id == channel_id)
-        else {
-            return Err(eyre!(
-                "Requested LMB channel {} is not an LMB entry in the canonical sampling catalogue for graph '{}'; the catalogue has {} channels.",
-                usize::from(channel_id),
-                weighting_settings.graph_name,
-                channel_entries.len()
-            ));
-        };
-        if *selected_channel_lmb != selected_lmb {
-            return Err(eyre!(
-                "Canonical sampling channel {} resolves to LMB basis {}, but weighting requested basis {}",
-                channel_id.index(),
-                usize::from(*selected_channel_lmb),
-                usize::from(selected_lmb)
-            ));
-        }
-        let lmb_basis_ids_for_partition = channel_entries
-            .iter()
-            .map(|(_, lmb_index)| *lmb_index)
-            .collect::<Vec<_>>();
-
-        match weighting_settings.channel_weight {
-            LmbChannelWeight::Ose => Ok(self.compute_ose_prefactor_impl(
-                selected_lmb,
-                &lmb_basis_ids_for_partition,
-                momentum_sample,
-                weighting_settings.model,
-                weighting_settings.alpha,
-            )),
-            LmbChannelWeight::InverseJacobian => Ok(self.compute_inverse_jacobian_prefactor_impl(
-                selected_lmb,
-                &lmb_basis_ids_for_partition,
-                momentum_sample,
-                weighting_settings.parameterization_settings,
-                weighting_settings.e_cm,
-            )),
-        }
-    }
-
-    fn compute_ose_prefactor_impl<T: FloatLike>(
-        &self,
-        selected_lmb: LmbIndex,
-        lmb_basis_ids_for_partition: &[LmbIndex],
-        momentum_sample: &MomentumSample<T>,
-        model: &Model,
-        alpha: &F<T>,
-    ) -> F<T> {
-        let all_energies = self.graph.get_energy_cache(
-            model,
-            &momentum_sample.sample.loop_moms,
-            &momentum_sample.sample.external_moms,
-            &self.graph.loop_momentum_basis,
-        );
-
-        let mut numerator = momentum_sample.zero();
-
-        let denominators = lmb_basis_ids_for_partition
-            .iter()
-            .map(|&lmb_index| {
-                let channel_product = self.all_bases[lmb_index]
-                    .loop_edges
-                    .iter()
-                    .map(|&edge_index| &all_energies[edge_index])
-                    .fold(momentum_sample.one(), |product, energy| product * energy)
-                    .powf(&-alpha);
-
-                if selected_lmb == lmb_index {
-                    numerator = channel_product.clone();
-                }
-
-                channel_product
-            })
-            .fold(momentum_sample.zero(), |sum, summand| sum + summand);
-
-        numerator / denominators
-    }
-
-    fn compute_inverse_jacobian_prefactor_impl<T: FloatLike>(
-        &self,
-        selected_lmb: LmbIndex,
-        lmb_basis_ids_for_partition: &[LmbIndex],
-        momentum_sample: &MomentumSample<T>,
-        parameterization_settings: &ParameterizationSettings,
-        e_cm: f64,
-    ) -> F<T> {
-        let scores = self.compute_inverse_jacobian_scores_impl(
-            lmb_basis_ids_for_partition,
-            momentum_sample,
-            parameterization_settings,
-            e_cm,
-        );
-        let numerator = lmb_basis_ids_for_partition
-            .iter()
-            .zip(scores.iter())
-            .filter(|(lmb_index, _)| **lmb_index == selected_lmb)
-            .map(|(_, score)| score.clone())
-            .last()
-            .unwrap_or_else(|| momentum_sample.zero());
-        let denominator = scores
-            .into_iter()
-            .fold(momentum_sample.zero(), |sum, summand| sum + summand);
-
-        if denominator.is_zero() {
-            momentum_sample.zero()
-        } else {
-            numerator / denominator
-        }
-    }
-
-    /// Evaluate the inverse-Jacobian scores used by the legacy LMB partition.
-    /// Keeping this as the single implementation is important: the advanced
-    /// map-density bridge below must agree pointwise with the production LMB
-    /// prefactor, including the two-branch common-radial parameterization.
-    fn compute_inverse_jacobian_scores_impl<T: FloatLike>(
-        &self,
-        lmb_basis_ids_for_partition: &[LmbIndex],
-        momentum_sample: &MomentumSample<T>,
-        parameterization_settings: &ParameterizationSettings,
-        e_cm: f64,
-    ) -> Vec<F<T>> {
-        let e_cm = F::<T>::from_f64(e_cm);
-
-        if matches!(
-            parameterization_settings.mode,
-            ParameterizationMode::SphericalProductCommonRadial
-        ) {
-            let product_settings = ParameterizationSettings {
-                mode: ParameterizationMode::Spherical,
-                mapping: parameterization_settings.mapping.clone(),
-                b: parameterization_settings.b,
-                power: parameterization_settings.power,
-                lmb_basis_ids: Default::default(),
-                sampling_channels: Default::default(),
-            };
-            let common_radial_settings = ParameterizationSettings {
-                mode: ParameterizationMode::SphericalCommonRadial,
-                mapping: parameterization_settings.mapping.clone(),
-                b: parameterization_settings.b,
-                power: parameterization_settings.power,
-                lmb_basis_ids: Default::default(),
-                sampling_channels: Default::default(),
-            };
-            let sampled_branch = momentum_sample.sample.parameterization_branch;
-            lmb_basis_ids_for_partition
-                .iter()
-                .map(|&lmb_index| {
-                    let basis_momenta = self.basis_momenta_for_lmb(lmb_index, momentum_sample);
-                    let (_, product_inverse_jacobian) =
-                        global_inv_parameterize(&basis_momenta, e_cm.clone(), &product_settings);
-                    let (_, common_radial_inverse_jacobian) = global_inv_parameterize(
-                        &basis_momenta,
-                        e_cm.clone(),
-                        &common_radial_settings,
-                    );
-                    match sampled_branch {
-                        Some(0) => product_inverse_jacobian,
-                        Some(1) => common_radial_inverse_jacobian,
-                        _ => product_inverse_jacobian + common_radial_inverse_jacobian,
-                    }
-                })
-                .collect()
-        } else {
-            lmb_basis_ids_for_partition
-                .iter()
-                .map(|&lmb_index| {
-                    let basis_momenta = self.basis_momenta_for_lmb(lmb_index, momentum_sample);
-                    let (_, inverse_jacobian) = global_inv_parameterize(
-                        &basis_momenta,
-                        e_cm.clone(),
-                        parameterization_settings,
-                    );
-                    inverse_jacobian
-                })
-                .collect()
-        }
-    }
-
-    /// Build an exact map-density partition for ordinary LMB channels at one
-    /// common raw momentum sample. Discrete runtime samples use the canonical
-    /// bridge below; this helper remains available for diagnostics.
-    ///
-    /// The returned weights are pointwise identical to the legacy
-    /// `LmbChannelWeight::InverseJacobian` prefactors for the selected channel
-    /// set.  A non-positive score is treated as unsupported (rather than being
-    /// silently inserted into a positive partition), and the partition emits
-    /// the standard diagnostics if every selected channel is unsupported.
-    pub fn inverse_jacobian_sampling_partition<T: FloatLike>(
-        &self,
-        momentum_sample: &MomentumSample<T>,
-        graph_name: &str,
-        parameterization_settings: &ParameterizationSettings,
-        e_cm: f64,
-        selected_channels: Option<&[SamplingChannelId]>,
-    ) -> Result<SamplingPartition> {
-        let channel_entries = match selected_channels {
-            Some(channel_indices) => channel_indices
-                .iter()
-                .copied()
-                .map(|channel_id| {
-                    self.sampling_channel_lmb_id(
-                        channel_id,
-                        graph_name,
-                        parameterization_settings,
-                    )?
-                    .map(|basis_id| (channel_id, basis_id))
-                    .ok_or_else(|| {
-                        eyre!(
-                            "LMB inverse-Jacobian partition cannot evaluate graph-aware sampling channel {} for graph '{}'",
-                            channel_id.index(), graph_name
-                        )
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?,
-            None => self.canonical_lmb_basis_entries(graph_name, parameterization_settings)?,
-        };
-        if channel_entries.is_empty() {
-            return Err(eyre!(
-                "cannot build an LMB sampling partition for graph '{graph_name}': no channels selected"
-            ));
-        }
-
-        let lmb_basis_ids_for_partition = channel_entries
-            .iter()
-            .map(|(_, lmb_index)| *lmb_index)
-            .collect::<Vec<_>>();
-        let scores = self.compute_inverse_jacobian_scores_impl(
-            &lmb_basis_ids_for_partition,
-            momentum_sample,
-            parameterization_settings,
-            e_cm,
-        );
-        let channels = scores
-            .into_iter()
-            .zip(channel_entries.iter().copied())
-            .map(|(score, (channel_id, lmb_index))| {
-                let value = score.into_ff64().0;
-                SamplingChannelScore::map_density(
-                    format!(
-                        "lmb:{}:basis={}",
-                        channel_id.index(),
-                        usize::from(lmb_index)
-                    ),
-                    SamplingScoreFunction::from_positive_function(move |_| {
-                        if !value.is_finite() {
-                            Err(eyre!(
-                                "LMB channel {} (basis {}) returned a non-finite inverse-Jacobian score {value}",
-                                channel_id.index(),
-                                usize::from(lmb_index)
-                            ))
-                        } else if value < 0.0 {
-                            Err(eyre!(
-                                "LMB channel {} (basis {}) returned a negative inverse-Jacobian score {value}",
-                                channel_id.index(),
-                                usize::from(lmb_index)
-                            ))
-                        } else if value == 0.0 {
-                            Ok(None)
-                        } else {
-                            Ok(Some(value))
-                        }
-                    }),
-                )
-            })
-            .collect::<Vec<_>>();
-        SamplingPartition::new(SamplingPartitionMode::MapDensity, &channels, &[])
-    }
-
-    fn basis_momenta_for_lmb<T: FloatLike>(
-        &self,
-        lmb_index: LmbIndex,
-        momentum_sample: &MomentumSample<T>,
-    ) -> Vec<ThreeMomentum<F<T>>> {
-        self.all_bases[lmb_index]
-            .loop_edges
-            .iter()
-            .map(|&edge_index| {
-                let edge_signature = &self.graph.loop_momentum_basis.edge_signatures[edge_index];
-
-                edge_signature
-                    .internal
-                    .apply_typed(&momentum_sample.sample.loop_moms)
-                    + edge_signature
-                        .external
-                        .apply(&momentum_sample.sample.external_moms.raw)
-                        .spatial
-            })
-            .collect()
     }
 }
 
@@ -3347,7 +3016,7 @@ pub trait GraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
-        context: GraphTermEvaluationContext<'_, '_, T>,
+        context: GraphTermEvaluationContext<'_, '_>,
     ) -> Result<GraphEvaluationResult<T>>;
 
     fn name(&self) -> String;
@@ -3382,12 +3051,6 @@ pub trait GraphTerm {
         orientation: Option<usize>,
     ) -> Result<SamplingChannelBridge>;
 
-    /// Whether summed sampling may replay unit-cube coordinates through the
-    /// canonical bridge for this graph term. Cross-section terms require
-    /// per-sample LU/t* preparation and remain on their guarded legacy route.
-    fn supports_canonical_summed_sampling(&self) -> bool {
-        false
-    }
     fn sampling_channel_is_lmb(
         &self,
         channel_id: SamplingChannelId,
@@ -3419,41 +3082,17 @@ struct EvaluationContext<'a, 'm> {
     record_primary_timing: bool,
 }
 
-pub struct GraphTermEvaluationContext<'a, 'm, T: FloatLike> {
+pub struct GraphTermEvaluationContext<'a, 'm> {
     pub model: &'a Model,
     pub settings: &'a RuntimeSettings,
     pub event_processing_runtime: Option<&'m mut EventProcessingRuntime>,
     pub rotation: &'a Rotation,
     pub evaluation_metadata: &'m mut EvaluationMetaData,
     pub record_primary_timing: bool,
-    /// The single canonical sampling-channel selection used by the graph
-    /// estimator.  The legacy LMB weighting route is represented explicitly
-    /// as one variant while the mapped route carries the same stable channel
-    /// id; there is no second channel-index domain.
-    pub sampling_channel: Option<SamplingChannelEvaluation<T>>,
+    /// The canonical channel which mapped this point into the parent frame.
+    /// Its sampling partition is applied outside the physical graph evaluation.
+    pub sampling_channel: Option<SamplingChannelId>,
     pub lmb_basis_id: Option<LmbIndex>,
-}
-
-#[derive(Debug, Clone)]
-pub enum SamplingChannelEvaluation<T: FloatLike> {
-    /// Temporary compatibility route for cross-section terms which still
-    /// need per-sample LU/t* data before a complete map can be replayed.
-    LegacyLmb {
-        id: SamplingChannelId,
-        alpha: F<T>,
-        channel_weight: LmbChannelWeight,
-    },
-    /// The canonical map route. The momentum point has already been mapped
-    /// into the graph's parent frame and must not be reinterpreted as an LMB.
-    Mapped { id: SamplingChannelId },
-}
-
-impl<T: FloatLike> SamplingChannelEvaluation<T> {
-    pub fn id(&self) -> SamplingChannelId {
-        match self {
-            Self::LegacyLmb { id, .. } | Self::Mapped { id } => *id,
-        }
-    }
 }
 
 /// Evaluate one graph term using the canonical sampling channel contract.
@@ -3462,25 +3101,21 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     graph_id: usize,
     sample: &MomentumSample<T>,
     context: &mut EvaluationContext<'_, '_>,
-    sampling_channel: Option<SamplingChannelEvaluation<T>>,
+    sampling_channel: Option<SamplingChannelId>,
     lmb_basis_id: Option<LmbIndex>,
 ) -> Result<GraphEvaluationResult<T>> {
-    if let Some(channel) = sampling_channel.as_ref() {
-        if let Some(parameterization_settings) =
+    if let Some(channel) = sampling_channel
+        && let Some(parameterization_settings) =
             context.settings.sampling.get_parameterization_settings()
-            && integrand
-                .get_graph(graph_id)
-                .sampling_channel_requires_deferred_cut_context(
-                    channel.id(),
-                    &parameterization_settings,
-                )?
-        {
-            return Err(eyre!(
-                "sampling channel {} for graph '{}' requires a deferred physical-cut context (solved LU/t* and unit-cube coordinates); the cross-section evaluator boundary cannot evaluate it from a pre-mapped sample",
-                channel.id().index(),
-                integrand.get_graph(graph_id).name(),
-            ));
-        }
+        && integrand
+            .get_graph(graph_id)
+            .sampling_channel_requires_deferred_cut_context(channel, &parameterization_settings)?
+    {
+        return Err(eyre!(
+            "sampling channel {} for graph '{}' requires a deferred physical-cut context (solved LU/t* and unit-cube coordinates); the cross-section evaluator boundary cannot evaluate it from a pre-mapped sample",
+            channel.index(),
+            integrand.get_graph(graph_id).name(),
+        ));
     }
     let mut event_processing_runtime = integrand.take_event_processing_runtime();
     let result = {
@@ -3574,7 +3209,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     graph_id,
                     sample,
                     context,
-                    Some(SamplingChannelEvaluation::Mapped { id: *channel_id }),
+                    Some(*channel_id),
                     None,
                 )?;
                 if let Some(weight) = partition_weight {
@@ -3588,8 +3223,6 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                 Ok(result)
             }
             DiscreteGraphSample::MultiChanneling {
-                alpha,
-                channel_weight,
                 sampling_coordinates,
                 sample,
             } => {
@@ -3597,126 +3230,92 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     .settings
                     .sampling
                     .get_parameterization_settings()
-                    .expect("LMB multichanneling requires a parameterization.");
+                    .expect("sampling multichanneling requires a parameterization");
                 let channel_ids = integrand
                     .get_graph(graph_id)
                     .sampling_channel_ids(&parameterization_settings)?;
-                let use_canonical_bridge = integrand
-                    .get_graph(graph_id)
-                    .supports_canonical_summed_sampling();
-                let coordinates = sampling_coordinates.as_ref().map(|coordinates| {
-                    coordinates
-                        .iter()
-                        .map(|coordinate| coordinate.clone().into_ff64().0)
-                        .collect_vec()
-                });
-                let bridge = if use_canonical_bridge {
-                    let externals = context
-                        .settings
-                        .kinematics
-                        .externals
-                        .get_dependent_externals::<f64>(
-                            integrand.get_dependent_momenta_constructor(),
-                        )?;
-                    let external_momenta = externals
-                        .iter()
-                        .map(|momentum| {
-                            [
-                                momentum.temporal.value.0,
-                                momentum.spatial.px.0,
-                                momentum.spatial.py.0,
-                                momentum.spatial.pz.0,
-                            ]
-                        })
-                        .collect_vec();
-                    Some(integrand.get_graph(graph_id).compile_sampling_bridge(
-                        &parameterization_settings,
-                        context.settings.kinematics.e_cm,
-                        &external_momenta,
-                        sample.sample.orientation,
-                    )?)
-                } else {
-                    None
-                };
-                let channel_count = channel_ids.len() as f64;
-                channel_ids
-                    .into_iter()
-                    .map(|channel_id| {
-                        if let Some(bridge) = bridge.as_ref() {
-                            let coordinates = coordinates.as_ref().ok_or_else(|| {
-                                eyre!(
-                                    "canonical summed amplitude channel {} requires retained unit-cube coordinates",
-                                    channel_id.index()
-                                )
-                            })?;
-                            let mapped = bridge.forward(channel_id, coordinates)?;
-                            let partition_weight = mapped
-                                .partition
-                                .weight(channel_id.index())
-                                .ok_or_else(|| {
-                                    eyre!(
-                                        "sampling channel partition has no weight for channel {}",
-                                        channel_id.index()
-                                    )
-                                })?;
-                            if !partition_weight.is_finite() || partition_weight <= 0.0 {
-                                return Err(eyre!(
-                                    "sampling channel partition has invalid weight {partition_weight}"
-                                ));
-                            }
-                            let mut mapped_sample = mapped.to_momentum_sample::<T>(
-                                SamplingMomentumSampleContext {
-                                    loop_mom_cache_id: sample.sample.loop_mom_cache_id,
-                                    external_moms: &context.settings.kinematics.externals,
-                                    external_mom_cache_id: sample.sample.external_mom_cache_id,
-                                    dependent_momenta_constructor: integrand
-                                        .get_dependent_momenta_constructor(),
-                                    orientation: sample.sample.orientation,
-                                },
-                            )?;
-                            mapped_sample.sample.parameterization_branch =
-                                sample.sample.parameterization_branch;
-                            mapped_sample.sample.jacobian = mapped_sample.sample.jacobian
-                                * F::from_f64(partition_weight * channel_count);
-                            evaluate_graph_term(
-                                integrand,
-                                graph_id,
-                                &mapped_sample,
-                                context,
-                                Some(SamplingChannelEvaluation::Mapped { id: channel_id }),
-                                None,
-                            )
-                        } else {
-                            if !integrand.get_graph(graph_id).sampling_channel_is_lmb(
-                                channel_id,
-                                &parameterization_settings,
-                            )? {
-                                return Err(eyre!(
-                                    "summed sampling multichanneling cannot evaluate graph-aware channel {}; use discrete multi-channeling",
-                                    channel_id.index()
-                                ));
-                            }
-                            evaluate_graph_term(
-                                integrand,
-                                graph_id,
-                                sample,
-                                context,
-                                Some(SamplingChannelEvaluation::LegacyLmb {
-                                    id: channel_id,
-                                    alpha: alpha.clone(),
-                                    channel_weight: *channel_weight,
-                                }),
-                                None,
-                            )
-                        }
+                let coordinates = sampling_coordinates
+                    .as_ref()
+                    .ok_or_else(|| {
+                        eyre!("summed sampling requires retained unit-cube coordinates")
+                    })?
+                    .iter()
+                    .map(|coordinate| coordinate.clone().into_ff64().0)
+                    .collect_vec();
+                let externals = context
+                    .settings
+                    .kinematics
+                    .externals
+                    .get_dependent_externals::<f64>(
+                        integrand.get_dependent_momenta_constructor(),
+                    )?;
+                let external_momenta = externals
+                    .iter()
+                    .map(|momentum| {
+                        [
+                            momentum.temporal.value.0,
+                            momentum.spatial.px.0,
+                            momentum.spatial.py.0,
+                            momentum.spatial.pz.0,
+                        ]
                     })
-                    .try_fold(
-                        GraphEvaluationResult::zero(zero.clone()),
-                        |mut sum, term| {
-                            sum.merge_in_place(term?);
-                            Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
-                        },
-                    )
+                    .collect_vec();
+                let bridge = integrand.get_graph(graph_id).compile_sampling_bridge(
+                    &parameterization_settings,
+                    context.settings.kinematics.e_cm,
+                    &external_momenta,
+                    sample.sample.orientation,
+                )?;
+                channel_ids.into_iter().try_fold(
+                    // Summed channels contribute J_c(x) w_c(T_c(x)) f(T_c(x)).
+                    // Channel Monte Carlo supplies its inverse selection probability
+                    // separately; an explicit sum has no channel-count multiplier.
+                    GraphEvaluationResult::zero(zero.clone()),
+                    |mut sum, channel_id| {
+                        let mapped = bridge.forward(channel_id, &coordinates)?;
+                        let partition_weight =
+                            mapped.partition.weight(channel_id.index()).ok_or_else(|| {
+                                eyre!("sampling partition has no channel {}", channel_id.index())
+                            })?;
+                        if !partition_weight.is_finite() || partition_weight <= 0.0 {
+                            return Err(eyre!(
+                                "sampling partition has invalid weight {partition_weight}"
+                            ));
+                        }
+                        let mapped_sample = mapped
+                            .to_momentum_sample::<T>(SamplingMomentumSampleContext {
+                                loop_mom_cache_id: sample.sample.loop_mom_cache_id,
+                                external_moms: &context.settings.kinematics.externals,
+                                external_mom_cache_id: sample.sample.external_mom_cache_id,
+                                dependent_momenta_constructor: integrand
+                                    .get_dependent_momenta_constructor(),
+                                orientation: sample.sample.orientation,
+                            })?
+                            .rotate(
+                                context.rotation,
+                                sample.sample.loop_mom_cache_id,
+                                sample.sample.external_mom_cache_id,
+                            );
+                        let factor = Complex::new_re(
+                            mapped_sample.jacobian() * F::from_f64(partition_weight),
+                        );
+                        let mut result = evaluate_graph_term(
+                            integrand,
+                            graph_id,
+                            &mapped_sample,
+                            context,
+                            Some(channel_id),
+                            None,
+                        )?;
+                        result.integrand_result *= factor.clone();
+                        apply_full_event_multiplicative_factor_precise(
+                            &mut result.event_groups,
+                            &factor,
+                        );
+                        sum.merge_in_place(result);
+                        Ok::<_, eyre::Report>(sum)
+                    },
+                )
             }
             DiscreteGraphSample::Tropical(sample) => {
                 let master_graph = integrand.get_master_graph(group_id).get_graph();
@@ -4158,140 +3757,31 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                 evaluate_graph_term(integrand, *graph_id, sample, &mut context, None, None)?
             }
             GammaLoopSample::MultiChanneling {
-                alpha,
-                channel_weight,
                 sampling_coordinates,
                 sample,
-            } => (0..integrand.graph_count()).try_fold(
-                GraphEvaluationResult::zero(zero.clone()),
-                |mut sum, graph_id| {
-                    let parameterization_settings = context
-                        .settings
-                        .sampling
-                        .get_parameterization_settings()
-                        .expect("LMB multichanneling requires a parameterization.");
-                    let channel_ids = integrand
-                        .get_graph(graph_id)
-                        .sampling_channel_ids(&parameterization_settings)?;
-                    let use_canonical_bridge = integrand
-                        .get_graph(graph_id)
-                        .supports_canonical_summed_sampling();
-                    let coordinates = sampling_coordinates.as_ref().map(|coordinates| {
-                        coordinates
-                            .iter()
-                            .map(|coordinate| coordinate.clone().into_ff64().0)
-                            .collect_vec()
-                    });
-                    let bridge = if use_canonical_bridge {
-                        let externals = context
-                            .settings
-                            .kinematics
-                            .externals
-                            .get_dependent_externals::<f64>(
-                                integrand.get_dependent_momenta_constructor(),
-                            )?;
-                        let external_momenta = externals
-                            .iter()
-                            .map(|momentum| {
-                                [
-                                    momentum.temporal.value.0,
-                                    momentum.spatial.px.0,
-                                    momentum.spatial.py.0,
-                                    momentum.spatial.pz.0,
-                                ]
-                            })
-                            .collect_vec();
-                        Some(integrand.get_graph(graph_id).compile_sampling_bridge(
-                            &parameterization_settings,
-                            context.settings.kinematics.e_cm,
-                            &external_momenta,
-                            None,
-                        )?)
-                    } else {
-                        None
-                    };
-                    let channel_count = channel_ids.len() as f64;
-                    let graph_result = channel_ids.into_iter().try_fold(
-                        // Each summed channel is sampled from the same base
-                        // coordinate point; bridge partitioning therefore
-                        // carries the channel-count normalization once.
-                        GraphEvaluationResult::zero(zero.clone()),
-                        |mut channel_sum, channel_id| {
-                            let channel_result = if let Some(bridge) = bridge.as_ref() {
-                                let coordinates = coordinates.as_ref().ok_or_else(|| {
-                                    eyre!(
-                                        "canonical summed amplitude channel {} requires retained unit-cube coordinates",
-                                        channel_id.index()
-                                    )
-                                })?;
-                                let mapped = bridge.forward(channel_id, coordinates)?;
-                                let partition_weight = mapped
-                                    .partition
-                                    .weight(channel_id.index())
-                                    .ok_or_else(|| {
-                                        eyre!(
-                                            "sampling channel partition has no weight for channel {}",
-                                            channel_id.index()
-                                        )
-                                    })?;
-                                if !partition_weight.is_finite() || partition_weight <= 0.0 {
-                                    return Err(eyre!(
-                                        "sampling channel partition has invalid weight {partition_weight}"
-                                    ));
-                                }
-                                let mut mapped_sample = mapped.to_momentum_sample::<T>(
-                                    SamplingMomentumSampleContext {
-                                        loop_mom_cache_id: sample.sample.loop_mom_cache_id,
-                                        external_moms: &context.settings.kinematics.externals,
-                                        external_mom_cache_id: sample.sample.external_mom_cache_id,
-                                        dependent_momenta_constructor: integrand
-                                            .get_dependent_momenta_constructor(),
-                                        orientation: None,
-                                    },
-                                )?;
-                                mapped_sample.sample.parameterization_branch =
-                                    sample.sample.parameterization_branch;
-                                mapped_sample.sample.jacobian = mapped_sample.sample.jacobian
-                                    * F::from_f64(partition_weight * channel_count);
-                                evaluate_graph_term(
-                                    integrand,
-                                    graph_id,
-                                    &mapped_sample,
-                                    &mut context,
-                                    Some(SamplingChannelEvaluation::Mapped { id: channel_id }),
-                                    None,
-                                )?
-                            } else {
-                                let is_lmb = integrand
-                                    .get_graph(graph_id)
-                                    .sampling_channel_is_lmb(channel_id, &parameterization_settings)?;
-                                if !is_lmb {
-                                    return Err(eyre!(
-                                        "summed sampling cannot evaluate graph-aware channel {}; this graph requires per-sample LU/t* preparation",
-                                        channel_id.index()
-                                    ));
-                                }
-                                evaluate_graph_term(
-                                    integrand,
-                                    graph_id,
-                                    sample,
-                                    &mut context,
-                                    Some(SamplingChannelEvaluation::LegacyLmb {
-                                        id: channel_id,
-                                        alpha: alpha.clone(),
-                                        channel_weight: *channel_weight,
-                                    }),
-                                    None,
-                                )?
-                            };
-                            channel_sum.merge_in_place(channel_result);
-                            Ok::<GraphEvaluationResult<T>, eyre::Report>(channel_sum)
-                        },
-                    )?;
-                    sum.merge_in_place(graph_result);
-                    Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
-                },
-            )?,
+            } => integrand
+                .get_group_structure()
+                .iter_enumerated()
+                .map(|(group_id, _)| group_id)
+                .collect_vec()
+                .into_iter()
+                .try_fold(
+                    GraphEvaluationResult::zero(zero.clone()),
+                    |mut sum, group_id| {
+                        let result = evaluate_graph_group(
+                            integrand,
+                            group_id,
+                            &DiscreteGraphSample::MultiChanneling {
+                                sampling_coordinates: sampling_coordinates.clone(),
+                                sample: sample.clone(),
+                            },
+                            &mut context,
+                            &zero,
+                        )?;
+                        sum.merge_in_place(result);
+                        Ok::<_, eyre::Report>(sum)
+                    },
+                )?,
             GammaLoopSample::DiscreteGraph { group_id, sample } => {
                 evaluate_graph_group(integrand, *group_id, sample, &mut context, &zero)?
             }
@@ -4636,31 +4126,17 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                         use_lmb_basis: false,
                     }
                 }
-                DiscreteGraphSamplingType::MultiChanneling(multichanneling_settings) => {
+                DiscreteGraphSamplingType::MultiChanneling(_) => {
                     if input.channel_id.is_some() {
                         return Err(eyre!(
                             "Channel selection is not available for this discrete-graph sampling mode."
                         ));
                     }
-                    if integrand
-                        .get_master_graph(group_id)
-                        .supports_canonical_summed_sampling()
-                    {
-                        // Direct momentum input already contains the desired
-                        // point; amplitudes must not reinterpret it once per
-                        // channel. The canonical bridge is only needed for
-                        // unit-cube samples, which retain their coordinates.
-                        DiscreteGraphSample::Default {
-                            sample,
-                            use_lmb_basis: false,
-                        }
-                    } else {
-                        DiscreteGraphSample::MultiChanneling {
-                            alpha: F::from_f64(multichanneling_settings.alpha),
-                            channel_weight: multichanneling_settings.channel_weight,
-                            sampling_coordinates: None,
-                            sample,
-                        }
+                    // Direct momentum input already contains the desired
+                    // parent-frame point; only unit-cube samples replay maps.
+                    DiscreteGraphSample::Default {
+                        sample,
+                        use_lmb_basis: false,
                     }
                 }
                 DiscreteGraphSamplingType::TropicalSampling(_) => {
@@ -5207,6 +4683,18 @@ fn evaluate_reference_sample<I: ProcessIntegrandImpl>(
 ) -> Result<ReferenceSampleEvaluation> {
     let source = EvaluationSource::XSpace(sample);
     let (gamma_sample, parameterization_time) = source.build_gamma_sample::<f64, I>(integrand)?;
+    if matches!(
+        &gamma_sample,
+        GammaLoopSample::MultiChanneling { .. }
+            | GammaLoopSample::DiscreteGraph {
+                sample: DiscreteGraphSample::MultiChanneling { .. },
+                ..
+            }
+    ) {
+        return Err(eyre!(
+            "summed reference acceptance needs per-channel momentum moments; use explicit canonical channel selections with sampling_channels = 'mc' until the reference overlay supports the summed estimator"
+        ));
+    }
     let default_sample = gamma_sample.get_default_sample();
     let mut result = EvaluationResult::zero();
     result.integrand_result = Complex::new_re(reference.evaluate(default_sample.loop_moms())?);
@@ -5276,10 +4764,10 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 #[cfg(test)]
 mod tests {
     use super::{
-        LmbChannelWeightingSettings, LmbMultiChannelingSetup, RuntimeCache,
-        SamplingChannelCompileContext, SamplingChannelId, create_stability_iterator, filtered_orientation_count,
-        resolve_sampling_channel_selection, resolve_visible_orientation_id,
-        validate_orientation_catalog_group, validate_process_runtime_settings,
+        LmbMultiChannelingSetup, RuntimeCache, SamplingChannelCompileContext, SamplingChannelId,
+        create_stability_iterator, filtered_orientation_count, resolve_sampling_channel_selection,
+        resolve_visible_orientation_id, validate_orientation_catalog_group,
+        validate_process_runtime_settings,
     };
     use crate::cff::expression::OrientationID;
     use crate::{
@@ -5295,12 +4783,12 @@ mod tests {
             RuntimeSettings,
             global::OrientationPattern,
             runtime::{
-                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, LmbChannelWeight,
-                MultiChannelingSettings, ParameterizationSettings, SamplingChannelDefinition,
-                SamplingChannelSelection, SamplingSettings, Precision, StabilitySettings,
+                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, MultiChannelingSettings,
+                ParameterizationSettings, SamplingChannelDefinition, SamplingChannelSelection,
+                SamplingSettings, Precision, StabilitySettings,
             },
         },
-        utils::{F, load_generic_model},
+        utils::F,
     };
     use linnet::half_edge::{
         involution::{EdgeIndex, EdgeVec, Orientation},
@@ -5759,7 +5247,7 @@ mod tests {
             ]
         );
         // The canonical IDs retain their one-domain ordering while resolving
-        // to the generated LMB basis used by legacy diagnostics.
+        // to the generated LMB basis shown in diagnostics.
         assert_eq!(
             [
                 SamplingChannelId::from(0),
@@ -5825,7 +5313,7 @@ mod tests {
             .insert(
                 "cut".into(),
                 SamplingChannelDefinition {
-                    around: "phase_space(cut(0))".into(),
+                    around: "then(phase_space(cut(0)),left(surface(0)))".into(),
                     subspace_lmb: parent_lmb.clone(),
                     parent_lmb,
                     on_cut: vec![],
@@ -5897,7 +5385,7 @@ mod tests {
     }
 
     #[test]
-    fn lmb_channel_prefactors_form_a_partition_of_unity() {
+    fn canonical_lmb_density_partition_matches_inverse_jacobians() {
         test_initialise().unwrap();
         let mut graph: Graph = dot!(
             digraph lmb_prefactor_partition {
@@ -5931,7 +5419,7 @@ mod tests {
             .collect();
         let external_moms: ExternalFourMomenta<F<f64>> =
             (0..graph.loop_momentum_basis.ext_edges.len())
-                .map(|_| [F(0.0), F(0.0), F(0.0), F(0.0)].into())
+                .map(|_| [F(0.0), F(0.2), F(-0.3), F(0.4)].into())
                 .collect();
         let sample = MomentumSample {
             sample: BareMomentumSample {
@@ -5947,80 +5435,85 @@ mod tests {
                 parameterization_branch: None,
             },
         };
-        let model = load_generic_model("sm");
-        let parameterization_settings = ParameterizationSettings::default();
-        let alpha = F(1.3);
-
-        for channel_weight in [LmbChannelWeight::Ose, LmbChannelWeight::InverseJacobian] {
-            let weighting_settings = LmbChannelWeightingSettings {
-                graph_name: "G",
-                model: &model,
-                alpha: &alpha,
-                channel_weight,
-                parameterization_settings: &parameterization_settings,
-                e_cm: 1.0,
-            };
-            let sum = [SamplingChannelId::from(0), SamplingChannelId::from(1)]
-                .into_iter()
-                .map(|channel_id| {
-                    let selected_lmb = setup
-                        .sampling_channel_lmb_basis_id(channel_id, "G", &parameterization_settings)
-                        .unwrap();
-                    setup
-                        .compute_prefactor_impl(
-                            channel_id,
-                            selected_lmb,
-                            &sample,
-                            weighting_settings,
-                        )
-                        .unwrap()
-                })
-                .fold(F(0.0), |sum, weight| sum + weight);
-
-            let difference = (sum - sum.one()).abs();
-            assert!(difference <= sum.epsilon() * sum.from_usize(16));
-        }
-
-        let partition = setup
-            .inverse_jacobian_sampling_partition(
-                &sample,
-                "G",
-                &parameterization_settings,
-                1.0,
-                None,
-            )
+        let mut parameterization_settings = ParameterizationSettings::default();
+        parameterization_settings
+            .sampling_channels
+            .default_channel_selection = vec!["auto:lmb".into()];
+        let resolved = resolve_sampling_channel_selection(
+            &graph.name,
+            &parameterization_settings.sampling_channels,
+        )
+        .unwrap();
+        let context = SamplingChannelCompileContext::new(
+            graph.name.clone(),
+            graph
+                .loop_momentum_basis
+                .loop_edges
+                .iter()
+                .map(|edge| edge.0)
+                .collect(),
+            parameterization_settings.clone(),
+            1.0,
+            sample.loop_moms().0.len(),
+        );
+        let external = sample
+            .external_moms()
+            .iter()
+            .map(|momentum| {
+                [
+                    momentum.temporal.value.0,
+                    momentum.spatial.px.0,
+                    momentum.spatial.py.0,
+                    momentum.spatial.pz.0,
+                ]
+            })
+            .collect::<Vec<_>>();
+        let bridge = setup
+            .compile_sampling_channel_bridge_with_external(&resolved, &context, &external)
             .unwrap();
-        let weighting_settings = LmbChannelWeightingSettings {
-            graph_name: "G",
-            model: &model,
-            alpha: &alpha,
-            channel_weight: LmbChannelWeight::InverseJacobian,
-            parameterization_settings: &parameterization_settings,
-            e_cm: 1.0,
-        };
-        for channel_id in [SamplingChannelId::from(0), SamplingChannelId::from(1)] {
-            let selected_lmb = setup
-                .sampling_channel_lmb_basis_id(channel_id, "G", &parameterization_settings)
+        let raw = sample
+            .loop_moms()
+            .iter()
+            .flat_map(|momentum| [momentum.px.0, momentum.py.0, momentum.pz.0])
+            .collect::<Vec<_>>();
+        // Check map-density weights against independent inverse parameterizations
+        // in every generated LMB at the same parent momentum point. This retains
+        // the former prefactor partition's pointwise normalization test without
+        // keeping a separate LMB weighting implementation in production.
+        let scores = setup
+            .all_bases
+            .iter()
+            .map(|basis| {
+                let momenta = basis
+                    .loop_edges
+                    .iter()
+                    .map(|edge| {
+                        let signature = &graph.loop_momentum_basis.edge_signatures[*edge];
+                        signature.internal.apply_typed(sample.loop_moms())
+                            + signature
+                                .external
+                                .apply(&sample.external_moms().raw)
+                                .spatial
+                    })
+                    .collect::<Vec<_>>();
+                crate::utils::global_inv_parameterize(&momenta, F(1.0), &parameterization_settings)
+                    .1
+                    .0
+            })
+            .collect::<Vec<_>>();
+        let total = scores.iter().sum::<f64>();
+        for channel_id in 0..bridge.channels().len() {
+            let evaluation = bridge
+                .inverse(SamplingChannelId::from(channel_id), &raw)
                 .unwrap();
-            let expected = setup
-                .compute_prefactor_impl(channel_id, selected_lmb, &sample, weighting_settings)
-                .unwrap();
-            let actual = F::<f64>(partition.weight(usize::from(channel_id)).unwrap());
-            let difference = (actual - expected).abs();
-            assert!(difference <= actual.epsilon() * actual.from_usize(16));
+            assert!((evaluation.partition.weights.iter().sum::<f64>() - 1.0).abs() < 1.0e-14);
+            let actual = evaluation.partition.weight(channel_id).unwrap();
+            let expected = scores[channel_id] / total;
+            assert!(
+                (actual - expected).abs() < 1.0e-14,
+                "channel {channel_id}: {actual} != {expected}"
+            );
         }
-
-        let selected = [SamplingChannelId::from(1)];
-        let single_channel_partition = setup
-            .inverse_jacobian_sampling_partition(
-                &sample,
-                "G",
-                &parameterization_settings,
-                1.0,
-                Some(&selected),
-            )
-            .unwrap();
-        assert_eq!(single_channel_partition.weights, vec![1.0]);
     }
 
     #[test]
@@ -6054,8 +5547,7 @@ mod tests {
             all_bases,
         };
 
-        let mut selection = SamplingChannelSelection::default();
-        selection.default_channel_selection = vec!["auto:optimized_lmb".into()];
+        let selection = SamplingChannelSelection::default();
         let resolved = resolve_sampling_channel_selection(&graph.name, &selection).unwrap();
         let mut parameterization_settings = ParameterizationSettings::default();
         parameterization_settings.sampling_channels = selection;
@@ -6069,6 +5561,14 @@ mod tests {
         let bridge = setup
             .compile_sampling_channel_bridge(&resolved, &context)
             .unwrap();
+        assert_eq!(
+            setup
+                .sampling_channel_ids(&graph.name, &context.parameterization_settings)
+                .unwrap()
+                .len(),
+            bridge.channels().len(),
+            "omitted defaults must resolve identically for channel counts and compiled maps"
+        );
         assert_eq!(bridge.channels().len(), 1);
 
         let dimensions = bridge.dimensions();
