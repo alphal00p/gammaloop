@@ -6,6 +6,8 @@
 //! checked recursively, so a valid nested call cannot hide an invalid root or
 //! sibling.
 
+use std::sync::Arc;
+
 use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::LoopMomenta;
 use crate::settings::runtime::{
@@ -293,7 +295,7 @@ pub struct SamplingMapEvaluation {
 /// A graph-independent map component which can participate in a product or
 /// ordered conditional composition.  `context` contains previously produced
 /// raw coordinates for `then` maps and is empty for independent products.
-pub trait SamplingMapComponent: std::fmt::Debug {
+pub trait SamplingMapComponent: std::fmt::Debug + Send + Sync {
     fn dimensions(&self) -> usize;
     fn output_dimensions(&self) -> usize;
     fn contract(&self) -> SamplingMapContract;
@@ -420,6 +422,130 @@ pub struct SamplingMapComposition {
     children: Vec<Box<dyn SamplingMapComponent>>,
     dimensions: usize,
     output_dimensions: usize,
+}
+
+/// A direct-product map whose child output blocks are embedded into an
+/// explicitly supplied master-frame permutation.  This is the exact generic
+/// construction used for a surface subspace together with its complement:
+/// each child remains in its native coordinates, while this wrapper only
+/// permutes complete three-momentum blocks.  The permutation has unit
+/// absolute determinant, so the product Jacobian is unchanged.
+#[derive(Clone)]
+pub struct SamplingMapEmbedding {
+    map: Arc<SamplingMapComposition>,
+    /// Product-output index -> master-frame output index.
+    output_indices: Vec<usize>,
+}
+
+impl std::fmt::Debug for SamplingMapEmbedding {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SamplingMapEmbedding")
+            .field("map", &self.map)
+            .field("output_indices", &self.output_indices)
+            .finish()
+    }
+}
+
+impl SamplingMapEmbedding {
+    /// Build an embedded direct product.  `output_indices` must be a complete
+    /// permutation of `0..sum(child.output_dimensions())`; duplicate or
+    /// missing frame coordinates are rejected before any numerical use.
+    pub fn product(
+        children: Vec<Box<dyn SamplingMapComponent>>,
+        output_indices: Vec<usize>,
+    ) -> Result<Self> {
+        let map = SamplingMapComposition::product(children)?;
+        if output_indices.len() != map.output_dimensions {
+            return Err(eyre!(
+                "sampling-map embedding supplies {} output indices, expected {}",
+                output_indices.len(),
+                map.output_dimensions
+            ));
+        }
+        let mut seen = vec![false; map.output_dimensions];
+        for index in &output_indices {
+            let Some(slot) = seen.get_mut(*index) else {
+                return Err(eyre!(
+                    "sampling-map embedding output index {index} is outside master frame 0..{}",
+                    map.output_dimensions
+                ));
+            };
+            if *slot {
+                return Err(eyre!(
+                    "sampling-map embedding repeats master-frame output index {index}"
+                ));
+            }
+            *slot = true;
+        }
+        Ok(Self {
+            map: Arc::new(map),
+            output_indices,
+        })
+    }
+
+    pub fn output_indices(&self) -> &[usize] {
+        &self.output_indices
+    }
+
+    fn embed_point(&self, product_point: &[f64]) -> Vec<f64> {
+        let mut point = vec![0.0; product_point.len()];
+        for (product_index, master_index) in self.output_indices.iter().enumerate() {
+            point[*master_index] = product_point[product_index];
+        }
+        point
+    }
+
+    fn unembed_point(&self, master_point: &[f64]) -> Vec<f64> {
+        self.output_indices
+            .iter()
+            .map(|master_index| master_point[*master_index])
+            .collect()
+    }
+}
+
+impl SamplingMapComponent for SamplingMapEmbedding {
+    fn dimensions(&self) -> usize {
+        self.map.dimensions()
+    }
+
+    fn output_dimensions(&self) -> usize {
+        self.map.output_dimensions()
+    }
+
+    fn contract(&self) -> SamplingMapContract {
+        self.map.contract()
+    }
+
+    fn name(&self) -> &'static str {
+        "embedded_product"
+    }
+
+    fn forward(&self, coordinates: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+        let mut evaluation = self.map.forward(coordinates, &[])?;
+        evaluation.point = self.embed_point(&evaluation.point);
+        evaluation
+            .diagnostics
+            .push("unit-determinant master-frame embedding".to_owned());
+        Ok(evaluation)
+    }
+
+    fn inverse(&self, point: &[f64], _context: &[f64]) -> Result<SamplingMapEvaluation> {
+        if point.len() != self.output_dimensions() {
+            return Err(eyre!(
+                "sampling-map embedding inverse received output dimension {}, expected {}",
+                point.len(),
+                self.output_dimensions()
+            ));
+        }
+        let mut evaluation = self.map.inverse(&self.unembed_point(point), &[])?;
+        // The inverse's point is the user-supplied master-frame point.
+        evaluation.point = point.to_vec();
+        evaluation
+            .diagnostics
+            .push("unit-determinant master-frame embedding".to_owned());
+        Ok(evaluation)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1595,6 +1721,44 @@ mod tests {
         assert!((mapped.jacobian * mapped.inverse_jacobian - 1.0).abs() < 1.0e-10);
         assert!(mapped.residual < 1.0e-11);
         let inverse = composition.inverse(&mapped.point, &[]).unwrap();
+        assert!(inverse.residual < 1.0e-10);
+        assert!(
+            inverse
+                .coordinates
+                .iter()
+                .zip(coordinates)
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-10)
+        );
+    }
+
+    #[test]
+    fn embedded_product_permutates_master_frame_without_changing_jacobian() {
+        let first = SurfaceRadialMap::absent(2, vec![0.0, 0.0], 1.3, 1.0).unwrap();
+        let second = SamplingMapKernel::new(
+            SamplingMapDefinition::Lmb(vec![7]),
+            ParameterizationSettings::default(),
+            42.2,
+            1,
+        )
+        .unwrap();
+        let first_eval =
+            <SurfaceRadialMap as SamplingMapComponent>::forward(&first, &[0.23, 0.71], &[])
+                .unwrap();
+        let second_eval =
+            <SamplingMapKernel as SamplingMapComponent>::forward(&second, &[0.17, 0.43, 0.89], &[])
+                .unwrap();
+        let embedding = SamplingMapEmbedding::product(
+            vec![Box::new(first), Box::new(second)],
+            vec![2, 3, 0, 1, 4],
+        )
+        .expect("valid master-frame permutation");
+        let coordinates = [0.23, 0.71, 0.17, 0.43, 0.89];
+        let mapped = embedding.forward(&coordinates, &[]).unwrap();
+        assert_eq!(mapped.point[0..2], second_eval.point[0..2]);
+        assert_eq!(mapped.point[2..4], first_eval.point[0..2]);
+        assert_eq!(mapped.point[4], second_eval.point[2]);
+        assert!((mapped.jacobian - first_eval.jacobian * second_eval.jacobian).abs() < 1.0e-10);
+        let inverse = embedding.inverse(&mapped.point, &[]).unwrap();
         assert!(inverse.residual < 1.0e-10);
         assert!(
             inverse

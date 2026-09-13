@@ -17,8 +17,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     SamplingChannelScore, SamplingMapComponent, SamplingMapContract, SamplingMapDefinition,
-    SamplingMapEvaluation, SamplingMapKernel, SamplingPartition, SamplingPartitionMode,
-    SamplingScoreFunction, SurfaceRadialMap,
+    SamplingMapEmbedding, SamplingMapEvaluation, SamplingMapKernel, SamplingPartition,
+    SamplingPartitionMode, SamplingScoreFunction, SurfaceRadialMap,
 };
 use crate::momentum::sample::{LoopMomenta, MomentumSample};
 use crate::settings::runtime::ParameterizationSettings;
@@ -210,6 +210,7 @@ impl SamplingChannelCompileContext {
 pub enum CompiledSamplingMap {
     Lmb(SamplingMapKernel),
     Surface(SurfaceRadialMap),
+    Embedded(SamplingMapEmbedding),
 }
 
 impl CompiledSamplingMap {
@@ -217,6 +218,7 @@ impl CompiledSamplingMap {
         match self {
             Self::Lmb(map) => map.contract(),
             Self::Surface(map) => map.contract(),
+            Self::Embedded(map) => map.contract(),
         }
     }
 
@@ -224,6 +226,7 @@ impl CompiledSamplingMap {
         match self {
             Self::Lmb(map) => map.dimensions(),
             Self::Surface(map) => map.dimension(),
+            Self::Embedded(map) => map.dimensions(),
         }
     }
 
@@ -231,6 +234,7 @@ impl CompiledSamplingMap {
         match self {
             Self::Lmb(map) => map,
             Self::Surface(map) => map,
+            Self::Embedded(map) => map,
         }
     }
 
@@ -664,6 +668,112 @@ impl fmt::Display for SamplingChannelCompileError {
 
 impl std::error::Error for SamplingChannelCompileError {}
 
+/// Compile one radial surface in its native subspace and embed it together
+/// with the ordinary map on the complementary parent-LMB edges.  The output
+/// permutation is explicit, so sharing a surface across graph channels never
+/// relies on an implicit edge ordering or a silent local-frame assumption.
+fn compile_surface_map(
+    channel: &str,
+    edges: &[usize],
+    context: &SamplingChannelCompileContext,
+) -> Result<CompiledSamplingMap, SamplingChannelCompileError> {
+    if edges.is_empty() {
+        return Err(SamplingChannelCompileError::InvalidChannel {
+            channel: channel.to_owned(),
+            error: "surface subspace must contain at least one edge".to_owned(),
+        });
+    }
+    let parent_positions = context
+        .parent_lmb
+        .iter()
+        .enumerate()
+        .map(|(position, edge)| (*edge, position))
+        .collect::<BTreeMap<_, _>>();
+    if edges
+        .iter()
+        .any(|edge| !parent_positions.contains_key(edge))
+    {
+        return Err(SamplingChannelCompileError::InvalidChannel {
+            channel: channel.to_owned(),
+            error: format!(
+                "surface edges {edges:?} are not a subspace of parent LMB {:?}",
+                context.parent_lmb
+            ),
+        });
+    }
+    let Some(geometry) = context.surfaces.get(edges) else {
+        return Err(SamplingChannelCompileError::MissingSurfaceGeometry {
+            channel: channel.to_owned(),
+            edges: edges.to_vec(),
+        });
+    };
+    let expected_dimension = 3 * edges.len();
+    if geometry.center.len() != expected_dimension {
+        return Err(SamplingChannelCompileError::InvalidChannel {
+            channel: channel.to_owned(),
+            error: format!(
+                "surface centre has dimension {}, expected {} for edges {edges:?}",
+                geometry.center.len(),
+                expected_dimension
+            ),
+        });
+    }
+    let surface = SurfaceRadialMap::new(
+        expected_dimension,
+        geometry.center.clone(),
+        geometry.threshold_radius,
+        geometry.beta,
+        geometry.power,
+    )
+    .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+        channel: channel.to_owned(),
+        error: error.to_string(),
+    })?;
+    if edges.len() == context.n_loop_momenta {
+        return Ok(CompiledSamplingMap::Surface(surface));
+    }
+
+    let complement = context
+        .parent_lmb
+        .iter()
+        .copied()
+        .filter(|edge| !edges.contains(edge))
+        .collect::<Vec<_>>();
+    if complement.is_empty() {
+        return Err(SamplingChannelCompileError::InvalidChannel {
+            channel: channel.to_owned(),
+            error: format!("surface edges {edges:?} do not leave a complementary parent-LMB block"),
+        });
+    }
+    let complement_map = SamplingMapKernel::new(
+        SamplingMapDefinition::Lmb(complement.clone()),
+        context.parameterization_settings.clone(),
+        context.e_cm,
+        complement.len(),
+    )
+    .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+        channel: channel.to_owned(),
+        error: format!("complement LMB {complement:?} could not be compiled: {error}"),
+    })?;
+
+    // Product order is surface block followed by complement block.  Convert
+    // each block's edge ordering to the complete parent-LMB component frame.
+    let mut output_indices = Vec::with_capacity(3 * context.n_loop_momenta);
+    for edge in edges.iter().chain(complement.iter()) {
+        let position = parent_positions[edge];
+        output_indices.extend([3 * position, 3 * position + 1, 3 * position + 2]);
+    }
+    SamplingMapEmbedding::product(
+        vec![Box::new(surface), Box::new(complement_map)],
+        output_indices,
+    )
+    .map(CompiledSamplingMap::Embedded)
+    .map_err(|error| SamplingChannelCompileError::InvalidChannel {
+        channel: channel.to_owned(),
+        error: error.to_string(),
+    })
+}
+
 impl SamplingChannelCatalogue {
     pub fn lmb_entries(&self) -> impl Iterator<Item = (usize, &[usize])> {
         self.entries.iter().filter_map(|entry| match entry {
@@ -747,46 +857,8 @@ impl SamplingChannelCatalogue {
                             ),
                         });
                     }
-                    if edges.len() != context.n_loop_momenta {
-                        return Err(SamplingChannelCompileError::UnsupportedMap {
-                            channel: format!("surface:{edges:?}"),
-                            map: format!(
-                                "surface({edges:?}) is only a full-frame map; supply an explicit product(surface(...), complement(...)) with prepared embedding for a proper subspace"
-                            ),
-                        });
-                    }
-                    let Some(geometry) = context.surfaces.get(edges) else {
-                        return Err(SamplingChannelCompileError::MissingSurfaceGeometry {
-                            channel: format!("surface:{edges:?}"),
-                            edges: edges.clone(),
-                        });
-                    };
-                    let expected_dimension = 3 * edges.len();
-                    if geometry.center.len() != expected_dimension {
-                        return Err(SamplingChannelCompileError::InvalidChannel {
-                            channel: format!("surface:{edges:?}"),
-                            error: format!(
-                                "surface centre has dimension {}, expected {} for edges {edges:?}",
-                                geometry.center.len(),
-                                expected_dimension
-                            ),
-                        });
-                    }
                     let definition = SamplingMapDefinition::Surface(edges.clone());
-                    let map = SurfaceRadialMap::new(
-                        expected_dimension,
-                        geometry.center.clone(),
-                        geometry.threshold_radius,
-                        geometry.beta,
-                        geometry.power,
-                    )
-                    .map(CompiledSamplingMap::Surface)
-                    .map_err(|error| {
-                        SamplingChannelCompileError::InvalidChannel {
-                            channel: format!("surface:{edges:?}"),
-                            error: error.to_string(),
-                        }
-                    })?;
+                    let map = compile_surface_map(&format!("surface:{edges:?}"), edges, context)?;
                     (format!("surface:{edges:?}"), None, definition, map)
                 }
                 SamplingCatalogueEntry::Named(channel) => {
@@ -813,45 +885,7 @@ impl SamplingChannelCatalogue {
                             error: error.to_string(),
                         })?,
                         SamplingMapDefinition::Surface(edges) => {
-                            if edges.len() != context.n_loop_momenta {
-                                return Err(SamplingChannelCompileError::UnsupportedMap {
-                                    channel: channel.name.clone(),
-                                    map: format!(
-                                        "surface({edges:?}) is only a full-frame map; supply an explicit product(surface(...), complement(...)) with prepared embedding for a proper subspace"
-                                    ),
-                                });
-                            }
-                            let Some(geometry) = context.surfaces.get(edges) else {
-                                return Err(SamplingChannelCompileError::MissingSurfaceGeometry {
-                                    channel: channel.name.clone(),
-                                    edges: edges.clone(),
-                                });
-                            };
-                            let expected_dimension = 3 * edges.len();
-                            if geometry.center.len() != expected_dimension {
-                                return Err(SamplingChannelCompileError::InvalidChannel {
-                                    channel: channel.name.clone(),
-                                    error: format!(
-                                        "surface centre has dimension {}, expected {} for edges {edges:?}",
-                                        geometry.center.len(),
-                                        expected_dimension
-                                    ),
-                                });
-                            }
-                            SurfaceRadialMap::new(
-                                expected_dimension,
-                                geometry.center.clone(),
-                                geometry.threshold_radius,
-                                geometry.beta,
-                                geometry.power,
-                            )
-                            .map(CompiledSamplingMap::Surface)
-                            .map_err(|error| {
-                                SamplingChannelCompileError::InvalidChannel {
-                                    channel: channel.name.clone(),
-                                    error: error.to_string(),
-                                }
-                            })?
+                            compile_surface_map(&channel.name, edges, context)?
                         }
                         unsupported => {
                             return Err(SamplingChannelCompileError::UnsupportedMap {
@@ -863,12 +897,15 @@ impl SamplingChannelCatalogue {
                     (channel.name.clone(), None, definition, map)
                 }
             };
-            let embedded_edges = match &definition {
-                SamplingMapDefinition::Lmb(edges)
-                | SamplingMapDefinition::Surface(edges)
-                | SamplingMapDefinition::Complement(edges)
-                | SamplingMapDefinition::Cut(edges) => edges.clone(),
-                _ => Vec::new(),
+            let embedded_edges = match &map {
+                CompiledSamplingMap::Embedded(_) => context.parent_lmb.clone(),
+                _ => match &definition {
+                    SamplingMapDefinition::Lmb(edges)
+                    | SamplingMapDefinition::Surface(edges)
+                    | SamplingMapDefinition::Complement(edges)
+                    | SamplingMapDefinition::Cut(edges) => edges.clone(),
+                    _ => Vec::new(),
+                },
             };
             compiled.push(CompiledSamplingChannel {
                 name,
@@ -1415,6 +1452,44 @@ mod tests {
         assert!(matches!(compiled[2].map, CompiledSamplingMap::Surface(_)));
         assert_eq!(compiled[2].master_graph, "G");
         assert_eq!(compiled[2].dimensions(), 6);
+    }
+
+    #[test]
+    fn catalogue_embeds_partial_surface_with_complement_lmb() {
+        let mut selection = SamplingChannelSelection::default();
+        selection.default_channel_selection = vec!["threshold".into()];
+        selection
+            .channel_definitions
+            .entry("G".into())
+            .or_default()
+            .insert("threshold".into(), definition("surface(2)"));
+        let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let mut context = SamplingChannelCompileContext::new(
+            "G",
+            vec![1, 2],
+            ParameterizationSettings::default(),
+            100.0,
+            2,
+        );
+        context.surfaces.insert(
+            vec![2],
+            SamplingSurfaceGeometry {
+                center: vec![0.0; 3],
+                threshold_radius: Some(3.0),
+                beta: 2.0,
+                power: 1.0,
+            },
+        );
+        let compiled = catalogue.compile(&context).unwrap();
+        assert_eq!(compiled.len(), 1);
+        assert!(matches!(compiled[0].map, CompiledSamplingMap::Embedded(_)));
+        assert_eq!(compiled[0].embedded_edges, vec![1, 2]);
+        let point = compiled[0]
+            .forward(&[0.31, 0.42, 0.57, 0.23, 0.68, 0.81])
+            .unwrap();
+        let inverse = compiled[0].inverse(&point.point).unwrap();
+        assert!(inverse.residual < 1.0e-10);
     }
 
     #[test]
