@@ -6,8 +6,8 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread,
     time::Duration,
@@ -16,22 +16,22 @@ use std::{
 use clap::Args;
 use color_eyre::{Result, Section};
 use colored::Colorize;
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 use gammalooprs::{
     processes::{Amplitude, CrossSection},
     utils::serde_utils::IsDefault,
 };
 use linnet::half_edge::subgraph::SubGraphLike;
-use schemars::{schema_for, JsonSchema, Schema};
+use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, get_current_pid};
 use toml::Value as TomlValue;
-use tracing::{debug, info, info_span, Span};
+use tracing::{Span, debug, info, info_span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use gammalooprs::{
-    clear_interrupt_request,
+    GammaLoopContextContainer, clear_interrupt_request,
     feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
@@ -39,33 +39,32 @@ use gammalooprs::{
     is_interrupt_requested,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{
-        begin_phase, merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
-        GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
-        GenerationProgressObserver, GenerationProgressObserverGuard, GenerationProgressPhase,
-        GraphGenerationStats, GraphGroupSelectionMode, GraphGroupSelectionPlan,
-        GraphGroupSelectionReport, GraphGroupSelectionSpec, NamedGraphGenerationReport, Process,
-        ProcessCollection, ProcessDefinition, ProcessList, ProcessLoadSelection,
+        DotExportSettings, GeneratedGraphReport, GenerationProcessKind, GenerationProgressMode,
+        GenerationProgressModeGuard, GenerationProgressObserver, GenerationProgressObserverGuard,
+        GenerationProgressPhase, GraphGenerationStats, GraphGroupSelectionMode,
+        GraphGroupSelectionPlan, GraphGroupSelectionReport, GraphGroupSelectionSpec,
+        NamedGraphGenerationReport, Process, ProcessCollection, ProcessDefinition, ProcessList,
+        ProcessLoadSelection, begin_phase, merge_generated_graph_reports,
     },
     settings::{
-        global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings,
+        GlobalSettings, RuntimeSettings, global::GenerationSettings, runtime::LockedRuntimeSettings,
     },
     utils::{
-        serde_utils::{get_schema_folder, SmartSerde},
-        tracing::{init_bench_tracing, init_test_tracing},
         F,
+        serde_utils::{SmartSerde, get_schema_folder},
+        tracing::{init_bench_tracing, init_test_tracing},
     },
-    GammaLoopContextContainer,
 };
 
 use crate::{
+    CLISettings,
     command_parser::{normalize_clap_args, split_command_line},
-    command_template::{contains_placeholder, placeholder_specs, PlaceholderSpec},
-    commands::{save::SaveState, Commands},
-    integrand_info::{collect_integrand_info, IntegrandInfo},
+    command_template::{PlaceholderSpec, contains_placeholder, placeholder_specs},
+    commands::{Commands, save::SaveState},
+    integrand_info::{IntegrandInfo, collect_integrand_info},
     model_parameters::{external_model_parameter_type, validate_model_parameter_type},
     render_smart_toml,
     tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
-    CLISettings,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -3441,13 +3440,13 @@ mod tests {
         model::InputParamCard,
         momentum::{Dep, ExternalMomenta, Helicity},
         processes::{
-            process::ProcessCollection, RaisedPropagatorScope, RaisedPropagatorSignature,
-            SelectionPolarity,
+            RaisedPropagatorScope, RaisedPropagatorSignature, SelectionPolarity,
+            process::ProcessCollection,
         },
         settings::global::{CompilationMode, FrozenCompilationMode},
         settings::{
-            runtime::kinematic::{improvement::PhaseSpaceImprovementSettings, Externals},
             KinematicsSettings, RuntimeSettings,
+            runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
         },
         utils::{load_generic_model, serde_utils::SHOWDEFAULTS},
     };
@@ -3549,7 +3548,7 @@ mod tests {
 
     #[test]
     fn named_generation_records_common_settings_for_persistent_uv_exports() -> Result<()> {
-        use gammalooprs::uv::{export::UVForestExportSettings, UVOrchestrator};
+        use gammalooprs::uv::{UVOrchestrator, export::UVForestExportSettings};
 
         test_initialise()?;
         for (folder, source) in [
@@ -3692,8 +3691,10 @@ mod tests {
                                 let file_name = file_name.to_string_lossy();
                                 node_ids
                                     .insert(file_name.split('_').nth(1).unwrap().parse::<usize>()?);
-                                assert!(fs::read_to_string(node.path())?
-                                    .contains("forest_residue_index"));
+                                assert!(
+                                    fs::read_to_string(node.path())?
+                                        .contains("forest_residue_index")
+                                );
                             }
                         }
                         assert!(node_ids.len() > 1, "computed export needs a proper UV node");
@@ -4056,14 +4057,18 @@ mod tests {
         assert_eq!(selected.process_id, 0);
         assert_eq!(selected.integrand_name, "selected");
         let process = &state.process_list.processes[0];
-        assert!(process
-            .collection
-            .get_integrand_names()
-            .contains(&"default"));
-        assert!(process
-            .collection
-            .get_integrand_names()
-            .contains(&"selected"));
+        assert!(
+            process
+                .collection
+                .get_integrand_names()
+                .contains(&"default")
+        );
+        assert!(
+            process
+                .collection
+                .get_integrand_names()
+                .contains(&"selected")
+        );
         match &process.collection {
             ProcessCollection::Amplitudes(amplitudes) => {
                 assert!(amplitudes["default"].integrand.is_none());
@@ -4148,12 +4153,14 @@ mod tests {
         assert!(selected.replaced_existing_target);
         assert!(selected.removed_target_artifacts);
         assert!(!stale_integrand_folder.exists());
-        assert!(!state
-            .generation_summaries
-            .contains_key(&IntegrandGenerationSummaryKey {
-                process_id: 0,
-                integrand_name: "selected".to_string(),
-            }));
+        assert!(
+            !state
+                .generation_summaries
+                .contains_key(&IntegrandGenerationSummaryKey {
+                    process_id: 0,
+                    integrand_name: "selected".to_string(),
+                })
+        );
 
         let err = state
             .select_integrand_graph_groups(
@@ -4291,7 +4298,7 @@ b = 1.0
 
     #[test]
     fn test_command_history_serialization() {
-        use super::{set_serialize_commands_as_strings, CommandHistory};
+        use super::{CommandHistory, set_serialize_commands_as_strings};
         use crate::commands::Commands;
 
         // Test basic construction
@@ -4325,7 +4332,7 @@ b = 1.0
 
     #[test]
     fn test_command_history_toml_and_json_formats() {
-        use super::{set_serialize_commands_as_strings, CommandHistory};
+        use super::{CommandHistory, set_serialize_commands_as_strings};
         use crate::commands::Commands;
 
         // Test different command types
@@ -4393,7 +4400,7 @@ b = 1.0
     #[test]
     fn run_history_push_with_raw_skips_quit_and_definition_commands() {
         use super::RunHistory;
-        use crate::commands::{run::Run, StartCommandsBlock};
+        use crate::commands::{StartCommandsBlock, run::Run};
 
         let mut run_history = RunHistory::default();
         run_history.push_with_raw(
@@ -4860,43 +4867,236 @@ commands = ["quit -n"]
 
     #[test]
     fn saved_generated_process_runs_reference_acceptance_after_reload() -> Result<()> {
+        use gammalooprs::{
+            graph::GroupId,
+            settings::runtime::{
+                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
+                StabilityLevelSetting,
+            },
+        };
+        use symbolica::numerical_integration::Sample;
+
         let _guard = crate::LOG_TEST_MUTEX
             .lock()
             .unwrap_or_else(|err| err.into_inner());
-        let mut state = build_generated_scalar_bubble_state_with_external_backend();
-        let temp = tempdir()?;
-        let saved = temp.path().join("saved");
-        state.save(&saved, true, false)?;
+        let bubble = build_generated_scalar_bubble_state_with_external_backend();
+        let mut kite = State::new_test();
+        kite.model = load_generic_model("scalars");
+        kite.model.get_parameter_mut("mass_scalar_1")?.value = Some(Complex::new_re(F(1.0)));
+        kite.model_parameters = InputParamCard::default_from_model(&kite.model);
+        kite.import_graphs(
+            Graph::from_path(
+                crate::test_workspace_root().join("tests/resources/graphs/massive_kite.dot"),
+                &kite.model,
+            )?,
+            GraphImportOptions {
+                process_name: Some("sampling_kite".into()),
+                process_id: None,
+                process_definition: None,
+                integrand_name: Some("default".into()),
+                overwrite: false,
+                append: false,
+            },
+        )?;
+        let global: GlobalSettings = toml::from_str(
+            r#"
+[n_cores]
+generate = 1
+[generation]
+override_lmb_heuristics = true
+[generation.uv]
+subtract_uv = false
+generate_integrated = false
+[generation.evaluator]
+compile = false
+summed = false
+summed_function_map = true
+iterative_orientation_optimization = false
+"#,
+        )?;
+        let mut runtime: RuntimeSettings = toml::from_str(
+            r#"
+[general]
+evaluator_method = "SummedFunctionMap"
+integral_unit = "none"
+enable_cache = false
+[kinematics]
+e_cm = 5.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[5.0, 0.0, 0.0, 0.0], "dependent"]
+helicities = [0, 0]
+[sampling]
+graphs = "summed"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "summed"
+power = 2.0
+default_channel_selection = ["C", "D", "ordinary"]
+[sampling.channel_definitions.massive_kite.C]
+around = "surface(2,4,6)"
+parent_lmb = [4,6]
+subspace_lmb = [4,6]
+[sampling.channel_definitions.massive_kite.D]
+around = "surface(3,5,6)"
+parent_lmb = [4,6]
+subspace_lmb = [4,6]
+[sampling.channel_definitions.massive_kite.ordinary]
+around = "lmb(4,6)"
+parent_lmb = [4,6]
+[stability]
+rotation_axis = [{type = "x"}, {type = "y"}]
+"#,
+        )?;
+        runtime.stability.levels = vec![StabilityLevelSetting::default_double()];
+        kite.generate_integrands(&global, (&runtime).into())?;
 
-        let mut loaded = State::load(saved, None, None)?;
-        loaded.activate_loaded_integrand_backends(false)?;
-        let integrand = loaded.process_list.get_integrand_mut(0, "default")?;
-        let reference = GaussianReferenceFunction::centered(2.0, 1)?;
+        for (mut state, reference) in [
+            (
+                bubble,
+                GaussianReferenceFunction::new(2.0, vec![0.7, -0.4, 0.2])?,
+            ),
+            (
+                kite,
+                GaussianReferenceFunction::new(1.2, vec![0.4, -0.3, 0.2, -0.2, 0.1, 0.35])?,
+            ),
+        ] {
+            let temp = tempdir()?;
+            let saved = temp.path().join("saved");
+            state.save(&saved, true, false)?;
+            let mut loaded = State::load(saved, None, None)?;
+            loaded.activate_loaded_integrand_backends(false)?;
+            let integrand = loaded.process_list.get_integrand_mut(0, "default")?;
+            integrand.warm_up(&loaded.model)?;
 
-        // Exercise the complete saved-process parameterization with a compact,
-        // deterministic unit-cube quadrature.  The acceptance report checks
-        // finiteness and Jacobian propagation; this deliberately avoids
-        // coupling persistence coverage to a particular integration grid.
-        let coordinates = (0..256)
-            .map(|index| {
-                let x = (index as f64 + 0.5) / 256.0;
-                vec![
-                    x,
-                    (0.618_033_988_75 * x).fract(),
-                    (0.414_213_562_37 * x).fract(),
-                ]
-            })
-            .collect::<Vec<_>>();
-        let report = integrand.evaluate_reference_coordinates(&coordinates, &reference)?;
+            // Exercise the complete saved-process parameterization with genuine
+            // multidimensional Halton points. Finiteness, normalization, moments
+            // and Jacobian propagation are independent of a trained integration
+            // grid. The deterministic dispersion is not a randomized-MC error.
+            let coordinates = (1..=8192)
+                .map(|index| {
+                    [2, 3, 5, 7, 11, 13]
+                        .iter()
+                        .take(reference.center().len())
+                        .map(|&base| {
+                            let (mut index, mut fraction, mut value) = (index, 1.0, 0.0);
+                            while index > 0 {
+                                fraction /= base as f64;
+                                value += (index % base) as f64 * fraction;
+                                index /= base;
+                            }
+                            value
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            let report = integrand.evaluate_reference_coordinates(&coordinates, &reference)?;
+            assert_eq!(report.sample_count, coordinates.len());
+            assert_eq!(report.finite_sample_count, coordinates.len());
+            assert!((report.normalization - 1.0).abs() < 2.0e-2, "{report:?}");
+            assert!(
+                (report.second_moment - report.expected_second_moment).abs() < 2.0e-1,
+                "{report:?}"
+            );
 
-        assert_eq!(report.sample_count, coordinates.len());
-        assert_eq!(report.finite_sample_count, coordinates.len());
-        assert!(report.normalization.is_finite());
-        assert!(report.second_moment.is_finite());
-        assert!(report.normalization_stderr.is_finite());
-        assert!(report.second_moment_stderr.is_finite());
-        assert!((report.normalization - 1.0).abs() < 2.0e-2);
-        assert!((report.second_moment - report.expected_second_moment).abs() < 2.0e-1);
+            if reference.center().len() == 6 {
+                // The same saved three-channel catalogue must also reproduce
+                // the full threshold-subtracted amplitude under explicit MC
+                // selection; the reference overlay cannot stand in for this gate.
+                let original_settings = integrand.get_settings().clone();
+                let SamplingSettings::MultiChanneling(multichanneling) =
+                    original_settings.sampling.clone()
+                else {
+                    panic!("expected summed kite channels")
+                };
+                let ids = integrand.group_sampling_channel_ids(
+                    GroupId(0),
+                    &multichanneling.parameterization_settings,
+                )?;
+                assert_eq!(ids.len(), 3);
+                let xs = vec![F(0.19), F(0.27), F(0.61), F(0.39), F(0.72), F(0.58)];
+                let summed_sample = Sample::Continuous(F(1.0), xs.clone());
+                let summed = integrand
+                    .evaluate_samples_raw(
+                        &loaded.model,
+                        std::slice::from_ref(&summed_sample),
+                        0,
+                        false,
+                        false,
+                        Complex::new_zero(),
+                    )?
+                    .samples
+                    .remove(0);
+                let summed_reference =
+                    integrand.evaluate_reference_sample_detailed(&summed_sample, &reference)?;
+                let mut settings = original_settings.clone();
+                settings.sampling =
+                    SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                        sample_orientations: false,
+                        sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(
+                            multichanneling,
+                        ),
+                        ..Default::default()
+                    });
+                *integrand.get_mut_settings() = settings;
+                integrand.warm_up(&loaded.model)?;
+                let mut expected = Complex::<F<f64>>::new_zero();
+                let mut expected_reference = (0.0, 0.0);
+                for channel_id in ids {
+                    let sample = Sample::Discrete(
+                        F(1.0),
+                        0,
+                        Some(Box::new(Sample::Discrete(
+                            F(1.0),
+                            channel_id.0,
+                            Some(Box::new(Sample::Continuous(F(1.0), xs.clone()))),
+                        ))),
+                    );
+                    let result = integrand
+                        .evaluate_samples_raw(
+                            &loaded.model,
+                            std::slice::from_ref(&sample),
+                            0,
+                            false,
+                            false,
+                            Complex::new_zero(),
+                        )?
+                        .samples
+                        .remove(0);
+                    expected += result.integrand_result * result.parameterization_jacobian.unwrap();
+                    let result =
+                        integrand.evaluate_reference_sample_detailed(&sample, &reference)?;
+                    let jacobian = result.evaluation.parameterization_jacobian.unwrap().0;
+                    expected_reference.0 += result.evaluation.integrand_result.re.0 * jacobian;
+                    expected_reference.1 += result.moments.second_moment.0 * jacobian;
+                }
+                let actual = summed.integrand_result * summed.parameterization_jacobian.unwrap();
+                let scale = expected.re.0.abs() + expected.im.0.abs();
+                assert!(scale > 1.0e-18 && scale.is_finite());
+                assert!(
+                    (actual.re.0 - expected.re.0).abs() + (actual.im.0 - expected.im.0).abs()
+                        < 1.0e-9 * scale
+                );
+                let jacobian = summed_reference
+                    .evaluation
+                    .parameterization_jacobian
+                    .unwrap()
+                    .0;
+                for (actual, expected) in [
+                    (
+                        summed_reference.evaluation.integrand_result.re.0 * jacobian,
+                        expected_reference.0,
+                    ),
+                    (
+                        summed_reference.moments.second_moment.0 * jacobian,
+                        expected_reference.1,
+                    ),
+                ] {
+                    assert!((actual - expected).abs() < 1.0e-10 * expected.abs().max(1.0));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -4949,7 +5149,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
             2,
             "bubble must exercise two distinct affine LMB charts"
         );
-        let coordinates = vec![
+        let coordinates = [
             vec![F(0.27), F(0.36), F(0.71)],
             vec![F(0.62), F(0.24), F(0.53)],
         ];
@@ -4959,12 +5159,11 @@ rotation_axis = [{type = "x"}, {type = "y"}]
             .collect::<Vec<_>>();
         *integrand.get_mut_settings() = settings.clone();
         integrand.warm_up(&state.model)?;
-        let reference = GaussianReferenceFunction::centered(2.0, 1)?;
-        assert!(integrand
-            .evaluate_reference_sample(&samples[0], &reference)
-            .unwrap_err()
-            .to_string()
-            .contains("per-channel momentum moments"));
+        let reference = GaussianReferenceFunction::new(2.0, vec![0.7, -0.4, 0.2])?;
+        let summed_reference = samples
+            .iter()
+            .map(|sample| integrand.evaluate_reference_sample_detailed(sample, &reference))
+            .collect::<Result<Vec<_>>>()?;
         let summed = integrand.evaluate_samples_raw(
             &state.model,
             &samples,
@@ -4984,6 +5183,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
         *integrand.get_mut_settings() = settings.clone();
         integrand.warm_up(&state.model)?;
         let mut expected = vec![Complex::<F<f64>>::new_zero(); coordinates.len()];
+        let mut expected_reference = vec![(0.0, 0.0); coordinates.len()];
         for channel_id in channel_ids {
             let samples = coordinates
                 .iter()
@@ -4999,6 +5199,12 @@ rotation_axis = [{type = "x"}, {type = "y"}]
                     )
                 })
                 .collect::<Vec<_>>();
+            for (expected, sample) in expected_reference.iter_mut().zip(&samples) {
+                let result = integrand.evaluate_reference_sample_detailed(sample, &reference)?;
+                let jacobian = result.evaluation.parameterization_jacobian.unwrap().0;
+                expected.0 += result.evaluation.integrand_result.re.0 * jacobian;
+                expected.1 += result.moments.second_moment.0 * jacobian;
+            }
             let result = integrand.evaluate_samples_raw(
                 &state.model,
                 &samples,
@@ -5025,11 +5231,27 @@ rotation_axis = [{type = "x"}, {type = "y"}]
             .into_iter()
             .map(|sample| Sample::Discrete(F(1.0), 0, Some(Box::new(sample))))
             .collect::<Vec<_>>();
-        assert!(integrand
-            .evaluate_reference_sample(&samples[0], &reference)
-            .unwrap_err()
-            .to_string()
-            .contains("per-channel momentum moments"));
+        let group_summed_reference = samples
+            .iter()
+            .map(|sample| integrand.evaluate_reference_sample_detailed(sample, &reference))
+            .collect::<Result<Vec<_>>>()?;
+        for results in [summed_reference, group_summed_reference] {
+            for (result, expected) in results.iter().zip(&expected_reference) {
+                let jacobian = result.evaluation.parameterization_jacobian.unwrap().0;
+                for (actual, expected) in [
+                    (
+                        result.evaluation.integrand_result.re.0 * jacobian,
+                        expected.0,
+                    ),
+                    (result.moments.second_moment.0 * jacobian, expected.1),
+                ] {
+                    assert!(
+                        (actual - expected).abs() < 1.0e-11 * expected.abs().max(1.0),
+                        "summed reference {actual} differs from explicit channel sum {expected}"
+                    );
+                }
+            }
+        }
         let group_summed = integrand.evaluate_samples_raw(
             &state.model,
             &samples,
@@ -5063,6 +5285,112 @@ rotation_axis = [{type = "x"}, {type = "y"}]
                 );
             }
         }
+        // Default selected-LMB sampling must be converted at the same boundary
+        // as the reference overlay. Compare both targets to an independently
+        // reconstructed raw point, including the nonzero external shift.
+        use gammalooprs::{
+            integrands::process::{
+                GraphTerm, MomentumSpaceEvaluationInput, ProcessIntegrand, ProcessIntegrandImpl,
+                SamplingMapComponent, SamplingMapDefinition, SamplingMapKernel,
+            },
+            momentum::ThreeMomentum,
+        };
+        let mut settings = integrand.get_settings().clone();
+        let mut parameterization = settings.sampling.get_parameterization_settings().unwrap();
+        parameterization
+            .lmb_basis_ids
+            .insert("bubble".into(), vec![1]);
+        parameterization.sampling_channels.default_channel_selection =
+            vec!["auto:optimized_lmb".into()];
+        settings.sampling = SamplingSettings::Default(parameterization.clone());
+        *integrand.get_mut_settings() = settings.clone();
+        integrand.warm_up(&state.model)?;
+        let frame = {
+            let ProcessIntegrand::Amplitude(amplitude) = integrand else {
+                unreachable!()
+            };
+            let term = &amplitude.data.graph_terms[0];
+            let basis = term.selected_lmb_basis_id(&parameterization)?;
+            assert_eq!(usize::from(basis), 1);
+            let externals = settings
+                .kinematics
+                .externals
+                .get_dependent_externals::<f64>(amplitude.get_dependent_momenta_constructor())?;
+            let externals = externals
+                .iter()
+                .map(|p| {
+                    [
+                        p.temporal.value.0,
+                        p.spatial.px.0,
+                        p.spatial.py.0,
+                        p.spatial.pz.0,
+                    ]
+                })
+                .collect::<Vec<_>>();
+            term.sampling_setup().lmb_frame_map(basis, &externals)?
+        };
+        let kernel = SamplingMapKernel::new(
+            SamplingMapDefinition::Lmb(vec![0]),
+            parameterization,
+            settings.kinematics.e_cm,
+            1,
+        )?;
+        let xs = [0.27, 0.36, 0.71];
+        let selected = SamplingMapComponent::forward(&kernel, &xs, &[])?;
+        let raw = frame.forward(&selected.point, &[])?;
+        let sample = Sample::Continuous(F(1.0), xs.into_iter().map(F).collect());
+        let reference_result = integrand.evaluate_reference_sample_detailed(&sample, &reference)?;
+        let distance_squared = raw
+            .point
+            .iter()
+            .zip(reference.center())
+            .map(|(x, c)| (x - c).powi(2))
+            .sum::<f64>();
+        let expected = (-distance_squared / (2.0 * reference.width().powi(2))).exp()
+            / (2.0 * std::f64::consts::PI * reference.width().powi(2)).powf(1.5);
+        assert!(
+            (reference_result.evaluation.integrand_result.re.0 - expected).abs()
+                < expected * 1.0e-12
+        );
+        let radius_squared = raw.point.iter().map(|x| x * x).sum::<f64>();
+        assert!(
+            (reference_result.moments.second_moment.0 - expected * radius_squared).abs() < 1.0e-12
+        );
+        let physical = integrand
+            .evaluate_samples_raw(
+                &state.model,
+                &[sample],
+                0,
+                false,
+                false,
+                Complex::new_zero(),
+            )?
+            .samples
+            .remove(0);
+        let raw_result = integrand.evaluate_momentum_configuration(
+            &state.model,
+            &MomentumSpaceEvaluationInput {
+                loop_momenta: raw
+                    .point
+                    .chunks_exact(3)
+                    .map(|p| ThreeMomentum {
+                        px: F(p[0]),
+                        py: F(p[1]),
+                        pz: F(p[2]),
+                    })
+                    .collect(),
+                integrator_weight: F(1.0),
+                graph_id: Some(0),
+                group_id: None,
+                orientation: None,
+                channel_id: None,
+            },
+            false,
+        )?;
+        let delta = physical.integrand_result - raw_result.integrand_result;
+        let scale = raw_result.integrand_result.re.0.abs() + raw_result.integrand_result.im.0.abs();
+        assert!(scale > 1.0e-18 && scale.is_finite());
+        assert!(delta.re.0.abs() + delta.im.0.abs() < 1.0e-10 * scale);
         Ok(())
     }
 
@@ -5111,9 +5439,10 @@ rotation_axis = [{type = "x"}, {type = "y"}]
             .resolve_effective_model_parameter_card_for_settings(&settings)
             .unwrap_err();
 
-        assert!(err
-            .to_string()
-            .contains("cannot be overridden because it is not present"));
+        assert!(
+            err.to_string()
+                .contains("cannot be overridden because it is not present")
+        );
     }
 }
 

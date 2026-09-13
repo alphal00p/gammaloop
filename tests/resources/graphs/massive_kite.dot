@@ -1,0 +1,15 @@
+digraph massive_kite {
+    num=1;
+    overall_factor=1;
+    node [num=1];
+    edge [num=1];
+    ext_in [style=invis];
+    ext_out [style=invis];
+    ext_in -> A:0 [id=0, particle=scalar_0];
+    C:1 -> ext_out [id=1, particle=scalar_0];
+    A -> B [id=2, particle=scalar_1];
+    B -> C [id=3, particle=scalar_1];
+    C -> D [id=4, particle=scalar_1, lmb_id=0];
+    D -> A [id=5, particle=scalar_1];
+    B -> D [id=6, particle=scalar_1, lmb_id=1];
+}

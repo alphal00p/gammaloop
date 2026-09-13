@@ -21,30 +21,32 @@ These timings use the existing debug CLI, eager evaluators, no compilation,
 one generation core and no UV subtraction. They are generation measurements,
 not integration benchmarks or measurements of the new sampling maps. A fully
 threshold-subtracted kite point was also evaluated successfully. Exact files,
-settings and evidence are given below; no tracked production fixture was
-changed.
+settings and evidence are given below. That scratch research changed no tracked
+production fixture. The subsequent implementation adds
+[massive_kite.dot](../../../tests/resources/graphs/massive_kite.dot) and the
+bounded production tests described below.
 
-## What can run through the current sampling owner
+## Production coverage: initial audit and implementation
 
-There is an implementation gap to close before calling these advanced-map
-acceptance tests. In
+The initial audit on 13 September found a production connection missing from
 [AmplitudeGraphTerm::compile_sampling_bridge](../../../crates/gammalooprs/src/integrands/process/amplitude/mod.rs),
-the context currently receives the graph parent LMB, dimensions, settings and
-orientation, but its `surfaces` and `implicit_surfaces` maps remain empty.
-The common setup then supplies LMB affine routing, not amplitude E-surface
-geometry.
+which supplied the parent frame and settings but left surface geometry empty.
+Ordinary/named LMB channels worked; explicit physical surfaces could not compile.
+Synthetic supplied-geometry tests did not cover that missing connection.
 
-Consequently ordinary/named LMB channels can compile through this production
-owner, but an explicit graph `surface(...)` target needs the next geometry
-registration extension; otherwise it reaches `MissingSurfaceGeometry`.
-`auto:surfaces` currently has no amplitude physical-surface candidates to add
-and can only use ordinary coverage channels. Tests which manually provide a
-sphere or an implicit evaluator in `SamplingChannelCompileContext` validate
-the map kernel; they do not validate this missing production connection.
+The following implementation registers explicit full-rank surfaces from the
+actual catalogue, warmup masses and external momenta. It resolves sign-reversed
+shift counterparts, diagnoses remaining ambiguities, validates the full native
+frame/rank, and preserves normalized fallback channels for absent/pinched targets.
+Existing surfaces with an unsuitable zero center are rejected. The real kite
+test passes rest/boosted root, six-dimensional determinant, inverse and common
+partition checks. It exposed and fixed a shared metadata bug: physical energy
+edges identify the surface; the fully embedded output uses the common parent
+coordinate frame.
 
-The extension should populate the existing context from the amplitude's real
-E-surface catalogue, mass cache and external momenta, then call the same
-implicit-map/kernel and canonical bridge used elsewhere. There is **no
+Automatic discovery, non-native parent frames and proper subspace/complement
+registration remain unfinished. `auto:surfaces` alone still has no registered
+amplitude physical-surface candidates to add. There is **no
 Cutkosky host, LU rescaling t-star or LU h** in these amplitude benchmarks.
 Do not create a second amplitude-specific sampling engine. A two-line surface
 which is cylindrical in the full six-dimensional space needs its proper active

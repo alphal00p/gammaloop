@@ -491,18 +491,26 @@ remain guarded until their geometry and all foreign-channel densities use the
 correct cut data. The old LMB-specific partition implementation is removed.
 Default single-basis routing and obsolete weight settings remain migration work.
 
-Physical amplitude E-surfaces still need to populate the production compile
-context. The selected UV-finite two-loop amplitude benchmarks and that coverage
-gap are recorded in
+Explicit full-rank amplitude E-surfaces populate the production compile context
+from real catalogue equations, masses and external momenta. Ambiguous shifts,
+unsupported frames and rank-deficient full-space requests fail clearly. Known
+absent/pinched targets retain normalized exact fallback maps. The selected
+UV-finite two-loop amplitude benchmarks and remaining subspace/automatic work
+are recorded in
 [the amplitude study](../research/advanced_sampling/AMPLITUDE_BENCHMARK_CANDIDATES.md).
-The current implicit kernel falls back when its supplied center is not strictly
-inside a surface; this does not certify global surface absence. Generic geometry
-preparation must distinguish those cases and select suitable interior centers.
+The amplitude host distinguishes existence from the implicit kernel's rootless
+branch and rejects existing surfaces with an unsuitable zero center. The kernel
+certifies residuals and rejects unrepresentable inverse points without clipping.
+Generic geometry preparation still needs suitable interior-center selection.
 
-The Gaussian reference API currently supports one mapped point per sample;
-summed reference evaluation errors until weighted per-channel moments are
-supported. See [the implementation plan](../../ADVANCED_SAMPLING_PLAN.md) for
-the remaining harness and channel milestones, and
+Physical and Gaussian-reference targets share graph traversal and default-LMB
+routing. Summed reference evaluation aggregates values and raw-frame moments
+across mapped points before statistical squaring. Graph/orientation probabilities
+and outer map/grid factors are applied once; invalid draws fail acceptance.
+Explicit discrete coordinate selections expose partial partition contributions,
+which require summation or inverse-selection probabilities for unit normalization.
+See [the implementation plan](../../ADVANCED_SAMPLING_PLAN.md) for the remaining
+harness and channel milestones, and
 [the LU localization study](../research/advanced_sampling/LU_H_MATCHED_SAMPLING.md)
 for proposed h-matched radial profiles, which are not implemented settings yet.
 

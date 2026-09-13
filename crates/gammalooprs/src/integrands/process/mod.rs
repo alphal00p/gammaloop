@@ -90,7 +90,7 @@ pub use sampling_partition::{
     SamplingScoreFunction,
 };
 pub use sampling_reference::{
-    GaussianReferenceFunction, ReferenceSampleEvaluation, ReferenceSamplingReport,
+    GaussianReferenceFunction, ReferenceMoments, ReferenceSampleEvaluation, ReferenceSamplingReport,
 };
 pub use sampling_selection::{
     CompiledSamplingChannel, CompiledSamplingMap, DeferredCrossSectionSamplingState,
@@ -947,7 +947,8 @@ impl ProcessIntegrand {
     /// coordinates (for example Halton points), and exercise the complete
     /// process parameterization without constructing Symbolica `Sample`
     /// values themselves. The coordinate batch is interpreted as an equally
-    /// weighted quadrature rule, so each sample receives weight `1/N`; the
+    /// weighted quadrature rule, so each sample has unit inverse-density weight
+    /// and the report averages once over the `N` draws; the
     /// canonical sampling channel selected by
     /// the loaded settings remains responsible for its map and Jacobian.
     pub fn evaluate_reference_coordinates(
@@ -960,7 +961,6 @@ impl ProcessIntegrand {
                 "reference acceptance coordinate batch needs at least one sample"
             ));
         }
-        let sample_weight = 1.0 / coordinates.len() as f64;
         let samples = coordinates
             .iter()
             .enumerate()
@@ -971,7 +971,7 @@ impl ProcessIntegrand {
                     ));
                 }
                 Ok(Sample::Continuous(
-                    F(sample_weight),
+                    F(1.0),
                     coordinate.iter().copied().map(F).collect(),
                 ))
             })
@@ -985,6 +985,11 @@ impl ProcessIntegrand {
     /// canonical graph/orientation/channel order used by the process sampler.
     /// The selection itself is never re-enumerated or filtered here; callers
     /// must supply IDs obtained from the loaded process' canonical catalogue.
+    /// Unit discrete weights make this a partition contribution, which need
+    /// not integrate to one. A complete acceptance estimator must sum the
+    /// per-draw contributions or use MC samples with reciprocal selection
+    /// probabilities. Do not add report errors for channels sharing the same
+    /// coordinates: their contributions must be combined before squaring.
     pub fn evaluate_reference_discrete_coordinates(
         &mut self,
         discrete_indices: &[usize],
@@ -996,7 +1001,6 @@ impl ProcessIntegrand {
                 "reference acceptance coordinate batch needs at least one sample"
             ));
         }
-        let sample_weight = 1.0 / coordinates.len() as f64;
         let samples = coordinates
             .iter()
             .enumerate()
@@ -1007,16 +1011,11 @@ impl ProcessIntegrand {
                     ));
                 }
                 let mut sample = Sample::Continuous(
-                    F(sample_weight),
+                    F(1.0),
                     coordinate.iter().copied().map(F).collect(),
                 );
-                for (depth, index) in discrete_indices.iter().rev().enumerate() {
-                    let weight = if depth + 1 == discrete_indices.len() {
-                        F(sample_weight)
-                    } else {
-                        F(1.0)
-                    };
-                    sample = Sample::Discrete(weight, *index, Some(Box::new(sample)));
+                for index in discrete_indices.iter().rev() {
+                    sample = Sample::Discrete(F(1.0), *index, Some(Box::new(sample)));
                 }
                 Ok(sample)
             })
@@ -1031,14 +1030,27 @@ impl ProcessIntegrand {
         samples: &[Sample<F<f64>>],
         reference: &GaussianReferenceFunction,
     ) -> Result<ReferenceSamplingReport> {
+        if samples.is_empty() {
+            return Err(eyre!("reference acceptance needs at least one sample"));
+        }
         let evaluations = samples
             .iter()
             .map(|sample| self.evaluate_reference_sample_detailed(sample, reference))
             .collect::<Result<Vec<_>>>()?;
-        Ok(ReferenceSamplingReport::from_evaluations(
-            evaluations,
-            reference,
-        ))
+        let report = ReferenceSamplingReport::from_evaluations(evaluations, reference);
+        if report.finite_sample_count != report.sample_count
+            || !report.normalization.is_finite()
+            || !report.normalization_stderr.is_finite()
+            || !report.second_moment.is_finite()
+            || !report.second_moment_stderr.is_finite()
+        {
+            return Err(eyre!(
+                "reference acceptance has invalid mapped contributions or statistics: {} finite draws out of {}",
+                report.finite_sample_count,
+                report.sample_count
+            ));
+        }
+        Ok(report)
     }
 
     /// Detailed variant used by acceptance harnesses that also check raw
@@ -1749,7 +1761,7 @@ fn full_event_multiplicative_factor_precise<T: FloatLike>(
     Complex::new_re(jacobian * integrator_weight)
 }
 
-fn apply_full_event_multiplicative_factor_precise<T: FloatLike>(
+pub(super) fn apply_full_event_multiplicative_factor_precise<T: FloatLike>(
     event_groups: &mut crate::observables::GenericEventGroupList<T>,
     full_factor: &Complex<F<T>>,
 ) {
@@ -3009,6 +3021,7 @@ pub trait GraphTerm {
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()>;
     fn get_graph(&self) -> &Graph;
+    fn sampling_setup(&self) -> &LmbMultiChannelingSetup;
     fn get_num_orientations(&self) -> usize;
     fn production_orientation_keys(&self) -> &[String];
     fn selected_production_orientation_keys(&self) -> Vec<&str>;
@@ -3054,8 +3067,14 @@ pub trait GraphTerm {
     ) -> Result<Vec<SamplingChannelId>>;
 }
 
+#[derive(Clone, Copy)]
+enum EvaluationTarget<'a> {
+    Physical(&'a Model),
+    Reference(&'a GaussianReferenceFunction),
+}
+
 struct EvaluationContext<'a, 'm> {
-    model: &'a Model,
+    target: EvaluationTarget<'a>,
     settings: &'a RuntimeSettings,
     rotation: &'a Rotation,
     evaluation_metadata: &'m mut EvaluationMetaData,
@@ -3072,7 +3091,6 @@ pub struct GraphTermEvaluationContext<'a, 'm> {
     /// The canonical channel which mapped this point into the parent frame.
     /// Its sampling partition is applied outside the physical graph evaluation.
     pub sampling_channel: Option<SamplingChannelId>,
-    pub lmb_basis_id: Option<LmbIndex>,
 }
 
 /// Evaluate one graph term using the canonical sampling channel contract.
@@ -3097,17 +3115,64 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
             integrand.get_graph(graph_id).name(),
         ));
     }
+    // Default sampling starts in a selected LMB. Both targets must see the
+    // same graph-parent point, after the existing affine reinterpretation.
+    let mapped_sample;
+    let sample = if let Some(lmb_basis_id) = lmb_basis_id {
+        mapped_sample = integrand
+            .get_graph(graph_id)
+            .sampling_setup()
+            .reinterpret_loop_momenta_for_lmb(
+                lmb_basis_id,
+                sample,
+                sample.sample.loop_mom_cache_id,
+            );
+        &mapped_sample
+    } else {
+        sample
+    };
+    let model = match context.target {
+        EvaluationTarget::Physical(model) => model,
+        EvaluationTarget::Reference(reference) => {
+            // A reference is defined in the original raw frame, including its
+            // nonzero center. Stability rotations must not rotate the target
+            // relative to the integration point.
+            let raw_momenta = sample
+                .loop_moms()
+                .0
+                .iter()
+                .map(|momentum| context.rotation.inverse_rotate_three(momentum))
+                .collect::<LoopMomenta<_>>();
+            let mut value = reference.evaluate(&raw_momenta)?
+                / sample.zero().from_usize(integrand.graph_count());
+            if sample.sample.orientation.is_some() {
+                value /= sample
+                    .zero()
+                    .from_usize(integrand.get_graph(graph_id).get_num_orientations());
+            }
+            let radius_squared = raw_momenta.0.iter().fold(sample.zero(), |sum, momentum| {
+                sum + momentum.px.square() + momentum.py.square() + momentum.pz.square()
+            });
+            let mut result = GraphEvaluationResult::zero(sample.zero());
+            result.reference_moments = Some(ReferenceMoments {
+                second_moment: value.clone() * radius_squared,
+                jacobian_min: 1.0,
+                jacobian_max: 1.0,
+            });
+            result.integrand_result = Complex::new_re(value);
+            return Ok(result);
+        }
+    };
     let mut event_processing_runtime = integrand.take_event_processing_runtime();
     let result = {
         let graph_context = GraphTermEvaluationContext {
-            model: context.model,
+            model,
             settings: context.settings,
             event_processing_runtime: event_processing_runtime.as_mut(),
             rotation: context.rotation,
             evaluation_metadata: context.evaluation_metadata,
             record_primary_timing: context.record_primary_timing,
             sampling_channel,
-            lmb_basis_id,
         };
         integrand
             .get_graph_mut(graph_id)
@@ -3193,12 +3258,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                     None,
                 )?;
                 if let Some(weight) = partition_weight {
-                    let factor = Complex::new_re(weight.clone());
-                    result.integrand_result *= factor.clone();
-                    apply_full_event_multiplicative_factor_precise(
-                        &mut result.event_groups,
-                        &factor,
-                    );
+                    result.apply_sampling_factor(weight.clone());
                 }
                 Ok(result)
             }
@@ -3276,9 +3336,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                                 sample.sample.loop_mom_cache_id,
                                 sample.sample.external_mom_cache_id,
                             );
-                        let factor = Complex::new_re(
-                            mapped_sample.jacobian() * F::from_f64(partition_weight),
-                        );
+                        let factor = mapped_sample.jacobian() * F::from_f64(partition_weight);
                         let mut result = evaluate_graph_term(
                             integrand,
                             graph_id,
@@ -3287,11 +3345,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                             Some(channel_id),
                             None,
                         )?;
-                        result.integrand_result *= factor.clone();
-                        apply_full_event_multiplicative_factor_precise(
-                            &mut result.event_groups,
-                            &factor,
-                        );
+                        result.apply_sampling_factor(factor);
                         sum.merge_in_place(result);
                         Ok::<_, eyre::Report>(sum)
                     },
@@ -3299,9 +3353,14 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
             }
             DiscreteGraphSample::Tropical(sample) => {
                 let master_graph = integrand.get_master_graph(group_id).get_graph();
+                let EvaluationTarget::Physical(model) = context.target else {
+                    return Err(eyre!(
+                        "reference acceptance does not support tropical sampling"
+                    ));
+                };
 
                 let energy_cache = master_graph.get_energy_cache(
-                    context.model,
+                    model,
                     sample.loop_moms(),
                     sample.external_moms(),
                     &master_graph.loop_momentum_basis,
@@ -3344,7 +3403,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
 
 fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
-    model: &Model,
+    target: EvaluationTarget<'_>,
     gammaloop_sample: &GammaLoopSample<T>,
     evaluation_metadata: &mut EvaluationMetaData,
     is_primary_stability_level: bool,
@@ -3389,7 +3448,7 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
 
         let result = evaluate_single(
             integrand,
-            model,
+            target,
             gammaloop_sample,
             rotation,
             evaluation_metadata,
@@ -3462,7 +3521,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
     let evaluator_time_before = context.evaluation_metadata.evaluator_evaluation_time;
     let (graph_results, primary_rotation_index, rotated_results) = evaluate_all_rotations(
         integrand,
-        context.model,
+        EvaluationTarget::Physical(context.model),
         &gammaloop_sample,
         context.evaluation_metadata,
         context.is_primary_stability_level,
@@ -3657,7 +3716,7 @@ macro_rules! warn_cache_efficiency {
 
 fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
-    model: &Model,
+    target: EvaluationTarget<'_>,
     gammaloop_sample: &GammaLoopSample<T>,
     rotation: &Rotation,
     evaluation_metadata: &mut EvaluationMetaData,
@@ -3674,7 +3733,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
         None
     };
     let mut context = EvaluationContext {
-        model,
+        target,
         settings: &settings,
         rotation,
         evaluation_metadata,
@@ -4637,27 +4696,50 @@ fn evaluate_reference_sample<I: ProcessIntegrandImpl>(
 ) -> Result<ReferenceSampleEvaluation> {
     let source = EvaluationSource::XSpace(sample);
     let (gamma_sample, parameterization_time) = source.build_gamma_sample::<f64, I>(integrand)?;
-    if matches!(
+    let mut metadata = EvaluationMetaData::new_empty();
+    let (mut results, primary, _) = evaluate_all_rotations(
+        integrand,
+        EvaluationTarget::Reference(reference),
         &gamma_sample,
-        GammaLoopSample::MultiChanneling { .. }
-            | GammaLoopSample::DiscreteGraph {
-                sample: DiscreteGraphSample::MultiChanneling { .. },
-                ..
+        &mut metadata,
+        true,
+        false,
+    )?;
+    let graph_result = results.swap_remove(primary);
+    let moments = graph_result
+        .reference_moments
+        .ok_or_else(|| eyre!("reference acceptance produced no mapped reference contributions"))?;
+    for rotated in results {
+        let rotated_moments = rotated.reference_moments.ok_or_else(|| {
+            eyre!("rotated reference acceptance produced no mapped reference contributions")
+        })?;
+        for (original, rotated) in [
+            (
+                graph_result.integrand_result.re.0,
+                rotated.integrand_result.re.0,
+            ),
+            (moments.second_moment.0, rotated_moments.second_moment.0),
+        ] {
+            let scale = original.abs().max(rotated.abs());
+            if !original.is_finite()
+                || !rotated.is_finite()
+                || (original - rotated).abs() > 1.0e-9 * scale
+            {
+                return Err(eyre!(
+                    "reference sampling is not rotation invariant: {original} versus {rotated}"
+                ));
             }
-    ) {
-        return Err(eyre!(
-            "summed reference acceptance needs per-channel momentum moments; use explicit canonical channel selections with sampling_channels = 'mc' until the reference overlay supports the summed estimator"
-        ));
+        }
     }
-    let default_sample = gamma_sample.get_default_sample();
     let mut result = EvaluationResult::zero();
-    result.integrand_result = Complex::new_re(reference.evaluate(default_sample.loop_moms())?);
-    result.parameterization_jacobian = Some(default_sample.jacobian());
+    result.integrand_result = graph_result.integrand_result;
+    result.parameterization_jacobian = Some(gamma_sample.get_default_sample().jacobian());
     result.integrator_weight = sample.get_weight();
-    result.evaluation_metadata.parameterization_time = parameterization_time;
+    metadata.parameterization_time = parameterization_time;
+    result.evaluation_metadata = metadata;
     Ok(ReferenceSampleEvaluation {
         evaluation: result,
-        loop_momenta: default_sample.loop_moms().clone(),
+        moments,
     })
 }
 
