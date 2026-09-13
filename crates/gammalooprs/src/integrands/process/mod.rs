@@ -2518,16 +2518,16 @@ impl LmbMultiChannelingSetup {
 
     pub fn sampling_channel_edge_ids(
         &self,
-        channel_index: SamplingChannelId,
+        channel_id: SamplingChannelId,
         graph_name: &str,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<SmallVec<[usize; 4]>> {
         let lmb_index = self
-            .sampling_channel_lmb_id(channel_index, graph_name, parameterization_settings)?
+            .sampling_channel_lmb_id(channel_id, graph_name, parameterization_settings)?
             .ok_or_else(|| {
                 eyre!(
                     "Sampling channel {} for graph '{}' is graph-aware and has no generated LMB basis; use the canonical sampling bridge for this channel.",
-                    channel_index.index(), graph_name
+                    channel_id.index(), graph_name
                 )
             })?;
         Ok(self.all_bases[lmb_index]
@@ -2701,19 +2701,19 @@ impl LmbMultiChannelingSetup {
     }
 
     /// This function is used to do do LMB multi-channeling without fully switching to a different lmb
-    /// for each channel. The momenta provided are reinterpreted as loop momenta of the lmb corresponding to the channel_index.
+    /// for each channel. The momenta provided are reinterpreted as loop momenta of the LMB corresponding to the channel ID.
     /// Then we transform these loop momenta to the fixed lmb of the graph. The prefactor is immediately computed for the requested channel
     ///
     /// Note this increments the loop_mom_cache_id of the returned BareMomentumSample
     pub(crate) fn reinterpret_loop_momenta_and_compute_prefactor<T: FloatLike>(
         &self,
-        channel_index: SamplingChannelId,
+        channel_id: SamplingChannelId,
         momentum_sample: &MomentumSample<T>,
         loop_mom_cache_id: usize,
         weighting_settings: LmbChannelWeightingSettings<'_, T>,
     ) -> Result<(MomentumSample<T>, F<T>)> {
         let lmb_index = self.sampling_channel_lmb_basis_id(
-            channel_index,
+            channel_id,
             weighting_settings.graph_name,
             weighting_settings.parameterization_settings,
         )?;
@@ -2726,15 +2726,15 @@ impl LmbMultiChannelingSetup {
         };
 
         let prefactor =
-            self.compute_prefactor_impl(channel_index, lmb_index, &sample, weighting_settings)?;
+            self.compute_prefactor_impl(channel_id, lmb_index, &sample, weighting_settings)?;
 
         Ok((sample, prefactor))
     }
 
-    /// Computes the prefactor for the given channel index and momentum sample.
+    /// Computes the prefactor for the given canonical channel ID and momentum sample.
     pub(crate) fn compute_prefactor_impl<T: FloatLike>(
         &self,
-        channel_index: SamplingChannelId,
+        channel_id: SamplingChannelId,
         selected_lmb: LmbIndex,
         momentum_sample: &MomentumSample<T>,
         weighting_settings: LmbChannelWeightingSettings<'_, T>,
@@ -2745,11 +2745,11 @@ impl LmbMultiChannelingSetup {
         )?;
         let Some((_, selected_channel_lmb)) = channel_entries
             .iter()
-            .find(|(channel_id, _)| *channel_id == channel_index)
+            .find(|(candidate_id, _)| *candidate_id == channel_id)
         else {
             return Err(eyre!(
                 "Requested LMB channel {} is not an LMB entry in the canonical sampling catalogue for graph '{}'; the catalogue has {} channels.",
-                usize::from(channel_index),
+                usize::from(channel_id),
                 weighting_settings.graph_name,
                 channel_entries.len()
             ));
@@ -2757,7 +2757,7 @@ impl LmbMultiChannelingSetup {
         if *selected_channel_lmb != selected_lmb {
             return Err(eyre!(
                 "Canonical sampling channel {} resolves to LMB basis {}, but weighting requested basis {}",
-                channel_index.index(),
+                channel_id.index(),
                 usize::from(*selected_channel_lmb),
                 usize::from(selected_lmb)
             ));
@@ -3650,22 +3650,22 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                 let channel_count = channel_ids.len() as f64;
                 channel_ids
                     .into_iter()
-                    .map(|channel_index| {
+                    .map(|channel_id| {
                         if let Some(bridge) = bridge.as_ref() {
                             let coordinates = coordinates.as_ref().ok_or_else(|| {
                                 eyre!(
                                     "canonical summed amplitude channel {} requires retained unit-cube coordinates",
-                                    channel_index.index()
+                                    channel_id.index()
                                 )
                             })?;
-                            let mapped = bridge.forward(channel_index, coordinates)?;
+                            let mapped = bridge.forward(channel_id, coordinates)?;
                             let partition_weight = mapped
                                 .partition
-                                .weight(channel_index.index())
+                                .weight(channel_id.index())
                                 .ok_or_else(|| {
                                     eyre!(
                                         "sampling channel partition has no weight for channel {}",
-                                        channel_index.index()
+                                        channel_id.index()
                                     )
                                 })?;
                             if !partition_weight.is_finite() || partition_weight <= 0.0 {
@@ -3692,17 +3692,17 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                                 graph_id,
                                 &mapped_sample,
                                 context,
-                                Some(SamplingChannelEvaluation::Mapped { id: channel_index }),
+                                Some(SamplingChannelEvaluation::Mapped { id: channel_id }),
                                 None,
                             )
                         } else {
                             if !integrand.get_graph(graph_id).sampling_channel_is_lmb(
-                                channel_index,
+                                channel_id,
                                 &parameterization_settings,
                             )? {
                                 return Err(eyre!(
                                     "summed sampling multichanneling cannot evaluate graph-aware channel {}; use discrete multi-channeling",
-                                    channel_index.index()
+                                    channel_id.index()
                                 ));
                             }
                             evaluate_graph_term(
@@ -3711,7 +3711,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                                 sample,
                                 context,
                                 Some(SamplingChannelEvaluation::LegacyLmb {
-                                    id: channel_index,
+                                    id: channel_id,
                                     alpha: alpha.clone(),
                                     channel_weight: *channel_weight,
                                 }),
@@ -4225,22 +4225,22 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                         // coordinate point; bridge partitioning therefore
                         // carries the channel-count normalization once.
                         GraphEvaluationResult::zero(zero.clone()),
-                        |mut channel_sum, channel_index| {
+                        |mut channel_sum, channel_id| {
                             let channel_result = if let Some(bridge) = bridge.as_ref() {
                                 let coordinates = coordinates.as_ref().ok_or_else(|| {
                                     eyre!(
                                         "canonical summed amplitude channel {} requires retained unit-cube coordinates",
-                                        channel_index.index()
+                                        channel_id.index()
                                     )
                                 })?;
-                                let mapped = bridge.forward(channel_index, coordinates)?;
+                                let mapped = bridge.forward(channel_id, coordinates)?;
                                 let partition_weight = mapped
                                     .partition
-                                    .weight(channel_index.index())
+                                    .weight(channel_id.index())
                                     .ok_or_else(|| {
                                         eyre!(
                                             "sampling channel partition has no weight for channel {}",
-                                            channel_index.index()
+                                            channel_id.index()
                                         )
                                     })?;
                                 if !partition_weight.is_finite() || partition_weight <= 0.0 {
@@ -4267,17 +4267,17 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                                     graph_id,
                                     &mapped_sample,
                                     &mut context,
-                                    Some(SamplingChannelEvaluation::Mapped { id: channel_index }),
+                                    Some(SamplingChannelEvaluation::Mapped { id: channel_id }),
                                     None,
                                 )?
                             } else {
                                 let is_lmb = integrand
                                     .get_graph(graph_id)
-                                    .sampling_channel_is_lmb(channel_index, &parameterization_settings)?;
+                                    .sampling_channel_is_lmb(channel_id, &parameterization_settings)?;
                                 if !is_lmb {
                                     return Err(eyre!(
                                         "summed sampling cannot evaluate graph-aware channel {}; this graph requires per-sample LU/t* preparation",
-                                        channel_index.index()
+                                        channel_id.index()
                                     ));
                                 }
                                 evaluate_graph_term(
@@ -4286,7 +4286,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                                     sample,
                                     &mut context,
                                     Some(SamplingChannelEvaluation::LegacyLmb {
-                                        id: channel_index,
+                                        id: channel_id,
                                         alpha: alpha.clone(),
                                         channel_weight: *channel_weight,
                                     }),
@@ -5865,17 +5865,13 @@ mod tests {
             };
             let sum = [SamplingChannelId::from(0), SamplingChannelId::from(1)]
                 .into_iter()
-                .map(|channel_index| {
+                .map(|channel_id| {
                     let selected_lmb = setup
-                        .sampling_channel_lmb_basis_id(
-                            channel_index,
-                            "G",
-                            &parameterization_settings,
-                        )
+                        .sampling_channel_lmb_basis_id(channel_id, "G", &parameterization_settings)
                         .unwrap();
                     setup
                         .compute_prefactor_impl(
-                            channel_index,
+                            channel_id,
                             selected_lmb,
                             &sample,
                             weighting_settings,
@@ -5905,14 +5901,14 @@ mod tests {
             parameterization_settings: &parameterization_settings,
             e_cm: 1.0,
         };
-        for channel_index in [SamplingChannelId::from(0), SamplingChannelId::from(1)] {
+        for channel_id in [SamplingChannelId::from(0), SamplingChannelId::from(1)] {
             let selected_lmb = setup
-                .sampling_channel_lmb_basis_id(channel_index, "G", &parameterization_settings)
+                .sampling_channel_lmb_basis_id(channel_id, "G", &parameterization_settings)
                 .unwrap();
             let expected = setup
-                .compute_prefactor_impl(channel_index, selected_lmb, &sample, weighting_settings)
+                .compute_prefactor_impl(channel_id, selected_lmb, &sample, weighting_settings)
                 .unwrap();
-            let actual = F::<f64>(partition.weight(usize::from(channel_index)).unwrap());
+            let actual = F::<f64>(partition.weight(usize::from(channel_id)).unwrap());
             let difference = (actual - expected).abs();
             assert!(difference <= actual.epsilon() * actual.from_usize(16));
         }
