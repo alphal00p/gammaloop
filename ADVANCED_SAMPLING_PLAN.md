@@ -32,7 +32,11 @@ amplitude/cross-section assertions remain open.
 discrete graph sampler now carries the selected canonical partition factor
 with the parent-frame map Jacobian, including for the direct momentum route;
 the obsolete `DiscreteGraphSample::DiscreteMultiChanneling` representation has
-been removed rather than maintained as a second channel model.
+been removed rather than maintained as a second channel model. Top-level
+summed amplitude sampling now retains its unit-cube point and routes every
+canonical catalogue entry through the same bridge, including mixed LMB and
+named entries; cross-section summed graph-aware entries remain guarded until
+their per-sample LU/\(t^\star\) context is available.
 
 The Symbolica evaluator now exposes real map values and the full dual-derived
 Jacobian matrix, including its signed and absolute determinant. Its audit also
