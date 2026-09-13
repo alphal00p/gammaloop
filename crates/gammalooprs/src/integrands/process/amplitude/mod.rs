@@ -87,10 +87,10 @@ use crate::{
 
 use super::{
     GraphTerm, GraphTermEvaluationContext, LmbMultiChannelingSetup, ProcessIntegrandImpl,
-    RuntimeCache, create_grid, evaluate_sample, filtered_orientation_count,
-    format_orientation_label, format_sampling_channel_label, histogram_process_info_for_integrand,
-    prepare_buffered_event, resolve_visible_orientation_id, validate_group_orientation_catalogs,
-    validate_process_runtime_settings,
+    RuntimeCache, SamplingChannelEvaluation, create_grid, evaluate_sample,
+    filtered_orientation_count, format_orientation_label, format_sampling_channel_label,
+    histogram_process_info_for_integrand, prepare_buffered_event, resolve_visible_orientation_id,
+    validate_group_orientation_catalogs, validate_process_runtime_settings,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -792,44 +792,48 @@ impl AmplitudeGraphTerm {
         momentum_sample: &MomentumSample<T>,
         context: &mut GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<AmplitudeGraphTermEvaluation<T>> {
-        let (momentum_sample, prefactor) =
-            if let Some((channel_id, alpha, channel_weight)) = &context.channel_id {
-                let parameterization_settings = context
-                    .settings
-                    .sampling
-                    .get_parameterization_settings()
-                    .expect("LMB multichanneling requires a parameterization.");
-                let weighting_settings = LmbChannelWeightingSettings {
-                    graph_name: &self.multi_channeling_setup.graph.name,
-                    model: context.model,
-                    alpha,
-                    channel_weight: *channel_weight,
-                    parameterization_settings: &parameterization_settings,
-                    e_cm: context.settings.kinematics.e_cm,
-                };
-
-                self.multi_channeling_setup
-                    .reinterpret_loop_momenta_and_compute_prefactor(
-                        *channel_id,
-                        momentum_sample,
-                        0,
-                        weighting_settings,
-                    )?
-            } else {
-                if let Some(lmb_basis_id) = context.lmb_basis_id {
-                    (
-                        self.multi_channeling_setup
-                            .reinterpret_loop_momenta_for_lmb(
-                                lmb_basis_id,
-                                momentum_sample,
-                                momentum_sample.sample.loop_mom_cache_id,
-                            ),
-                        momentum_sample.one(),
-                    )
-                } else {
-                    (momentum_sample.clone(), momentum_sample.one())
-                }
+        let (momentum_sample, prefactor) = if let Some(SamplingChannelEvaluation::LegacyLmb {
+            id: channel_id,
+            alpha,
+            channel_weight,
+        }) = &context.sampling_channel
+        {
+            let parameterization_settings = context
+                .settings
+                .sampling
+                .get_parameterization_settings()
+                .expect("LMB multichanneling requires a parameterization.");
+            let weighting_settings = LmbChannelWeightingSettings {
+                graph_name: &self.multi_channeling_setup.graph.name,
+                model: context.model,
+                alpha,
+                channel_weight: *channel_weight,
+                parameterization_settings: &parameterization_settings,
+                e_cm: context.settings.kinematics.e_cm,
             };
+
+            self.multi_channeling_setup
+                .reinterpret_loop_momenta_and_compute_prefactor(
+                    *channel_id,
+                    momentum_sample,
+                    0,
+                    weighting_settings,
+                )?
+        } else {
+            if let Some(lmb_basis_id) = context.lmb_basis_id {
+                (
+                    self.multi_channeling_setup
+                        .reinterpret_loop_momenta_for_lmb(
+                            lmb_basis_id,
+                            momentum_sample,
+                            momentum_sample.sample.loop_mom_cache_id,
+                        ),
+                    momentum_sample.one(),
+                )
+            } else {
+                (momentum_sample.clone(), momentum_sample.one())
+            }
+        };
 
         let hel = context.settings.kinematics.externals.get_helicities();
         let orientations =
@@ -1216,10 +1220,9 @@ impl GraphTerm for AmplitudeGraphTerm {
         mut context: GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<GraphEvaluationResult<T>> {
         let event_channel_id = context
-            .channel_id
+            .sampling_channel
             .as_ref()
-            .map(|(channel_id, _, _)| *channel_id)
-            .or(context.advanced_channel_id);
+            .map(SamplingChannelEvaluation::id);
         let prepared_event = prepare_buffered_event(
             context.settings,
             context.rotation,

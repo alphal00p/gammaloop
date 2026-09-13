@@ -96,9 +96,9 @@ use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
 use super::{
-    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
-    evaluate_sample, filtered_orientation_count, format_orientation_label,
-    format_sampling_channel_label, histogram_process_info_for_integrand,
+    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache,
+    SamplingChannelEvaluation, create_grid, evaluate_sample, filtered_orientation_count,
+    format_orientation_label, format_sampling_channel_label, histogram_process_info_for_integrand,
     resolve_visible_orientation_id, validate_group_orientation_catalogs,
     validate_process_runtime_settings,
 };
@@ -1827,7 +1827,9 @@ impl GraphTerm for CrossSectionGraphTerm {
         let mut accepted_event_group = GenericEventGroup::default();
 
         let momentum_sample =
-            if let Some((channel_id, _alpha, _channel_weight)) = &context.channel_id {
+            if let Some(SamplingChannelEvaluation::LegacyLmb { id: channel_id, .. }) =
+                &context.sampling_channel
+            {
                 let parameterization_settings = context
                     .settings
                     .sampling
@@ -1986,10 +1988,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                             // metadata without routing the momenta through the
                             // legacy LMB reinterpretation path.
                             channel_id: context
-                                .channel_id
+                                .sampling_channel
                                 .as_ref()
-                                .map(|(channel_id, _, _)| *channel_id)
-                                .or(context.advanced_channel_id),
+                                .map(SamplingChannelEvaluation::id),
                         },
                         &solution,
                         &momentum_sample,
@@ -2022,7 +2023,12 @@ impl GraphTerm for CrossSectionGraphTerm {
             // differentiated physical integrand. This is distinct from the overlap-group
             // multi-channeling internal to threshold subtraction.
             let lmb_channel_prefactor = Complex::new_re(
-                if let Some((channel_index, alpha, channel_weight)) = &context.channel_id {
+                if let Some(SamplingChannelEvaluation::LegacyLmb {
+                    id: channel_index,
+                    alpha,
+                    channel_weight,
+                }) = &context.sampling_channel
+                {
                     let parameterization_settings = context
                         .settings
                         .sampling
