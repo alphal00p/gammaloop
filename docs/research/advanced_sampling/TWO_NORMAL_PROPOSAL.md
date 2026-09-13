@@ -182,3 +182,179 @@ Separately, the six-dimensional A-star cone map with nonzero cp and cs gives
 the claimed determinant within 1.5e-9 relative; its inverse recovers ell within
 2.3e-16 and p-star within 2.9e-14 GeV. These checks substantiate the formulas
 at regular points, not a global domain certificate or an implementation claim.
+
+## Next implementation slice: a generic shared-energy chart (unimplemented)
+
+The first exact primitive should accept two routed energy equations in one
+three-dimensional active block, rather than graph names or H/Z formulas:
+
+```
+f1(x;y) = E0(x) + E1(x+a(y)) - C1(y),
+f2(x;y) = E0(x) + E2(x+b(y)) - C2(y),
+Ei(v) = sqrt(|v|^2 + mi^2),  mi >= 0.
+```
+
+The existing Esurface/routing owner must establish that each target has exactly
+these two varying energies; all other energies and external shifts enter the
+complement-only constants. Shared energies are identified by equal mass and
+exact signed routing, including external shifts, not by a common edge ID.
+A common invertible affine change to x is retained by the existing frame map.
+The bounded first matcher accepts active coefficients equal up to sign; an
+unsupported routing class is a structural diagnostic, not an ordinary fallback.
+
+Actual GL638 fits this class with `a=q2`, `b=-q10`, masses `(mt,mt,0)`,
+`C1=E(a+t)+E(t)` and `C2=Q-E(t)` in the prepared host frame. The common energy
+is carried by distinct edges 12 and 3 with identical routed momenta. This is a
+fixture demonstrating the class; the kernel receives none of those labels.
+Amplitudes can supply the same data without a cut or projection owner.
+
+This is a graph-agnostic **exact supported class**, not support for every pair
+of routed E-surfaces. The generic machinery is the existing block, context,
+support, branch, inverse-density and native Jacobian contract. A later implicit
+rank-two component can solve arbitrary routed residuals under that same
+contract, after proving local rank, branch uniqueness and its feasible domain.
+It must use the same `intersect` AST and canonical registry; no parallel parser
+or second catalogue is implied. Until then other equation classes fail clearly
+at binding, even when a generic numerical root finder could find one solution.
+
+For requested residuals h,z put S=C1+h, T=C2+z and u=E0(x). The general plane
+constraints, retaining the unsquared energy signs, are
+
+```
+2 a.x = S^2 - 2 S u + m0^2 - m1^2 - |a|^2,
+2 b.x = T^2 - 2 T u + m0^2 - m2^2 - |b|^2.
+```
+
+For `|a x b|>0`, solve in an orthonormal plane frame to obtain `x=d+e*u+w*n`.
+Define `k=e.e-1`, `B=d.e`, `C=m0^2+d.d`, `D=B^2-k*C`. A regular full circle is
+
+```
+uc=-B/k, delta=sqrt(D)/k,
+u=uc+delta*cos(phi), w=sqrt(k)*delta*sin(phi), 0<=phi<2*pi,
+J = |dx/(dh dz dphi)| = u*(S-u)*(T-u)/(|a x b|*sqrt(k)).
+```
+
+The inverse evaluates the original two residuals and u at the supplied point,
+then uses `atan2(w/(sqrt(k)*delta), (u-uc)/delta)`. A half-open full circle
+includes both signs of w once; its joining points phi=0,pi have finite J.
+Compute inverse density at that supplied point, not at a forward reconstruction.
+Clipped arcs, tangencies, vanishing energies and additional algebraic branches
+are outside this first primitive. The origin of normal polar coordinates is
+an explicit singular boundary, not a silently finite density cap.
+
+### A certified disk and a normalized fallback
+
+Use alpha=1 initially, or any fixed positive normal-scale parameter; neither
+requires the GL638 physical coefficient P0. For each prepared complement y,
+choose a dyadic candidate radius rho and certify the enclosing rectangle
+`|h|<=rho`, `|z|<=rho/alpha`. The following sufficient inequalities enforce a
+complete physical circle everywhere in that rectangle:
+
+```
+|a x b|^2 > 0, k > 0, D > 0,
+L0=-B-k*m0 > 0,        L0^2 > D,
+L1=k*(S-m1)+B > 0,     L1^2 > D,
+L2=k*(T-m2)+B > 0,     L2^2 > D.
+```
+
+The last six conditions prove `uc-delta>m0` and
+`uc+delta<min(S-m1,T-m2)` without squaring away a sign. These are rational
+expressions in the normal coordinates and prepared data; after establishing
+positive Gram and k denominators, no transcendental domain proof is needed.
+Halving rho is allowed only until these inequalities are certified on the
+whole rectangle. A finite point grid or a native epsilon margin is not a proof.
+
+There is currently no rigorous interval owner in the sampling code. The
+smallest arithmetic addition is a private bounded enclosure calculation for
+these predicates using the existing `rug`/MPFR dependency, with directed
+rounding at **every** add, multiply, divide and square. Import the actual native
+inputs through their existing numeric wrappers: binary64 exactly, Quad as
+its high and low limbs enclosed under directed addition, and Arb from its
+stored MPFR value. Do not first narrow to binary64; the existing Quad-to-106-bit
+MPFR conversion alone is not a proof of exactness for arbitrarily separated
+limbs. Any small exposure of those representations belongs in `utils::FloatLike`,
+not a second numeric hierarchy. Keep the enclosure code private to this
+certificate until another implemented primitive needs it.
+
+The arithmetic certificate applies to the mathematical energy equations with
+those prepared parameters. To certify the exact physical equations rather
+than the represented prepared chart, the host must also supply enclosures of
+its derived constants/coordinates. In particular it does not certify the
+accuracy of the existing LU root or a future CT projection. Native point/J
+representability and selected J times inverse-q checks remain separate gates.
+Unresolved interval signs must not be called proven absence. Use typed numerical
+retry when precision prevents the specified branch decision; a deterministic
+complement-only decision to decline the compact chart is a normalized fallback,
+not a claim that the physical intersection does not exist.
+
+For a certified disk sample R uniformly on (0,rho), theta and phi uniformly
+on their full circles, with `h=R*cos(theta)`, `z=R*sin(theta)/alpha`. The cube
+Jacobian is `4*pi^2*rho*R*J/alpha`. If the complement-only certification policy
+declines the chart, the **same named channel** uses the existing normalized
+ordinary three-dimensional conditional map. Forward and every foreign inverse
+must reproduce that policy and rho from the same ordered complement data.
+
+For complements using the compact chart, its inverse returns outside-support
+for points outside the disk/image. Keep an ordinary full-support channel in
+the same canonical catalogue and use the existing exact-density partition;
+this supplies coverage outside the patch. Do not select overlapping compact
+and broad laws inside one cube branch and report only the branch Jacobian.
+The current fixed-partition estimator is not changed to a mixture-PDF estimator.
+
+### Existing owners and dependency order
+
+1. `sampling_maps.rs` owns the new native component and its paired forward/
+   inverse. Extend the existing inverse return contract to express outside
+   support (for example `Result<Option<SamplingMapEvaluation<T>>>`), propagating
+   it through affine, embedding and ordered composition. Positive supported
+   densities still undergo existing validation; `None` never represents
+   underflow, a failed solve, or a selected forward point's missing inverse.
+2. `sampling_selection.rs` passes outside-support to the **existing**
+   `SamplingPartition::from_log_scores` None convention: zero channel weight;
+   all-None already errors. Refine the existing map contract so restricted
+   image coverage is not confused with complement dependence or branch count.
+   Its current Full/Conditional/Branched enum conflates these facts. Maintain
+   one support contract and migrate it, rather than adding an independent
+   domain registry. Require ordinary coverage for a selected compact chart.
+3. `sampling_evaluator.rs` retains the common eager/dual program. Its current
+   square-Jacobian method counts all parameters, so allow selecting the three
+   cube derivative columns while holding prepared parameters fixed, using the
+   existing determinant owner. Compile expressions once in the current program
+   cache; clone worker buffers and bind native parameters as already done.
+4. `cff/esurface.rs` supplies the routed-energy matcher and prepared constants;
+   `sampling_selection.rs` admits exactly `intersect(surface(...),surface(...))`
+   as one existing block/registry key. Resolve both leaves under one host/frame,
+   consume three coordinates total, and preserve ordered prior dependencies.
+   Amplitude/cross-section binders then return this same component. No second
+   channel enumeration, automatic discovery, arbitrary implicit intersection
+   solver or new projected-target resolver belongs in this slice.
+
+A later certified star pullback consumes this identical three-dimensional
+component through the existing affine/context embedding when the projection
+is affine in its active block. A larger cone chart can compose it as a child.
+Actual center/alpha ownership and non-affine sensitivities remain requirements
+of that outer map, not assumptions hidden in the joint kernel.
+
+### Bounded validation before physical pilots
+
+- Unequal masses, one massless energy, nonorthogonal shifts and translated or
+  reordered parents; both w signs and phi joining points. Check the original
+  unsquared equations, direct inverse support and an independent Cartesian
+  finite-difference determinant, then native Quad/Arb references.
+- Certify complete boxes, deliberately infeasible boxes, rank-zero and nearly
+  tangent complements. Include a case where finite probing misses a violating
+  interior point, and verify that refinement never labels an uncertain sign
+  as absence. Inspect the returned margins/rho, not just sampled points.
+- Shifted Gaussian normalization and raw moments with focused plus ordinary
+  channels, nonuniform discrete/continuous weights, foreign points outside the
+  focused image, and complements switching to normalized ordinary fallback.
+  Include full composed determinants with complement-dependent affine frames.
+- Reuse actual routed GL638 H/Z records and a routing-qualified amplitude pair
+  as graph-backed witnesses; verify their class before inventing a fixture.
+  One orientation is suitable during development. Final production acceptance
+  must retain every selected amplitude orientation and all 936 GL638 keys,
+  six cuts and the complete subtraction/UV configuration.
+- On a regular compact patch, test the expected 1/R density and bounded weight
+  for a controlled leading C/R integrand. This proves neither global finite
+  variance nor star alignment. Benchmark certificate/map costs before a long
+  GL638 run; no performance gain follows from the formulas alone.
