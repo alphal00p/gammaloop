@@ -360,6 +360,14 @@ impl SamplingMapComposition {
                     child.output_dimensions()
                 ));
             }
+            if child.dimensions() != child.output_dimensions() {
+                return Err(eyre!(
+                    "sampling-map composition child {index} ({}) is not square (input {}, output {}); exact block Jacobians require bijective blocks",
+                    child.name(),
+                    child.dimensions(),
+                    child.output_dimensions()
+                ));
+            }
         }
         let dimensions = children.iter().map(|child| child.dimensions()).sum();
         let output_dimensions = children.iter().map(|child| child.output_dimensions()).sum();
