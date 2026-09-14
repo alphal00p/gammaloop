@@ -406,7 +406,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-doctest";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -414,7 +414,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -422,7 +422,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -430,7 +430,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-docs";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -438,7 +438,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -446,7 +446,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -454,7 +454,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-python-api";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -462,7 +462,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-spenso";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };
@@ -470,7 +470,7 @@
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-vakint";
       secrets = [
-        "SYMBOLICA_LICENSE"
+        "SYMBOLICA_LICENSE_SIGNED"
       ];
       system = "x86_64-linux";
     };

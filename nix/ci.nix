@@ -428,7 +428,8 @@ in {
         package = "packages.${system}.nix-ci-check-${name}";
         inherit system;
         in-repo = true;
-        secrets = ["SYMBOLICA_LICENSE"];
+        # Keep the legacy repository key available to branches on older Symbolica.
+        secrets = ["SYMBOLICA_LICENSE_SIGNED"];
       };
     }) (["gammaloop-doctest"] ++ map (group: "gammaloop-nextest-${group.name}") groups));
     deploy = {

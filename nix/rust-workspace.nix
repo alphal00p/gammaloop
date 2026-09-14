@@ -2685,6 +2685,9 @@
         runtimeInputs = [pkgs.nix];
         text = ''
           set -euo pipefail
+          if [[ -n "''${SYMBOLICA_LICENSE_SIGNED:-}" ]]; then
+            export SYMBOLICA_LICENSE="$SYMBOLICA_LICENSE_SIGNED"
+          fi
           exec nix \
             --extra-experimental-features nix-command \
             --extra-experimental-features flakes \

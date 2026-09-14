@@ -102,7 +102,7 @@ env:
   # closure separate from the broader Nix producer set.
   HESTIA_CACHE_VERSION_SALT: gammaloop-docs-no-closure-v1
   HESTIA_DRAIN_TIMEOUT: 7200
-  SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE || 'GAMMALOOP_USER' }}
+  SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED || 'GAMMALOOP_USER' }}
 
 jobs:
   build:
