@@ -1,0 +1,308 @@
+{
+  "status": "Seven-card static-only comparison; native sequential Cut1+HZ binding and all-catalogue reference/physical acceptance pending",
+  "proposal_order": [
+    "optimized_lmb",
+    "cuts",
+    "cuts_joint",
+    "cuts_soft",
+    "cuts_joint_soft",
+    "cuts_combined_joint",
+    "cuts_combined_joint_soft"
+  ],
+  "cards": {
+    "optimized_lmb": "/tmp/gl638-physics-comparison/cut-matched/cards/optimized_lmb.toml",
+    "cuts": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts.toml",
+    "cuts_joint": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint.toml",
+    "cuts_soft": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_soft.toml",
+    "cuts_joint_soft": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint_soft.toml",
+    "cuts_combined_joint": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint.toml",
+    "cuts_combined_joint_soft": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint_soft.toml"
+  },
+  "expected_channels": {
+    "optimized_lmb": 6,
+    "cuts": 6,
+    "cuts_joint": 7,
+    "cuts_soft": 7,
+    "cuts_joint_soft": 8,
+    "cuts_combined_joint": 7,
+    "cuts_combined_joint_soft": 8
+  },
+  "primary_channels": {
+    "cuts": "lu_cut_1",
+    "cuts_joint": "direct_joint_HZ",
+    "cuts_soft": "lu_cut_1",
+    "cuts_joint_soft": "direct_joint_HZ",
+    "cuts_combined_joint": "cut1_joint_HZ",
+    "cuts_combined_joint_soft": "cut1_joint_HZ"
+  },
+  "cut_edges": {
+    "0": [
+      2,
+      6,
+      12,
+      13
+    ],
+    "1": [
+      2,
+      6,
+      10
+    ],
+    "2": [
+      2,
+      6,
+      7,
+      13,
+      14
+    ],
+    "3": [
+      2,
+      4,
+      12
+    ],
+    "4": [
+      2,
+      4,
+      10,
+      13
+    ],
+    "5": [
+      2,
+      4,
+      7,
+      14
+    ]
+  },
+  "entries": {
+    "optimized_lmb": {
+      "path": "/tmp/gl638-physics-comparison/cut-matched/cards/optimized_lmb.toml",
+      "sha256": "c4d99ba8507ab73a5c754e1480c0e37978bd5489b31692f66e0ea030aff5b3e6",
+      "expected_channels": 6,
+      "selection": [
+        "auto:optimized_lmb"
+      ],
+      "joint": false,
+      "soft": false
+    },
+    "cuts": {
+      "path": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts.toml",
+      "sha256": "71ce4efcf492a51393075382816f8ded9ee79f93dbb1023f590b7b391f29f751",
+      "expected_channels": 6,
+      "primary_channel": "lu_cut_1",
+      "selection": [
+        "lu_cut_0",
+        "lu_cut_1",
+        "lu_cut_2",
+        "lu_cut_3",
+        "lu_cut_4",
+        "lu_cut_5"
+      ],
+      "joint": false,
+      "soft": false
+    },
+    "cuts_joint": {
+      "path": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint.toml",
+      "sha256": "62afd2a032e956759c5f9a3404857e9eb8442feb1bdd6c0c197d5c1d6ea829d6",
+      "expected_channels": 7,
+      "primary_channel": "direct_joint_HZ",
+      "selection": [
+        "lu_cut_0",
+        "lu_cut_1",
+        "lu_cut_2",
+        "lu_cut_3",
+        "lu_cut_4",
+        "lu_cut_5",
+        "direct_joint_HZ"
+      ],
+      "joint": true,
+      "soft": false
+    },
+    "cuts_soft": {
+      "path": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_soft.toml",
+      "sha256": "041ed87209898600035b7dd46f049d708cb8244ba38c5cc2380831574f9d25ee",
+      "expected_channels": 7,
+      "primary_channel": "lu_cut_1",
+      "selection": [
+        "lu_cut_0",
+        "lu_cut_1",
+        "lu_cut_2",
+        "lu_cut_3",
+        "lu_cut_4",
+        "lu_cut_5",
+        "soft_6_12"
+      ],
+      "joint": false,
+      "soft": true
+    },
+    "cuts_joint_soft": {
+      "path": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint_soft.toml",
+      "sha256": "d92938edd474476914f12a19c414e732cf6338469ef7f30f7cd7b955530e0c5a",
+      "expected_channels": 8,
+      "primary_channel": "direct_joint_HZ",
+      "selection": [
+        "lu_cut_0",
+        "lu_cut_1",
+        "lu_cut_2",
+        "lu_cut_3",
+        "lu_cut_4",
+        "lu_cut_5",
+        "direct_joint_HZ",
+        "soft_6_12"
+      ],
+      "joint": true,
+      "soft": true
+    },
+    "cuts_combined_joint": {
+      "path": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint.toml",
+      "sha256": "e7c61f30d4e117c53bdd0bcb15ca116ab7bdd3b6005c299c7b828ea0de4f1c9b",
+      "expected_channels": 7,
+      "primary_channel": "cut1_joint_HZ",
+      "selection": [
+        "lu_cut_0",
+        "lu_cut_1",
+        "lu_cut_2",
+        "lu_cut_3",
+        "lu_cut_4",
+        "lu_cut_5",
+        "cut1_joint_HZ"
+      ],
+      "joint": true,
+      "soft": false,
+      "sequential_cut1_joint": true,
+      "active_blocks": [
+        [
+          6,
+          10
+        ],
+        [
+          7
+        ],
+        [
+          3
+        ]
+      ],
+      "scalar_dimensions": [
+        6,
+        3,
+        3
+      ],
+      "joint_prior_lmb_order": [
+        6,
+        10,
+        7
+      ]
+    },
+    "cuts_combined_joint_soft": {
+      "path": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint_soft.toml",
+      "sha256": "ab492e6e29e6fc275b6d9e99f5c353470e3b59db78fd7248b8ae5b8a9d9b09bb",
+      "expected_channels": 8,
+      "primary_channel": "cut1_joint_HZ",
+      "selection": [
+        "lu_cut_0",
+        "lu_cut_1",
+        "lu_cut_2",
+        "lu_cut_3",
+        "lu_cut_4",
+        "lu_cut_5",
+        "cut1_joint_HZ",
+        "soft_6_12"
+      ],
+      "joint": true,
+      "soft": true,
+      "sequential_cut1_joint": true,
+      "active_blocks": [
+        [
+          6,
+          10
+        ],
+        [
+          7
+        ],
+        [
+          3
+        ]
+      ],
+      "scalar_dimensions": [
+        6,
+        3,
+        3
+      ],
+      "joint_prior_lmb_order": [
+        6,
+        10,
+        7
+      ]
+    }
+  },
+  "matched_pairs": [
+    [
+      "cuts",
+      "cuts_joint"
+    ],
+    [
+      "cuts_soft",
+      "cuts_joint_soft"
+    ],
+    [
+      "cuts",
+      "cuts_combined_joint"
+    ],
+    [
+      "cuts_soft",
+      "cuts_combined_joint_soft"
+    ]
+  ],
+  "soft_pairs": [
+    [
+      "cuts",
+      "cuts_soft"
+    ],
+    [
+      "cuts_joint",
+      "cuts_joint_soft"
+    ],
+    [
+      "cuts_combined_joint",
+      "cuts_combined_joint_soft"
+    ]
+  ],
+  "unchanged": {
+    "non_sampling_settings_equal": true,
+    "sampling_settings_except_definitions_and_selection_equal": true,
+    "all_six_cut_definitions_identical": true,
+    "physical_orientations": 936,
+    "physical_cuts": 6,
+    "local_and_integrated_uv": "unchanged saved state",
+    "threshold_subtraction": "enabled, unchanged metadata/WH/WF/h",
+    "native_stability": "unchanged Double/Quad/Arb and Euler probe"
+  },
+  "preserved_previous_files": {
+    "/tmp/gl638-physics-comparison/cards/direct_h_p2.toml": "5dc88bcaa2353dc163a4614ec42f6875c5cc3a5462dab6e641164236b7b07bfb",
+    "/tmp/gl638-physics-comparison/cards/direct_h_p2_plus_lmb.toml": "5ef416e1a6180e42eb4f875206588140173c85f22cf21de6335ef3107e90acca",
+    "/tmp/gl638-physics-comparison/cards/joint_hz_h_p2_lu_h_plus_lmb.toml": "276d1a8af6a14e4c81c423a5b1b747f451bc41fe5e1e9ab3dc291cbbf5b700ff",
+    "/tmp/gl638-physics-comparison/cards/joint_hz_h_p2_plus_lmb.toml": "66ab25187c62ca9dc15db8846f248c1dac8f6ce7055f93c1c7d030cc317e0d80",
+    "/tmp/gl638-physics-comparison/cards/joint_hz_plus_lmb.toml": "ddf20011d314c39b9ab3c79b41df556a4c26d346a3dbb97297e9182e01023d42",
+    "/tmp/gl638-physics-comparison/cards/lu_h_six_cuts.toml": "fc8419ab509ecd5476d9cfbf0c9456f9fe78ed47da45b2e0b60da13b4e8b76e5",
+    "/tmp/gl638-physics-comparison/cards/optimized_lmb.toml": "c4d99ba8507ab73a5c754e1480c0e37978bd5489b31692f66e0ea030aff5b3e6",
+    "/tmp/gl638-physics-comparison/cards_manifest.json": "215c2c18cec4cb7744b6925275acc22193d6e0a4ee45482e9ade3bf1f66e7cbf"
+  },
+  "second_round": "Only if first matched screen warrants it: cuts+direct_H_p2, paired with cuts+direct_H_p2+joint, with fixed soft choice. Not prepared or run.",
+  "preserved_five_card_snapshot": {
+    "/tmp/gl638-physics-comparison/cut-matched/cards/optimized_lmb.toml": "c4d99ba8507ab73a5c754e1480c0e37978bd5489b31692f66e0ea030aff5b3e6",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint_soft.toml": "d92938edd474476914f12a19c414e732cf6338469ef7f30f7cd7b955530e0c5a",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts.toml": "71ce4efcf492a51393075382816f8ded9ee79f93dbb1023f590b7b391f29f751",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint.toml": "62afd2a032e956759c5f9a3404857e9eb8442feb1bdd6c0c197d5c1d6ea829d6",
+    "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_soft.toml": "041ed87209898600035b7dd46f049d708cb8244ba38c5cc2380831574f9d25ee",
+    "/tmp/gl638-physics-comparison/cut-matched/cards_manifest.json": "fdd2c3a4817d7a4bbc10fee3df73d1c54aa44ddc57786fea0b698c14c9ebb9cb",
+    "/tmp/gl638-hosted-joint-gate/manifest-cut-matched-physics.json": "9bf23a08fb9c4b94ee88513f17404d16ea44dbe3f8f1ece81eedb12cd0404423"
+  },
+  "combined_comparisons": [
+    [
+      "cuts_joint",
+      "cuts_combined_joint"
+    ],
+    [
+      "cuts_joint_soft",
+      "cuts_combined_joint_soft"
+    ]
+  ]
+}

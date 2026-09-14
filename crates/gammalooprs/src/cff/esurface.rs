@@ -2140,7 +2140,7 @@ impl Esurface {
 
     /// Explicit prepared-ray boundary for LU root and jet evaluation. Routing
     /// before radial scaling changes finite-precision association. Existing
-    /// amplitude/static/fiber evaluation keeps scale-then-route semantics.
+    /// non-LU amplitude/static/fiber evaluation keeps scale-then-route semantics.
     /// The center is supplied explicitly; physical LU uses generation zero.
     pub(crate) fn routed_ray<T: FloatLike>(
         &self,
@@ -3763,6 +3763,159 @@ mod tests {
         check_native::<f64>(&graph, &surface);
         check_native::<QuadFloat>(&graph, &surface);
         check_native::<ArbPrec>(&graph, &surface);
+    }
+
+    #[test]
+    fn phase_space_cut_root_replays_canonical_foreign_inverse_cancellation() {
+        test_initialise().unwrap();
+        // GL638 Halton3363: the hosted joint's ordinary fallback generated this
+        // canonical Arb point; its foreign full-frame Cut1 inverse failed before
+        // any reference/physical body. Retain the native decimal roundtrip, not
+        // a binary64 reconstruction or an independently regenerated joint point.
+        let point_tokens = [
+            "1367030.43662744423077657886622585118732404500993473554913895566241589500405947461690714412624268513505631015396234810943269596104532748643105542702039862197867565164412838526283892048404678602045626445614508293241427506110755435656591802035619036221554197413841701638040025597247140012517189434530153459",
+            "-999526.399472714004924745558487742174280959297534606425446121987615879279562127703414975258631734220750778229983972859653308430370782154297373722895399005861599636821957013566636477314723339751660664618818230868728997962470940365780821107652219318608507461393737546471739313569778449847787262829689519758",
+            "2635.11804627574968679150746698546684926537860473844219904054202664480773875967585945065405808941879393444480927960481154917330356034222219635456028440278614622109927632916893794632929631394563782912542725019630912377572312073034188155233244619198043408564989307377224208055269346704158128964908317509261",
+            "1365298.80606570193439178248903075440797721030001172865681315316962534564202453943423169414748443288269134401947007088168439700475928251218359436660404679423063978012317674014693339414507122222142523195226338848798195882508017496231651900921236382771006795390348616128129934316532814543030209744364019054",
+            "-998820.613196962571373332987243603087494541655288997511144379181267051699516068044611894994190494668286551419090745020640141977947029490154255331734395335596048929725132710856235917568105358581132488124086315318516657933430936244305844004808412923698398375511933676277573855820903335530154557900187401664",
+            "4047.33414152831088829375438466435223275171308987396130932582985387723022229862922976703274469623350667935654058159331604678380195069378771816145293238142522165286453283051283913992888932063257542647725648351805459013522266494043094042838131736080143438861266226902012570363568976019577762021664023114866",
+            "83.1126856152680405091850152707032759635065978000760419277583832932540620572340228677113831897018166702219588733109015730699449632190446808998629297952866898031107347012837750524595236018672538656817674901345397345906420467235996584856394111008677691361716531755180039690828818424181738021720937612332473",
+            "-271.487004006624936032383971262627992814142127178531082780852027992007247020700756462748911221240546859750792472835768342005119164451772938283340118890996475035825441694527852209889256539059182981432179743946981544937115591798425012272630650241061657324339012716835440520492257904951141777212048569398409",
+            "172.995634312193812329535193383815352801038985837137105437759642412099825918135903635674987213191903064253661504641496794322344612352796885741009454426914017751085087430094408938579737245424065728815449873693652886682643449058779221848518639106186622340605844416298128898323757003199986295961514068931809",
+            "1553.02030744971213963777112883628816116222224922513300779830478460724114360528704175205365061869941782426355915003669694077799625540057885933310993881768684532880891858480897867129984665510634951301156097819370899150217888483360555670282615505920358106216430177949458381682435533431403640861028867643634",
+            "175.729482877721774403936070331243420758342427008390700023593859226796553067648366117048302143782877238854817038614857585311307016571639203050561588272527571998881087153974255763006207376888422035958124493436136546263533358525466966789793340591585338882735253021052931213562265925007864963381639808647379",
+            "-987.094530658251250328865816150283711625817471698266080780545993723465686910923865574545177650018084715406989468479547700982468885609732012850096019949134333598256299704715871688857759497730140969322324491488236509562871514705347225367092074540791495561129260238451255593578254459645239533939527551314165",
+        ];
+        let point = point_tokens
+            .iter()
+            .map(|token| {
+                let value = token.parse::<ArbPrec>().unwrap();
+                assert_eq!(value.to_string(), *token);
+                F(value)
+            })
+            .collect_vec();
+        let one = point[0].one();
+        let zero = one.zero();
+        let f = |value| one.from_i64(value);
+        let model = crate::utils::load_generic_model("sm");
+        let graph: Graph =
+            include_str!("../../../../examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot")
+                .into_graph(&model)
+                .unwrap();
+        let lmb = &graph.loop_momentum_basis;
+        assert_eq!(
+            lmb.loop_edges.raw,
+            vec![EdgeIndex(3), EdgeIndex(4), EdgeIndex(7), EdgeIndex(10)]
+        );
+        for (edge, coefficients) in [(2, [-1, 1, 0, 0]), (6, [-1, 1, 0, 1]), (10, [0, 0, 0, 1])] {
+            assert_eq!(
+                lmb.edge_signatures[EdgeIndex(edge)]
+                    .internal
+                    .to_momtrop_format(),
+                coefficients
+            );
+        }
+        let surface = Esurface {
+            energies: vec![EdgeIndex(2), EdgeIndex(6), EdgeIndex(10)],
+            external_shift: vec![(EdgeIndex(0), -1), (EdgeIndex(1), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let masses = graph
+            .underlying
+            .new_edgevec_from_iter(lmb.edge_signatures.iter().map(|(edge, _)| {
+                f(match edge.0 {
+                    2 => 125,
+                    6 | 10 => 173,
+                    _ => 0,
+                })
+            }))
+            .unwrap();
+        let externals = ExternalFourMomenta::from_iter([1, -1].map(|sign| {
+            FourMomentum::from_args(f(500), zero.clone(), zero.clone(), f(500 * sign))
+        }));
+        assert_eq!(externals.len(), lmb.ext_edges.len());
+        let center = LoopMomenta::from_iter(
+            (0..4).map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+        );
+        // Preserve the inverse owner's full12D sum/order and normalization.
+        // Host-null p/s components must not be dropped before forming this ray.
+        let radius = point
+            .iter()
+            .map(F::square)
+            .fold(zero.clone(), |sum, x| sum + x)
+            .sqrt();
+        let direction = point.iter().map(|x| x / &radius).collect_vec();
+        let velocity = LoopMomenta::from_iter(
+            direction
+                .chunks_exact(3)
+                .map(|v| ThreeMomentum::new(v[0].clone(), v[1].clone(), v[2].clone())),
+        );
+        let original = |r: &F<ArbPrec>| {
+            surface.compute_self_and_r_derivative(r, &velocity, &center, &externals, &masses, lmb)
+        };
+        let ray = surface.routed_ray(&velocity, &center, &externals, &masses, lmb);
+        let routed = |r: &F<ArbPrec>| ray.evaluate(r);
+        let scale = original(&zero).0.abs().max(one.clone());
+        assert_eq!(scale, f(529));
+        let guess = f(300);
+        let tolerance = f(64);
+        let identity = RadialRootIdentity::new("canonical foreign phase-space Cut1".into());
+        let old_strict = safeguarded_newton_iteration_and_derivative(
+            &zero, &guess, original, &tolerance, 2048, 96, &scale,
+        );
+        let old_checked = RadialRootDiagnostics::default().solve(
+            &identity, &zero, &guess, original, &tolerance, 2048, 96, &scale,
+        );
+        let ray_strict = safeguarded_newton_iteration_and_derivative(
+            &zero, &guess, routed, &tolerance, 2048, 96, &scale,
+        );
+        let ray_checked = RadialRootDiagnostics::default().solve(
+            &identity, &zero, &guess, routed, &tolerance, 2048, 96, &scale,
+        );
+        crate::debug_tags!(#integration, #sampling, #solver;
+            stage = "canonical_foreign_cut_root_comparison",
+            scale = %scale, tolerance = %tolerance,
+            old_strict = ?old_strict, old_checked = ?old_checked,
+            ray_strict = ?ray_strict, ray_checked = ?ray_checked,
+            "same native direction and root budget; only radial routing association differs"
+        );
+        let Err(SafeguardedNewtonError::DidNotConverge {
+            result,
+            lower_bound,
+            upper_bound,
+        }) = old_strict
+        else {
+            panic!("retained point did not reproduce the original failed callback");
+        };
+        assert_eq!(result.solution, lower_bound);
+        assert_eq!(result.solution, F("397339.292129129457670657255502631235707430728003236007665188851741059988603886168137387085943384940050545361933742066907875904266411120132268928043162217340042566193200203939814362605526391210977153331875750728687297380447984755419924107738341193852462036361671032388546985919083686130672457601933412077".parse::<ArbPrec>().unwrap()));
+        assert_eq!(result.derivative_at_solution, F("1.89172234332619088523547124801376213069340504387632086738281927967636989017896303335256085095364995340008004517730539670922548200475769065127437640250637540730631026978180801048759551386539060201137497670459856172911183019727298113312180354967670498695170211446748295063372406403797004835125320002494423e-3".parse::<ArbPrec>().unwrap()));
+        assert_eq!(result.error_of_function, F("-1.14679433441675535850302203255662653802548196930155482065516258074128414020703309961761627393787629857947032362638242933663599106623983500678126078018019011326084382655077394465668514937147617056084028309045057099969394177818124344214140305955891007956258616793631925999960450772417858669201530418435211e-296".parse::<ArbPrec>().unwrap()));
+        assert_eq!(result.num_iterations_used, 17);
+        assert!(upper_bound > lower_bound);
+        assert!(result.error_of_function.abs() > one.epsilon() * &tolerance * &scale);
+        // The existing wrapper is tested independently: a tiny bracket alone
+        // must not silently enlarge this callback's residual allowance.
+        assert!(old_checked.is_err());
+        let prepared = ray_strict.expect("pre-routed same-budget comparison did not converge");
+        let checked = ray_checked.unwrap();
+        assert_eq!(prepared.solution, checked.solution);
+        assert!(prepared.derivative_at_solution > zero);
+        assert!(prepared.error_of_function.abs() <= one.epsilon() * &tolerance * &scale);
+        let residual = surface
+            .evaluate_routed_enclosed(&prepared.solution, &velocity, &externals, &masses, lmb)
+            .unwrap();
+        let allowed = (one.epsilon() * &tolerance * &scale)
+            .0
+            .mpfr_enclosure(2048)
+            .0;
+        assert!(residual[0] >= -allowed.clone() && residual[1] <= allowed);
+        crate::debug_tags!(#integration, #sampling, #solver;
+            stage = "canonical_foreign_cut_original_residual",
+            native_root = %prepared.solution,
+            original_residual_lower = %residual[0], original_residual_upper = %residual[1],
+            "directed original routing at the pre-routed callback root"
+        );
     }
 
     #[test]

@@ -1,0 +1,375 @@
+{
+  "failed_preflight/cuts.json": {
+    "sha256_uncompressed": "0c744f768808f1cf7285bc71dc216c093dcbd174292cf056ed203d5db0fb555e",
+    "bytes_uncompressed": 536302,
+    "stored_path": "failed_preflight/cuts.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight1/cuts.json"
+  },
+  "failed_preflight/cuts.settings.toml": {
+    "sha256_uncompressed": "1e4615ad7880a59702f3eabe3950334bb63a075bfa0a97b53ecc2b129c09a198",
+    "bytes_uncompressed": 3183,
+    "stored_path": "failed_preflight/cuts.settings.toml",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight1/cuts.settings.toml"
+  },
+  "failed_preflight/cuts_joint.json": {
+    "sha256_uncompressed": "788ddfbefa24fdd1ecc1b311a03888cdbf7d488d6c7bbce4f4b81ff1eaefacfb",
+    "bytes_uncompressed": 454221,
+    "stored_path": "failed_preflight/cuts_joint.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight1/cuts_joint.json"
+  },
+  "failed_preflight/cuts_joint.settings.toml": {
+    "sha256_uncompressed": "b7cf7b8bc621d5093dfe469deb1a4d7259c0db4ed354f0d2b7dc9d0733ea5b68",
+    "bytes_uncompressed": 3451,
+    "stored_path": "failed_preflight/cuts_joint.settings.toml",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight1/cuts_joint.settings.toml"
+  },
+  "failed_preflight/optimized_lmb.json": {
+    "sha256_uncompressed": "5d19de6f8375cd23f4b2fe46fafddc70990ea8dc49ed4159125edf5de4e8fa13",
+    "bytes_uncompressed": 534480,
+    "stored_path": "failed_preflight/optimized_lmb.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight1/optimized_lmb.json"
+  },
+  "failed_preflight/optimized_lmb.settings.toml": {
+    "sha256_uncompressed": "123b6faaa533a5ccc3aa53ce2d7a7d7a018a02195cd517f2a6296678f2f8144e",
+    "bytes_uncompressed": 1365,
+    "stored_path": "failed_preflight/optimized_lmb.settings.toml",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight1/optimized_lmb.settings.toml"
+  },
+  "failed_preflight/state_after.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "failed_preflight/state_after.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight1/state_after.json"
+  },
+  "failed_preflight/state_before.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "failed_preflight/state_before.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight1/state_before.json"
+  },
+  "failed_preflight/summary.json": {
+    "sha256_uncompressed": "06a22e470734a8daeb8074e0ae37aa2ffa6eeea48170e78f20ac3a3c5eda0358",
+    "bytes_uncompressed": 5927,
+    "stored_path": "failed_preflight/summary.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight1/summary.json"
+  },
+  "minimal_point/cuts.json": {
+    "sha256_uncompressed": "fbd6f40283ab05315422721fcba6af84e4e8f815381d74ceeb00d363f375a1f1",
+    "bytes_uncompressed": 566794,
+    "stored_path": "minimal_point/cuts.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363/cuts.json"
+  },
+  "minimal_point/cuts.settings.toml": {
+    "sha256_uncompressed": "1e4615ad7880a59702f3eabe3950334bb63a075bfa0a97b53ecc2b129c09a198",
+    "bytes_uncompressed": 3183,
+    "stored_path": "minimal_point/cuts.settings.toml",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363/cuts.settings.toml"
+  },
+  "minimal_point/cuts_joint.json": {
+    "sha256_uncompressed": "aceb945a00b0c231c08e0d58f86f040b9d3e10909edfba790441e207e1bdd189",
+    "bytes_uncompressed": 583443,
+    "stored_path": "minimal_point/cuts_joint.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363/cuts_joint.json"
+  },
+  "minimal_point/cuts_joint.settings.toml": {
+    "sha256_uncompressed": "b7cf7b8bc621d5093dfe469deb1a4d7259c0db4ed354f0d2b7dc9d0733ea5b68",
+    "bytes_uncompressed": 3451,
+    "stored_path": "minimal_point/cuts_joint.settings.toml",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363/cuts_joint.settings.toml"
+  },
+  "minimal_point/state_after.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "minimal_point/state_after.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363/state_after.json"
+  },
+  "minimal_point/state_before.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "minimal_point/state_before.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363/state_before.json"
+  },
+  "minimal_point/summary.json": {
+    "sha256_uncompressed": "9ccb050273bed675ce7a0ff2f737c72523907322355fcfbcd61e05e277dadb51",
+    "bytes_uncompressed": 5772,
+    "stored_path": "minimal_point/summary.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363/summary.json"
+  },
+  "failed_preflight/manifest.json": {
+    "sha256_uncompressed": "4a74150da6c7e711d34d3df9cf6e8109618c4b0969bc8438db9ca5373cb3d566",
+    "bytes_uncompressed": 20604,
+    "stored_path": "failed_preflight/manifest.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-cut-combined-seven-physics.json"
+  },
+  "failed_preflight/run.json": {
+    "sha256_uncompressed": "60467adff62a77c60b7c25f8a21b39f66916a91cd1853e7d50aa9c757539eee8",
+    "bytes_uncompressed": 512,
+    "stored_path": "failed_preflight/run.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/cut-combined-seven-preflight-run1.json"
+  },
+  "minimal_point/manifest.json": {
+    "sha256_uncompressed": "907dcd699b19627628cbdbd41200a01754f0539327db915781184d06ae7a4d58",
+    "bytes_uncompressed": 21671,
+    "stored_path": "minimal_point/manifest.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-reference-point-3363.json"
+  },
+  "minimal_point/run.json": {
+    "sha256_uncompressed": "3cc2c11983afaf1dc24df8be8b3920876ef8a403d3786953044a4334efd79e68",
+    "bytes_uncompressed": 467,
+    "stored_path": "minimal_point/run.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/reference-point-3363-run.json"
+  },
+  "failed_preflight/driver_build.json": {
+    "sha256_uncompressed": "18ce2983a5a03efd14c20b17d9ca2f7ff14ec59727aa4df780eb0f459a53dc53",
+    "bytes_uncompressed": 42283,
+    "stored_path": "failed_preflight/driver_build.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-extended.build.json"
+  },
+  "minimal_point/driver_build.json": {
+    "sha256_uncompressed": "ae1a7834416b7a11887187278860c69857c9e6fb265a2de857e18d321bf987d4",
+    "bytes_uncompressed": 42288,
+    "stored_path": "minimal_point/driver_build.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/gate-reference-point-fixed.build.json"
+  },
+  "minimal_point/gate.rs": {
+    "sha256_uncompressed": "254a7465209162a8f5214329fab849ad5c32f5e3c6cc5c1c5eed32ba2ef3c1a2",
+    "bytes_uncompressed": 118860,
+    "stored_path": "minimal_point/gate.rs.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/gate.rs"
+  },
+  "fixture/comparison.log": {
+    "sha256_uncompressed": "d23922149800a6f42a9bb66c0c7f030e18171b0d95bb35aae882d9a63858ea44",
+    "bytes_uncompressed": 19436,
+    "stored_path": "fixture/comparison.log.gz",
+    "original_path": "/tmp/gl638-foreign-root-fixture-test2.log"
+  },
+  "fixture/port_correction.log": {
+    "sha256_uncompressed": "fe97ecceb79d775a5e7154996abc3a0074abecfa28181d74b479ef5eebba9bb7",
+    "bytes_uncompressed": 1727,
+    "stored_path": "fixture/port_correction.log.gz",
+    "original_path": "/tmp/gl638-foreign-root-fixture-test1.log"
+  },
+  "fixture/production_check.log": {
+    "sha256_uncompressed": "2d309579137ba4cbdfd7bd7fa5cd5a41fa06f740f78a3cb11664323b9ab8d2d3",
+    "bytes_uncompressed": 422,
+    "stored_path": "fixture/production_check.log.gz",
+    "original_path": "/tmp/gl638-phase-space-ray-check1.log"
+  },
+  "cards/cards_manifest.json": {
+    "sha256_uncompressed": "86e43d4b335524723d8921c34ba56ef937ed20372e1cee58d7cd5ece55235a67",
+    "bytes_uncompressed": 9017,
+    "stored_path": "cards/cards_manifest.json",
+    "original_path": "/tmp/gl638-physics-comparison/cut-matched/cards_combined_seven_manifest.json"
+  },
+  "cards/cuts.toml": {
+    "sha256_uncompressed": "71ce4efcf492a51393075382816f8ded9ee79f93dbb1023f590b7b391f29f751",
+    "bytes_uncompressed": 3483,
+    "stored_path": "cards/cuts.toml",
+    "original_path": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts.toml"
+  },
+  "cards/cuts_combined_joint.toml": {
+    "sha256_uncompressed": "e7c61f30d4e117c53bdd0bcb15ca116ab7bdd3b6005c299c7b828ea0de4f1c9b",
+    "bytes_uncompressed": 4149,
+    "stored_path": "cards/cuts_combined_joint.toml",
+    "original_path": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint.toml"
+  },
+  "cards/cuts_combined_joint_soft.toml": {
+    "sha256_uncompressed": "ab492e6e29e6fc275b6d9e99f5c353470e3b59db78fd7248b8ae5b8a9d9b09bb",
+    "bytes_uncompressed": 4339,
+    "stored_path": "cards/cuts_combined_joint_soft.toml",
+    "original_path": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint_soft.toml"
+  },
+  "cards/cuts_joint.toml": {
+    "sha256_uncompressed": "62afd2a032e956759c5f9a3404857e9eb8442feb1bdd6c0c197d5c1d6ea829d6",
+    "bytes_uncompressed": 3936,
+    "stored_path": "cards/cuts_joint.toml",
+    "original_path": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint.toml"
+  },
+  "cards/cuts_joint_soft.toml": {
+    "sha256_uncompressed": "d92938edd474476914f12a19c414e732cf6338469ef7f30f7cd7b955530e0c5a",
+    "bytes_uncompressed": 4126,
+    "stored_path": "cards/cuts_joint_soft.toml",
+    "original_path": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint_soft.toml"
+  },
+  "cards/cuts_soft.toml": {
+    "sha256_uncompressed": "041ed87209898600035b7dd46f049d708cb8244ba38c5cc2380831574f9d25ee",
+    "bytes_uncompressed": 3673,
+    "stored_path": "cards/cuts_soft.toml",
+    "original_path": "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_soft.toml"
+  },
+  "cards/optimized_lmb.toml": {
+    "sha256_uncompressed": "c4d99ba8507ab73a5c754e1480c0e37978bd5489b31692f66e0ea030aff5b3e6",
+    "bytes_uncompressed": 1962,
+    "stored_path": "cards/optimized_lmb.toml",
+    "original_path": "/tmp/gl638-physics-comparison/cut-matched/cards/optimized_lmb.toml"
+  },
+  "provenance.json": {
+    "sha256_uncompressed": "7a03d1b103f331ecd5112a939eff9bbe7e6dbe0cd17727f11ab90f3e060ae0c9",
+    "bytes_uncompressed": 6473,
+    "stored_path": "provenance.json"
+  },
+  "analyze.py": {
+    "sha256_uncompressed": "de61fa4d831bfa0c062772536070c40cb15d022ba56016123ffeabd1e35605d2",
+    "bytes_uncompressed": 6806,
+    "stored_path": "analyze.py"
+  },
+  "analysis.json": {
+    "sha256_uncompressed": "c4056b6bd5c31898582de130a85e214740ad6118bd89df4b177ec0ebbdb12e2c",
+    "bytes_uncompressed": 8547,
+    "stored_path": "analysis.json"
+  },
+  "fix_source.patch": {
+    "sha256_uncompressed": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65",
+    "bytes_uncompressed": 14472,
+    "stored_path": "fix_source.patch.gz"
+  },
+  "fixture/production_tests.log": {
+    "sha256_uncompressed": "252183e426e74fc2753df5006318f2b75d0dad198d1ab5a2e1bebd23a0a83daf",
+    "bytes_uncompressed": 718,
+    "stored_path": "fixture/production_tests.log.gz",
+    "original_path": "/tmp/gl638-phase-space-ray-tests1.log"
+  },
+  "fixture/clippy.log": {
+    "sha256_uncompressed": "358c2cd505af49cf1d2686094dd7f02c9725f680d1fde2807d1a0ba272cd8ada",
+    "bytes_uncompressed": 422,
+    "stored_path": "fixture/clippy.log.gz",
+    "original_path": "/tmp/gl638-phase-space-ray-clippy1.log"
+  },
+  "fixture/clippy.jsonl": {
+    "sha256_uncompressed": "ab92240896b08f6a29f10c41142b9691719dd23f20da67502dab18a2bb38de0c",
+    "bytes_uncompressed": 691837,
+    "stored_path": "fixture/clippy.jsonl.gz",
+    "original_path": "/tmp/gl638-phase-space-ray-clippy1.jsonl"
+  },
+  "fixture/clippy_audit.json": {
+    "sha256_uncompressed": "631888135e91baf7829e85167a1d40f98395319eed1bb9b350802ff880036eae",
+    "bytes_uncompressed": 58,
+    "stored_path": "fixture/clippy_audit.json",
+    "original_path": "/tmp/gl638-phase-space-ray-clippy-audit1.json"
+  },
+  "fixture/format.log": {
+    "sha256_uncompressed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes_uncompressed": 0,
+    "stored_path": "fixture/format.log.gz",
+    "original_path": "/tmp/gl638-phase-space-ray-fmt1.log"
+  },
+  "build5/manifest.json": {
+    "sha256_uncompressed": "ed74938a08ead1b194135c5edbe6966cad3f5181e174a7bd749e81b30eb60fb7",
+    "bytes_uncompressed": 955,
+    "stored_path": "build5/manifest.json",
+    "original_path": "/tmp/hosted-joint-optimized-build5-manifest.json"
+  },
+  "build5/build.log": {
+    "sha256_uncompressed": "5bc4bfb22df01395a63be93ebfa92c068392d3b707c4d309b42601bb39afa95d",
+    "bytes_uncompressed": 524,
+    "stored_path": "build5/build.log.gz",
+    "original_path": "/tmp/hosted-joint-optimized-build5.log"
+  },
+  "build5/build.jsonl": {
+    "sha256_uncompressed": "09b7b990a56fa9c0547f9e4e1f1dd88f48648a7f6bb3a4d35a949d0be0396b59",
+    "bytes_uncompressed": 409188,
+    "stored_path": "build5/build.jsonl.gz",
+    "original_path": "/tmp/hosted-joint-optimized-build5.jsonl"
+  },
+  "build5/rustc/gammalooprs.json": {
+    "sha256_uncompressed": "7fc9ee33f7592ba276551a49e8db1d6ae22fc85941cd63b6aed7a6a240789dca",
+    "bytes_uncompressed": 16536,
+    "stored_path": "build5/rustc/gammalooprs.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/rustc-invocations-build5/gammalooprs.json"
+  },
+  "build5/rustc/gammaloop_api.json": {
+    "sha256_uncompressed": "8ae1c830c315a4718bb0263f15aa97ff459a321bfaa0e5518c1333bd8a436146",
+    "bytes_uncompressed": 14827,
+    "stored_path": "build5/rustc/gammaloop_api.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/rustc-invocations-build5/gammaloop_api.json"
+  },
+  "build5/rustc/status.json": {
+    "sha256_uncompressed": "d36d01070597ccc36f33a058af3ea9a5777a9049eb9e97bdcd58db6ec50ac298",
+    "bytes_uncompressed": 169,
+    "stored_path": "build5/rustc/status.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/rustc-invocations-build5/status.json"
+  },
+  "replay_build5/cuts.json": {
+    "sha256_uncompressed": "26ec119d86127f8c81a71dca98e028ef331ecee2d4bd143b2c4e591a89b4d7f2",
+    "bytes_uncompressed": 566793,
+    "stored_path": "replay_build5/cuts.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363-build5/cuts.json"
+  },
+  "replay_build5/cuts_joint.json": {
+    "sha256_uncompressed": "7ae8c2e5786c27a2855d77090a5d58d8a5affe6949a3bbdba025de2e72f77314",
+    "bytes_uncompressed": 587734,
+    "stored_path": "replay_build5/cuts_joint.json.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363-build5/cuts_joint.json"
+  },
+  "replay_build5/cuts.settings.toml": {
+    "sha256_uncompressed": "1e4615ad7880a59702f3eabe3950334bb63a075bfa0a97b53ecc2b129c09a198",
+    "bytes_uncompressed": 3183,
+    "stored_path": "replay_build5/cuts.settings.toml",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363-build5/cuts.settings.toml"
+  },
+  "replay_build5/cuts_joint.settings.toml": {
+    "sha256_uncompressed": "b7cf7b8bc621d5093dfe469deb1a4d7259c0db4ed354f0d2b7dc9d0733ea5b68",
+    "bytes_uncompressed": 3451,
+    "stored_path": "replay_build5/cuts_joint.settings.toml",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363-build5/cuts_joint.settings.toml"
+  },
+  "replay_build5/state_before.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "replay_build5/state_before.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363-build5/state_before.json"
+  },
+  "replay_build5/state_after.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "replay_build5/state_after.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363-build5/state_after.json"
+  },
+  "replay_build5/run.json": {
+    "sha256_uncompressed": "b5ac466ee5cff4dea965da87a618c7735cb83bc0f0bee3e7c8c077ac2ece6ebe",
+    "bytes_uncompressed": 481,
+    "stored_path": "replay_build5/run.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/reference-point-3363-build5-run.json"
+  },
+  "replay_build5/manifest.json": {
+    "sha256_uncompressed": "e8bf0d4a33f67ae63f0d949cfc8aa0a0381c884089cfc41482ce00ede79d4c86",
+    "bytes_uncompressed": 28315,
+    "stored_path": "replay_build5/manifest.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/manifest-reference-point-3363-build5.json"
+  },
+  "replay_build5/driver_build.json": {
+    "sha256_uncompressed": "36cd685beeac861df7572a9b3a001f9ddf8bdf06c0bba8ed89273a6d945f773f",
+    "bytes_uncompressed": 42289,
+    "stored_path": "replay_build5/driver_build.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/drivers/gate-reference-point-build5.build.json"
+  },
+  "replay_build5/run.log": {
+    "sha256_uncompressed": "a0257869f9fa61f853b6cb98c8e6337e317b54debe7cae318aff54c06da24c44",
+    "bytes_uncompressed": 142,
+    "stored_path": "replay_build5/run.log.gz",
+    "original_path": "/tmp/gl638-reference-point-3363-build5.log"
+  },
+  "build5/driver_verification.json": {
+    "sha256_uncompressed": "5582c578965619ed36204c57974cc7628237c99f48283a9a09ca4dcd3aa303f6",
+    "bytes_uncompressed": 9701,
+    "stored_path": "build5/driver_verification.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/build5-driver-verification.json"
+  },
+  "replay_build5/summary.json": {
+    "sha256_uncompressed": "de360226630a9ff44654b4efe326e295753556626f613c335dc7a8cd609c4b9b",
+    "bytes_uncompressed": 5772,
+    "stored_path": "replay_build5/summary.json"
+  },
+  "replay_build5/independent_matrix_analysis.json": {
+    "sha256_uncompressed": "12cd26f2449b1eedb1daa5548ebbb454539429401fbfa01b68660176a6ace452",
+    "bytes_uncompressed": 8553,
+    "stored_path": "replay_build5/independent_matrix_analysis.json",
+    "original_path": "/tmp/gl638-hosted-joint-gate/results-reference-point-3363-build5/independent_matrix_analysis.json"
+  },
+  "replay_build5/independent_analysis.py": {
+    "sha256_uncompressed": "073c2f859e9e52ce79d427dce37fa1d00e4d6834c41be47b80c7b9af7f546e5a",
+    "bytes_uncompressed": 6679,
+    "stored_path": "replay_build5/independent_analysis.py.gz",
+    "original_path": "/tmp/gl638-hosted-joint-gate/analyze_reference_point_build5.py"
+  }
+}

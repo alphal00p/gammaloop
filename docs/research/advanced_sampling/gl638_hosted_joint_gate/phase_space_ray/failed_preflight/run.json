@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-extended",
+    "/tmp/gl638-hosted-joint-gate/manifest-cut-combined-seven-physics.json",
+    "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight1",
+    "all",
+    "physics-preflight",
+    "20",
+    "16",
+    "1",
+    "1337"
+  ],
+  "started_utc": "2026-09-14T07:51:57.984968+00:00",
+  "cores": 20,
+  "memory_budget_GB": 300,
+  "pid": 2133249,
+  "returncode": 1,
+  "elapsed_seconds": 726.2355081919814,
+  "max_rss_KiB": 62764472
+}

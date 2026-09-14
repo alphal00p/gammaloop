@@ -1,0 +1,192 @@
+{
+  "checked_at_utc": "2026-09-14T09:17:36.883303+00:00",
+  "passed": true,
+  "scope": "read-only current sources/binaries/dependencies/captures/build completion; no numerical execution or state load",
+  "build": {
+    "head": "22eb17a6e389636c26fa7135f90abe421fbbded7",
+    "started_utc": "2026-09-14T08:59:45.967029+00:00",
+    "profile": "dev-optim",
+    "jobs": 2,
+    "purpose": "phase-space LU ray cancellation correctness fix",
+    "source_patch_sha256": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65",
+    "argv": [
+      "cargo",
+      "build",
+      "--profile",
+      "dev-optim",
+      "--locked",
+      "--offline",
+      "-p",
+      "gammaloop-api",
+      "--bin",
+      "gammaloop",
+      "--features",
+      "ufo_support",
+      "--message-format=json"
+    ],
+    "environment": {
+      "RUSTFLAGS": "-C linker=/nix/store/vdaz6sk455r8sbpi7wzaf9vlz5i9yyvx-gcc-wrapper-15.2.0/bin/gcc",
+      "CARGO_ENCODED_RUSTFLAGS": null,
+      "CARGO_TARGET_DIR": null,
+      "CARGO_BUILD_JOBS": "2"
+    },
+    "cargo_pid": 3595293,
+    "returncode": 0,
+    "watcher_returncode": 0,
+    "elapsed_seconds": 426.39208210399374,
+    "finished_utc": "2026-09-14T09:06:52.359212+00:00",
+    "source_unchanged": true
+  },
+  "source_patch": "/tmp/hosted-joint-optimized-build5-source.patch",
+  "source_patch_sha256": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65",
+  "source_hashes": {
+    "/common/dev/gammaloop_ir_safe_thresholds/crates/gammalooprs/src/cff/esurface.rs": "9d3136521456888f5ca534bee8640b15ba714bee8080023c4935cf59e044bfd1",
+    "/common/dev/gammaloop_ir_safe_thresholds/crates/gammalooprs/src/integrands/process/cross_section/mod.rs": "816bde397190ecd3e6ca94502d7f3c9c6c718876f0e542452f1b5b6d868bfeb1"
+  },
+  "drivers": [
+    {
+      "driver": "/tmp/gl638-hosted-joint-gate/drivers/gate-reference-point-build5",
+      "build_record": "/tmp/gl638-hosted-joint-gate/drivers/gate-reference-point-build5.build.json",
+      "source": "/tmp/gl638-hosted-joint-gate/drivers/gate.rs",
+      "source_sha256": "254a7465209162a8f5214329fab849ad5c32f5e3c6cc5c1c5eed32ba2ef3c1a2",
+      "binary_sha256": "7c715cc13e224652871abf7cb77e65bed4d90dbfa504931a2b6c96dd8041edf7",
+      "dependencies": {
+        "gammaloop_api": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libgammaloop_api.rlib",
+          "sha256": "8243401134eb17dd3aef1471f03a8c47049faae24e5b487a60b2069e3cf7ed0c"
+        },
+        "gammalooprs": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libgammalooprs-ec2cc2a666066bf5.rlib",
+          "sha256": "3416c512007ebedb87ae871ddd44bacea9a0151deee293841e1f5e5f1f35e147"
+        },
+        "symbolica": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libsymbolica-65681f143f1779a6.rlib",
+          "sha256": "982271405cf69fb76acff7e05ad7be4e7885f2db6591a1409cf325757aff391b"
+        },
+        "spenso": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libspenso-e6ac904bfd8dd720.rlib",
+          "sha256": "40805ef973bb05ed2a9bba203aaf5b088854a19a665782155f57e35d494c85f9"
+        },
+        "color_eyre": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libcolor_eyre-821e98309b993482.rlib",
+          "sha256": "2024d5c8f376778688e2456059840a42c57fe55d01b7d57ed262d90f89b4d0a1"
+        },
+        "figment": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libfigment-3ebdff869cec9c6f.rlib",
+          "sha256": "004f061a7f94f98f89d6811d900fffa9004c634f965256350ee032c3af884746"
+        },
+        "serde_json": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libserde_json-8d5a1b6683fc5257.rlib",
+          "sha256": "2d7b6881a08e597a14efd9e5511e883b3721e84b092372881614ba57e1863a68"
+        },
+        "toml": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libtoml-653cd84a2ec19d53.rlib",
+          "sha256": "b84333a350c51023ab444ccce0d84f7fa403527e86b97739a67134bb4173b167"
+        }
+      }
+    },
+    {
+      "driver": "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build5",
+      "build_record": "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build5.build.json",
+      "source": "/tmp/gl638-hosted-joint-gate/drivers/gate-before-reference-point.rs",
+      "source_sha256": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306",
+      "binary_sha256": "2fd035e87812264837a6cb0feb752a6abb63f827a90d1b461285442fd0dd311d",
+      "dependencies": {
+        "gammaloop_api": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libgammaloop_api.rlib",
+          "sha256": "8243401134eb17dd3aef1471f03a8c47049faae24e5b487a60b2069e3cf7ed0c"
+        },
+        "gammalooprs": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libgammalooprs-ec2cc2a666066bf5.rlib",
+          "sha256": "3416c512007ebedb87ae871ddd44bacea9a0151deee293841e1f5e5f1f35e147"
+        },
+        "symbolica": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libsymbolica-65681f143f1779a6.rlib",
+          "sha256": "982271405cf69fb76acff7e05ad7be4e7885f2db6591a1409cf325757aff391b"
+        },
+        "spenso": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libspenso-e6ac904bfd8dd720.rlib",
+          "sha256": "40805ef973bb05ed2a9bba203aaf5b088854a19a665782155f57e35d494c85f9"
+        },
+        "color_eyre": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libcolor_eyre-821e98309b993482.rlib",
+          "sha256": "2024d5c8f376778688e2456059840a42c57fe55d01b7d57ed262d90f89b4d0a1"
+        },
+        "figment": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libfigment-3ebdff869cec9c6f.rlib",
+          "sha256": "004f061a7f94f98f89d6811d900fffa9004c634f965256350ee032c3af884746"
+        },
+        "serde_json": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libserde_json-8d5a1b6683fc5257.rlib",
+          "sha256": "2d7b6881a08e597a14efd9e5511e883b3721e84b092372881614ba57e1863a68"
+        },
+        "toml": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libtoml-653cd84a2ec19d53.rlib",
+          "sha256": "b84333a350c51023ab444ccce0d84f7fa403527e86b97739a67134bb4173b167"
+        }
+      }
+    },
+    {
+      "driver": "/tmp/gl638-hosted-joint-gate/drivers/max-replay-build5",
+      "build_record": "/tmp/gl638-hosted-joint-gate/drivers/max-replay-build5.build.json",
+      "source": "/tmp/gl638-hosted-joint-gate/drivers/max_replay_current.rs",
+      "source_sha256": "29b9c6a48448935aee70159787063bb8a2c1cdd5b6a762ff596fd2d9061ca498",
+      "binary_sha256": "12172b64cd64a5e9aa1871e923d453db56c776dbf9b0b6da3c689fb20aac7eca",
+      "dependencies": {
+        "gammaloop_api": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libgammaloop_api.rlib",
+          "sha256": "8243401134eb17dd3aef1471f03a8c47049faae24e5b487a60b2069e3cf7ed0c"
+        },
+        "gammalooprs": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libgammalooprs-ec2cc2a666066bf5.rlib",
+          "sha256": "3416c512007ebedb87ae871ddd44bacea9a0151deee293841e1f5e5f1f35e147"
+        },
+        "symbolica": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libsymbolica-65681f143f1779a6.rlib",
+          "sha256": "982271405cf69fb76acff7e05ad7be4e7885f2db6591a1409cf325757aff391b"
+        },
+        "spenso": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libspenso-e6ac904bfd8dd720.rlib",
+          "sha256": "40805ef973bb05ed2a9bba203aaf5b088854a19a665782155f57e35d494c85f9"
+        },
+        "color_eyre": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libcolor_eyre-821e98309b993482.rlib",
+          "sha256": "2024d5c8f376778688e2456059840a42c57fe55d01b7d57ed262d90f89b4d0a1"
+        },
+        "figment": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libfigment-3ebdff869cec9c6f.rlib",
+          "sha256": "004f061a7f94f98f89d6811d900fffa9004c634f965256350ee032c3af884746"
+        },
+        "serde_json": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libserde_json-8d5a1b6683fc5257.rlib",
+          "sha256": "2d7b6881a08e597a14efd9e5511e883b3721e84b092372881614ba57e1863a68"
+        },
+        "toml": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libtoml-653cd84a2ec19d53.rlib",
+          "sha256": "b84333a350c51023ab444ccce0d84f7fa403527e86b97739a67134bb4173b167"
+        },
+        "bincode": {
+          "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/deps/libbincode-d653225ddcf3d562.rlib",
+          "sha256": "d982bf9b54ddd02d689e2be9398c8fab4906bb0e07e83440aae336f38b5263a2"
+        }
+      }
+    }
+  ],
+  "max_included_source": {
+    "path": "/tmp/gl638-hosted-joint-gate/drivers/gate-max-support.rs",
+    "sha256": "b53df2b439845729dd5a9c898c9cece83c28426457ec18701cf9787756310306"
+  },
+  "cli": {
+    "path": "/common/dev/gammaloop_ir_safe_thresholds/target/dev-optim/gammaloop",
+    "sha256": "5d3f6d86a975664f8b42262f2e9f1028fe54dc7b4a9ddf9edd98193907f17522"
+  },
+  "watcher": {
+    "status": "captured",
+    "cargo_pid": 3595293,
+    "captured": {
+      "gammalooprs": 3595311,
+      "gammaloop_api": 3724876
+    },
+    "elapsed_seconds": 372.2623544780072
+  }
+}

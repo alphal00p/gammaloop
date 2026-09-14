@@ -1,0 +1,35 @@
+{
+  "head": "22eb17a6e389636c26fa7135f90abe421fbbded7",
+  "started_utc": "2026-09-14T08:59:45.967029+00:00",
+  "profile": "dev-optim",
+  "jobs": 2,
+  "purpose": "phase-space LU ray cancellation correctness fix",
+  "source_patch_sha256": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65",
+  "argv": [
+    "cargo",
+    "build",
+    "--profile",
+    "dev-optim",
+    "--locked",
+    "--offline",
+    "-p",
+    "gammaloop-api",
+    "--bin",
+    "gammaloop",
+    "--features",
+    "ufo_support",
+    "--message-format=json"
+  ],
+  "environment": {
+    "RUSTFLAGS": "-C linker=/nix/store/vdaz6sk455r8sbpi7wzaf9vlz5i9yyvx-gcc-wrapper-15.2.0/bin/gcc",
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_TARGET_DIR": null,
+    "CARGO_BUILD_JOBS": "2"
+  },
+  "cargo_pid": 3595293,
+  "returncode": 0,
+  "watcher_returncode": 0,
+  "elapsed_seconds": 426.39208210399374,
+  "finished_utc": "2026-09-14T09:06:52.359212+00:00",
+  "source_unchanged": true
+}

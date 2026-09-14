@@ -7,6 +7,13 @@ documented below. The original measurements at commit
 those results remain archived. Performance tuning has stopped at the user's
 request. No integration gain or bounded-weight claim follows from these tests.
 
+The later seven-candidate cut-matched preflight exposed a foreign Cut1 inverse
+failure at an ordinary-fallback point. Its exact reproduction and narrowly
+scoped prepared-ray fix are recorded in
+[PHASE_SPACE_RAY_CERTIFICATION.md](PHASE_SPACE_RAY_CERTIFICATION.md).
+The rebuilt exact GL638 point replay passes with unchanged native forwards;
+the complete seven-candidate preflight remains pending.
+
 ## Fixed physical calculation and proposal
 
 The saved state is `/common/dev/gl638_checkpoint_06d470409/all/state`:

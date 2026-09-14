@@ -1,0 +1,173 @@
+{
+  "status": "passed",
+  "scope": "Retained Halton3363 binder/source regression; one point is not normalization, physical acceptance or a global root guarantee. Reduced bridge denominator remains discarded.",
+  "run": {
+    "argv": [
+      "/tmp/gl638-hosted-joint-gate/drivers/gate-reference-point-build5",
+      "/tmp/gl638-hosted-joint-gate/manifest-reference-point-3363-build5.json",
+      "/tmp/gl638-hosted-joint-gate/results-reference-point-3363-build5",
+      "cuts,cuts_joint",
+      "reference-point",
+      "1",
+      "1",
+      "1",
+      "1337"
+    ],
+    "started_utc": "2026-09-14T09:18:22.315786+00:00",
+    "pid": 3984626,
+    "returncode": 0,
+    "elapsed_seconds": 81.7997306130128,
+    "max_rss_KiB": 5235712
+  },
+  "counts": {
+    "forward_successes": 13,
+    "foreign_cut1_inverse_successes": 13,
+    "foreign_inverse_failures": 0,
+    "full_summed_reference_successes": 2,
+    "full_selected_reference_successes": 1
+  },
+  "within_build_common_rows_exact": 6,
+  "full936_six_cuts_and_CT_inventory_unchanged": true,
+  "all35_state_hashes_unchanged": true,
+  "halton_bits_and_original_nested_samples_unchanged": true,
+  "joint_forward_full_record_unchanged": true,
+  "comparison_to_build4": [
+    {
+      "generator": "lu_cut_0",
+      "forward_record_exact": true,
+      "forward_point_exact": true,
+      "max_absolute_point_difference_GeV": "0E-300",
+      "relative_forward_J_difference": "0",
+      "old_inverse_status": "ok",
+      "new_inverse_status": "ok",
+      "new_inverse_residual": "9.55661945347296132085851693797188781687901641084629017212635483951070116839194249681346894948230248816225269688652024447196659221866529172317717316816825094384036522125644953880570957809563475467366902575375475833078284815151036201784502549632425066302155139946932716666337089770148822243346086820293426e-299",
+      "inverse_record_exact": true,
+      "relative_inverse_J_difference": "0"
+    },
+    {
+      "generator": "lu_cut_1",
+      "forward_record_exact": true,
+      "forward_point_exact": true,
+      "max_absolute_point_difference_GeV": "0E-300",
+      "relative_forward_J_difference": "0",
+      "old_inverse_status": "ok",
+      "new_inverse_status": "ok",
+      "new_inverse_residual": "1.57814877888894312437224142012797483382250163581455826963531894859498004646003659786245859312251694409007512797217829427754838939860966877967701170189184690879238843643990782911332567349215999708527092993648430628294470666251992404025155645647307694054389095864283517957302345586066568204443186798155877e-297",
+      "inverse_record_exact": true,
+      "relative_inverse_J_difference": "0",
+      "own_forward_J_times_inverse_q_error": "8.8108196763453072881195835310886743343228226612179778717506721771089700052601825145415392232029037637057714276251818174410003808558648186326501929326474150922455314802727150712226472028936082228629229780195628504276412535998077366791305771863528632375676915205692953319132464118190122001854555431794751173783E-298"
+    },
+    {
+      "generator": "lu_cut_2",
+      "forward_record_exact": true,
+      "forward_point_exact": true,
+      "max_absolute_point_difference_GeV": "0E-301",
+      "relative_forward_J_difference": "0",
+      "old_inverse_status": "ok",
+      "new_inverse_status": "ok",
+      "new_inverse_residual": "2.03339477199481329354360710004425284916171884335467744404579120354745270563401995234933458468086334582108556406019045982964070421152616578188070555652392433168353395938218283741698047155808291049638574934690242846202242866723738054340632241712805442818274962784802441706310083124140649795293208394927277e-297",
+      "inverse_record_exact": true,
+      "relative_inverse_J_difference": "0"
+    },
+    {
+      "generator": "lu_cut_3",
+      "forward_record_exact": true,
+      "forward_point_exact": true,
+      "max_absolute_point_difference_GeV": "0E-300",
+      "relative_forward_J_difference": "0",
+      "old_inverse_status": "ok",
+      "new_inverse_status": "ok",
+      "new_inverse_residual": "0",
+      "inverse_record_exact": true,
+      "relative_inverse_J_difference": "0"
+    },
+    {
+      "generator": "lu_cut_4",
+      "forward_record_exact": true,
+      "forward_point_exact": true,
+      "max_absolute_point_difference_GeV": "0E-300",
+      "relative_forward_J_difference": "0",
+      "old_inverse_status": "ok",
+      "new_inverse_status": "ok",
+      "new_inverse_residual": "0",
+      "inverse_record_exact": true,
+      "relative_inverse_J_difference": "0"
+    },
+    {
+      "generator": "lu_cut_5",
+      "forward_record_exact": true,
+      "forward_point_exact": true,
+      "max_absolute_point_difference_GeV": "0E-300",
+      "relative_forward_J_difference": "0",
+      "old_inverse_status": "ok",
+      "new_inverse_status": "ok",
+      "new_inverse_residual": "0",
+      "inverse_record_exact": true,
+      "relative_inverse_J_difference": "0"
+    },
+    {
+      "generator": "direct_joint_HZ",
+      "forward_record_exact": true,
+      "forward_point_exact": true,
+      "max_absolute_point_difference_GeV": "0E-296",
+      "relative_forward_J_difference": "0",
+      "old_inverse_status": "error",
+      "new_inverse_status": "ok",
+      "new_inverse_residual": "1.58856244792077785770555617993809021300365813351589976866794431009444161669758639025231441498422500631825388169373746876569490754477674424809353805792120294869118608541466308361733340261235622098428717694255393996019604202997222204092311434616219342041168561154874816533665215618968666185751343966224823e-292"
+    }
+  ],
+  "summed_reference_reports": {
+    "cuts": {
+      "expected_raw_second_moment": 1085600.0,
+      "finite_points": 1,
+      "jacobian_abs_max": 3.328537017129335e+26,
+      "jacobian_max": 3.328537017129335e+26,
+      "jacobian_min": 9.897857167142248e+23,
+      "normalization": 9.827987381856061e-09,
+      "normalization_dispersion": 0.0,
+      "normalization_squared": 9.658933597792195e-17,
+      "points": 1,
+      "raw_second_moment": 0.0011394575905770438,
+      "second_moment_dispersion": 0.0
+    },
+    "cuts_joint": {
+      "expected_raw_second_moment": 1085600.0,
+      "finite_points": 1,
+      "jacobian_abs_max": 4.87505662544399e+54,
+      "jacobian_max": 4.87505662544399e+54,
+      "jacobian_min": 9.88639933487526e+23,
+      "normalization": 9.816509354630045e-09,
+      "normalization_dispersion": 0.0,
+      "normalization_squared": 9.636385590953919e-17,
+      "points": 1,
+      "raw_second_moment": 0.001138117673273438,
+      "second_moment_dispersion": 0.0
+    }
+  },
+  "selected_reference_report": {
+    "expected_raw_second_moment": 1085600.0,
+    "finite_points": 1,
+    "jacobian_abs_max": 4.87505662544399e+54,
+    "jacobian_max": 4.87505662544399e+54,
+    "jacobian_min": 4.87505662544399e+54,
+    "normalization": 0.0,
+    "normalization_dispersion": 0.0,
+    "normalization_squared": 0.0,
+    "points": 1,
+    "raw_second_moment": 0.0,
+    "second_moment_dispersion": 0.0
+  },
+  "selected_zero_scope": "Gaussian selected value is finite zero at this very large point; this validates completed preparation, not a nonzero physical result.",
+  "input_sha256": {
+    "/tmp/gl638-hosted-joint-gate/reference-point-3363-build5-run.json": "b5ac466ee5cff4dea965da87a618c7735cb83bc0f0bee3e7c8c077ac2ece6ebe",
+    "/tmp/gl638-hosted-joint-gate/results-reference-point-3363/cuts.json": "fbd6f40283ab05315422721fcba6af84e4e8f815381d74ceeb00d363f375a1f1",
+    "/tmp/gl638-hosted-joint-gate/results-reference-point-3363/cuts_joint.json": "aceb945a00b0c231c08e0d58f86f040b9d3e10909edfba790441e207e1bdd189",
+    "/tmp/gl638-hosted-joint-gate/results-reference-point-3363-build5/cuts.json": "26ec119d86127f8c81a71dca98e028ef331ecee2d4bd143b2c4e591a89b4d7f2",
+    "/tmp/gl638-hosted-joint-gate/results-reference-point-3363-build5/cuts_joint.json": "7ae8c2e5786c27a2855d77090a5d58d8a5affe6949a3bbdba025de2e72f77314",
+    "/tmp/gl638-hosted-joint-gate/results-reference-point-3363/state_before.json": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "/tmp/gl638-hosted-joint-gate/results-reference-point-3363/state_after.json": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "/tmp/gl638-hosted-joint-gate/results-reference-point-3363-build5/state_before.json": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "/tmp/gl638-hosted-joint-gate/results-reference-point-3363-build5/state_after.json": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f"
+  },
+  "analysis_script_sha256": "073c2f859e9e52ce79d427dce37fa1d00e4d6834c41be47b80c7b9af7f546e5a"
+}

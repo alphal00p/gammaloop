@@ -1,0 +1,146 @@
+# Prepared matched GL638 cut-channel screen; static syntax/invariant checks only, no numerical gate yet.
+[general]
+m_uv = 91.188
+mu_r = 91.188
+integral_unit = "picobarn"
+generate_events = false
+store_additional_weights_in_event = false
+
+[kinematics]
+e_cm = 1000.0
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]
+helicities = ["summed_averaged", "summed_averaged"]
+
+[integrator]
+n_bins = 16
+min_samples_for_update = 64
+n_start = 2048
+n_increase = 0
+n_max = 2048
+discrete_dim_learning_rate = 0.25
+continuous_dim_learning_rate = 0.25
+seed = 1337
+integrated_phase = "real"
+train_on_avg = false
+
+[stability]
+escalate_if_exact_zero = false
+check_on_norm = true
+
+[[stability.rotation_axis]]
+type = "euler_angles"
+alpha = 0.1
+beta = 0.2
+gamma = 0.3
+
+[[stability.levels]]
+precision = "Double"
+required_precision_for_re = 1e-06
+required_precision_for_im = 1e-06
+escalate_for_large_weight_threshold = 0.9
+
+[[stability.levels]]
+precision = "Quad"
+required_precision_for_re = 1e-10
+required_precision_for_im = 1e-10
+escalate_for_large_weight_threshold = -1.0
+
+[[stability.levels]]
+precision = "Arb"
+required_precision_for_re = 1e-12
+required_precision_for_im = 1e-12
+escalate_for_large_weight_threshold = -1.0
+
+[sampling]
+default_channel_selection = []
+graphs = "monte_carlo"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+sampling_channel_weight = "map_density"
+b = 0.3
+orientations = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+power = 1.0
+
+[sampling.channel_selection]
+GL638 = ["lu_cut_0", "lu_cut_1", "lu_cut_2", "lu_cut_3", "lu_cut_4", "lu_cut_5", "direct_joint_HZ", "soft_6_12"]
+
+[subtraction]
+esurface_existence_threshold = 1e-14
+disable_threshold_subtraction = false
+
+[subtraction.local_ct_settings]
+
+[subtraction.local_ct_settings.uv_localisation]
+gaussian_width = 1.0
+sliver_width = 10.0
+smooth_sliver = false
+dynamic_width = false
+force_uv_dampers_to_one = false
+
+[h_function]
+function = "poly_exponential"
+sigma = 1.0
+power = 3
+
+
+[sampling.channel_definitions.GL638.lu_cut_0]
+around = "phase_space(cut(2,6,12,13))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [0]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_1]
+around = "phase_space(cut(2,6,10))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [1]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_2]
+around = "phase_space(cut(2,6,7,13,14))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [2]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_3]
+around = "phase_space(cut(2,4,12))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [3]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_4]
+around = "phase_space(cut(2,4,10,13))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [4]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_5]
+around = "phase_space(cut(2,4,7,14))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [5]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+# The compact joint chart requires explicit full-volume siblings. The six
+# unchanged LU-h cut maps supply them; the canonical catalogue owns all IDs.
+# This is the original global H/Z pair at the host, with no CT-star pullback.
+[sampling.channel_definitions.GL638.direct_joint_HZ]
+around = "then(complement(6,7,10),block(lmb(3),at_cut(cut(2,6,10),intersect(surface(2,4,12),surface(3,10,13)))))"
+parent_lmb = [3,6,7,10]
+on_cut = [1]
+
+# Reuse the recorded soft LMB channel; this adds one full-volume proposal.
+[sampling.channel_definitions.GL638.soft_6_12]
+parent_lmb = [3, 4, 7, 10]
+around = "lmb(6,12,13,14)"
