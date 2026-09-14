@@ -40,8 +40,14 @@ The measured worker rule chose 20; the 30-worker baseline control is retained
 and excluded from the screen. The first confirmation attempt stopped on the
 ordinary baseline at seed 20011: canonical physical cut-group-3 root certification
 failed at Arb1000 before the body. Three earlier runs completed, but no partial
-confirmation is pooled; source/root investigation is pending. Physical maximum
-attribution and a supported central estimate remain pending.
+confirmation is pooled. The [captured source](docs/research/advanced_sampling/GL638_CONFIRMATION_ROOT.md)
+reproduces that exact error; repair validation remains pending. The
+[maximum replay and three-point attribution](docs/research/advanced_sampling/GL638_SCREEN_MAXIMUM_REPLAY.md)
+now pass: 84 signed extrema, 59 distinct Samples, 28 Arb controls, and unchanged
+native trace totals/events. Remaining large weights include ordinary projected
+threshold terms and materially moved CT-star normals; the soft-labelled maximum
+is not at a soft-gluon endpoint. These are finite-point observations, not a global
+bound or variance cure. A supported confirmation estimate remains pending.
 See also the [center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
 
 Current implementation status: there is one `SamplingChannelCatalogue` and one

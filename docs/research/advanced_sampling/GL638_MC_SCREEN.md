@@ -50,8 +50,8 @@ have smaller observed errors and component maxima than their cut-only control
 in this screen. The soft variants retain large outliers and errors; none are
 excluded after observing them. The local composed-chart reduction of about
 7.9 on the two H/Z rays does not translate into a similarly separated screen
-score: other sampled regions still contribute. Physical attribution of the
-retained maxima is a separate follow-up.
+score: other sampled regions still contribute. The [completed maximum replay and three-point attribution](GL638_SCREEN_MAXIMUM_REPLAY.md)
+now examine retained maxima separately.
 
 These are empirical errors from a small screen of a potentially heavy-tailed
 integrand. Stability acceptance and finite observed maxima do not establish
@@ -90,8 +90,8 @@ The first confirmation attempt subsequently stopped on `optimized_lmb` seed
 20011: canonical physical overlap preparation for cut group 3 could not certify
 its Arb1000 root before body evaluation. The three seed-10007 runs completed;
 they are not pooled as confirmation. The saved-state hashes remain unchanged.
-The [pending failure note](/tmp/gl638-hosted-joint-gate/CONFIRMATION_FAILURE_PENDING.md)
-and [attempt record](/tmp/gl638-hosted-joint-gate/confirmation-build5-run.json)
+The [retained interruption](GL638_CONFIRMATION_ROOT.md)
+and [attempt record](gl638_hosted_joint_gate/mc_confirmation_root/attempt1/run.json.gz)
 retain this interruption separately while exact-source/root-owner investigation
 proceeds. No cause or repair is established by the screen results.
 

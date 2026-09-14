@@ -1,0 +1,70 @@
+{
+  "passed": true,
+  "scope": "Read-only input/record comparison; no Gamma evaluation, state load, state-file rehash or source writes. Numeric error cause remains unresolved.",
+  "checks": [
+    {
+      "name": "all authenticated reduction input files retain original hashes",
+      "passed": true
+    },
+    {
+      "name": "summary input hashes exactly match frozen request",
+      "passed": true
+    },
+    {
+      "name": "complete original native error string reproduced",
+      "passed": true
+    },
+    {
+      "name": "exact source coordinate address",
+      "passed": true
+    },
+    {
+      "name": "all12 cube decimal values reproduce captured binary64 bits",
+      "passed": true
+    },
+    {
+      "name": "complete cumulative weights and channel path retained",
+      "passed": true
+    },
+    {
+      "name": "source mixed seed and RNG stream match production",
+      "passed": true
+    },
+    {
+      "name": "state hash records remain unchanged without reopening state",
+      "passed": true
+    },
+    {
+      "name": "all inputs retained unchanged and run succeeded",
+      "passed": true
+    },
+    {
+      "name": "source equals successful compiled input",
+      "passed": true
+    },
+    {
+      "name": "core and API build identities match unchanged build5",
+      "passed": true
+    },
+    {
+      "name": "captured canonical ordinary channel agrees",
+      "passed": true
+    },
+    {
+      "name": "partial cancellation preserved",
+      "passed": true
+    },
+    {
+      "name": "captured row equals nested worker summary",
+      "passed": true
+    }
+  ],
+  "source_index": 5156,
+  "worker": 3,
+  "worker_local_index": 239,
+  "partial_evaluated_total": 1844,
+  "requested_source_count": 32768,
+  "whole_process_seconds": 121.4519633220043,
+  "client_elapsed_seconds": 108.698550094,
+  "native_source_scope": "Exact same original error at the captured complete binary64 Sample. Canonical map output is a following low-level ordinary bridge evaluation, not a replacement physical root solve."
+}
