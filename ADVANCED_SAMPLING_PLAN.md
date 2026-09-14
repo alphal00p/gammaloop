@@ -16,12 +16,14 @@ resource limits below supersede the earlier 10% optimization stopping rule.
 The canonical physical-center repair now passes its generated gates and the
 actual retained GL638 failure: CT-on Euler accepts Quad and Arb without changing
 the canonical point/J/partition, and Pi2Z returns identical native totals and
-six cut weights at each precision. The first local H/Z scan is also complete:
-eight saved points on two hard rays, compared through optimized LMB, direct-H
-and joint channels with actual forwarded points and native inverse diagnostics.
-The next local check extends each direction by two decades; full-state reference
-and matched integration evidence remain pending. These are local/fixed-point
-results, not global boundedness or variance claims. See the
+six cut weights at each precision. The local H/Z scan and two-decade extension
+are complete: two hard directions over five decades, compared through optimized
+LMB, direct-H and joint channels using actual forwarded points and native inverse
+diagnostics. The [local result](docs/research/advanced_sampling/LOCAL_HZ_BOUNDING.md)
+shows nearly constant joint weights on these directions, without a global bound
+or variance claim. Seven-candidate preflight is underway, including genuinely
+composed Cut1 LU-h to H/Z maps with and without the soft LMB. Full-state reference
+and Monte Carlo integration comparisons remain pending. See also the
 [center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
 
 Current implementation status: there is one `SamplingChannelCatalogue` and one
@@ -1226,16 +1228,18 @@ semantics and native raised packets; CT-off/reference skip it. The
 does not establish amplitude covariance, global stability, GL638 normalization
 or integration gain.
 Continue reporting sampling cost honestly; exceeding 10% no longer blocks
-physics studies. The first eight-point, two-direction H/Z scan is complete for
-optimized LMB, direct-H and joint configurations. Extend those directions by two
-decades next, retaining actual forward/inverse normal distances and full physical
-values. Then establish actual-state reference correctness and compare the
-candidate combinations below at equal sample counts. Report signed and absolute
+physics studies. The eight-point H/Z scan and two-decade extension are complete
+for optimized LMB, direct-H and joint configurations. The
+[archived local comparison](docs/research/advanced_sampling/LOCAL_HZ_BOUNDING.md)
+retains actual forward/inverse distances, full sampled weights and its directional
+limitations. Seven-candidate preflight is underway; establish actual-state
+reference correctness before comparing the candidates below at equal sample
+counts. Report signed and absolute
 integrals with Monte Carlo errors, maximum weights and their origin, H/Z-corner
 boundedness/scaling tests, and the best defensible GL638 central value and uncertainty. Compare
 the joint combinations' maxima against both optimized LMB and nonjoint advanced
 sampling. Up to 30 cores and 300 GB may be used when scaling is useful. Full-state
-normalization, the two-decade extension and integration comparisons remain pending.
+normalization and Monte Carlo integration comparisons remain pending.
 
 For historical scale only, the optimized
 [X2 physical pilot](docs/research/advanced_sampling/GL638_X2_PHYSICAL_PILOT.md#fixed-budget-pilot)
@@ -1351,13 +1355,19 @@ amplitude need not benefit from concentrating on a particular threshold.
 
 ## 6. GL638 validation and completion criteria
 
-The latest candidate matrix uses optimized LMB as the baseline. Every advanced
+The matched candidate matrix uses optimized LMB as the baseline. Every advanced
 candidate includes sampling channels for all six physical cuts, with the direct
 H/Z joint channel switched on or off and the explicit soft LMB `[6,12,13,14]`
 independently included or omitted. Thus compare cuts, cuts+soft, cuts+joint, and
 cuts+joint+soft against the same baseline. Keep the cut-1 radial channel when
 adding its hosted joint channel; selecting a proposal never restricts the
 physical six-cut sum. Preserve normalized full-support coverage in each case.
+
+The seven-candidate preflight adds cuts+combined-joint and
+cuts+combined-joint+soft. Their single composed channel first applies Cut1 LU-h
+sampling to `[6,10]`, samples ordinary complement `[7]`, then applies hosted H/Z
+to `[3]`, in parent `[3,6,7,10]`. This combines radial and joint focusing in one
+map; merely including separate Cut1 and H/Z siblings does not do that.
 
 | Physical cut ID | Exact cut edges | Joint target when enabled |
 | --- | --- | --- |

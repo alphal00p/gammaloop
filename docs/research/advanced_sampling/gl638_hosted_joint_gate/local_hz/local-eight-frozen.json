@@ -1,0 +1,30 @@
+{
+  "driver_source": "/tmp/gl638-hosted-joint-gate/drivers/gate-local-eight.rs",
+  "driver_sha256": "ab24de37c1e028d1bf40ef159140537b8c69fcb85a5a73f8fc2f1ea99ca513b0",
+  "files": {
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/direct_h_p2.hz_00_stack.approach.json": "efb162d5d38303f5f5897b917b0225653d5e0a50f2dac0add1cf46aecdf25997",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/direct_h_p2.hz_01_stack.approach.json": "ec0e6fca7c0a24188569dd3c09a78ec1cda38e7df02a73ec3fe4fce55fca007b",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/direct_h_p2.hz_02_stack.approach.json": "9cac2d177704faf1c157cc6ef1aa96c7be59101ecaf6a8beadd6d039cacc1dcc",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/direct_h_p2.hz_03_stack.approach.json": "6c1c544879aef9dbae3ad5411249e9a011d9f01671b6e1b3d8ab320284ca2f74",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/direct_h_p2.hz_04_stack.approach.json": "9c422e7fd7f419ea381e805d20cf265a89899c155a87324bf299687b81d86d53",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/direct_h_p2.hz_05_stack.approach.json": "b5059a233cccf0318fb1f35d9a0618e60fabbadb4d4a9b71f11388f1a678e1f4",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/direct_h_p2.hz_06_stack.approach.json": "b5a939d5657bed8d67d7a428830a56436aa2dbc09c50c127832c5e27568619e2",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/direct_h_p2.hz_07_stack.approach.json": "54317e1b7515eb4f431837068b66d2b8310826e8d545df250e623c1a4e687a10",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/joint_hz_plus_lmb.hz_00_stack.approach.json": "eb61f73ae0816ab3a1789663e7c0ed47ce8a27dd39abdb4b819c8685b8efd5cf",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/joint_hz_plus_lmb.hz_01_stack.approach.json": "8ec7c0d316b480bcedb05c06608e76a3f193a8f8fc2bcbc226a3e2eef3176a7a",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/joint_hz_plus_lmb.hz_02_stack.approach.json": "9bc2e6f5e4c28ccf96a5950a644aafc01e91b6718d1b106ebd1b136d3fb2f192",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/joint_hz_plus_lmb.hz_03_stack.approach.json": "c794e4f918d9aa6c3f5c14c05d1f081b86424f9da5167676f6e7b682efed6086",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/joint_hz_plus_lmb.hz_04_stack.approach.json": "0a513211e2f1fb71e77a389251e847570b6452eb4331d5a84b0c37d30c9f9b6c",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/joint_hz_plus_lmb.hz_05_stack.approach.json": "bfd4621ad18713fe319544283fe1a8a5d0ce7982be21b4a3c1452a6de9191bd8",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/joint_hz_plus_lmb.hz_06_stack.approach.json": "ca3ca4b26c254dd8378fc0dc9159cbcd0257659699ab7640504089f46b8e798d",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/joint_hz_plus_lmb.hz_07_stack.approach.json": "a18c4f1ea355e50334aecc7e3f8051e581360fddd2c75bb9354da65f32e64f6a",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/optimized_lmb.hz_00_stack.approach.json": "2aa1ccbfeb2b4db481818de7d480ad9fa8a4c861c75ddc06dfa0ac090fa77474",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/optimized_lmb.hz_01_stack.approach.json": "b5322ee8919b9303bdf818bed1059e59b766bd08ee7a04cdba81d96cd25eb2aa",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/optimized_lmb.hz_02_stack.approach.json": "f7c6b1de83608f73464c521a29765eac3085150a0cd9a974f0d83b9ed84301e4",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/optimized_lmb.hz_03_stack.approach.json": "921562169f7d17b1d448f972eafcb812559321960a6ff6172810350aa6db27ea",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/optimized_lmb.hz_04_stack.approach.json": "37fb0eeb52cfa8be4767a663f4520bfa607109261e937ab2b07553b9e3f14b90",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/optimized_lmb.hz_05_stack.approach.json": "96f2b15930e1e0a298907abd54cafb085c91f8c7caea7fcdfec7a351debbe815",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/optimized_lmb.hz_06_stack.approach.json": "599cd62260a9daba6d83b419cd9330d00ea3db4e9825f94f230d673fa92345a1",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1/optimized_lmb.hz_07_stack.approach.json": "e20d06903c90f47f67d72eaf225528ca6d7718a2b56a9c5f7ba60852e9113c79"
+  }
+}

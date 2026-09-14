@@ -1,0 +1,102 @@
+{
+  "argv": [
+    "/tmp/gl638-hosted-joint-gate/drivers/gate-physics",
+    "/tmp/gl638-hosted-joint-gate/manifest-local-approach.json",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach1",
+    "optimized_lmb,direct_h_p2,joint_hz_plus_lmb",
+    "local-approach",
+    "1",
+    "1",
+    "1",
+    "1337"
+  ],
+  "environment": {
+    "setup": "source /tmp/gammaloop-rebase-dev-env.sh",
+    "SYMBOLICA_LICENSE": "authorized license supplied; value not archived",
+    "GL_DISPLAY_FILTER": "off",
+    "RAYON_NUM_THREADS": "20"
+  },
+  "process_exit_code": 0,
+  "execution_confirmation": "root; original session20554, extension exact sidecar retained",
+  "summary_without_repeated_reports": {
+    "build_identity": {
+      "candidate_binary_sha256": "3837034b29e85742a665825609f1ba79dba31c4fd495f773645a96ccf35115e8",
+      "driver_sha256": "7c827857585c4668f73acab1e0d2d3a84c2e8c99def46fb4b15e72e634a39e7e",
+      "source_base_commit": "6e9bf401db75cb13ec20e18377a444bc2fcd4f33",
+      "source_candidate_commit": null,
+      "source_candidate_patch_sha256": "1d78e98b73e6a8dafaf6e446353c2a1607dc0724f8ea7d1c2d88c4962b81bba7"
+    },
+    "cold_load_seconds": 45.326838567,
+    "cost_policy": "record timing; former10% cap does not block physics per current user instruction",
+    "draws_per_worker": 1,
+    "error": null,
+    "mode": [
+      "optimized_lmb",
+      "direct_h_p2",
+      "joint_hz_plus_lmb"
+    ],
+    "preflight_accepted": false,
+    "preflight_reused_from": null,
+    "repetitions": 1,
+    "saved_state_unchanged": true,
+    "scope": {
+      "finite_smoke_is_not_normalization": true,
+      "gain_claim": false,
+      "maps_scope": "completed-point hosted joint; CT-star density cure remains pending",
+      "precision_scope": "fresh first iteration max_eval=0; trained-iteration rescue history not certified",
+      "runtime_cap": "representative, stored hard selected/bare and replayed representative maxima, each reported separately"
+    },
+    "seed": 1337,
+    "stage": "local-approach",
+    "status": "completed_requested_stages",
+    "workers": 1
+  },
+  "verified_inventory": {
+    "optimized_lmb": {
+      "orientation_keys": 936,
+      "cuts": 6,
+      "channels": 6,
+      "all_actual_forward_points_compact": true,
+      "point_count": 8
+    },
+    "direct_h_p2": {
+      "orientation_keys": 936,
+      "cuts": 6,
+      "channels": 1,
+      "all_actual_forward_points_compact": true,
+      "point_count": 8
+    },
+    "joint_hz_plus_lmb": {
+      "orientation_keys": 936,
+      "cuts": 6,
+      "channels": 7,
+      "all_actual_forward_points_compact": true,
+      "point_count": 8
+    }
+  },
+  "state_file_count": 35,
+  "state_hashes_identical": true,
+  "source_build": "../../canonical_centers/build.json",
+  "source_patch": "../../canonical_centers/source.patch.gz",
+  "driver_build": "driver_build.json",
+  "omitted_duplicate_reports": {
+    "summary.json": {
+      "sha256_uncompressed": "b0be9124d02c88b0b8712abbdd26e78cb6055ad219707242feaf7139d719adcb",
+      "bytes_uncompressed": 15802014
+    },
+    "optimized_lmb.json": {
+      "sha256_uncompressed": "5e96f79dad6fe46cfda65efadd1cd2cf64fc1651e4fdc5f9916a7e7595764c73",
+      "bytes_uncompressed": 5030845
+    },
+    "direct_h_p2.json": {
+      "sha256_uncompressed": "60c8c56d6ac6eedb9da130a16e7e88f43575be9c3623a8afa0d9a68005f9f1aa",
+      "bytes_uncompressed": 4997352
+    },
+    "joint_hz_plus_lmb.json": {
+      "sha256_uncompressed": "523631f61bb340de38205beed91d4157baedd1aba20dbe9654786f832797921f",
+      "bytes_uncompressed": 5041816
+    }
+  },
+  "runtime_budget_evidence": false,
+  "scope": "Completed local approach. Physical values use actual native forwarded points; distinct inverse-to-binary64 cubes need not give identical Cartesian points. No Gaussian normalization or global MC/variance claim."
+}

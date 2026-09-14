@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-extended",
+    "/tmp/gl638-hosted-joint-gate/manifest-local-approach-extension.json",
+    "/tmp/gl638-hosted-joint-gate/results-local-approach-extension1",
+    "optimized_lmb,direct_h_p2,joint_hz_plus_lmb",
+    "local-approach",
+    "1",
+    "1",
+    "1",
+    "1337"
+  ],
+  "started_utc": "2026-09-14T07:44:31.362524+00:00",
+  "pid": 2032250,
+  "returncode": 0,
+  "elapsed_seconds": 132.897087968071
+}
