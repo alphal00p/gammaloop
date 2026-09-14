@@ -1135,16 +1135,20 @@ impl CommandHistory {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct RunHistory {
+    /// Default runtime settings restored before replaying the recorded commands.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub default_runtime_settings: RuntimeSettings,
 
+    /// State and global CLI settings captured with this run history.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub cli_settings: CLISettings,
 
+    /// Named reusable command sequences declared by run cards.
     #[serde(skip_serializing_if = "is_command_blocks_empty")]
     pub command_blocks: Vec<CommandsBlock>,
     // #[serde(with = "serde_yaml::with::singleton_map_recursive")]
     // #[schemars(with = "Vec<CommandHistory>")]
+    /// Ordered top-level commands persisted for replay.
     pub commands: Vec<CommandHistory>,
 }
 
@@ -1451,9 +1455,13 @@ fn parse_toml_command_history(value: TomlValue, context: &str) -> Result<Command
 )]
 #[derive(Clone)]
 pub struct State {
+    /// Active physics model used to interpret processes and integrands.
     pub model: Model,
+    /// Numerical input-parameter values currently applied to the model.
     pub model_parameters: InputParamCard<F<f64>>,
+    /// Imported processes together with their generated integrands.
     pub process_list: ProcessList,
+    /// Generation provenance indexed by process and integrand.
     pub generation_summaries: BTreeMap<IntegrandGenerationSummaryKey, IntegrandGenerationSummary>,
 }
 
@@ -1522,10 +1530,15 @@ fn run_state_migration_checks(manifest: &StateManifest, save_path: &Path) -> Res
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StateFolderKind {
+    /// The configured state path does not exist.
     Missing,
+    /// The state directory is empty apart from its optional `logs` directory.
     Scratch,
+    /// The directory contains data but no state manifest.
     Unmanifested,
+    /// The directory contains a supported manifest and all required state files.
     Saved,
+    /// The path cannot be used as a saved state; the payload explains why.
     Invalid(String),
 }
 

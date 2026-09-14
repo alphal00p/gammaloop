@@ -607,9 +607,16 @@ except Exception as exc:
 points = np.array([{}, {}], dtype=float)
 batch = summarize_batch_result(api.evaluate_samples(points))
 momentum = summarize_result(api.evaluate_sample({}, momentum_space=True))
+try:
+    api.evaluate_sample([0.1, 0.2, 0.3, 0.4], momentum_space=True)
+except Exception as exc:
+    momentum_shape_error = str(exc)
+else:
+    raise AssertionError("momentum-space evaluation accepted an incomplete triplet")
 payload = {{
     "batch": batch,
     "momentum": momentum,
+    "momentum_shape_error": momentum_shape_error,
 }}
 "#,
             default_xspace_point(),
@@ -655,6 +662,12 @@ payload = {{
     let formatted = momentum["formatted"].as_str().unwrap();
     assert!(formatted.contains("parameterization jacobian"));
     assert!(formatted.contains("None"));
+    assert!(payload["momentum_shape_error"]
+        .as_str()
+        .unwrap()
+        .contains(
+            "Momentum-space evaluation expects flattened (px, py, pz) triplets, so the coordinate count must be a multiple of 3; got 4."
+        ));
 
     Ok(())
 }

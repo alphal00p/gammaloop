@@ -158,6 +158,8 @@ pub struct SpensoName {
     // pub args: Vec<Atom>,
 }
 
+impl ModuleInit for SpensoName {}
+
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
@@ -498,16 +500,7 @@ impl From<ShadowedStructure<AbstractIndex>> for SpensoIndices {
     }
 }
 
-impl ModuleInit for SpensoIndices {
-    fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
-        m.add_class::<SpensoIndices>()?;
-        m.add_class::<SpensoName>()?;
-        m.add_class::<SpensoSlot>()?;
-        m.add_class::<SpensoStructure>()?;
-        m.add_class::<SpensoRepresentation>()?;
-        Ok(())
-    }
-}
+impl ModuleInit for SpensoIndices {}
 
 pub enum ArithmeticStructure {
     Convertible(ConvertibleToExpression),
@@ -881,6 +874,8 @@ impl SpensoIndices {
 pub struct SpensoStructure {
     pub structure: PermutedStructure<ExplicitKey<AbstractIndex>>,
 }
+
+impl ModuleInit for SpensoStructure {}
 
 impl Deref for SpensoStructure {
     type Target = ExplicitKey<AbstractIndex>;
@@ -1417,6 +1412,8 @@ pub struct SpensoRepresentation {
     pub representation: Representation<LibraryRep>,
 }
 
+impl ModuleInit for SpensoRepresentation {}
+
 pub enum ConvertibleToAbstractIndex {
     Aind(AbstractIndex),
     Atom(PythonExpression),
@@ -1810,6 +1807,8 @@ pub struct SpensoSlot {
     pub slot: Slot<LibraryRep>,
 }
 
+impl ModuleInit for SpensoSlot {}
+
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoSlot {
@@ -1899,9 +1898,6 @@ impl SpensoSlot {
         PythonExpression::from(self.slot.to_atom())
     }
 }
-
-#[cfg(feature = "python_stubgen")]
-static EMPTY: fn() -> String = || "[]".into();
 
 #[cfg(feature = "python_stubgen")]
 static FALSE: fn() -> String = || "False".to_string();
@@ -2315,8 +2311,8 @@ list of int
                     ParameterInfo {
                         name: "extra_args",
                         kind:ParameterKind::KeywordOnly,
-                        default:ParameterDefault::Expr(EMPTY),
-                        type_info: Vec::<ConvertibleToExpression>::type_input,
+                        default:ParameterDefault::Expr(NONE_ARG),
+                        type_info: || Vec::<ConvertibleToExpression>::type_input() | TypeInfo::none(),
                     },
                 ],
                 r#type: MethodType::Instance,
@@ -2362,8 +2358,8 @@ Examples
 
                         name: "extra_args",
                         kind:ParameterKind::KeywordOnly,
-                        default:ParameterDefault::Expr(EMPTY),
-                        type_info: Vec::<ConvertibleToExpression>::type_input,
+                        default:ParameterDefault::Expr(NONE_ARG),
+                        type_info: || Vec::<ConvertibleToExpression>::type_input() | TypeInfo::none(),
                     },
                 ],
                 r#type: MethodType::Instance,
@@ -2416,8 +2412,8 @@ Examples
                     ParameterInfo {
                         name: "extra_args",
                         kind:ParameterKind::KeywordOnly,
-                        default:ParameterDefault::Expr(EMPTY),
-                        type_info: std::vec::Vec::<PythonExpression>::type_input,
+                        default:ParameterDefault::Expr(NONE_ARG),
+                        type_info: || std::vec::Vec::<PythonExpression>::type_input() | TypeInfo::none(),
                     },
                     ParameterInfo {
                         name: "cook_indices",

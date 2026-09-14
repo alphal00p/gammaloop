@@ -27,7 +27,7 @@ use crate::{
 )]
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Evaluate {
-    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
     #[arg(
         short = 'p',
         long = "process",
@@ -45,7 +45,7 @@ pub struct Evaluate {
     )]
     pub graphs_group_name: Option<String>,
 
-    /// The path to store results in
+    /// Write the canonical symbolic evaluation result to this TOML file
     #[arg(short = 'o', long, value_hint = clap::ValueHint::FilePath)]
     pub result_path: Option<PathBuf>,
 

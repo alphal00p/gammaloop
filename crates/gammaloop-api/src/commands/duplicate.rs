@@ -10,6 +10,7 @@ use crate::{
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Duplicate {
+    /// Copy one generated integrand and its process context under new names.
     Integrand(DuplicateIntegrand),
 }
 
@@ -23,7 +24,7 @@ impl Duplicate {
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct DuplicateIntegrand {
-    /// Source process reference: #<id>, name:<name>, or <id>/<name>
+    /// Source process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
     #[arg(
         short = 'p',
         long = "process",

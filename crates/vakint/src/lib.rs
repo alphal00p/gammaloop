@@ -44,6 +44,15 @@ use symbolica::{
 #[cfg(feature = "symbolica_community_module")]
 pub mod symbolica_community_module;
 
+/// Gather the Python API registered for the Vakint Symbolica community module.
+#[cfg(feature = "python_stubgen")]
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    pyo3_stub_gen::StubInfo::from_project_root(
+        "symbolica.community.vakint".to_owned(),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    )
+}
+
 use crate::alphaloop_numerics::DIRECT_SUBSTITUTIONS;
 
 #[allow(unused)]
@@ -1812,7 +1821,10 @@ impl EvaluationMethod {
 }
 
 #[derive(Debug, Clone)]
-pub struct EvaluationOrder(pub Vec<EvaluationMethod>);
+pub struct EvaluationOrder(
+    /// Evaluation backends tried in order until one supports the requested integral.
+    pub Vec<EvaluationMethod>,
+);
 
 impl Default for EvaluationOrder {
     fn default() -> Self {
@@ -1927,23 +1939,37 @@ pub enum InputFloatRationalizationPrecision {
 #[derive(Debug, Clone)]
 pub struct VakintSettings {
     #[allow(unused)]
+    /// Symbol used for the dimensional-regularization parameter epsilon.
     pub epsilon_symbol: String,
+    /// Symbol used for the squared renormalization scale.
     pub mu_r_sq_symbol: String,
+    /// Executable name or path used to invoke FORM.
     pub form_exe_path: String,
+    /// Executable name or path used to invoke Python-based backends.
     pub python_exe_path: String,
+    /// Whether canonicalization must account for every numerator factor.
     pub verify_numerator_identification: bool,
+    /// Per-loop normalization convention applied to evaluated integrals.
     pub integral_normalization_factor: LoopNormalizationFactor,
+    /// Requested decimal precision passed to numerical backends and conversions.
     pub run_time_decimal_precision: u32,
+    /// Whether inputs may match Vakint's generic unknown-integral topology.
     pub allow_unknown_integrals: bool,
+    /// Whether successful external-backend runs remove their temporary directories.
     pub clean_tmp_dir: bool,
+    /// Ordered analytic and numerical backends considered for each integral.
     pub evaluation_order: EvaluationOrder,
     // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
     // For example when considering a 2-loop problem, then:
     //   a) for the nested one-loop integrals appearing, the single pole, finite term *and* order-epsilon term will need to be considered.
     //   b) for the two-loop integrals, the double pole, single pole and finite terms will be needed, so again three terms
+    /// Number of terms retained in the dimensional-regulator expansion.
     pub number_of_terms_in_epsilon_expansion: i64,
+    /// Precision policy used when rationalizing floating-point input for FORM.
     pub precision_for_input_float_rationalization: InputFloatRationalizationPrecision,
+    /// Whether reduced scalar products remain in dot-product notation.
     pub use_dot_product_notation: bool,
+    /// Optional parent directory for uniquely named external-backend work directories.
     pub temporary_directory: Option<String>,
 }
 
@@ -2181,6 +2207,7 @@ impl From<Pattern> for FullPattern {
 
 #[derive(Debug, Clone)]
 pub struct Vakint {
+    /// Supported topology registry used for matching, canonicalization, and evaluation.
     pub topologies: Topologies,
 }
 
@@ -2569,7 +2596,10 @@ impl VakintTerm {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VakintExpression(pub Vec<VakintTerm>);
+pub struct VakintExpression(
+    /// Expression terms, each separating a matched integral from its numerator.
+    pub Vec<VakintTerm>,
+);
 
 impl fmt::Display for VakintExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -2734,7 +2764,10 @@ impl From<VakintExpression> for Atom {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct NumericalEvaluationResult(pub Vec<(i64, Complex<Float>)>);
+pub struct NumericalEvaluationResult(
+    /// Laurent coefficients stored as `(epsilon power, complex coefficient)` pairs.
+    pub Vec<(i64, Complex<Float>)>,
+);
 
 impl fmt::Display for NumericalEvaluationResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

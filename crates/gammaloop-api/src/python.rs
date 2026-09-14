@@ -71,6 +71,33 @@ use pyo3::{
     wrap_pyfunction, FromPyObject, PyRef, Python,
 };
 
+/// Evaluate a graph's symbolic overall factor and return its canonical form.
+///
+/// Parameters
+/// ----------
+/// overall_factor : str
+///     Symbolica expression used as the graph's overall factor.
+///
+/// Returns
+/// -------
+/// str
+///     The evaluated factor in canonical Symbolica form.
+///
+/// Raises
+/// ------
+/// Exception
+///     If the expression cannot be parsed or evaluated.
+///
+/// Examples
+/// --------
+/// Evaluate the symmetry and fermion-loop factors attached to a graph:
+///
+/// ```python
+/// evaluate_graph_overall_factor(
+///     "AutG(2)^-1*InternalFermionLoopSign(-1)"
+/// )
+/// ```
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "evaluate_graph_overall_factor")]
 pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> Result<String> {
@@ -79,12 +106,62 @@ pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> Result<Stri
     Ok(overall_factor_evaluated.to_canonical_string())
 }
 
+/// Parse a Symbolica expression and return its canonical string form.
+///
+/// Parameters
+/// ----------
+/// atom_str : str
+///     Symbolica expression to parse and normalize.
+///
+/// Returns
+/// -------
+/// str
+///     The parsed expression in canonical string form.
+///
+/// Raises
+/// ------
+/// Exception
+///     If ``atom_str`` is not a valid Symbolica expression.
+///
+/// Examples
+/// --------
+/// Normalize a symbolic expression before comparing or storing it:
+///
+/// ```python
+/// atom_to_canonical_string("x + x")
+/// ```
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "atom_to_canonical_string")]
 pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
     Ok(parse!(atom_str).to_canonical_string())
 }
 
+/// Rewrite a Symbolica tensor expression into Idenso dot-product notation.
+///
+/// Parameters
+/// ----------
+/// atom_str : str
+///     Symbolica tensor expression whose repeated indices encode contractions.
+///
+/// Returns
+/// -------
+/// str
+///     The equivalent expression using Idenso dot-product notation.
+///
+/// Raises
+/// ------
+/// Exception
+///     If ``atom_str`` cannot be parsed or converted.
+///
+/// Examples
+/// --------
+/// Rewrite a contraction before passing it to an Idenso workflow:
+///
+/// ```python
+/// to_dots("p(mu) * q(mu)")
+/// ```
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "to_dots")]
 pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
@@ -106,6 +183,10 @@ pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
 fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     gammalooprs::initialisation::initialise().expect("initialization failed");
     gammalooprs::set_interrupt_handler();
+    register_python_api(m)
+}
+
+fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<GammaLoopAPI>()?;
     m.add_class::<LogLevel>()?;
     m.add_class::<DotExportSettings>()?;
@@ -162,6 +243,23 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+#[cfg(feature = "python_stubgen")]
+#[doc(hidden)]
+pub fn register_python_api_for_docs(m: &Bound<PyModule>) -> PyResult<()> {
+    register_python_api(m)
+}
+
+/// Gather the Python API registered for `gammaloop._gammaloop`.
+#[cfg(feature = "python_stubgen")]
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    pyo3_stub_gen::StubInfo::from_project_root(
+        "gammaloop._gammaloop".to_owned(),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    )
+}
+
+/// Read-only, detached view over serialized GammaLoop settings.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SettingsValue", skip_from_py_object)]
 #[derive(Clone)]
 pub struct PySettingsValue {
@@ -169,30 +267,43 @@ pub struct PySettingsValue {
     path: String,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PySettingsValue {
+    /// Dot-separated location of this value within the settings tree.
     #[getter]
     fn path(&self) -> String {
         self.path.clone()
     }
 
+    /// JSON value kind: ``object``, ``array``, ``string``, ``number``, ``boolean``, or ``null``.
     #[getter]
     fn kind(&self) -> &'static str {
         json_type_name(&self.value)
     }
 
+    /// Return whether this value is an object with named children.
     fn is_object(&self) -> bool {
         self.value.is_object()
     }
 
+    /// Return whether this value is an array with indexed children.
     fn is_array(&self) -> bool {
         self.value.is_array()
     }
 
+    /// Return whether this value is a scalar JSON value, including ``null``.
     fn is_scalar(&self) -> bool {
         !self.value.is_object() && !self.value.is_array()
     }
 
+    /// Return this object's child keys in lexical order.
+    ///
+    /// Raises
+    /// ------
+    /// TypeError
+    ///     If this value is not an object.
     fn keys(&self) -> PyResult<Vec<String>> {
         match &self.value {
             JsonValue::Object(map) => {
@@ -208,6 +319,20 @@ impl PySettingsValue {
         }
     }
 
+    /// Resolve a dot-separated descendant path.
+    ///
+    /// An empty path returns this value. Objects become ``SettingsValue`` views,
+    /// while scalar values become their ordinary Python equivalents.
+    ///
+    /// Parameters
+    /// ----------
+    /// path : str
+    ///     Relative path such as ``"sampling.parameterization"``.
+    ///
+    /// Raises
+    /// ------
+    /// KeyError
+    ///     If the path does not exist below this value.
     fn get<'py>(&self, py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyAny>> {
         let value = if path.is_empty() {
             &self.value
@@ -223,10 +348,12 @@ impl PySettingsValue {
         py_object_from_settings_value(py, value, &self.extend_path(path))
     }
 
+    /// Convert the complete detached value tree to ordinary Python containers and scalars.
     fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         py_builtin_from_settings_value(py, &self.value)
     }
 
+    #[gen_stub(skip)]
     fn __getitem__<'py>(
         &self,
         py: Python<'py>,
@@ -258,6 +385,12 @@ impl PySettingsValue {
         ))
     }
 
+    /// Resolve an object child by attribute name.
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Immediate child key to resolve.
     fn __getattr__<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
         match &self.value {
             JsonValue::Object(map) => map.get(name).map_or_else(
@@ -280,6 +413,7 @@ impl PySettingsValue {
         }
     }
 
+    /// Return object-child names in lexical order, or an empty list for other kinds.
     fn __dir__(&self) -> Vec<String> {
         match &self.value {
             JsonValue::Object(map) => {
@@ -291,6 +425,7 @@ impl PySettingsValue {
         }
     }
 
+    /// Return the number of object or array children.
     fn __len__(&self) -> PyResult<usize> {
         match &self.value {
             JsonValue::Object(map) => Ok(map.len()),
@@ -303,18 +438,38 @@ impl PySettingsValue {
         }
     }
 
+    /// Return the detached settings value as pretty-printed JSON.
     fn __str__(&self) -> PyResult<String> {
         serde_json::to_string_pretty(&self.value).map_err(|e| {
             exceptions::PyException::new_err(format!("Could not format settings: {}", e))
         })
     }
 
+    /// Return a compact representation containing this value's path and kind.
     fn __repr__(&self) -> String {
         format!(
             "SettingsValue(path='{}', kind='{}')",
             self.path,
             json_type_name(&self.value)
         )
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! {
+        r#"
+        class PySettingsValue:
+            def __getitem__(self, key: typing.Any, /) -> typing.Any:
+                """Resolve a relative string path or array index.
+
+                Parameters
+                ----------
+                key : str or int
+                    Descendant path for an object, or zero-based index for an array.
+                """
+                ...
+        "#
     }
 }
 
@@ -455,150 +610,325 @@ pub struct PyComplexValue {
     pub im: f64,
 }
 
+// `ComplexValue` is returned inside other records but is intentionally not
+// registered as a module-level constructor. Keep its generated annotations
+// honest by treating that opaque value as `Any` without adding a fake export.
+#[cfg(feature = "python_stubgen")]
+impl pyo3_stub_gen::PyStubType for PyComplexValue {
+    fn type_output() -> pyo3_stub_gen::TypeInfo {
+        pyo3_stub_gen::TypeInfo::any()
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+impl pyo3_stub_gen::PyStubType for ProcessRef {
+    fn type_output() -> pyo3_stub_gen::TypeInfo {
+        <i64 as pyo3_stub_gen::PyStubType>::type_output()
+            | <String as pyo3_stub_gen::PyStubType>::type_output()
+    }
+
+    fn type_input() -> pyo3_stub_gen::TypeInfo {
+        <i64 as pyo3_stub_gen::PyStubType>::type_input()
+            | <String as pyo3_stub_gen::PyStubType>::type_input()
+    }
+}
+
+/// One energy-momentum four-vector returned with a generated event.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "FourMomentum", get_all)]
 #[derive(Clone)]
 pub struct PyFourMomentum {
+    /// Energy component.
     pub e: f64,
+    /// Momentum along the x axis.
     pub px: f64,
+    /// Momentum along the y axis.
     pub py: f64,
+    /// Momentum along the z axis.
     pub pz: f64,
 }
 
+/// Named auxiliary complex weight attached to a generated event.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "AdditionalWeight", get_all)]
 #[derive(Clone)]
 pub struct PyAdditionalWeight {
+    /// Stable weight name, optionally followed by colon-separated identifiers.
     pub key: String,
+    /// Complex auxiliary event weight associated with ``key``.
     pub value: PyComplexValue,
 }
 
+/// Process, graph, orientation, and loop-basis identifiers for one cut event.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "CutInfo", get_all)]
 #[derive(Clone)]
 pub struct PyCutInfo {
+    /// PDG identifiers aligned with ``Event.incoming_momenta``.
     pub incoming_pdgs: Vec<isize>,
+    /// PDG identifiers aligned with ``Event.outgoing_momenta``.
     pub outgoing_pdgs: Vec<isize>,
+    /// Zero-based cut identifier within the selected graph.
     pub cut_id: usize,
+    /// Zero-based graph identifier within the integrand.
     pub graph_id: usize,
+    /// Graph-group identifier, when group metadata is available.
     pub graph_group_id: Option<usize>,
+    /// Causal-flow orientation identifier, when sampled explicitly.
     pub orientation_id: Option<usize>,
+    /// Loop-momentum-basis multichannel identifier, when sampled explicitly.
     pub lmb_channel_id: Option<usize>,
+    /// Edge identifiers defining the selected loop-momentum basis, when available.
     pub lmb_channel_edge_ids: Option<Vec<usize>>,
 }
 
+/// Identity and master-graph status of one graph in an integrand.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandGraph", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandGraphInfo {
+    /// Zero-based graph identifier within the integrand.
     pub graph_id: usize,
+    /// Persistent graph name.
     pub name: String,
+    /// Whether this graph is the representative graph of its group.
     pub is_master: bool,
 }
 
+/// Edge-direction signature for one causal-flow orientation.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandOrientation", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandOrientationInfo {
+    /// Zero-based orientation identifier within the graph group.
     pub orientation_id: usize,
+    /// Direction per ``IntegrandGraphGroup.orientation_edge_ids``: ``1``, ``-1``, or ``0``.
     pub signature: Vec<i8>,
 }
 
+/// Loop-momentum basis and optional multichannel identifier for a graph group.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandLoopMomentumBasis", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandLoopMomentumBasisInfo {
+    /// Zero-based loop-momentum-basis identifier on the representative graph.
     pub basis_id: usize,
+    /// Effective multichannel identifier, or ``None`` when this basis is not sampled.
     pub channel_id: Option<usize>,
+    /// Edge identifiers whose momenta form the basis.
     pub edge_ids: Vec<usize>,
+    /// Whether this is the loop-momentum basis used during integrand generation.
     pub matches_generation_basis: bool,
 }
 
+/// Cut edges, raising power, and threshold associations for one cross-section cut.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandCut", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandCutInfo {
+    /// Zero-based cut identifier within the representative graph.
     pub cut_id: usize,
+    /// Edge identifiers crossed by the cut.
     pub edge_ids: Vec<usize>,
+    /// Maximum multiplicity of the cut's related threshold group.
     pub raising_power: usize,
+    /// Threshold associations on the left side of the cut.
     pub left_thresholds: Vec<PyIntegrandCutThresholdInfo>,
+    /// Threshold associations on the right side of the cut.
     pub right_thresholds: Vec<PyIntegrandCutThresholdInfo>,
 }
 
+/// Classification and boundary edges of one threshold associated with a cut.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandCutThreshold", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandCutThresholdInfo {
+    /// Threshold E-surface identifier within the graph group.
     pub esurface_id: usize,
+    /// Viability classification for this threshold-cut association.
     pub status: String,
+    /// Cut edges that bound the associated threshold region.
     pub cut_boundary_edge_ids: Vec<usize>,
+    /// Threshold edges that bound the associated threshold region.
     pub threshold_boundary_edge_ids: Vec<usize>,
+    /// Whether the invariant-bound criterion applies to this association.
     pub invariant_bound_is_applicable: bool,
 }
 
+/// Viable cut associated with a threshold E-surface.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandActiveThresholdCut", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandActiveThresholdCutInfo {
+    /// Zero-based identifier of a cut on which the E-surface remains viable.
     pub cut_id: usize,
+    /// Whether this cut can make the E-surface pinched for some kinematics.
     pub can_become_pinched: bool,
 }
 
+/// Threshold E-surface metadata and the cuts on which it remains active.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandThresholdEsurface", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandThresholdEsurfaceInfo {
+    /// E-surface identifier within the graph group.
     pub esurface_id: usize,
+    /// Graph whose local E-surface supplies ``edge_ids``.
     pub representative_graph_id: usize,
+    /// Edge identifiers contributing energies to this E-surface.
     pub edge_ids: Vec<usize>,
+    /// Kinematic existence class, or ``None`` when no static classification was computed.
     pub classification: Option<String>,
+    /// Cuts on which this E-surface remains viable.
     pub active_cuts: Vec<PyIntegrandActiveThresholdCutInfo>,
 }
 
+/// Graphs and shared orientation, loop-basis, threshold, and cut data in one group.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandGraphGroup", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandGraphGroupInfo {
+    /// Zero-based graph-group identifier within the integrand.
     pub group_id: usize,
+    /// Graphs in this group, with the representative graph marked as master.
     pub graphs: Vec<PyIntegrandGraphInfo>,
+    /// Edge identifiers that establish the ordering of every orientation signature.
     pub orientation_edge_ids: Vec<usize>,
+    /// Available causal-flow orientations for the representative graph.
     pub orientations: Vec<PyIntegrandOrientationInfo>,
+    /// Available loop-momentum bases for the representative graph.
     pub loop_momentum_bases: Vec<PyIntegrandLoopMomentumBasisInfo>,
+    /// Ordered identifiers of threshold E-surfaces retained for the group.
     pub threshold_esurface_ids: Vec<usize>,
+    /// Structured metadata for the retained threshold E-surfaces.
     pub threshold_esurfaces: Vec<PyIntegrandThresholdEsurfaceInfo>,
+    /// Cross-section cuts; empty for amplitude graph groups.
     pub cuts: Vec<PyIntegrandCutInfo>,
 }
 
+/// Structured description of a generated integrand and its evaluation backend.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandInfo", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandInfo {
+    /// Numeric identifier of the process that owns the integrand.
     pub process_id: usize,
+    /// Persistent folder name of the owning process.
     pub process_name: String,
+    /// Canonical name of the resolved integrand.
     pub integrand_name: String,
+    /// ``"amplitude"`` or ``"cross section"``.
     pub kind: String,
+    /// Compilation backend frozen into the generated integrand.
     pub generation_backend: String,
+    /// Backend-specific compilation options, when configured.
     pub generation_compile_options: Option<String>,
+    /// Floating-point evaluator backend currently active for f64 evaluation.
     pub active_f64_backend: String,
+    /// Number of amplitude graphs or cross-section supergraphs.
     pub graph_count: usize,
+    /// Number of graph groups in the generated integrand.
     pub graph_group_count: usize,
+    /// Serialized integrand-record size in bytes, excluding its compiled evaluator.
     pub record_size_bytes: usize,
+    /// Per-group graph, orientation, basis, threshold, and cut metadata.
     pub graph_groups: Vec<PyIntegrandGraphGroupInfo>,
 }
 
+/// Accepted cut event with momenta, its primary weight, and auxiliary weights.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "Event", get_all)]
 #[derive(Clone)]
 pub struct PyEvent {
+    /// Incoming four-momenta, aligned with ``cut_info.incoming_pdgs``.
     pub incoming_momenta: Vec<PyFourMomentum>,
+    /// Outgoing four-momenta, aligned with ``cut_info.outgoing_pdgs``.
     pub outgoing_momenta: Vec<PyFourMomentum>,
+    /// Cut, graph, orientation, and loop-basis identifiers for this event.
     pub cut_info: PyCutInfo,
+    /// Primary complex event weight.
     pub weight: PyComplexValue,
+    /// Named auxiliary complex weights such as threshold-counterterm contributions.
     pub additional_weights: Vec<PyAdditionalWeight>,
 }
 
+/// Correlated accepted events produced by one graph group for one sample.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "EventGroup", get_all)]
 #[derive(Clone)]
 pub struct PyEventGroup {
+    /// Correlated accepted events in this group.
     pub events: Vec<PyEvent>,
 }
 
+/// Mutable continuous or discrete histogram accumulator with sample-level statistics.
+///
+/// Notes
+/// -----
+/// The example below deliberately places at most one entry in each bin. If several correlated
+/// entries land in one bin, the current helper records their squared weights separately rather
+/// than grouping their weights like GammaLoop's native observable pipeline. Do not replay raw
+/// event groups through this class until that statistical contract is aligned.
+///
+/// Examples
+/// --------
+/// Merge two pending, statistically independent samples before committing them:
+///
+/// ```python
+/// from gammaloop import HistogramAccumulator
+///
+/// left = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
+/// right = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
+/// left.fill_continuous_sample([(0.5, 2.0)])
+/// right.fill_continuous_sample([(2.5, 3.0)])
+/// left.merge_in_place(right)
+/// left.update_results()
+///
+/// snapshot = left.snapshot()
+/// assert snapshot.sample_count == 2
+/// assert snapshot.bins[0].sum_weights == 2.0
+/// assert snapshot.bins[0].sum_weights_squared == 4.0
+/// assert snapshot.bins[0].sum_weights / snapshot.sample_count == 1.0
+/// assert snapshot.bins[2].sum_weights == 3.0
+/// assert snapshot.bins[2].sum_weights_squared == 9.0
+/// assert right.snapshot().sample_count == 0
+/// assert len(left.rebin(2).snapshot().bins) == 2
+/// ```
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "HistogramAccumulator", skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyHistogramAccumulator {
     inner: HistogramAccumulatorState,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyHistogramAccumulator {
+    /// Create an evenly binned continuous histogram accumulator.
+    ///
+    /// Parameters
+    /// ----------
+    /// title : str
+    ///     Human-readable title used by snapshots and exported output.
+    /// x_min : float
+    ///     Lower edge of the histogram range.
+    /// x_max : float
+    ///     Upper edge of the histogram range.
+    /// n_bins : int
+    ///     Number of equal-width in-range bins.
+    /// type_description : str, default="AL"
+    ///     HwU ``TYPE@`` metadata.
+    /// phase : {"real", "imag"}, default="real"
+    ///     Component of each complex event weight to accumulate.
+    /// value_transform : {"identity", "log10"}, default="identity"
+    ///     Transformation applied to coordinates before binning.
+    /// log_x_axis : bool, default=False
+    ///     Request logarithmic horizontal-axis rendering.
+    /// log_y_axis : bool, default=True
+    ///     Request logarithmic vertical-axis rendering.
     #[staticmethod]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (title, x_min, x_max, n_bins, type_description="AL".to_string(), phase="real".to_string(), value_transform="identity".to_string(), log_x_axis=false, log_y_axis=true))]
     fn continuous(
         title: String,
@@ -626,7 +956,33 @@ impl PyHistogramAccumulator {
         })
     }
 
+    /// Create a discrete histogram accumulator over an inclusive integer range.
+    ///
+    /// Parameters
+    /// ----------
+    /// title : str
+    ///     Human-readable title used by snapshots and exported output.
+    /// min_bin_id : int
+    ///     Smallest accepted bin identifier.
+    /// max_bin_id : int
+    ///     Largest accepted bin identifier, inclusive.
+    /// ordering : {"ascending_bin_id", "value_descending", "abs_value_descending"}, default="ascending_bin_id"
+    ///     Ordering used when bins are returned or exported.
+    /// labels : Sequence[str], optional
+    ///     One label per bin, ordered by ascending bin identifier.
+    /// type_description : str, default="AL"
+    ///     HwU ``TYPE@`` metadata.
+    /// phase : {"real", "imag"}, default="real"
+    ///     Component of each complex event weight to accumulate.
+    /// log_y_axis : bool, default=True
+    ///     Request logarithmic vertical-axis rendering.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the range, label count, ordering, or phase is invalid.
     #[staticmethod]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (title, min_bin_id, max_bin_id, ordering="ascending_bin_id".to_string(), labels=None, type_description="AL".to_string(), phase="real".to_string(), log_y_axis=true))]
     fn discrete(
         title: String,
@@ -676,16 +1032,40 @@ impl PyHistogramAccumulator {
         })
     }
 
+    /// Return an immutable snapshot including committed and pending samples.
     fn snapshot(&self) -> PyHistogramSnapshot {
         py_histogram_snapshot_from_snapshot(self.inner.snapshot())
     }
 
-    fn merge_in_place(&mut self, other: &mut PyHistogramAccumulator) -> PyResult<()> {
+    /// Move pending samples from another compatible accumulator into this one.
+    ///
+    /// Parameters
+    /// ----------
+    /// other : HistogramAccumulator
+    ///     Compatible accumulator whose pending samples are consumed.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If histogram definitions differ.
+    fn merge_in_place(
+        &mut self,
+        #[gen_stub(override_type(type_repr = "HistogramAccumulator"))]
+        other: &mut PyHistogramAccumulator,
+    ) -> PyResult<()> {
         self.inner
             .merge_in_place(&mut other.inner)
             .map_err(to_py_value_error)
     }
 
+    /// Return a copy with each run of adjacent continuous bins combined.
+    ///
+    /// Discrete histograms are copied unchanged.
+    ///
+    /// Parameters
+    /// ----------
+    /// contiguous_bins : int
+    ///     Positive number of old bins per new bin; it must divide the bin count.
     fn rebin(&self, contiguous_bins: usize) -> PyResult<Self> {
         self.inner
             .rebin(contiguous_bins)
@@ -693,26 +1073,66 @@ impl PyHistogramAccumulator {
             .map_err(to_py_value_error)
     }
 
+    /// Multiply all accumulated weights by a constant in place.
+    ///
+    /// Parameters
+    /// ----------
+    /// factor : float
+    ///     Scale applied to weight sums; squared-weight sums use its square.
     fn rescale(&mut self, factor: f64) {
         self.inner.rescale(factor);
     }
 
+    /// Change the display ordering of a discrete histogram.
+    ///
+    /// Parameters
+    /// ----------
+    /// ordering : {"ascending_bin_id", "value_descending", "abs_value_descending"}
+    ///     New ordering for snapshots and exported output.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If this is a continuous histogram or the name is invalid.
     fn change_bin_ordering(&mut self, ordering: String) -> PyResult<()> {
         self.inner
             .change_bin_ordering(py_discrete_ordering(&ordering)?)
             .map_err(to_py_value_error)
     }
 
+    /// Commit pending samples to the accumulator's completed-result counters.
     fn update_results(&mut self) {
         self.inner.update_results();
     }
 
+    /// Add one independent continuous sample containing coordinate-weight pairs.
+    ///
+    /// Parameters
+    /// ----------
+    /// entries : Sequence[tuple[float, float]]
+    ///     ``(coordinate, projected_weight)`` entries for this sample.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If this is not a continuous histogram.
     fn fill_continuous_sample(&mut self, entries: Vec<(f64, f64)>) -> PyResult<()> {
         self.inner
             .fill_continuous_sample(&entries)
             .map_err(to_py_value_error)
     }
 
+    /// Add one independent discrete sample containing bin-weight pairs.
+    ///
+    /// Parameters
+    /// ----------
+    /// entries : Sequence[tuple[int, float]]
+    ///     ``(bin_id, projected_weight)`` entries for this sample.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If this is not a discrete histogram.
     fn fill_discrete_sample(&mut self, entries: Vec<(isize, f64)>) -> PyResult<()> {
         self.inner
             .fill_discrete_sample(&entries)
@@ -720,55 +1140,93 @@ impl PyHistogramAccumulator {
     }
 }
 
+/// Raw statistics and optional coordinate metadata for one histogram bin.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "HistogramBin", get_all)]
 #[derive(Clone)]
 pub struct PyHistogramBinSnapshot {
+    /// Lower coordinate edge, or ``None`` for a discrete or overflow bin.
     pub x_min: Option<f64>,
+    /// Upper coordinate edge, or ``None`` for a discrete or underflow bin.
     pub x_max: Option<f64>,
+    /// Discrete bin identifier, or ``None`` for a continuous bin.
     pub bin_id: Option<isize>,
+    /// Optional label of a discrete bin.
     pub label: Option<String>,
+    /// Number of event entries accumulated in this bin.
     pub entry_count: usize,
+    /// Sum of per-sample projected weights for this bin.
     pub sum_weights: f64,
+    /// Sum of squared per-sample projected weights for this bin.
     pub sum_weights_squared: f64,
+    /// Number of fills produced by paired boundary-misbinning mitigation.
     pub mitigated_fill_count: usize,
 }
 
+/// Aggregate entry, NaN, and misbinning-mitigation counts for a histogram.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "HistogramStats", get_all)]
 #[derive(Clone)]
 pub struct PyHistogramStatisticsSnapshot {
+    /// Number of event entries assigned to in-range bins.
     pub in_range_entry_count: usize,
+    /// Number of entries skipped because their coordinate was non-finite.
     pub nan_value_count: usize,
+    /// Number of entry pairs processed by boundary-misbinning mitigation.
     pub mitigated_pair_count: usize,
 }
 
+/// Immutable, mergeable histogram snapshot containing raw per-bin statistics.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "HistogramSnapshot", get_all)]
 #[derive(Clone)]
 pub struct PyHistogramSnapshot {
+    /// ``"continuous"`` or ``"discrete"``.
     pub kind: String,
+    /// Human-readable histogram title.
     pub title: String,
+    /// HwU ``TYPE@`` description retained with the histogram.
     pub type_description: String,
+    /// Complex-weight component accumulated: ``"real"`` or ``"imag"``.
     pub phase: String,
+    /// Coordinate transform: ``"identity"`` or ``"log10"``.
     pub value_transform: String,
+    /// Whether paired fills can mitigate bin-boundary instability.
     pub supports_misbinning_mitigation: bool,
+    /// Lower bound of a continuous histogram, otherwise ``None``.
     pub x_min: Option<f64>,
+    /// Upper bound of a continuous histogram, otherwise ``None``.
     pub x_max: Option<f64>,
+    /// Number of statistically independent Monte Carlo samples represented.
     pub sample_count: usize,
+    /// Whether compatible renderers should use a logarithmic horizontal axis.
     pub log_x_axis: bool,
+    /// Whether compatible renderers should use a logarithmic vertical axis.
     pub log_y_axis: bool,
+    /// Smallest discrete bin identifier, otherwise ``None``.
     pub discrete_min_bin_id: Option<isize>,
+    /// Discrete display ordering, otherwise ``None``.
     pub discrete_ordering: Option<String>,
+    /// Raw statistics for every in-range bin, in display order.
     pub bins: Vec<PyHistogramBinSnapshot>,
+    /// Raw statistics for entries below a continuous histogram's range.
     pub underflow_bin: PyHistogramBinSnapshot,
+    /// Raw statistics for entries above a continuous histogram's range.
     pub overflow_bin: PyHistogramBinSnapshot,
+    /// Histogram-wide entry and mitigation counters.
     pub statistics: PyHistogramStatisticsSnapshot,
 }
 
+/// Completed integration result, observable snapshots, and workspace location.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "IntegrationOutput", skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyIntegrationOutput {
     inner: crate::commands::integrate::IntegrationOutput,
 }
 
+/// Complex integral estimate with errors, chi-squared values, and evaluation counts.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegralEstimate", get_all)]
 #[derive(Clone)]
 pub struct PyIntegralEstimate {
@@ -781,6 +1239,8 @@ pub struct PyIntegralEstimate {
     pub im_chisq: f64,
 }
 
+/// One real or imaginary component row from an integration result table.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrationTableComponentResult", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrationTableComponentResult {
@@ -794,6 +1254,8 @@ pub struct PyIntegrationTableComponentResult {
     pub max_weight_impact: f64,
 }
 
+/// Timing, precision, stability, and event-selection statistics for an integration slot.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrationStatisticsSnapshot", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrationStatisticsSnapshot {
@@ -814,6 +1276,8 @@ pub struct PyIntegrationStatisticsSnapshot {
     pub selection_efficiency_percentage: Option<f64>,
 }
 
+/// Largest observed contribution for one signed integration component.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "MaxWeightInfoEntry", get_all)]
 #[derive(Clone)]
 pub struct PyMaxWeightInfoEntry {
@@ -823,6 +1287,8 @@ pub struct PyMaxWeightInfoEntry {
     pub coordinates: Option<String>,
 }
 
+/// One labeled coordinate on a discrete integration axis.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "DiscreteCoordinate", get_all)]
 #[derive(Clone)]
 pub struct PyDiscreteCoordinate {
@@ -831,6 +1297,8 @@ pub struct PyDiscreteCoordinate {
     pub bin_label: Option<String>,
 }
 
+/// Estimate and sampling metadata for one bin of a discrete-axis breakdown.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "DiscreteBreakdownEntry", get_all)]
 #[derive(Clone)]
 pub struct PyDiscreteBreakdownEntry {
@@ -843,6 +1311,8 @@ pub struct PyDiscreteBreakdownEntry {
     pub processed_samples: usize,
 }
 
+/// Per-bin integration estimates along one discrete axis at fixed other coordinates.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "DiscreteBreakdown", get_all)]
 #[derive(Clone)]
 pub struct PyDiscreteBreakdown {
@@ -851,6 +1321,8 @@ pub struct PyDiscreteBreakdown {
     pub entries: Vec<PyDiscreteBreakdownEntry>,
 }
 
+/// Optional real and imaginary discrete-axis breakdowns for an integration slot.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ComponentDiscreteBreakdown", get_all)]
 #[derive(Clone)]
 pub struct PyComponentDiscreteBreakdown {
@@ -858,6 +1330,8 @@ pub struct PyComponentDiscreteBreakdown {
     pub im: Option<PyDiscreteBreakdown>,
 }
 
+/// Result, diagnostics, and discrete breakdown for one named integration slot.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "SlotIntegrationResult", get_all)]
 #[derive(Clone)]
 pub struct PySlotIntegrationResult {
@@ -872,14 +1346,28 @@ pub struct PySlotIntegrationResult {
     pub grid_breakdown: PyComponentDiscreteBreakdown,
 }
 
+/// Collection of independently addressable integration-slot results.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrationResult", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrationResult {
     pub slots: Vec<PySlotIntegrationResult>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyHistogramBinSnapshot {
+    /// Compute this bin's Monte Carlo mean from its raw weight sum.
+    ///
+    /// Parameters
+    /// ----------
+    /// sample_count : int
+    ///     Number of statistically independent samples represented by the histogram.
+    ///
+    /// Returns
+    /// -------
+    /// float
+    ///     ``sum_weights / sample_count``, or zero when ``sample_count`` is zero.
     fn average(&self, sample_count: usize) -> f64 {
         if sample_count == 0 {
             0.0
@@ -888,6 +1376,17 @@ impl PyHistogramBinSnapshot {
         }
     }
 
+    /// Compute the standard error of this bin's Monte Carlo mean.
+    ///
+    /// Parameters
+    /// ----------
+    /// sample_count : int
+    ///     Number of statistically independent samples represented by the histogram.
+    ///
+    /// Returns
+    /// -------
+    /// float
+    ///     Sample-mean standard error, or zero when it cannot be estimated reliably.
     fn error(&self, sample_count: usize) -> f64 {
         if sample_count <= 1 {
             return 0.0;
@@ -903,6 +1402,7 @@ impl PyHistogramBinSnapshot {
     }
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyIntegrationOutput {
     #[getter]
@@ -933,6 +1433,7 @@ impl PyIntegrationOutput {
     }
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyIntegrationResult {
     fn slot(&self, key: &str) -> Option<PySlotIntegrationResult> {
@@ -944,24 +1445,35 @@ impl PyIntegrationResult {
     }
 }
 
+/// Outcome and cost of one numerical-stability precision level.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "StabilityResult", get_all)]
 #[derive(Clone)]
 pub struct PyStabilityResult {
+    /// Numerical precision used for this stability level.
     pub precision: String,
+    /// Estimated relative accuracy, or ``None`` when it could not be estimated.
     pub estimated_relative_accuracy: Option<f64>,
+    /// Human-readable stability outcome and number of rotated samples.
     pub status: String,
+    /// Number of rotated samples evaluated at this precision level.
     pub sample_count: usize,
+    /// Total wall-clock time spent at this precision level, in seconds.
     pub total_time_seconds: f64,
 }
 
+/// Numerical value, metadata, stability records, and generated events for one sample.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "SampleEvaluationResult")]
 #[derive(Clone)]
 pub struct PySampleEvaluationResult {
     inner: SampleEvaluationResult,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySampleEvaluationResult {
+    /// Complex integrand value before applying the parameterization Jacobian.
     #[getter]
     fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
         PyComplex::from_doubles(
@@ -971,11 +1483,13 @@ impl PySampleEvaluationResult {
         )
     }
 
+    /// Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
     #[getter]
     fn integrator_weight(&self) -> f64 {
         self.inner.evaluation.integrator_weight.0
     }
 
+    /// Number of candidate events generated, or ``None`` when metadata was omitted.
     #[getter]
     fn generated_event_count(&self) -> Option<usize> {
         self.inner
@@ -985,6 +1499,7 @@ impl PySampleEvaluationResult {
             .map(|metadata| metadata.generated_event_count)
     }
 
+    /// Number of generated events accepted by selectors, or ``None`` without metadata.
     #[getter]
     fn accepted_event_count(&self) -> Option<usize> {
         self.inner
@@ -994,6 +1509,7 @@ impl PySampleEvaluationResult {
             .map(|metadata| metadata.accepted_event_count)
     }
 
+    /// Time spent building and selecting events, in seconds, or ``None`` without metadata.
     #[getter]
     fn event_processing_time_seconds(&self) -> Option<f64> {
         self.inner
@@ -1003,6 +1519,7 @@ impl PySampleEvaluationResult {
             .map(|metadata| metadata.event_processing_time.as_secs_f64())
     }
 
+    /// Sample parameterization Jacobian, or ``None`` when no Jacobian was supplied.
     #[getter]
     fn parameterization_jacobian(&self) -> Option<f64> {
         self.inner
@@ -1011,6 +1528,7 @@ impl PySampleEvaluationResult {
             .map(|jac| jac.0)
     }
 
+    /// Whether evaluation metadata flagged a non-finite result, or ``None`` without metadata.
     #[getter]
     fn is_nan(&self) -> Option<bool> {
         self.inner
@@ -1020,6 +1538,7 @@ impl PySampleEvaluationResult {
             .map(|metadata| metadata.is_nan)
     }
 
+    /// Per-precision stability attempts, or ``None`` when metadata was omitted.
     #[getter]
     fn stability_results(&self) -> Option<Vec<PyStabilityResult>> {
         self.inner
@@ -1043,6 +1562,7 @@ impl PySampleEvaluationResult {
             })
     }
 
+    /// Correlated event groups produced while evaluating this sample.
     #[getter]
     fn event_groups(&self) -> Vec<PyEventGroup> {
         self.inner
@@ -1053,23 +1573,29 @@ impl PySampleEvaluationResult {
             .collect()
     }
 
+    /// Return a human-readable evaluation summary.
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
 
+    /// Return the human-readable evaluation summary.
     fn __repr__(&self) -> String {
         self.__str__()
     }
 }
 
+/// Single-sample evaluation paired with the observable snapshot for that sample.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "EvaluationResult")]
 #[derive(Clone)]
 pub struct PyEvaluationResult {
     inner: SingleSampleEvaluationResult,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyEvaluationResult {
+    /// Evaluation record for the requested sample.
     #[getter]
     fn sample(&self) -> PySampleEvaluationResult {
         PySampleEvaluationResult {
@@ -1077,31 +1603,37 @@ impl PyEvaluationResult {
         }
     }
 
+    /// Complex integrand value before applying the parameterization Jacobian.
     #[getter]
     fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
         self.sample().integrand_result(py)
     }
 
+    /// Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
     #[getter]
     fn integrator_weight(&self) -> f64 {
         self.inner.sample.evaluation.integrator_weight.0
     }
 
+    /// Number of candidate events generated, or ``None`` when metadata was omitted.
     #[getter]
     fn generated_event_count(&self) -> Option<usize> {
         self.sample().generated_event_count()
     }
 
+    /// Number of generated events accepted by selectors, or ``None`` without metadata.
     #[getter]
     fn accepted_event_count(&self) -> Option<usize> {
         self.sample().accepted_event_count()
     }
 
+    /// Time spent building and selecting events, in seconds, or ``None`` without metadata.
     #[getter]
     fn event_processing_time_seconds(&self) -> Option<f64> {
         self.sample().event_processing_time_seconds()
     }
 
+    /// Sample parameterization Jacobian, or ``None`` when no Jacobian was supplied.
     #[getter]
     fn parameterization_jacobian(&self) -> Option<f64> {
         self.inner
@@ -1111,43 +1643,53 @@ impl PyEvaluationResult {
             .map(|jac| jac.0)
     }
 
+    /// Whether evaluation metadata flagged a non-finite result, or ``None`` without metadata.
     #[getter]
     fn is_nan(&self) -> Option<bool> {
         self.sample().is_nan()
     }
 
+    /// Per-precision stability attempts, or ``None`` when metadata was omitted.
     #[getter]
     fn stability_results(&self) -> Option<Vec<PyStabilityResult>> {
         self.sample().stability_results()
     }
 
+    /// Correlated event groups produced while evaluating this sample.
     #[getter]
     fn event_groups(&self) -> Vec<PyEventGroup> {
         self.sample().event_groups()
     }
 
+    /// Observable snapshots produced from the same Monte Carlo sample.
     #[getter]
     fn observables<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         py_observable_dict_from_bundle(py, &self.inner.observables)
     }
 
+    /// Return a human-readable evaluation and observable summary.
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
 
+    /// Return the human-readable evaluation and observable summary.
     fn __repr__(&self) -> String {
         self.__str__()
     }
 }
 
+/// Per-sample evaluations paired with one observable snapshot for the complete batch.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "BatchEvaluationResult")]
 #[derive(Clone)]
 pub struct PyBatchEvaluationResult {
     inner: BatchSampleEvaluationResult,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyBatchEvaluationResult {
+    /// Evaluation records in the same order as the requested samples.
     #[getter]
     fn samples(&self) -> Vec<PySampleEvaluationResult> {
         self.inner
@@ -1158,37 +1700,46 @@ impl PyBatchEvaluationResult {
             .collect()
     }
 
+    /// Observable snapshots accumulated across the complete sample batch.
     #[getter]
     fn observables<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         py_observable_dict_from_bundle(py, &self.inner.observables)
     }
 
+    /// Return a human-readable batch and observable summary.
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
 
+    /// Return the human-readable batch and observable summary.
     fn __repr__(&self) -> String {
         self.__str__()
     }
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyEvent {
+    /// Return a human-readable event summary.
     fn __str__(&self) -> String {
         event_from_py_event(self).to_string()
     }
 
+    /// Return the human-readable event summary.
     fn __repr__(&self) -> String {
         self.__str__()
     }
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyEventGroup {
+    /// Return a human-readable summary of the grouped events.
     fn __str__(&self) -> String {
         event_group_from_py_event_group(self).to_string()
     }
 
+    /// Return the human-readable grouped-event summary.
     fn __repr__(&self) -> String {
         self.__str__()
     }
@@ -1792,6 +2343,7 @@ fn py_integrand_info_from_info(info: IntegrandInfo) -> PyIntegrandInfo {
     }
 }
 
+#[allow(dead_code)] // Retained with the currently disabled Python `integrate` binding.
 fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
     if let Ok(process_id) = process.extract::<usize>() {
         return Ok(ProcessRef::Id(process_id));
@@ -1805,6 +2357,7 @@ fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
     ProcessRef::from_str(&process).map_err(exceptions::PyValueError::new_err)
 }
 
+#[allow(dead_code)] // Retained with the currently disabled Python `integrate` binding.
 fn py_complex_target_from_any(
     target: &Bound<'_, PyAny>,
 ) -> PyResult<spenso::algebra::complex::Complex<gammalooprs::utils::F<f64>>> {
@@ -1827,6 +2380,7 @@ fn py_complex_target_from_any(
     ))
 }
 
+#[allow(dead_code)] // Retained with the currently disabled Python `integrate` binding.
 fn resolve_python_slot_key(
     state: &State,
     process: &ProcessRef,
@@ -1846,6 +2400,7 @@ fn resolve_python_slot_key(
     ))
 }
 
+#[allow(dead_code, clippy::too_many_arguments)] // Retained with the disabled Python `integrate` binding.
 fn build_python_integrate_command(
     state: &State,
     slots: Option<Vec<(ProcessRef, String)>>,
@@ -2210,6 +2765,19 @@ impl PyNumeratorAwareGroupingOption {
 }
 */
 
+/// Load, inspect, and evaluate one mutable GammaLoop session.
+///
+/// One instance owns a GammaLoop state, run history, CLI settings, default runtime
+/// settings, and session state. Calls to ``run`` and the evaluation methods all act
+/// on that same in-memory session.
+///
+/// Notes
+/// -----
+/// ``read_only_state=True`` prevents writes inside the active state directory; it
+/// does not make this Python object immutable. Commands may still change in-memory
+/// settings, processes, or run history. Create separate instances when independent
+/// sessions are required.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(unsendable, name = "GammaLoopAPI")
@@ -2223,9 +2791,59 @@ struct GammaLoopAPI {
 }
 
 // TODO: Improve error broadcasting to Python everywhere so as to show rust backtrace
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl GammaLoopAPI {
+    /// Load or create a GammaLoop state and initialize its CLI session.
+    ///
+    /// Parameters
+    /// ----------
+    /// state_folder : path-like, optional
+    ///     State directory to load or create. The default is ``./gammaloop_state``.
+    /// boot_commands_path : path-like, optional
+    ///     TOML run card whose commands are applied during startup.
+    /// model_file : path-like, optional
+    ///     Model file override used while loading or initializing the state.
+    /// trace_logs_filename : str, optional
+    ///     File receiving native trace records for this session.
+    /// level : LogLevel, optional
+    ///     Terminal log-level override for this session.
+    /// logfile_level : LogLevel, optional
+    ///     File log-level override for this session.
+    /// logging_prefix : object, optional
+    ///     Native logging-prefix configuration.
+    /// read_only_state : bool, default=False
+    ///     Prevent writes whose target lies inside the active state directory and
+    ///     disable file logging there. In-memory session changes remain possible.
+    /// settings_global_path : path-like, optional
+    ///     TOML file overriding the global settings loaded at startup.
+    /// settings_runtime_defaults_path : path-like, optional
+    ///     TOML file overriding the default runtime settings loaded at startup.
+    /// clean_state : bool, default=False
+    ///     Remove the resolved state path before startup. This is destructive and
+    ///     cannot be combined with ``read_only_state=True``.
+    ///
+    /// Returns
+    /// -------
+    /// GammaLoopAPI
+    ///     A stateful API instance sharing one state, history, and settings session.
+    ///
+    /// Raises
+    /// ------
+    /// Exception
+    ///     If startup options conflict, the state or settings cannot be loaded, a
+    ///     boot command fails, or a boot card requests process exit.
+    ///
+    /// Examples
+    /// --------
+    /// Open an existing generated state without permitting writes to it:
+    ///
+    /// ```python
+    /// api = GammaLoopAPI(state_folder="./state", read_only_state=True)
+    /// ```
     #[new]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (
         state_folder=None,
         boot_commands_path=None,
@@ -2246,6 +2864,10 @@ impl GammaLoopAPI {
         trace_logs_filename: Option<String>,
         level: Option<LogLevel>,
         logfile_level: Option<LogLevel>,
+        #[gen_stub(override_type(
+            type_repr = "builtins.object | None",
+            imports = ("builtins")
+        ))]
         logging_prefix: Option<LogFormat>,
         read_only_state: bool,
         settings_global_path: Option<PathBuf>,
@@ -2288,6 +2910,90 @@ impl GammaLoopAPI {
         })
     }
 
+    /// Evaluate one integration or momentum-space sample.
+    ///
+    /// Parameters
+    /// ----------
+    /// point : Sequence[float]
+    ///     Coordinates for one sample. In integration space, the length must match
+    ///     the selected integrand and ``discrete_dim``. In momentum space, values
+    ///     are grouped as ``(px, py, pz)`` with one triplet per independent loop
+    ///     momentum. Energy components and external momenta are not accepted.
+    /// process_id : int, optional
+    ///     Process containing the integrand. Supply this when selection is ambiguous.
+    /// integrand_name : str, optional
+    ///     Integrand to evaluate. Supply this when selection is ambiguous.
+    /// use_arb_prec : bool, default=False
+    ///     Force arbitrary-precision (Arb) internal evaluation instead of following
+    ///     the configured stability ladder.
+    ///     Returned numeric fields remain ``float64``.
+    /// minimal_output : bool, default=False
+    ///     Omit the optional evaluation metadata from the returned sample.
+    /// return_events : bool, optional
+    ///     Temporarily override event generation for this call. The integrand setting
+    ///     is restored afterward.
+    /// momentum_space : bool, default=False
+    ///     Interpret ``point`` as consecutive spatial loop-momentum ``(px, py, pz)``
+    ///     triplets instead of integration-space coordinates.
+    /// integrator_weight : float, optional
+    ///     Weight associated with this sample. The default is 1.0.
+    /// discrete_dim : Sequence[int], optional
+    ///     Discrete integration coordinates used to determine the expected dimension.
+    /// graph_name : str, optional
+    ///     Graph selected for momentum-space evaluation.
+    /// orientation : int, optional
+    ///     Orientation index for ``graph_name`` in momentum-space evaluation.
+    ///
+    /// Returns
+    /// -------
+    /// EvaluationResult
+    ///     The sample evaluation and the observable snapshot for its one-row batch.
+    ///
+    /// Raises
+    /// ------
+    /// Exception
+    ///     If integrand selection is ambiguous or invalid, dimensions do not match,
+    ///     graph or orientation selection is invalid, or warm-up/evaluation fails.
+    ///
+    /// Notes
+    /// -----
+    /// With ``use_arb_prec=False``, evaluation follows the configured ``f64``,
+    /// ``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``
+    /// forces arbitrary-precision (Arb) internal evaluation. Python-visible numeric
+    /// fields use the package's ``float64`` output contract. Evaluation may
+    /// warm the integrand and update in-memory caches or observable snapshots even in
+    /// a read-only-state session.
+    ///
+    /// See Also
+    /// --------
+    /// GammaLoop's sample-evaluation contract in the interface guide and the
+    /// maintained events-and-observables example.
+    ///
+    /// Examples
+    /// --------
+    /// Evaluate one point from the repository's differential API regression fixture:
+    ///
+    /// ```python
+    /// from pathlib import Path
+    ///
+    /// from gammaloop import GammaLoopAPI
+    ///
+    /// example = Path("examples/api/python/epem_a_ddxg_xs_LO")
+    /// api = GammaLoopAPI(
+    ///     state_folder=example / "state",
+    ///     boot_commands_path=example / "run.toml",
+    ///     clean_state=True,
+    /// )
+    /// point = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]
+    /// result = api.evaluate_sample(point, return_events=True)
+    /// assert result.parameterization_jacobian is not None
+    /// assert result.stability_results
+    /// assert result.event_groups
+    /// ```
+    ///
+    /// This card verifies API and event plumbing. Its powered coupling selector is not an
+    /// independently reviewed perturbative-order definition or normalization benchmark.
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(
         name = "evaluate_sample",
         signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, return_events=None, momentum_space=false, integrator_weight=None, discrete_dim=None, graph_name=None, orientation=None)
@@ -2347,6 +3053,94 @@ impl GammaLoopAPI {
         })
     }
 
+    /// Evaluate a batch of integration or momentum-space samples.
+    ///
+    /// Parameters
+    /// ----------
+    /// points : numpy.ndarray[numpy.float64]
+    ///     Two-dimensional array with one sample per row. Integration-space columns
+    ///     must match the selected integrand; momentum-space columns are flattened
+    ///     ``(px, py, pz)`` groups with one triplet per independent loop momentum.
+    ///     Energy components and external momenta are not accepted.
+    /// process_id : int, optional
+    ///     Process containing the integrand. Supply this when selection is ambiguous.
+    /// integrand_name : str, optional
+    ///     Integrand to evaluate. Supply this when selection is ambiguous.
+    /// use_arb_prec : bool, default=False
+    ///     Force arbitrary-precision (Arb) internal evaluation instead of following
+    ///     the configured stability ladder.
+    ///     Returned numeric fields remain ``float64``.
+    /// minimal_output : bool, default=False
+    ///     Omit the optional evaluation metadata from every returned sample.
+    /// return_events : bool, optional
+    ///     Temporarily override event generation for this call. The integrand setting
+    ///     is restored afterward.
+    /// momentum_space : bool, default=False
+    ///     Interpret each row as consecutive spatial loop-momentum ``(px, py, pz)``
+    ///     triplets instead of integration-space coordinates.
+    /// integrator_weights : numpy.ndarray[numpy.float64], optional
+    ///     One weight per row. Defaults to 1.0 for every sample.
+    /// discrete_dims : numpy.ndarray[numpy.unsignedinteger], optional
+    ///     Two-dimensional array with one row of discrete coordinates per sample.
+    /// graph_names : Sequence[str | None], optional
+    ///     Momentum-space graph selection for each sample.
+    /// orientations : Sequence[int | None], optional
+    ///     Momentum-space orientation selection for each sample.
+    ///
+    /// Returns
+    /// -------
+    /// BatchEvaluationResult
+    ///     Per-sample evaluations and one observable snapshot for the complete batch.
+    ///
+    /// Raises
+    /// ------
+    /// Exception
+    ///     If integrand selection is ambiguous or invalid, array or option lengths do
+    ///     not match, dimensions are invalid, or warm-up/evaluation fails.
+    ///
+    /// Notes
+    /// -----
+    /// With ``use_arb_prec=False``, evaluation follows the configured ``f64``,
+    /// ``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``
+    /// forces arbitrary-precision (Arb) internal evaluation. Python-visible numeric
+    /// fields use the package's ``float64`` output contract. Evaluation may
+    /// update in-memory caches or observable snapshots in a read-only-state session.
+    ///
+    /// See Also
+    /// --------
+    /// GammaLoop's sample-evaluation contract in the interface guide and the
+    /// maintained events-and-observables example.
+    ///
+    /// Examples
+    /// --------
+    /// Evaluate two rows and inspect their per-sample events and batch-level histograms:
+    ///
+    /// ```python
+    /// from pathlib import Path
+    ///
+    /// import numpy as np
+    /// from gammaloop import GammaLoopAPI
+    ///
+    /// example = Path("examples/api/python/epem_a_ddxg_xs_LO")
+    /// api = GammaLoopAPI(
+    ///     state_folder=example / "state",
+    ///     boot_commands_path=example / "run.toml",
+    ///     clean_state=True,
+    /// )
+    /// points = np.array([
+    ///     [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],
+    ///     [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],
+    /// ], dtype=float)
+    /// result = api.evaluate_samples(points, return_events=True)
+    /// assert len(result.samples) == 2
+    /// assert all(sample.event_groups for sample in result.samples)
+    /// assert result.observables["leading_jet_pt_hist"].sample_count == 2
+    /// assert len(result.observables["leading_jet_pt_hist"].bins) == 8
+    /// ```
+    ///
+    /// The fixture exercises the API surface; its powered coupling selector is not a validated
+    /// perturbative-order or normalization benchmark.
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(
         name = "evaluate_samples",
         signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, return_events=None, momentum_space=false, integrator_weights=None, discrete_dims=None, graph_names=None, orientations=None)
@@ -2362,6 +3156,10 @@ impl GammaLoopAPI {
         return_events: Option<bool>,
         momentum_space: bool,
         integrator_weights: Option<PyReadonlyArray1<'py, f64>>,
+        #[gen_stub(override_type(
+            type_repr = "numpy.typing.NDArray[numpy.unsignedinteger] | None",
+            imports = ("numpy", "numpy.typing")
+        ))]
         discrete_dims: Option<PyReadonlyArray2<'py, usize>>,
         graph_names: Option<Vec<Option<String>>>,
         orientations: Option<Vec<Option<usize>>>,
@@ -2386,6 +3184,27 @@ impl GammaLoopAPI {
         Ok(PyBatchEvaluationResult { inner: res })
     }
 
+    /// Import DOT graphs into a new or existing process/integrand collection.
+    ///
+    /// Parameters
+    /// ----------
+    /// graphs : str
+    ///     DOT file path when ``format="dot"`` or inline DOT text when
+    ///     ``format="string"``.
+    /// process_name, process_id : str or int, optional
+    ///     Process to create or update. Inline text requires one of these selectors.
+    /// integrand_name : str, optional
+    ///     Integrand within the selected process.
+    /// format : {"dot", "string"}, default="dot"
+    ///     Select file-backed or inline input.
+    /// overwrite, append : bool, default=False
+    ///     Replace an existing collection or append to it; these modes conflict.
+    ///
+    /// Raises
+    /// ------
+    /// Exception
+    ///     If selectors conflict, the source is missing or malformed, or importing fails.
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(name="import_graphs", signature = (graphs, process_name=None, process_id=None, integrand_name=None, format="dot".into(), overwrite=false, append=false))]
     pub(crate) fn import_graphs_python(
         &mut self,
@@ -2445,6 +3264,21 @@ impl GammaLoopAPI {
         )
     }
 
+    /// Generate loop-momentum bases for each supplied graph.
+    ///
+    /// Parameters
+    /// ----------
+    /// graphs : str
+    ///     DOT file path or inline DOT text, as selected by ``format``.
+    /// format : {"dot", "string"}, default="dot"
+    ///     Select file-backed or inline input.
+    ///
+    /// Returns
+    /// -------
+    /// list
+    ///     Per graph, a list of ``(loop_edges, external_edges, edge_signatures)``
+    ///     tuples. Each signature contains its loop and external coefficients.
+    #[allow(clippy::type_complexity)]
     #[pyo3(name="get_lmbs", signature = (graphs, format="dot".into()))]
     pub(crate) fn get_lmbs(
         &self,
@@ -2520,6 +3354,25 @@ impl GammaLoopAPI {
             .collect())
     }
 
+    /// Return the causal-flow orientations generated for one graph.
+    ///
+    /// Each returned dictionary maps an edge id to ``1`` (default), ``-1``
+    /// (reversed), or ``0`` (undirected). Supply process and integrand selectors when
+    /// the active state does not identify a unique integrand.
+    ///
+    /// Parameters
+    /// ----------
+    /// graph_name : str
+    ///     Name of the graph within the selected integrand.
+    /// process_id : int, optional
+    ///     Numeric process identifier; omit when process selection is unambiguous.
+    /// integrand_name : str, optional
+    ///     Integrand containing the graph; omit when integrand selection is unambiguous.
+    ///
+    /// Returns
+    /// -------
+    /// list[dict[int, int]]
+    ///     One edge-direction mapping per generated orientation.
     #[pyo3(name="get_orientations", signature = (graph_name, process_id=None, integrand_name=None))]
     pub(crate) fn get_orientations(
         &self,
@@ -2594,6 +3447,12 @@ impl GammaLoopAPI {
             .collect())
     }
 
+    /// Serialize the active physics model as JSON.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     JSON representation of the model currently owned by this session.
     #[pyo3(name = "get_model")]
     pub(crate) fn get_model(&self) -> PyResult<String> {
         let serializable_model = self.gammaloop_state.model.to_serializable();
@@ -2602,6 +3461,25 @@ impl GammaLoopAPI {
         })
     }
 
+    /// Evaluate one generated graph group as a symbolic or numerical expression.
+    ///
+    /// Parameters
+    /// ----------
+    /// process_id : int, optional
+    ///     Process containing the requested graph group.
+    /// graphs_group_name : str, optional
+    ///     Group to evaluate when the current state is ambiguous.
+    /// result_path : path-like, optional
+    ///     Optional destination for the evaluated expression.
+    /// numerical : bool, default=True
+    ///     Evaluate numerically instead of retaining a symbolic result.
+    /// number_of_terms_in_epsilon_expansion : int, optional
+    ///     Truncate the dimensional-regulator expansion to this many terms.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     Canonical Symbolica representation of the result.
     #[pyo3(name="evaluate", signature = (process_id=None, graphs_group_name=None, result_path=None, numerical=true, number_of_terms_in_epsilon_expansion=None))]
     pub(crate) fn evaluate_python(
         &mut self,
@@ -2632,6 +3510,18 @@ impl GammaLoopAPI {
         .map(|res| res.to_canonical_string())
     }
 
+    /// Replace the active model from a GammaLoop model file or supported model source.
+    ///
+    /// ``simplify_model`` applies the standard symbolic simplification pass while
+    /// importing. Existing process data may no longer be compatible with a replaced
+    /// model, so import the model before generating processes.
+    ///
+    /// Parameters
+    /// ----------
+    /// model_specifier : path-like
+    ///     Path or model specifier accepted by GammaLoop's model importer.
+    /// simplify_model : bool, default=True
+    ///     Apply the standard symbolic simplification pass while importing.
     #[pyo3(name="import_model", signature = (model_specifier, simplify_model=true))]
     pub(crate) fn import_model_python(
         &mut self,
@@ -2646,6 +3536,12 @@ impl GammaLoopAPI {
         .map_err(|e| exceptions::PyException::new_err(format!("Could not import model: {}", e)))
     }
 
+    /// List generated amplitude and cross-section names with their process ids.
+    ///
+    /// Returns
+    /// -------
+    /// tuple[dict[str, int], dict[str, int]]
+    ///     Amplitude mapping followed by the cross-section mapping.
     #[pyo3(name="list_outputs", signature = ())]
     pub(crate) fn list_outputs(
         &mut self,
@@ -2675,6 +3571,52 @@ impl GammaLoopAPI {
         Ok((all_amplitudes, all_cross_sections))
     }
 
+    /// Describe the selected generated integrand and its graph structure.
+    ///
+    /// Parameters
+    /// ----------
+    /// process_id : int, optional
+    ///     Process containing the integrand. Supply this when selection is ambiguous.
+    /// integrand_name : str, optional
+    ///     Integrand to inspect. Supply this when selection is ambiguous.
+    ///
+    /// Returns
+    /// -------
+    /// IntegrandInfo
+    ///     Structured process, backend, graph, orientation, cut, and size metadata.
+    ///
+    /// Raises
+    /// ------
+    /// Exception
+    ///     If no unique generated integrand matches the selection.
+    ///
+    /// Examples
+    /// --------
+    /// Inspect the generated graph groups in the repository's differential API fixture:
+    ///
+    /// ```python
+    /// from pathlib import Path
+    ///
+    /// from gammaloop import GammaLoopAPI
+    ///
+    /// example = Path("examples/api/python/epem_a_ddxg_xs_LO")
+    /// api = GammaLoopAPI(
+    ///     state_folder=example / "state",
+    ///     boot_commands_path=example / "run.toml",
+    ///     clean_state=True,
+    /// )
+    /// info = api.get_integrand_info()
+    /// assert info.kind == "cross section"
+    /// assert info.graph_count == 2
+    /// assert info.graph_group_count == len(info.graph_groups)
+    /// assert all(
+    ///     sum(graph.is_master for graph in group.graphs) == 1
+    ///     for group in info.graph_groups
+    /// )
+    /// ```
+    ///
+    /// This fixture's powered coupling selector is a regression input, not a reviewed physical
+    /// perturbative-order definition.
     #[pyo3(name="get_integrand_info", signature = (process_id=None, integrand_name=None))]
     pub(crate) fn get_integrand_info(
         &self,
@@ -2691,6 +3633,35 @@ impl GammaLoopAPI {
         Ok(py_integrand_info_from_info(info))
     }
 
+    /// Return a detached, read-only snapshot of one integrand's settings.
+    ///
+    /// Parameters
+    /// ----------
+    /// process_id : int, optional
+    ///     Process containing the integrand. Supply this when selection is ambiguous.
+    /// integrand_name : str, optional
+    ///     Integrand whose settings are required.
+    ///
+    /// Returns
+    /// -------
+    /// SettingsValue
+    ///     Serialized settings snapshot supporting ``get(path)``, attribute access,
+    ///     indexing, and ``to_dict()``. Mutating it does not update the live session.
+    ///
+    /// Raises
+    /// ------
+    /// Exception
+    ///     If selection fails, the integrand has not been generated, or its settings
+    ///     cannot be serialized.
+    ///
+    /// Examples
+    /// --------
+    /// Read a nested setting without changing the live integrand:
+    ///
+    /// ```python
+    /// settings = api.get_integrand_settings(process_id=0)
+    /// print(settings.get("general.generate_events"))
+    /// ```
     #[pyo3(name="get_integrand_settings", signature = (process_id=None, integrand_name=None))]
     pub(crate) fn get_integrand_settings(
         &mut self,
@@ -2732,6 +3703,30 @@ impl GammaLoopAPI {
         }
     }
 
+    /// Render the current in-memory run history as TOML.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     TOML representation of the history owned by this API instance.
+    ///
+    /// Raises
+    /// ------
+    /// Exception
+    ///     If the current history cannot be serialized.
+    ///
+    /// Notes
+    /// -----
+    /// This reports the live session, including commands run through ``run``; it does
+    /// not imply that the history has been persisted to the state directory.
+    ///
+    /// Examples
+    /// --------
+    /// Capture a reproducible run card from the current session:
+    ///
+    /// ```python
+    /// run_card_toml = api.get_run_history()
+    /// ```
     #[pyo3(name = "get_run_history", signature = ())]
     pub(crate) fn get_run_history(&self) -> PyResult<String> {
         self.run_history
@@ -2743,6 +3738,25 @@ impl GammaLoopAPI {
             })
     }
 
+    /// Render the current effective CLI and global settings as TOML.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     TOML representation of the settings used by this API session.
+    ///
+    /// Raises
+    /// ------
+    /// Exception
+    ///     If the settings cannot be rendered.
+    ///
+    /// Examples
+    /// --------
+    /// Record the effective settings after applying startup overrides:
+    ///
+    /// ```python
+    /// settings_toml = api.get_global_settings()
+    /// ```
     #[pyo3(name = "get_global_settings", signature = ())]
     pub(crate) fn get_global_settings(&self) -> PyResult<String> {
         render_smart_toml(&self.cli_settings).map_err(|e| {
@@ -2752,6 +3766,21 @@ impl GammaLoopAPI {
         })
     }
 
+    /// Return the named command blocks in the current run history.
+    ///
+    /// Returns
+    /// -------
+    /// dict[str, list[str]]
+    ///     Mapping from block name to its rendered CLI commands.
+    ///
+    /// Examples
+    /// --------
+    /// Inspect the commands currently grouped under each block:
+    ///
+    /// ```python
+    /// for name, commands in api.get_active_command_blocks().items():
+    ///     print(name, commands)
+    /// ```
     #[pyo3(name = "get_active_command_blocks", signature = ())]
     pub(crate) fn get_active_command_blocks(
         &self,
@@ -2769,6 +3798,27 @@ impl GammaLoopAPI {
             .collect())
     }
 
+    /// Return a detached, read-only snapshot of the default runtime settings.
+    ///
+    /// Returns
+    /// -------
+    /// SettingsValue
+    ///     Serialized settings including defaults. Use ``get(path)`` or ``to_dict()``
+    ///     to inspect it; changes to derived Python values do not affect the session.
+    ///
+    /// Raises
+    /// ------
+    /// Exception
+    ///     If the settings cannot be serialized.
+    ///
+    /// Examples
+    /// --------
+    /// Inspect a runtime default by its documented settings path:
+    ///
+    /// ```python
+    /// runtime = api.get_default_runtime_settings()
+    /// print(runtime.get("integrator.n_start"))
+    /// ```
     #[pyo3(name = "get_default_runtime_settings", signature = ())]
     pub(crate) fn get_default_runtime_settings(&self) -> PyResult<PySettingsValue> {
         PySettingsValue::from_settings(
@@ -2778,6 +3828,21 @@ impl GammaLoopAPI {
         )
     }
 
+    /// Render a selected amplitude or cross section as Graphviz DOT text.
+    ///
+    /// Parameters
+    /// ----------
+    /// process : int or str, optional
+    ///     Process id or name; omit only when selection is unambiguous.
+    /// integrand_name : str, optional
+    ///     Integrand to render.
+    /// settings : DotExportSettings, optional
+    ///     Controls diagram combination, UV terms, algebra, and generated fields.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     DOT source suitable for Graphviz or GammaLoop's drawing pipeline.
     #[pyo3(name="get_dot_files", signature = (process=None, integrand_name=None, settings=DotExportSettings::default()))]
     pub(crate) fn get_dot_files(
         &mut self,
@@ -2828,6 +3893,38 @@ impl GammaLoopAPI {
         Ok(dot_output)
     }
 
+    /// Parse and execute a CLI command in this API instance's session.
+    ///
+    /// Parameters
+    /// ----------
+    /// command : str
+    ///     GammaLoop CLI command text.
+    ///
+    /// Returns
+    /// -------
+    /// None
+    ///     The command's normal output is emitted through the configured CLI/logging
+    ///     sinks; inspect structured state through the corresponding getter methods.
+    ///
+    /// Raises
+    /// ------
+    /// Exception
+    ///     If the command cannot be parsed or execution fails.
+    ///
+    /// Notes
+    /// -----
+    /// Commands share and may mutate the instance's in-memory state, settings, and run
+    /// history. ``read_only_state=True`` only blocks writes inside the active state
+    /// directory. The API does not automatically persist the session after this call;
+    /// persistence depends on the executed command's explicit output behavior.
+    ///
+    /// Examples
+    /// --------
+    /// Display the processes loaded in the current state:
+    ///
+    /// ```python
+    /// api.run("display processes")
+    /// ```
     #[pyo3(name="run", signature = (command,))]
     pub(crate) fn run_command(&mut self, command: String) -> PyResult<()> {
         let command_history =
@@ -2856,6 +3953,23 @@ impl GammaLoopAPI {
             .map(|_| ())
     }
 
+    /// Build a causal-flow expression from an inline DOT graph or one of its subgraphs.
+    ///
+    /// Parameters
+    /// ----------
+    /// dot_string : str
+    ///     Inline DOT graph using particles from the active model.
+    /// subgraph_nodes : Sequence[str]
+    ///     Vertex names retained in the subgraph; an empty sequence selects all nodes.
+    /// reverse_dangling : Sequence[int]
+    ///     Dangling edge ids whose orientation is reversed.
+    /// orientation_pattern : str, optional
+    ///     Pattern restricting returned causal-flow orientations.
+    ///
+    /// Returns
+    /// -------
+    /// list[tuple[dict[int, int], str]]
+    ///     Edge-direction maps paired with their energy-denominator expressions.
     #[pyo3(name = "generate_cff", signature = (dot_string, subgraph_nodes, reverse_dangling,orientation_pattern=None))]
     pub(crate) fn generate_cff(
         &self,
@@ -2935,6 +4049,27 @@ impl GammaLoopAPI {
         Ok(result)
     }
 
+    /// Serialize a causal-flow expression and its surfaces as JSON.
+    ///
+    /// This accepts the same graph, subgraph, and dangling-edge inputs as
+    /// ``generate_cff``. The current JSON representation is intended for GammaLoop
+    /// tooling and may contain internal structural details.
+    ///
+    /// Parameters
+    /// ----------
+    /// dot_string : str
+    ///     Inline DOT graph using particles from the active model.
+    /// subgraph_nodes : Sequence[str]
+    ///     Vertex names retained in the subgraph; an empty sequence selects all nodes.
+    /// reverse_dangling : Sequence[int]
+    ///     Dangling edge ids whose orientation is reversed.
+    /// orientation_pattern : str, optional
+    ///     Pattern restricting returned causal-flow orientations.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     JSON representation of the causal-flow expression and E-surfaces.
     #[pyo3(
         name = "generate_cff_as_json_string",
         signature = (dot_string, subgraph_nodes, reverse_dangling, orientation_pattern = None)

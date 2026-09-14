@@ -156,7 +156,7 @@ pub trait RepName:
 
     /// for the given concrete index, says whether it should have a minus sign during contraction
     ///
-    /// for example see [`Self::negative`]
+    /// For example, see [`Representation::negative`].
     #[must_use]
     fn is_neg(self, _i: usize) -> bool {
         false
@@ -1416,7 +1416,8 @@ fn test_negative() {
 }
 
 #[cfg(feature = "shadowing")]
-/// Can possibly constuct a Representation from an `AtomView`, if it is of the form: <representation>(<dimension>)
+/// Can construct a `Representation` from an `AtomView` of the form
+/// `<representation>(<dimension>)`.
 ///
 impl<'a, T: RepName> TryFrom<AtomView<'a>> for Representation<T> {
     type Error = SlotError;

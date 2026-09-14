@@ -24,9 +24,14 @@ platforms = [
 ]
 
 # These crates expose Python/stubgen feature sets that are useful for their own
-# builds but too broad for the common CI cache target.
+# builds but too broad for the common CI cache target. Documentation tools
+# likewise keep their compiler and rendering dependencies in their own builds.
 [traversal-excludes]
 workspace-members = [
+    "alphal00p-docs-builder",
+    "alphal00p-docs-catalogs",
+    "alphal00p-docs-examples",
+    "alphal00p-docs-python-exporter",
     "clinnet",
     "idenso",
     "linnest",

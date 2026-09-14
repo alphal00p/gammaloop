@@ -69,7 +69,7 @@ spenso-macros = { workspace = true }
 # slotmap = { version = "1.0.7", features = ["serde"] }
 # smartstring = { version = "1.0.1", features = ["serde"] }
 symbolica-utils = { workspace = true }
-tabled = "0.20.0"
+tabled = "0.22.0"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 # approx-derive = "0.2.6"

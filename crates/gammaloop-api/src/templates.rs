@@ -93,6 +93,7 @@ mod tests {
         assert!(templates.join("figure.typ").is_file());
         assert!(templates.join("grid.typ").is_file());
         assert!(templates.join("layout.typ").is_file());
+        assert!(templates.join("layout-core.typ").is_file());
         assert!(fs::read_to_string(templates.join("grid.typ"))?.contains("page_format"));
         let figure = fs::read_to_string(templates.join("figure.typ"))?;
         assert!(figure.contains("amplitude-mode"));
@@ -100,13 +101,17 @@ mod tests {
         assert!(figure.contains("show-node-index"));
         assert!(figure.contains("unit: 1.5"));
         let layout = fs::read_to_string(templates.join("layout.typ"))?;
-        assert!(layout.contains("autogen-external-edge-fields"));
-        assert!(layout.contains("momentum-index"));
-        assert!(layout.contains("$(p_#index)$"));
-        assert!(layout.contains("$n_#index$"));
-        assert!(layout.contains("graph.style("));
-        assert!(layout.contains("length-scale: 0.4"));
-        assert!(layout.contains("z-spring-growth: 1.01"));
+        assert!(layout.contains("#import \"layout-core.typ\": bind-layout"));
+        assert!(layout.contains("#let layout = bind-layout("));
+        assert!(!layout.contains("graph.parse(input)"));
+        let layout_core = fs::read_to_string(templates.join("layout-core.typ"))?;
+        assert!(layout_core.contains("autogen-external-edge-fields"));
+        assert!(layout_core.contains("momentum-index"));
+        assert!(layout_core.contains("$(p_#index)$"));
+        assert!(layout_core.contains("$n_#index$"));
+        assert!(layout_core.contains("graph.style("));
+        assert!(layout_core.contains("length-scale: 0.4"));
+        assert!(layout_core.contains("z-spring-growth: 1.01"));
 
         assert!(templates
             .join("crates/linnest/typst/linnest.wasm")
@@ -127,6 +132,7 @@ mod tests {
 
         Assets::extract_justfile(tempdir.path())?;
         let justfile = fs::read_to_string(tempdir.path().join("justfile"))?;
+        assert!(justfile.contains("--style drawings/templates/layout-core.typ"));
         assert!(justfile.contains("momentum_line_mark := \"auto\""));
         assert!(justfile.contains("show_node_index := \"true\""));
         assert!(justfile.contains("show_particle := \"false\""));
