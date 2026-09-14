@@ -1,21 +1,30 @@
-use std::ops::Neg;
+use std::{
+    collections::BTreeMap,
+    ops::Neg,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use color_eyre::Result;
 use eyre::eyre;
-use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
+use linnet::half_edge::subgraph::SubSetLike;
 use symbolica::atom::Atom;
 use three_dimensional_reps::CffGenerationContext;
 
 use crate::{
-    cff::CutCFFIndex,
+    cff::{
+        CutCFFIndex,
+        generation::{PreparationKey, PreparationValue},
+    },
     debug_tags,
     graph::{ExactUvSubLmbFrame, Graph, cuts::CutSet},
+    numerator::energy_degree::{EnergyPowerAnalyzer, EnergyPowerCapMap},
     utils::GS,
     uv::{
         UVgenerationSettings,
         approx::{
             local_3d::Localizer,
-            local_4d::{FourDSector, Local4dCts},
+            local_4d::{CanonicalUvSector, FourDSector, Local4dCts},
         },
     },
 };
@@ -74,6 +83,67 @@ impl Neg for Projected4dCts {
     }
 }
 
+/// Nonserialized preparation owned by one graph's complete UV computation.
+/// Independent contours share reusable source payloads, never coefficients.
+pub(crate) struct Local4dProjectionContext {
+    pub(crate) generation_cache: crate::cff::generation::ExactCffGenerationCache,
+    pub(crate) preparations:
+        crate::cff::generation::GenerationCache<PreparationKey, PreparationValue>,
+    pub(crate) numerator_rows:
+        crate::cff::generation::GenerationCache<crate::cff::ExactNumeratorRowKey, Atom>,
+    pub(crate) numerator_template_builds: usize,
+    pub(crate) canonical_preparation_builds: usize,
+    pub(crate) source_preparation_builds: usize,
+    pub(crate) projected_component_requests: usize,
+}
+
+impl Default for Local4dProjectionContext {
+    fn default() -> Self {
+        Self {
+            generation_cache: Default::default(),
+            preparations: crate::cff::generation::GenerationCache::new(48 * 1024 * 1024, 4096),
+            numerator_rows: crate::cff::generation::GenerationCache::new(16 * 1024 * 1024, 16384),
+            numerator_template_builds: 0,
+            canonical_preparation_builds: 0,
+            source_preparation_builds: 0,
+            projected_component_requests: 0,
+        }
+    }
+}
+
+impl Local4dProjectionContext {
+    fn canonical_projection(
+        &mut self,
+        sector: FourDSector,
+        graph: &Graph,
+    ) -> Result<Arc<CanonicalUvSector>> {
+        let started = Instant::now();
+        let key = PreparationKey::Canonical(Arc::new(sector));
+        if let Some(PreparationValue::Canonical(sector)) = self.preparations.get(&key) {
+            let sector = Arc::clone(sector);
+            drop(key);
+            self.preparations.cache_time += started.elapsed();
+            return Ok(sector);
+        }
+        let PreparationKey::Canonical(raw) = &key else {
+            unreachable!()
+        };
+        let projection_started = Instant::now();
+        let sector = Arc::new(raw.canonical_projection(graph)?);
+        let projection_time = projection_started.elapsed();
+        let bytes = raw.accounted_bytes()
+            + sector.accounted_bytes()
+            + 2 * std::mem::size_of::<PreparationKey>()
+            + std::mem::size_of::<PreparationValue>()
+            + 128;
+        self.canonical_preparation_builds += 1;
+        self.preparations
+            .insert(key, PreparationValue::Canonical(Arc::clone(&sector)), bytes);
+        self.preparations.cache_time += started.elapsed().saturating_sub(projection_time);
+        Ok(sector)
+    }
+}
+
 pub(crate) struct Projected4dApproximation<'a> {
     localizer: Localizer<'a>,
     graph: &'a mut Graph,
@@ -102,7 +172,8 @@ impl Localizer<'_> {
     pub(super) fn project_factorized_taylor_sector(
         self,
         graph: &mut Graph,
-        sector: &FourDSector,
+        sector: &CanonicalUvSector,
+        context: &mut Local4dProjectionContext,
     ) -> Result<Atom> {
         if sector.active_components.is_empty() {
             return Err(eyre!(
@@ -119,80 +190,94 @@ impl Localizer<'_> {
         // is then the complete integral.
         let mut options = self.orientation.cff_options()?;
         options.cff_generation_context = CffGenerationContext::EmbeddedCffFactor;
+        let excluded_report_owners = graph
+            .iter_edges_of(&graph.initial_state_cut)
+            .chain(graph.iter_edges_of(&graph.tree_edges))
+            .map(|(_, edge, _)| edge)
+            .collect::<std::collections::BTreeSet<_>>();
         let mut terms = Vec::new();
-        for term in sector.physical_terms()? {
+        for term in &sector.terms {
+            // Raw physical ownership is diagnostic provenance, separate from
+            // canonical class algebra and the selected native capacities.
+            // Compute it once, before residue states multiply across waves.
+            let raw_degree_started = Instant::now();
+            let raw_reports = sector
+                .active_components
+                .iter()
+                .map(|(owners, _, _)| {
+                    let owners = graph
+                        .iter_edges_of(owners)
+                        .filter_map(|(pair, edge, data)| {
+                            (pair.is_paired()
+                                && !data.data.is_dummy
+                                && !excluded_report_owners.contains(&edge))
+                            .then_some(edge)
+                        });
+                    EnergyPowerAnalyzer::for_physical_emr_edges(owners)
+                        .analyze_atom(&term.source_numerator)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            debug_tags!(#generation, #profile, #uv, #local, #four_d;
+                stage = "raw_physical_degree_report",
+                components = raw_reports.len(),
+                elapsed_ms = raw_degree_started.elapsed().as_secs_f64() * 1000.0,
+                "Analyzed raw physical ownership for degree reporting"
+            );
             let mut component_denominators = vec![Vec::new(); sector.active_components.len()];
             let mut residual_factor = Atom::one();
-            for denominator in &term.denominators {
-                let memberships = sector
-                    .active_components
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, (owners, _, _))| {
-                        owners.includes(&graph[&denominator.source_edge].1)
-                    })
-                    .map(|(component, _)| component)
-                    .collect::<Vec<_>>();
-                match memberships.as_slice() {
-                    [] => residual_factor /= &denominator.full_expr,
-                    [component] => {
-                        // A denominator owned by this Taylor component can
-                        // nevertheless be independent of its quotient loop
-                        // coordinates after a pinch. It then has no contour
-                        // pole and remains an ordinary factor, exactly as in
-                        // the former single-frame projection.
-                        if denominator
-                            .momentum_signature_in_lmb(
-                                &sector.active_components[*component].2,
-                                true,
-                            )?
-                            .loop_signature
-                            .iter()
-                            .any(|coefficient| *coefficient != 0)
-                        {
-                            component_denominators[*component].push(denominator.clone());
-                        } else {
-                            residual_factor /= &denominator.full_expr;
-                        }
-                    }
-                    _ => {
-                        return Err(eyre!(
-                            "4D denominator owner {} belongs to overlapping active Taylor components {:?}",
-                            usize::from(denominator.source_edge),
-                            memberships
-                        ));
-                    }
+            for (denominator, class) in term.source_witness.iter().zip(&term.source_classes) {
+                if let Some((class, _)) = class {
+                    component_denominators[sector.class(*class).component]
+                        .push(denominator.clone());
+                } else {
+                    // A denominator can be independent of its component's
+                    // quotient loop after a pinch. Its full polynomial remains
+                    // an ordinary factor, with the original physical binding.
+                    residual_factor /= &denominator.full_expr;
                 }
             }
-
+            let classes = sector
+                .classes
+                .iter()
+                .filter(|class| term.powers.contains_key(&class.id))
+                .cloned()
+                .collect::<Vec<_>>();
             terms.push((
                 component_denominators,
-                vec![(residual_factor, term.numerator)],
+                classes,
+                term.powers.clone(),
+                raw_reports,
+                vec![(residual_factor, term.numerator.clone())],
             ));
         }
         // Each Taylor component owns an independent energy contour. Every
         // state entering one component retains its own occurrence capacities.
         // Reuse requires equal topology and capacity, so no registration pass
         // or combined bound envelope is needed before generation.
-        // The next component starts a fresh cache because its
-        // numerators are immutable outputs of this wave's exact residue maps.
+        // The graph-owned cache retains immutable source payloads across
+        // waves; each request still carries its own numerator assignment.
         for (component, (_, source_scope, coordinate_lmb)) in
             sector.active_components.iter().enumerate()
         {
+            let mut composition_time = Duration::ZERO;
             let uv_edges = graph
                 .iter_edges_of(source_scope)
                 .filter_map(|(pair, edge_id, edge)| {
                     (pair.is_paired() && !edge.data.is_dummy).then_some(edge_id)
                 })
                 .collect::<Vec<_>>();
-            let mut generation_cache = crate::cff::generation::ExactCffGenerationCache::default();
 
             // Use the complete enclosing source scope for incidence:
             // exact-source reconstruction contracts the omitted prefix into
             // the quotient topology. Only the reduced owner set above selects
             // this component's active denominators.
-            for (component_denominators, states) in &mut terms {
+            for (component_denominators, classes, _, raw_reports, states) in &mut terms {
                 let denominators = &component_denominators[component];
+                let active_classes = classes
+                    .iter()
+                    .filter(|class| class.component == component)
+                    .cloned()
+                    .collect::<Vec<_>>();
                 if denominators.is_empty() {
                     return Err(eyre!(
                         "active Taylor component has no energy denominator in one 4D term"
@@ -215,7 +300,8 @@ impl Localizer<'_> {
                         source_scope.string_label(),
                         numerator,
                     );
-                    let (cff, _) = graph.cff_from_4d_denominators_in_uv_sub_lmb(
+                    context.projected_component_requests += 1;
+                    let (mut cff, _) = graph.cff_from_4d_denominators_in_uv_sub_lmb(
                         denominators,
                         uv_edges.iter().copied(),
                         [],
@@ -224,8 +310,11 @@ impl Localizer<'_> {
                         &child_cutset,
                         &options,
                         &numerator,
-                        Some(&mut generation_cache),
+                        Some(&mut *context),
+                        &active_classes,
                     )?;
+                    cff.energy_degree_bound_report.physical_parent_bounds =
+                        raw_reports[component].clone().into_generation_bounds();
                     self.orientation
                         .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
                     // The sector already carries its forest subtraction sign.
@@ -240,7 +329,10 @@ impl Localizer<'_> {
                         }
                         for orientation in &cff_term.orientations {
                             let mapped_numerator = cff_term
-                                .map_exact_source_numerator(&orientation.orientation)
+                                .map_exact_source_numerator(
+                                    &orientation.orientation,
+                                    Some(&mut *context),
+                                )
                                 .map_err(|error| {
                                     eyre!(
                                         "{error}; exact UV-child component denominators are {:?}",
@@ -255,29 +347,116 @@ impl Localizer<'_> {
                                 source_scope.string_label(),
                                 mapped_numerator,
                             );
+                            let composition_started = Instant::now();
                             next_states.push((
                                 &carrier * &orientation.expression * &production_prefactor,
                                 mapped_numerator,
                             ));
+                            composition_time += composition_started.elapsed();
                         }
                     }
                 }
                 *states = next_states;
             }
 
+            // Once a component is integrated, its old powers no longer
+            // distinguish future requests. Canonical class IDs retain the
+            // exact routing, mass and domain inside this common sector frame.
+            // Keep the first deterministic witness, never concatenate source
+            // denominators; the next source certifies the combined numerator.
+            let composition_started = Instant::now();
+            let mut remaining_requests = BTreeMap::new();
+            for (mut denominators, mut classes, mut powers, mut raw_reports, states) in terms {
+                denominators[component].clear();
+                classes.retain(|class| class.component > component);
+                powers.retain(|id, _| sector.class(*id).component > component);
+                raw_reports[component] = Default::default();
+                let (_, _, _, reports, combined) =
+                    remaining_requests.entry(powers.clone()).or_insert_with(|| {
+                        (
+                            denominators,
+                            classes,
+                            powers,
+                            vec![EnergyPowerCapMap::default(); raw_reports.len()],
+                            Vec::new(),
+                        )
+                    });
+                for (report, incoming) in reports.iter_mut().zip(raw_reports) {
+                    report.max_assign(incoming);
+                }
+                combined.extend(states);
+            }
+            terms = remaining_requests.into_values().collect();
+            for (_, _, _, _, states) in &mut terms {
+                // Equal numerators share their summed carrier. Conversely,
+                // equal carriers share one factorized numerator. All states here
+                // have the same remaining component requests and contour frame,
+                // including states from different original rational terms.
+                // Combine numerator keys first: carrier-first grouping would
+                // turn repeated identical N into different multiples of N and
+                // conceal reuse at the next independent component.
+                loop {
+                    let previous_count = states.len();
+                    let mut by_numerator = BTreeMap::<Atom, Atom>::new();
+                    for (carrier, numerator) in std::mem::take(states) {
+                        *by_numerator.entry(numerator).or_insert(Atom::Zero) += carrier;
+                    }
+                    let mut by_carrier = BTreeMap::<Atom, Atom>::new();
+                    for (numerator, carrier) in by_numerator {
+                        if !carrier.is_zero() {
+                            *by_carrier.entry(carrier).or_insert(Atom::Zero) += numerator;
+                        }
+                    }
+                    *states = by_carrier
+                        .into_iter()
+                        .filter(|(_, numerator)| !numerator.is_zero())
+                        .collect();
+                    // Summing numerators can create an equality which the
+                    // first pass could not see. Every further useful pass
+                    // strictly decreases the number of states.
+                    if states.len() == previous_count {
+                        break;
+                    }
+                }
+            }
+
+            composition_time += composition_started.elapsed();
+            debug_tags!(#generation, #uv, #local, #four_d, #profile;
+                stage = "component_composition",
+                component,
+                elapsed_ms = composition_time.as_secs_f64() * 1000.0,
+                remaining_requests = terms.len(),
+                remaining_states = terms.iter().map(|(_, _, _, _, states)| states.len()).sum::<usize>(),
+                mapped_subtree_hits = context.numerator_rows.hits,
+                mapped_subtree_misses = context.numerator_rows.misses,
+                mapped_subtree_evictions = context.numerator_rows.evictions,
+                retained_subtree_bytes = context.numerator_rows.retained_bytes(),
+                "Composed and grouped independent UV component states"
+            );
+            context.numerator_rows.clear();
             debug_tags!(#generation, #uv, #local, #four_d, #cff, #summary;
                 component,
-                cached_exact_cff_expressions = generation_cache.len(),
+                cached_exact_cff_expressions = context.generation_cache.len(),
+                cached_preparations = context.preparations.len(),
+                numerator_template_builds = context.numerator_template_builds,
+                numerator_row_cache_hits = context.numerator_rows.hits,
+                preparation_bytes = context.preparations.retained_bytes(),
                 "Cached exact CFF expressions by topology and capacity in one local-4D component wave"
             );
         }
 
+        let composition_started = Instant::now();
         let active = terms
             .into_iter()
-            .flat_map(|(_, states)| states)
+            .flat_map(|(_, _, _, _, states)| states)
             .fold(Atom::Zero, |sum, (carrier, numerator)| {
                 sum + carrier * numerator
             });
+        debug_tags!(#generation, #uv, #local, #four_d, #profile;
+            stage = "sector_composition",
+            elapsed_ms = composition_started.elapsed().as_secs_f64() * 1000.0,
+            "Composed factorized UV sector coefficient"
+        );
         Ok(active)
     }
 }
@@ -287,7 +466,14 @@ impl Projected4dApproximation<'_> {
     /// child's own energy frame. The contracted cograph is deliberately absent
     /// here: final assembly attaches it after the independent 4D Taylor
     /// operation has been converted to CFF.
-    pub(crate) fn project_local_4d(&mut self, local: &Local4dCts) -> Result<Projected4dCts> {
+    pub(crate) fn project_local_4d(
+        &mut self,
+        local: &Local4dCts,
+        context: &mut Local4dProjectionContext,
+    ) -> Result<Projected4dCts> {
+        let projection_started = Instant::now();
+        let preparation_cache_before = context.preparations.cache_time;
+        let row_cache_before = context.numerator_rows.cache_time;
         if !self.settings.local_uv_cts_from_expanded_4d_integrands {
             return Err(eyre!(
                 "the typed local-4D child projection is reserved for local counterterms requested from expanded 4D integrands"
@@ -301,9 +487,19 @@ impl Projected4dApproximation<'_> {
 
         // Select the typed local sectors directly. Recursive completions are
         // owned by the separately integrated branch; no cograph is attached here.
-        if local.active_sectors().is_empty() {
+        let normalization_started = Instant::now();
+        let sectors = local.projection_sectors();
+        debug_tags!(#generation, #uv, #local, #four_d, #profile;
+            stage = "sector_grouping",
+            raw_sectors = local.active_sectors().len(),
+            grouped_sectors = sectors.len(),
+            elapsed_ms = normalization_started.elapsed().as_secs_f64() * 1000.0,
+            "Grouped compatible UV projection sectors"
+        );
+        if sectors.is_empty() {
             // Local4dCts prunes algebraically zero sectors and can also contain
-            // only completed recursive factors. Its local contribution is then
+            // only completed recursive factors. Grouping can cancel nonzero
+            // sectors with identical bindings. The local contribution is then
             // a typed zero, which needs no child or production energy map.
             return Ok(Projected4dCts::new(vec![Projected4dSector {
                 coefficient: Atom::Zero,
@@ -317,16 +513,26 @@ impl Projected4dApproximation<'_> {
         }
 
         let mut active_sectors = Vec::new();
-        for sector in local.active_sectors() {
-            let frozen_localizer = sector
-                .frozen_lmbs()
-                .iter()
-                .fold(Atom::one(), |product, lmb| {
-                    product * GS.localizing_integrand(lmb)
-                });
+        for sector in sectors {
+            let normalization_started = Instant::now();
+            let cache_time_before = context.preparations.cache_time;
+            let sector = context.canonical_projection(sector, self.graph)?;
+            let cache_time = context.preparations.cache_time - cache_time_before;
+            debug_tags!(#generation, #uv, #local, #four_d, #profile;
+                stage = "canonical_normalization",
+                buckets = sector.terms.len(),
+                denominator_classes = sector.classes.len(),
+                components = sector.active_components.len(),
+                elapsed_ms = normalization_started.elapsed().as_secs_f64() * 1000.0,
+                cache_work_ms = cache_time.as_secs_f64() * 1000.0,
+                "Certified canonical factorized UV algebra"
+            );
+            let frozen_localizer = sector.frozen_lmbs.iter().fold(Atom::one(), |product, lmb| {
+                product * GS.localizing_integrand(lmb)
+            });
             let active = self
                 .localizer
-                .project_factorized_taylor_sector(self.graph, sector)?;
+                .project_factorized_taylor_sector(self.graph, &sector, context)?;
 
             active_sectors.push(Projected4dSector {
                 coefficient: active,
@@ -334,6 +540,35 @@ impl Projected4dApproximation<'_> {
             });
         }
 
+        let (cff_hits, cff_misses, cff_evictions, retained_cff_bytes) =
+            context.generation_cache.statistics();
+        debug_tags!(#generation, #uv, #local, #four_d, #profile;
+            stage = "local_projection_total",
+            graph = %self.graph.name,
+            elapsed_ms = projection_started.elapsed().as_secs_f64() * 1000.0,
+            component_requests = context.projected_component_requests,
+            template_builds = context.numerator_template_builds,
+            canonical_preparation_builds = context.canonical_preparation_builds,
+            source_preparation_builds = context.source_preparation_builds,
+            preparation_hits = context.preparations.hits,
+            preparation_misses = context.preparations.misses,
+            preparation_evictions = context.preparations.evictions,
+            retained_preparation_bytes = context.preparations.retained_bytes(),
+            preparation_cache_ms = context.preparations.cache_time.as_secs_f64() * 1000.0,
+            preparation_cache_work_ms = (context.preparations.cache_time - preparation_cache_before).as_secs_f64() * 1000.0,
+            cff_hits,
+            cff_misses,
+            cff_evictions,
+            retained_cff_bytes,
+            native_generations = context.generation_cache.native_generations,
+            row_hits = context.numerator_rows.hits,
+            row_misses = context.numerator_rows.misses,
+            row_evictions = context.numerator_rows.evictions,
+            retained_row_bytes = context.numerator_rows.retained_bytes(),
+            row_cache_ms = context.numerator_rows.cache_time.as_secs_f64() * 1000.0,
+            row_cache_work_ms = (context.numerator_rows.cache_time - row_cache_before).as_secs_f64() * 1000.0,
+            "Completed local four-dimensional UV projection"
+        );
         Ok(Projected4dCts::new(active_sectors))
     }
 }
@@ -341,8 +576,8 @@ impl Projected4dApproximation<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::uv::approx::local_4d::FourDSector;
     use crate::{
-        cff::generation::ExactCffGenerationCache,
         dot,
         graph::{LMBext, parse::IntoGraph},
         initialisation::test_initialise,
@@ -355,6 +590,70 @@ mod tests {
         subgraph::{InternalSubGraph, SubSetOps},
     };
     use symbolica::atom::{AtomCore, FunctionBuilder};
+
+    #[test]
+    fn canonical_source_and_template_preparation_share_retention_invariant_budget() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph preparation_retention {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let mut coefficient = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one();
+        for edge in [EdgeIndex(0), EdgeIndex(1)] {
+            let momentum = FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish();
+            let polynomial = (1..=3).fold(
+                GS.emr_mom(edge, GS.cind(0)).pow(2) - Atom::one(),
+                |polynomial, index| polynomial - GS.emr_mom(edge, GS.cind(index)).pow(2),
+            );
+            coefficient *= GS
+                .den(usize::from(edge), momentum, Atom::one(), polynomial)
+                .pow(-2);
+        }
+        let full = graph.full_filter();
+        let raw = FourDSector::new(
+            coefficient,
+            vec![(full.clone(), full, graph.loop_momentum_basis.clone())],
+            Vec::new(),
+        );
+        let cutset = CutSet::empty(graph.n_hedges());
+        let pattern = OrientationPattern::default();
+        let production = Default::default();
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, false),
+        );
+        let mut context = Local4dProjectionContext::default();
+        let mut expected = None;
+        for phase in ["cold", "warm", "disabled", "evicted", "evicted_again"] {
+            if phase == "disabled" {
+                context.preparations = crate::cff::generation::GenerationCache::new(0, 0);
+            } else if phase == "evicted" {
+                context.preparations =
+                    crate::cff::generation::GenerationCache::new(48 * 1024 * 1024, 1);
+            }
+            let sector = context.canonical_projection(raw.clone(), &graph)?;
+            let coefficient = localizer
+                .project_factorized_taylor_sector(&mut graph, &sector, &mut context)?
+                .collect_factors();
+            assert_eq!(
+                expected.get_or_insert_with(|| coefficient.clone()),
+                &coefficient,
+                "{phase}"
+            );
+            let budget = if phase == "disabled" {
+                0
+            } else {
+                48 * 1024 * 1024
+            };
+            assert!(context.preparations.retained_bytes() <= budget);
+        }
+        Ok(())
+    }
 
     #[test]
     fn nested_banana_quotient_powered_component_has_the_analytic_one_energy_sign() -> Result<()> {
@@ -460,11 +759,38 @@ mod tests {
             &cutset,
             OrientationProjection::exact(&production, &projection_options, &pattern, false),
         );
-        let powered = localizer.project_factorized_taylor_sector(&mut graph, &powered_sector)?;
-        let cancelled =
-            localizer.project_factorized_taylor_sector(&mut graph, &cancelled_sector)?;
-        let dotted = localizer.project_factorized_taylor_sector(&mut graph, &dotted_sector)?;
-        let one_pole = localizer.project_factorized_taylor_sector(&mut graph, &one_pole_sector)?;
+        let powered = {
+            let canonical = powered_sector.canonical_projection(&graph)?;
+            localizer.project_factorized_taylor_sector(
+                &mut graph,
+                &canonical,
+                &mut Local4dProjectionContext::default(),
+            )
+        }?;
+        let cancelled = {
+            let canonical = cancelled_sector.canonical_projection(&graph)?;
+            localizer.project_factorized_taylor_sector(
+                &mut graph,
+                &canonical,
+                &mut Local4dProjectionContext::default(),
+            )
+        }?;
+        let dotted = {
+            let canonical = dotted_sector.canonical_projection(&graph)?;
+            localizer.project_factorized_taylor_sector(
+                &mut graph,
+                &canonical,
+                &mut Local4dProjectionContext::default(),
+            )
+        }?;
+        let one_pole = {
+            let canonical = one_pole_sector.canonical_projection(&graph)?;
+            localizer.project_factorized_taylor_sector(
+                &mut graph,
+                &canonical,
+                &mut Local4dProjectionContext::default(),
+            )
+        }?;
 
         // D/D^2 = 1/D, while the repeated-pole remainder obeys
         // CFF[1/D^2] = -CFF[1/D]/(2 E^2). Compare each term directly to the
@@ -594,7 +920,7 @@ mod tests {
                 (pair.is_paired() && !data.data.is_dummy).then_some(edge)
             })
             .collect::<Vec<_>>();
-        let mut structural_cache = ExactCffGenerationCache::default();
+        let mut structural_cache = Local4dProjectionContext::default();
         for term in sector.physical_terms()? {
             graph.cff_from_4d_denominators_in_uv_sub_lmb(
                 &term.denominators,
@@ -606,10 +932,18 @@ mod tests {
                 &options,
                 &term.numerator,
                 Some(&mut structural_cache),
+                &[],
             )?;
         }
 
-        let batched = localizer.project_factorized_taylor_sector(&mut graph, &sector)?;
+        let batched = {
+            let canonical = sector.canonical_projection(&graph)?;
+            localizer.project_factorized_taylor_sector(
+                &mut graph,
+                &canonical,
+                &mut Local4dProjectionContext::default(),
+            )
+        }?;
         let mut sequential = Atom::Zero;
         for term in sector.physical_terms()? {
             let (cff, _) = graph.cff_from_4d_denominators_in_uv_sub_lmb(
@@ -622,6 +956,7 @@ mod tests {
                 &options,
                 &term.numerator,
                 None,
+                &[],
             )?;
             let production_prefactor = Atom::num(cff.production_prefactor_factor());
             for (index, cff_term) in cff.terms {
@@ -629,7 +964,7 @@ mod tests {
                 for orientation in &cff_term.orientations {
                     sequential += &orientation.expression
                         * &production_prefactor
-                        * cff_term.map_exact_source_numerator(&orientation.orientation)?;
+                        * cff_term.map_exact_source_numerator(&orientation.orientation, None)?;
                 }
             }
         }
@@ -643,7 +978,14 @@ mod tests {
             sector.active_components.clone(),
             Vec::new(),
         );
-        let permuted = localizer.project_factorized_taylor_sector(&mut graph, &permuted)?;
+        let permuted = {
+            let canonical = permuted.canonical_projection(&graph)?;
+            localizer.project_factorized_taylor_sector(
+                &mut graph,
+                &canonical,
+                &mut Local4dProjectionContext::default(),
+            )
+        }?;
         assert_eq!(
             permuted, batched,
             "component-wave registration and output must be invariant under term permutation"
@@ -712,11 +1054,13 @@ mod tests {
             .pow(-1)
         };
         let numerator = Atom::var(symbolica::symbol!("typed_taylor_cache::nested"));
+        let coefficient = &numerator
+            * denominator(EdgeIndex(0))
+            * denominator(EdgeIndex(1))
+            * denominator(EdgeIndex(2));
+        let raised_coefficient = &coefficient * denominator(EdgeIndex(0));
         let sector = FourDSector::new(
-            &numerator
-                * denominator(EdgeIndex(0))
-                * denominator(EdgeIndex(1))
-                * denominator(EdgeIndex(2)),
+            coefficient.clone(),
             vec![
                 (
                     inner_subgraph.filter.clone(),
@@ -742,7 +1086,14 @@ mod tests {
             &cutset,
             OrientationProjection::exact(&production, &projection_options, &pattern, false),
         );
-        let batched = localizer.project_factorized_taylor_sector(&mut graph, &sector)?;
+        let batched = {
+            let canonical = sector.canonical_projection(&graph)?;
+            localizer.project_factorized_taylor_sector(
+                &mut graph,
+                &canonical,
+                &mut Local4dProjectionContext::default(),
+            )
+        }?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let [term] = sector
             .physical_terms()?
@@ -769,6 +1120,7 @@ mod tests {
             &options,
             &term.numerator,
             None,
+            &[],
         )?;
         let inner_prefactor = Atom::num(inner_cff.production_prefactor_factor());
         for (index, cff_term) in inner_cff.terms {
@@ -776,12 +1128,12 @@ mod tests {
             for orientation in &cff_term.orientations {
                 states.push((
                     &orientation.expression * &inner_prefactor,
-                    cff_term.map_exact_source_numerator(&orientation.orientation)?,
+                    cff_term.map_exact_source_numerator(&orientation.orientation, None)?,
                 ));
             }
         }
         let uv_edges = [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)];
-        let mut shell_cache = ExactCffGenerationCache::default();
+        let mut shell_cache = Local4dProjectionContext::default();
 
         let mut cached = Atom::Zero;
         let mut sequential = Atom::Zero;
@@ -800,6 +1152,7 @@ mod tests {
                     &options,
                     &state_numerator,
                     cache,
+                    &[],
                 )?;
                 let prefactor = Atom::num(cff.production_prefactor_factor());
                 for (index, cff_term) in cff.terms {
@@ -808,7 +1161,8 @@ mod tests {
                         *sum += &carrier
                             * &orientation.expression
                             * &prefactor
-                            * cff_term.map_exact_source_numerator(&orientation.orientation)?;
+                            * cff_term
+                                .map_exact_source_numerator(&orientation.orientation, None)?;
                     }
                 }
             }
@@ -817,6 +1171,39 @@ mod tests {
         assert!(
             (batched.collect_factors() - sequential.collect_factors()).is_zero(),
             "the production two-pass waves must equal fully uncached sequential component projection"
+        );
+
+        // Different first-component powers become the same remaining request.
+        // Both terms retain one independent inner contour and one outer frame;
+        // merging their completed states must preserve the complete outer value.
+        let combined = FourDSector::new(
+            &coefficient + &raised_coefficient,
+            sector.active_components.clone(),
+            Vec::new(),
+        )
+        .canonical_projection(&graph)?;
+        let mut combined_context = Local4dProjectionContext::default();
+        let combined = localizer.project_factorized_taylor_sector(
+            &mut graph,
+            &combined,
+            &mut combined_context,
+        )?;
+        let mut separate_context = Local4dProjectionContext::default();
+        let mut separate = Atom::Zero;
+        for coefficient in [coefficient, raised_coefficient] {
+            let canonical =
+                FourDSector::new(coefficient, sector.active_components.clone(), Vec::new())
+                    .canonical_projection(&graph)?;
+            separate += localizer.project_factorized_taylor_sector(
+                &mut graph,
+                &canonical,
+                &mut separate_context,
+            )?;
+        }
+        assert!(
+            (combined.collect_factors() - separate.collect_factors())
+                .together()
+                .is_zero()
         );
         Ok(())
     }

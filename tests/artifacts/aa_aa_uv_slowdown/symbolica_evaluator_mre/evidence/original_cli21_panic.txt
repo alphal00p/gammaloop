@@ -1,0 +1,6 @@
+The application panicked (crashed).
+Message:  advance out of bounds: the len is 1721315294 but advancing by 10311249876
+Location: /home/codex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bytes-1.11.1/src/lib.rs:170
+
+Backtrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.
+Run with RUST_BACKTRACE=full to include source snippets.

@@ -50,6 +50,72 @@ use symbolica::{
     function, parse,
 };
 
+#[test]
+fn integrands_bulk_add_preserves_factorized_coefficients_and_cut_orders() -> Result<(), eyre::Report>
+{
+    test_initialise()?;
+    let ordinary = crate::cff::CutCFFIndex::new_all_none();
+    let raised = crate::cff::CutCFFIndex {
+        left_threshold_order: Some(1),
+        ..ordinary
+    };
+    let numerator = parse!("(x+y)^8*(u+v)^3");
+    let first = &numerator / parse!("D^2");
+    let second = &numerator / parse!("E^3");
+    let zero = crate::uv::Integrands::from_iter([(ordinary, Atom::Zero), (raised, Atom::Zero)]);
+    let sum = zero.clone().zip_add([
+        [(ordinary, &first + &second), (raised, first.clone())]
+            .into_iter()
+            .collect(),
+        [(ordinary, -&first), (raised, -&first)]
+            .into_iter()
+            .collect(),
+        [(ordinary, second.clone()), (raised, first.clone())]
+            .into_iter()
+            .collect(),
+    ])?;
+    // Exact structural equality also checks that neither numerator power nor
+    // the separate denominator buckets were distributed during accumulation.
+    assert_eq!(
+        sum,
+        [(ordinary, Atom::num(2) * second), (raised, first)]
+            .into_iter()
+            .collect()
+    );
+    assert_eq!(zero.clone().zip_add([])?, zero);
+    Ok(())
+}
+
+#[test]
+fn integrands_bulk_add_checks_every_complete_cut_shape() -> Result<(), eyre::Report> {
+    test_initialise()?;
+    let ordinary = crate::cff::CutCFFIndex::new_all_none();
+    let raised = crate::cff::CutCFFIndex {
+        left_threshold_order: Some(1),
+        ..ordinary
+    };
+    let initial = crate::uv::Integrands::from_iter([(ordinary, Atom::one())]);
+    let extra = crate::uv::Integrands::from_iter([(ordinary, Atom::one()), (raised, Atom::one())]);
+    let empty = crate::uv::Integrands::from_iter([]);
+    assert!(
+        initial
+            .clone()
+            .zip_add([initial.clone(), extra])
+            .unwrap_err()
+            .to_string()
+            .contains("left integrands are missing key")
+    );
+    assert!(
+        initial
+            .clone()
+            .zip_add([initial, empty])
+            .unwrap_err()
+            .to_string()
+            .contains("right integrands are missing key")
+    );
+    Ok(())
+}
+
 fn logspace(start: f64, stop: f64, num: usize, base: f64) -> Vec<f64> {
     let log_start = start;
     let log_stop = stop;

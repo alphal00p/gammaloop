@@ -111,7 +111,7 @@ impl DirectResidueBranches {
                 .iter_mut()
                 .find(|(existing_key, _)| *existing_key == key)
             {
-                *existing = existing.clone().zip_add(integrands)?;
+                *existing = existing.clone().zip_add([integrands])?;
             } else {
                 branches.push((key, integrands));
             }
@@ -221,12 +221,12 @@ impl DirectResidueBranches {
             .next()
             .ok_or_else(|| eyre!("direct local-3D residue branches cannot be empty"))?;
         let first_selector = first_key.selector(materialize_key_selector);
-        let mut result = first.map(|atom| atom * &first_selector);
-        for (key, integrands) in branches {
-            let selector = key.selector(materialize_key_selector);
-            result = result.zip_add(integrands.map(|atom| atom * &selector))?;
-        }
-        Ok(result)
+        first
+            .map(|atom| atom * &first_selector)
+            .zip_add(branches.map(|(key, integrands)| {
+                let selector = key.selector(materialize_key_selector);
+                integrands.map(|atom| atom * &selector)
+            }))
     }
 }
 

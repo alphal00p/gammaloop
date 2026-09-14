@@ -124,12 +124,11 @@ that type until symbolic output converts it with `Atom::num`. Native rational
 serde/bincode support owns coefficient persistence; old Atom coefficient encodings
 are not a compatibility contract.
 
-All CFF power and capacity questions, including numerator and finite-pole
-powers of repeated occurrences, are expressed solely in physical EMR/source-edge
-energies. LMB coordinates describe momentum routing and are never consulted to
-identify, cap, or substitute an energy power. Production capacity analysis
-accepts physical `Q(edge, index)` atoms and rejects `K(loop, index)` until its
-producer normalizes it with physical edge provenance.
+CFF capacities belong to independently sampled denominator occurrences. Physical
+sources use their EMR/source-edge identities; completed UV sources additionally
+accept typed canonical denominator classes, which are distinct from `EdgeIndex`.
+LMB coordinates certify routing and fixed affine carriers. They do not authorize
+redistributing a physical source's energy powers or combining contours.
 
 Both direct local-3D modes first perform the complete loop-energy integration
 and build the complete/global CFF expression; the UV Taylor operators then act
@@ -142,75 +141,205 @@ applied independently to every keyed body and leaves that selector opaque.
 explicitly sums the same bodies. Neither direct mode reconstructs
 or projects completed local-4D Taylor structures.
 
-Only the projected local-4D route represents completed terms with raised
-propagators by source-backed occurrence graphs. The original `EdgeIndex`
-survives the Taylor operator in the typed denominator wrapper. Disjoint-set
-contraction of absent edges in the original graph then constructs the cograph
-and UV source minors, and every
-occurrence inherits the endpoints of its `source_edge` in the appropriate
-minor. Only repeated occurrences of that same source edge subdivide its
-incidence into a serial dotted chain. Exact momentum signatures are normalized
-up to sign to validate denominator equality and record repeated occurrences;
-they never infer endpoints or merge physical owners. The rank solve at this
-source-topology boundary selects a unique `+/-` routing sign modulo the opposite
-source domain on those
-already fixed endpoints. There is no incidence/Kirchhoff reconstruction and no
-external-balance synthesis. The raw `+/-Q` sign remains available to the
-numerator mapper, while a post-construction Graphica pass canonically relabels
-nodes and exact edges for deterministic cache keys.
+The projected local-4D route retains raw `Local4dCts`, recursive sectors and
+original provenance for subsequent outer Taylor operations. Its projection view
+normalizes completed hard roles zero and one into exact signed denominator
+classes. Each class includes the component domain, routing, mass and full
+polynomial; physical/soft provenance, frozen localizers and cograph bindings
+remain explicit. The class algebra contains powered denominators and a
+factorized numerator, with no CFF capacities or sampling conventions. This is
+the boundary a future LTD consumer can use directly.
 
-Projection prepares each genuinely outer additive Taylor term once, then
-compares at most three certified assignments by actual native source-map count.
-Generated expressions are reused only for equal canonical topology and
-identical per-occurrence capacity. Every term keeps its selected factorized
-assignment and matching generated payload.
-Equal physical energies do not authorize the cache to redistribute bounds
-between their distinct occurrences. Independent requests never contribute a
-shared capacity maximum, and no preliminary registration pass is needed.
-The real degree-one triangle regression retains the natural UV-owner
-multiplicities `(1,1,1)`, `(2,1,1)` and `(1,1,2)` as separate denominator
-topologies. Terms with the same denominators may share a factorized additive
-numerator; collecting a common denominator across different topologies would
-manufacture positive denominator factors and inflate the required CFF rank.
-Genuine positive typed denominator factors already present in a numerator
-remain supported, with their original ownership and CFF lower sectors intact.
-Non-vacuum exact sources retain pure-external boundaries as explicit
-source-crown hedges. Future on-shell two-point insertions such as `(m,0,0,0)`
-require an explicit fixed-boundary payload, not topology reconstruction.
-This exact-source reconstruction and bounded dispatch search is exclusive to
-the projected local-4D route; direct local-3D and LTD dispatch are unchanged.
-Original factors retain their own occurrences; newly denominator-derived hard
-factors may use only their line's serial copies. The descending rank envelope
-orders proposals, preferring `(4,2,2)` to `(4,3,1)` while the original quartic
-stays fixed. The hard search compares that baseline with at most two
-deterministic alternatives, each changing a single owner's assignment. New soft
-Taylor factors retain explicit crown provenance until outer assembly, where the
-completed child coefficient is multiplied by the untouched outer numerator.
-The soft search proposes at
-most three certified off-shell cograph routings, including every fixed external
-shift.
+Local Taylor construction retains spinor products, chains and traces after
+metric simplification. Numerical tensor execution contracts them after residue
+mapping; the integrated-CT preparation separately performs the required
+analytic Dirac algebra on its copy before Vakint. This avoids expanding a local
+trace into scalar contractions before canonical merging and energy sampling.
+Analytic spin expansion temporarily aliases completed, spin-independent scalar
+products, certified by their expanded tensor structure. Their internally bound
+indices must not be reused when a powered product is materialized. Open compact
+tensor contractions remain visible to full shorthand expansion; the existing
+alias owner restores scalar products afterwards. Tensor execution evaluates odd
+powers as paired contractions times the remaining base, preserving its free
+indices and the requested exponent.
+Both local routes simplify the reduced numerator's color algebra before Taylor
+construction and the cograph's color algebra before residue mapping, using the
+existing numerator operation. Open color indices remain explicit; the final
+color pass contracts indices closed by attached UV terms and projectors. When
+fundamental-dimension invariant substitution is requested, the color simplifier
+also applies it after each local rewrite and before tensor collection. Resolved
+scalar Casimirs and indices therefore do not cause collection over a factorized
+residue sum; newly produced invariants follow the same rule. Raw
+graph storage and parse-time validation are unchanged.
 
-Both searches select the smallest actual native generated source-map row count
-(`generated.expression.orientations.len()`), with proposal order breaking ties.
-This counts stored operational rows after the core's own emission/coalescing,
-including retained zero rows, before surface conversion and cut/host selection.
-It is not a degree-product estimate or a global union of keys across Taylor
-terms. Final selected host/map branches can have a different count. Existing
-rank/Pareto and basis restrictions define a bounded proposal class, so this is
-best-of-three selection, not a global optimum or a bound on generation time/RAM.
+Tensor collection temporarily aliases maximal unselected composite coefficients
+before polynomial grouping. Selected tensors retain their complete slots and
+payloads; structurally equal coefficients share an alias, with collision checks
+against input symbols. The existing Symbolica alias owner restores definitions
+before tensor-group callbacks run. This preserves factorized powers and sums and
+avoids statistical zero tests on large momentum coefficients. Collection does
+not promise polynomial simplification of those opaque coefficients; structural
+cancellations and tensor-algebra zeros still apply. Aliases live only for the
+collection call and are never serialized or retained in generation caches.
+Chain composition uses this same collector before applying its existing
+composition and normalization rules, including when color simplification
+encounters chain factors in a mapped numerator.
+Positive integer powers of collected tensors stay compressed inside the complete
+payload passed to callbacks. The color simplifier runs its fixed-point rewrite
+loop on these collected payloads, keeping unrelated momentum coefficients
+outside repeated chain traversal. Untyped color heads follow the same selection.
+Generic non-color chain/trace and metric rewrites reach their own fixed point
+before and after color collection, without making non-color trace sums into
+polynomial variables. This preserves factorized powers and mixed contractions.
 
-The hard cache admits full payloads only for winning keys and retains small
-count-only records for contenders under the same complete source/options/bounds
-key. The soft path has no persistent count memo: it holds an incumbent and
-challenger, drops the loser, then performs surface conversion, cut/hosting,
-reporting and numerator mapping only for the winner. Existing root-expression
-reuse bypasses this search instead of regenerating its established capacity.
-The chosen factorized expression and immutable plan supply both the generated
-capacity and numerator mapping. No numerator expansion, on-shell routing
-identity, or change of original ownership is involved.
-The full design, sign argument for `D(Q)=D(-Q)`, and concrete production fixtures
-are documented in
+Final residue assembly validates the complete cut-key shape of every summand,
+then uses Symbolica's native bulk addition once per cut order. Projected sectors
+and direct-route selector materialization retain their already mapped branch
+values until this merge. This avoids repeatedly copying the growing numerator;
+it merges existing top-level sums without distributing product factors or
+constructing common denominators.
+
+Tensor-network edge joins use Linnet's existing dense edge swap, which updates
+the moved edges through their owning half-edges. Each join therefore avoids a
+scan over the growing graph while preserving its edge payloads and merge flow.
+Operator merging uses its existing disjoint union groups to mark newly internal
+half-edges directly from each group's node crowns. One shared deletion set
+preserves original self-loops, dangling slots and edges between groups without
+allocating and combining graph-sized masks for each operator island.
+
+Ready-operation batches likewise retain sorted visible half-edge lists per
+operation. Disjointness checks and the optional batch union visit these lists;
+counts use their lengths. Node identification consumes the same ordered list
+and its exact membership predicate, preserving the dense subset's representative
+node and newly internal edge marks, including partially hidden edges. Sequential,
+parallel and partial-rewrite strategies use this common payload. Only extraction
+materializes a dense subset for an individual operation, with the complete graph
+extent. Retained batch membership therefore scales with touched incidence rather
+than the product of graph size and ready-operation count.
+Root alignment uses the existing traversal's discovery order to collect one
+root per visited node, without converting that traversal to child vectors.
+Requests for disjoint node crowns commute. The traversal is released before
+the graph's node-store conversion, which still normalizes sibling ordering.
+
+Rational-shell extraction groups equal denominator multisets through sums,
+products and powers while leaving denominator-free numerator subtrees opaque.
+It adds powers and numerators, prunes exact zeros, and never constructs a global
+common denominator. Positive typed denominator factors remain indivisible
+numerator blocks with their complete polynomial and signed binding. Compatible
+sectors merge before reconstruction. Exact cancellation at this boundary returns
+the existing typed zero with all cut-order outputs preserved, before any energy
+map or orientation is required. Frozen domains and localizers remain part of the
+compatibility test; opposite terms in different domains do not cancel.
+After each independent component contour,
+states with equal remaining requests and bindings share numerators when their
+carriers agree, or share carriers when their numerators agree.
+Grouping repeats until the state count stops decreasing, because one sum can
+create an equality for the next grouping pass.
+
+Every algebra bucket retains one deterministic physical source witness. The
+existing source builder inherits original incidence, contracts omitted edges,
+and adds serial copies for raised occurrences. Only certified serial paths or
+pure cycles permit incidence contraction of equal channels. Nonadjacent equal
+channels can merge algebraically while retaining distinct edges in that witness.
+Exact signatures validate routing and its sign; they never infer endpoints.
+The source separately checks rank, measure, boundary attachments and contour.
+The class numerator is certified in one neutral momentum frame, independently
+of denominator routing, mass, multiplicity and domain. The signed occurrence
+lift obeys `H=hR`, `P=rR`, hence `H^0=hrP^0`.
+
+Completed hard numerator factors may use any certified occurrence of their
+class, including occurrences inherited from different physical owners. Equal
+channels with unequal masses or prescriptions remain distinct pools. A hard
+carrier without a surviving class uses an exact fixed affine lift through
+retained base occurrences and external shifts; it creates no new pole family.
+Physical source ownership and soft crown provenance retain their restrictions.
+Non-vacuum exact sources retain pure-external boundaries as explicit source-crown
+hedges. Future on-shell insertions such as `(m,0,0,0)` require an explicit fixed
+boundary payload rather than inferred attachments.
+
+The immutable CFF assignment is constructed compositionally. Sums take the
+componentwise maximum, products and registered multilinear arguments add degrees,
+and positive integer powers retain compressed repetitions. A deterministic
+checkpoint with a doubling interval detects assignment cycles after a transient
+while retaining one offset context, including packed tails beyond 64 occurrences.
+The inert cyclic,
+symmetric and antisymmetric tensor projectors use the same slotwise degree rule
+while keeping their symbolic heads intact. Freely assignable
+leaves use cyclic offsets within each class; opaque blocks use deterministic
+least-loaded placement. An ordinary affine request admits one candidate. A
+nonlinear request admits at most three distinct valid candidates: baseline,
+packed unavoidable excess, then reversal of the best-scored placement (rotation
+only replaces a duplicate). Each challenger changes one eligible occurrence pool,
+with no Cartesian search across pools.
+
+Selection uses native `generated.expression.orientations.len()` before surface
+conversion and host selection. Maximum rank, descending rank envelope and stable
+candidate order break ties. The cache key preserves exact ordered capacities;
+identical physical energies do not authorize permuting loads. This bounded
+selection is not an exhaustive minimum. The sunset regression compares complete
+signed contours against independent residues: at energies `(2,3,7)`, the degree-five
+and degree-seven values are `1213/16387080192` and `-365/47775744`. It covers all
+126 degree-five distributions over the five equivalent occurrences and the
+allocator's degree-five/seven proposals. It imposes no native row count or
+proposal order. All losing generation belongs to selection cost. Soft routing
+retains its existing exact-basis/Pareto frontier
+for off-shell proposals, including every fixed external shift. Its at-most-three
+native generation trials do not bound that separate frontier's preparation cost.
+Root-expression reuse retains its established capacities.
+
+Generation profiling includes raw physical-degree reports and the complete outer
+routing selection interval. Raw CFF requests separate source reconstruction,
+degree/preparation, native generation and postprocessing, and selection records
+the winner explicitly. This keeps winning generation separate while charging
+every losing proposal, its preparation and destruction to dispatch. Full local
+UV accounting uses completed nonroot forest nodes; child projection timers alone
+do not include the outer routing and assembly boundary.
+
+One nonserialized `Local4dProjectionContext` spans each graph's complete UV
+computation in both forest orchestrators. Its deterministic LRU caches retain
+canonical sectors, owned source analysis and immutable numerator templates
+together (48 MiB, 4,096 entries), winning CFF payloads and
+contender counts (64 MiB, 4,096 keys), and component-local mapped subtrees
+(16 MiB, 16,384 entries). Owned keys, containers and symbolic payloads are charged;
+oversized entries bypass retention. These are retained-payload limits, not RSS
+limits. Clearing or evicting entries changes computation cost only.
+Source preparation owns its parsed incidence and signed namespace maps, so a
+warm hit skips reconstruction without retaining a borrowed graph adapter. The
+context belongs to one graph computation and cannot be reused for another graph;
+its keys describe that graph's requests rather than a global graph registry.
+Projection reuse tests compare complete coefficients with cold, warm, disabled
+and evicted retention, while checking only the configured byte ceiling. Hit
+counts, prepared entry counts and traversal order remain diagnostic observations.
+
+`PlannedExactSourceNumerator` owns the assignment, prepared expression and exact
+signed mapping context behind an immutable `Arc`. A cache miss prepares the same
+generic template. Capture-free loop/occurrence parameters remain symbolic until
+a residue row arrives; each subtree records its exact dependencies. Mapping
+converts required energies once per row and memoizes only the relevant sample
+tuple. Constants are reused unchanged. Zero contact samples and the order of
+inactive-energy elimination are preserved. Mutable row caches live outside the
+immutable template and are cleared after each component wave. No graph-specific
+tables, global caches or serialized caches are involved.
+
+Each candidate prepares or reuses its exact immutable template before native
+CFF generation. Preparation certifies the occurrence diagonal in a formal
+spatial/temporal frame, including fixed external four-vectors. The selected
+payload carries this same certified template into row mapping. Profiling separates
+winning template construction from discarded candidate construction; all discarded
+preparation and cache work count toward dispatch overhead. Its only distribution is the
+finite projector action on an affine energy sum; numerator products and powers
+remain intact. A positive denominator block with a pinched hard carrier keeps
+its whole polynomial and an exact source-owned affine-rewrite witness. Only
+that witness permits joint fixed dependencies in the existing planned factor;
+uncertified mixed ownership and soft provenance keep their original rules.
+
+The full reconstruction invariant, sign argument for `D(Q)=D(-Q)`, and worked
+fixtures are documented in
 [`exact-powered-denominator-cff-lifting.md`](exact-powered-denominator-cff-lifting.md).
+Generation/runtime measurements and correctness coverage are recorded in
+[`local-4d-uv-performance.md`](local-4d-uv-performance.md). The original plan and
+dated implementation notes remain in the repository-root
+`SPEED_UP_UV_CTS_FROM_4D.md`.
 
 The production numerator remains factorized. Degree analysis traverses its
 factors without expanding them, each UV step attaches only newly owned factors,
@@ -272,6 +401,10 @@ sequential forest construction composes the same local and integrated replay
 operations used by disconnected forests. Integrated localization registers its
 source surfaces before either Taylor branch reads the graph, and its normalized
 localizing factor remains inert under subsequent Taylor operations.
+Evaluator preparation skips residue-selector parametrization when the selector
+symbol is absent, and skips orientation collection when neither theta nor IF
+occurs. Expressions with conditionals retain the existing guarded-branch
+rewrites so inactive residue-local inverses are never evaluated.
 
 The shared CFF core also returns its connected-loop and pure
 duplicate-denominator global sign as typed metadata. GammaLoop consumes that
@@ -337,9 +470,69 @@ projected local4D are summed representations and reject that request.
 
 ### 3.3 Tensor-network contraction order
 
-Evaluator construction parses the factorized numerator into a Spenso network,
-aliases large scalar references, and contracts its tensor products before
-resolving those aliases. The default `intermediate_cost` preset selects
+Generic metric normalization retains its ordered vector, redundant-metric,
+vector-power, metric-power and trace passes. The first two passes traverse the
+factorized expression from the root downward and use conservative symbol-tag
+checks before applying their unchanged rules at the current node. Ordinary
+momentum components and scalar dots avoid unnecessary wildcard matching. A
+matched replacement keeps the original descendant-skipping behavior, and the
+redundant-metric pass still runs to a fixed point. In particular, metric-power
+normalization continues to precede tracing.
+
+Evaluator construction normalizes its factorized input once, then parses each
+existing top-level summand into an independent Spenso network. This bounds
+network preparation to the current summand. Products, powers and nested sums
+retain their grouping.
+Each network aliases large scalar references and contracts its tensor products
+before resolving its own aliases. Typed scalar-store handles are substituted
+directly from their definitions.
+Resolution retains its exact fixed point for nested or newly exposed handles;
+it avoids hashing unrelated subexpressions and copying alias-free results.
+Within a network, bulk Atom addition accepts every leaf whose existing scalar
+conversion succeeds, including rank-zero tensors and lazy sums with scales.
+The conversion preserves alias handles and rejects open tensors before the
+store changes. Owned scalar results move into the existing bulk or streaming
+sum, avoiding repeated pairwise addition of large closed-tensor results.
+Scalar results are combined in one bulk sum
+before global evaluator optimization; open tensors, including open zero tensors,
+remain invalid scalar outputs. Optional evaluator variants borrow these scalars
+before the final parametric evaluator takes ownership. Selector-free inputs and
+empty function-map replacement lists retain that ownership without copying the
+expression. Once symbolic programs are built, unstored source expressions are
+released before dual and numeric programs are constructed. Profiling separates
+expression preparation, Symbolica construction and numeric-program conversion.
+At this finite component boundary, a ready tensor
+whose exposed indices all contract with a pending tensor sum is attached to
+each immediate sum branch first. One expression traversal selects all eligible
+disjoint outermost sums, including siblings within a product. Small product
+wrappers copy only the closing leaf references and their exact slot order,
+flow and internal traces. Native arms and sum shells stay in place; stable
+half-edge identifiers bind the consumed inputs while residual seams remain
+untouched. The wrappers are appended together, followed by one deletion and
+operator merge per wave. This reduces the sum's open tensor rank before large
+component expressions are constructed, without repeated extraction of a whole
+sum or its arms. The tensor store is shared by reference and scalar spectators
+stay outside; sums are not multiplied
+through other sums, powers or opaque functions. Repeating the transformation
+decreases an existing sum's exposed rank. Eligibility requires self-dual exposed
+sum slots, so shared edge descriptors retain their exact endpoint meaning;
+internal dual contractions and spectator incidence are preserved. It changes
+the contraction graph, leaving the input Atom, raw Taylor algebra and selected
+energy assignments untouched. Symbolic networks used to reconstruct numerator
+Atoms do not invoke this preparation.
+
+Completed contraction waves reclaim tensors no longer referenced by the whole
+network graph. The owned store moves surviving entries and remaps every tensor
+leaf variant, including shared references and scaled sums. Tensor indices are
+local execution handles and may change between waves. Reclamation occurs only
+after replacement leaves are installed and deferred node identifications are
+finished; parallel workers first return all additions from their borrowed
+overlays. Extracted subgraphs cannot determine whole-store liveness. Scalar
+indices remain stable, preserving alias handles embedded inside expressions and
+the original definitions used during final restoration. No symbolic expression
+is rewritten by this storage compaction.
+
+The default `intermediate_cost` preset selects
 `MinIntermediateCost`, a configuration of the existing `ContractionStrategy`
 implementation. It changes pair selection, preserving the scalar, trace,
 library, disconnected-product and final cleanup rules.
@@ -356,6 +549,9 @@ Cartesian entry count, capped by output and contracted-coordinate volume for
 single tensors. That cap is not applied to lazy sums, whose terms may share
 coordinates. The existing bounded output-support join and deterministic
 operand-order ties remain in use.
+The bounded join counts output coordinates through borrowed slices of its
+immutable support groups, avoiding per-product coordinate copies while merging
+equal output coordinates from distinct contracted groups by their contents.
 
 These scores estimate work before cancellations. They are not physical memory
 bounds or a prediction of the globally best contraction sequence. They use

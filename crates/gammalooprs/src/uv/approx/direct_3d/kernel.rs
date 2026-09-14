@@ -268,6 +268,7 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     let numerator = ctx
         .graph
         .numerator(&reduced, given.subgraph())
+        .color_simplify()
         .get_single_atom()
         .expect("graph numerator should be available");
     let mapped_numerator = key.map_numerator(orientation, ctx.graph, &numerator)?;

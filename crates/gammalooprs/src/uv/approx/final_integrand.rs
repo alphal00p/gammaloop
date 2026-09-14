@@ -44,7 +44,7 @@ impl FinalIntegrands {
     }
 
     pub(crate) fn zip_add(self, other: Self) -> Result<Self> {
-        Ok(Self(self.0.zip_add(other.0)?))
+        Ok(Self(self.0.zip_add([other.0])?))
     }
 
     pub(crate) fn into_integrands(self) -> Integrands {
@@ -88,11 +88,22 @@ impl<'a> FinalIntegrandBuilder<'a> {
             "Computed global numerator"
         );
 
+        // Resolve the cograph's color algebra before residue mapping repeats its
+        // momentum numerator. The final pass still closes attached UV/projector
+        // color indices that remain open at this boundary.
         let resnum = graph
             .numerator(&reduced, current.subgraph())
+            .color_simplify()
             .get_single_atom()
             .expect("graph numerator should be available")
             * global_num;
+        debug_tags!(#generation, #profile, #uv, #numerator, #dump;
+            stage = "final_cograph_numerator_ready",
+            graph = %graph.name,
+            numerator_bytes = resnum.as_view().get_byte_size(),
+            file.atom = %resnum.to_canonical_string(),
+            "Cograph numerator before residue mapping"
+        );
         let localized_integrated = self
             .localizer
             .localize(
@@ -151,10 +162,18 @@ impl<'a> FinalIntegrandBuilder<'a> {
         );
         let resnum = graph
             .numerator(&reduced, current.subgraph())
+            .color_simplify()
             .get_single_atom()
             .expect("graph numerator should be available")
             * global_num;
         let localizer = self.localizer.with_independent_source_sum();
+        debug_tags!(#generation, #profile, #uv, #numerator, #dump;
+            stage = "final_cograph_numerator_ready",
+            graph = %graph.name,
+            numerator_bytes = resnum.as_view().get_byte_size(),
+            file.atom = %resnum.to_canonical_string(),
+            "Cograph numerator before residue mapping"
+        );
         // Only the projected local-4D route reaches this assembly boundary.
         // Its child Taylor coefficient deliberately omits the untouched
         // cograph; choose its outer CFF per independent sector here, converting
@@ -188,14 +207,14 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 .then_some(edge)
             })
             .collect::<Vec<_>>();
-        let mut selector_free: Option<Integrands> = None;
+        let mut selector_free: Option<Vec<Integrands>> = None;
         for sector in active_sectors {
             if sector.coefficient.is_zero() {
                 // A disabled integrated prefix can deliberately retain a
                 // typed zero sector for later forest replay. Preserve all
                 // allowed cut orders without asking the outer CFF to resolve
                 // a map for an identically zero coefficient.
-                selector_free.get_or_insert_with(|| allowed_zero.clone());
+                selector_free.get_or_insert_with(Vec::new);
                 continue;
             }
             // Choose the soft Taylor routing once with the untouched cograph
@@ -230,8 +249,9 @@ impl<'a> FinalIntegrandBuilder<'a> {
             // branches carry maps and cut orders; consume each map once before
             // adding its value, checking the complete allowed cut-key shape.
             for (_, _, integrands) in localized.iter_orientations() {
-                let sum = selector_free.take().unwrap_or_else(|| allowed_zero.clone());
-                selector_free = Some(sum.zip_add(integrands.clone())?);
+                selector_free
+                    .get_or_insert_with(Vec::new)
+                    .push(integrands.clone());
             }
         }
         // The integrated addback is shared with the direct route. Its localizer
@@ -255,13 +275,14 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // lane: sum them explicitly without ever materializing a selector or
         // traversing another numerator map.
         for (_, _, integrands) in localized_integrated.iter_orientations() {
-            let sum = selector_free.take().unwrap_or_else(|| allowed_zero.clone());
-            selector_free = Some(sum.zip_add(integrands.clone())?);
+            selector_free
+                .get_or_insert_with(Vec::new)
+                .push(integrands.clone());
         }
         let selector_free = selector_free.ok_or_else(|| {
             eyre::eyre!("final 3D UV integrand contains no production energy maps")
         })?;
-        Self::simplify_final(graph, &reduced, selector_free)
+        Self::simplify_final(graph, &reduced, allowed_zero.zip_add(selector_free)?)
     }
 
     /// Normalize an already mapped and selector-assembled final integrand. This
@@ -287,10 +308,15 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 .with(W_.prop_);
             // Preserve the sum of CFF denominators after residue mapping, just
             // as the Taylor stage preserves its separate propagator topologies.
+            atom = atom.replace(GS.dim).with(4).simplify_metrics();
+            debug_tags!(#generation, #profile, #uv, #numerator, #dump;
+                stage = "final_integrand_before_color",
+                graph = %graph.name,
+                numerator_bytes = atom.as_view().get_byte_size(),
+                file.atom = %atom.to_canonical_string(),
+                "Mapped factorized integrand before final color simplification"
+            );
             atom = atom
-                .replace(GS.dim)
-                .with(4)
-                .simplify_metrics()
                 .simplify_color_with(
                     ColorSimplifySettings::default().with_cof_dimension_invariants(),
                 )
@@ -406,7 +432,10 @@ mod tests {
         )?;
         assert!(zero_local.atom().is_zero());
         let produced = Projected4dApproximation::new(localizer, &mut graph, &settings)
-            .project_local_4d(&zero_local)?;
+            .project_local_4d(
+                &zero_local,
+                &mut crate::uv::approx::projected_4d::Local4dProjectionContext::default(),
+            )?;
         assert_eq!(
             builder
                 .build_projected(&mut graph, &current, &produced, &IntegratedCts::root())?
@@ -420,7 +449,10 @@ mod tests {
             "a pruned local zero must preserve every allowed cut order without energy maps",
         );
         let missing_maps = Projected4dApproximation::new(localizer, &mut graph, &settings)
-            .project_local_4d(&Local4dCts::root())
+            .project_local_4d(
+                &Local4dCts::root(),
+                &mut crate::uv::approx::projected_4d::Local4dProjectionContext::default(),
+            )
             .expect_err("a nonzero local source still requires production maps");
         assert!(
             missing_maps

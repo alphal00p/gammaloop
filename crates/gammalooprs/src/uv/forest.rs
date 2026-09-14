@@ -6,7 +6,7 @@ use crate::{
         ApproximationType, Integrands,
         approx::{
             CutStructure, ForestNodeLike, OrientationProjection, final_integrand::FinalIntegrands,
-            local_3d::Localizer,
+            local_3d::Localizer, projected_4d::Local4dProjectionContext,
         },
         marker::UvMarker,
         settings::FinalIntegrandDimension,
@@ -79,6 +79,7 @@ impl CutForests {
         orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
+        let mut projection_context = Local4dProjectionContext::default();
         for ((forest, cuts), vakint_settings) in &mut self
             .forests
             .iter_mut()
@@ -89,7 +90,13 @@ impl CutForests {
             debug_tags!(#forest,#uv;
                 n_terms = %forest.n_terms(),
                 "Computing cut forest");
-            forest.compute(graph, (vakint, vakint_settings), localizer, settings)?;
+            forest.compute(
+                graph,
+                (vakint, vakint_settings),
+                localizer,
+                settings,
+                &mut projection_context,
+            )?;
         }
         Ok(())
     }
@@ -199,6 +206,7 @@ impl Forest {
         vakint: (&Vakint, &vakint::VakintSettings),
         localizer: Localizer<'_>,
         settings: &UVgenerationSettings,
+        projection_context: &mut Local4dProjectionContext,
     ) -> Result<()> {
         let started = std::time::Instant::now();
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -265,9 +273,13 @@ impl Forest {
                             continue;
                         }
                         FinalIntegrandDimension::ThreeD => {
-                            current
-                                .data
-                                .compute_3d(&parent.data, graph, localizer, settings)?;
+                            current.data.compute_3d(
+                                &parent.data,
+                                graph,
+                                localizer,
+                                settings,
+                                projection_context,
+                            )?;
                         }
                     }
                 }

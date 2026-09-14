@@ -1,0 +1,26 @@
+{
+  "utc": "2026-09-13T19:41:29.860151+00:00",
+  "kind": "Independent tiny public Atom import remapping regression; not the large evaluator-construction panic",
+  "source_sha256": "c87c395d621913102ccdb1d3e9fbde2b24a8a16d291faf0324523c70e7f0c22c",
+  "binary_sha256": "84d74f331a0218f9f4cbf873b02e1f11abcc892f7cafd621b26d32a108347a22",
+  "input_bytes": 2480,
+  "input_sha256": "630e1b3c5a67d8536bb3e604f39af259f6e267429bf6a823e175b79f6acd19d3",
+  "runs": [
+    {
+      "command": [
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/examples/import_remap",
+        "write",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/import_remap_r1/tiny.symbolica"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/examples/import_remap",
+        "read",
+        "/common/dev/gammaloop_fix_4d_uv_slowdown/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/import_remap_r1/tiny.symbolica"
+      ],
+      "exit_code": 101
+    }
+  ]
+}

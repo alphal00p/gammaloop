@@ -452,11 +452,34 @@ impl<'a> Localizer<'a> {
         active_edges: impl IntoIterator<Item = EdgeIndex>,
         generation_context: CffGenerationContext,
     ) -> Result<(Atom, OrientationIntegrands)> {
+        let selection_started = std::time::Instant::now();
+        debug_tags!(#generation, #profile, #uv, #summary;
+            stage = "outer_cff_routing_start",
+            graph = %graph.name,
+            "Preparing bounded soft-momentum routing proposals"
+        );
+        let preparation_started = std::time::Instant::now();
         let mut proposals = graph.soft_momentum_routing_proposals(numerator, active_edges)?;
+        let proposal_preparation_time = preparation_started.elapsed();
+        let prepared_candidates = proposals.len();
+        let setup_started = std::time::Instant::now();
         if to_contract.is_empty() && self.orientation.root_expression().is_some() {
             // Existing root maps own this source; do not regenerate a different
             // capacity while pretending to reuse its production expression.
             let numerator = proposals.remove(0);
+            drop(proposals);
+            debug_tags!(#generation, #profile, #uv, #summary;
+                stage = "outer_cff_routing_selection",
+                graph = %graph.name,
+                root_reuse = true,
+                prepared_candidates,
+                admitted_candidates = 0,
+                selected_proposal = 0,
+                proposal_preparation_ms = proposal_preparation_time.as_secs_f64() * 1000.0,
+                setup_ms = setup_started.elapsed().as_secs_f64() * 1000.0,
+                elapsed_ms = selection_started.elapsed().as_secs_f64() * 1000.0,
+                "Selected the existing root CFF routing without native generation"
+            );
             let projected =
                 self.projected_cff(graph, to_contract, [&numerator], generation_context)?;
             return Ok((numerator, projected));
@@ -466,7 +489,8 @@ impl<'a> Localizer<'a> {
         let mut contract_edges = graph.paired_edges(&contract_subgraph);
         contract_edges.sort_unstable();
         contract_edges.dedup();
-        let mut selected: Option<(usize, Atom, GeneratedThreeDExpression)> = None;
+        let setup_time = setup_started.elapsed();
+        let mut selected: Option<(usize, usize, Atom, GeneratedThreeDExpression)> = None;
         for (proposal, numerator) in proposals.into_iter().enumerate() {
             let started = std::time::Instant::now();
             let generated = graph.generate_raw_3d_expression_for_integrand(
@@ -487,12 +511,29 @@ impl<'a> Localizer<'a> {
             // can differ after cuts; rank proposal order only breaks count ties.
             if selected
                 .as_ref()
-                .is_none_or(|(best, _, _)| map_count < *best)
+                .is_none_or(|(best, _, _, _)| map_count < *best)
             {
-                selected = Some((map_count, numerator, generated));
+                selected = Some((map_count, proposal, numerator, generated));
             }
         }
-        let (_, numerator, generated) = selected.expect("soft routing always supplies a baseline");
+        let (native_source_maps, selected_proposal, numerator, generated) =
+            selected.expect("soft routing always supplies a baseline");
+        // This enclosing timer includes every discarded proposal, including
+        // preparation and destruction. The nested raw-generation event keeps
+        // the winner's native generation separate from selection overhead.
+        debug_tags!(#generation, #profile, #uv, #summary;
+            stage = "outer_cff_routing_selection",
+            graph = %graph.name,
+            root_reuse = false,
+            prepared_candidates,
+            admitted_candidates = prepared_candidates,
+            selected_proposal,
+            native_source_maps,
+            proposal_preparation_ms = proposal_preparation_time.as_secs_f64() * 1000.0,
+            setup_ms = setup_time.as_secs_f64() * 1000.0,
+            elapsed_ms = selection_started.elapsed().as_secs_f64() * 1000.0,
+            "Selected bounded soft routing before surface conversion"
+        );
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
         let initial_cut_edges = graph
             .iter_edges_of(&graph.initial_state_cut)

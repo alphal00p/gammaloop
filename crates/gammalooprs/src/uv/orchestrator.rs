@@ -147,7 +147,13 @@ fn legacy_renormalization_part(
     let mut forest = wood.unfold(graph, &graph.loop_momentum_basis);
     let vk = (crate::utils::vakint()?, &vk_settings);
     let cuts = CutSet::empty(graph.n_hedges());
-    forest.compute(graph, vk, Localizer::new(&cuts, orientation), settings)?;
+    forest.compute(
+        graph,
+        vk,
+        Localizer::new(&cuts, orientation),
+        settings,
+        &mut super::approx::projected_4d::Local4dProjectionContext::default(),
+    )?;
 
     forest.renormalization_part_of_ends(graph, settings)
 }
