@@ -17,14 +17,6 @@ mkdir -p "$output_root"
 output_root=$(CDPATH= cd -- "$output_root" && pwd -P)
 cd "$repo_root"
 
-case $(typst --version) in
-    "typst 0.15.0"*) ;;
-    *)
-        printf 'website SVG rendering requires Typst 0.15.0\n' >&2
-        exit 1
-        ;;
-esac
-
 render() {
     local source=$1
     local destination=$2

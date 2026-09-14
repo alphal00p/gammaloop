@@ -37,7 +37,10 @@
   /// Horizontal scale of the coil before it is mapped onto a path. -> int | float
   longitudinal-scale: 1.25,
 ) = {
-  _impl.coil(samples-per-period: samples-per-period, longitudinal-scale: longitudinal-scale)
+  _impl.coil(
+    samples-per-period: samples-per-period,
+    longitudinal-scale: longitudinal-scale,
+  )
 }
 
 /// Return `from` moved toward `toward` by `distance`.
@@ -212,6 +215,17 @@
   accuracy: 0.001,
 ) = _impl.length(path, accuracy: accuracy)
 
+/// Find transverse crossings between two paths, sorted by arc distance along the first path.
+/// -> array
+#let intersections(
+  /// First Kurvst path dictionary. -> dictionary
+  a,
+  /// Second Kurvst path dictionary. -> dictionary
+  b,
+  /// Absolute geometry and arc-length tolerance. -> float
+  accuracy: 0.001,
+) = _impl.intersections(a, b, accuracy: accuracy)
+
 /// Resolve a fixed and relative visible path length.
 /// -> none | int | float
 #let resolve-length(
@@ -224,7 +238,12 @@
   /// Resolution strategy for fixed and relative targets. -> string | function
   method: "min",
 ) = {
-  _impl.resolve-length(base-length, length: length, ratio: ratio, method: method)
+  _impl.resolve-length(
+    base-length,
+    length: length,
+    ratio: ratio,
+    method: method,
+  )
 }
 
 /// Compute the symmetric trim needed to center a shorter path layer.
@@ -263,7 +282,12 @@
   /// Arc-length approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
 ) = {
-  _impl.trim(path, start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
+  _impl.trim(
+    path,
+    start-outset: start-outset,
+    end-outset: end-outset,
+    accuracy: accuracy,
+  )
 }
 
 /// Construct a cubic Hobby path through three points.
@@ -339,9 +363,9 @@
   path,
   /// Signed normal offset distance. -> int | float
   distance: 0,
-  /// Arc length removed from the start before offsetting. -> int | float
+  /// Arc length removed from the start of the offset path. -> int | float
   start-outset: 0,
-  /// Arc length removed from the end before offsetting. -> int | float
+  /// Arc length removed from the end of the offset path. -> int | float
   end-outset: 0,
   /// Geometry approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
@@ -367,10 +391,12 @@
   offset: 0,
   /// Fixed target visible length. -> none | int | float
   length: none,
-  /// Relative target visible length as a fraction of the base length. -> none | int | float
+  /// Relative target visible length as a fraction of the full offset path length. -> none | int | float
   ratio: none,
   /// Resolution strategy for fixed and relative targets. -> string | function
   resolve-length: "min",
+  /// Arc-length displacement on the offset path; positive moves toward its end. -> int | float
+  shift: 0,
   /// Arc length removed from the start. -> int | float
   start-outset: 0,
   /// Arc length removed from the end. -> int | float
@@ -387,6 +413,7 @@
   length: length,
   ratio: ratio,
   resolve-length: resolve-length,
+  shift: shift,
   start-outset: start-outset,
   end-outset: end-outset,
   side-point: side-point,

@@ -5,10 +5,14 @@
 
 #import "impl/draw.typ" as _impl
 
+#let _overlay-style = _impl._overlay-style
+
 /// Split a laid-out graph edge into source and sink half-edge paths.
 ///
-/// The returned dictionary has `source`, `sink`, and `curve`. The split point is
-/// the edge layout point, so the two half-edges join smoothly there.
+/// The returned dictionary has `source`, `sink`, `curve`, and `split-gap`. The
+/// split point is the edge layout point, so a zero-gap pair joins smoothly
+/// there. `split-gap` reports the effective gap when a requested half-gap is
+/// longer than either half-edge.
 /// -> dictionary
 #let edge-halves(
   /// Edge record returned by `graph.edges(layout(g))`. -> dictionary
@@ -21,6 +25,8 @@
   source-outset: 0,
   /// Arc-length trim applied at the sink node side. -> int | float
   sink-outset: 0,
+  /// Total arc-length gap centered on the edge layout point. -> int | float
+  split-gap: 0,
   /// Arc-length accuracy used while trimming. -> float
   accuracy: 0.001,
 ) = {
@@ -31,6 +37,7 @@
       omega: omega,
       source-outset: source-outset,
       sink-outset: sink-outset,
+      split-gap: split-gap,
       accuracy: accuracy,
     ),
   )
@@ -55,6 +62,8 @@
   source-outset: 0,
   /// Arc-length trim applied at the sink node side. -> int | float
   sink-outset: 0,
+  /// Total arc-length gap centered on the edge layout point. -> int | float
+  split-gap: 0,
   /// Arc-length accuracy used while trimming. -> float
   accuracy: 0.001,
   /// CeTZ style for the source half edge. -> dictionary
@@ -70,6 +79,7 @@
       omega: omega,
       source-outset: source-outset,
       sink-outset: sink-outset,
+      split-gap: split-gap,
       accuracy: accuracy,
       source-style: source-style,
       sink-style: sink-style,
@@ -236,9 +246,22 @@
 /// )
 /// #draw(layout(g), unit: 1.4, source-style: oriented-arrow, sink-style: oriented-arrow)
 /// `,dir:ttb)
+///
+/// A style layer may set `crossing-under` to a visible edge's integer id or
+/// Typst label name and `crossing-gap` (default `0.55`) to the total arc length
+/// hidden around each proper centerline intersection. References are resolved
+/// independently of edge order. The current layer is split with Kurvst, so
+/// patterned phases continue across the hidden spans. A mark on the same layer
+/// is emitted once on its uncut carrier, so splitting the painted path neither
+/// removes nor duplicates it. Dangling layers and paired layers with one
+/// continuous source/sink paint style are supported. On a
+/// paired layer both half styles must specify the same target and gap. The cut
+/// layer cannot participate in a subgraph underlay. References to self,
+/// unknown, or invisible edges are errors.
+/// A valid pair with no proper interior intersection is left unchanged.
 /// -> content
 #let draw(
-  /// Graph object with positions from `layout` or explicit graph API `pos` fields. -> bytes
+  /// Graph object with positions from `layout` or explicit graph API `pos` fields. -> dictionary
   graph,
   /// Additional values merged into node and edge callback dictionaries.
   /// -> dictionary
@@ -251,9 +274,10 @@
   /// -> none | auto | content | string
   title: none,
   /// Optional subgraph or array of subgraphs whose half-edges are shaded.
-  /// Array entries may be raw subgraphs or records like
+  /// Array entries may be subgraph objects or records like
   /// `(subgraph: sg, edge-style: (stroke: red + 2pt))`.
-  /// -> none | bytes | array
+  /// Each selection must have topology compatible with the graph.
+  /// -> none | dictionary | array
   subgraph: none,
   /// Debug level. `1` enables CeTZ canvas debug; `2` also marks edge positions.
   /// -> bool | int
@@ -285,35 +309,73 @@
   /// node and label. A callback receives `(node, box)` and should return CeTZ
   /// draw elements; `box` contains `name`, `center`, `width`, `height`, `unit`,
   /// `label`, `label-style`, `style`, `radius`, and `node`.
+  /// Generated cut boundary nodes skip this callback and all node painting;
+  /// they retain a named position and zero-size anchor box for incident edges.
   /// -> auto | function
   draw-node: auto,
+  /// Additional CeTZ elements drawn after the edges, labels, and nodes in the
+  /// same canvas. A callback receives `(graph, bounds)` and returns CeTZ
+  /// elements. `bounds` contains numeric `left`, `right`, `top`, `bottom`,
+  /// `width`, and `height` in graph units, enclosing the rendered graph before
+  /// overlays and canvas padding. It includes shapes, curves, and label boxes;
+  /// CeTZ does not add stroke thickness to path bounds. `top` is the greatest
+  /// y coordinate, and all fields are zero for an empty drawing.
+  /// Use `graph.nodes` / `graph.edges` to inspect the positioned graph.
+  /// These elements share `unit` and contribute to canvas bounds, but do not
+  /// participate in graph layout.
+  /// -> none | array | function
+  draw-after: none,
   /// Default CeTZ edge stroke. -> any
   edge-stroke: 0.1em,
+  /// Default logical-edge style dictionary, layers, or callback. An edge's
+  /// `style:` value patches this default; `auto` delegates and `none` hides the
+  /// edge without changing its topology. -> dictionary | array | function | none
+  edge-style: (:),
   /// Default normal offset for edge paths. Applied to the base edge geometry
   /// before patterns; node outsets then trim the shifted path. -> int | float
   edge-offset: 0,
   /// Maximum visible arc length for centered parallel edge paths. `none` keeps
   /// the full shifted path. -> none | int | float
   edge-length: none,
-  /// Maximum visible fraction of the base edge length for centered parallel edge
+  /// Maximum visible fraction of the full offset path length for centered edge
   /// paths. Combined with `edge-length` according to `edge-resolve-length`.
   /// -> none | int | float
   edge-ratio: none,
   /// Resolve `edge-length` and `edge-ratio`. Accepted string
   /// values are `"min"`/`"shorter"`, `"max"`/`"longer"`, `"length"`/`"fixed"`,
   /// `"ratio"`/`"relative"`, or `"none"`/`"full"`. A function receives
-  /// `(base-length, length, ratio)`. -> string | function
+  /// `(offset-path-length, length, ratio)`. -> string | function
   edge-resolve-length: "min",
   /// Arc-length accuracy for fitted parallel edge paths. -> float
   edge-accuracy: 0.001,
   /// Let Kurbo optimize the fitted parallel path. -> bool
   edge-optimize: true,
+  /// Total arc-length gap centered on the source/sink split at the edge layout
+  /// point. A per-layer `split-gap` overrides this value. -> int | float
+  edge-split-gap: 0,
+  /// Tangent constraint at dangling edge positions. `"horizontal"` and
+  /// `"vertical"` preserve `bend` while making the corresponding endpoint
+  /// tangent exact. A per-layer `dangling-tangent` overrides this value.
+  /// -> auto | string
+  edge-dangling-tangent: auto,
   /// Source half-edge style dictionary, array of layer dictionaries, or
-  /// callback. `mark-position: "center-if-dangling"` keeps an end marker at the
-  /// paired-edge split point while centering it on dangling half edges.
+  /// callback. A `"center"` or numeric mark on a common source/sink paint layer
+  /// is placed once on the complete derived layer, so it follows `shift`.
+  /// `mark-position` also accepts a numeric path-length ratio from `0` to `1`;
+  /// `mark-shift` moves a centered or numeric mark by signed arc length, with
+  /// positive values moving toward the derived path's end. This also works on
+  /// patterned dangling and asymmetric paired layers without resetting pattern
+  /// phase. `mark-position: "center-if-dangling"` centers dangling marks while
+  /// retaining the paired-edge split point selected by `mark-orientation`.
   /// `mark-orientation: "edge"` makes a mark follow `edge.orientation` instead
   /// of raw path direction; reversed edges move the mark to the sink half and
-  /// flip it, while undirected edges suppress it.
+  /// flip it, while undirected edges suppress it. Heads span a chord between
+  /// two points on the full carrier: triangle and straight heads use their
+  /// geometric tip and back; other marks use their declared tip/base anchors.
+  /// Centered heads straddle the requested arc position, so their chord center
+  /// can lie off the curve. Near endpoints the interval moves inward; the head
+  /// fits the chord longitudinally while keeping its width. Interior marks
+  /// overlay the unshortened curve; end shafts meet the appropriate head contact.
   /// `source-anchor` may be a CeTZ anchor name such as `"north"` or `"south"`
   /// to route this endpoint from a measured node-box anchor. By default,
   /// anchored paired edges use two smooth cubic halves through the edge layout
@@ -327,6 +389,24 @@
   /// points through that same Hobby path.
   /// `route: "straight-through"` draws the two straight force springs from
   /// source to edge position and from edge position to sink.
+  /// A finite layer can set `shift` to move along the logical edge, with
+  /// positive values moving toward its end. `label` attaches content near the
+  /// layer midpoint; `label-shift` (default `0`) moves its reference point by
+  /// signed arc length on that derived path, clamped to the path's endpoints.
+  /// Positive values move toward its end without moving or trimming the layer.
+  /// `label-side` is `auto`, `"left"`, `"right"`, or a signed number; `auto`
+  /// follows the side selected by ordinary edge-label layout.
+  /// With `label-style.anchor` omitted or set to `auto` (also `"auto"`), the
+  /// centered label's actual CeTZ box clears the local tangent line by
+  /// `label-gap`, accounting for text bounds, wrapping, padding and rotation.
+  /// This is not minimum distance to the finite curved shaft. An explicit
+  /// anchor, including `"center"`, instead sits at the shifted reference point
+  /// plus `label-gap` along the chosen normal, without box correction.
+  /// Negative gaps are clamped to zero. Other `label-style` fields are forwarded
+  /// to `cetz.draw.content`. An attached
+  /// label replaces the ordinary painted edge label, which may still provide
+  /// its pre-layout measurement and side. Attached labels do not add separate
+  /// pre-layout collision constraints.
   /// -> dictionary | array | function | none
   source-style: (:),
   /// Sink half-edge style dictionary, array of layer dictionaries, or callback.
@@ -391,13 +471,17 @@
       node-style: node-style,
       node-label: node-label,
       draw-node: draw-node,
+      draw-after: draw-after,
       edge-stroke: edge-stroke,
+      edge-style: edge-style,
       edge-offset: edge-offset,
       edge-length: edge-length,
       edge-ratio: edge-ratio,
       edge-resolve-length: edge-resolve-length,
       edge-accuracy: edge-accuracy,
       edge-optimize: edge-optimize,
+      edge-split-gap: edge-split-gap,
+      edge-dangling-tangent: edge-dangling-tangent,
       source-style: source-style,
       sink-style: sink-style,
       edge-label: edge-label,

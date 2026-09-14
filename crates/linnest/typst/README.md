@@ -3,6 +3,9 @@
 Linnest is the Typst wrapper for the `linnest.wasm` graph-layout plugin. It requires Typst 0.15.0
 or newer.
 
+The standalone mirror rewrites Linnest's sibling Kurvst import to the version declared by
+Kurvst's manifest and expects that package in Typst's `@local` namespace.
+
 `src/render/figure.typ` owns the domain-neutral `render(config)` implementation used by native
 graph-spec consumers. DOT-oriented tools can pass a parsed graph to the shared
 `layout-graph(config, graph)` adapter instead of duplicating the styling and layout pipeline.
@@ -13,4 +16,5 @@ with the supported symbol reference split across the
 [Linnest Typst API reference](https://alphal00p.github.io/gammaloop/products/linnet/latest/reference/typst/).
 Compile-checked examples live under [`examples/`](examples/).
 
-Contributor policy is in [`CONTRIBUTING.typ`](../../../CONTRIBUTING.typ).
+Contributor policy is in GammaLoop's
+[`CONTRIBUTING.typ`](https://github.com/alphal00p/gammaloop/blob/main/CONTRIBUTING.typ).

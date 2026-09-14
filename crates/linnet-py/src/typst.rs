@@ -316,6 +316,7 @@ enum EnumKind {
     Compass,
     Routing,
     RoutePoints,
+    DanglingTangent,
     Anchor,
     Pattern,
     EdgeLengthResolution,
@@ -342,6 +343,7 @@ impl EnumKind {
             Self::Compass => "Compass",
             Self::Routing => "Routing",
             Self::RoutePoints => "RoutePoints",
+            Self::DanglingTangent => "DanglingTangent",
             Self::Anchor => "Anchor",
             Self::Pattern => "Pattern",
             Self::EdgeLengthResolution => "EdgeLengthResolution",
@@ -370,6 +372,7 @@ enum NativeEnum {
     Compass(PyCompass),
     Routing(PyRouting),
     RoutePoints(PyRoutePoints),
+    DanglingTangent(PyDanglingTangent),
     Anchor(PyAnchor),
     Pattern(PyPattern),
     EdgeLengthResolution(PyEdgeLengthResolution),
@@ -396,6 +399,7 @@ impl NativeEnum {
             Self::Compass(_) => EnumKind::Compass,
             Self::Routing(_) => EnumKind::Routing,
             Self::RoutePoints(_) => EnumKind::RoutePoints,
+            Self::DanglingTangent(_) => EnumKind::DanglingTangent,
             Self::Anchor(_) => EnumKind::Anchor,
             Self::Pattern(_) => EnumKind::Pattern,
             Self::EdgeLengthResolution(_) => EnumKind::EdgeLengthResolution,
@@ -422,6 +426,7 @@ impl NativeEnum {
             Self::Compass(value) => Py::new(py, value)?.into_any(),
             Self::Routing(value) => Py::new(py, value)?.into_any(),
             Self::RoutePoints(value) => Py::new(py, value)?.into_any(),
+            Self::DanglingTangent(value) => Py::new(py, value)?.into_any(),
             Self::Anchor(value) => Py::new(py, value)?.into_any(),
             Self::Pattern(value) => Py::new(py, value)?.into_any(),
             Self::EdgeLengthResolution(value) => Py::new(py, value)?.into_any(),
@@ -658,6 +663,7 @@ impl NativeEnum {
             Self::Compass(value) => value.typst_name(),
             Self::Routing(value) => value.typst_name(),
             Self::RoutePoints(value) => value.typst_name(),
+            Self::DanglingTangent(value) => value.typst_name(),
             Self::Anchor(value) => value.typst_name(),
             Self::Pattern(value) => value.typst_name(),
             Self::EdgeLengthResolution(value) => value.typst_name(),
@@ -935,6 +941,14 @@ typst_string_enum! {
     PyRoutePoints, "RoutePoints", RoutePoints {
         Ignore => "ignore",
         Through => "through",
+    }
+}
+
+typst_string_enum! {
+    /// Tangent constraint at the free endpoint of a dangling edge.
+    PyDanglingTangent, "DanglingTangent", DanglingTangent {
+        Horizontal => "horizontal",
+        Vertical => "vertical",
     }
 }
 
@@ -1678,6 +1692,15 @@ fn parse_options(
             .ok_or_else(|| PyTypeError::new_err(format!("unknown Typst option {key:?}")))?;
         let value = native_from_py(&value, 0)?;
         field.validate(&value)?;
+        if matches!(
+            field.rule,
+            ValueRule::Style
+                | ValueRule::StyleLayers
+                | ValueRule::PatternOrStyleLayers
+                | ValueRule::DrawSubgraphs
+        ) {
+            validate_nested_drawing_enums(&value)?;
+        }
         if !matches!(value, NativeValue::Inherit) {
             out.insert(field.typst.to_owned(), value);
         }
@@ -2278,6 +2301,7 @@ fn native_from_py(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<NativeValu
         PyCompass,
         PyRouting,
         PyRoutePoints,
+        PyDanglingTangent,
         PyAnchor,
         PyPattern,
         PyEdgeLengthResolution,
@@ -2620,6 +2644,11 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
     FieldSpec::new("epochs", "epochs", ValueRule::NonNegativeInt),
     FieldSpec::new("crossing_penalty", "crossing-penalty", ValueRule::Number),
     FieldSpec::new("dangling_repulsion", "gamma-dangling", ValueRule::Number),
+    FieldSpec::new(
+        "dangling_centroid_repulsion",
+        "gamma-dangling-centroid",
+        ValueRule::Number,
+    ),
     FieldSpec::new("edge_edge_repulsion", "gamma-ee", ValueRule::Number),
     FieldSpec::new("directional_force", "directional-force", ValueRule::Number),
     FieldSpec::new(
@@ -2703,7 +2732,7 @@ impl PyLayoutOptions {
     #[new]
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "(*, subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., edge_edge_repulsion=..., directional_force=..., label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
+        text_signature = "(*, subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., edge_edge_repulsion=..., directional_force=..., label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
     )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -2729,7 +2758,7 @@ impl PyLayoutOptions {
 
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "($self, *, subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., edge_edge_repulsion=..., directional_force=..., label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
+        text_signature = "($self, *, subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., edge_edge_repulsion=..., directional_force=..., label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
     )]
     #[gen_stub(skip)]
     fn then(&self, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -2798,6 +2827,17 @@ const DRAW_FIELDS: &[FieldSpec] = &[
         ValueRule::NonNegativeNumber,
     ),
     FieldSpec::new("edge_optimize", "edge-optimize", ValueRule::Bool),
+    FieldSpec::new(
+        "edge_split_gap",
+        "edge-split-gap",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "edge_dangling_tangent",
+        "edge-dangling-tangent",
+        ValueRule::Enum(EnumKind::DanglingTangent),
+    )
+    .auto(),
     FieldSpec::new("source_style", "source-style", ValueRule::StyleLayers).none(),
     FieldSpec::new("sink_style", "sink-style", ValueRule::StyleLayers).none(),
     FieldSpec::new("edge_label", "edge-label", ValueRule::ContentOrFunction).none(),
@@ -2848,7 +2888,7 @@ impl PyDrawOptions {
     #[new]
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "(*, scope=..., unit=..., title=..., subgraph=..., debug=..., show_half_edge_ids=..., node_radius=..., node_min_radius=..., node_label_padding=..., node_fill=..., node_stroke=..., node_outset=..., node_label_style=..., node_style=..., node_label=..., draw_node=..., edge_stroke=..., edge_offset=..., edge_length=..., edge_ratio=..., edge_resolve_length=..., edge_accuracy=..., edge_optimize=..., source_style=..., sink_style=..., edge_label=..., edge_label_style=..., edge_omega=..., edge_trim_accuracy=..., padding=..., debug_edge_radius=..., debug_edge_fill=..., debug_edge_stroke=..., debug_edge_label_fill=..., subgraph_edge_style=..., subgraph_edge_underlay=...)"
+        text_signature = "(*, scope=..., unit=..., title=..., subgraph=..., debug=..., show_half_edge_ids=..., node_radius=..., node_min_radius=..., node_label_padding=..., node_fill=..., node_stroke=..., node_outset=..., node_label_style=..., node_style=..., node_label=..., draw_node=..., edge_stroke=..., edge_offset=..., edge_length=..., edge_ratio=..., edge_resolve_length=..., edge_accuracy=..., edge_optimize=..., edge_split_gap=..., edge_dangling_tangent=..., source_style=..., sink_style=..., edge_label=..., edge_label_style=..., edge_omega=..., edge_trim_accuracy=..., padding=..., debug_edge_radius=..., debug_edge_fill=..., debug_edge_stroke=..., debug_edge_label_fill=..., subgraph_edge_style=..., subgraph_edge_underlay=...)"
     )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -3191,8 +3231,8 @@ pyo3_stub_gen::inventory::submit! {
         import typing
 
         class PyLayoutOptions:
-            def __new__(cls, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
-            def then(self, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+            def __new__(cls, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+            def then(self, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
     "# }
 }
 
@@ -3202,7 +3242,7 @@ pyo3_stub_gen::inventory::submit! {
         import typing
 
         class PyDrawOptions:
-            def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., show_half_edge_ids: _Boolean = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_optimize: _Boolean = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
+            def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., show_half_edge_ids: _Boolean = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_optimize: _Boolean = ..., edge_split_gap: _Number = ..., edge_dangling_tangent: _DanglingTangentValue = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
     "# }
 }
 
@@ -3858,6 +3898,7 @@ fn drawing_enum_rule(field: &str) -> Option<(EnumKind, bool, bool)> {
         "debug" => Some((EnumKind::DebugLevel, false, false)),
         "label_layout" | "label-layout" => Some((EnumKind::LabelLayout, false, false)),
         "route_points" | "route-points" => Some((EnumKind::RoutePoints, true, false)),
+        "dangling_tangent" | "dangling-tangent" => Some((EnumKind::DanglingTangent, false, true)),
         "edge_resolve_length" | "edge-resolve-length" | "resolve_length" | "resolve-length" => {
             Some((EnumKind::EdgeLengthResolution, true, false))
         }
@@ -4007,7 +4048,14 @@ fn validate_nested_drawing_enums(value: &NativeValue) -> PyResult<()> {
         | NativeValue::Insets(values)
         | NativeValue::Mark(values) => {
             for (field, value) in values {
-                if let Some(rule) = drawing_enum_rule(field) {
+                let rule = drawing_enum_rule(field);
+                if field.contains('_') && rule.is_some() {
+                    return Err(PyValueError::new_err(format!(
+                        "drawing style field {field:?} must use its Typst spelling {:?}",
+                        field.replace('_', "-")
+                    )));
+                }
+                if let Some(rule) = rule {
                     validate_drawing_enum(field, value, rule)?;
                 }
                 validate_nested_drawing_enums(value)?;
@@ -4241,6 +4289,7 @@ pub(crate) fn register_typst_api(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyCompass>()?;
     module.add_class::<PyRouting>()?;
     module.add_class::<PyRoutePoints>()?;
+    module.add_class::<PyDanglingTangent>()?;
     module.add_class::<PyAnchor>()?;
     module.add_class::<PyPattern>()?;
     module.add_class::<PyEdgeLengthResolution>()?;

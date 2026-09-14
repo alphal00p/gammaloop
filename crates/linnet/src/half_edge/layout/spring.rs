@@ -1,5 +1,3 @@
-use std::ops::IndexMut;
-
 use cgmath::{EuclideanSpace, MetricSpace, Point2, Vector2, Zero};
 
 use rand::{distributions::Uniform, prelude::Distribution, Rng};
@@ -49,6 +47,18 @@ pub enum ShiftDirection {
     NegativeOnly,
 }
 
+/// A node or edge-control-point index in the shared layout coordinate space.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
+pub enum LayoutPointIndex {
+    Node(NodeIndex),
+    Edge(EdgeIndex),
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 #[cfg_attr(
     feature = "rkyv",
@@ -59,26 +69,17 @@ pub enum Constraint {
     Fixed,
     #[default]
     Free,
-    Grouped(usize, ShiftDirection),
+    Grouped(LayoutPointIndex, ShiftDirection),
 }
 
 impl Constraint {
-    pub(crate) fn force_target(self, index: usize) -> Option<usize> {
+    pub(crate) fn force_target(self, index: LayoutPointIndex) -> Option<LayoutPointIndex> {
         match self {
             Constraint::Fixed => None,
             Constraint::Free => Some(index),
             Constraint::Grouped(reference, _) => Some(reference),
         }
     }
-}
-
-pub trait Shiftable {
-    fn shift<I: From<usize> + PartialEq + Copy, R: IndexMut<I, Output = Point2<f64>>>(
-        &self,
-        shift: Vector2<f64>,
-        index: I,
-        values: &mut R,
-    ) -> bool;
 }
 
 pub trait HasPointConstraint {
@@ -91,17 +92,9 @@ impl HasPointConstraint for PointConstraint {
     }
 }
 
-fn apply_directional_shift(shift_val: f64, direction: ShiftDirection) -> f64 {
-    match direction {
-        ShiftDirection::Any | ShiftDirection::PositiveOnly | ShiftDirection::NegativeOnly => {
-            shift_val
-        }
-    }
-}
-
 pub(crate) fn directional_force_shift(
     constraints: &PointConstraint,
-    index: usize,
+    index: LayoutPointIndex,
     point: Point2<f64>,
     magnitude: f64,
 ) -> Vector2<f64> {
@@ -129,110 +122,20 @@ pub(crate) fn directional_force_shift(
     )
 }
 
-impl Shiftable for PointConstraint {
-    fn shift<I: From<usize> + PartialEq + Copy, R: IndexMut<I, Output = Point2<f64>>>(
-        &self,
-        shift: Vector2<f64>,
-        index: I,
-        values: &mut R,
-    ) -> bool {
-        let mut changed = false;
-
-        match (self.x, self.y) {
-            (Constraint::Fixed, Constraint::Fixed) => {}
-            (Constraint::Free, Constraint::Free) => {
-                values[index] += shift;
-                changed = true;
-            }
-            (Constraint::Fixed, Constraint::Free) => {
-                values[index].y += shift.y;
-                changed = true;
-            }
-            (Constraint::Free, Constraint::Fixed) => {
-                values[index].x += shift.x;
-                changed = true;
-            }
-            (Constraint::Grouped(r, dir), Constraint::Fixed) => {
-                let i = r.into();
-                if i != index {
-                    values[index].x = values[i].x;
-                } else {
-                    let x_shift = apply_directional_shift(shift.x, dir);
-                    values[index].x += x_shift;
-                    changed = x_shift != 0.0;
-                }
-            }
-            (Constraint::Grouped(r, dir), Constraint::Free) => {
-                let i = r.into();
-                if i != index {
-                    values[index].x = values[i].x;
-                    values[index].y += shift.y;
-                    changed = true;
-                } else {
-                    let x_shift = apply_directional_shift(shift.x, dir);
-                    values[index].x += x_shift;
-                    values[index].y += shift.y;
-                    changed = x_shift != 0.0 || shift.y != 0.0;
-                }
-            }
-
-            (Constraint::Fixed, Constraint::Grouped(r, dir)) => {
-                let i = r.into();
-                if i != index {
-                    values[index].y = values[i].y;
-                } else {
-                    let y_shift = apply_directional_shift(shift.y, dir);
-                    values[index].y += y_shift;
-                    changed = y_shift != 0.0;
-                }
-            }
-            (Constraint::Free, Constraint::Grouped(r, dir)) => {
-                let i = r.into();
-                if i != index {
-                    values[index].y = values[i].y;
-                    values[index].x += shift.x;
-                    changed = true;
-                } else {
-                    let y_shift = apply_directional_shift(shift.y, dir);
-                    values[index].x += shift.x;
-                    values[index].y += y_shift;
-                    changed = shift.x != 0.0 || y_shift != 0.0;
-                }
-            }
-            (Constraint::Grouped(xi, x_dir), Constraint::Grouped(yi, y_dir)) => {
-                let ix = xi.into();
-                let iy = yi.into();
-                if ix != index && iy != index {
-                    values[index].x = values[ix].x;
-                    values[index].y = values[iy].y;
-                } else if ix == index && iy != index {
-                    let x_shift = apply_directional_shift(shift.x, x_dir);
-                    values[index].x += x_shift;
-                    values[index].y = values[iy].y;
-                    changed = x_shift != 0.0;
-                } else if ix != index && iy == index {
-                    let y_shift = apply_directional_shift(shift.y, y_dir);
-                    values[index].x = values[ix].x;
-                    values[index].y += y_shift;
-                    changed = y_shift != 0.0;
-                } else {
-                    let x_shift = apply_directional_shift(shift.x, x_dir);
-                    let y_shift = apply_directional_shift(shift.y, y_dir);
-                    values[index].x += x_shift;
-                    values[index].y += y_shift;
-                    changed = x_shift != 0.0 || y_shift != 0.0;
-                }
-            }
-        }
-        changed
-    }
-}
-
 pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     pub graph: &'a HedgeGraph<E, V, H, N>,
     pub ext: SuBitGraph,
     pub vertex_points: NodeVec<Point2<f64>>,
     pub edge_points: EdgeVec<Point2<f64>>,
+    /// Raw auxiliary depths: optional seeds before force layout, final raw values afterwards.
+    /// Effective depth collapses to zero without changing hard-pinned raw values.
+    pub vertex_depths: NodeVec<Option<f64>>,
+    pub edge_depths: EdgeVec<Option<f64>>,
+    /// Independent of XY constraints; callers must also pin depths outside an active subgraph.
+    pub vertex_depth_pins: NodeVec<bool>,
+    pub edge_depth_pins: EdgeVec<bool>,
+    /// Dimensionless rest-length multipliers, defaulting to one; set before starting the layout.
+    pub edge_spring_length_scales: EdgeVec<f64>,
     pub delta: f64,
     pub directional_force: f64,
     // Tracks which node/edge entries were mutated during proposal generation so
@@ -259,6 +162,11 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             ext,
             vertex_points,
             edge_points,
+            vertex_depths: vec![None; len_v].into(),
+            edge_depths: vec![None; len_e].into(),
+            vertex_depth_pins: vec![false; len_v].into(),
+            edge_depth_pins: vec![false; len_e].into(),
+            edge_spring_length_scales: vec![1.0; len_e].into(),
             delta,
             directional_force,
             changed_nodes: SubSet::empty(len_v),
@@ -275,6 +183,11 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> Clone for LayoutState<'a, E, 
             ext: self.ext.clone(),
             vertex_points: self.vertex_points.clone(),
             edge_points: self.edge_points.clone(),
+            vertex_depths: self.vertex_depths.clone(),
+            edge_depths: self.edge_depths.clone(),
+            vertex_depth_pins: self.vertex_depth_pins.clone(),
+            edge_depth_pins: self.edge_depth_pins.clone(),
+            edge_spring_length_scales: self.edge_spring_length_scales.clone(),
             delta: self.delta,
             directional_force: self.directional_force,
             changed_nodes: self.changed_nodes.clone(),
@@ -301,8 +214,8 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
 
 pub struct LayoutNeighbor;
 
-impl<'a, E: Shiftable, V: Shiftable, H, N: NodeStorageOps<NodeData = V> + Clone>
-    Neighbor<LayoutState<'a, E, V, H, N>> for LayoutNeighbor
+impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Neighbor<LayoutState<'a, E, V, H, N>>
+    for LayoutNeighbor
 {
     fn propose(
         &self,
@@ -382,10 +295,15 @@ pub struct PinnedLayoutNeighbor;
 
 impl<'a, E, V, H, N> Neighbor<LayoutState<'a, E, V, H, N>> for PinnedLayoutNeighbor
 where
-    E: Shiftable + HasPointConstraint,
-    V: Shiftable + HasPointConstraint,
+    E: HasPointConstraint,
+    V: HasPointConstraint,
     N: NodeStorageOps<NodeData = V> + Clone,
 {
+    fn prepare(&self, state: &mut LayoutState<'a, E, V, H, N>) {
+        state.synchronize_grouped_coordinates();
+        state.clear_changes();
+    }
+
     fn propose(
         &self,
         s: &LayoutState<'a, E, V, H, N>,
@@ -394,6 +312,7 @@ where
         _temp: f64,
     ) -> LayoutState<'a, E, V, H, N> {
         let mut st = s.clone();
+        st.synchronize_grouped_coordinates();
         let n_v: NodeIndex = st.vertex_points.len();
         let n_e: EdgeIndex = st.edge_points.len();
         let step_range: Uniform<f64> = Uniform::from(-step..step);
@@ -418,7 +337,7 @@ where
                         let mut shift = LayoutNeighbor::axis_shift(&step_range, rng);
                         let bias = directional_force_shift(
                             st.graph[v].point_constraint(),
-                            v.0,
+                            LayoutPointIndex::Node(v),
                             st.vertex_points[v],
                             st.directional_force * step,
                         );
@@ -430,7 +349,7 @@ where
                         let mut shift = LayoutNeighbor::axis_shift(&step_range, rng);
                         let bias = directional_force_shift(
                             st.graph[e].point_constraint(),
-                            e.0,
+                            LayoutPointIndex::Edge(e),
                             st.edge_points[e],
                             st.directional_force * step,
                         );
@@ -446,7 +365,7 @@ where
                     let shift = LayoutNeighbor::diagonal_shift(&step_range, rng, 0.6);
                     let vertex_bias = directional_force_shift(
                         st.graph[v].point_constraint(),
-                        v.0,
+                        LayoutPointIndex::Node(v),
                         st.vertex_points[v],
                         st.directional_force * step,
                     );
@@ -461,7 +380,7 @@ where
                         // Propagate to incident edge control points; any change gets recorded.
                         let edge_bias = directional_force_shift(
                             st.graph[index].point_constraint(),
-                            index.0,
+                            LayoutPointIndex::Edge(index),
                             st.edge_points[index],
                             st.directional_force * step,
                         );
@@ -477,177 +396,219 @@ where
     }
 }
 
-pub(crate) fn apply_vertex_shift<
-    'a,
-    E: Shiftable,
-    V: Shiftable,
-    H,
-    N: NodeStorageOps<NodeData = V> + Clone,
->(
+pub(crate) fn apply_vertex_shift<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone>(
     state: &mut LayoutState<'a, E, V, H, N>,
     idx: NodeIndex,
     shift: Vector2<f64>,
 ) -> bool {
-    let changed = state.graph[idx].shift(shift, idx, &mut state.vertex_points);
-    if changed {
-        state.mark_node_changed(idx);
+    if shift == Vector2::zero() {
+        return false;
     }
-    changed
+    state.vertex_points[idx] += shift;
+    state.mark_node_changed(idx);
+    true
 }
 
-pub(crate) fn apply_edge_shift<
-    'a,
-    E: Shiftable,
-    V: Shiftable,
-    H,
-    N: NodeStorageOps<NodeData = V> + Clone,
->(
+pub(crate) fn apply_edge_shift<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone>(
     state: &mut LayoutState<'a, E, V, H, N>,
     idx: EdgeIndex,
     shift: Vector2<f64>,
 ) -> bool {
-    let changed = state.graph[idx].shift(shift, idx, &mut state.edge_points);
-    if changed {
-        state.mark_edge_changed(idx);
+    if shift == Vector2::zero() {
+        return false;
     }
-    changed
+    state.edge_points[idx] += shift;
+    state.mark_edge_changed(idx);
+    true
 }
 
-fn is_group_reference(constraints: &PointConstraint, reference: usize) -> bool {
-    matches!(constraints.x, Constraint::Grouped(r, _) if r == reference)
-        || matches!(constraints.y, Constraint::Grouped(r, _) if r == reference)
+#[derive(Clone, Copy)]
+enum LayoutAxis {
+    X,
+    Y,
 }
 
-fn propagate_grouped_nodes<'a, E, V, H, N>(
-    state: &mut LayoutState<'a, E, V, H, N>,
-    reference: NodeIndex,
-) -> bool
+impl<'a, E, V, H, N> LayoutState<'a, E, V, H, N>
 where
+    E: HasPointConstraint,
     V: HasPointConstraint,
     N: NodeStorageOps<NodeData = V> + Clone,
 {
-    let graph = state.graph;
-    let reference_point = state.vertex_points[reference];
-    let reference_id = reference.0;
-    let mut changed_any = false;
-    let len = state.vertex_points.len().0;
-
-    for i in 0..len {
-        if i == reference_id {
-            continue;
-        }
-        let idx = NodeIndex(i);
-        let constraints = graph[idx].point_constraint();
-        let mut changed = false;
-
-        if matches!(constraints.x, Constraint::Grouped(r, _) if r == reference_id)
-            && state.vertex_points[idx].x != reference_point.x
-        {
-            state.vertex_points[idx].x = reference_point.x;
-            changed = true;
-        }
-        if matches!(constraints.y, Constraint::Grouped(r, _) if r == reference_id)
-            && state.vertex_points[idx].y != reference_point.y
-        {
-            state.vertex_points[idx].y = reference_point.y;
-            changed = true;
-        }
-
-        if changed {
-            state.mark_node_changed(idx);
-            changed_any = true;
+    fn constraints(&self, index: LayoutPointIndex) -> PointConstraint {
+        match index {
+            LayoutPointIndex::Node(index) => *self.graph[index].point_constraint(),
+            LayoutPointIndex::Edge(index) => *self.graph[index].point_constraint(),
         }
     }
 
-    changed_any
-}
-
-fn propagate_grouped_edges<'a, E, V, H, N>(
-    state: &mut LayoutState<'a, E, V, H, N>,
-    reference: EdgeIndex,
-) -> bool
-where
-    E: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
-{
-    let graph = state.graph;
-    let reference_point = state.edge_points[reference];
-    let reference_id = reference.0;
-    let mut changed_any = false;
-    let len = state.edge_points.len().0;
-
-    for i in 0..len {
-        if i == reference_id {
-            continue;
+    fn group_members(
+        &self,
+        reference: LayoutPointIndex,
+        axis: LayoutAxis,
+    ) -> Vec<LayoutPointIndex> {
+        let matches_reference = |constraints: PointConstraint| {
+            matches!(
+                match axis {
+                    LayoutAxis::X => constraints.x,
+                    LayoutAxis::Y => constraints.y,
+                },
+                Constraint::Grouped(group_reference, _) if group_reference == reference
+            )
+        };
+        let mut members = Vec::new();
+        for i in 0..self.vertex_points.len().0 {
+            let index = NodeIndex(i);
+            if matches_reference(*self.graph[index].point_constraint()) {
+                members.push(LayoutPointIndex::Node(index));
+            }
         }
-        let idx = EdgeIndex(i);
-        let constraints = graph[idx].point_constraint();
-        let mut changed = false;
-
-        if matches!(constraints.x, Constraint::Grouped(r, _) if r == reference_id)
-            && state.edge_points[idx].x != reference_point.x
-        {
-            state.edge_points[idx].x = reference_point.x;
-            changed = true;
+        for i in 0..self.edge_points.len().0 {
+            let index = EdgeIndex(i);
+            if matches_reference(*self.graph[index].point_constraint()) {
+                members.push(LayoutPointIndex::Edge(index));
+            }
         }
-        if matches!(constraints.y, Constraint::Grouped(r, _) if r == reference_id)
-            && state.edge_points[idx].y != reference_point.y
-        {
-            state.edge_points[idx].y = reference_point.y;
-            changed = true;
-        }
+        members
+    }
 
-        if changed {
-            state.mark_edge_changed(idx);
-            changed_any = true;
+    fn shift_coordinate(&mut self, index: LayoutPointIndex, axis: LayoutAxis, shift: f64) {
+        match index {
+            LayoutPointIndex::Node(index) => {
+                match axis {
+                    LayoutAxis::X => self.vertex_points[index].x += shift,
+                    LayoutAxis::Y => self.vertex_points[index].y += shift,
+                }
+                self.mark_node_changed(index);
+            }
+            LayoutPointIndex::Edge(index) => {
+                match axis {
+                    LayoutAxis::X => self.edge_points[index].x += shift,
+                    LayoutAxis::Y => self.edge_points[index].y += shift,
+                }
+                self.mark_edge_changed(index);
+            }
         }
     }
 
-    changed_any
+    fn coordinate(&self, index: LayoutPointIndex, axis: LayoutAxis) -> f64 {
+        match (index, axis) {
+            (LayoutPointIndex::Node(index), LayoutAxis::X) => self.vertex_points[index].x,
+            (LayoutPointIndex::Node(index), LayoutAxis::Y) => self.vertex_points[index].y,
+            (LayoutPointIndex::Edge(index), LayoutAxis::X) => self.edge_points[index].x,
+            (LayoutPointIndex::Edge(index), LayoutAxis::Y) => self.edge_points[index].y,
+        }
+    }
+
+    fn set_coordinate(&mut self, index: LayoutPointIndex, axis: LayoutAxis, value: f64) -> bool {
+        if self.coordinate(index, axis) == value {
+            return false;
+        }
+        let coordinate = match index {
+            LayoutPointIndex::Node(index) => {
+                self.mark_node_changed(index);
+                &mut self.vertex_points[index]
+            }
+            LayoutPointIndex::Edge(index) => {
+                self.mark_edge_changed(index);
+                &mut self.edge_points[index]
+            }
+        };
+        match axis {
+            LayoutAxis::X => coordinate.x = value,
+            LayoutAxis::Y => coordinate.y = value,
+        }
+        true
+    }
+
+    pub(crate) fn synchronize_grouped_coordinates(&mut self) {
+        for i in 0..self.vertex_points.len().0 {
+            let index = NodeIndex(i);
+            let point = LayoutPointIndex::Node(index);
+            let constraints = self.constraints(point);
+            if let Constraint::Grouped(reference, _) = constraints.x {
+                let value = self.coordinate(reference, LayoutAxis::X);
+                self.set_coordinate(point, LayoutAxis::X, value);
+            }
+            if let Constraint::Grouped(reference, _) = constraints.y {
+                let value = self.coordinate(reference, LayoutAxis::Y);
+                self.set_coordinate(point, LayoutAxis::Y, value);
+            }
+        }
+        for i in 0..self.edge_points.len().0 {
+            let index = EdgeIndex(i);
+            let point = LayoutPointIndex::Edge(index);
+            let constraints = self.constraints(point);
+            if let Constraint::Grouped(reference, _) = constraints.x {
+                let value = self.coordinate(reference, LayoutAxis::X);
+                self.set_coordinate(point, LayoutAxis::X, value);
+            }
+            if let Constraint::Grouped(reference, _) = constraints.y {
+                let value = self.coordinate(reference, LayoutAxis::Y);
+                self.set_coordinate(point, LayoutAxis::Y, value);
+            }
+        }
+    }
+
+    fn shift_axis(
+        &mut self,
+        index: LayoutPointIndex,
+        axis: LayoutAxis,
+        constraint: Constraint,
+        shift: f64,
+    ) -> bool {
+        if shift == 0.0 {
+            return false;
+        }
+        match constraint {
+            Constraint::Fixed => false,
+            Constraint::Free => {
+                self.shift_coordinate(index, axis, shift);
+                true
+            }
+            Constraint::Grouped(reference, _) if reference == index => {
+                self.shift_coordinate(index, axis, shift);
+                let value = self.coordinate(index, axis);
+                for member in self.group_members(reference, axis) {
+                    self.set_coordinate(member, axis, value);
+                }
+                true
+            }
+            Constraint::Grouped(_, _) => false,
+        }
+    }
+
+    fn shift_constrained(&mut self, index: LayoutPointIndex, shift: Vector2<f64>) -> bool {
+        let constraints = self.constraints(index);
+        let changed_x = self.shift_axis(index, LayoutAxis::X, constraints.x, shift.x);
+        let changed_y = self.shift_axis(index, LayoutAxis::Y, constraints.y, shift.y);
+        changed_x || changed_y
+    }
 }
 
-pub(crate) fn apply_vertex_shift_with_groups<
-    'a,
-    E: Shiftable + HasPointConstraint,
-    V: Shiftable + HasPointConstraint,
-    H,
-    N: NodeStorageOps<NodeData = V> + Clone,
->(
+pub(crate) fn apply_vertex_shift_with_groups<'a, E, V, H, N>(
     state: &mut LayoutState<'a, E, V, H, N>,
     idx: NodeIndex,
     shift: Vector2<f64>,
-) -> bool {
-    let changed = state.graph[idx].shift(shift, idx, &mut state.vertex_points);
-    if changed {
-        state.mark_node_changed(idx);
-        let constraints = state.graph[idx].point_constraint();
-        if is_group_reference(constraints, idx.0) {
-            return propagate_grouped_nodes(state, idx) || changed;
-        }
-    }
-    changed
+) -> bool
+where
+    E: HasPointConstraint,
+    V: HasPointConstraint,
+    N: NodeStorageOps<NodeData = V> + Clone,
+{
+    state.shift_constrained(LayoutPointIndex::Node(idx), shift)
 }
 
-pub(crate) fn apply_edge_shift_with_groups<
-    'a,
-    E: Shiftable + HasPointConstraint,
-    V: Shiftable + HasPointConstraint,
-    H,
-    N: NodeStorageOps<NodeData = V> + Clone,
->(
+pub(crate) fn apply_edge_shift_with_groups<'a, E, V, H, N>(
     state: &mut LayoutState<'a, E, V, H, N>,
     idx: EdgeIndex,
     shift: Vector2<f64>,
-) -> bool {
-    let changed = state.graph[idx].shift(shift, idx, &mut state.edge_points);
-    if changed {
-        state.mark_edge_changed(idx);
-        let constraints = state.graph[idx].point_constraint();
-        if is_group_reference(constraints, idx.0) {
-            return propagate_grouped_edges(state, idx) || changed;
-        }
-    }
-    changed
+) -> bool
+where
+    E: HasPointConstraint,
+    V: HasPointConstraint,
+    N: NodeStorageOps<NodeData = V> + Clone,
+{
+    state.shift_constrained(LayoutPointIndex::Edge(idx), shift)
 }
 
 fn swap_on_fixed_axis_nodes<'a, E, V, H, N>(
@@ -808,15 +769,16 @@ where
 
 #[derive(Clone, Copy)]
 pub struct SpringChargeEnergy {
-    pub spring_length: f64,    // L
-    pub k_spring: f64,         // 1.0
-    pub c_vv: f64,             // vertex-vertex charge (≈ 0.14*L^3)
-    pub dangling_charge: f64,  // dangling edge charge (≈ 0.14*L^3)
-    pub c_ev: f64,             // edge-vertex (≈ 0.028*L^3)
-    pub c_ee_local: f64,       // edge-edge local (≈ 0.014*L^3)
-    pub c_center: f64,         // central pull (dimensionless relative strength)
-    pub crossing_penalty: f64, // crossing energy penalty (≈ penalty*L^2)
-    pub eps: f64,              // softened distance (≈ eps*L)
+    pub spring_length: f64,            // L
+    pub k_spring: f64,                 // 1.0
+    pub c_vv: f64,                     // vertex-vertex charge (≈ 0.14*L^3)
+    pub dangling_charge: f64,          // dangling edge charge (≈ 0.14*L^3)
+    pub dangling_centroid_charge: f64, // dangling edge vs node-centroid charge
+    pub c_ev: f64,                     // edge-vertex (≈ 0.028*L^3)
+    pub c_ee_local: f64,               // edge-edge local (≈ 0.014*L^3)
+    pub c_center: f64,                 // central pull (dimensionless relative strength)
+    pub crossing_penalty: f64,         // crossing energy penalty (≈ penalty*L^2)
+    pub eps: f64,                      // softened distance (≈ eps*L)
 }
 
 impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a, E, V, H, N>>
@@ -853,15 +815,16 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct ParamTuning {
-    pub length_scale: f64,     // scales L: default 1.0
-    pub k_spring: f64,         // spring stiffness: default 1.0
-    pub beta: f64,             // vertex–vertex strength
-    pub gamma_dangling: f64,   // dangling edge vs vertex–vertex
-    pub gamma_ev: f64,         // edge–vertex vs vertex–vertex
-    pub gamma_ee: f64,         // local edge–edge vs vertex–vertex
-    pub g_center: f64,         // central vs vertex–vertex
-    pub crossing_penalty: f64, // fixed penalty per crossing
-    pub eps: f64,              // softening epsilon
+    pub length_scale: f64,            // scales L: default 1.0
+    pub k_spring: f64,                // spring stiffness: default 1.0
+    pub beta: f64,                    // vertex–vertex strength
+    pub gamma_dangling: f64,          // dangling edge vs vertex–vertex
+    pub gamma_dangling_centroid: f64, // dangling edge vs node centroid
+    pub gamma_ev: f64,                // edge–vertex vs vertex–vertex
+    pub gamma_ee: f64,                // local edge–edge vs vertex–vertex
+    pub g_center: f64,                // central vs vertex–vertex
+    pub crossing_penalty: f64,        // fixed penalty per crossing
+    pub eps: f64,                     // softening epsilon
 }
 
 impl ParamTuning {
@@ -882,6 +845,10 @@ impl ParamTuning {
         global_data.statements.insert(
             "gamma_dangling".to_string(),
             self.gamma_dangling.to_string(),
+        );
+        global_data.statements.insert(
+            "gamma_dangling_centroid".to_string(),
+            self.gamma_dangling_centroid.to_string(),
         );
         global_data
             .statements
@@ -910,6 +877,11 @@ impl ParamTuning {
                 "gamma_dangling" => {
                     if let Ok(v) = value.parse::<f64>() {
                         tune.gamma_dangling = v;
+                    }
+                }
+                "gamma_dangling_centroid" => {
+                    if let Ok(v) = value.parse::<f64>() {
+                        tune.gamma_dangling_centroid = v;
                     }
                 }
                 "k_spring" => {
@@ -961,6 +933,7 @@ impl Default for ParamTuning {
             k_spring: 1.0,
             beta: 0.14,
             gamma_dangling: 0.14,
+            gamma_dangling_centroid: 0.0,
             gamma_ev: 0.20,
             gamma_ee: 0.10,
             g_center: 0.05,
@@ -1103,6 +1076,37 @@ impl SpringChargeEnergy {
     }
 
     #[cfg_attr(feature = "energy_trace", inline(never))]
+    fn dangling_centroid_term(&self, dist: f64) -> f64 {
+        self.dangling_centroid_charge / (dist + self.eps)
+    }
+
+    fn dangling_centroid_energy<'a, E, V, H, N>(&self, state: &LayoutState<'a, E, V, H, N>) -> f64
+    where
+        N: NodeStorageOps<NodeData = V> + Clone,
+    {
+        let n = state.vertex_points.len().0;
+        if self.dangling_centroid_charge == 0.0 || n == 0 {
+            return 0.0;
+        }
+
+        let centroid = Point2::from_vec(
+            state
+                .vertex_points
+                .iter()
+                .fold(Vector2::zero(), |sum, (_, point)| sum + point.to_vec())
+                / n as f64,
+        );
+        state
+            .ext
+            .included_iter()
+            .map(|hedge| {
+                let edge = state.graph[&hedge];
+                self.dangling_centroid_term(state.edge_points[edge].distance(centroid))
+            })
+            .sum()
+    }
+
+    #[cfg_attr(feature = "energy_trace", inline(never))]
     fn center_term(&self, r: f64) -> f64 {
         0.5 * self.c_center * r.powi(2)
     }
@@ -1138,7 +1142,7 @@ impl SpringChargeEnergy {
         }
     }
 
-    fn edge_spring_length<'a, E, V, H, N>(
+    pub(super) fn edge_spring_length<'a, E, V, H, N>(
         s: &LayoutState<'a, E, V, H, N>,
         edge: EdgeIndex,
         base: f64,
@@ -1146,6 +1150,7 @@ impl SpringChargeEnergy {
     where
         N: NodeStorageOps<NodeData = V> + Clone,
     {
+        let base = base * s.edge_spring_length_scales[edge];
         let (_, pair) = &s.graph[&edge];
         match pair {
             HedgePair::Unpaired { .. } => base * 2.0,
@@ -1298,6 +1303,7 @@ impl SpringChargeEnergy {
                 energy += self.dangling_term(pi.distance(pj));
             }
         }
+        energy += self.dangling_centroid_energy(s);
         #[cfg(feature = "energy_trace")]
         energy_trace::record_dangling(dangling_start.elapsed());
 
@@ -1471,6 +1477,15 @@ impl SpringChargeEnergy {
                     - self.dangling_term(prev_pi.distance(prev_pj));
             }
         }
+        if self.dangling_centroid_charge != 0.0
+            && (!node_changes.is_empty()
+                || next
+                    .ext
+                    .included_iter()
+                    .any(|hedge| edge_changes.includes(&next.graph[&hedge])))
+        {
+            delta += self.dangling_centroid_energy(next) - self.dangling_centroid_energy(prev);
+        }
         #[cfg(feature = "energy_trace")]
         energy_trace::record_dangling(dangling_start.elapsed());
 
@@ -1519,6 +1534,7 @@ impl SpringChargeEnergy {
             c_ee_local: tune.beta * tune.gamma_ee * repulsion_scale,
             c_center: tune.beta * tune.g_center,
             dangling_charge: tune.gamma_dangling * tune.beta * repulsion_scale,
+            dangling_centroid_charge: tune.gamma_dangling_centroid * tune.beta * repulsion_scale,
             crossing_penalty: tune.crossing_penalty * spring_length_sq,
             eps: tune.eps * spring_length,
         }
@@ -1528,28 +1544,38 @@ impl SpringChargeEnergy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::half_edge::{
+        builder::HedgeGraphBuilder, involution::Flow, nodestore::DefaultNodeStore, NoData,
+    };
+    use rand::{rngs::SmallRng, SeedableRng};
 
     #[test]
     fn directional_force_only_restores_wrong_side() {
+        let reference = LayoutPointIndex::Node(NodeIndex(0));
         let constraints = PointConstraint {
-            x: Constraint::Grouped(0, ShiftDirection::PositiveOnly),
-            y: Constraint::Grouped(0, ShiftDirection::NegativeOnly),
+            x: Constraint::Grouped(reference, ShiftDirection::PositiveOnly),
+            y: Constraint::Grouped(reference, ShiftDirection::NegativeOnly),
         };
 
         assert_eq!(
-            directional_force_shift(&constraints, 0, Point2::new(-1.0, 1.0), 2.0),
+            directional_force_shift(&constraints, reference, Point2::new(-1.0, 1.0), 2.0),
             Vector2::new(2.0, -2.0)
         );
         assert_eq!(
-            directional_force_shift(&constraints, 0, Point2::new(0.0, 0.0), 2.0),
+            directional_force_shift(&constraints, reference, Point2::new(0.0, 0.0), 2.0),
             Vector2::new(2.0, -2.0)
         );
         assert_eq!(
-            directional_force_shift(&constraints, 0, Point2::new(1.0, -1.0), 2.0),
+            directional_force_shift(&constraints, reference, Point2::new(1.0, -1.0), 2.0),
             Vector2::zero()
         );
         assert_eq!(
-            directional_force_shift(&constraints, 1, Point2::new(-1.0, 1.0), 2.0),
+            directional_force_shift(
+                &constraints,
+                LayoutPointIndex::Node(NodeIndex(1)),
+                Point2::new(-1.0, 1.0),
+                2.0,
+            ),
             Vector2::zero()
         );
     }
@@ -1560,11 +1586,126 @@ mod tests {
             k_spring: 1.0,
             c_vv: 0.0,
             dangling_charge: 0.0,
+            dangling_centroid_charge: 0.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center,
             crossing_penalty: 0.0,
             eps: 1e-4,
+        }
+    }
+
+    #[test]
+    fn edge_spring_length_scales_are_local_and_preserve_dangling_factor() {
+        for split in [None, Some(Flow::Source), Some(Flow::Sink)] {
+            let mut builder = HedgeGraphBuilder::<(), ()>::new();
+            let a = builder.add_node(());
+            let b = builder.add_node(());
+            builder.add_edge(a, b, (), false);
+            builder.add_external_edge(a, (), false, Flow::Source);
+            builder.add_external_edge(b, (), false, Flow::Sink);
+            let mut graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            if let Some(split) = split {
+                let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
+                    panic!("expected paired edge");
+                };
+                graph[&EdgeIndex(0)].1 = HedgePair::Split {
+                    source,
+                    sink,
+                    split,
+                };
+            }
+            let mut state = graph.new_layout_state(
+                vec![Point2::origin(), Point2::new(6.0, 0.0)].into(),
+                vec![
+                    Point2::new(2.0, 0.0),
+                    Point2::new(0.0, 4.0),
+                    Point2::new(6.0, 4.0),
+                ]
+                .into(),
+                1.0,
+                0.0,
+                false,
+            );
+            let energy = SpringChargeEnergy {
+                spring_length: 3.0,
+                ..test_energy(0.0)
+            };
+            assert_eq!(state.edge_spring_length_scales, vec![1.0; 3].into());
+            for (scales, lengths, expected_energy) in [
+                ([1.0, 1.0, 1.0], [3.0, 6.0, 6.0], 5.0),
+                ([0.5, 1.0, 1.0], [1.5, 6.0, 6.0], 7.25),
+                ([0.5, 2.0, 1.0], [1.5, 12.0, 6.0], 37.25),
+            ] {
+                state.edge_spring_length_scales = scales.to_vec().into();
+                for (edge, length) in lengths.into_iter().enumerate() {
+                    assert_eq!(
+                        SpringChargeEnergy::edge_spring_length(
+                            &state,
+                            EdgeIndex(edge),
+                            energy.spring_length,
+                        ),
+                        length,
+                    );
+                }
+                assert_eq!(energy.energy(None, &state), expected_energy);
+                let mut cloned = state.clone();
+                assert_eq!(
+                    cloned.edge_spring_length_scales,
+                    state.edge_spring_length_scales
+                );
+                assert_eq!(energy.energy(None, &cloned), expected_energy);
+                cloned.edge_spring_length_scales[EdgeIndex(0)] = 4.0;
+                assert_eq!(state.edge_spring_length_scales[EdgeIndex(0)], scales[0]);
+            }
+        }
+    }
+
+    #[test]
+    fn heterogeneous_edge_spring_length_scales_incremental_energy_matches_full() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let a = builder.add_node(());
+        let b = builder.add_node(());
+        let c = builder.add_node(());
+        builder.add_edge(a, b, (), false);
+        builder.add_edge(b, c, (), false);
+        builder.add_external_edge(a, (), false, Flow::Source);
+        builder.add_external_edge(c, (), false, Flow::Sink);
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let mut state = graph.new_layout_state(
+            vec![
+                Point2::new(-2.0, 0.0),
+                Point2::new(1.0, 2.0),
+                Point2::new(4.0, -1.0),
+            ]
+            .into(),
+            vec![
+                Point2::new(-1.0, 1.0),
+                Point2::new(2.5, 0.5),
+                Point2::new(-4.0, -1.0),
+                Point2::new(6.0, 1.0),
+            ]
+            .into(),
+            1.0,
+            0.0,
+            true,
+        );
+        state.edge_spring_length_scales = vec![0.5, 2.0, 1.5, 0.75].into();
+        let energy = test_energy(0.2);
+        let mut rng = SmallRng::seed_from_u64(17);
+        let mut cached = energy.energy(None, &state);
+        for iteration in 0..100 {
+            let next = LayoutNeighbor.propose(&state, &mut rng, 0.2, 0.3);
+            let incremental = energy.energy(Some((&state, cached)), &next);
+            let exact = energy.total_energy(&next);
+            assert!(
+                (incremental - exact).abs() <= 1e-9 * (1.0 + exact.abs()),
+                "iteration {iteration}: incremental={incremental}, exact={exact}",
+            );
+            state = next;
+            energy.on_accept(&mut state);
+            cached = incremental;
+            assert_eq!(energy.energy(Some((&state, cached)), &state), cached);
         }
     }
 
@@ -1583,6 +1724,7 @@ mod tests {
             k_spring: 11.0,
             beta: 3.0,
             gamma_dangling: 0.7,
+            gamma_dangling_centroid: 1.3,
             gamma_ev: 0.2,
             gamma_ee: 0.4,
             g_center: 0.05,
@@ -1606,6 +1748,10 @@ mod tests {
         assert_eq!(large.c_ev / small.c_ev, 8.0);
         assert_eq!(large.c_ee_local / small.c_ee_local, 8.0);
         assert_eq!(large.dangling_charge / small.dangling_charge, 8.0);
+        assert_eq!(
+            large.dangling_centroid_charge / small.dangling_centroid_charge,
+            8.0
+        );
         assert_eq!(large.crossing_penalty / small.crossing_penalty, 4.0);
         assert_eq!(large.eps / small.eps, 2.0);
         assert_eq!(large.c_center, small.c_center);

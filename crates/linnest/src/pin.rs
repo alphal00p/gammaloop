@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use cgmath::Point2;
-use linnet::half_edge::layout::spring::{Constraint, PointConstraint, ShiftDirection};
+use linnet::half_edge::layout::spring::{
+    Constraint, LayoutPointIndex, PointConstraint, ShiftDirection,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -18,8 +20,8 @@ pub enum PinConstraint {
 impl PinConstraint {
     pub fn point_constraint(
         &self,
-        index: usize,
-        map: &mut HashMap<String, usize>,
+        index: LayoutPointIndex,
+        map: &mut HashMap<String, LayoutPointIndex>,
     ) -> (Point2<f64>, PointConstraint) {
         match self {
             PinConstraint::Fixed(x, y) => (
@@ -44,9 +46,9 @@ impl PinConstraint {
                 },
             ),
             PinConstraint::LinkX(group) => {
-                let (group_name, direction) = Self::parse_direction(group);
+                let (_, direction) = Self::parse_direction(group);
                 let reference = *map
-                    .entry(format!("link_x_{}", group_name))
+                    .entry(format!("link_x_{group}"))
                     .or_insert_with(|| index);
                 (
                     Point2::new(0.0, 0.0),
@@ -57,9 +59,9 @@ impl PinConstraint {
                 )
             }
             PinConstraint::LinkY(group) => {
-                let (group_name, direction) = Self::parse_direction(group);
+                let (_, direction) = Self::parse_direction(group);
                 let reference = *map
-                    .entry(format!("link_y_{}", group_name))
+                    .entry(format!("link_y_{group}"))
                     .or_insert_with(|| index);
                 (
                     Point2::new(0.0, 0.0),
@@ -70,15 +72,18 @@ impl PinConstraint {
                 )
             }
             PinConstraint::LinkBoth(group) => {
-                let (group_name, direction) = Self::parse_direction(group);
-                let reference = *map
-                    .entry(format!("link_{}", group_name))
+                let (_, direction) = Self::parse_direction(group);
+                let x_reference = *map
+                    .entry(format!("link_x_{group}"))
+                    .or_insert_with(|| index);
+                let y_reference = *map
+                    .entry(format!("link_y_{group}"))
                     .or_insert_with(|| index);
                 (
                     Point2::new(0.0, 0.0),
                     PointConstraint {
-                        x: Constraint::Grouped(reference, direction),
-                        y: Constraint::Grouped(reference, direction),
+                        x: Constraint::Grouped(x_reference, direction),
+                        y: Constraint::Grouped(y_reference, direction),
                     },
                 )
             }

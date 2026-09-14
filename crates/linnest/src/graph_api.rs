@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use cgmath::{Point2, Rad, Vector2};
 use dot_parser::ast::CompassPt;
@@ -6,11 +6,13 @@ use linnet::{
     half_edge::{
         builder::{HedgeData, HedgeGraphBuilder},
         involution::{
-            ArchivedOrientation, EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation,
+            ArchivedOrientation, EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Involution,
+            InvolutiveMapping, Orientation,
         },
-        layout::spring::{Constraint, PointConstraint},
-        nodestore::DefaultNodeStore,
+        layout::spring::{Constraint, LayoutPointIndex, PointConstraint},
+        nodestore::{DefaultNodeStore, NodeStorageOps},
         subgraph::{Inclusion, SuBitGraph, SubSetLike},
+        swap::Swap,
         NodeIndex,
     },
     parser::{
@@ -20,7 +22,7 @@ use linnet::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{default_figment, PinConstraint, TypstGraph};
+use crate::{default_figment, PinConstraint, TypstEdge, TypstGraph, TypstHedge, TypstNode};
 
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
@@ -75,7 +77,7 @@ enum PlacementMode {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TypstPlacementSpec {
     #[serde(default)]
     mode: PlacementMode,
@@ -84,9 +86,13 @@ pub struct TypstPlacementSpec {
     #[serde(default)]
     y_mode: Option<PlacementMode>,
     #[serde(default)]
+    z_mode: Option<PlacementMode>,
+    #[serde(default)]
     x: Option<TypstPlacementCoord>,
     #[serde(default)]
     y: Option<TypstPlacementCoord>,
+    #[serde(default)]
+    z: Option<TypstNumber>,
     #[serde(default, rename = "ref")]
     reference: Option<usize>,
     #[serde(default, deserialize_with = "deserialize_optional_f64")]
@@ -117,6 +123,8 @@ struct TypstPlacementGroup {
     name: String,
     #[serde(default)]
     side: Option<String>,
+    #[serde(default)]
+    start: Option<TypstNumber>,
 }
 
 #[derive(Debug, Clone, Copy, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -129,9 +137,12 @@ pub struct ResolvedPoint {
 
 #[derive(Debug, Clone)]
 struct ResolvedPlacement {
-    point: ResolvedPoint,
+    point: Option<ResolvedPoint>,
+    z: Option<(f64, PlacementMode)>,
     pin: Option<String>,
     mode: PlacementMode,
+    group_start_x: bool,
+    group_start_y: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -401,6 +412,24 @@ pub struct TypstJoinSpec {
     pub key: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct TypstJoinOrigin {
+    #[serde(default)]
+    pub left: Option<usize>,
+    #[serde(default)]
+    pub right: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct TypstJoinResult {
+    pub graph: Vec<u8>,
+    pub nodes: Vec<TypstJoinOrigin>,
+    pub edges: Vec<TypstJoinOrigin>,
+    pub hedges: Vec<TypstJoinOrigin>,
+}
+
 pub fn encode_cbor<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
     let mut buffer = Vec::new();
     ciborium::ser::into_writer(value, &mut buffer).map_err(|err| err.to_string())?;
@@ -584,6 +613,7 @@ fn apply_typst_graph_structural_patch(
     patch: TypstGraphStructuralPatch,
 ) -> Result<(), String> {
     let mut node_positions = typst_node_positions(graph);
+    let mut refresh_positions = false;
 
     for node in patch.nodes {
         if node.index >= graph.graph.n_nodes() {
@@ -597,17 +627,24 @@ fn apply_typst_graph_structural_patch(
         let index = NodeIndex(node.index);
         if let Some(pos) = node.pos {
             let placement = pos.resolve(&node_positions, "node structural patch")?;
+            if let Some(point) = placement.point {
+                refresh_positions = true;
+                node_positions[node.index] = point;
+            }
             let statements = std::mem::take(&mut graph.graph[index].statements);
             graph.graph[index].statements =
                 apply_placement_statements(statements, Some(&placement));
-            node_positions[node.index] = placement.point;
         }
         if let Some(shift) = node.shift {
             graph.graph[index]
                 .statements
                 .insert("shift".to_string(), shift.to_statement()?);
         }
+        refresh_positions |= point_statements_changed(&node.statements);
         graph.graph[index].statements.extend(node.statements);
+        if let Some((x, y)) = statement_point(&graph.graph[index].statements, "shift") {
+            graph.graph[index].shift = Some(Vector2::new(x, y));
+        }
     }
 
     for edge in patch.edges {
@@ -622,6 +659,7 @@ fn apply_typst_graph_structural_patch(
         let index = EdgeIndex(edge.index);
         if let Some(pos) = edge.pos {
             let placement = pos.resolve(&node_positions, "edge structural patch")?;
+            refresh_positions |= placement.point.is_some();
             let statements = std::mem::take(&mut graph.graph[index].statements);
             graph.graph[index].statements =
                 apply_placement_statements(statements, Some(&placement));
@@ -646,7 +684,22 @@ fn apply_typst_graph_structural_patch(
                 .statements
                 .insert("bend".to_string(), format!("{bend}rad"));
         }
+        refresh_positions |= point_statements_changed(&edge.statements);
         graph.graph[index].statements.extend(edge.statements);
+        let data = &mut graph.graph[index];
+        if let Some((x, y)) = statement_point(&data.statements, "shift") {
+            data.shift = Some(Vector2::new(x, y));
+        }
+        if let Some((x, y)) = statement_point(&data.statements, "label-pos") {
+            data.label_pos = Some(Point2::new(x, y));
+        }
+        if let Some(angle) = statement_radians(&data.statements, "label-angle") {
+            data.label_angle = Some(angle);
+        }
+        if let Some(bend) = statement_radians(&data.statements, "bend") {
+            data.bend = Ok(Rad(bend));
+            data.bend_explicit = true;
+        }
     }
 
     for hedge in patch.hedges {
@@ -670,8 +723,25 @@ fn apply_typst_graph_structural_patch(
         }
     }
 
-    refresh_structural_state_from_statements(graph);
+    if refresh_positions {
+        refresh_structural_state_from_statements(graph);
+    }
     Ok(())
+}
+
+fn point_statements_changed(statements: &BTreeMap<String, String>) -> bool {
+    statements.keys().any(|key| {
+        matches!(
+            normalize_statement_key(key).as_str(),
+            "pos"
+                | "pin"
+                | "pos-x-set"
+                | "pos-y-set"
+                | "pos-mode"
+                | "group-start-x"
+                | "group-start-y"
+        )
+    })
 }
 
 fn typst_node_positions(graph: &TypstGraph) -> Vec<ResolvedPoint> {
@@ -688,7 +758,7 @@ fn typst_node_positions(graph: &TypstGraph) -> Vec<ResolvedPoint> {
 }
 
 fn refresh_structural_state_from_statements(graph: &mut TypstGraph) {
-    let mut node_group_map = HashMap::new();
+    let mut group_map = HashMap::new();
     for index in 0..graph.graph.n_nodes() {
         let index = NodeIndex(index);
         let node = &mut graph.graph[index];
@@ -697,17 +767,16 @@ fn refresh_structural_state_from_statements(graph: &mut TypstGraph) {
             node.shift = Some(Vector2::new(x, y));
         }
         refresh_point_state(
-            index.0,
+            LayoutPointIndex::Node(index),
             &statements,
             &mut node.pos,
             &mut node.constraints,
             &mut node.start_x,
             &mut node.start_y,
-            &mut node_group_map,
+            &mut group_map,
         );
     }
 
-    let mut edge_group_map = HashMap::new();
     for index in 0..graph.graph.n_edges() {
         let index = EdgeIndex(index);
         let edge = &mut graph.graph[index];
@@ -726,25 +795,25 @@ fn refresh_structural_state_from_statements(graph: &mut TypstGraph) {
             edge.bend_explicit = true;
         }
         refresh_point_state(
-            index.0,
+            LayoutPointIndex::Edge(index),
             &statements,
             &mut edge.pos,
             &mut edge.constraints,
             &mut edge.start_x,
             &mut edge.start_y,
-            &mut edge_group_map,
+            &mut group_map,
         );
     }
 }
 
 fn refresh_point_state(
-    index: usize,
+    index: LayoutPointIndex,
     statements: &BTreeMap<String, String>,
     point: &mut Point2<f64>,
     constraints: &mut PointConstraint,
     start_x: &mut bool,
     start_y: &mut bool,
-    group_map: &mut HashMap<String, usize>,
+    group_map: &mut HashMap<String, LayoutPointIndex>,
 ) {
     let position = parse_statement_point(statements, "pos");
     let pin = statement_map_value(statements, "pin").and_then(|value| PinConstraint::parse(value));
@@ -753,10 +822,10 @@ fn refresh_point_state(
         Some(pin) => {
             let (mut pin_point, pin_constraints) = pin.point_constraint(index, group_map);
             if let Some(position) = position {
-                if matches!(pin_constraints.x, Constraint::Free) && position.x_set {
+                if !matches!(pin_constraints.x, Constraint::Fixed) && position.x_set {
                     pin_point.x = position.x;
                 }
-                if matches!(pin_constraints.y, Constraint::Free) && position.y_set {
+                if !matches!(pin_constraints.y, Constraint::Fixed) && position.y_set {
                     pin_point.y = position.y;
                 }
                 *start_x = position.x_set;
@@ -941,6 +1010,13 @@ pub fn graph_edges_of_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> 
 pub fn graph_nodes_of_archived_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let graph = decode_typst_graph(arg)?;
     let subgraph = decode_subgraph(arg2)?;
+    if subgraph.size() != graph.n_hedges() {
+        return Err(format!(
+            "Archived subgraph has {} bits, but graph has {} half-edges; sizes must match",
+            subgraph.size(),
+            graph.n_hedges()
+        ));
+    }
     let nodes = with_dot_view(&graph, |graph| {
         Ok(graph
             .vertex_data_of(&subgraph)
@@ -953,6 +1029,13 @@ pub fn graph_nodes_of_archived_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result
 pub fn graph_edges_of_archived_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let graph = decode_typst_graph(arg)?;
     let subgraph = decode_subgraph(arg2)?;
+    if subgraph.size() != graph.n_hedges() {
+        return Err(format!(
+            "Archived subgraph has {} bits, but graph has {} half-edges; sizes must match",
+            subgraph.size(),
+            graph.n_hedges()
+        ));
+    }
     let edges = with_dot_view(&graph, |graph| {
         Ok(graph
             .edge_data_of(&subgraph)
@@ -988,6 +1071,12 @@ pub fn graph_archived_compass_subgraph_bytes(arg: &[u8], arg2: &[u8]) -> Result<
     let graph = decode_typst_graph(arg)?;
     let compass = decode_compass(arg2)?;
     encode_subgraph(&graph.to_dot_graph().compass_subgraph::<SuBitGraph>(compass))
+}
+
+#[cfg(any(test, all(target_arch = "wasm32", feature = "typst-plugin")))]
+pub(crate) fn subgraph_size_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let subgraph = decode_subgraph(arg)?;
+    encode_cbor(&subgraph.size())
 }
 
 pub fn subgraph_label_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
@@ -1031,6 +1120,415 @@ pub fn graph_spanning_forests_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     encode_cbor(&archived)
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TypstCutEntry {
+    left: usize,
+    right: usize,
+    winding: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+struct TypstCutEdgeOrigin {
+    edge: usize,
+    segment: Option<usize>,
+    winding: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+struct TypstCutBoundary {
+    edge: usize,
+    node: Option<usize>,
+    hedge: usize,
+    side: String,
+    crossing: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TypstCutResult {
+    graph: Vec<u8>,
+    nodes: Vec<Option<usize>>,
+    edges: Vec<TypstCutEdgeOrigin>,
+    hedges: Vec<Option<usize>>,
+    boundaries: Vec<TypstCutBoundary>,
+}
+
+impl TypstEdge {
+    fn cut_payload(&self) -> Option<ciborium::Value> {
+        let mut bytes = self.data.as_deref()?;
+        let value = ciborium::de::from_reader(&mut bytes).ok()?;
+        bytes.is_empty().then_some(value)
+    }
+
+    fn cut_name(&self) -> Result<Option<String>, String> {
+        let statement = statement_map_value(&self.statements, TYPST_EDGE_NAME_KEY);
+        let mut name = statement.cloned();
+        if let Some(ciborium::Value::Map(fields)) = self.cut_payload() {
+            for (key, value) in fields {
+                if key.as_text() != Some("name") || value == ciborium::Value::Null {
+                    continue;
+                }
+                let value = value
+                    .as_text()
+                    .ok_or("Cut edge payload name must be text")?;
+                if name.as_deref().is_some_and(|name| name != value) {
+                    return Err("Conflicting cut edge names in statements and payload".into());
+                }
+                name = Some(value.to_owned());
+            }
+        }
+        Ok(name)
+    }
+
+    fn cut_fragment(&self, name: String) -> Result<Self, String> {
+        let mut statements = self.statements.clone();
+        statements.retain(|key, _| {
+            let key = normalize_statement_key(key);
+            key != "pos"
+                && !key.starts_with("pos-")
+                && !matches!(
+                    key.as_str(),
+                    "pin"
+                        | "z"
+                        | "z-mode"
+                        | "shift"
+                        | "bend"
+                        | "label-pos"
+                        | "label-angle"
+                        | "route-points"
+                        | "group-start-x"
+                        | "group-start-y"
+                        | TYPST_EDGE_NAME_KEY
+                )
+        });
+        statements.insert(TYPST_EDGE_NAME_KEY.into(), name.clone());
+        // Payloads are otherwise opaque. Only rewrite an existing CBOR name;
+        // sidecar data keys and every other field retain their input meanings.
+        let mut data = self.data.clone();
+        if let Some(ciborium::Value::Map(mut fields)) = self.cut_payload() {
+            let mut renamed = false;
+            for (key, value) in &mut fields {
+                if key.as_text() == Some("name") {
+                    *value = ciborium::Value::Text(name.clone());
+                    renamed = true;
+                }
+            }
+            if renamed {
+                data = Some(encode_cbor(&ciborium::Value::Map(fields))?);
+            }
+        }
+        Ok(Self {
+            data,
+            statements,
+            ..Self::default()
+        })
+    }
+}
+
+impl TypstCutEntry {
+    fn endpoints(&self, graph: &TypstGraph) -> Result<(Hedge, Hedge, EdgeIndex), String> {
+        if self.winding == 0 {
+            return Err("Cut winding must be positive".into());
+        }
+        if self.left >= graph.n_hedges() || self.right >= graph.n_hedges() {
+            return Err(format!(
+                "Cut hedge pair ({}, {}) is out of bounds",
+                self.left, self.right
+            ));
+        }
+        let (left, right) = (Hedge(self.left), Hedge(self.right));
+        if left == right || graph.inv(left) != right || graph.inv(right) != left {
+            return Err(format!(
+                "Cut hedges ({left}, {right}) must be paired inverses"
+            ));
+        }
+        let (source, sink) = match graph.underlying_hedge_orientation(left) {
+            Flow::Source => (left, right),
+            Flow::Sink => (right, left),
+        };
+        Ok((source, sink, graph[&source]))
+    }
+
+    fn boundary(
+        &self,
+        edge: usize,
+        node: Option<usize>,
+        hedge: Hedge,
+        crossing: usize,
+    ) -> TypstCutBoundary {
+        TypstCutBoundary {
+            edge,
+            node,
+            hedge: hedge.0,
+            side: if hedge.0 == self.left {
+                "left"
+            } else {
+                "right"
+            }
+            .into(),
+            crossing,
+        }
+    }
+}
+
+impl TypstGraph {
+    fn validate_cut_topology(&self) -> Result<(), String> {
+        // rkyv checks the archive's memory representation, not cross-index
+        // invariants. Validate these before calling Linnet's indexing APIs.
+        let invalid = || "Invalid cut input graph topology".to_string();
+        let involution: &Involution = self.graph.as_ref();
+        let mappings: Vec<_> = involution.iter().map(|(_, mapping)| mapping).collect();
+        let node_hedges: Hedge = self.graph.node_store.len();
+        if mappings.len() != self.n_hedges()
+            || self.iter_hedges().count() != self.n_hedges()
+            || node_hedges.0 != self.n_hedges()
+            || self.graph.node_store.iter().count() != self.n_nodes()
+        {
+            return Err(invalid());
+        }
+        let mut edges = vec![false; self.n_edges()];
+        for (index, mapping) in mappings.iter().enumerate() {
+            let hedge = Hedge(index);
+            let data = match mapping {
+                InvolutiveMapping::Identity { data, .. } => data,
+                InvolutiveMapping::Source { data, sink_idx } => {
+                    if !matches!(mappings.get(sink_idx.0), Some(InvolutiveMapping::Sink { source_idx }) if *source_idx == hedge)
+                    {
+                        return Err(invalid());
+                    }
+                    data
+                }
+                InvolutiveMapping::Sink { source_idx } => {
+                    if !matches!(mappings.get(source_idx.0), Some(InvolutiveMapping::Source { sink_idx, .. }) if *sink_idx == hedge)
+                    {
+                        return Err(invalid());
+                    }
+                    continue;
+                }
+            };
+            let seen = edges.get_mut(data.data.0).ok_or_else(invalid)?;
+            if std::mem::replace(seen, true) {
+                return Err(invalid());
+            }
+        }
+        if edges.contains(&false) {
+            return Err(invalid());
+        }
+        self.check().map_err(|err| err.to_string())?;
+        let mut hedges = vec![false; self.n_hedges()];
+        for (node, neighbors, _) in self.iter_nodes() {
+            for hedge in neighbors {
+                let seen = hedges.get_mut(hedge.0).ok_or_else(invalid)?;
+                if std::mem::replace(seen, true) || self.node_id(hedge) != node {
+                    return Err(invalid());
+                }
+            }
+        }
+        if hedges.contains(&false) {
+            return Err(invalid());
+        }
+        Ok(())
+    }
+
+    /// Cut each selected paired edge into source/sink stubs and `winding - 1`
+    /// disconnected middle edges. All origins refer to the immediate input graph,
+    /// indexed by output IDs. Segment/crossing order follows underlying flow, not
+    /// superficial orientation or the caller's choice of left/right.
+    /// Requests are capped at 64 MiB of graph bytes and 1 MiB of cut CBOR;
+    /// nonempty cuts also bound each output ID space to 65,536 entries and
+    /// estimated expanded storage (including node bitsets) to 64 MiB.
+    pub fn cut_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+        const MAX_BYTES: usize = 64 * 1024 * 1024;
+        const MAX_ITEMS: usize = 65_536;
+        let too_large = || "Cut exceeds topology or allocation limits".to_string();
+        if arg.len() > MAX_BYTES || arg2.len() > 1024 * 1024 {
+            return Err(too_large());
+        }
+        let mut remaining = arg2;
+        let entries: Vec<TypstCutEntry> = ciborium::de::from_reader(&mut remaining)
+            .map_err(|err| format!("Failed to deserialize cut entries: {err}"))?;
+        if !remaining.is_empty() {
+            return Err("Trailing bytes after cut entries CBOR array".into());
+        }
+        let mut graph = decode_typst_graph(arg)?;
+        graph.validate_cut_topology()?;
+        let (n_nodes, n_edges, n_hedges) = (graph.n_nodes(), graph.n_edges(), graph.n_hedges());
+        let mut result = TypstCutResult {
+            graph: Vec::new(),
+            nodes: (0..n_nodes).map(Some).collect(),
+            edges: (0..n_edges)
+                .map(|edge| TypstCutEdgeOrigin {
+                    edge,
+                    segment: None,
+                    winding: 0,
+                })
+                .collect(),
+            hedges: (0..n_hedges).map(Some).collect(),
+            boundaries: Vec::new(),
+        };
+        if entries.is_empty() {
+            result.graph = arg.to_vec();
+            return encode_cbor(&result);
+        }
+        if entries.len() > n_edges {
+            return Err("Cut selects more entries than input edges".into());
+        }
+
+        let mut selected = HashSet::new();
+        let mut windings = 0usize;
+        let mut estimated_bytes = arg.len();
+        // Preflight before splitting or allocating in proportion to a winding.
+        for entry in &entries {
+            let (source, sink, edge) = entry.endpoints(&graph)?;
+            if !selected.insert(edge) {
+                return Err(format!("Duplicate cut selection for edge {edge}"));
+            }
+            windings = windings
+                .checked_add(entry.winding)
+                .filter(|n| *n <= MAX_ITEMS)
+                .ok_or_else(too_large)?;
+            let fragment_bytes = to_rkyv_bytes::<_, 256>(&graph[edge])?.len()
+                + to_rkyv_bytes::<_, 256>(&graph[source])?.len()
+                + to_rkyv_bytes::<_, 256>(&graph[sink])?.len()
+                + 1024;
+            estimated_bytes = entry
+                .winding
+                .checked_mul(fragment_bytes)
+                .and_then(|bytes| estimated_bytes.checked_add(bytes))
+                .filter(|bytes| *bytes <= MAX_BYTES)
+                .ok_or_else(too_large)?;
+        }
+        let extra_endpoints = 2 * (windings - entries.len());
+        let output_nodes = n_nodes
+            .checked_add(extra_endpoints)
+            .filter(|n| *n <= MAX_ITEMS)
+            .ok_or_else(too_large)?;
+        let output_hedges = n_hedges
+            .checked_add(extra_endpoints)
+            .filter(|n| *n <= MAX_ITEMS)
+            .ok_or_else(too_large)?;
+        n_edges
+            .checked_add(windings)
+            .filter(|n| *n <= MAX_ITEMS)
+            .ok_or_else(too_large)?;
+        // The default vector node store uses one hedge bitset per node.
+        let node_storage_bytes = output_nodes * output_hedges.div_ceil(8);
+        if estimated_bytes
+            .checked_add(node_storage_bytes)
+            .is_none_or(|bytes| bytes > MAX_BYTES)
+        {
+            return Err(too_large());
+        }
+
+        let mut names: HashSet<String> = graph
+            .iter_nodes()
+            .filter_map(|(_, _, node)| node.name.clone())
+            .collect();
+        let mut edge_names = Vec::with_capacity(n_edges);
+        for (_, edge, data) in graph.iter_edges() {
+            let name = data.data.cut_name()?;
+            names.extend(name.clone());
+            edge_names.push(name.unwrap_or_else(|| format!("__linnest_cut_edge_{}", edge.0)));
+        }
+        let mut builder = HedgeGraphBuilder::<TypstEdge, TypstNode, TypstHedge>::new();
+        let mut middle_origins = Vec::with_capacity(windings - entries.len());
+        for entry in entries {
+            let (source, sink, edge) = entry.endpoints(&graph)?;
+            let original = graph[edge].clone();
+            let orientation = graph.get_edge_data_full(source).orientation;
+            graph.graph[source].route_points.clear();
+            graph.graph[sink].route_points.clear();
+            for segment in 0..=entry.winding {
+                let name = format!("{}.{segment}", edge_names[edge.0]);
+                if !names.insert(name.clone()) {
+                    return Err(format!("Cut generated name collision: {name:?}"));
+                }
+                let mut fragment = original.cut_fragment(name)?;
+                let origin = TypstCutEdgeOrigin {
+                    edge: edge.0,
+                    segment: Some(segment),
+                    winding: entry.winding,
+                };
+                if segment == 0 {
+                    fragment.from = Some((graph.node_id(source), source));
+                    graph.graph[edge] = fragment;
+                    result.edges[edge.0] = origin;
+                    result
+                        .boundaries
+                        .push(entry.boundary(edge.0, None, source, 0));
+                    continue;
+                }
+                if segment == entry.winding {
+                    let last_edge = graph.n_edges();
+                    fragment.to = Some((graph.node_id(sink), sink));
+                    graph
+                        .graph
+                        .split_edge(sink, EdgeData::new(fragment, orientation))
+                        .map_err(|err| err.to_string())?;
+                    result.edges.push(origin);
+                    result
+                        .boundaries
+                        .push(entry.boundary(last_edge, None, sink, segment - 1));
+                    continue;
+                }
+                let middle_edge = n_edges + selected.len() + middle_origins.len();
+                // Crossing endpoints carry the opposite original hedge's data:
+                // a middle source continues the original sink's side of the previous
+                // crossing, and its sink ends at the original source's side of the next.
+                let [source_endpoint, sink_endpoint] =
+                    [("source", sink), ("sink", source)].map(|(role, origin)| {
+                        let name = format!("__linnest_cut_{}_{segment}_{role}", edge.0);
+                        if !names.insert(name.clone()) {
+                            return Err(format!("Cut generated name collision: {name:?}"));
+                        }
+                        let node = builder.add_node(TypstNode {
+                            name: Some(name),
+                            ..TypstNode::default()
+                        });
+                        let output_node = NodeIndex(result.nodes.len());
+                        let output_hedge = Hedge(result.hedges.len());
+                        result.nodes.push(None);
+                        result.hedges.push(Some(origin.0));
+                        let endpoint = Some((output_node, output_hedge));
+                        let crossing = if role == "source" {
+                            fragment.from = endpoint;
+                            segment - 1
+                        } else {
+                            fragment.to = endpoint;
+                            segment
+                        };
+                        result.boundaries.push(entry.boundary(
+                            middle_edge,
+                            Some(output_node.0),
+                            origin,
+                            crossing,
+                        ));
+                        let mut data = graph[origin].clone();
+                        data.id = None;
+                        data.from = 0;
+                        data.to = 0;
+                        Ok(HedgeData {
+                            node,
+                            data,
+                            is_in_subgraph: false,
+                        })
+                    });
+                builder.add_edge(source_endpoint?, sink_endpoint?, fragment, orientation);
+                middle_origins.push(origin);
+            }
+        }
+        if !middle_origins.is_empty() {
+            graph
+                .graph
+                .append_disconnected_mut(builder.build())
+                .map_err(|err| err.to_string())?;
+        }
+        result.edges.extend(middle_origins);
+        result.graph = encode_typst_graph(&graph)?;
+        encode_cbor(&result)
+    }
+}
+
 pub fn graph_join_by_edge_key_bytes(
     arg: &[u8],
     arg2: &[u8],
@@ -1041,27 +1539,41 @@ pub fn graph_join_by_edge_key_bytes(
     let left = left_typst.to_dot_graph();
     let right = decode_typst_graph(arg2)?.to_dot_graph();
     let spec: TypstJoinSpec = decode_cbor(arg3, "join spec")?;
-    let key = spec.key;
-
-    let global_data = left.global_data.clone();
+    if spec.key.is_empty() {
+        return Err("graph.join: key must not be empty".into());
+    }
+    validate_join_identities(&left.graph, &spec.key, false)?;
+    validate_join_identities(&right.graph, &spec.key, false)?;
+    validate_join_names(&left.graph, &right.graph)?;
+    let left_nodes = left.graph.iter_nodes().count();
+    let left_hedges = left.graph.iter_hedges().count();
+    let left_map = edge_origin_map(&left.graph);
+    let right_map = edge_origin_map(&right.graph);
+    let mut global_data = left.global_data.clone();
+    merge_global_data(&mut global_data, &right.global_data);
     let graph = left
         .graph
         .join(
             right.graph,
             |left_flow, left_data, right_flow, right_data| {
                 left_flow == -right_flow
-                    && statement_value(left_data, &key)
-                        .zip(statement_value(right_data, &key))
+                    && statement_value(left_data, &spec.key)
+                        .zip(statement_value(right_data, &spec.key))
                         .is_some_and(|(left, right)| left == right)
             },
-            |left_flow, left_data, _, _| (left_flow, left_data),
+            |left_flow, left_data, right_flow, right_data| {
+                (
+                    left_flow,
+                    merge_edge_data(left_data, right_flow, right_data),
+                )
+            },
         )
         .map_err(|err| err.to_string())?;
-
-    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(
+    let graph = TypstGraph::from_dot_with_layout_config(
         DotGraph { global_data, graph },
         left_layout_config,
-    ))
+    );
+    encode_join_result(graph, left_nodes, left_hedges, &left_map, &right_map)
 }
 
 pub fn graph_join_by_hedge_key_bytes(
@@ -1074,27 +1586,247 @@ pub fn graph_join_by_hedge_key_bytes(
     let left = left_typst.to_dot_graph();
     let right = decode_typst_graph(arg2)?.to_dot_graph();
     let spec: TypstJoinSpec = decode_cbor(arg3, "join spec")?;
-    let key = spec.key;
-
-    let global_data = left.global_data.clone();
+    validate_hedge_key(&spec.key)?;
+    validate_join_identities(&left.graph, &spec.key, true)?;
+    validate_join_identities(&right.graph, &spec.key, true)?;
+    validate_join_names(&left.graph, &right.graph)?;
+    let left_nodes = left.graph.iter_nodes().count();
+    let left_hedges = left.graph.iter_hedges().count();
+    let left_map = edge_origin_map(&left.graph);
+    let right_map = edge_origin_map(&right.graph);
+    let mut global_data = left.global_data.clone();
+    merge_global_data(&mut global_data, &right.global_data);
     let graph = left
         .graph
         .join_with_hedge_data(
             right.graph,
             |_, left_flow, _, left_hedge, _, right_flow, _, right_hedge| {
                 left_flow == -right_flow
-                    && hedge_value(left_hedge, &key)
-                        .zip(hedge_value(right_hedge, &key))
+                    && hedge_value(left_hedge, &spec.key)
+                        .zip(hedge_value(right_hedge, &spec.key))
                         .is_some_and(|(left, right)| left == right)
             },
-            |left_flow, left_data, _, _| (left_flow, left_data),
+            |left_flow, left_data, right_flow, right_data| {
+                (
+                    left_flow,
+                    merge_edge_data(left_data, right_flow, right_data),
+                )
+            },
         )
         .map_err(|err| err.to_string())?;
-
-    encode_typst_graph(&TypstGraph::from_dot_with_layout_config(
+    let graph = TypstGraph::from_dot_with_layout_config(
         DotGraph { global_data, graph },
         left_layout_config,
-    ))
+    );
+    encode_join_result(graph, left_nodes, left_hedges, &left_map, &right_map)
+}
+
+fn merge_edge_data(
+    left: EdgeData<DotEdgeData>,
+    _right_flow: Flow,
+    right: EdgeData<DotEdgeData>,
+) -> EdgeData<DotEdgeData> {
+    let mut data = right.data;
+    if left.data.payload.is_some() {
+        data.payload = left.data.payload;
+    }
+    for (key, value) in left.data.statements {
+        data.statements.insert(key, value);
+    }
+    for (key, value) in left.data.local_statements {
+        data.local_statements.insert(key, value);
+    }
+    if left.data.edge_id.is_some() {
+        data.edge_id = left.data.edge_id;
+    }
+    EdgeData::new(data, left.orientation)
+}
+
+fn merge_global_data(left: &mut GlobalData, right: &GlobalData) {
+    if left.payload.is_none() {
+        left.payload = right.payload.clone();
+    }
+    for (k, v) in &right.statements {
+        left.statements
+            .entry(k.clone())
+            .or_insert_with(|| v.clone());
+    }
+    for (k, v) in &right.edge_statements {
+        left.edge_statements
+            .entry(k.clone())
+            .or_insert_with(|| v.clone());
+    }
+    for (k, v) in &right.node_statements {
+        left.node_statements
+            .entry(k.clone())
+            .or_insert_with(|| v.clone());
+    }
+}
+
+fn validate_hedge_key(key: &str) -> Result<(), String> {
+    matches!(key, "statement" | "compass" | "port-label" | "id")
+        .then_some(())
+        .ok_or_else(|| format!("graph.join: unsupported hedge key {key:?}"))
+}
+
+fn validate_join_identities(
+    graph: &linnet::half_edge::HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
+    key: &str,
+    hedge_key: bool,
+) -> Result<(), String> {
+    let mut seen = HashSet::new();
+    for (pair, _, data) in graph.iter_edges() {
+        let HedgePair::Unpaired { hedge, flow } = pair else {
+            continue;
+        };
+        let value = if hedge_key {
+            hedge_value(&graph[hedge], key)
+        } else {
+            statement_value(data, key).map(str::to_owned)
+        };
+        let Some(value) = value else {
+            continue;
+        };
+        if !seen.insert((flow, value.clone())) {
+            return Err(format!(
+                "graph.join: duplicate dangling identity ({flow:?}, {value:?})"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_join_names(
+    left: &linnet::half_edge::HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
+    right: &linnet::half_edge::HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
+) -> Result<(), String> {
+    let names: HashSet<_> = left.iter_nodes().filter_map(|(_, _, n)| n.name()).collect();
+    for (_, _, n) in right.iter_nodes() {
+        if let Some(name) = n.name() {
+            if names.contains(name) {
+                return Err(format!("graph.join: duplicate node label {name:?}"));
+            }
+        }
+    }
+    let names: HashSet<_> = left
+        .iter_edges()
+        .filter_map(|(_, _, e)| {
+            e.data
+                .statements
+                .get(TYPST_EDGE_NAME_KEY)
+                .map(String::as_str)
+        })
+        .collect();
+    for (_, _, e) in right.iter_edges() {
+        if let Some(name) = e
+            .data
+            .statements
+            .get(TYPST_EDGE_NAME_KEY)
+            .map(String::as_str)
+        {
+            if names.contains(name) {
+                return Err(format!("graph.join: duplicate edge label {name:?}"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn edge_origin_map(
+    graph: &linnet::half_edge::HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
+) -> HashMap<Hedge, usize> {
+    let mut map = HashMap::new();
+    for (pair, index, _) in graph.iter_edges() {
+        match pair {
+            HedgePair::Unpaired { hedge, .. } => {
+                map.insert(hedge, index.0);
+            }
+            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                map.insert(source, index.0);
+                map.insert(sink, index.0);
+            }
+        }
+    }
+    map
+}
+
+fn encode_join_result(
+    graph: TypstGraph,
+    left_nodes: usize,
+    left_hedges: usize,
+    left_map: &HashMap<Hedge, usize>,
+    right_map: &HashMap<Hedge, usize>,
+) -> Result<Vec<u8>, String> {
+    let graph_bytes = encode_typst_graph(&graph)?;
+    let dot = graph.to_dot_graph();
+    let nodes = dot
+        .iter_nodes()
+        .enumerate()
+        .map(|(i, _)| TypstJoinOrigin {
+            left: (i < left_nodes).then_some(i),
+            right: if i >= left_nodes {
+                Some(i - left_nodes)
+            } else {
+                None
+            },
+        })
+        .collect();
+    let hedges = dot
+        .iter_hedges()
+        .map(|(h, _)| TypstJoinOrigin {
+            left: (h.0 < left_hedges).then_some(h.0),
+            right: if h.0 >= left_hedges {
+                Some(h.0 - left_hedges)
+            } else {
+                None
+            },
+        })
+        .collect();
+    let edges = dot
+        .iter_edges()
+        .map(|(pair, _, _)| {
+            let hs: Vec<_> = match pair {
+                HedgePair::Unpaired { hedge, .. } => vec![hedge],
+                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                    vec![source, sink]
+                }
+            };
+            let li = hs
+                .iter()
+                .filter(|h| h.0 < left_hedges)
+                .find_map(|h| left_map.get(h))
+                .copied();
+            let ri = hs
+                .iter()
+                .filter(|h| h.0 >= left_hedges)
+                .find_map(|h| right_map.get(&Hedge(h.0 - left_hedges)))
+                .copied();
+            match (li, ri) {
+                (Some(left), Some(right)) => TypstJoinOrigin {
+                    left: Some(left),
+                    right: Some(right),
+                },
+                (Some(index), None) => TypstJoinOrigin {
+                    left: Some(index),
+                    right: None,
+                },
+                (None, Some(index)) => TypstJoinOrigin {
+                    left: None,
+                    right: Some(index),
+                },
+                (None, None) => TypstJoinOrigin {
+                    left: None,
+                    right: None,
+                },
+            }
+        })
+        .collect();
+    encode_cbor(&TypstJoinResult {
+        graph: graph_bytes,
+        nodes,
+        edges,
+        hedges,
+    })
 }
 
 fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
@@ -1159,7 +1891,7 @@ fn graph_from_spec(spec: TypstGraphSpec) -> Result<DotGraph, String> {
         node_positions.push(
             placement
                 .as_ref()
-                .map(|placement| placement.point)
+                .and_then(|placement| placement.point)
                 .unwrap_or_else(|| resolved_point_from_statements(&node_data.statements)),
         );
         builder.add_node(node_data);
@@ -1200,29 +1932,37 @@ fn add_edge_to_builder(
         .unwrap_or(Orientation::Default);
     let has_statement_position = statement_map_value(&edge.statements, "pos").is_some()
         || statement_map_value(&global_data.edge_statements, "pos").is_some();
-    let placement = resolve_placement(edge.pos.as_ref(), node_positions, "edge")?.or_else(|| {
-        if has_statement_position {
-            return None;
-        }
-        let (Some(source), Some(sink)) = (&edge.source, &edge.sink) else {
-            return None;
-        };
-        let (source, sink) = (
-            node_positions.get(source.node)?,
-            node_positions.get(sink.node)?,
-        );
-        (source.x_set && source.y_set && sink.x_set && sink.y_set).then_some(ResolvedPlacement {
-            point: ResolvedPoint {
-                x: (source.x + sink.x) / 2.0,
-                y: (source.y + sink.y) / 2.0,
-                x_set: false,
-                y_set: false,
-            },
-            pin: None,
-            mode: PlacementMode::Start,
-        })
-    });
+    let placement = resolve_placement(edge.pos.as_ref(), node_positions, "edge")?;
     let mut local_statements = apply_placement_statements(edge.statements, placement.as_ref());
+    let midpoint = edge
+        .source
+        .as_ref()
+        .zip(edge.sink.as_ref())
+        .and_then(|(source, sink)| {
+            if has_statement_position || placement.as_ref().is_some_and(|p| p.point.is_some()) {
+                return None;
+            }
+            let (source, sink) = (
+                node_positions.get(source.node)?,
+                node_positions.get(sink.node)?,
+            );
+            (source.x_set && source.y_set && sink.x_set && sink.y_set).then_some(
+                ResolvedPlacement {
+                    point: Some(ResolvedPoint {
+                        x: (source.x + sink.x) / 2.0,
+                        y: (source.y + sink.y) / 2.0,
+                        x_set: false,
+                        y_set: false,
+                    }),
+                    z: None,
+                    pin: None,
+                    mode: PlacementMode::Start,
+                    group_start_x: false,
+                    group_start_y: false,
+                },
+            )
+        });
+    local_statements = apply_placement_statements(local_statements, midpoint.as_ref());
     if let Some(name) = edge.name {
         local_statements.insert(TYPST_EDGE_NAME_KEY.to_owned(), name);
     }
@@ -1299,12 +2039,32 @@ fn apply_placement_statements(
         return statements;
     };
 
-    statements.insert(
-        "pos".to_string(),
-        format!("{},{}", placement.point.x, placement.point.y),
-    );
-    statements.insert("pos-x-set".to_string(), placement.point.x_set.to_string());
-    statements.insert("pos-y-set".to_string(), placement.point.y_set.to_string());
+    if let Some((z, mode)) = placement.z {
+        statements.remove("\"pos-z\"");
+        statements.remove("\"pos-z-mode\"");
+        statements.insert("pos-z".to_string(), z.to_string());
+        statements.insert(
+            "pos-z-mode".to_string(),
+            match mode {
+                PlacementMode::Start => "start",
+                PlacementMode::Pin => "pin",
+            }
+            .to_string(),
+        );
+    }
+    let Some(point) = placement.point else {
+        return statements;
+    };
+
+    // Explicit XY placement replaces old pins; inferred midpoints and Z-only
+    // patches must leave them intact.
+    if point.x_set || point.y_set {
+        statements.remove("pin");
+        statements.remove("\"pin\"");
+    }
+    statements.insert("pos".to_string(), format!("{},{}", point.x, point.y));
+    statements.insert("pos-x-set".to_string(), point.x_set.to_string());
+    statements.insert("pos-y-set".to_string(), point.y_set.to_string());
     statements.insert(
         "pos-mode".to_string(),
         match placement.mode {
@@ -1313,6 +2073,14 @@ fn apply_placement_statements(
         }
         .to_string(),
     );
+    statements.remove("group-start-x");
+    statements.remove("group-start-y");
+    if placement.group_start_x {
+        statements.insert("group-start-x".to_string(), "true".to_string());
+    }
+    if placement.group_start_y {
+        statements.insert("group-start-y".to_string(), "true".to_string());
+    }
 
     if let Some(pin) = &placement.pin {
         statements.insert("pin".to_string(), pin.clone());
@@ -1363,6 +2131,10 @@ impl TypstPlacementSpec {
         references: &[ResolvedPoint],
         context: &str,
     ) -> Result<ResolvedPlacement, String> {
+        let z = self.z.map(TypstNumber::as_f64);
+        if z.is_some_and(|z| !z.is_finite()) {
+            return Err(format!("{context} placement z must be a finite number"));
+        }
         let mut point = if let Some(reference) = self.reference {
             let reference = references.get(reference).ok_or_else(|| {
                 format!("{context} placement references node {reference}, but it is not available")
@@ -1384,6 +2156,14 @@ impl TypstPlacementSpec {
 
         let x_mode = self.x_mode.unwrap_or(self.mode);
         let y_mode = self.y_mode.unwrap_or(self.mode);
+        let group_start_x = matches!(
+            &self.x,
+            Some(TypstPlacementCoord::Group(group)) if group.start.is_some() || point.x_set
+        );
+        let group_start_y = matches!(
+            &self.y,
+            Some(TypstPlacementCoord::Group(group)) if group.start.is_some() || point.y_set
+        );
         let x_pin = self
             .x
             .as_ref()
@@ -1410,9 +2190,13 @@ impl TypstPlacementSpec {
         }
 
         let pin = if parts.is_empty() {
-            if self.mode == PlacementMode::Pin && self.x_mode.is_none() && self.y_mode.is_none() {
+            if self.mode == PlacementMode::Pin
+                && self.x_mode.is_none()
+                && self.y_mode.is_none()
+                && z.is_none()
+            {
                 return Err(format!(
-                    "{context} pin placement must constrain x, y, or ref"
+                    "{context} pin placement must constrain x, y, z, or ref"
                 ));
             }
             None
@@ -1426,7 +2210,15 @@ impl TypstPlacementSpec {
             PlacementMode::Start
         };
 
-        Ok(ResolvedPlacement { point, pin, mode })
+        Ok(ResolvedPlacement {
+            // Depth-only placements must not synthesize or refresh XY state.
+            point: (z.is_none() || point.x_set || point.y_set).then_some(point),
+            z: z.map(|z| (z, self.z_mode.unwrap_or(self.mode))),
+            pin,
+            mode,
+            group_start_x,
+            group_start_y,
+        })
     }
 }
 
@@ -1455,6 +2247,13 @@ impl TypstPlacementCoord {
                         "placement {axis} coordinate expected graph.group(...), got kind {:?}",
                         group.kind
                     ));
+                }
+                if let Some(start) = group.start {
+                    if axis == "x" {
+                        point.x = start.as_f64();
+                    } else {
+                        point.y = start.as_f64();
+                    }
                 }
                 if axis == "x" {
                     point.x_set = true;
@@ -1691,6 +2490,8 @@ fn public_statements(mut statements: BTreeMap<String, String>) -> BTreeMap<Strin
         "pos-x-set",
         "pos-y-set",
         "pos-mode",
+        "group-start-x",
+        "group-start-y",
         "pin",
         TYPST_EDGE_NAME_KEY,
     ] {
@@ -1872,4 +2673,1136 @@ fn compass_pt_to_string(compass: CompassPt) -> String {
         CompassPt::Underscore => "_",
     }
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ciborium::Value;
+
+    fn cut_fixture(orientation: Orientation) -> TypstGraph {
+        let mut builder = DotBuilder::new();
+        for (index, name) in ["b", "c", "isolated"].into_iter().enumerate() {
+            builder.add_node(
+                TypstNode {
+                    name: Some(name.into()),
+                    index: Some(NodeIndex(index)),
+                    data: Some(vec![index as u8, 255]),
+                    pos: Point2::new(index as f64, 4.0),
+                    constraints: PointConstraint {
+                        x: Constraint::Fixed,
+                        y: Constraint::Fixed,
+                    },
+                    statements: BTreeMap::from([("pin".into(), "x:1,y:4".into())]),
+                    ..TypstNode::default()
+                }
+                .to_dot(),
+            );
+        }
+        for (index, name) in ["k", "uncut"].into_iter().enumerate() {
+            let mut endpoints = [HedgeData::from(NodeIndex(0)), HedgeData::from(NodeIndex(1))];
+            for (side, endpoint) in endpoints.iter_mut().enumerate() {
+                endpoint.data = TypstHedge {
+                    id: Some(2 * index + side),
+                    data: Some(vec![index as u8, side as u8, 255]),
+                    statement: Some(format!("weight={}", side + 2)),
+                    port_label: Some(format!("port-{side}")),
+                    compasspt: Some(if side == 0 { "ne" } else { "sw" }.into()),
+                    ..TypstHedge::default()
+                }
+                .to_dot();
+            }
+            let [source, sink] = endpoints;
+            let payload = BTreeMap::from([
+                ("name", Value::Text(name.into())),
+                ("data-key", Value::Integer((17 + index).into())),
+                (
+                    "nested",
+                    Value::Array(vec![Value::Bytes(vec![0, 255]), Value::Bool(true)]),
+                ),
+            ]);
+            let data = TypstEdge {
+                data: Some(encode_cbor(&payload).unwrap()),
+                pos: Point2::new(2.0, 3.0),
+                start_x: true,
+                start_y: true,
+                shift: Some(Vector2::new(0.2, 0.3)),
+                bend: Ok(Rad(0.4)),
+                label_pos: Some(Point2::new(5.0, 6.0)),
+                label_angle: Some(0.7),
+                statements: BTreeMap::from([
+                    (TYPST_EDGE_NAME_KEY.into(), name.into()),
+                    ("pin".into(), "x:2,y:3".into()),
+                    ("\"pos-z\"".into(), "5".into()),
+                    ("pos-z-mode".into(), "pin".into()),
+                    ("pos-mode".into(), "pin".into()),
+                    ("group-start-x".into(), "true".into()),
+                    ("group-start-y".into(), "true".into()),
+                    ("route-points".into(), "stale".into()),
+                    ("spring-length".into(), "2.5".into()),
+                    ("source-color".into(), "red".into()),
+                    ("sink-color".into(), "blue".into()),
+                    ("custom".into(), "keep".into()),
+                ]),
+                ..TypstEdge::default()
+            }
+            .to_dot();
+            builder.add_edge(source, sink, data, orientation);
+        }
+        builder.add_external_edge(
+            NodeIndex(0),
+            TypstEdge {
+                data: Some(vec![255, 0, 128]),
+                pos: Point2::new(7.0, 8.0),
+                ..TypstEdge::default()
+            }
+            .to_dot(),
+            Orientation::Reversed,
+            Flow::Sink,
+        );
+        let global_data = global_data_from_parts(
+            Some("cut-test".into()),
+            Some(vec![128, 0, 255]),
+            BTreeMap::from([
+                ("eval".into(), "global".into()),
+                ("custom".into(), "graph".into()),
+            ]),
+            BTreeMap::from([
+                ("pin".into(), "x:9".into()),
+                ("spring-length".into(), "2.5".into()),
+            ]),
+            BTreeMap::from([
+                ("pin".into(), "y:8".into()),
+                ("label".into(), "default".into()),
+            ]),
+        );
+        let mut graph = typst_graph_from_dot(DotGraph {
+            global_data,
+            graph: builder.build(),
+        });
+        graph.layout_config =
+            crate::LayoutConfig::from_figment(&default_figment().merge(("viewport-w", 23.0)));
+        for index in 0..graph.n_hedges() {
+            graph.graph[Hedge(index)].route_points = vec![Point2::new(index as f64, 1.0)];
+            graph.graph[Hedge(index)].weight = index as f64 + 1.0;
+        }
+        graph
+    }
+
+    fn cut_result(graph: &TypstGraph, entries: &[TypstCutEntry]) -> Result<TypstCutResult, String> {
+        let bytes = TypstGraph::cut_bytes(&encode_typst_graph(graph)?, &encode_cbor(&entries)?)?;
+        decode_cbor(&bytes, "cut result")
+    }
+
+    #[test]
+    fn weighted_cut_windings_orientations_payloads_and_origins() {
+        for orientation in [
+            Orientation::Default,
+            Orientation::Reversed,
+            Orientation::Undirected,
+        ] {
+            for winding in 1..=3 {
+                for source_is_left in [false, true] {
+                    let graph = cut_fixture(orientation);
+                    let entry = TypstCutEntry {
+                        left: usize::from(!source_is_left),
+                        right: usize::from(source_is_left),
+                        winding,
+                    };
+                    let result = cut_result(&graph, &[entry]).unwrap();
+                    let output = decode_typst_graph(&result.graph).unwrap();
+                    output.check().unwrap();
+                    assert_eq!(output.n_nodes(), 3 + 2 * (winding - 1));
+                    assert_eq!(output.n_edges(), 3 + winding);
+                    assert_eq!(output.n_hedges(), 5 + 2 * (winding - 1));
+                    assert_eq!(result.nodes.len(), output.n_nodes());
+                    assert_eq!(result.edges.len(), output.n_edges());
+                    assert_eq!(result.hedges.len(), output.n_hedges());
+                    assert_eq!(output.name, graph.name);
+                    assert_eq!(output.data, graph.data);
+                    assert_eq!(output.global_eval, graph.global_eval);
+                    assert_eq!(output.global_statements, graph.global_statements);
+                    assert_eq!(
+                        output.default_node_statements,
+                        graph.default_node_statements
+                    );
+                    assert_eq!(
+                        output.default_edge_statements,
+                        graph.default_edge_statements
+                    );
+                    assert_eq!(
+                        encode_cbor(&output.layout_config).unwrap(),
+                        encode_cbor(&graph.layout_config).unwrap()
+                    );
+                    assert_eq!(&result.nodes[..3], &[Some(0), Some(1), Some(2)]);
+                    assert_eq!(
+                        &result.hedges[..5],
+                        &[Some(0), Some(1), Some(2), Some(3), Some(4)]
+                    );
+                    for (node, neighbors, data) in output.iter_nodes() {
+                        if node.0 < 3 {
+                            assert_eq!(
+                                encode_cbor(data).unwrap(),
+                                encode_cbor(&graph[node]).unwrap()
+                            );
+                            if node.0 == 2 {
+                                assert_eq!(neighbors.count(), 0);
+                            }
+                        } else {
+                            assert_eq!(result.nodes[node.0], None);
+                            assert_eq!(neighbors.count(), 1);
+                            assert!(data.data.is_none());
+                            assert!(data.statements.is_empty());
+                            assert!(data.index.is_none());
+                        }
+                    }
+                    for (pair, edge, data) in output.iter_edges() {
+                        let origin = &result.edges[edge.0];
+                        if let Some(segment) = origin.segment {
+                            assert_eq!(origin.edge, 0);
+                            assert_eq!(origin.winding, winding);
+                            assert_eq!(data.orientation, orientation);
+                            let name = format!("k.{segment}");
+                            assert_eq!(
+                                data.data.cut_name().unwrap().as_deref(),
+                                Some(name.as_str())
+                            );
+                            assert_eq!(data.data.statements[TYPST_EDGE_NAME_KEY], name);
+                            let mut expected: BTreeMap<String, Value> =
+                                decode_cbor(graph[EdgeIndex(0)].data.as_ref().unwrap(), "payload")
+                                    .unwrap();
+                            expected.insert("name".into(), Value::Text(name));
+                            let actual: BTreeMap<String, Value> =
+                                decode_cbor(data.data.data.as_ref().unwrap(), "payload").unwrap();
+                            assert_eq!(actual, expected);
+                            assert_eq!(data.data.statements.len(), 5);
+                            for key in ["spring-length", "source-color", "sink-color", "custom"] {
+                                assert_eq!(
+                                    data.data.statements[key],
+                                    graph[EdgeIndex(0)].statements[key]
+                                );
+                            }
+                            assert!(matches!(data.data.constraints.x, Constraint::Free));
+                            assert!(matches!(data.data.constraints.y, Constraint::Free));
+                            assert_eq!(data.data.pos, Point2::new(0.0, 0.0));
+                            assert!(
+                                !data.data.start_x
+                                    && !data.data.start_y
+                                    && !data.data.bend_explicit
+                            );
+                            assert!(data.data.bend.is_err());
+                            assert!(
+                                data.data.shift.is_none()
+                                    && data.data.label_pos.is_none()
+                                    && data.data.label_angle.is_none()
+                            );
+                            if segment == 0 {
+                                assert_eq!(edge.0, 0);
+                                assert_eq!(
+                                    pair,
+                                    HedgePair::Unpaired {
+                                        hedge: Hedge(0),
+                                        flow: Flow::Source
+                                    }
+                                );
+                                assert_eq!(data.data.from, Some((NodeIndex(0), Hedge(0))));
+                                assert_eq!(data.data.to, None);
+                            } else if segment == winding {
+                                assert_eq!(edge.0, 3);
+                                assert_eq!(
+                                    pair,
+                                    HedgePair::Unpaired {
+                                        hedge: Hedge(1),
+                                        flow: Flow::Sink
+                                    }
+                                );
+                                assert_eq!(data.data.from, None);
+                                assert_eq!(data.data.to, Some((NodeIndex(1), Hedge(1))));
+                            } else {
+                                assert_eq!(edge.0, 3 + segment);
+                                let source = Hedge(5 + 2 * (segment - 1));
+                                let sink = Hedge(source.0 + 1);
+                                assert_eq!(pair, HedgePair::Paired { source, sink });
+                                assert_eq!(data.data.from, Some((output.node_id(source), source)));
+                                assert_eq!(data.data.to, Some((output.node_id(sink), sink)));
+                                assert_eq!(result.hedges[source.0], Some(1));
+                                assert_eq!(result.hedges[sink.0], Some(0));
+                            }
+                        } else {
+                            assert_eq!(origin.edge, edge.0);
+                            assert_eq!(origin.winding, 0);
+                            assert_eq!(
+                                encode_cbor(data.data).unwrap(),
+                                encode_cbor(&graph[edge]).unwrap()
+                            );
+                        }
+                    }
+                    for (hedge, data) in output.iter_hedges() {
+                        let mut expected = graph[Hedge(result.hedges[hedge.0].unwrap())].clone();
+                        if hedge.0 < 2 || hedge.0 >= 5 {
+                            expected.route_points.clear();
+                        }
+                        if hedge.0 >= 5 {
+                            expected.id = None;
+                            expected.from = 0;
+                            expected.to = 0;
+                        }
+                        assert_eq!(encode_cbor(data).unwrap(), encode_cbor(&expected).unwrap());
+                        if hedge.0 < 5 {
+                            assert_eq!(output.node_id(hedge), graph.node_id(hedge));
+                        }
+                    }
+                    let source_side = if source_is_left { "left" } else { "right" };
+                    let sink_side = if source_is_left { "right" } else { "left" };
+                    let mut expected = vec![(0, None, 0, source_side, 0)];
+                    for segment in 1..winding {
+                        expected.push((
+                            3 + segment,
+                            Some(3 + 2 * (segment - 1)),
+                            1,
+                            sink_side,
+                            segment - 1,
+                        ));
+                        expected.push((
+                            3 + segment,
+                            Some(4 + 2 * (segment - 1)),
+                            0,
+                            source_side,
+                            segment,
+                        ));
+                    }
+                    expected.push((3, None, 1, sink_side, winding - 1));
+                    let boundaries: Vec<_> = result
+                        .boundaries
+                        .iter()
+                        .map(|b| (b.edge, b.node, b.hedge, b.side.as_str(), b.crossing))
+                        .collect();
+                    assert_eq!(boundaries, expected);
+                    assert_eq!(boundaries.len(), 2 * winding);
+                    let edges: Vec<TypstDotEdge> =
+                        decode_cbor(&graph_edges_bytes(&result.graph).unwrap(), "edges").unwrap();
+                    assert_eq!(edges.len(), result.edges.len());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn weighted_cut_can_be_relaid_out() {
+        let graph = TypstGraph::parse(
+            r#"digraph {
+            a [pos="-2,0" pin="x:-2,y:0"]
+            b [pos="2,0" pin="x:2,y:0"]
+            a -> b [pos="0,0" pin="x:0,y:0" bend=0.3 "spring-length"=2]
+        }"#,
+        )
+        .unwrap();
+        let cut = cut_result(
+            &graph,
+            &[TypstCutEntry {
+                left: 1,
+                right: 0,
+                winding: 3,
+            }],
+        )
+        .unwrap();
+        let before = decode_typst_graph(&cut.graph).unwrap();
+        for algorithm in ["layered", "force"] {
+            let settings = encode_cbor(&BTreeMap::from([("layout-algo", algorithm)])).unwrap();
+            let bytes = crate::api::layout_parsed_graph_bytes(&cut.graph, &settings).unwrap();
+            let after = decode_typst_graph(&bytes).unwrap();
+            after.check().unwrap();
+            assert_eq!(after.n_nodes(), before.n_nodes());
+            assert_eq!(after.n_hedges(), before.n_hedges());
+            assert_eq!(after.n_edges(), before.n_edges());
+            for ((pair, edge, data), (original_pair, original_edge, _)) in
+                after.iter_edges().zip(before.iter_edges())
+            {
+                assert_eq!((pair, edge), (original_pair, original_edge));
+                assert!(data.data.pos.x.is_finite() && data.data.pos.y.is_finite());
+                assert_eq!(data.data.statements["spring-length"], "2");
+            }
+        }
+    }
+
+    #[test]
+    fn weighted_cut_empty_spec_and_wire_shape() {
+        for graph in [
+            cut_fixture(Orientation::Default),
+            TypstGraph::parse("digraph { isolated }").unwrap(),
+            TypstGraph::parse("digraph {}").unwrap(),
+        ] {
+            let bytes = encode_typst_graph(&graph).unwrap();
+            let wire =
+                TypstGraph::cut_bytes(&bytes, &encode_cbor(&Vec::<TypstCutEntry>::new()).unwrap())
+                    .unwrap();
+            let fields: BTreeMap<String, Value> = decode_cbor(&wire, "wire fields").unwrap();
+            assert_eq!(
+                fields.keys().map(String::as_str).collect::<Vec<_>>(),
+                ["boundaries", "edges", "graph", "hedges", "nodes"]
+            );
+            assert!(fields["graph"].is_array());
+            let result: TypstCutResult = decode_cbor(&wire, "cut").unwrap();
+            assert_eq!(result.graph, bytes);
+            assert_eq!(
+                result.nodes,
+                (0..graph.n_nodes()).map(Some).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                result.hedges,
+                (0..graph.n_hedges()).map(Some).collect::<Vec<_>>()
+            );
+            assert!(result.boundaries.is_empty());
+            for (edge, origin) in result.edges.iter().enumerate() {
+                assert_eq!(
+                    origin,
+                    &TypstCutEdgeOrigin {
+                        edge,
+                        segment: None,
+                        winding: 0
+                    }
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn weighted_cut_mixed_entries_and_immediate_origins() {
+        let graph = cut_fixture(Orientation::Reversed);
+        let result = cut_result(
+            &graph,
+            &[
+                TypstCutEntry {
+                    left: 2,
+                    right: 3,
+                    winding: 3,
+                },
+                TypstCutEntry {
+                    left: 1,
+                    right: 0,
+                    winding: 2,
+                },
+            ],
+        )
+        .unwrap();
+        let output = decode_typst_graph(&result.graph).unwrap();
+        output.check().unwrap();
+        let origins: Vec<_> = result
+            .edges
+            .iter()
+            .map(|o| (o.edge, o.segment, o.winding))
+            .collect();
+        assert_eq!(
+            origins,
+            [
+                (0, Some(0), 2),
+                (1, Some(0), 3),
+                (2, None, 0),
+                (1, Some(3), 3),
+                (0, Some(2), 2),
+                (1, Some(1), 3),
+                (1, Some(2), 3),
+                (0, Some(1), 2),
+            ]
+        );
+        assert_eq!(
+            &result.hedges[5..],
+            &[Some(3), Some(2), Some(3), Some(2), Some(1), Some(0)]
+        );
+        assert_eq!(result.boundaries.len(), 10);
+        let pair = output[EdgeIndex(5)].from.unwrap().1;
+        let recut = cut_result(
+            &output,
+            &[TypstCutEntry {
+                left: pair.0,
+                right: output.inv(pair).0,
+                winding: 1,
+            }],
+        )
+        .unwrap();
+        let recut_graph = decode_typst_graph(&recut.graph).unwrap();
+        assert_eq!(recut.edges[5].edge, 5);
+        assert_eq!(recut.edges.last().unwrap().edge, 5);
+        assert_eq!(
+            recut_graph[EdgeIndex(5)].cut_name().unwrap().as_deref(),
+            Some("uncut.1.0")
+        );
+        assert_eq!(
+            recut.hedges,
+            (0..output.n_hedges()).map(Some).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            recut.nodes,
+            (0..output.n_nodes()).map(Some).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn archived_subgraph_size_requires_exact_mask_length() {
+        let graph = cut_fixture(Orientation::Default);
+        let graph_bytes = encode_typst_graph(&graph).unwrap();
+        let n_hedges = graph.n_hedges();
+        for size in [0, 1, n_hedges - 1, n_hedges, n_hedges + 1, 64, 65] {
+            let mask = SuBitGraph::empty(size);
+            let bytes = encode_subgraph(&mask).unwrap();
+            let size_bytes = subgraph_size_bytes(&bytes).unwrap();
+            assert_eq!(
+                decode_cbor::<usize>(&size_bytes, "subgraph size").unwrap(),
+                size
+            );
+            for read in [
+                graph_nodes_of_archived_subgraph_bytes,
+                graph_edges_of_archived_subgraph_bytes,
+            ] {
+                let result = read(&graph_bytes, &bytes);
+                if size == n_hedges {
+                    let selected: Vec<Value> = decode_cbor(&result.unwrap(), "selection").unwrap();
+                    assert!(selected.is_empty());
+                } else {
+                    assert_eq!(result.unwrap_err(), format!(
+                        "Archived subgraph has {size} bits, but graph has {n_hedges} half-edges; sizes must match"
+                    ));
+                }
+            }
+        }
+        assert!(subgraph_size_bytes(&[255]).is_err());
+    }
+
+    #[test]
+    fn weighted_cut_rejects_trailing_cbor() {
+        let graph = encode_typst_graph(&cut_fixture(Orientation::Default)).unwrap();
+        let specs = [
+            encode_cbor(&Vec::<TypstCutEntry>::new()).unwrap(),
+            encode_cbor(&[TypstCutEntry {
+                left: 0,
+                right: 1,
+                winding: 2,
+            }])
+            .unwrap(),
+            vec![0x9f, 0xff],
+        ];
+        for spec in specs {
+            assert!(TypstGraph::cut_bytes(&graph, &spec).is_ok());
+            for trailing in [0x00, 0x80, 0xf6, 0xff] {
+                let mut bytes = spec.clone();
+                bytes.push(trailing);
+                assert_eq!(
+                    TypstGraph::cut_bytes(&graph, &bytes).unwrap_err(),
+                    "Trailing bytes after cut entries CBOR array"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn weighted_cut_invalid_specs_are_errors() {
+        let graph = cut_fixture(Orientation::Default);
+        for (left, right, winding, message) in [
+            (0, 1, 0, "positive"),
+            (0, 0, 1, "paired inverses"),
+            (0, 3, 1, "paired inverses"),
+            (4, 4, 1, "paired inverses"),
+            (0, 5, 1, "out of bounds"),
+            (usize::MAX, 1, 1, "out of bounds"),
+            (0, 1, usize::MAX, "limits"),
+            (0, 1, 65_536, "limits"),
+            (0, 1, 20_000, "limits"),
+        ] {
+            let error = cut_result(
+                &graph,
+                &[TypstCutEntry {
+                    left,
+                    right,
+                    winding,
+                }],
+            )
+            .unwrap_err();
+            assert!(error.contains(message), "{error}");
+        }
+        let error = cut_result(
+            &graph,
+            &[
+                TypstCutEntry {
+                    left: 0,
+                    right: 1,
+                    winding: 1,
+                },
+                TypstCutEntry {
+                    left: 1,
+                    right: 0,
+                    winding: 2,
+                },
+            ],
+        )
+        .unwrap_err();
+        assert!(error.contains("Duplicate"), "{error}");
+        let bytes = encode_typst_graph(&graph).unwrap();
+        for value in [
+            Value::Null,
+            Value::Map(vec![]),
+            Value::Array(vec![Value::Null]),
+            Value::Array(vec![Value::Map(vec![])]),
+        ] {
+            assert!(TypstGraph::cut_bytes(&bytes, &encode_cbor(&value).unwrap()).is_err());
+        }
+        for value in [
+            Value::Integer((-1).into()),
+            Value::Float(1.5),
+            Value::Text("2".into()),
+            Value::Null,
+        ] {
+            let entries = [BTreeMap::from([
+                ("left", Value::Integer(0.into())),
+                ("right", Value::Integer(1.into())),
+                ("winding", value),
+            ])];
+            assert!(TypstGraph::cut_bytes(&bytes, &encode_cbor(&entries).unwrap()).is_err());
+        }
+        assert!(
+            TypstGraph::cut_bytes(&bytes, &[0x9b, 255, 255, 255, 255, 255, 255, 255, 255]).is_err()
+        );
+        assert!(TypstGraph::cut_bytes(&bytes, &[255]).is_err());
+        assert!(TypstGraph::cut_bytes(&[255], &[0x80]).is_err());
+    }
+
+    #[test]
+    fn weighted_cut_rejects_malformed_archived_topology() {
+        for field in ["source_idx", "sink_idx", "source", "sink", "edge-index"] {
+            let graph = cut_fixture(Orientation::Default);
+            let mut value: Value = decode_cbor(&encode_cbor(&graph).unwrap(), "graph").unwrap();
+            let mut pending = vec![&mut value];
+            let mut changed = false;
+            while let Some(value) = pending.pop() {
+                match value {
+                    Value::Map(fields) => {
+                        let edge_data = fields
+                            .iter()
+                            .any(|(key, _)| key.as_text() == Some("orientation"));
+                        for (key, value) in fields {
+                            if key.as_text() == Some(field)
+                                || (field == "edge-index"
+                                    && edge_data
+                                    && key.as_text() == Some("data")
+                                    && value.is_integer())
+                            {
+                                *value = Value::Integer(u64::MAX.into());
+                                changed = true;
+                            } else {
+                                pending.push(value);
+                            }
+                        }
+                    }
+                    Value::Array(values) => pending.extend(values),
+                    _ => {}
+                }
+            }
+            assert!(changed, "No serialized {field} found");
+            let graph: TypstGraph =
+                decode_cbor(&encode_cbor(&value).unwrap(), "corrupt graph").unwrap();
+            assert!(cut_result(
+                &graph,
+                &[TypstCutEntry {
+                    left: 0,
+                    right: 1,
+                    winding: 2
+                }]
+            )
+            .is_err());
+        }
+        let mut graph = cut_fixture(Orientation::Default);
+        graph.graph.node_store = HedgeGraphBuilder::<TypstEdge, TypstNode, TypstHedge>::new()
+            .build::<DefaultNodeStore<TypstNode>>()
+            .node_store;
+        assert!(cut_result(
+            &graph,
+            &[TypstCutEntry {
+                left: 0,
+                right: 1,
+                winding: 2
+            }]
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn weighted_cut_names_do_not_overwrite_user_names() {
+        for collision in 0..5 {
+            let mut graph = cut_fixture(Orientation::Default);
+            match collision {
+                0 => {
+                    graph.graph[NodeIndex(2)].name = Some("k.2".into());
+                }
+                1 => {
+                    graph.graph[NodeIndex(2)].name = Some("__linnest_cut_0_1_source".into());
+                }
+                2 => {
+                    graph.graph[EdgeIndex(1)].data = None;
+                    graph.graph[EdgeIndex(1)]
+                        .statements
+                        .insert(TYPST_EDGE_NAME_KEY.into(), "k.0".into());
+                }
+                3 => {
+                    graph.graph[EdgeIndex(1)]
+                        .statements
+                        .remove(TYPST_EDGE_NAME_KEY);
+                    graph.graph[EdgeIndex(1)].data =
+                        Some(encode_cbor(&BTreeMap::from([("name", "k.1")])).unwrap());
+                }
+                _ => {
+                    graph.graph[EdgeIndex(0)].data =
+                        Some(encode_cbor(&BTreeMap::from([("name", "different")])).unwrap());
+                }
+            }
+            let error = cut_result(
+                &graph,
+                &[TypstCutEntry {
+                    left: 0,
+                    right: 1,
+                    winding: 2,
+                }],
+            )
+            .unwrap_err();
+            assert!(
+                error.contains(if collision == 4 {
+                    "Conflicting"
+                } else {
+                    "collision"
+                }),
+                "{error}"
+            );
+        }
+        for payload_only in [false, true] {
+            let mut graph = cut_fixture(Orientation::Default);
+            if payload_only {
+                graph.graph[EdgeIndex(0)]
+                    .statements
+                    .remove(TYPST_EDGE_NAME_KEY);
+            } else {
+                graph.graph[EdgeIndex(0)].data = Some(vec![255, 0, 128]);
+            }
+            let result = cut_result(
+                &graph,
+                &[TypstCutEntry {
+                    left: 0,
+                    right: 1,
+                    winding: 2,
+                }],
+            )
+            .unwrap();
+            let output = decode_typst_graph(&result.graph).unwrap();
+            for edge in [0, 3, 4] {
+                assert!(output[EdgeIndex(edge)]
+                    .cut_name()
+                    .unwrap()
+                    .unwrap()
+                    .starts_with("k."));
+                if !payload_only {
+                    assert_eq!(output[EdgeIndex(edge)].data, graph[EdgeIndex(0)].data);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn weighted_cut_preserves_opaque_and_unnamed_payloads() {
+        let mut trailing = encode_cbor(&BTreeMap::from([("name", "opaque-prefix")])).unwrap();
+        trailing.push(255);
+        for payload in [
+            None,
+            Some(vec![255]),
+            Some(trailing),
+            Some(encode_cbor(&vec![1, 2, 3]).unwrap()),
+        ] {
+            let mut graph = cut_fixture(Orientation::Undirected);
+            graph.graph[EdgeIndex(0)]
+                .statements
+                .remove(TYPST_EDGE_NAME_KEY);
+            graph.graph[EdgeIndex(0)].data = payload.clone();
+            let result = cut_result(
+                &graph,
+                &[TypstCutEntry {
+                    left: 0,
+                    right: 1,
+                    winding: 2,
+                }],
+            )
+            .unwrap();
+            let output = decode_typst_graph(&result.graph).unwrap();
+            for edge in [0, 3, 4] {
+                let segment = result.edges[edge].segment.unwrap();
+                assert_eq!(
+                    output[EdgeIndex(edge)].cut_name().unwrap(),
+                    Some(format!("__linnest_cut_edge_0.{segment}"))
+                );
+                assert_eq!(output[EdgeIndex(edge)].data, payload);
+            }
+        }
+    }
+
+    #[test]
+    fn weighted_cut_self_loop_and_reordered_hedges() {
+        let mut dot = TypstGraph::parse("digraph { a -> a }")
+            .unwrap()
+            .to_dot_graph();
+        dot.graph[Hedge(0)].id = Some(Hedge(1));
+        dot.graph[Hedge(1)].id = Some(Hedge(0));
+        dot.apply_explicit_id_ordering().unwrap();
+        let graph = typst_graph_from_dot(dot);
+        let (pair, edge, _) = graph.iter_edges().next().unwrap();
+        let HedgePair::Paired { source, sink } = pair else {
+            panic!("Expected self-loop");
+        };
+        assert_eq!((source, sink), (Hedge(1), Hedge(0)));
+        let result = cut_result(
+            &graph,
+            &[TypstCutEntry {
+                left: sink.0,
+                right: source.0,
+                winding: 3,
+            }],
+        )
+        .unwrap();
+        let output = decode_typst_graph(&result.graph).unwrap();
+        output.check().unwrap();
+        assert_eq!(output[edge].from, Some((NodeIndex(0), source)));
+        assert_eq!(output[EdgeIndex(1)].to, Some((NodeIndex(0), sink)));
+        assert_eq!(result.nodes[0], Some(0));
+        assert!(output[edge].cut_name().unwrap().unwrap().ends_with(".0"));
+    }
+
+    #[test]
+    fn auxiliary_z_modes_preserve_xy_statements() {
+        let mut spec: TypstPlacementSpec = decode_cbor(
+            &encode_cbor(&BTreeMap::from([("z", -2.5)])).unwrap(),
+            "placement",
+        )
+        .unwrap();
+        let xy = BTreeMap::from([
+            ("pos".into(), "3,4".into()),
+            ("pos-x-set".into(), "true".into()),
+            ("pos-y-set".into(), "false".into()),
+            ("pos-mode".into(), "pin".into()),
+            ("pin".into(), "x:@column".into()),
+            ("group-start-x".into(), "true".into()),
+            ("label".into(), "unchanged".into()),
+            ("\"pos-z\"".into(), "9".into()),
+            ("\"pos-z-mode\"".into(), "start".into()),
+        ]);
+        for mode in [PlacementMode::Pin, PlacementMode::Start] {
+            for z_mode in [None, Some(PlacementMode::Pin), Some(PlacementMode::Start)] {
+                spec.mode = mode;
+                spec.z_mode = z_mode;
+                let decoded: TypstPlacementSpec =
+                    decode_cbor(&encode_cbor(&spec).unwrap(), "placement").unwrap();
+                assert_eq!(decoded, spec);
+                let resolved = decoded.resolve(&[], "test").unwrap();
+                assert!(resolved.point.is_none());
+                assert!(resolved.pin.is_none());
+                let mut statements = apply_placement_statements(xy.clone(), Some(&resolved));
+                assert_eq!(statements.remove("pos-z").as_deref(), Some("-2.5"));
+                assert_eq!(
+                    statements.remove("pos-z-mode").as_deref(),
+                    Some(match z_mode.unwrap_or(mode) {
+                        PlacementMode::Pin => "pin",
+                        PlacementMode::Start => "start",
+                    })
+                );
+                let mut expected = xy.clone();
+                expected.remove("\"pos-z\"");
+                expected.remove("\"pos-z-mode\"");
+                assert_eq!(statements, expected);
+            }
+        }
+
+        let statements = apply_placement_statements(xy, Some(&spec.resolve(&[], "test").unwrap()));
+        spec.z = None;
+        spec.x = Some(TypstPlacementCoord::Number(TypstNumber::Signed(7)));
+        let statements =
+            apply_placement_statements(statements, Some(&spec.resolve(&[], "test").unwrap()));
+        assert_eq!(statements["pos-z"], "-2.5");
+        assert_eq!(statements["pos-z-mode"], "start");
+        assert_eq!(statements["pos-x-set"], "true");
+        assert_eq!(statements["pos-y-set"], "false");
+    }
+
+    #[test]
+    fn auxiliary_z_requires_finite_numeric_coordinates() {
+        for z in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let spec: TypstPlacementSpec = decode_cbor(
+                &encode_cbor(&BTreeMap::from([("z", z)])).unwrap(),
+                "placement",
+            )
+            .unwrap();
+            assert!(spec
+                .resolve(&[], "test")
+                .unwrap_err()
+                .contains("finite number"));
+        }
+        for z in [
+            Value::Integer((-3).into()),
+            Value::Integer(u64::MAX.into()),
+            Value::Float(f64::MAX),
+        ] {
+            let spec: TypstPlacementSpec = decode_cbor(
+                &encode_cbor(&BTreeMap::from([("z", z)])).unwrap(),
+                "placement",
+            )
+            .unwrap();
+            let statements = apply_placement_statements(
+                BTreeMap::new(),
+                Some(&spec.resolve(&[], "test").unwrap()),
+            );
+            assert!(statements["pos-z"].parse::<f64>().unwrap().is_finite());
+            assert_eq!(statements["pos-z-mode"], "pin");
+            assert_eq!(statements.len(), 2);
+        }
+        for (key, value) in [
+            ("z", Value::Text("2".into())),
+            (
+                "z",
+                Value::Map(vec![(
+                    Value::Text("kind".into()),
+                    Value::Text("group".into()),
+                )]),
+            ),
+            ("dz", Value::Integer(1.into())),
+            ("ref-depth", Value::Integer(0.into())),
+            ("z-mode", Value::Text("group".into())),
+        ] {
+            assert!(decode_cbor::<TypstPlacementSpec>(
+                &encode_cbor(&BTreeMap::from([(key, value)])).unwrap(),
+                "placement",
+            )
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn auxiliary_z_build_keeps_defaults_and_edge_midpoint_seeds() {
+        let mut spec: TypstGraphSpec = decode_cbor(
+            &encode_cbor(&BTreeMap::from([(
+                "nodes",
+                vec![
+                    BTreeMap::from([("name", "a")]),
+                    BTreeMap::from([("name", "b")]),
+                ],
+            )]))
+            .unwrap(),
+            "graph",
+        )
+        .unwrap();
+        spec.nodes[1].pos = Some(
+            decode_cbor(
+                &encode_cbor(&BTreeMap::from([("x", 8), ("y", 10)])).unwrap(),
+                "placement",
+            )
+            .unwrap(),
+        );
+        spec.edges.push(
+            decode_cbor(
+                &encode_cbor(&BTreeMap::from([
+                    ("source", BTreeMap::from([("node", 0)])),
+                    ("sink", BTreeMap::from([("node", 1)])),
+                ]))
+                .unwrap(),
+                "edge",
+            )
+            .unwrap(),
+        );
+        let z: TypstPlacementSpec = decode_cbor(
+            &encode_cbor(&BTreeMap::from([("z", 3)])).unwrap(),
+            "placement",
+        )
+        .unwrap();
+
+        for with_defaults in [false, true] {
+            if with_defaults {
+                spec.default_node_statements = BTreeMap::from([
+                    ("pos".into(), "2,4".into()),
+                    ("pos-z".into(), "9".into()),
+                    ("pos-z-mode".into(), "start".into()),
+                ]);
+            }
+            for edge_pos in [None, Some("11,12")] {
+                spec.default_edge_statements = edge_pos
+                    .map(|pos| BTreeMap::from([("pos".into(), pos.into())]))
+                    .unwrap_or_default();
+                let baseline = graph_from_spec(spec.clone()).unwrap();
+                let mut placed = spec.clone();
+                placed.nodes[0].pos = Some(z.clone());
+                placed.edges[0].pos = Some(z.clone());
+                let graph = graph_from_spec(placed.clone()).unwrap();
+                for (actual, expected) in [
+                    (
+                        &graph.graph[NodeIndex(0)].statements,
+                        &baseline.graph[NodeIndex(0)].statements,
+                    ),
+                    (
+                        &graph.graph[EdgeIndex(0)].statements,
+                        &baseline.graph[EdgeIndex(0)].statements,
+                    ),
+                ] {
+                    let mut expected = expected.clone();
+                    expected.insert("pos-z".into(), "3".into());
+                    expected.insert("pos-z-mode".into(), "pin".into());
+                    assert_eq!(actual, &expected);
+                }
+                if with_defaults && edge_pos.is_none() {
+                    assert_eq!(graph.graph[EdgeIndex(0)].statements["pos"], "5,7");
+                    assert_eq!(graph.graph[EdgeIndex(0)].statements["pos-x-set"], "false");
+                    assert_eq!(graph.graph[EdgeIndex(0)].statements["pos-y-set"], "false");
+                }
+                assert_eq!(
+                    graph.graph[NodeIndex(1)].statements,
+                    baseline.graph[NodeIndex(1)].statements
+                );
+                let bytes =
+                    graph_from_spec_bytes(&encode_graph_spec_bytes(&placed).unwrap()).unwrap();
+                let nodes: Vec<TypstDotNode> =
+                    decode_cbor(&graph_nodes_bytes(&bytes).unwrap(), "nodes").unwrap();
+                let edges: Vec<TypstDotEdge> =
+                    decode_cbor(&graph_edges_bytes(&bytes).unwrap(), "edges").unwrap();
+                assert_eq!(nodes[0].statements["pos-z"], "3");
+                assert_eq!(edges[0].statements["pos-z-mode"], "pin");
+                if with_defaults && edge_pos.is_none() {
+                    assert_eq!(edges[0].pos, Some(TypstPoint { x: 5.0, y: 7.0 }));
+                    assert!(!edges[0].pos_x_set && !edges[0].pos_y_set);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn auxiliary_z_structural_patches_preserve_xy_state_and_metadata() {
+        for dot in [
+            "digraph { a; b; a -> b; }",
+            "digraph { a [pos=\"x:4!\"]; b [pos=\"x:@column!,y:8\"]; a -> b [pos=\"x:3,y:5!\"]; }",
+        ] {
+            let graphs = crate::parse_dot_graphs_bytes(dot.as_bytes()).unwrap();
+            let graph = decode_graph_bytes_list(&graphs).unwrap().remove(0);
+            let before = decode_typst_graph(&graph).unwrap();
+            let z_patch = BTreeMap::from([
+                ("index", Value::Integer(0.into())),
+                (
+                    "pos",
+                    Value::Map(vec![
+                        (Value::Text("z".into()), Value::Integer(6.into())),
+                        (Value::Text("z-mode".into()), Value::Text("start".into())),
+                    ]),
+                ),
+            ]);
+            let patch =
+                BTreeMap::from([("nodes", vec![z_patch.clone()]), ("edges", vec![z_patch])]);
+            let patched =
+                graph_apply_structural_patches_bytes(&graph, &encode_cbor(&patch).unwrap())
+                    .unwrap();
+            let after = decode_typst_graph(&patched).unwrap();
+            for (actual, expected) in [
+                (
+                    &after.graph[NodeIndex(0)].statements,
+                    &before.graph[NodeIndex(0)].statements,
+                ),
+                (
+                    &after.graph[EdgeIndex(0)].statements,
+                    &before.graph[EdgeIndex(0)].statements,
+                ),
+            ] {
+                let mut expected = expected.clone();
+                expected.insert("pos-z".into(), "6".into());
+                expected.insert("pos-z-mode".into(), "start".into());
+                assert_eq!(actual, &expected);
+            }
+            assert_eq!(
+                after.graph[NodeIndex(0)].pos,
+                before.graph[NodeIndex(0)].pos
+            );
+            assert_eq!(
+                after.graph[EdgeIndex(0)].pos,
+                before.graph[EdgeIndex(0)].pos
+            );
+            assert_eq!(
+                encode_cbor(&after.graph[NodeIndex(0)].constraints).unwrap(),
+                encode_cbor(&before.graph[NodeIndex(0)].constraints).unwrap(),
+            );
+            assert_eq!(
+                encode_cbor(&after.graph[EdgeIndex(0)].constraints).unwrap(),
+                encode_cbor(&before.graph[EdgeIndex(0)].constraints).unwrap(),
+            );
+            let old_nodes: Vec<TypstDotNode> =
+                decode_cbor(&graph_nodes_bytes(&graph).unwrap(), "nodes").unwrap();
+            let mut nodes: Vec<TypstDotNode> =
+                decode_cbor(&graph_nodes_bytes(&patched).unwrap(), "nodes").unwrap();
+            let old_edges: Vec<TypstDotEdge> =
+                decode_cbor(&graph_edges_bytes(&graph).unwrap(), "edges").unwrap();
+            let mut edges: Vec<TypstDotEdge> =
+                decode_cbor(&graph_edges_bytes(&patched).unwrap(), "edges").unwrap();
+            for statements in [&mut nodes[0].statements, &mut edges[0].statements] {
+                assert_eq!(statements.remove("pos-z").as_deref(), Some("6"));
+                assert_eq!(statements.remove("pos-z-mode").as_deref(), Some("start"));
+            }
+            assert_eq!(nodes, old_nodes);
+            assert_eq!(edges, old_edges);
+
+            let xy_patch = BTreeMap::from([
+                ("index", Value::Integer(0.into())),
+                (
+                    "pos",
+                    Value::Map(vec![(Value::Text("x".into()), Value::Integer(7.into()))]),
+                ),
+            ]);
+            let patch =
+                BTreeMap::from([("nodes", vec![xy_patch.clone()]), ("edges", vec![xy_patch])]);
+            let patched =
+                graph_apply_structural_patches_bytes(&patched, &encode_cbor(&patch).unwrap())
+                    .unwrap();
+            let after = decode_typst_graph(&patched).unwrap();
+            for statements in [
+                &after.graph[NodeIndex(0)].statements,
+                &after.graph[EdgeIndex(0)].statements,
+            ] {
+                assert_eq!(statements["pos-z"], "6");
+                assert_eq!(statements["pos-z-mode"], "start");
+                assert_eq!(statements["pos-x-set"], "true");
+                assert_eq!(statements["pos-y-set"], "false");
+            }
+        }
+    }
+
+    #[test]
+    fn auxiliary_z_patch_keeps_xy_references_in_the_same_batch() {
+        let graphs =
+            crate::parse_dot_graphs_bytes(b"digraph { a [pos=\"4,5\"]; b; a -> b; }").unwrap();
+        let graph = decode_graph_bytes_list(&graphs).unwrap().remove(0);
+        let patch = BTreeMap::from([(
+            "nodes",
+            vec![
+                BTreeMap::from([
+                    ("index", Value::Integer(0.into())),
+                    (
+                        "pos",
+                        Value::Map(vec![(Value::Text("z".into()), Value::Integer(9.into()))]),
+                    ),
+                ]),
+                BTreeMap::from([
+                    ("index", Value::Integer(1.into())),
+                    (
+                        "pos",
+                        Value::Map(vec![
+                            (Value::Text("ref".into()), Value::Integer(0.into())),
+                            (Value::Text("dx".into()), Value::Integer(2.into())),
+                            (Value::Text("z".into()), Value::Integer((-3).into())),
+                        ]),
+                    ),
+                ]),
+            ],
+        )]);
+        let patched =
+            graph_apply_structural_patches_bytes(&graph, &encode_cbor(&patch).unwrap()).unwrap();
+        let nodes: Vec<TypstDotNode> =
+            decode_cbor(&graph_nodes_bytes(&patched).unwrap(), "nodes").unwrap();
+        assert_eq!(nodes[0].pos, Some(TypstPoint { x: 4.0, y: 5.0 }));
+        assert_eq!(nodes[1].pos, Some(TypstPoint { x: 6.0, y: 5.0 }));
+        assert_eq!(nodes[0].statements["pos-z"], "9");
+        assert_eq!(nodes[1].statements["pos-z"], "-3");
+    }
 }
