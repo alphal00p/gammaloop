@@ -407,6 +407,7 @@
       "crates/linnest/typst/typst.toml"
       "crates/linnet-py/vendor"
     ];
+    spynso3 = ["crates/spynso3/typst"];
     vakint = [
       "crates/vakint/form_src"
       "crates/vakint/templates"
@@ -2365,10 +2366,7 @@
 
   nextestSplitPackages = sortedUnique (lib.concatMap (target: target.packages) nextestPackageGroups);
   workspacePackages = sortedUnique workspaceMemberPackages;
-  nextestCoverageIgnoredPackages = [
-    "gammaloop-workspace-hack"
-    "spynso3"
-  ];
+  nextestCoverageIgnoredPackages = ["gammaloop-workspace-hack"];
   nextestCoveredWorkspacePackages = sortedUnique (lib.subtractLists nextestCoverageIgnoredPackages workspaceMemberPackages);
   missingNextestPackages = lib.subtractLists nextestSplitPackages nextestCoveredWorkspacePackages;
   extraNextestPackages = lib.subtractLists nextestCoveredWorkspacePackages nextestSplitPackages;

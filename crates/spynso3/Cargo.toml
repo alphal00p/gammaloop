@@ -11,7 +11,7 @@ ahash = { workspace = true, features = ["serde"] }
 idenso = { workspace = true, features = ["native", "python"] }
 spenso = { workspace = true, features = ["native-code-generation", "portable-payload", "python", "shadowing"] }
 spenso-hep-lib = { workspace = true }
-spenso-macros = { workspace = true, features = ["native"] }
+spenso-macros = { workspace = true }
 xpct = "0.5.1"
 
 eyre = { workspace = true }

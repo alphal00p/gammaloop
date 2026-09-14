@@ -201,32 +201,33 @@
 
       mkDevShell = craneLibForShell: extraPackages: rustFlags:
         craneLibForShell.devShell ({
-          # checks = self.checks.${system};
+            # checks = self.checks.${system};
 
-          RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
-          GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
-          TYPST_FONT_PATHS = docsFontPath;
-          # `typst.withPackages` injects this only into its executable wrapper.
-          # The persistent Rust renderer and typst-py need the same package tree directly.
-          TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
+            RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+            GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
+            TYPST_FONT_PATHS = docsFontPath;
+            # `typst.withPackages` injects this only into its executable wrapper.
+            # The persistent Rust renderer and typst-py need the same package tree directly.
+            TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
 
-          CC = nixCc;
-          CXX = nixCxx;
-          "${cargoLinkerVar}" = nixCc;
+            CC = nixCc;
+            CXX = nixCxx;
+            "${cargoLinkerVar}" = nixCc;
 
-          LD_LIBRARY_PATH = runtimeLibPath;
-          DYLD_LIBRARY_PATH = runtimeLibPath;
+            LD_LIBRARY_PATH = runtimeLibPath;
+            DYLD_LIBRARY_PATH = runtimeLibPath;
 
-          # shellHook = ''
-          #   export CC="${nixCc}"
-          #   export CXX="${nixCxx}"
-          #   export ${cargoLinkerVar}="${nixCc}"
-          # '';
+            # shellHook = ''
+            #   export CC="${nixCc}"
+            #   export CXX="${nixCxx}"
+            #   export ${cargoLinkerVar}="${nixCc}"
+            # '';
 
-          packages = devShellPackages ++ extraPackages;
-        } // lib.optionalAttrs (rustFlags != null) {
-          RUSTFLAGS = rustFlags;
-        });
+            packages = devShellPackages ++ extraPackages;
+          }
+          // lib.optionalAttrs (rustFlags != null) {
+            RUSTFLAGS = rustFlags;
+          });
     in {
       checks = allChecks;
 

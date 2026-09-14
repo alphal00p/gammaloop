@@ -59,6 +59,7 @@
         "spenso"
         "spenso-hep-lib"
         "spenso-macros"
+        "spynso3"
         "symbolica-utils"
       ];
     }
@@ -313,9 +314,7 @@
     ]
     ++ map (group: "checks.${system}.gammaloop-nextest-${group.name}") groups
     ++ [
-      (crateTestDependencyAttr "spynso3")
       (crateTestBinaryAttr workspaceHackPackage)
-      (crateTestBinaryAttr "spynso3")
       (workspacePackageGraphAttr workspaceHackPackage)
     ]
     # A cached Python module needs no production Cargo artifacts. Its worker
