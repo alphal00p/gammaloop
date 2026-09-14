@@ -21,9 +21,12 @@ necessary producers and final success. Packaging, documentation and WASM remain
 available through the flake; `nix flake check --impure` includes those extra checks.
 
 Compilation stays per crate. Source filtering preserves unaffected packages;
-manifest and lockfile changes still invalidate broadly. Compatible test and Python
-builds share dependencies, while Python retains its required ABI, interpreter and
-features. Clippy and doctests share check dependencies but retain workspace-wide
+manifest and lockfile changes still invalidate broadly. Test dependencies avoid
+multi-crate cycles: Linnet enables its own optional test features, and Spenso owns
+the macro integration test. Regenerate Hakari after dependency/feature changes so
+the shared cache does not retain unused build dependencies. Compatible test and
+Python builds share dependencies, while Python retains its required ABI, interpreter
+and features. Clippy and doctests share check dependencies but retain workspace-wide
 source inputs, so their rebuild isolation differs from package test artifacts.
 
 Merged artifacts are self-contained compressed archives. Recursive inheritance,
@@ -55,6 +58,23 @@ reason to invalidate it. See the [cache-reuse audit](architecture/nix-crane-cach
 for earlier investigation and implementation details.
 
 ## Measured results
+
+The Cargo dependency cleanup was compared locally with `246c03693` on Rust
+1.98.1, using eight jobs, `ci-optim`, no incremental compilation, and the same 631
+selected tests from the Linnet and Spenso groups (658 listed, identical filters).
+
+| Local Cargo workflow | Before | After |
+|---|---:|---:|
+| Empty-target test build and execution | 6m52s | 6m13s |
+| Empty-target check followed by tests | 10m31s | 7m12s |
+
+These are single pairs on a shared host with vendored dependencies available,
+not full-suite or remote measurements. Direct test CPU time fell 4.4%; most of
+the larger combined gain comes from checking. Both unchanged retries compiled
+nothing. Nix archive inventories matched all 631 tests; the selected Nix suite
+passed 1,633 runtime tests (including five Python cases), 43 doctests and static
+checks. FeynKit graph evaluation preserved its groups and extracted-crate cache
+boundaries; its runtime suite was not rerun for this cleanup.
 
 The final warm comparison used the same main application layout:
 [baseline](https://nix-ci.com/gh:alphal00p:gammaloop/codex%2Fci-clan-cache-fixed-validation/f1ed70f585d293ecb851cf39f28821a69b33ac05)

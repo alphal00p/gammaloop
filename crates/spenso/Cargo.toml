@@ -96,4 +96,4 @@ ron = "0.8"
 [features]
 python = ["dep:pyo3"]
 python_stubgen = ["dep:pyo3-stub-gen", "python"]
-shadowing = ["dep:symbolica", "linnet/symbolica", "spenso-macros/shadowing"]
+shadowing = ["dep:symbolica", "linnet/symbolica"]

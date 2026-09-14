@@ -612,7 +612,6 @@
     idenso = ["reference-cases"];
     linnet = ["drawing" "symbolica"];
     spenso = ["shadowing"];
-    "spenso-macros" = ["shadowing"];
   };
 
   workspaceFeatureUnificationExcludedPackages = [
@@ -638,18 +637,10 @@
       ++ (workspaceIncomingNormalDependencyFeaturesFor package)
     );
 
-  craneTestExtraFeatureSets = {
-    "spenso-macros" = ["spenso/shadowing"];
-  };
-
-  craneTestFeaturesFor = package:
-    sortedUnique (craneCiFeaturesFor package ++ (craneTestExtraFeatureSets.${package} or []));
-
   craneTestContextFeaturesFor = sourcePackages: package:
     sortedUnique (
       craneCiCommonFeaturesFor package
       ++ (craneCiExtraFeatureSets.${package} or [])
-      ++ (craneTestExtraFeatureSets.${package} or [])
       ++ (ci.testFeatures.${package} or [])
       ++ (workspaceIncomingTestDependencyFeaturesFor sourcePackages package)
     );
@@ -787,7 +778,7 @@
     );
 
   craneWorkspacePrebuildFeatureArgs =
-    cargoQualifiedFeatureArgsFor workspaceMemberPackages craneTestFeaturesFor;
+    cargoQualifiedFeatureArgsFor workspaceMemberPackages craneCiFeaturesFor;
   workspacePrebuildDependencyPackages =
     lib.filter (
       package:
@@ -802,7 +793,7 @@
     if lib.hasPrefix "crates/" packageDir
     then "../${lib.removePrefix "crates/" packageDir}"
     else "../../${packageDir}";
-  workspacePrebuildCargoToml = workspaceAnchorCargoTomlFor workspacePrebuildPackage workspacePrebuildDependencyPackages craneTestFeaturesFor;
+  workspacePrebuildCargoToml = workspaceAnchorCargoTomlFor workspacePrebuildPackage workspacePrebuildDependencyPackages craneCiFeaturesFor;
   workspacePrebuildSourceScript = ''
     install -D -m 0644 ${workspacePrebuildCargoToml} "$out/${workspacePrebuildPackageDir}/Cargo.toml"
     install -D -m 0644 ${dummyCargoTarget} "$out/${workspacePrebuildPackageDir}/src/lib.rs"
@@ -1414,7 +1405,7 @@
     ${guppyFeatureMapFor craneCiFeaturesFor}
     EOF
     cat > "$tmp/test-features.json" <<'EOF'
-    ${guppyFeatureMapFor craneTestFeaturesFor}
+    ${guppyFeatureMapFor craneCiFeaturesFor}
     EOF
 
     cargo metadata \
@@ -2222,7 +2213,7 @@
       inherit cargoArtifacts;
       pname = "gammaloop-workspace-build-artifacts";
       src = workspaceNonIntegrationTestSrc;
-      cargoExtraArgs = "${cargoPackagesArgsFor (lib.subtractLists ["gammaloop-integration-tests"] workspaceMemberPackages) craneTestFeaturesFor} --tests";
+      cargoExtraArgs = "${cargoPackagesArgsFor (lib.subtractLists ["gammaloop-integration-tests"] workspaceMemberPackages) craneCiFeaturesFor} --tests";
     });
 
   linnestWasmArgs = {

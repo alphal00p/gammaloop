@@ -240,9 +240,11 @@ Run it against the final code you intend to push; rerun it if that code changes.
 If you lack upload credentials, run `just ci-checks` and mention in your handoff
 or PR that the results were not uploaded.
 
-After changing workspace manifests or test groups, run `just ci-update` before
-the checks and commit the regenerated `nix/ci-workspace-graph.json` and `nix-ci.nix`
-with the change.
+After changing dependencies or features, run `cargo hakari generate` and
+`cargo hakari verify` in `nix develop`. Commit the updated workspace-hack manifest
+and lockfile. After changing workspace manifests or test groups, run
+`just ci-update` before the checks and commit the regenerated
+`nix/ci-workspace-graph.json` and `nix-ci.nix` with the change.
 
 Put your NixCI token in `~/.netrc`, or point `NIXCI_NETRC` at an existing file:
 

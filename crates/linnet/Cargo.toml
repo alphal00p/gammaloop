@@ -56,7 +56,8 @@ figment = "0.10.19"
 iai-callgrind = "0.14.0"
 insta = { workspace = true, features = ["ron"] }
 kurbo = "0.13"
-linnest = { workspace = true }
+# Keep optional drawing and serialization covered by isolated Linnet tests.
+linnet = { path = ".", features = ["drawing", "rkyv", "serde"] }
 proptest = "1.6.0"
 serde = "1.0"
 similar-asserts = "1.7.0"
