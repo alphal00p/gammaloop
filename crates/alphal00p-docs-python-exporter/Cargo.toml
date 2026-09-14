@@ -7,7 +7,7 @@ publish = false
 [dependencies]
 gammaloop-api = { path = "../gammaloop-api", optional = true, default-features = false, features = ["python_stubgen"] }
 idenso = { workspace = true, optional = true, features = ["python_stubgen"] }
-linnet-py = { path = "../linnet-py", optional = true }
+linnet-py = { path = "../linnet-py", optional = true, features = ["python_stubgen"] }
 pyo3 = { workspace = true, features = ["auto-initialize"] }
 pyo3-stub-gen = { workspace = true, features = ["infer_signature"] }
 spynso3 = { path = "../spynso3", optional = true, features = ["python_stubgen"] }

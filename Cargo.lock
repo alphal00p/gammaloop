@@ -905,6 +905,7 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "tempfile",
  "walkdir",
 ]
 
@@ -3547,10 +3548,18 @@ name = "linnet-py"
 version = "0.1.0"
 dependencies = [
  "dot-parser",
+ "kurvst",
+ "linnest",
  "linnet",
  "pyo3",
  "pyo3-build-config",
  "pyo3-stub-gen",
+ "pyo3-stub-gen-derive",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "walkdir",
 ]
 
 [[package]]

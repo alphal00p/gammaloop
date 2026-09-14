@@ -65,6 +65,8 @@
     (workspaceRoot + "/crates/linnest/typst/linnest.wasm")
     (workspaceRoot + "/crates/linnest/typst/src")
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
+    (workspaceRoot + "/crates/linnet-py/README.md")
+    (workspaceRoot + "/crates/linnet-py/vendor")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
   ];
@@ -98,7 +100,7 @@
 
   workspaceTestSrc = lib.fileset.toSource {
     root = workspaceRoot;
-    fileset = lib.fileset.unions [
+    fileset = lib.fileset.unions ([
       cargoSources
       nonCargoBuildSources
       snapshotSources
@@ -108,18 +110,18 @@
       (workspaceRoot + "/docs/examples.toml")
       (workspaceRoot + "/docs/products")
       (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
-    ];
+    ] ++ workspacePackageExtraFilesetsForSourcePackages "compileTimeTest" workspaceMemberPackages);
   };
 
   workspaceNonIntegrationTestSrc = lib.fileset.toSource {
     root = workspaceRoot;
-    fileset = lib.fileset.unions [
+    fileset = lib.fileset.unions ([
       nonIntegrationCargoSources
       nonCargoBuildSources
       snapshotSources
       (workspaceRoot + "/tests/resources")
       (workspaceRoot + "/examples/cli")
-    ];
+    ] ++ workspacePackageExtraFilesetsForSourcePackages "compileTimeTest" workspaceMemberPackages);
   };
 
   linnestWasmSrc = lib.fileset.toSource {
@@ -389,6 +391,19 @@
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
     ];
+    "linnet-py" = [
+      "crates/linnet-py/LICENSE"
+      "crates/linnet-py/README.md"
+      "crates/kurvst/typst/LICENSE"
+      "crates/kurvst/typst/kurvst.wasm"
+      "crates/kurvst/typst/src"
+      "crates/kurvst/typst/typst.toml"
+      "crates/linnest/typst/linnest.wasm"
+      "crates/linnest/typst/LICENSE"
+      "crates/linnest/typst/src"
+      "crates/linnest/typst/typst.toml"
+      "crates/linnet-py/vendor"
+    ];
     vakint = [
       "crates/vakint/form_src"
       "crates/vakint/templates"
@@ -398,6 +413,12 @@
   workspacePackageExtraSourceRoots.compileTimeTest = {
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
     "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet_py.pyi" "docs/api/python"];
+    clinnet = [
+      "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
+      "assets/embedded/drawing/templates/layout-core.typ"
+      "assets/embedded/drawing/templates/physics-edge-style.typ"
+      "tests/resources/graphs/epemttbar.dot"
+    ];
     gammalooprs = [
       "tests/resources/graphs/scalar/dod2_bubble.dot"
     ];
@@ -412,6 +433,8 @@
       "crates/idenso/CHANGELOG.typ"
       "crates/kurvst/typst/docs"
       "crates/linnest/typst/docs"
+      "crates/linnet-py/examples/physics_render_settings.py"
+      "crates/linnet-py/examples/rendering_api.py"
       "crates/linnet/CHANGELOG.typ"
       "crates/spenso-hep-lib/CHANGELOG.typ"
       "crates/spenso-macros/CHANGELOG.typ"
@@ -427,6 +450,7 @@
     "alphal00p-docs-catalogs" = [
       "docs/api/python"
     ];
+    clinnet = ["docs/assets/typst/portal-graphs/edge-style.typ"];
     "gammaloop-api" = [
       "tests/resources/graphs/scalar_bubble.dot"
     ];
@@ -2298,7 +2322,7 @@
     doCheck = false;
     buildType = "release";
     CARGO_BUILD_TARGET = wasmTarget;
-    cargoExtraArgs = "--locked -p linnest -p kurvst --features linnest/custom --target ${wasmTarget}";
+    cargoExtraArgs = "--locked -p linnest -p kurvst --features linnest/typst-plugin,kurvst/typst-plugin --target ${wasmTarget}";
   };
 
   linnestWasmCargoArtifacts = wasmCraneLib.buildDepsOnly (linnestWasmArgs
@@ -2734,7 +2758,7 @@
     ++ map (target: "gammaloop-nextest-binaries-${target.name}") checkedNextestPackageGroups
   );
 in {
-  inherit (documentation) docsTypst docsFontPath alphal00pDocsCargoArtifacts
+  inherit (documentation) docsTypst docsFontPath linnetPython alphal00pDocsCargoArtifacts
     alphal00pDocsPages alphal00pDocsSnapshotFixture;
   inherit
     workspaceDependencySrc

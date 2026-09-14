@@ -5,8 +5,8 @@
 
 #strong[Implemented by:] `395610143576` (2026-08-15)
 
-The current generator imports the reusable
-#link("../../crates/linnest/typst/src/physics-edge-style.typ")[`physics-edge-style.typ`]
+The current generator imports GammaLoop's reusable
+#link("../../assets/embedded/drawing/templates/physics-edge-style.typ")[`physics-edge-style.typ`]
 callbacks and emits only the model-specific particle map plus three
 wrapper functions. The embedded drawing entry points are
 #link("../../assets/embedded/drawing/templates/layout.typ")[`layout.typ`]

@@ -1,19 +1,19 @@
 = GammaLoop Drawing Architecture
 
 #quote(block: true)[
-#strong[Status:] Current contract; audited against the implementation on 2026-08-18
+#strong[Status:] Current contract; audited against the implementation on 2026-08-31
 
-The pipeline, ownership, DOT parser fields, callback data, path styles, and subgraph sections
-describe the implemented drawing stack. The superseded `*-eval` and placeholder-interpolation
-design is preserved separately in
+The pipeline, ownership, DOT parser fields, typed rendering data, path styles, and subgraph
+sections describe the implemented drawing stack. The superseded `*-eval` and
+placeholder-interpolation design is preserved separately in
 #link("gammaloop-drawing-evaluated-fields-history.typ")[the evaluated-field proposal record].
 ]
 
 This document describes the drawing path used by GammaLoop and the DOT syntax
 that matters at each layer. The important boundary is:
 
-- GammaLoop owns physics graph data and model-to-style policy.
-- Linnet/Linnest owns DOT parsing, half-edge graph shape, layout, and drawing.
+- GammaLoop owns physics graph data, model-to-style policy, and its domain render template.
+- Linnet/Linnest owns DOT parsing, half-edge graph shape, layout, and generic drawing primitives.
 - Kurvst owns Bezier splitting, trimming, and path patterns.
 - User-authored render templates are an optional drawing feature, not part of
   GammaLoop's generated physics interaction.
@@ -31,19 +31,39 @@ rendering run has these steps:
    its app templates there (`figure.typ`, `grid.typ`, `layout.typ`, `layout-core.typ`), while the
    shared Linnest/Kurvst package files keep their canonical workspace layout
    under `drawings/templates/crates/{linnest,kurvst}/typst/`.
-+ The `linnet` CLI compiles `figure.typ` for each DOT file. The figure
-   template reads the file through `sys.inputs.data-path` and forwards the DOT
-   text to `layout.typ`.
-+ `layout.typ` binds the extracted Linnest package and generated edge styles;
-   `layout-core.typ` then calls `graph.parse`, `layout`, and `draw`.
-+ `draw` calls the generated callbacks from `edge-style.typ`, draws edges and
-   labels, then draws nodes last so nodes sit on top of edges.
++ Clinnet stages the input DOT and a generated Typst entrypoint for each graph, then the `linnet`
+   CLI compiles it with an external Typst 0.15 executable. Its thin DOT adapter parses that input
+   and delegates graph styling, layout, and drawing to Linnest's generic renderer.
++ `linnet-py` owns a separate in-process preparation boundary. It serializes only names, indices,
+   incidence, flow, and orientation into a versioned `linnest-graph-spec` CBOR document; arbitrary
+   Python `.data` and DOT `GlobalData` never enter it. The wheel embeds Linnest, Kurvst, CeTZ 0.5.1,
+   and oxifmt 1.0.0, stages them with the graph spec, and invokes `typst-py` 0.15.0 directly. It has
+   no Clinnet library dependency and does not discover or launch a Typst executable.
++ Both preparers invoke Typst with constant-sized process arguments. Their generated entrypoints
+   statically import the selected template and each referenced user module once, materialize the
+   native configuration dictionary, and call the template's mandatory `render(config)` export.
+   Configuration is not
+   flattened into `sys.inputs`; the Python entrypoint adds `graph-spec-path`, while Clinnet adds
+   `data-path` for its DOT adapter.
++ Linnest owns the generic figure/layout implementation. It has no particle, momentum, amplitude,
+   or cross-section mode. The GammaLoop path supplies its generated template bundle instead,
+   binding the model-specific `edge-style.typ` callbacks and interpreting GammaLoop-owned options
+   for its generic, amplitude, and cross-section presets.
++ The generic renderer receives a native graph from either `graph.from-spec` or Clinnet's DOT
+   adapter, attaches the typed node, edge, and half-edge records from `config.elements`, and patches
+   half-edge statements, port labels, and compass points by topology index. It applies final labels
+   and styles with `graph.style`, and only then runs the ordered layout passes and `draw`. Label and
+   node measurements therefore participate in spacing.
++ `draw` uses ordinary Linnest node and edge styles for a model-neutral graph. GammaLoop's selected
+   template installs the particle and momentum callbacks from `edge-style.typ`. It draws edges and
+   labels first, then nodes last so nodes sit on top of edges.
 
-The normal GammaLoop path does not need evaluated strings. Generated particle
-styles are ordinary Typst dictionaries/functions in `edge-style.typ`, backed by
-#link("../../crates/linnest/typst/src/physics-edge-style.typ")[`physics-edge-style.typ`].
-A user can opt into evaluating the recognized `label`, `display-label`,
-`source-style`, and `sink-style` string fields at drawing time.
+The rendering contract has no evaluated-string mode. Generated particle styles are ordinary
+Typst dictionaries/functions in `edge-style.typ`, backed by
+#link("../../assets/embedded/drawing/templates/physics-edge-style.typ")[GammaLoop's
+`physics-edge-style.typ`].
+Custom executable Typst enters only through an explicitly imported module; DOT strings and plain
+Python strings remain data.
 
 == Components
 
@@ -55,16 +75,35 @@ A user can opt into evaluating the recognized `label`, `display-label`,
   invisible DOT nodes into dangling half-edges and preserves unconsumed
   attributes as statement dictionaries.
 
-/ `crates/linnest`: Provides the Typst-facing wasm plugin and Typst wrappers. It parses DOT into
-  graph bytes, lays out node and edge positions, exposes graph queries, and
-  provides the CeTZ draw API.
+/ `crates/linnest`: Provides the Typst-facing wasm plugin and Typst wrappers. It parses DOT or a
+  versioned native graph spec into graph bytes, owns the generic `render(config)` implementation,
+  lays out node and edge positions, exposes graph queries, and provides the domain-neutral CeTZ
+  draw API.
 
 / `crates/kurvst`: Provides the Typst-facing curve wasm plugin. It splits and trims Bezier
   curves, builds Hobby curves through edge layout points, and generates wave,
   zigzag, and coil path patterns.
 
-/ `crates/clinnet`: Provides the `linnet` CLI used to batch-render DOT files with Typst and
-  assemble grid PDFs.
+/ `crates/clinnet`: Provides the external-Typst CLI used to batch-render DOT files and assemble
+  grid PDFs. Its generic template is a thin DOT-ingestion adapter over Linnest's renderer. Every
+  custom figure template must export `render(config)`.
+
+/ `crates/linnet-py`: Owns Linnet `HedgeGraph` topology through a selectable vector or forest node
+  store. It exposes declarative construction, graph-bound subgraphs, topology algorithms and
+  transformations,
+  typed drawing metadata and render configuration, explicit DOT codecs, and module references.
+  Subgraphs retain Linnet's native half-edge set and add only the zero-crown node IDs that the set
+  cannot represent, keeping isolated nodes visible to Python graph operations.
+  Its rendering methods and notebook SVG display prepare a versioned CBOR topology and typed Typst
+  configuration, then compile the staged standalone project in-process through the `typst` Python
+  package. It shares Linnest's renderer with Clinnet but owns its native preparation and package
+  staging.
+
+GammaLoop's particle policy is not part of Clinnet's generic embedded template. Python callers
+that want GammaLoop particle colors, labels, path decorations, or mode presets select the
+GammaLoop `figure.typ` entry point, pass its settings through `RenderConfig.template_options`,
+and keep its imported template bundle together. Callers implementing another domain can instead
+use generic `DrawingSelectors` to derive typed drawing records from arbitrary Python data.
 
 == Data Ownership
 
@@ -74,9 +113,22 @@ Physics data is read by GammaLoop when a graph is parsed as a physics graph.
 Examples are `particle`, `pdg`, `lmb_id`, `num`, `int_id`, and
 `overall_factor`.
 
-Drawing data is read by the Linnest drawing templates. Examples are
-`display-label`, `label`, `source-style`, `sink-style`, half-edge
-compass points, and subgraph selections by compass.
+Generic drawing data is read by Linnest's drawing template. Examples are display labels,
+half-edge compass points, and subgraph selections by compass. Particle and cut identifiers are
+GammaLoop template extensions rather than Linnest drawing fields.
+
+The Python API makes this boundary explicit. `Node.data`, `Edge.data`, and
+`HalfEdge.data` retain arbitrary Python objects by identity; the renderer never inspects or
+serializes them. Their corresponding mutable `drawing` views accept only the closed native value
+model and template extensions. Python drawing selectors may inspect live element views, but only
+their validated results enter `config.elements`.
+
+DOT conversion is a separate, explicit boundary. Python import and export require a `DotCodec`.
+The canonical Linnest codec retains its supported drawing subset while dropping arbitrary element
+`.data`; the topology codec drops element data and drawing. Both preserve graph and element names
+and the separate `GlobalData`. Rendering does not use either codec to guess a representation for
+arbitrary `.data`: it stages a versioned topology-only CBOR graph spec separately and sends typed
+drawing records through `config.elements`.
 
 The same DOT file may contain both kinds of data for drawing. If a manually
 decorated DOT file is later fed back into GammaLoop's physics parser, keep in
@@ -244,27 +296,53 @@ GammaLoop's generated `edge-style.typ` uses `particle` to look up the default
 edge style. A user can add drawing-only fields without affecting the generated
 GammaLoop styles.
 
-== Current Callback Precedence And Eval Mode
+== Typed Render Configuration And Precedence
 
-The generated model entry supplies the base source and sink styles. A normal `source-style` or
-`sink-style` value is then read from the edge and its corresponding half-edge data. Dictionaries
-are accepted directly. String values are ignored in `typst-fields: "plain"` mode and evaluated in
-`typst-fields: "eval"` mode. There is no `source-style-eval` or `sink-style-eval` fallback.
+`Graph.render_config` stores typed `GraphStyleOptions`, ordered `LayoutOptions`, `DrawOptions`,
+generic `DrawingSelectors`, and the selected template's closed native `template_options`. A sparse
+configuration supplied to `render` or `to_svg` overlays the rendering layers in this order:
 
-The default edge label is selected from edge-data `display-label`/`label`, then top-level
-`display-label`/`label`, then the generated particle-map label. The optional `show-momentum`,
-`show-edge-index`, `show-half-edge-index`, and `show-particle` controls build an explicit metadata
-label instead. There is no `label-template` fallback or placeholder expansion. These rules live in
-#link("../../crates/linnest/typst/src/impl/physics-edge-style.typ")[the callback implementation],
-while the public options live in
-#link("../../crates/linnest/typst/src/physics-edge-style.typ")[the callback API].
-
-The embedded figure still defaults `sys.inputs.typst-fields` to `"plain"`. Opt into executable
-Typst strings only for a deliberately hand-authored rendering:
-
-```bash
-linnet draw graphs --input typst-fields=eval
+```text
+selected-template defaults -> graph configuration -> per-call configuration
 ```
+
+The `Graph.render_config` object itself is live and mutable, while its nested option objects are
+immutable values whose getters reconstruct copies. Replace `style`, `layouts`, `drawing`,
+`selectors`, or `template_options` after changing an option. `RenderConfig.overlay` returns a new
+configuration, and per-call overlays do not mutate the graph configuration. The template-options
+dictionary is open only in its string keys; every value still belongs to the validated native
+Typst model.
+
+The shipped Python notebook display is always generic, even when topology has dangling edges. Core
+Linnet has no `RenderMode`, `PhysicsOptions`, or topology-based diagram inference. GammaLoop's CLI
+and generated bundle select GammaLoop's `figure.typ` and provide its mode and particle settings as
+template-owned options. Another application can select another template without teaching Linnet
+its domain vocabulary.
+
+The renderer correlates every typed node, edge, and half-edge record with its topology index
+before GammaLoop mode generation. Explicit element or configuration values override generated
+amplitude/cross-section values, which override template defaults. This preserves particle styles,
+momentum arrowheads and index labels, amplitude edge ordering and side labels, cut-ID-matched
+cross-section side labels, and directional placement without converting drawing values to DOT
+strings.
+
+Generic Python selectors run before staging and may inspect arbitrary element `.data`. They return
+detached `NodeDrawing`, `EdgeDrawing`, or `HalfEdgeDrawing` values and fill only fields that the
+element did not set explicitly. Selector results never become Typst callbacks and arbitrary
+Python objects never enter `config.elements`.
+
+Plain strings are escaped content. `None`, `AUTO`, and `INHERIT` have distinct native meanings;
+lengths, colors, strokes, marks, labels, layouts, routing, and the remaining finite choices use
+their value classes or enums. A `TypstModule` reference is the only executable extension point:
+its `value`, `content`, or `function` export is statically imported, and `call`/`bind` produce a
+validated reference. The renderer does not accept raw Typst expressions and does not call
+`eval`.
+
+These rules complement the generated particle callback implementation in
+#link("../../assets/embedded/drawing/templates/impl/physics-edge-style.typ")[the GammaLoop-owned
+implementation]; its public callback API lives in
+#link("../../assets/embedded/drawing/templates/physics-edge-style.typ")[the same GammaLoop
+template bundle].
 
 == Pattern Style Dictionaries
 
@@ -311,16 +389,9 @@ dictionaries and Rust converts those dictionaries to `kurbo::BezPath` internally
 That keeps the public Typst API path-in/path-out without tying path objects to
 Kurbo's serde representation.
 
-GammaLoop-generated particle styles produce these dictionaries directly. A user
-can also produce them through `source-style` or `sink-style` in eval mode:
-
-```dot
-a -> b [
-  particle="a",
-  source-style="(stroke: red + 1pt, pattern: \"wave\", pattern-amplitude: 0.14)",
-  sink-style="(stroke: blue + 1pt, pattern: \"coil\", pattern-amplitude: 0.14)"
-];
-```
+GammaLoop-generated particle styles produce these dictionaries directly. Python callers express
+the same values through typed edge and half-edge drawing styles, or reference a dictionary
+exported by an explicit `TypstModule`. A DOT attribute is never interpreted as Typst source.
 
 == Subgraph Drawing
 
@@ -344,16 +415,14 @@ For GammaLoop-generated diagrams:
 
 - Put physics data in canonical GammaLoop fields.
 - Let GammaLoop generate `edge-style.typ`.
-- Keep `typst-fields` at the default `plain`.
-- Do not use the superseded `*-eval` field names.
+- Select the GammaLoop V1 template when rendering through Python or Clinnet directly.
+- Put executable custom styles in an imported Typst module, not in DOT strings.
 
 For manually edited drawing DOT:
 
-- Use `display-label` or `label` for labels; the current callback does not expand
-  `{field}` placeholders or recognize `label-template`.
-- Use `--input typst-fields=eval` only when a recognized render field contains
-  deliberately executable Typst code. Do not use the superseded `*-eval` field names.
-- Prefer drawing-only fields such as `source-style` and `sink-style` over
-  changing physics fields such as `particle`, `pdg`, or `mass`.
+- Use `display-label` or `label` as data labels; templates do not expand `{field}` placeholders
+  or recognize `label-template`.
+- Keep custom styles in the typed render configuration or an imported Typst module instead of a
+  DOT string.
 - Treat drawing-only DOT as a render artifact if those fields are not yet
   accepted by the GammaLoop physics parser.

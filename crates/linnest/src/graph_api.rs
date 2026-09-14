@@ -56,6 +56,7 @@ pub struct TypstPoint {
 
 #[derive(
     Debug,
+    Serialize,
     Deserialize,
     Clone,
     Copy,
@@ -73,7 +74,7 @@ enum PlacementMode {
     Pin,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypstPlacementSpec {
     #[serde(default)]
@@ -94,14 +95,14 @@ pub struct TypstPlacementSpec {
     dy: Option<f64>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(untagged)]
 enum TypstPlacementCoord {
     Number(TypstNumber),
     Group(TypstPlacementGroup),
 }
 
-#[derive(Debug, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 #[serde(untagged)]
 enum TypstNumber {
     Float(f64),
@@ -109,7 +110,7 @@ enum TypstNumber {
     Unsigned(u64),
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 struct TypstPlacementGroup {
     kind: String,
@@ -139,6 +140,10 @@ pub struct TypstDotNode {
     pub name: Option<String>,
     pub data: Option<Vec<u8>>,
     pub pos: Option<TypstPoint>,
+    #[serde(rename = "pos-x-set")]
+    pub pos_x_set: bool,
+    #[serde(rename = "pos-y-set")]
+    pub pos_y_set: bool,
     pub shift: Option<TypstPoint>,
     pub statements: BTreeMap<String, String>,
 }
@@ -165,6 +170,8 @@ pub struct TypstDotEdge {
     pub source: Option<TypstDotEndpoint>,
     pub sink: Option<TypstDotEndpoint>,
     pub pos: Option<TypstPoint>,
+    pub pos_x_set: bool,
+    pub pos_y_set: bool,
     pub shift: Option<TypstPoint>,
     pub label_pos: Option<TypstPoint>,
     pub label_angle: Option<f64>,
@@ -172,7 +179,7 @@ pub struct TypstDotEdge {
     pub statements: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypstGraphSpec {
     #[serde(default)]
@@ -191,7 +198,7 @@ pub struct TypstGraphSpec {
     pub edges: Vec<TypstEdgeSpec>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct TypstNodeSpec {
     #[serde(default)]
     pub name: Option<String>,
@@ -205,9 +212,11 @@ pub struct TypstNodeSpec {
     pub statements: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypstEdgeSpec {
+    #[serde(default)]
+    pub name: Option<String>,
     #[serde(default)]
     pub source: Option<TypstEndpointSpec>,
     #[serde(default)]
@@ -226,7 +235,7 @@ pub struct TypstEdgeSpec {
     pub statements: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypstEndpointSpec {
     pub node: usize,
@@ -242,6 +251,51 @@ pub struct TypstEndpointSpec {
     pub compass: Option<String>,
     #[serde(default)]
     pub in_subgraph: bool,
+}
+
+pub const GRAPH_SPEC_SCHEMA: &str = "linnest-graph-spec";
+pub const GRAPH_SPEC_VERSION: u32 = 1;
+
+/// Versioned wire envelope shared by native renderers and the Typst plugin.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct TypstGraphSpecEnvelope {
+    pub schema: String,
+    pub version: u32,
+    pub graph: TypstGraphSpec,
+}
+
+#[derive(Serialize)]
+struct TypstGraphSpecRefEnvelope<'a> {
+    schema: &'static str,
+    version: u32,
+    graph: &'a TypstGraphSpec,
+}
+
+impl TypstGraphSpecEnvelope {
+    pub fn new(graph: TypstGraphSpec) -> Self {
+        Self {
+            schema: GRAPH_SPEC_SCHEMA.to_owned(),
+            version: GRAPH_SPEC_VERSION,
+            graph,
+        }
+    }
+
+    fn into_graph(self) -> Result<TypstGraphSpec, String> {
+        if self.schema != GRAPH_SPEC_SCHEMA {
+            return Err(format!(
+                "Invalid graph spec schema {:?}; expected {GRAPH_SPEC_SCHEMA:?}",
+                self.schema
+            ));
+        }
+        if self.version != GRAPH_SPEC_VERSION {
+            return Err(format!(
+                "Unsupported graph spec version {}; expected {GRAPH_SPEC_VERSION}",
+                self.version
+            ));
+        }
+        Ok(self.graph)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -264,6 +318,8 @@ struct TypstGraphStructuralPatch {
     pub nodes: Vec<TypstNodeStructuralPatch>,
     #[serde(default)]
     pub edges: Vec<TypstEdgeStructuralPatch>,
+    #[serde(default)]
+    pub hedges: Vec<TypstHedgeStructuralPatch>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -294,6 +350,18 @@ struct TypstEdgeStructuralPatch {
     pub bend: Option<f64>,
     #[serde(default)]
     pub statements: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct TypstHedgeStructuralPatch {
+    pub index: usize,
+    #[serde(default)]
+    pub statement: Option<String>,
+    #[serde(default)]
+    pub port_label: Option<String>,
+    #[serde(default)]
+    pub compass: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -396,9 +464,19 @@ fn encode_subgraph(subgraph: &SuBitGraph) -> Result<Vec<u8>, String> {
 }
 
 pub fn graph_from_spec_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let spec: TypstGraphSpec = ciborium::de::from_reader(arg)
+    let envelope: TypstGraphSpecEnvelope = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize graph spec: {err}"))?;
-    encode_typst_graph(&typst_graph_from_dot(graph_from_spec(spec)?))
+    encode_typst_graph(&typst_graph_from_dot(graph_from_spec(
+        envelope.into_graph()?,
+    )?))
+}
+
+pub fn encode_graph_spec_bytes(spec: &TypstGraphSpec) -> Result<Vec<u8>, String> {
+    encode_cbor(&TypstGraphSpecRefEnvelope {
+        schema: GRAPH_SPEC_SCHEMA,
+        version: GRAPH_SPEC_VERSION,
+        graph: spec,
+    })
 }
 
 pub fn graph_with_data_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
@@ -569,6 +647,27 @@ fn apply_typst_graph_structural_patch(
                 .insert("bend".to_string(), format!("{bend}rad"));
         }
         graph.graph[index].statements.extend(edge.statements);
+    }
+
+    for hedge in patch.hedges {
+        if hedge.index >= graph.graph.n_hedges() {
+            return Err(format!(
+                "Half-edge structural patch index {} is out of bounds for graph with {} half-edges",
+                hedge.index,
+                graph.graph.n_hedges()
+            ));
+        }
+
+        let data = &mut graph.graph[Hedge(hedge.index)];
+        if let Some(statement) = hedge.statement {
+            data.statement = Some(statement);
+        }
+        if let Some(port_label) = hedge.port_label {
+            data.port_label = Some(port_label);
+        }
+        if let Some(compass) = hedge.compass {
+            data.compasspt = parse_endpoint_compass(&compass)?.map(compass_pt_to_string);
+        }
     }
 
     refresh_structural_state_from_statements(graph);
@@ -1080,7 +1179,9 @@ fn graph_from_spec(spec: TypstGraphSpec) -> Result<DotGraph, String> {
         global_data,
         graph: builder.build::<DefaultNodeStore<DotVertexData>>(),
     };
-    graph.apply_explicit_id_ordering();
+    graph
+        .apply_explicit_id_ordering()
+        .map_err(|error| error.to_string())?;
     Ok(graph)
 }
 
@@ -1114,14 +1215,17 @@ fn add_edge_to_builder(
             point: ResolvedPoint {
                 x: (source.x + sink.x) / 2.0,
                 y: (source.y + sink.y) / 2.0,
-                x_set: true,
-                y_set: true,
+                x_set: false,
+                y_set: false,
             },
             pin: None,
             mode: PlacementMode::Start,
         })
     });
-    let local_statements = apply_placement_statements(edge.statements, placement.as_ref());
+    let mut local_statements = apply_placement_statements(edge.statements, placement.as_ref());
+    if let Some(name) = edge.name {
+        local_statements.insert(TYPST_EDGE_NAME_KEY.to_owned(), name);
+    }
     let edge_data = DotEdgeData {
         payload: edge.data,
         statements: merged_statements(&global_data.edge_statements, &local_statements),
@@ -1195,22 +1299,20 @@ fn apply_placement_statements(
         return statements;
     };
 
-    if placement.point.x_set || placement.point.y_set {
-        statements.insert(
-            "pos".to_string(),
-            format!("{},{}", placement.point.x, placement.point.y),
-        );
-        statements.insert("pos-x-set".to_string(), placement.point.x_set.to_string());
-        statements.insert("pos-y-set".to_string(), placement.point.y_set.to_string());
-        statements.insert(
-            "pos-mode".to_string(),
-            match placement.mode {
-                PlacementMode::Start => "start",
-                PlacementMode::Pin => "pin",
-            }
-            .to_string(),
-        );
-    }
+    statements.insert(
+        "pos".to_string(),
+        format!("{},{}", placement.point.x, placement.point.y),
+    );
+    statements.insert("pos-x-set".to_string(), placement.point.x_set.to_string());
+    statements.insert("pos-y-set".to_string(), placement.point.y_set.to_string());
+    statements.insert(
+        "pos-mode".to_string(),
+        match placement.mode {
+            PlacementMode::Start => "start",
+            PlacementMode::Pin => "pin",
+        }
+        .to_string(),
+    );
 
     if let Some(pin) = &placement.pin {
         statements.insert("pin".to_string(), pin.clone());
@@ -1541,6 +1643,8 @@ fn node_view_to_output(vertex: ArchivedDotVertexView<'_>) -> TypstDotNode {
             .map(|value| value.as_str().to_string()),
         data: vertex.data.payload.as_ref().map(|value| value.to_vec()),
         pos: parse_point(&raw_statements, "pos"),
+        pos_x_set: parse_bool_statement(&raw_statements, "pos-x-set").unwrap_or(false),
+        pos_y_set: parse_bool_statement(&raw_statements, "pos-y-set").unwrap_or(false),
         shift: parse_point(&raw_statements, "shift"),
         statements: public_statements(raw_statements),
     }
@@ -1571,6 +1675,8 @@ fn edge_view_to_output(
         source: endpoints.source.map(endpoint_to_output),
         sink: endpoints.sink.map(endpoint_to_output),
         pos: parse_point(&raw_statements, "pos"),
+        pos_x_set: parse_bool_statement(&raw_statements, "pos-x-set").unwrap_or(false),
+        pos_y_set: parse_bool_statement(&raw_statements, "pos-y-set").unwrap_or(false),
         shift: parse_point(&raw_statements, "shift"),
         label_pos: parse_point(&raw_statements, "label-pos"),
         label_angle: parse_rad(&raw_statements, "label-angle"),

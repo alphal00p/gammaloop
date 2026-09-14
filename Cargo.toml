@@ -13,6 +13,7 @@ alphal00p-docs-schema = { path = "crates/alphal00p-docs-schema/" }
 bincode = "2.0.1"
 bincode-trait-derive = "0.1.1"
 chrono = "0.4.44"
+clinnet = { path = "crates/clinnet/", default-features = false }
 clap = "4.6.1"
 color-eyre = { version = "0.6.5", default-features = false, features = ["capture-spantrace", "track-caller"] }
 colored = "3.1.1"

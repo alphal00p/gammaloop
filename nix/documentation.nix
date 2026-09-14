@@ -29,6 +29,14 @@ let
     ]
   );
 
+  linnetPython = docsPkgs.python313.withPackages (
+    pythonPackages:
+    assert lib.assertMsg (
+      pythonPackages.typst.version == "0.15.0"
+    ) "the Linnet Python renderer requires typst-py 0.15.0";
+    [ pythonPackages.typst ]
+  );
+
   docsFontPath = "${docsPkgs.roboto}/share/fonts/truetype";
 
   repositoryDocumentationSources = lib.fileset.fileFilter (
@@ -102,8 +110,12 @@ let
         (workspaceRoot + "/tests/resources/graphs/epemttbar.dot")
         (workspaceRoot + "/pyproject.toml")
         (workspaceRoot + "/crates/linnet-py/pyproject.toml")
+        (workspaceRoot + "/crates/linnet-py/uv.lock")
         (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
+        (workspaceRoot + "/crates/linnet-py/examples/physics_render_settings.py")
+        (workspaceRoot + "/crates/linnet-py/examples/rendering_api.py")
         (workspaceRoot + "/crates/linnet-py/tests/test_basic.py")
+        (workspaceRoot + "/crates/linnet-py/tests/test_wasm.py")
       ]
     );
   };
@@ -188,7 +200,7 @@ let
         cargoWithProfile test --locked --no-run -p alphal00p-docs-examples
         cargo clean --profile ${docsCargoProfile} -p alphal00p-docs-examples
         cargoWithProfile build --locked -p alphal00p-docs-builder
-        cargoWithProfile build --locked -p linnet-py --features extension-module,abi3-py310
+        cargoWithProfile build --locked -p linnet-py --lib --features extension-module,abi3-py310
         ${documentationRustdocBuildCommands}
         cargoWithProfile build --locked -p alphal00p-docs-catalogs \
           --features ${lib.escapeShellArg documentationCatalogFeatures} \
@@ -301,15 +313,24 @@ let
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
     linnet_python="$TMPDIR/alphal00p-docs-linnet-python"
     export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
-    uv venv "$linnet_python" --python "$PYO3_PYTHON"
-    VIRTUAL_ENV="$linnet_python" maturin develop \
-      --uv \
+    export UV_OFFLINE=true
+    uv venv "$linnet_python" --python "${linnetPython}/bin/python3" --system-site-packages
+    linnet_wheels="$TMPDIR/alphal00p-docs-linnet-wheels"
+    maturin build \
       --offline \
       --locked \
       --profile ${docsCargoProfile} \
+      --interpreter "$linnet_python/bin/python" \
+      --out "$linnet_wheels" \
       --manifest-path crates/linnet-py/Cargo.toml \
       --features extension-module,abi3-py310
-    "$linnet_python/bin/python" -m unittest crates/linnet-py/tests/test_basic.py
+    # Python imports the pinned Typst from Nix; uv does not discover those
+    # inherited packages when resolving dependencies.
+    uv pip install --offline --no-deps --python "$linnet_python/bin/python" \
+      "$linnet_wheels"/linnet_py-*.whl
+    "$linnet_python/bin/python" -m unittest \
+      crates/linnet-py/tests/test_basic.py \
+      crates/linnet-py/tests/test_wasm.py
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
     svg_assets="$TMPDIR/alphal00p-svg-assets"
     bash scripts/render-docs-svg-assets.sh "$svg_assets"
@@ -525,7 +546,7 @@ let
         grep -Fq 'class="alphal00p-rustdoc-bar"' \
           "$out/products/gammaloop/latest/reference/rust/src/gammalooprs/lib.rs.html"
         test -s "$out/products/linnet/latest/reference/typst/index.html"
-        for typst_page in graph layout drawing physics subgraph; do
+        for typst_page in graph layout drawing templates subgraph; do
           test -s \
             "$out/products/linnet/latest/reference/typst/$typst_page/index.html"
         done
@@ -573,6 +594,7 @@ in
   inherit
     docsTypst
     docsFontPath
+    linnetPython
     documentationDeveloperScopeSources
     alphal00pDocsCargoArtifacts
     alphal00pDocsPages

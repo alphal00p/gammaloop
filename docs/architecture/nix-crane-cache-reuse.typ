@@ -1462,6 +1462,24 @@ change the reusable Cargo artifact. Checks whose Rust source is
 generated from the manuals remain in the terminal Pages derivation so
 they still validate the content being published.
 
+The terminal documentation derivation tests `linnet-py` in a virtual
+environment based on a Nix-composed Python that includes `typst-py`
+0.15.0. System site packages keep that wheel dependency available to
+the offline installer. `linnet-py` embeds its pinned CeTZ and oxifmt
+package trees and passes the staged copy to its in-process compiler, so
+its graph renderer never requires a network fetch or the documentation
+package cache. The terminal Python environment uses the same pinned docs
+package set to satisfy `linnet-py`'s exact `typst==0.15.0` dependency. Both
+Cargo and uv dependency resolution run offline; a mismatched Python package
+must fail locally instead of attempting a download inside the Nix sandbox.
+The broader documentation renderer still receives the package tree from
+`docsTypst` for MiTeX and other authored assets. These
+embedded package trees are compile-time `RustEmbed` inputs, so they
+intentionally enter the source key for `linnet-py` and aggregate Cargo
+producers that compile it. The package-specific source map keeps them out
+of unrelated per-crate producers, while downloaded Python wheels remain
+confined to the terminal documentation/runtime closure.
+
 == Follow-up: persistent Typst worlds in the live watcher
 <follow-up-persistent-typst-worlds>
 The release and Pages builders still use the pinned Typst 0.15 command-line
@@ -1703,9 +1721,13 @@ fixtures are therefore embedded in the docs-example test binary with
 as `trybuild` deliberately launch Cargo again; the archive runner gives
 those nested invocations an offline `CARGO_HOME` containing the same
 vendored Cargo configuration used to compile the archive. The docs-builder
-tests additionally consume the authored `docs/` tree, transitive Typst and
-graph inputs, checked-in changelogs, and the verified `flake.nix` scope at
-runtime, so the docs group carries those files in its remapped source. Its
+tests additionally consume the authored `docs/` tree, linked Python
+notebook sources, transitive Typst and graph inputs, checked-in changelogs,
+and the verified `flake.nix` scope at runtime, so the docs group carries those
+files in its remapped source. Latest and snapshot rendering also receive
+linked notebook sources so source-link validation sees the same repository
+inputs. Clinnet's embedded Typst test fixtures belong to the compile-time
+source set; those inputs remain present in the remapped runtime source. Its
 runner also provides the pinned Typst CLI, Git for provenance hashes, and
 Python for syntax-checking generated examples. The filtered test source has no
 `.git` directory, so the runner supplies stable, explicitly non-publishing
