@@ -1145,6 +1145,7 @@ impl Integral {
                     short_expression_pattern,
                     Some(&apply_restriction_to_symbols(
                         (1..=self.n_props)
+                            .filter(|i_prop| self.graph.edges.contains_key(i_prop))
                             .map(|i_prop| vk_symbol!(format!("pow{}_", i_prop)))
                             .collect(),
                         &symbol_or_number(),
@@ -5077,7 +5078,7 @@ Evaluated (n_loops=1, mu_r=1) :
                     );
                 processed = processed
                     .replace(vk_parse!("vec1(vec_,idx_)").unwrap().to_pattern())
-                    .when(Condition::from((vk_symbol!("v1_"), symbol_condition())))
+                    .when(Condition::from((vk_symbol!("vec_"), symbol_condition())))
                     .with(vk_parse!("vec_(idx_)").unwrap().to_pattern());
 
                 // Undo the temporary float marker wrapping the rationalized coefficients and map them back to floats

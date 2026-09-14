@@ -493,7 +493,9 @@ review_triggers = ["crates/vakint/src/**", "crates/vakint/templates/**", "crates
 path = "crates/vakint/src/lib.rs"
 symbol = "vakint::Vakint"
 anchor = "pub struct Vakint {"
-digest = "754171cea0bd0c11a4bf78fa6e62e96ec4fe2843"
+# Reviewed 2026-09-14: bind matcher conditions only to present wildcards;
+# topology ownership and the documented FORM conversion contracts are unchanged.
+digest = "5df5fcad822bcec0ab9e7cd494d32415b4480d94"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
