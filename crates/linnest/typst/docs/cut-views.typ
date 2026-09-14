@@ -23,8 +23,12 @@ external momenta and $k$ visible, including on the through-gluon. Page 3 sets
 this flag in `default-edge-data` instead. Visibility is ordinary edge data,
 not inferred by the renderer from topology or momentum text; the physical
 momentum values are retained even when their drawing layers are hidden.
-Each document sets its own page dimensions and font size. From the repository
-root, compile a document directly to its corresponding PDF, for example:
+Each document sets its own page dimensions. The shared `math-font-size` sets
+surrounding equations to 8pt, while `diagram` scopes its measurement and drawing
+to `diagram-style.font-size` (6pt), including momentum labels. Ordinary text,
+arrow sizes, and graph units are unaffected by the equation font size.
+From the repository root, compile a document directly to its corresponding
+PDF, for example:
 
 ```sh
 typst compile --root . crates/linnest/typst/examples/xbox-page-1.typ

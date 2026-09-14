@@ -2,6 +2,7 @@
 
 #set page(height: auto, width: auto, margin: 2mm)
 #set text(size: diagram-style.font-size)
+#show math.equation: set text(size: math-font-size)
 
 #let p1-left = (pos: pos(x: in-x, y: top), group: "p1", side: "left")
 #let p1-right = (pos: pos(x: out-x, y: top), group: "p1", side: "right")
@@ -12,7 +13,7 @@
 
 #let direct = {
   let g = graph.build(
-    default-edge-data: edge-data + (spring-length: .3),
+    default-edge-data: edge-data + (spring-length: .1),
     vertices,
     {
       edge(<D1.1>, sink(<a>), momentum: [$p_1$], ..p1-left)
@@ -47,14 +48,14 @@
     // ,compact
   )
   graph.map(g, edge: (
-    "D1.1": mom(side: "right", label: (gap: .01)),
+    "D1.1": mom(side: "left", label: (gap: .1)),
     D2: (show-momentum: false),
-    "D3.1": mom(side: "left", shift: -.4, label: (shift: -.7, gap: .01)),
+    "D3.1": mom(side: "left", label: (shift: -1.7, gap: .01, anchor: "east")),
     D4: (show-momentum: false),
-    "D3.2": mom(side: "left", label: (gap: .2, shift: .4)),
+    "D3.2": mom(side: "left", label: (gap: .2, shift: .6, anchor: "west")),
     D5: (show-momentum: false),
     "D1.2": mom(side: "left", label: (gap: .1)),
-    "D6.1": mom(side: "right", label: (gap: .1)),
+    "D6.1": mom(side: "left", label: (gap: .1)),
     "D6.2": mom(side: "left", label: (gap: .2)),
   ))
 }
@@ -83,14 +84,14 @@
     edge: (
       "D1.1": mom(side: "left", length: .8, label: (
         shift: 1,
-        gap: .01,
-        anchor: "south",
+        gap: .1,
+       
       )),
       D2: (show-momentum: false),
       "D3.1": (spring-length: 1.5, crossing-under: <D6.2>, crossing-gap: .7)
         + mom(side: "right", length: .8, label: (gap: .1)),
       D4: (spring-length: 1.5, show-momentum: false),
-      "D3.2": (spring-length: 1.5, crossing-under: <D6.1>, crossing-gap: .7),
+      "D3.2": (spring-length: 1.5, crossing-under: <D6.1>, crossing-gap: .7) + mom(side: "right", length: .8, label: (gap: .1)),
       D5: (show-momentum: false),
       "D1.2": mom(side: "left", shift: 1, length: .8, label: (
         shift: 2,
@@ -100,7 +101,7 @@
       "D6.1": (bend: .44, spring-length: 2.5)
         + mom(side: "left", shift: 2, length: .8, label: (gap: .2)),
       "D6.2": (bend: -.54, spring-length: 2.5)
-        + mom(side: "right", shift: -2, length: .8, label: (gap: .2)),
+        + mom(side: "left", shift: -2, length: .8, label: (gap: .2)),
     ),
   )
 }
@@ -109,6 +110,6 @@
   columns: 3,
   align: center + horizon,
   diagram(direct, options: routed-layout, cut-y: .5, cut-x: .3),
-  [#h(3mm) or #h(3mm)],
+  {h(3mm); text("or",size:10pt); h(3mm)},
   diagram(crossed, options: routed-layout, cut-y: .5, cut-x: .3),
 ))

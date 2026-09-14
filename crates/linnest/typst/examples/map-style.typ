@@ -39,8 +39,8 @@
   stroke: edge-stroke,
   pattern: "coil",
   pattern-amplitude: 0.15,
-  pattern-wavelength: 0.60,
-  pattern-coil-longitudinal-scale: 1.60,
+  pattern-wavelength: 0.45,
+  pattern-coil-longitudinal-scale:1.4,
 )
 #let scalar = (
   stroke: edge-stroke + (thickness: massive, dash: (0.1em, 0.45em)),
@@ -197,7 +197,7 @@
     .at("feynman", default: (:))
     .at(
       "node-style",
-      default: (radius: 0.18, fill: white, stroke: edge-stroke),
+      default: (radius: 0.14, fill: black, stroke: edge-stroke),
     )
 }
 
@@ -206,7 +206,7 @@
 #let graph-style(
   unit: 1.35,
   line-width: massless,
-  node-radius: 0.18,
+  node-radius: 0.08,
   node-line-width: auto,
   massive-line-width: auto,
   fermion-arrow-line-width: auto,
@@ -239,7 +239,7 @@
       feynman: (
         node-style: (
           radius: node-radius,
-          fill: white,
+          fill: black,
           stroke: stroke + (thickness: node-line-width),
         ),
         fermion: fermion,

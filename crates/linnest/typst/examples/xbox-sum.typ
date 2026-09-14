@@ -1,6 +1,7 @@
 #import "xbox-common.typ": *
 #set page(height: auto, width: 179mm, margin: 2mm)
 #set text(size: diagram-style.font-size)
+#show math.equation: set text(size: math-font-size)
 
 // The physical K4 is shared; only cuts and drawing patches vary between views.
 #let master = {
@@ -61,20 +62,20 @@
       d: (pos: pos(x: start(2), y: bot)),
     )
     let edges = (
-      D1: (show-momentum: false),
-      D2: (show-momentum: false),
+      D1: (spring-length: 1.3,show-momentum: false),
+      D2: (spring-length: 1.3,show-momentum: false),
       "D3.0": (spring-length: .3) + mom(label: (gap: .4)),
       "D3.1": (spring-length: .3, reverse: true)
         + mom(side: "left", label: (gap: .4)),
       "D4.0": (spring-length: .3) + mom(side: "right", label: (gap: .2)),
       "D4.1": (spring-length: .3) + mom(label: (gap: .2)),
       D5: (
-        spring-length: .2,
+        spring-length: 1.3,
         crossing-under: <D6>,
         crossing-gap: 0.9,
         // momentum-arrow-offset: 0.80,
       ),
-      D6: (spring-length: .2) + mom(side: "left", shift: 1.5, label: (gap: .2)),
+      D6: (spring-length: 1.3) + mom(side: "left", shift: 1.5, label: (gap: .2)),
     )
     graph.map(g, node: nodes, edge: edges)
   }
@@ -98,23 +99,23 @@
       "compact-bottom": (pos: pos(x: pin(0), y: bot)),
     )
     let edges = (
-      compact: (spring-length: 0.25),
-      "D1.0": mom(side: "right", label: (gap: .15, shift: 1.5)),
-      "D1.1": (spring-length: .3) + mom(side: "right", length: 1.,label: (gap: .15, shift: -1.5)),
-      D2: (spring-length: .3, show-momentum: false),
-      D3: (spring-length: .3, show-momentum: false),
+      compact: (spring-length: 0.3),
+      "D1.0": (spring-length: 1.3)+mom(side: "right", label: (gap: .15, shift: -1.5)),
+      "D1.1": (spring-length: 2) + mom(side: "right", label: (gap: .01, shift: -1.5, anchor: "south-east")),
+      D2: (spring-length: .6, show-momentum: false),
+      D3: (spring-length: .6, show-momentum: false),
       "D4.0": (
-        spring-length: .3,
+        spring-length: 2.,
         bend: -0.18,
         crossing-under: <D6.0>,
         crossing-gap: 0.9,
-        // fermion-arrow-shift: 1.15,
+        fermion-arrow-shift: -.7,
       )
-        + mom(side: "right", length: 1., shift: 0.3, label: (gap: .15, shift: 1.5)),
-      "D4.1": (spring-length: .3) + mom(side: "right", shift: -1., label: (gap: .1)),
+        + mom(side: "right", shift: .7, label: (gap: .015, shift: .9)),
+      "D4.1": (spring-length: 0.1) + mom(side: "right", shift: -.5, label: (gap: .01)),
       D5: (spring-length: .5),
-      "D6.0": (spring-length: .5, bend: -1.55) + mom(side: "right", shift:-.4,label: (gap: .1)),
-      "D6.1": mom(side: "right", length: 1., shift: -.2, label: (gap: .15, shift: .5)),
+      "D6.0": (spring-length: 1.5, bend: -1.55) + mom(side: "right", shift:-.2,label: (gap: .1)),
+      "D6.1": (spring-length: 1.4) + mom(side: "right", shift: -.2, label: (gap: .05, shift: .2)),
     )
     let g = graph.map(g, edge: flatten-boundary)
     graph.map(g, node: nodes, edge: edges)
@@ -134,21 +135,21 @@
     )
     let nodes = (c: (pos: pos(y: start(-4))), d: (pos: pos(y: start(0))))
     let edges = (
-      compact: (spring-length: 0.01),
-      D1: (show-momentum: false),
-      "D2.0": mom(side: "left", length: 1., shift: .4, label: (gap: .1)),
-      "D2.1": mom(side: "left", length: .7, shift: .3, label: (
+      compact: (spring-length: 1.7),
+      D1: (spring-length: 1)+(show-momentum: false),
+      "D2.0": (spring-length: 1.2)+mom(side: "left",  shift: .3, label: (gap: .1)),
+      "D2.1": (spring-length: 1)+mom(side: "left",  shift: .3, label: (
         gap: 0.01,
       )),
-      "D3.0": (spring-length: .2)
+      "D3.0": (spring-length: 1.2)
         + mom(shift: .6, ),
-      "D3.1": (crossing-under: <D6.1>, crossing-gap: 0.7)
-        + mom(side: "left", length: 1.2, shift: -.6, label: (gap: .2)),
+      "D3.1": (spring-length: 1.2,crossing-under: <D6.1>, crossing-gap: 0.7, fermion-arrow-shift: -.3)
+        + mom(side: "left", shift: -.5, label: (gap: .2,shift:-.7)),
       D4: (spring-length: .1, show-momentum: false),
-      D5: (spring-length: .5),
-      "D6.0": (spring-length: .3, bend: -0.55)
-        + mom(side: "left", length: 1.5, label: (gap: .2,shift:-0.3)),
-      "D6.1": (spring-length: .3)
+      D5: (spring-length: .1),
+      "D6.0": (spring-length: 1)
+        + mom(side: "left", label: (gap: .1)),
+      "D6.1": (spring-length: 1.5)
         + mom(side: "left", shift: .8, label: (gap: .2)),
     )
     let g = graph.map(g, edge: flatten-boundary)
@@ -169,34 +170,34 @@
       boundary: boundary-position,
     )
     let edges = (
-      compact: (spring-length: 1.8),
-      "D1.0": mom(side: "left", length: .8, label: (
+      compact: (spring-length: 4),
+      "D1.0": (spring-length: 1.4)+mom(side: "left", length: .8, label: (
         shift: 1,
         gap: .01,
         anchor: "east",
       )),
-      "D1.1": mom(side: "right", length: 1, shift: -.5, label: (
+      "D1.1": (spring-length: 1.6)+mom(side: "right", length: 1, shift: -.5, label: (
         shift: -3.2,
         gap: .01,
         anchor: "west",
       )),
-      "D2.0": mom(side: "left", shift: .4, label: (
+      "D2.0": (spring-length: 2.3)+mom(side: "left", shift: .4, label: (
         gap: .1,
         shift: 1.4,
         anchor: "east",
       )),
       "D2.1": mom(side: "left", label: (gap: .01, shift: -.8, anchor: "west")),
       D3: (
-        spring-length: 1.5,
+        spring-length: 1.,
         crossing-under: <D6.1>,
         crossing-gap: 0.8,
         fermion-arrow-shift: -0.5,
         show-momentum: false,
       ),
-      D4: (spring-length: .5, show-momentum: false),
-      D5: (crossing-under: <D6.1>, crossing-gap: 1.5, spring-length: .2),
+      D4: (spring-length: .4, show-momentum: false),
+      D5: (spring-length: .1),
       "D6.0": mom(side: "right", label: (gap: .2,anchor:"west")),
-      "D6.1": (spring-length: 2.)
+      "D6.1": (spring-length: 5)
         + mom(side: "left", shift:1,label: (shift: 1, gap: .1)),
       "D6.2": mom(side: "left", label: (gap: .1)),
     )
@@ -236,9 +237,9 @@
           cetz.draw.bezier(..points, stroke: initial-cut-styles.at(style))
         }
       }
-    })+#h(-1mm)
-    #diagram(xbox-opened, cut-x: 1, cut-y: 1, initial-cut: 1)#h(-1mm)+
-    #diagram(xbox-opened2, cut-x: -0.5, cut-y: 1, initial-cut: 2)+
-    #diagram(xbox-cut, cut-y: 0.5, initial-cut: 3) = op("disc")_(p_1^2) op("disc")_(p_2^2) integral (dif^d k)/(2 pi)^d (N^(q overline(q))_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
+    })+
+    #diagram(xbox-opened, cut-x: -.4, cut-y: 1, initial-cut: 1)+
+    #diagram(xbox-opened2, cut-x: -1.5, cut-y: 1, initial-cut: 2)+
+    #diagram(xbox-cut, cut-y: 0.5,cut-x:-0.3, initial-cut: 3) = op("disc")_(p_1^2) op("disc")_(p_2^2) integral (dif^d k)/(2 pi)^d (N^(q overline(q))_times.square delta^+_(q^2)(p_(12)-k) delta^+_0(k))/(p_1^2 p_2^2 (k-p_2)^2 (k-p_1)^2)
   $
 }

@@ -2,6 +2,7 @@
 
 #set page(height: auto, width: auto, margin: 2mm)
 #set text(size: diagram-style.font-size)
+#show math.equation: set text(size: math-font-size)
 
 #let soft-layout = layouts.options(base: routed-layout, spring: (length: .12))
 #let edge-data = (particle: "d", spring-length: .3, show-momentum: false)

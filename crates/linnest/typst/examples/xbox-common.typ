@@ -4,6 +4,8 @@
 #import feynman: momentum as mom
 #import "@preview/cetz:0.5.1" as cetz
 
+#let math-font-size = 10pt
+
 // Native font and stroke sizes are independent of the graph coordinate unit.
 #let graph-style = feynman.graph-style(unit: 2.6mm, line-width: 0.5pt)
 #let diagram-style = (
@@ -27,14 +29,14 @@
 ).map(style => (thickness: 1pt) + style)
 
 #let base-layout = layouts.options(
-  spring: (strength: 18, length: 0.15),
+  spring: (strength: 28, length: 0.15),
   repulsion: (
     strength: 12,
     centering: 0.005,
     edge-node: .29,
     edge-edge: .1,
     dangling: 14.75,
-    dangling-centroid: 50,
+    dangling-centroid: 80,
   ),
   constraints: (side-strength: 10),
   labels: (steps: 100, distance: 0.9, spring: 12, repulsion: 8),
@@ -49,7 +51,7 @@
   ),
 )
 #let routed-layout = layouts.options(
-  spring: (strength: 40, length: 0.2),
+  spring: (strength: 40, length: 0.12),
   repulsion: (
     strength: 10,
     centering: 0.005,
@@ -88,8 +90,10 @@
   cut-y: auto,
   initial-cut: none,
   draw-after: none,
-) = context {
-  draw(
+) = {
+  set text(size: diagram-style.font-size)
+  show math.equation: set text(size: diagram-style.font-size)
+  context draw(
     layout(graph.style(g, ..graph-style), ..options),
     ..feynman.draw-style,
     padding: diagram-style.padding,
@@ -165,9 +169,10 @@
         height: bounds.height + 2 * y,
       )
       cetz.draw.line((x, bounds.top), (x, bounds.bottom), stroke: (
-        paint: red,
+        paint: red.transparentize(50%),
         thickness: diagram-style.cut-line-width,
-        dash: "dashed",
+        cap:"round"
+        // dash: "dashed",
       ))
       if initial-cut != none and draw-initials {
         for side in ("left", "right") {
