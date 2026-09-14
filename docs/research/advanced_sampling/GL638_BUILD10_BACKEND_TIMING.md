@@ -111,6 +111,14 @@ an absolute difference 7.34910e-40. These misses remain explicitly recorded; the
 real component separately. The 600 GeV physics controls use componentwise
 stability and provide separate evidence.
 
+A subsequent 600 GeV, nine-channel componentwise control run also passed all
+11 retained Samples with O3. Complete real and absolute-real estimators, and
+precision/accuracy histories, matched O2 exactly in serialized output (nine
+Double and two Quad evaluations). This panel used no absolute comparison floor
+and did not integrate. Its independent audit is
+`/tmp/gl638-final-physics-screen/component-controls-o2-o3-build10-independent-audit.json`,
+SHA256 `0f762ddd0d7c450917dca77b9614e072ecd9bf0607c051f2d8761ca23e026e89`.
+
 ## Evidence
 
 - Analyzer: `/tmp/gl638-symjit-next/timing-analysis-build10-three-arm/analysis.json`.
