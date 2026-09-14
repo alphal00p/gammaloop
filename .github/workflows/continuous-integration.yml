@@ -84,10 +84,16 @@ jobs:
           ref: 32ae00483b4845161401afac8be755cc336cb2bb
           path: tymbolica-pinned
 
-      - name: Install Wasm build tools
+      - name: Install Binaryen 130
         run: |
-          sudo apt-get update
-          sudo apt-get install -y binaryen
+          binaryen_dir="$RUNNER_TEMP/binaryen"
+          mkdir -p "$binaryen_dir"
+          curl --fail --location --retry 3 \
+            https://github.com/WebAssembly/binaryen/releases/download/version_130/binaryen-version_130-x86_64-linux.tar.gz \
+            --output "$binaryen_dir/archive.tar.gz"
+          echo "0a18362361ad05465118cd8eeb72edaeec89de6894bc283576ef4e07aa3babcc  $binaryen_dir/archive.tar.gz" | sha256sum --check
+          tar -xzf "$binaryen_dir/archive.tar.gz" -C "$binaryen_dir" --strip-components=1
+          echo "$binaryen_dir/bin" >> "$GITHUB_PATH"
 
       - uses: taiki-e/install-action@v2
         with:
