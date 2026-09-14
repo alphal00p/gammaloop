@@ -872,8 +872,12 @@ pub struct SamplingMapComposition<T: FloatLike = f64> {
 /// absolute determinant, so the product Jacobian is unchanged. A conditional
 /// frame transform first prepares the actual preceding outputs, then converts
 /// the active physical output back to raw coordinates with its exact determinant.
-pub type SamplingMapContextTransform<T> =
-    Arc<dyn Fn(&[T]) -> Result<(Vec<T>, SamplingMapAffine<T>)> + Send + Sync + 'static>;
+pub type SamplingMapContextTransform<T> = Arc<
+    dyn Fn(&mut SamplingMapContext<'_, T>) -> Result<(Vec<T>, SamplingMapAffine<T>)>
+        + Send
+        + Sync
+        + 'static,
+>;
 
 #[derive(Clone)]
 pub struct SamplingMapEmbedding<T: FloatLike = f64> {
@@ -939,11 +943,14 @@ impl<T: FloatLike> SamplingMapEmbedding<T> {
         self
     }
 
-    fn transformed_context(&self, context: &[T]) -> Result<Option<(Vec<T>, SamplingMapAffine<T>)>> {
+    fn transformed_context(
+        &self,
+        context: &mut SamplingMapContext<'_, T>,
+    ) -> Result<Option<(Vec<T>, SamplingMapAffine<T>)>> {
         self.context_transform
             .as_ref()
             .map(|transform| {
-                if context.iter().any(|value| !value.is_finite()) {
+                if context.previous.iter().any(|value| !value.is_finite()) {
                     return Err(eyre!(
                         "conditional frame needs finite raw prerequisite coordinates"
                     ));
@@ -1023,7 +1030,7 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapEmbedding<T> {
         coordinates: &[T],
         context: &mut SamplingMapContext<'_, T>,
     ) -> Result<SamplingMapEvaluation<T>> {
-        let prepared = self.transformed_context(context.previous)?;
+        let prepared = self.transformed_context(context)?;
         let previous = prepared
             .as_ref()
             .map_or(context.previous, |(physical, _)| physical);
@@ -1061,7 +1068,7 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapEmbedding<T> {
             ));
         }
         let raw = self.unembed_point(point);
-        let prepared = self.transformed_context(context.previous)?;
+        let prepared = self.transformed_context(context)?;
         let transformed = prepared
             .as_ref()
             .map(|(_, frame)| frame.inverse(&raw, &[]))
@@ -3676,7 +3683,8 @@ mod tests {
             let calls = Arc::new(AtomicUsize::new(0));
             let transform: SamplingMapContextTransform<T> = Arc::new({
                 let calls = calls.clone();
-                move |prior: &[T]| {
+                move |context: &mut SamplingMapContext<'_, T>| {
+                    let prior = context.previous;
                     calls.fetch_add(1, Ordering::Relaxed);
                     if prior.len() != 3 {
                         return Err(eyre!("missing prior block"));
@@ -3740,7 +3748,7 @@ mod tests {
                     &mut SamplingMapContext::detached(&foreign_prior),
                 )?
                 .expect("full-support inverse");
-            let (fixed, frame) = transform(&foreign_prior)?;
+            let (fixed, frame) = transform(&mut SamplingMapContext::detached(&foreign_prior))?;
             let pullback = frame.inverse(&mapped.point[3..], &[])?;
             let expected = physical.inverse_with_context(&pullback.coordinates, &fixed)?;
             assert!(

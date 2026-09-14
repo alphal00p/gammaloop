@@ -66,7 +66,7 @@ use crate::{
     settings::runtime::{SamplingChannelWeight, SamplingSettings},
 };
 use color_eyre::Result;
-use sampling_context::SamplingProposalPolicies;
+use sampling_context::PreparedLUHost;
 use sampling_selection::SamplingChannelPrograms;
 
 pub mod evaluators;
@@ -2865,14 +2865,14 @@ pub trait ProcessIntegrandImpl {
     /// ```rust,ignore
     /// // When you change external momenta in your sampling
     /// integrand.signal_external_momenta_changed();
-    /// let new_sample = parameterize(&sample_point, &mut integrand, &mut first_draw_policies)?;
+    /// let new_sample = parameterize(&sample_point, &mut integrand, &mut first_draw_metadata)?;
     ///
     /// // Rotations will automatically get new cache IDs
     /// let rotated_samples = evaluate_all_rotations(&new_sample, &mut integrand, true)?;
     ///
     /// // Next iteration - revert to base configuration to reuse cache
     /// integrand.revert_to_base_external_cache_id();
-    /// let next_sample = parameterize(&next_sample_point, &mut integrand, &mut next_draw_policies)?;
+    /// let next_sample = parameterize(&next_sample_point, &mut integrand, &mut next_draw_metadata)?;
     /// ```
     fn signal_external_momenta_changed(&mut self) {
         self.increment_external_cache_id(1);
@@ -3160,7 +3160,7 @@ pub trait GraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
-        context: GraphTermEvaluationContext<'_, '_>,
+        context: GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<GraphEvaluationResult<T>>;
 
     fn name(&self) -> String;
@@ -3310,7 +3310,7 @@ struct EvaluationContext<'a, 'm> {
     record_primary_timing: bool,
 }
 
-pub struct GraphTermEvaluationContext<'a, 'm> {
+pub struct GraphTermEvaluationContext<'a, 'm, T: FloatLike> {
     pub model: &'a Model,
     pub settings: &'a RuntimeSettings,
     pub event_processing_runtime: Option<&'m mut EventProcessingRuntime>,
@@ -3320,6 +3320,8 @@ pub struct GraphTermEvaluationContext<'a, 'm> {
     /// The canonical channel which mapped this point into the parent frame.
     /// Its sampling partition is applied outside the physical graph evaluation.
     pub sampling_channel: Option<SamplingChannelId>,
+    pub graph_id: usize,
+    pub(crate) prepared_lu_hosts: &'m [PreparedLUHost<T>],
 }
 
 /// Evaluate one graph term using the canonical sampling channel contract.
@@ -3328,7 +3330,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     graph_id: usize,
     sample: &MomentumSample<T>,
     context: &mut EvaluationContext<'_, '_>,
-    sampling_channel: Option<SamplingChannelId>,
+    sampling_channel: Option<(SamplingChannelId, &[PreparedLUHost<T>])>,
     lmb_basis_id: Option<LmbIndex>,
 ) -> Result<GraphEvaluationResult<T>> {
     if context
@@ -3340,7 +3342,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
         // final physical/reference body must not influence a proposal law.
         return Ok(GraphEvaluationResult::zero(sample.zero()));
     }
-    if let Some(channel_id) = sampling_channel {
+    if let Some((channel_id, _)) = sampling_channel {
         let graph = integrand.get_graph(graph_id);
         graph
             .sampling_setup()
@@ -3356,7 +3358,8 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
             })?;
         // A successfully bound triangular map owns the cut/side prerequisites
         // used to produce this parent-frame point. Readiness is its compiled
-        // contract, not an additional fully sampled LU handoff.
+        // contract; its initial native host records accompany this point for
+        // independent physical adoption.
     }
     // Default sampling starts in a selected LMB. Both targets must see the
     // same graph-parent point, after the existing affine reinterpretation.
@@ -3378,6 +3381,8 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     };
     // Every actual target call counts, including failed attempts and probe
     // rotations. Evaluator subset diagnostics retain their primary-call flag.
+    // Host adoption is sampling work even though it runs inside this body.
+    let sampling_before = context.evaluation_metadata.parameterization_time;
     let started = Instant::now();
     let result = (|| -> Result<GraphEvaluationResult<T>> {
         let model = match context.target {
@@ -3425,7 +3430,9 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
                 rotation: context.rotation,
                 evaluation_metadata: context.evaluation_metadata,
                 record_primary_timing: context.record_primary_timing,
-                sampling_channel,
+                sampling_channel: sampling_channel.map(|(channel_id, _)| channel_id),
+                graph_id,
+                prepared_lu_hosts: sampling_channel.map_or(&[], |(_, hosts)| hosts),
             };
             integrand
                 .get_graph_mut(graph_id)
@@ -3442,7 +3449,9 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
         }
         Ok(result)
     })();
-    context.evaluation_metadata.integrand_evaluation_time += started.elapsed();
+    let nested_sampling = context.evaluation_metadata.parameterization_time - sampling_before;
+    context.evaluation_metadata.integrand_evaluation_time +=
+        started.elapsed().saturating_sub(nested_sampling);
     result
 }
 
@@ -3485,6 +3494,22 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
     zero: &F<T>,
 ) -> Result<GraphEvaluationResult<T>> {
     let group = integrand.get_group(group_id).into_iter().collect_vec();
+    let master_graph_id = integrand.get_group(group_id).master();
+    if let DiscreteGraphSample::SamplingChannel {
+        channel_id,
+        prepared_lu_hosts,
+        ..
+    } = sample
+        && prepared_lu_hosts.iter().any(|host| {
+            host.source.graph_id != master_graph_id
+                || host.source.generating_channel != *channel_id
+                || host.source.target_channel != *channel_id
+        })
+    {
+        return Err(eyre!(
+            "selected LU host records do not belong to graph-group master {master_graph_id} and generating channel {channel_id:?}"
+        ));
+    }
 
     let mut result = GraphEvaluationResult::zero(zero.clone());
     let mut grouped_events = crate::observables::GenericEventGroup::default();
@@ -3503,14 +3528,22 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                 channel_id,
                 sampling_coordinates: _,
                 partition_weight,
+                prepared_lu_hosts,
                 sample,
             } => {
+                // A selected group is mapped by its master. Other group members
+                // have their own physical cuts and cannot adopt the master's ray.
+                let hosts = if graph_id == master_graph_id {
+                    prepared_lu_hosts.as_slice()
+                } else {
+                    &[]
+                };
                 let mut result = evaluate_graph_term(
                     integrand,
                     graph_id,
                     sample,
                     context,
-                    Some(*channel_id),
+                    Some((*channel_id, hosts)),
                     None,
                 )?;
                 if let Some(weight) = partition_weight {
@@ -3556,7 +3589,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                                 bridge.channels().len(),
                                 graph_id,
                                 channel_id,
-                                &mut context.evaluation_metadata.sampling_proposal_policies,
+                                context.evaluation_metadata,
                             );
                             let mapped = bridge.forward_with_runtime_contexts(
                                 channel_id,
@@ -3584,12 +3617,12 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                                     sample.sample.loop_mom_cache_id,
                                     sample.sample.external_mom_cache_id,
                                 );
-                            Ok(Some((factor, mapped_sample)))
+                            Ok(Some((factor, mapped_sample, mapped.prepared_lu_hosts)))
                         })();
                         if !collecting {
                             context.evaluation_metadata.parameterization_time += started.elapsed();
                         }
-                        let Some((factor, mapped_sample)) = prepared? else {
+                        let Some((factor, mapped_sample, prepared_lu_hosts)) = prepared? else {
                             return Ok(sum);
                         };
                         let mut result = evaluate_graph_term(
@@ -3597,7 +3630,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                             graph_id,
                             &mapped_sample,
                             context,
-                            Some(channel_id),
+                            Some((channel_id, &prepared_lu_hosts)),
                             None,
                         )?;
                         result.apply_sampling_factor(factor);
@@ -4356,17 +4389,13 @@ impl<'a> EvaluationSource<'a> {
         let result = (|| match self {
             EvaluationSource::XSpace(sample) => {
                 integrand.prepare_sampling_precision::<T>()?;
-                parameterize::<T, I>(sample, integrand, &mut metadata.sampling_proposal_policies)
+                parameterize::<T, I>(sample, integrand, metadata)
             }
             EvaluationSource::Momentum(input) => {
                 if input.channel_id.is_some() {
                     integrand.prepare_sampling_precision::<T>()?;
                 }
-                build_direct_gamma_sample::<T, I>(
-                    integrand,
-                    input,
-                    &mut metadata.sampling_proposal_policies,
-                )
+                build_direct_gamma_sample::<T, I>(integrand, input, metadata)
             }
         })();
         // The canonical phase has one inclusive timer. All other source builds,
@@ -4385,11 +4414,10 @@ impl<'a> EvaluationSource<'a> {
         match self {
             EvaluationSource::XSpace(sample) => {
                 let started = Instant::now();
-                let sample = parameterize::<f64, I>(
-                    sample,
-                    integrand,
-                    &mut metadata.sampling_proposal_policies,
-                );
+                // Norm-only remapping cannot advance physical root occurrences.
+                let history = std::mem::take(&mut metadata.radial_root_diagnostics);
+                let sample = parameterize::<f64, I>(sample, integrand, metadata);
+                metadata.radial_root_diagnostics = history;
                 metadata.parameterization_time += started.elapsed();
                 Ok(sum_loop_norms(
                     sample?.get_default_sample().loop_moms().0.iter(),
@@ -4404,7 +4432,12 @@ impl<'a> EvaluationSource<'a> {
         integrand: &mut I,
         metadata: &mut EvaluationMetaData,
     ) -> Result<GammaLoopSample<f64>> {
-        self.build_gamma_sample::<f64, I>(integrand, metadata)
+        // Debug remapping uses sealed laws but an isolated root history,
+        // including when construction fails before producing a sample.
+        let history = std::mem::take(&mut metadata.radial_root_diagnostics);
+        let sample = self.build_gamma_sample::<f64, I>(integrand, metadata);
+        metadata.radial_root_diagnostics = history;
+        sample
     }
 }
 
@@ -4415,7 +4448,7 @@ fn sum_loop_norms<'a>(loop_momenta: impl Iterator<Item = &'a ThreeMomentum<F<f64
 fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     input: &MomentumSpaceEvaluationInput,
-    policies: &mut SamplingProposalPolicies,
+    metadata: &mut EvaluationMetaData,
 ) -> Result<GammaLoopSample<T>> {
     if integrand.uses_explicit_orientation_sum_only() && input.orientation.is_some() {
         return Err(eyre!(
@@ -4560,7 +4593,7 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                         bridge.channels().len(),
                         integrand.get_group(group_id).master(),
                         channel_id,
-                        policies,
+                        metadata,
                     );
                     let mapped = bridge.inverse_with_runtime_contexts(
                         channel_id,
@@ -4599,6 +4632,7 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                         channel_id,
                         sampling_coordinates: None,
                         partition_weight: Some(F(partition_weight)),
+                        prepared_lu_hosts: mapped.prepared_lu_hosts,
                         sample,
                     }
                 }
@@ -4674,6 +4708,7 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
     let mut evaluation_metadata = EvaluationMetaData::new_empty();
     if source.requires_proposal_policy(integrand)? {
         let preparation_start = Instant::now();
+        let root_history = std::mem::take(&mut evaluation_metadata.radial_root_diagnostics);
         evaluation_metadata
             .sampling_proposal_policies
             .begin_collection();
@@ -4698,6 +4733,9 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
             Ok(())
         })();
         evaluation_metadata.parameterization_time += preparation_start.elapsed();
+        // Canonical roots establish discrete policies only. Their observations
+        // cannot consume occurrences in a subsequent native stability lane.
+        evaluation_metadata.radial_root_diagnostics = root_history;
         preparation.wrap_err(
             "canonical sampling policy preparation failed at the fixed 1000-bit budget",
         )?;
@@ -5084,7 +5122,7 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{
         LmbMultiChannelingSetup, RuntimeCache, SamplingChannelCompileContext, SamplingChannelId,
         create_stability_iterator, filtered_orientation_count, resolve_sampling_channel_selection,
@@ -5121,6 +5159,267 @@ mod tests {
     };
     use std::sync::OnceLock;
     use typed_index_collections::TiVec;
+
+    /// Exercise source-private lifetime boundaries from the generated host fixture.
+    pub(crate) fn check_host_source_transport<I: super::ProcessIntegrandImpl>(
+        integrand: &mut I,
+        model: &crate::model::Model,
+        source: &symbolica::numerical_integration::Sample<F<f64>>,
+        graph_id: usize,
+        channel_id: SamplingChannelId,
+    ) -> color_eyre::Result<()> {
+        use super::{
+            EvaluationSource,
+            gammaloop_sample::{DiscreteGraphSample, GammaLoopSample, unwrap_sample},
+        };
+        use crate::{
+            integrands::evaluation::EvaluationMetaData,
+            momentum::{Rotatable, Rotation, RotationMethod},
+            utils::{QuadFloat, newton_solver::RadialRootDiagnostics},
+        };
+        use symbolica::numerical_integration::Sample;
+
+        let mut metadata = EvaluationMetaData::new_empty();
+        let original = EvaluationSource::XSpace(source)
+            .build_gamma_sample::<f64, _>(integrand, &mut metadata)?;
+        let GammaLoopSample::DiscreteGraph {
+            sample:
+                DiscreteGraphSample::SamplingChannel {
+                    prepared_lu_hosts, ..
+                },
+            ..
+        } = &original
+        else {
+            panic!("fixture must select a hosted channel")
+        };
+        assert!(!prepared_lu_hosts.is_empty());
+        for host in prepared_lu_hosts {
+            assert_eq!(host.source.graph_id, graph_id);
+            assert_eq!(host.source.generating_channel, channel_id);
+            assert_eq!(host.source.target_channel, channel_id);
+        }
+        let history = format!("{:?}", metadata.radial_root_diagnostics);
+        assert_ne!(history, format!("{:?}", RadialRootDiagnostics::default()));
+        let rotation = Rotation::new(RotationMethod::Pi2Z);
+        let rotated = original.rotate(&rotation, 17, 23);
+        let GammaLoopSample::DiscreteGraph {
+            sample:
+                DiscreteGraphSample::SamplingChannel {
+                    prepared_lu_hosts: retained,
+                    ..
+                },
+            ..
+        } = &rotated
+        else {
+            unreachable!()
+        };
+        assert_eq!(retained.len(), prepared_lu_hosts.len());
+        for (before, after) in prepared_lu_hosts.iter().zip(retained) {
+            assert_eq!(before.plan, after.plan);
+            assert_eq!(before.source, after.source);
+            assert_eq!(before.prior, after.prior);
+            assert_eq!(before.solution.solution, after.solution.solution);
+            assert_eq!(
+                before.solution.derivative_at_solution,
+                after.solution.derivative_at_solution
+            );
+            assert_eq!(
+                before.solution.error_of_function,
+                after.solution.error_of_function
+            );
+            assert_eq!(
+                before.solution.num_iterations_used,
+                after.solution.num_iterations_used
+            );
+            for t in [F(0.0), F(1.0), before.solution.solution] {
+                assert_eq!(before.ray.evaluate(&t), after.ray.evaluate(&t));
+            }
+        }
+        let original_momenta = original.get_default_sample().loop_moms();
+        let rotated_momenta = rotated.get_default_sample().loop_moms();
+        assert!(original_momenta.0.iter().any(|p| p != &p.rotate(&rotation)));
+        for (before, after) in original_momenta.0.iter().zip(&rotated_momenta.0) {
+            assert_eq!(*after, before.rotate(&rotation));
+        }
+        assert_eq!(rotated.get_default_sample().sample.loop_mom_cache_id, 17);
+
+        // Successful physical adoption must also respect a nonidentity probe.
+        // Keep the original source/host payload and compare the complete raised
+        // estimator and normal identity/probe event policy, without another
+        // generation or grid.
+        let mut baseline_metadata = metadata.clone();
+        let baseline = super::evaluate_single(
+            integrand,
+            super::EvaluationTarget::Physical(model),
+            &original,
+            &Rotation::new(RotationMethod::Identity),
+            &mut baseline_metadata,
+            false,
+        )?;
+        let mut rotated_metadata = metadata.clone();
+        let physical_rotated = super::evaluate_single(
+            integrand,
+            super::EvaluationTarget::Physical(model),
+            &rotated,
+            &rotation,
+            &mut rotated_metadata,
+            false,
+        )?;
+        for result in [&baseline, &physical_rotated] {
+            assert!(result.integrand_result.re.0.is_finite());
+            assert!(result.integrand_result.im.0.is_finite());
+            assert!(result.integrand_result.re.0.abs() + result.integrand_result.im.0.abs() > 0.0);
+        }
+        for (a, b) in [
+            (
+                baseline.integrand_result.re.0,
+                physical_rotated.integrand_result.re.0,
+            ),
+            (
+                baseline.integrand_result.im.0,
+                physical_rotated.integrand_result.im.0,
+            ),
+        ] {
+            assert!(
+                (a - b).abs() <= 1.0e-8 * a.abs().max(b.abs()).max(1.0e-25),
+                "rotated physical contribution {b} != {a}"
+            );
+        }
+        let baseline_events = baseline
+            .event_groups
+            .iter()
+            .flat_map(|group| group.iter())
+            .collect::<Vec<_>>();
+        assert!(!baseline_events.is_empty());
+        assert!(
+            baseline_events
+                .iter()
+                .all(|event| event.weight.re.0.is_finite() && event.weight.im.0.is_finite())
+        );
+        // prepare_buffered_event intentionally retains/counts identity events
+        // only; a rotated probe builds transient selector data when needed.
+        // The surrounding fixture compares identity selected/direct event weights.
+        assert!(physical_rotated.event_groups.is_empty());
+        assert_eq!(physical_rotated.generated_event_count, 0);
+        assert_eq!(physical_rotated.accepted_event_count, 0);
+
+        // A claimed selected record with another graph ID is corruption,
+        // not an ordinary graph-group member for which no authority is supplied.
+        let mut corrupted = original.clone();
+        let GammaLoopSample::DiscreteGraph {
+            sample:
+                DiscreteGraphSample::SamplingChannel {
+                    prepared_lu_hosts: claimed_hosts,
+                    ..
+                },
+            ..
+        } = &mut corrupted
+        else {
+            unreachable!()
+        };
+        claimed_hosts[0].source.graph_id = graph_id.wrapping_add(1);
+        let reference =
+            super::GaussianReferenceFunction::new(1.0, vec![0.0; 3 * original_momenta.0.len()])?;
+        let error = super::evaluate_single(
+            integrand,
+            super::EvaluationTarget::Reference(&reference),
+            &corrupted,
+            &rotation,
+            &mut metadata,
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("graph-group master"),
+            "{error:?}"
+        );
+        assert_eq!(history, format!("{:?}", metadata.radial_root_diagnostics));
+
+        // A valid alternate parent still does not belong to the selected
+        // immutable channel. Exercise actual physical adoption, where this
+        // mismatch and a forged active representative must fail before roots/events.
+        for forge_parent in [true, false] {
+            let mut corrupted = original.clone();
+            let GammaLoopSample::DiscreteGraph {
+                sample:
+                    DiscreteGraphSample::SamplingChannel {
+                        prepared_lu_hosts: claimed_hosts,
+                        ..
+                    },
+                ..
+            } = &mut corrupted
+            else {
+                unreachable!()
+            };
+            let plan = std::sync::Arc::make_mut(&mut claimed_hosts[0].plan);
+            let expected = if forge_parent {
+                assert!(plan.parent_lmb.len() >= 2);
+                plan.parent_lmb.swap(0, 1);
+                "selected channel definition"
+            } else {
+                plan.representative_cut_id.0 = plan.representative_cut_id.0.wrapping_add(1);
+                "incompatible active representative"
+            };
+            let error = super::evaluate_single(
+                integrand,
+                super::EvaluationTarget::Physical(model),
+                &corrupted,
+                &rotation,
+                &mut metadata,
+                false,
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains(expected), "{error:?}");
+            assert_eq!(history, format!("{:?}", metadata.radial_root_diagnostics));
+        }
+
+        // Norm/debug remapping may prepare real roots, but must leave the
+        // native retry occurrence/history owner exactly as it was on entry.
+        let before_time = metadata.parameterization_time;
+        EvaluationSource::XSpace(source).loop_norm_sum(integrand, &mut metadata)?;
+        assert_eq!(history, format!("{:?}", metadata.radial_root_diagnostics));
+        EvaluationSource::XSpace(source).debug_sample(integrand, &mut metadata)?;
+        assert_eq!(history, format!("{:?}", metadata.radial_root_diagnostics));
+        let (selection, mut coordinates) = unwrap_sample::<f64>(source);
+        coordinates[0] = F(f64::NAN);
+        let invalid = Sample::Uniform(F(1.0), selection, coordinates);
+        assert!(
+            EvaluationSource::XSpace(&invalid)
+                .loop_norm_sum(integrand, &mut metadata)
+                .is_err()
+        );
+        assert_eq!(history, format!("{:?}", metadata.radial_root_diagnostics));
+        assert!(
+            EvaluationSource::XSpace(&invalid)
+                .debug_sample(integrand, &mut metadata)
+                .is_err()
+        );
+        assert_eq!(history, format!("{:?}", metadata.radial_root_diagnostics));
+        assert!(metadata.parameterization_time >= before_time);
+
+        // A native Quad request replays the original source and prepares its
+        // own typed records. Gamma/Discrete samples have no precision-cast API.
+        let quad = EvaluationSource::XSpace(source)
+            .build_gamma_sample::<QuadFloat, _>(integrand, &mut metadata)?;
+        let GammaLoopSample::DiscreteGraph {
+            sample:
+                DiscreteGraphSample::SamplingChannel {
+                    prepared_lu_hosts: native,
+                    ..
+                },
+            ..
+        } = quad
+        else {
+            unreachable!()
+        };
+        assert_eq!(native.len(), prepared_lu_hosts.len());
+        for (before, after) in prepared_lu_hosts.iter().zip(native) {
+            assert_eq!(before.plan, after.plan);
+            assert_eq!(before.source, after.source);
+            assert_eq!(before.prior.len(), after.prior.len());
+        }
+        Ok(())
+    }
 
     /// Reuse the generated kite fixture while retaining the real source,
     /// partition and native stability owners. The final target alone is a probe.

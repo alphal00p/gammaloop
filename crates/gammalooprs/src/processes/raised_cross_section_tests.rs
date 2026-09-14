@@ -1692,6 +1692,66 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                 let coordinates = [0.31, 0.27, 0.61, 0.42, 0.33, 0.73, 0.57, 0.23, 0.67];
                 let channel = SamplingChannelId(1);
                 let mapped = bridge.forward(channel, &coordinates).unwrap();
+                // Both side consumers share the same literal host-dependent
+                // prior, even though the second sees additional host-null input.
+                assert_eq!(mapped.prepared_lu_hosts.len(), 1);
+                let retained = &mapped.prepared_lu_hosts[0];
+                assert_eq!(retained.plan.parent_lmb, parent);
+                assert_eq!(retained.plan.required_prior_lmb, vec![parent[1]]);
+                assert_eq!(retained.source.generating_channel, channel);
+                assert_eq!(retained.source.target_channel, channel);
+                let mut changed_null = coordinates;
+                changed_null[3] = 0.36;
+                changed_null[7] = 0.41;
+                let changed = bridge.forward(channel, &changed_null).unwrap();
+                assert_eq!(changed.prepared_lu_hosts.len(), 1);
+                assert_eq!(retained.prior, changed.prepared_lu_hosts[0].prior);
+                assert_eq!(retained.solution.solution, changed.prepared_lu_hosts[0].solution.solution);
+                for t in [F(0.7), F(1.0), F(1.3)] {
+                    assert_eq!(retained.ray.evaluate(&t), changed.prepared_lu_hosts[0].ray.evaluate(&t));
+                }
+                let recovered_host = bridge.inverse(channel, &mapped.raw_coordinates).unwrap().unwrap();
+                assert_eq!(recovered_host.prepared_lu_hosts.len(), 1);
+                let inverse_native = frame.inverse(&mapped.raw_coordinates, &[]).unwrap().coordinates;
+                assert_eq!(recovered_host.prepared_lu_hosts[0].prior, inverse_native[3..6]);
+                // Inverse work never overwrites the initial forward source.
+                assert_eq!(mapped.prepared_lu_hosts[0].prior, retained.prior);
+                if boost != 0.0 {
+                    // An ordinary raw prefix does not first add BQ. Its small
+                    // native component therefore exposes actual subtraction
+                    // roundoff through native -> master -> native, unlike a
+                    // cut prefix already rounded by the same BQ translation.
+                    let mut ordinary_prefix = parameterization.clone();
+                    ordinary_prefix.sampling_channels.default_channel_selection = vec!["ordinary_host".into()];
+                    ordinary_prefix.sampling_channels.channel_definitions.get_mut(&graph_name).unwrap().insert(
+                        "ordinary_host".into(), SamplingChannelDefinition {
+                            around: format!("then(lmb({}),block(lmb({}),at_cut(cut({cut_edges}),left(surface({left_edges})))),lmb({}))",
+                                parent[1], parent[0], parent[2]),
+                            parent_lmb: parent.clone(), on_cut: vec![host_id.0], ..Default::default()
+                        });
+                    let ordinary_bridge = term.compile_sampling_bridge(
+                        &ordinary_prefix, &runtime, &external_arrays, None).unwrap();
+                    let witness = (1..=8).map(|index| {
+                        let mut cube = coordinates;
+                        cube[0] = 0.025 * index as f64;
+                        let forward = ordinary_bridge.forward(SamplingChannelId(0), &cube).unwrap();
+                        let inverse = ordinary_bridge.inverse(SamplingChannelId(0), &forward.raw_coordinates)
+                            .unwrap().unwrap();
+                        (forward, inverse)
+                    }).find(|(forward, inverse)|
+                        forward.prepared_lu_hosts[0].prior != inverse.prepared_lu_hosts[0].prior)
+                        .expect("boosted ordinary prefix must exhibit an actual native affine roundoff");
+                    let (forward, inverse) = witness;
+                    assert_eq!(forward.prepared_lu_hosts.len(), 1);
+                    assert_eq!(inverse.prepared_lu_hosts.len(), 1);
+                    let expected_prior = frame.inverse(&forward.raw_coordinates, &[]).unwrap().coordinates;
+                    assert_eq!(inverse.prepared_lu_hosts[0].prior, expected_prior[3..6]);
+                    assert_ne!(forward.prepared_lu_hosts[0].prior, inverse.prepared_lu_hosts[0].prior);
+                    // Partition-time own inversion and a fresh direct inversion
+                    // both evaluate q at the actual supplied point/context.
+                    let inverse_log_density = inverse.map.inverse_jacobian.ln();
+                    assert!((forward.partition.log_scores[0].unwrap() - inverse_log_density).abs() < 1.0e-12);
+                }
                 let tau = lu(&mapped.raw_coordinates);
                 let physical_master = mapped.raw_coordinates.iter().map(|k| k * tau).collect_vec();
                 let physical_native = frame.inverse(&physical_master, &[]).unwrap().coordinates;
@@ -2004,6 +2064,12 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                             Some(Box::new(sample.clone())),
                         ))),
                     );
+                    if id == 1 {
+                        let ProcessIntegrand::CrossSection(inner) = &mut integrand else { unreachable!() };
+                        crate::integrands::process::tests::check_host_source_transport(
+                            inner, &model, &discrete, 0, SamplingChannelId(id),
+                        ).unwrap();
+                    }
                     let reference = integrand
                         .evaluate_reference_sample_detailed(&discrete, &reference)
                         .unwrap();

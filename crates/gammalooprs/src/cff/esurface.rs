@@ -28,10 +28,10 @@ use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::{GammaLoopContext, define_index};
 
 use crate::integrands::process::{GenericEvaluator, ImplicitSurfaceRadialMap};
-use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
 };
+use crate::momentum::{Rotatable, Rotation, ThreeMomentum};
 use crate::processes::CrossSectionCut;
 use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::newton_solver::{
@@ -103,6 +103,280 @@ impl<T: FloatLike> EsurfaceRay<T> {
         (energy_sum + &self.shift, derivative)
     }
 
+    /// The sole LU seed/Newton policy, also used by native partial host rays.
+    pub(crate) fn solve_lu_cut(
+        &self,
+        e_cm: &F<T>,
+        diagnostics: &mut RadialRootDiagnostics,
+        identity: &RadialRootIdentity,
+    ) -> std::result::Result<NewtonIterationResult<T>, SafeguardedNewtonError<T>> {
+        let guess = Esurface::radius_guess_from_terms(
+            &self.shift,
+            self.energies
+                .iter()
+                .map(|(_, v, b, _)| (v.norm_squared(), v.clone() * b)),
+        );
+        crate::debug_tags!(#integration, #cut, #solver;
+            radial_root = %identity,
+            initial_guess = %guess,
+            residual_tolerance = %(e_cm * guess.epsilon()),
+            "LU radial root setup"
+        );
+        diagnostics.solve(
+            identity,
+            &guess.zero(),
+            &guess,
+            |t| self.evaluate(t),
+            &guess.one(),
+            2000,
+            64,
+            e_cm,
+        )
+    }
+
+    /// Certify this retained candidate against both represented rays. This is
+    /// a fixed directed check, not another root solve. The exponent bounds all
+    /// pulled-back host-null dimensions; it need not be the actual map dimension.
+    /// Higher raised jets and complete conditional densities are not enclosed.
+    pub(crate) fn verify_lu_candidate(
+        &self,
+        completed: &Self,
+        solution: &NewtonIterationResult<T>,
+        dimension_bound: usize,
+        tolerance: &F<T>,
+    ) -> Result<()> {
+        use crate::integrands::process::sampling_maps::SamplingEvaluationError;
+        use rug::{Float, float::Round};
+        const PRECISION: u32 = 2048;
+        let uncertain = |detail: &str| SamplingEvaluationError::UncertainGeometry {
+            detail: format!("LU host adoption: {detail}"),
+        };
+        if self
+            .energies
+            .iter()
+            .map(|entry| entry.0)
+            .ne(completed.energies.iter().map(|entry| entry.0))
+        {
+            return Err(eyre!(
+                "LU host adoption has incompatible ordered energy occurrences"
+            ));
+        }
+        for ray in [self, completed] {
+            if !ray.shift.0.is_finite()
+                || ray.energies.iter().any(|(_, v, b, m)| {
+                    [&v.px, &v.py, &v.pz, &b.px, &b.py, &b.pz, m]
+                        .iter()
+                        .any(|x| !x.0.is_finite())
+                })
+            {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "LU host adoption",
+                    detail: "nonfinite represented ray coefficients".into(),
+                }
+                .into());
+            }
+        }
+        let t = &solution.solution;
+        let derivative = &solution.derivative_at_solution;
+        if [t, derivative, tolerance].iter().any(|x| !x.0.is_finite()) {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "LU host adoption",
+                detail: "nonfinite candidate, derivative or budget".into(),
+            }
+            .into());
+        }
+        if t <= &t.zero() || derivative <= &t.zero() || tolerance <= &t.zero() {
+            return Err(uncertain("candidate, derivative and budget must be positive").into());
+        }
+        // These local directed operations serve only this affine-ray check;
+        // they do not introduce a second interval/certificate engine.
+        let native = |x: &F<T>| {
+            let (lo, hi) = x.0.mpfr_enclosure(PRECISION);
+            [lo, hi]
+        };
+        let point = |x: &Float| [x.clone(), x.clone()];
+        let add = |a: &[Float; 2], b: &[Float; 2]| {
+            [
+                Float::with_val_round(PRECISION, &a[0] + &b[0], Round::Down).0,
+                Float::with_val_round(PRECISION, &a[1] + &b[1], Round::Up).0,
+            ]
+        };
+        let mul = |a: &[Float; 2], b: &[Float; 2]| {
+            let lower = a
+                .iter()
+                .flat_map(|x| {
+                    b.iter()
+                        .map(move |y| Float::with_val_round(PRECISION, x * y, Round::Down).0)
+                })
+                .reduce(|a, b| a.min(&b))
+                .unwrap();
+            let upper = a
+                .iter()
+                .flat_map(|x| {
+                    b.iter()
+                        .map(move |y| Float::with_val_round(PRECISION, x * y, Round::Up).0)
+                })
+                .reduce(|a, b| a.max(&b))
+                .unwrap();
+            [lower, upper]
+        };
+        let square = |a: &[Float; 2]| {
+            let upper = a[0].clone().abs().max(&a[1].clone().abs());
+            let lower = if a[0] <= 0 && a[1] >= 0 {
+                Float::with_val(PRECISION, 0)
+            } else {
+                a[0].clone().abs().min(&a[1].clone().abs())
+            };
+            [
+                Float::with_val_round(PRECISION, &lower * &lower, Round::Down).0,
+                Float::with_val_round(PRECISION, &upper * &upper, Round::Up).0,
+            ]
+        };
+        let divide = |a: &[Float; 2], b: &[Float; 2]| {
+            debug_assert!(b[0] > 0);
+            let reciprocal = [
+                Float::with_val_round(PRECISION, b[1].recip_ref(), Round::Down).0,
+                Float::with_val_round(PRECISION, b[0].recip_ref(), Round::Up).0,
+            ];
+            mul(a, &reciprocal)
+        };
+        let zero = Float::with_val(PRECISION, 0);
+        let one = Float::with_val(PRECISION, 1);
+        let evaluate = |ray: &Self,
+                        radius: &[Float; 2],
+                        with_derivative: bool|
+         -> Result<([Float; 2], [Float; 2])> {
+            let mut value = native(&ray.shift);
+            let mut slope = point(&zero);
+            for (_, velocity, offset, mass) in &ray.energies {
+                let mut norm = square(&native(mass));
+                let mut dot = point(&zero);
+                for (v, b) in [&velocity.px, &velocity.py, &velocity.pz]
+                    .into_iter()
+                    .zip([&offset.px, &offset.py, &offset.pz])
+                {
+                    let v = native(v);
+                    let q = add(&mul(&v, radius), &native(b));
+                    norm = add(&norm, &square(&q));
+                    dot = add(&dot, &mul(&v, &q));
+                }
+                if norm.iter().chain(&dot).any(|x| !x.is_finite()) {
+                    return Err(SamplingEvaluationError::Unrepresentable {
+                        operation: "LU host certificate",
+                        detail: "nonfinite directed energy or numerator".into(),
+                    }
+                    .into());
+                }
+                let energy = [
+                    Float::with_val_round(PRECISION, norm[0].sqrt_ref(), Round::Down).0,
+                    Float::with_val_round(PRECISION, norm[1].sqrt_ref(), Round::Up).0,
+                ];
+                value = add(&value, &energy);
+                if with_derivative {
+                    if energy[0] <= 0 {
+                        return Err(uncertain(
+                            "energy lower bound touches zero on the fixed candidate interval",
+                        )
+                        .into());
+                    }
+                    slope = add(&slope, &divide(&dot, &energy));
+                }
+            }
+            if value.iter().chain(&slope).any(|x| !x.is_finite()) {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "LU host certificate",
+                    detail: "nonfinite directed residual or derivative".into(),
+                }
+                .into());
+            }
+            Ok((value, slope))
+        };
+        let delta = native(tolerance)[0]
+            .clone()
+            .min(&(Float::with_val(PRECISION, 1) >> 2));
+        let divisor = Float::with_val(PRECISION, 4 * (dimension_bound + 1));
+        let r = Float::with_val_round(PRECISION, &delta / &divisor, Round::Down).0;
+        let t0 = native(t);
+        let lo_factor = Float::with_val_round(PRECISION, &one - &r, Round::Down).0;
+        let hi_factor = Float::with_val_round(PRECISION, &one + &r, Round::Up).0;
+        let interval = [
+            Float::with_val_round(PRECISION, &t0[0] * &lo_factor, Round::Down).0,
+            Float::with_val_round(PRECISION, &t0[1] * &hi_factor, Round::Up).0,
+        ];
+        if interval
+            .iter()
+            .chain(&t0)
+            .chain([&delta, &r])
+            .any(|x| !x.is_finite())
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "LU host certificate",
+                detail: "nonfinite directed candidate interval".into(),
+            }
+            .into());
+        }
+        if interval[0] <= 0 || interval[0] >= interval[1] {
+            return Err(uncertain("fixed candidate interval is not positive and distinct").into());
+        }
+        let allowed = [
+            Float::with_val_round(PRECISION, &one - &delta, Round::Up).0,
+            Float::with_val_round(PRECISION, &one + &delta, Round::Down).0,
+        ];
+        let residual_budget = Float::with_val_round(PRECISION, &t0[0] * &r, Round::Down).0;
+        for ray in [self, completed] {
+            if evaluate(ray, &point(&zero), false)?.0[1] >= 0
+                || evaluate(ray, &point(&interval[0]), false)?.0[1] >= 0
+                || evaluate(ray, &point(&interval[1]), false)?.0[0] <= 0
+            {
+                return Err(uncertain("origin/interior/exterior signs are not certified on the fixed candidate interval").into());
+            }
+            let (_, slope) = evaluate(ray, &interval, true)?;
+            if slope[0] <= 0 {
+                return Err(uncertain(
+                    "radial derivative is not certified positive throughout the interval",
+                )
+                .into());
+            }
+            let residual = evaluate(ray, &t0, false)?.0;
+            let residual = residual[0].clone().abs().max(&residual[1].clone().abs());
+            if Float::with_val_round(PRECISION, &residual / &slope[0], Round::Up).0
+                > residual_budget
+            {
+                return Err(uncertain(
+                    "candidate error exceeds its allocated relative root budget",
+                )
+                .into());
+            }
+            let ratio = divide(&slope, &native(derivative));
+            if ratio.iter().any(|x| !x.is_finite())
+                || ratio[0] < allowed[0]
+                || ratio[1] > allowed[1]
+            {
+                return Err(
+                    uncertain("first derivative variation exceeds the sampling budget").into(),
+                );
+            }
+        }
+        // Bound implemented/exact and its reciprocal explicitly, so the
+        // statement does not depend on the chosen relative-error denominator.
+        for ratio in [divide(&interval, &t0), divide(&t0, &interval)] {
+            let mut determinant_ratio = point(&one);
+            for _ in 0..dimension_bound {
+                determinant_ratio = mul(&determinant_ratio, &ratio);
+            }
+            if determinant_ratio.iter().any(|x| !x.is_finite())
+                || determinant_ratio[0] < allowed[0]
+                || determinant_ratio[1] > allowed[1]
+            {
+                return Err(uncertain(
+                    "worst-case LU inverse-volume variation exceeds the sampling budget",
+                )
+                .into());
+            }
+        }
+        Ok(())
+    }
+
     /// Original eta jet at the same represented coefficients used by the root.
     /// The caller retains the existing dual shape and factorial convention.
     #[inline]
@@ -118,6 +392,21 @@ impl<T: FloatLike> EsurfaceRay<T> {
             .reduce(|sum, energy| sum + energy)
             .unwrap_or_else(|| radius.zero());
         energy_sum + new_constant(radius, &self.shift)
+    }
+}
+
+impl<T: FloatLike> Rotatable for EsurfaceRay<T> {
+    fn rotate(&self, rotation: &Rotation) -> Self {
+        Self {
+            energies: self
+                .energies
+                .iter()
+                .map(|(edge, v, b, mass)| {
+                    (*edge, v.rotate(rotation), b.rotate(rotation), mass.clone())
+                })
+                .collect(),
+            shift: self.shift.clone(),
+        }
     }
 }
 
@@ -1614,28 +1903,7 @@ impl Esurface {
                 .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
         );
         let ray = self.routed_ray(loop_momenta, &center, external_momenta, masses, lmb);
-        let guess = Self::radius_guess_from_terms(
-            &ray.shift,
-            ray.energies
-                .iter()
-                .map(|(_, v, b, _)| (v.norm_squared(), v.clone() * b)),
-        );
-        crate::debug_tags!(#integration, #cut, #solver;
-            radial_root = %identity,
-            initial_guess = %guess,
-            residual_tolerance = %(e_cm * guess.epsilon()),
-            "LU radial root setup"
-        );
-        let solution = diagnostics.solve(
-            identity,
-            &zero,
-            &guess,
-            |t| ray.evaluate(t),
-            &guess.one(),
-            2000,
-            64,
-            e_cm,
-        )?;
+        let solution = ray.solve_lu_cut(e_cm, diagnostics, identity)?;
         Ok((ray, solution))
     }
 
@@ -2266,6 +2534,149 @@ mod tests {
             .to_string()
             .contains("found 0 candidates")
         );
+    }
+
+    #[test]
+    fn retained_lu_candidate_requires_directed_native_agreement() {
+        use super::EsurfaceRay;
+        use crate::{
+            integrands::process::sampling_maps::SamplingEvaluationError,
+            momentum::{Rotatable, Rotation, RotationMethod},
+        };
+        fn check<T: FloatLike>() {
+            let one = F::<T>::default().one();
+            let f = |n| one.from_usize(n);
+            let vector = |x| ThreeMomentum::new(x, one.zero(), one.zero());
+            // eta(t)=sqrt((3t+1)^2+9)-6, whose positive root is
+            // (sqrt(27)-1)/3. The independent radical is not a Newton result.
+            let ray = EsurfaceRay {
+                energies: vec![(EdgeIndex(1), vector(f(3)), vector(one.clone()), f(3))],
+                shift: -f(6),
+            };
+            let solution = ray
+                .solve_lu_cut(
+                    &f(6),
+                    &mut RadialRootDiagnostics::default(),
+                    &RadialRootIdentity::new("directed native host fixture".into()),
+                )
+                .unwrap();
+            let expected = (f(27).sqrt() - &one) / f(3);
+            assert!((&solution.solution - expected).abs() < one.epsilon() * f(100));
+            let budget = &one / f(1_000_000);
+            ray.verify_lu_candidate(&ray, &solution, 6, &budget)
+                .unwrap();
+            let rotation = Rotation::new(RotationMethod::EulerAngles(0.31, -0.17, 0.23));
+            ray.rotate(&rotation)
+                .verify_lu_candidate(&ray, &solution, 6, &budget)
+                .unwrap();
+
+            // The certificate encloses represented coefficients directly. A
+            // shallow positive slope and tiny nonzero masses remain resolvable
+            // even where native squaring would underflow; no Newton claim is
+            // made for that underflowing native evaluator in this direct check.
+            let tiny = &one / f(10).powi(200);
+            let mut shallow = ray.clone();
+            for (_, v, b, mass) in &mut shallow.energies {
+                *v = &*v * &tiny;
+                *b = &*b * &tiny;
+                *mass *= &tiny;
+            }
+            shallow.shift *= &tiny;
+            let mut shallow_solution = solution.clone();
+            shallow_solution.derivative_at_solution *= &tiny;
+            shallow_solution.error_of_function *= &tiny;
+            shallow
+                .verify_lu_candidate(&shallow, &shallow_solution, 6, &budget)
+                .unwrap();
+            let mut tiny_energy = ray.clone();
+            tiny_energy
+                .energies
+                .push((EdgeIndex(2), vector(one.zero()), vector(one.zero()), tiny));
+            tiny_energy
+                .verify_lu_candidate(&tiny_energy, &solution, 6, &budget)
+                .unwrap();
+            tiny_energy.energies[1].3 = one.zero();
+            let error = tiny_energy
+                .verify_lu_candidate(&tiny_energy, &solution, 6, &budget)
+                .unwrap_err();
+            assert!(
+                matches!(
+                    error.downcast_ref::<SamplingEvaluationError>(),
+                    Some(SamplingEvaluationError::UncertainGeometry { .. })
+                ),
+                "{error:?}"
+            );
+            assert!(
+                error
+                    .to_string()
+                    .contains("energy lower bound touches zero"),
+                "{error:?}"
+            );
+
+            let mut wrong = ray.clone();
+            wrong.shift -= &one / f(100);
+            let error = ray
+                .verify_lu_candidate(&wrong, &solution, 6, &budget)
+                .unwrap_err();
+            assert!(
+                matches!(
+                    error.downcast_ref::<SamplingEvaluationError>(),
+                    Some(SamplingEvaluationError::UncertainGeometry { .. })
+                ),
+                "{error:?}"
+            );
+            let mut wrong_derivative = solution.clone();
+            wrong_derivative.derivative_at_solution *= f(11) / f(10);
+            assert!(
+                ray.verify_lu_candidate(&ray, &wrong_derivative, 6, &budget)
+                    .is_err()
+            );
+            wrong = ray.clone();
+            wrong.energies[0].0 = EdgeIndex(2);
+            assert!(
+                ray.verify_lu_candidate(&wrong, &solution, 6, &budget)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("ordered energy occurrences")
+            );
+            wrong = ray.clone();
+            wrong.energies[0].3 = one.zero() / one.zero();
+            assert!(matches!(
+                ray.verify_lu_candidate(&wrong, &solution, 6, &budget)
+                    .unwrap_err()
+                    .downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::Unrepresentable { .. })
+            ));
+
+            // One rounded residual value cannot certify this much smaller
+            // budget. Native Quad/Arb resolve the same irrational root, while
+            // binary64 must ask for original-source precision rescue.
+            let tight = &one / f(10).powi(25);
+            let tight_result = ray.verify_lu_candidate(&ray, &solution, 6, &tight);
+            let large = f(10).powi(20);
+            let cancellation = (&large + &one) - &large;
+            let mut completed = ray.clone();
+            completed.energies[0].1.px += &cancellation - &one;
+            let cancellation_result = ray.verify_lu_candidate(&completed, &solution, 6, &budget);
+            if T::sampling_precision() == crate::settings::runtime::Precision::Double {
+                assert_eq!(cancellation, one.zero());
+                for result in [tight_result, cancellation_result] {
+                    assert!(matches!(
+                        result
+                            .unwrap_err()
+                            .downcast_ref::<SamplingEvaluationError>(),
+                        Some(SamplingEvaluationError::UncertainGeometry { .. })
+                    ));
+                }
+            } else {
+                assert_eq!(cancellation, one);
+                tight_result.unwrap();
+                cancellation_result.unwrap();
+            }
+        }
+        check::<f64>();
+        check::<QuadFloat>();
+        check::<ArbPrec>();
     }
 
     #[test]

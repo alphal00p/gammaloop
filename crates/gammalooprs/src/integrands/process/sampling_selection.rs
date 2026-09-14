@@ -18,7 +18,9 @@ use color_eyre::eyre::{Result, WrapErr, eyre};
 use serde::{Deserialize, Serialize};
 use symbolica::{atom::Atom, symbol, try_parse};
 
-use super::sampling_context::{SamplingMapContext, SamplingProposalKey, SamplingProposalPolicies};
+use super::sampling_context::{
+    PreparedLUHost, SamplingMapContext, SamplingProposalKey, SamplingProposalPolicies,
+};
 use super::sampling_maps::{SamplingEvaluationError, combine_contracts};
 use super::{
     ImplicitSurfaceRadialMap, SamplingExpressionEvaluator, SamplingMapAffine, SamplingMapComponent,
@@ -26,9 +28,11 @@ use super::{
     SamplingMapEvaluation, SamplingMapKernel, SamplingPartition, SamplingPartitionMode,
     SamplingScoreFunction, SamplingSupport, SharedEnergyJointMap, SurfaceRadialMap,
 };
+use crate::integrands::evaluation::EvaluationMetaData;
 use crate::momentum::sample::{LoopMomenta, MomentumSample};
 use crate::settings::runtime::ParameterizationSettings;
 use crate::settings::runtime::kinematic::Externals;
+use crate::utils::newton_solver::RadialRootDiagnostics;
 use crate::utils::{F, FloatLike};
 use crate::{DependentMomentaConstructor, momentum::ThreeMomentum};
 
@@ -1059,6 +1063,12 @@ pub struct SamplingChannelRuntimeContexts<'a, T: FloatLike = f64> {
     policies: Option<&'a mut SamplingProposalPolicies>,
     graph_id: usize,
     generating_channel: SamplingChannelId,
+    prepared_lu_hosts: Vec<PreparedLUHost<T>>,
+    /// None only during the initial selected operation; later inverse work
+    /// cannot extend the frozen source authority exported to the physical body.
+    selected_host_count: Option<usize>,
+    radial_root_diagnostics: Option<&'a mut RadialRootDiagnostics>,
+    detached_root_diagnostics: RadialRootDiagnostics,
 }
 
 impl<'a, T: FloatLike> SamplingChannelRuntimeContexts<'a, T> {
@@ -1069,6 +1079,10 @@ impl<'a, T: FloatLike> SamplingChannelRuntimeContexts<'a, T> {
             policies: None,
             graph_id: 0,
             generating_channel: SamplingChannelId(0),
+            prepared_lu_hosts: Vec::new(),
+            selected_host_count: Some(0),
+            radial_root_diagnostics: None,
+            detached_root_diagnostics: RadialRootDiagnostics::default(),
         }
     }
 
@@ -1077,14 +1091,39 @@ impl<'a, T: FloatLike> SamplingChannelRuntimeContexts<'a, T> {
         channel_count: usize,
         graph_id: usize,
         generating_channel: SamplingChannelId,
-        policies: &'a mut SamplingProposalPolicies,
+        metadata: &'a mut EvaluationMetaData,
     ) -> Self {
         Self {
             contexts: vec![None; channel_count],
-            policies: Some(policies),
+            policies: Some(&mut metadata.sampling_proposal_policies),
             graph_id,
             generating_channel,
+            prepared_lu_hosts: Vec::new(),
+            selected_host_count: Some(0),
+            radial_root_diagnostics: Some(&mut metadata.radial_root_diagnostics),
+            detached_root_diagnostics: RadialRootDiagnostics::default(),
         }
+    }
+
+    fn begin_selected(&mut self, channel_id: SamplingChannelId) -> Result<()> {
+        if self.policies.is_some() && self.generating_channel != channel_id {
+            return Err(eyre!(
+                "selected channel {channel_id:?} does not match generating row {:?}",
+                self.generating_channel
+            ));
+        }
+        self.generating_channel = channel_id;
+        self.prepared_lu_hosts.clear();
+        self.selected_host_count = None;
+        Ok(())
+    }
+
+    fn seal_selected(&mut self) {
+        self.selected_host_count = Some(self.prepared_lu_hosts.len());
+    }
+
+    fn selected_hosts(&self) -> Vec<PreparedLUHost<T>> {
+        self.prepared_lu_hosts[..self.selected_host_count.unwrap_or(0)].to_vec()
     }
 
     pub fn channel_count(&self) -> usize {
@@ -1133,13 +1172,20 @@ impl<'a, T: FloatLike> SamplingChannelRuntimeContexts<'a, T> {
                 target_channel: channel_id,
                 block_path: Vec::new(),
             },
+            prepared_lu_hosts: Some(&mut self.prepared_lu_hosts),
+            radial_root_diagnostics: Some(
+                self.radial_root_diagnostics
+                    .as_deref_mut()
+                    .unwrap_or(&mut self.detached_root_diagnostics),
+            ),
+            selecting_lu_hosts: self.selected_host_count.is_none(),
         })
     }
 }
 
 /// One push-forward/inverse result together with the common raw-frame
 /// multichannel partition.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct SamplingChannelBridgeEvaluation<T: FloatLike = f64> {
     pub channel_id: SamplingChannelId,
     pub channel_name: String,
@@ -1147,6 +1193,7 @@ pub struct SamplingChannelBridgeEvaluation<T: FloatLike = f64> {
     pub raw_coordinates: Vec<T>,
     pub map: SamplingMapEvaluation<T>,
     pub partition: SamplingPartition<T>,
+    pub(crate) prepared_lu_hosts: Vec<PreparedLUHost<T>>,
 }
 
 /// Summary of a deterministic acceptance run through a complete channel
@@ -1625,6 +1672,12 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
         Ok(self)
     }
 
+    pub(crate) fn relative_density_tolerance(&self, precision: &F<T>) -> F<T> {
+        self.relative_density_tolerance
+            .map(F::<T>::from_f64)
+            .unwrap_or_else(|| precision.epsilon().sqrt())
+    }
+
     pub fn channels(&self) -> &[CompiledSamplingChannel<T>] {
         &self.channels
     }
@@ -1649,6 +1702,11 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
         raw_coordinates: &[T],
         contexts: &mut SamplingChannelRuntimeContexts<'_, T>,
     ) -> Result<SamplingPartition<T>> {
+        if contexts.selected_host_count.is_none() {
+            return Err(eyre!(
+                "sampling partition cannot run before selected host authority is sealed"
+            ));
+        }
         if raw_coordinates.len() != self.dimensions {
             return Err(color_eyre::eyre::eyre!(
                 "raw sampling frame has {}, expected {} dimensions",
@@ -1747,8 +1805,10 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
                     channel: channel_id,
                 })?;
+        contexts.begin_selected(channel_id)?;
         let map =
             channel.forward_with_context(coordinates, &mut contexts.for_channel(channel_id)?)?;
+        contexts.seal_selected();
         if map.point.len() != self.dimensions {
             return Err(SamplingChannelBridgeError::DimensionMismatch {
                 channel: channel.name.clone(),
@@ -1786,10 +1846,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
         };
         let jacobian = F(map.jacobian.clone());
         let one = jacobian.one();
-        let tolerance = self
-            .relative_density_tolerance
-            .map(F::<T>::from_f64)
-            .unwrap_or_else(|| one.epsilon().sqrt());
+        let tolerance = self.relative_density_tolerance(&one);
         let log_ratio = jacobian.ln() + log_density;
         let two = &one + &one;
         // log(1 +/- tolerance) must retain a sub-epsilon budget. The atanh
@@ -1826,6 +1883,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
             raw_coordinates: map.point.clone(),
             map,
             partition,
+            prepared_lu_hosts: contexts.selected_hosts(),
         })
     }
 
@@ -1861,11 +1919,13 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
                 .ok_or(SamplingChannelBridgeError::UnknownChannel {
                     channel: channel_id,
                 })?;
+        contexts.begin_selected(channel_id)?;
         let Some(map) = channel
             .inverse_with_context(raw_coordinates, &mut contexts.for_channel(channel_id)?)?
         else {
             return Ok(None);
         };
+        contexts.seal_selected();
         let partition = self.partition_with_contexts(raw_coordinates, contexts)?;
         Ok(Some(SamplingChannelBridgeEvaluation {
             channel_id,
@@ -1873,6 +1933,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
             raw_coordinates: raw_coordinates.to_vec(),
             map,
             partition,
+            prepared_lu_hosts: contexts.selected_hosts(),
         }))
     }
 }
@@ -2905,6 +2966,174 @@ mod tests {
     use crate::settings::runtime::ParameterizationSettings;
 
     #[test]
+    fn native_lu_host_reuses_exact_sources_without_replacing_selected_authority() -> Result<()> {
+        use super::super::sampling_context::SamplingLUHostPlan;
+        use crate::{
+            cff::{VertexSet, esurface::Esurface},
+            dot,
+            graph::{Graph, parse::from_dot::IntoGraph},
+            momentum::{FourMomentum, sample::ExternalFourMomenta},
+            processes::{CutGroupId, CutId},
+            utils::{ArbPrec, QuadFloat},
+        };
+        use linnet::half_edge::involution::EdgeIndex;
+        use std::cell::Cell;
+
+        test_initialise()?;
+        let graph: Graph = dot!(digraph host_source {
+            ext [style=invis]
+            node [num=1]
+            edge [num=1 mass=1]
+            ext -> a:0 [id=0]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2]
+            b:1 -> ext [id=3]
+        })?;
+        let surface = Esurface {
+            energies: vec![EdgeIndex(1), EdgeIndex(2)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        fn check<T: FloatLike>(graph: &Graph, surface: &Esurface) -> Result<()> {
+            let one = F::<T>::default().one();
+            let zero = one.zero();
+            let e_cm = one.from_usize(4);
+            let masses = graph.underlying.new_edgevec_from_iter([
+                zero.clone(),
+                one.clone(),
+                one.clone(),
+                zero.clone(),
+            ])?;
+            let externals = ExternalFourMomenta::from_iter((0..2).map(|_| {
+                FourMomentum::from_args(e_cm.clone(), zero.clone(), zero.clone(), zero.clone())
+            }));
+            let plan = Arc::new(SamplingLUHostPlan {
+                graph_name: "host_source".into(),
+                cut_group_id: CutGroupId::from(0),
+                representative_cut_id: CutId(0),
+                parent_lmb: graph
+                    .loop_momentum_basis
+                    .loop_edges
+                    .iter()
+                    .map(|edge| edge.0)
+                    .collect(),
+                required_prior_lmb: graph
+                    .loop_momentum_basis
+                    .loop_edges
+                    .iter()
+                    .map(|edge| edge.0)
+                    .collect(),
+            });
+            let calls = Cell::new(0);
+            let identities = std::cell::RefCell::new(Vec::new());
+            let prepare =
+                |prior: &[T],
+                 diagnostics: &mut RadialRootDiagnostics,
+                 identity: &crate::utils::newton_solver::RadialRootIdentity| {
+                    calls.set(calls.get() + 1);
+                    identities.borrow_mut().push(identity.to_string());
+                    let loops = LoopMomenta::from_iter([ThreeMomentum::new(
+                        F(prior[0].clone()),
+                        F(prior[1].clone()),
+                        F(prior[2].clone()),
+                    )]);
+                    surface
+                        .solve_lu_cut(
+                            &loops,
+                            &externals,
+                            &masses,
+                            &graph.loop_momentum_basis,
+                            &e_cm,
+                            diagnostics,
+                            identity,
+                        )
+                        .map_err(|error| eyre!("{error:?}"))
+                };
+            let prior = vec![one.0.clone(), zero.0.clone(), zero.0.clone()];
+            let mut metadata = EvaluationMetaData::new_empty();
+            let mut row =
+                SamplingChannelRuntimeContexts::for_draw(2, 7, SamplingChannelId(0), &mut metadata);
+            row.begin_selected(SamplingChannelId(0))?;
+            {
+                let mut context = row.for_channel(SamplingChannelId(0))?;
+                let host =
+                    context.prepare_lu_host(&plan, prior.clone(), |d, i| prepare(&prior, d, i))?;
+                assert!(
+                    (&host.solution.solution - one.from_usize(3).sqrt()).abs()
+                        < one.epsilon() * one.from_usize(64)
+                );
+                assert_eq!(host.source.graph_id, 7);
+                assert_eq!(host.prior, prior);
+                context
+                    .reborrow(&[], Some(1))
+                    .prepare_lu_host(&plan, prior.clone(), |d, i| prepare(&prior, d, i))?;
+            }
+            assert_eq!(calls.get(), 1);
+            let different = vec![
+                (&one + one.epsilon() * one.from_usize(8)).0,
+                zero.0.clone(),
+                zero.0.clone(),
+            ];
+            assert_ne!(different, prior);
+            let error = row
+                .for_channel(SamplingChannelId(0))?
+                .prepare_lu_host(&plan, different.clone(), |d, i| prepare(&different, d, i))
+                .unwrap_err();
+            assert!(matches!(
+                error.downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::UncertainGeometry { .. })
+            ));
+            assert_eq!(calls.get(), 1);
+            row.seal_selected();
+            // A supplied-point inverse has distinct represented prerequisites.
+            // Its actual equation is solved, while selected source authority stays fixed.
+            row.for_channel(SamplingChannelId(0))?.prepare_lu_host(
+                &plan,
+                different.clone(),
+                |d, i| prepare(&different, d, i),
+            )?;
+            row.for_channel(SamplingChannelId(1))?.prepare_lu_host(
+                &plan,
+                different.clone(),
+                |d, i| prepare(&different, d, i),
+            )?;
+            assert_eq!(calls.get(), 2);
+            assert_eq!(row.prepared_lu_hosts.len(), 2);
+            let selected = row.selected_hosts();
+            assert_eq!(selected.len(), 1);
+            assert_eq!(selected[0].prior, prior);
+            assert_eq!(row.prepared_lu_hosts[1].prior, different);
+            let inverse_expected = one.from_usize(3).sqrt() / F(different[0].clone());
+            assert!(
+                (&row.prepared_lu_hosts[1].solution.solution - inverse_expected).abs()
+                    < one.epsilon() * one.from_usize(64)
+            );
+            assert!(identities.borrow()[0].contains("native selected"));
+            assert!(identities.borrow()[1].contains("native inverse"));
+            // A standalone partition owns no selected prefix; a new direct raw
+            // initial inverse establishes its own source, even in this same row object.
+            let mut partition_row = SamplingChannelRuntimeContexts::new(2);
+            partition_row
+                .for_channel(SamplingChannelId(0))?
+                .prepare_lu_host(&plan, prior.clone(), |d, i| prepare(&prior, d, i))?;
+            assert!(partition_row.selected_hosts().is_empty());
+            row.begin_selected(SamplingChannelId(0))?;
+            row.for_channel(SamplingChannelId(0))?.prepare_lu_host(
+                &plan,
+                different.clone(),
+                |d, i| prepare(&different, d, i),
+            )?;
+            row.seal_selected();
+            assert_eq!(row.selected_hosts()[0].prior, different);
+            assert_eq!(calls.get(), 4);
+            Ok(())
+        }
+        check::<f64>(&graph, &surface)?;
+        check::<QuadFloat>(&graph, &surface)?;
+        check::<ArbPrec>(&graph, &surface)
+    }
+
+    #[test]
     fn joint_bridge_requires_full_coverage_and_gates_actual_inverse_support() -> Result<()> {
         let program = std::thread::Builder::new()
             .stack_size(64 * 1024 * 1024)
@@ -3159,7 +3388,8 @@ mod tests {
                 SamplingMapComposition::then(vec![Box::new(joint)])?,
                 vec![0, 1, 2],
             )?
-            .with_context_transform(Arc::new(move |prior| {
+            .with_context_transform(Arc::new(move |context| {
+                let prior = context.previous;
                 if prior.len() != 3 {
                     return Err(eyre!(
                         "joint fixture needs its three declared prerequisites"
@@ -3261,14 +3491,14 @@ mod tests {
             // revisits the same compiled path in forward and inverse. Sealing
             // forbids an incidental later lane from filling a missing record.
             let cube = [0.1, 0.31, 0.43, 0.47, 0.29, 0.37];
-            let mut policies = SamplingProposalPolicies::default();
-            policies.begin_collection();
+            let mut metadata = EvaluationMetaData::new_empty();
+            metadata.sampling_proposal_policies.begin_collection();
             for generator in 0..2 {
                 let mut contexts = SamplingChannelRuntimeContexts::for_draw(
                     3,
                     7,
                     SamplingChannelId(generator),
-                    &mut policies,
+                    &mut metadata,
                 );
                 bridge.forward_with_runtime_contexts(
                     SamplingChannelId(generator),
@@ -3276,15 +3506,15 @@ mod tests {
                     &mut contexts,
                 )?;
             }
-            assert_eq!(policies.len(), 4);
-            policies.seal();
-            let sealed = policies.clone();
+            assert_eq!(metadata.sampling_proposal_policies.len(), 4);
+            metadata.sampling_proposal_policies.seal();
+            let sealed = metadata.sampling_proposal_policies.clone();
             for generator in 0..2 {
                 let mut contexts = SamplingChannelRuntimeContexts::for_draw(
                     3,
                     7,
                     SamplingChannelId(generator),
-                    &mut policies,
+                    &mut metadata,
                 );
                 let mapped = bridge.forward_with_runtime_contexts(
                     SamplingChannelId(generator),
@@ -3301,8 +3531,8 @@ mod tests {
                         .is_some()
                 );
             }
-            assert_eq!(policies, sealed);
-            let mut empty = SamplingProposalPolicies::default();
+            assert_eq!(metadata.sampling_proposal_policies, sealed);
+            let mut empty = EvaluationMetaData::new_empty();
             let mut contexts =
                 SamplingChannelRuntimeContexts::for_draw(3, 7, SamplingChannelId(0), &mut empty);
             let error = bridge
@@ -3313,7 +3543,7 @@ mod tests {
                 Some(SamplingEvaluationError::UncertainGeometry { .. })
             ));
             assert!(format!("{error:#}").contains("conditional-shared-energy-pair"));
-            assert!(empty.is_empty());
+            assert!(empty.sampling_proposal_policies.is_empty());
         }
         Ok(())
     }
@@ -3479,6 +3709,7 @@ mod tests {
         use super::super::sampling_maps::{SamplingEvaluationError, SamplingSupport};
         use crate::utils::ArbPrec;
         let evaluation = SamplingChannelBridgeEvaluation {
+            prepared_lu_hosts: Vec::new(),
             channel_id: SamplingChannelId(0),
             channel_name: "focused".into(),
             raw_coordinates: vec![1.0; 3],
@@ -3508,6 +3739,7 @@ mod tests {
             Some(SamplingEvaluationError::Unrepresentable { .. })
         ));
         let native = SamplingChannelBridgeEvaluation {
+            prepared_lu_hosts: Vec::new(),
             channel_id: evaluation.channel_id,
             channel_name: evaluation.channel_name,
             raw_coordinates: evaluation

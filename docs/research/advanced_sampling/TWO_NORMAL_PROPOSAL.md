@@ -540,11 +540,10 @@ is the compact-generator conditional oracle; with the equally selected ordinary
 sibling and constant support-gated proxies, the complete mean is 1 versus 5/4.
 
 These changes do not supply GL638's exact fixed-external routing specialization
-or authoritative Cutkosky `t*` handoff. CT-star pullbacks separately need the
-actual common overlap center and native projection alpha. The next host record
-belongs to lane-local typed map/runtime preparation, carrying the native routed
-equation and root into physical adoption and raised jets; metadata retains only
-cross-lane decisions/history. No all-orientation
+or, at that milestone, authoritative Cutkosky `t*` handoff. CT-star pullbacks
+separately need the actual common overlap center and native projection alpha.
+The subsequent native handoff implementation below keeps routed equations and
+roots in the lane; metadata retains only cross-lane decisions/history. No all-orientation
 GL638 bounded-weight or variance improvement follows from amplitude acceptance.
 
 ### Geometry and timing milestone — selected gates pass
@@ -554,10 +553,9 @@ root; raised eta jets consume those coefficients. This deliberately routes
 before scaling in the LU path. Other scalar CT/fiber evaluators and their
 external-only seed convention remain unchanged. The old and prepared routes
 can differ under finite-precision cancellation; the new tests preserve that
-counterexample rather than asserting general equivalence. Conditional maps
-still discard their ray, so authoritative selected/summed transport, rotation
-and completed-point adoption budgets remain required. Hosted joint binding,
-exact GL638 external-frame specialization and CT center/alpha handoff stay open.
+counterexample rather than asserting general equivalence. This milestone
+predates the native handoff below. Hosted joint binding, exact GL638 external-frame
+specialization and CT center/alpha handoff stay open.
 
 The existing timing counters now accumulate source/map/partition work and
 failed native attempts, norm/debug remaps and one inclusive canonical policy
@@ -591,3 +589,33 @@ from this unoptimized raw-momentum replay.
 The linked artifact independently verifies the post-build private tuple type
 alias as a semantics-neutral source change; it introduces no new numerical
 behavior beyond the tested snapshot.
+
+### Native host handoff — combined gates pass
+
+The existing runtime row retains native ray/root records and freezes the initial
+selected forward/direct-inverse prefix before partition work. Exact same-plan
+priors may reuse preparation; rounded own/foreign inverse priors prepare their
+own density without overwriting authority. Selected/summed transport is native,
+rotations retain the original-frame payload, and retries reconstruct the source.
+Canonical/norm/debug roots have isolated histories. Physical adoption authenticates
+graph/group/parent/prior identity against the selected immutable channel, rotates
+the retained ray once, and independently routes the completed sample. The fixed directed 2048-bit certificate bounds only
+represented scalar roots, first derivatives and explicit inverse-volume factors.
+It does not bound coefficient-vector discrepancies, higher raised jets or the
+full conditional/joint density; selected `J*q` reciprocity adds numerical chart
+consistency, not such a proof. Hosted H/Z remains guarded until its host sensitivity
+and exact external routing are handled. Host-only adoption work is included in
+sampling time and subtracted from the enclosing physical-body timer on success
+and error.
+
+The final source passes 184 unique core tests: the 176-test focused
+gate (118.591 s), seven Gamma sample tests and the complete kite (1504.601 s).
+The conditional fixture was rerun after its final test-only update (56.996 s),
+with strict 1e-8 nonidentity physical-total agreement. Existing event ownership
+buffers/counts only identity probes; surrounding selected/direct event comparisons
+remain intact. The complete kite again passes its 8192-draw 6%/8% reference bounds;
+its unoptimized duration does not measure production map overhead. Three API
+gates pass in 106.024 s, combined checking in 12.56 s and clippy in 57.76 s
+(68 existing warnings, none on changed lines). Formatting/diff checks pass.
+The optimized GL638 10% budget remains unmeasured; hosted joint binding and
+full host-to-H/Z sensitivity propagation remain open.

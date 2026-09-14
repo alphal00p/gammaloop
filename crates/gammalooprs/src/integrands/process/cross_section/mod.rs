@@ -18,12 +18,12 @@ use crate::{
             graph_to_group_id_for_group_structure,
             param_builder::LUParams,
             prepare_buffered_event,
-            sampling_context::SamplingMapContext,
+            sampling_context::{SamplingLUHostPlan, SamplingMapContext},
             sampling_maps::{
                 ImplicitSurfaceRadialMap, SamplingEvaluationError, SamplingMapAffine,
-                SamplingMapComponent, SamplingMapComposition, SamplingMapEmbedding,
+                SamplingMapComposition, SamplingMapEmbedding,
             },
-            sampling_selection::CompiledSamplingMap,
+            sampling_selection::{CompiledSamplingMap, SamplingCatalogueEntry},
             threshold_multiplier::{
                 ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierExpression,
                 ThresholdMultiplierLayout,
@@ -32,7 +32,7 @@ use crate::{
     },
     model::Model,
     momentum::{
-        FourMomentum, Rotation, RotationMethod, ThreeMomentum,
+        FourMomentum, Rotatable, Rotation, RotationMethod, ThreeMomentum,
         sample::{
             ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta, MomentumSample, Subspace,
             SubspaceData,
@@ -67,7 +67,7 @@ use crate::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex,
             shape_from_cut_cff_index, simple_n_deriv_shape,
         },
-        newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
+        newton_solver::{NewtonIterationResult, RadialRootIdentity},
         serde_utils::SmartSerde,
     },
 };
@@ -1759,6 +1759,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .or_insert(cut_group.related_esurface_group.max_occurence);
                 }
             }
+            let mut host_plans: BTreeMap<CutGroupId, Arc<SamplingLUHostPlan>> = BTreeMap::new();
             for channel in catalogue.named_entries() {
                 let parent = &channel.definition.parent_lmb;
                 let lmbs = TiVec::from(vec![
@@ -1797,11 +1798,41 @@ impl GraphTerm for CrossSectionGraphTerm {
                     let host_edges = block.target.host_cut().ok_or_else(|| eyre!(
                         "cross-section surface channel '{}' needs at_cut(cut(...), ...) or a preceding phase_space(cut(...)) host for target {:?}",
                         channel.name, block.target))?;
-                    let cut_id = context.physical_cut_ids.get(host_edges)
-                        .and_then(|ids| ids.iter().find(|id| channel.definition.on_cut.is_empty() || channel.definition.on_cut.contains(id)))
-                        .copied().map(CutId).ok_or_else(|| eyre!(
-                            "sampling channel '{}' requests inactive or excluded host cut {:?}; active cuts {:?}, on_cut {:?}",
-                            channel.name, host_edges, context.physical_cut_ids, channel.definition.on_cut))?;
+                    let matching_cuts = context
+                        .physical_cut_ids
+                        .get(host_edges)
+                        .into_iter()
+                        .flatten()
+                        .filter(|id| {
+                            channel.definition.on_cut.is_empty()
+                                || channel.definition.on_cut.contains(id)
+                        })
+                        .copied()
+                        .map(CutId)
+                        .collect_vec();
+                    let matching_groups = self
+                        .cut_group_data
+                        .cut_groups
+                        .iter_enumerated()
+                        .filter(|(group_id, group)| {
+                            self.counterterm.cut_group_is_active(*group_id)
+                                && group.cuts.iter().any(|id| matching_cuts.contains(id))
+                        })
+                        .collect_vec();
+                    let [(host_group_id, host_group)] = matching_groups.as_slice() else {
+                        return Err(eyre!(
+                            "sampling channel '{}' host {:?} must identify one active cut group; matched {:?}, on_cut {:?}",
+                            channel.name,
+                            host_edges,
+                            matching_groups.iter().map(|(id, _)| id).collect_vec(),
+                            channel.definition.on_cut
+                        ));
+                    };
+                    let cut_id = *host_group
+                        .cuts
+                        .iter()
+                        .find(|id| matching_cuts.contains(id))
+                        .expect("resolved host group contains a matching cut");
                     let host = &self.cut_esurface[cut_id];
                     let active = block
                         .active_lmb
@@ -1960,6 +1991,10 @@ impl GraphTerm for CrossSectionGraphTerm {
                             frame: SamplingMapAffine::new(matrix, translation)?,
                         }
                     } else {
+                        // The physical group owns its representative equation,
+                        // including repeated energy occurrences of raised cuts.
+                        let representative_cut_id = host_group.cuts[0];
+                        let host = &self.cut_esurface[representative_cut_id];
                         certify_independent(
                             host,
                             &active.iter().chain(&remaining).copied().collect_vec(),
@@ -2037,20 +2072,55 @@ impl GraphTerm for CrossSectionGraphTerm {
                             e_cm * parameterization_settings.b,
                             parameterization_settings.power,
                         )?;
+                        let required = (0..parent.len())
+                            .map(LoopIndex)
+                            .filter(|index| {
+                                host.energies.iter().any(|edge| {
+                                    lmb.edge_signatures[*edge].internal.to_momtrop_format()[index.0]
+                                        != 0
+                                })
+                            })
+                            .collect_vec();
+                        // Every required column is preceding, and every omitted
+                        // column was proved exactly zero before numerical routing.
+                        let plan = Arc::new(SamplingLUHostPlan {
+                            graph_name: self.graph.name.clone(),
+                            cut_group_id: *host_group_id,
+                            representative_cut_id,
+                            parent_lmb: parent.clone(),
+                            required_prior_lmb: required
+                                .iter()
+                                .map(|index| parent[index.0])
+                                .collect(),
+                        });
+                        let plan = match host_plans.entry(*host_group_id) {
+                            std::collections::btree_map::Entry::Occupied(entry) => {
+                                if entry.get().as_ref() != plan.as_ref() {
+                                    return Err(eyre!(
+                                        "sampling host group {} of graph '{}' has incompatible ordered parent/prerequisite plans {:?} and {:?}",
+                                        host_group_id.0,
+                                        self.graph.name,
+                                        entry.get(),
+                                        plan
+                                    ));
+                                }
+                                Arc::clone(entry.get())
+                            }
+                            std::collections::btree_map::Entry::Vacant(entry) => {
+                                Arc::clone(entry.insert(plan))
+                            }
+                        };
                         let host = host.clone();
-                        let lmb = self.graph.loop_momentum_basis.clone();
+                        let lmb = lmb.clone();
                         let masses = masses.clone();
                         let externals = externals.clone();
                         let origin = origin.clone();
-                        let frame = frame.clone();
+                        let origin_loops = origin_loops.clone();
                         let active_dimension = 3 * active.len();
                         let active = active.clone();
                         let preceding = preceding.clone();
-                        let identity = RadialRootIdentity::new(format!(
-                            "sampling host graph '{}' cut {}",
-                            self.graph.name, cut_id.0
-                        ));
-                        let transform = Arc::new(move |raw_prior: &[T]| {
+                        let transform = Arc::new(move |context: &mut SamplingMapContext<'_, T>| {
+                            let raw_prior = context.previous;
                             if raw_prior.len() != 3 * preceding.len() {
                                 return Err(eyre!(
                                     "sampling host requires {} declared prior components, received {}",
@@ -2066,51 +2136,67 @@ impl GraphTerm for CrossSectionGraphTerm {
                             {
                                 native[3 * index.0..3 * index.0 + 3].clone_from_slice(values);
                             }
-                            let master = frame
-                                .forward(&native, &mut SamplingMapContext::detached(&[]))?
-                                .point;
-                            let loops = LoopMomenta::from_iter(master.chunks_exact(3).map(|v| {
-                                ThreeMomentum::new(
-                                    F(v[0].clone()),
-                                    F(v[1].clone()),
-                                    F(v[2].clone()),
-                                )
-                            }));
-                            let zero = F(native[0].clone()).zero();
-                            let (_ray, solution) = host
-                                .solve_lu_cut(
-                                    &loops,
-                                    &externals,
-                                    &masses,
-                                    &lmb,
-                                    &F::from_f64(e_cm),
-                                    &mut RadialRootDiagnostics::default(),
-                                    &identity,
-                                )
-                                .map_err(|error| SamplingEvaluationError::UncertifiedRoot {
-                                    detail: format!("{identity:?}: {error:?}"),
-                                })?;
-                            let tau = solution.solution;
-                            let physical_master = master
-                                .into_iter()
-                                .map(|value| (F(value) * &tau).0)
+                            let prior = required
+                                .iter()
+                                .flat_map(|index| {
+                                    native[3 * index.0..3 * index.0 + 3].iter().cloned()
+                                })
                                 .collect_vec();
-                            if physical_master.iter().any(|value| !value.is_finite()) {
-                                return Err(SamplingEvaluationError::Unrepresentable {
-                                    operation: "conditional LU kinematics",
-                                    detail: format!(
-                                        "nonfinite prepared generation coordinates at t={tau}"
-                                    ),
-                                }
-                                .into());
-                            }
-                            let physical_native = frame.inverse(&physical_master, &[])?.coordinates;
+                            let zero = F(native[0].clone()).zero();
+                            let prepared = context.prepare_lu_host(
+                                &plan,
+                                prior,
+                                |diagnostics, identity| {
+                                    let mut velocity = LoopMomenta::from_iter(
+                                        (0..lmb.loop_edges.len()).map(|_| {
+                                            ThreeMomentum::new(
+                                                zero.clone(),
+                                                zero.clone(),
+                                                zero.clone(),
+                                            )
+                                        }),
+                                    );
+                                    for &index in &required {
+                                        let offset = 3 * index.0;
+                                        velocity[index] = ThreeMomentum::new(
+                                            F(native[offset].clone()) - F(origin[offset].clone()),
+                                            F(native[offset + 1].clone())
+                                                - F(origin[offset + 1].clone()),
+                                            F(native[offset + 2].clone())
+                                                - F(origin[offset + 2].clone()),
+                                        );
+                                    }
+                                    // Route the native quotient directly. A fabricated
+                                    // complete master point could lose the exact null
+                                    // dependence through affine cancellation.
+                                    let ray = host.routed_ray(
+                                        &velocity,
+                                        &origin_loops,
+                                        &externals,
+                                        &masses,
+                                        &lmb,
+                                    );
+                                    let solution = ray
+                                        .solve_lu_cut(&F::from_f64(e_cm), diagnostics, identity)
+                                        .map_err(|error| {
+                                            SamplingEvaluationError::UncertifiedRoot {
+                                                detail: format!("{identity}: {error:?}"),
+                                            }
+                                        })?;
+                                    Ok((ray, solution))
+                                },
+                            )?;
+                            let tau = prepared.solution.solution.clone();
                             let physical_prior = complement
                                 .iter()
                                 .flat_map(|index| {
-                                    physical_native[3 * index.0..3 * index.0 + 3]
+                                    native[3 * index.0..3 * index.0 + 3]
                                         .iter()
-                                        .cloned()
+                                        .zip(&origin[3 * index.0..3 * index.0 + 3])
+                                        .map(|(value, origin)| {
+                                            let origin = F(origin.clone());
+                                            (&origin + &tau * (F(value.clone()) - &origin)).0
+                                        })
                                 })
                                 .collect_vec();
                             let inverse_tau = tau.one() / &tau;
@@ -2364,7 +2450,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        mut context: GraphTermEvaluationContext<'_, '_>,
+        mut context: GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<GraphEvaluationResult<T>> {
         let orientations =
             momentum_sample.orientations(&self.orientation_filter, &self.orientations);
@@ -2387,6 +2473,170 @@ impl GraphTerm for CrossSectionGraphTerm {
             momentum_sample.loop_moms()
         );
 
+        // Host authentication, rotation and directed reconciliation are sampling
+        // overhead even though adoption happens at the physical boundary. Charge
+        // the entire interval on success and error; ordinary LU solves stay here.
+        let adoption_start = Instant::now();
+        let adopted_hosts = (|| {
+            let mut adopted = BTreeMap::new();
+            for host in context.prepared_lu_hosts {
+                let plan = &host.plan;
+                if host.source.graph_id != context.graph_id
+                    || plan.graph_name != self.graph.name
+                    || Some(host.source.generating_channel) != context.sampling_channel
+                    || Some(host.source.target_channel) != context.sampling_channel
+                {
+                    return Err(eyre!(
+                        "LU host source {:?} / plan {:?} does not belong to graph {} '{}' selected channel {:?}",
+                        host.source,
+                        plan,
+                        context.graph_id,
+                        self.graph.name,
+                        context.sampling_channel
+                    ));
+                }
+                let group = self
+                    .cut_group_data
+                    .cut_groups
+                    .get(plan.cut_group_id)
+                    .ok_or_else(|| eyre!("LU host claims unknown cut group {:?}", plan))?;
+                if !self.counterterm.cut_group_is_active(plan.cut_group_id)
+                    || group.cuts.first() != Some(&plan.representative_cut_id)
+                {
+                    return Err(eyre!(
+                        "LU host claims incompatible active representative {:?}",
+                        plan
+                    ));
+                }
+                let Some(SamplingCatalogueEntry::Named(channel)) = self
+                    .multi_channeling_setup
+                    .sampling_catalogue
+                    .as_ref()
+                    .and_then(|catalogue| {
+                        catalogue
+                            .entries
+                            .get(host.source.generating_channel.index())
+                    })
+                else {
+                    return Err(eyre!(
+                        "LU host {:?} has no selected named channel definition",
+                        plan
+                    ));
+                };
+                if channel.definition.parent_lmb != plan.parent_lmb {
+                    return Err(eyre!(
+                        "LU host parent {:?} does not match selected channel definition '{}' parent {:?}",
+                        plan.parent_lmb,
+                        channel.name,
+                        channel.definition.parent_lmb
+                    ));
+                }
+                let surface = &self.cut_esurface[plan.representative_cut_id];
+                let native_lmb = self
+                    .multi_channeling_setup
+                    .sampling_parent_lmb(&plan.parent_lmb)?;
+                let required = plan
+                    .parent_lmb
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| {
+                        surface.energies.iter().any(|edge| {
+                            native_lmb.edge_signatures[*edge]
+                                .internal
+                                .to_momtrop_format()[*index]
+                                != 0
+                        })
+                    })
+                    .map(|(_, edge)| *edge)
+                    .collect_vec();
+                if plan.required_prior_lmb != required || host.prior.len() != 3 * required.len() {
+                    return Err(eyre!(
+                        "LU host has incompatible canonical prerequisites {:?}; actual {:?}",
+                        plan,
+                        required
+                    ));
+                }
+                // The context retains the compiled child path as provenance.
+                // Here authenticate the physical consumer against the existing
+                // resolved catalogue, without inventing a second wrapper traversal.
+                let declared_host = channel.blocks.iter().any(|block| {
+                    !block.target.is_phase_space()
+                        && required
+                            .iter()
+                            .all(|edge| block.preceding_lmb.contains(edge))
+                        && block.target.host_cut().is_some_and(|edges| {
+                            group.cuts.iter().any(|id| {
+                                (channel.definition.on_cut.is_empty()
+                                    || channel.definition.on_cut.contains(&id.0))
+                                    && self.cut_esurface[*id]
+                                        .energies
+                                        .iter()
+                                        .map(|edge| edge.0)
+                                        .sorted()
+                                        .eq(edges.iter().copied())
+                            })
+                        })
+                });
+                if !declared_host {
+                    return Err(eyre!(
+                        "LU host {:?} is not a declared consumer of selected channel definition '{}'",
+                        plan,
+                        channel.name
+                    ));
+                }
+                if host.prior.iter().any(|value| !value.is_finite()) {
+                    return Err(SamplingEvaluationError::Unrepresentable {
+                        operation: "LU host adoption",
+                        detail: format!("nonfinite retained prerequisites for {plan:?}"),
+                    }
+                    .into());
+                }
+                // Payload remains in the original source frame through all
+                // sample rotations. Rotate its affine coefficients exactly once.
+                let ray = host.ray.rotate(context.rotation);
+                let zero = momentum_sample.zero();
+                let center = LoopMomenta::from_iter(
+                    (0..momentum_sample.loop_moms().0.len())
+                        .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+                );
+                let completed = surface.routed_ray(
+                    momentum_sample.loop_moms(),
+                    &center,
+                    momentum_sample.external_moms(),
+                    &masses,
+                    &self.graph.loop_momentum_basis,
+                );
+                let budget = self
+                    .multi_channeling_setup
+                    .sampling_bridge::<T>()?
+                    .relative_density_tolerance(&zero);
+                // This worst-case exponent covers every host-null pulled-back
+                // block. It does not certify complete threshold/joint density.
+                let dimension_bound = 3 * (plan.parent_lmb.len() - required.len());
+                ray.verify_lu_candidate(&completed, &host.solution, dimension_bound, &budget)
+                    .wrap_err_with(|| {
+                        format!(
+                            "graph '{}' host {:?}, source {:?}, rotation {}",
+                            self.graph.name, plan, host.source, context.rotation.method
+                        )
+                    })?;
+                if adopted
+                    .insert(plan.cut_group_id, (ray, host.solution.clone()))
+                    .is_some()
+                {
+                    return Err(eyre!(
+                        "multiple authoritative LU hosts for cut group {:?}",
+                        plan
+                    ));
+                }
+            }
+            Ok::<_, eyre::Report>(adopted)
+        })();
+        if !context.prepared_lu_hosts.is_empty() {
+            context.evaluation_metadata.parameterization_time += adoption_start.elapsed();
+        }
+        let mut adopted_hosts = adopted_hosts?;
+
         // Record every active cut root at each precision, even if another cut fails. A
         // later cut then retains its own lower-precision baseline for roundoff rescue.
         let mut lu_solutions = BTreeMap::new();
@@ -2408,32 +2658,39 @@ impl GraphTerm for CrossSectionGraphTerm {
                 "LU cut graph '{}' cut group {} probe rotation {}",
                 self.graph.name, cut_group_id.0, context.rotation.method,
             ));
-            let prepared_cut = match representative_esurface.solve_lu_cut(
-                momentum_sample.loop_moms(),
-                momentum_sample.external_moms(),
-                &masses,
-                &self.graph.loop_momentum_basis,
-                &F::from_f64(context.settings.kinematics.e_cm),
-                &mut context.evaluation_metadata.radial_root_diagnostics,
-                &identity,
-            ) {
-                Ok(solution) => solution,
-                Err(error) => {
-                    crate::debug_tags!(#integration, #cut, #solver;
-                        graph = %self.graph.name,
-                        cut_group_id = cut_group_id.0,
-                        edges = ?representative_esurface.energies,
-                        error = ?error,
-                        "LU radial root requires precision escalation"
-                    );
-                    // Use the existing residue-failure path so a recoverable numerical
-                    // failure is retried at higher precision and remains fatal at the final
-                    // level, without ever exposing invalid cut kinematics to the evaluator.
-                    lu_root_errors.push(format!(
-                        "Could not solve LU cut group {} of graph '{}', edges {:?}: {:?}",
-                        cut_group_id.0, self.graph.name, representative_esurface.energies, error,
-                    ));
-                    continue;
+            let prepared_cut = if let Some(prepared) = adopted_hosts.remove(&cut_group_id) {
+                prepared
+            } else {
+                match representative_esurface.solve_lu_cut(
+                    momentum_sample.loop_moms(),
+                    momentum_sample.external_moms(),
+                    &masses,
+                    &self.graph.loop_momentum_basis,
+                    &F::from_f64(context.settings.kinematics.e_cm),
+                    &mut context.evaluation_metadata.radial_root_diagnostics,
+                    &identity,
+                ) {
+                    Ok(solution) => solution,
+                    Err(error) => {
+                        crate::debug_tags!(#integration, #cut, #solver;
+                            graph = %self.graph.name,
+                            cut_group_id = cut_group_id.0,
+                            edges = ?representative_esurface.energies,
+                            error = ?error,
+                            "LU radial root requires precision escalation"
+                        );
+                        // Use the existing residue-failure path so a recoverable numerical
+                        // failure is retried at higher precision and remains fatal at the final
+                        // level, without ever exposing invalid cut kinematics to the evaluator.
+                        lu_root_errors.push(format!(
+                            "Could not solve LU cut group {} of graph '{}', edges {:?}: {:?}",
+                            cut_group_id.0,
+                            self.graph.name,
+                            representative_esurface.energies,
+                            error,
+                        ));
+                        continue;
+                    }
                 }
             };
 
