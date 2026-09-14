@@ -246,12 +246,20 @@ Replay a completed capture with:
 target/dev-optim/symbolica-evaluator-mre --exact-builder /path/to/build_PID_INDEX
 ```
 
-This mode imports the registry before defining any symbols and requires an
-empty remapping table. It loads the full raw expression and parameters using
+This mode restores the captured symbol prefix through Symbolica's public
+initializer protocol, before its dynamic special functions register their IDs.
+It lets the native special-function initializer restore its own callbacks,
+then imports the remaining registry and requires an empty remapping table.
+It loads the full raw expression and parameters using
 Symbolica's existing `AtomView::from` API, without normalization, abstraction,
 component recombination or textual parsing. After loading the actual FunctionMap,
-it verifies all serialized fields and raw Atom bytes against the original,
-sorting only the two container hash maps for comparison. A mismatch stops replay.
+it verifies definition IDs, argument order, symbol metadata and all raw Atom
+bytes against the original, sorting only the two container hash maps for
+comparison. The serialized callback-presence bit is excluded: it includes
+display-only callbacks and is explicitly not restored by Symbolica import.
+Missing application callbacks remain inventoried separately; native Symbolica
+special-function callbacks are restored by their original initializer.
+A content mismatch stops replay.
 Optimization settings round-trip exactly; the interrupt callback returns false
 as during uninterrupted live construction. No evaluator compilation occurs.
 
@@ -266,3 +274,14 @@ The RAM watchdog retains its 500 GB process-tree limit. Its `ps` snapshot timeou
 is increased from two to thirty seconds to tolerate brief host scheduling delays;
 monitoring errors still stop the run. Generation checks follow the requested
 4, 5, 6, ... minute intervals.
+
+The complete GL00 physical control passed on 2026-09-14. The captured expression
+has 29,884,507 bytes and 214 ordered parameters. The replay passed the identity
+registry and raw FunctionMap checks, built successfully in 0.909 s, and matched
+all four live operation counts: 11,570 additions, 14,748 multiplications,
+36 inversions and 18 function calls. Peak replay VmHWM was 347,852,800 bytes.
+The preserved r1/r2 loader attempts stopped at nonidentity registration; r3
+identified the native callback redefinition constraint; r4 isolated the
+callback-presence metadata difference. None is the original large-input panic.
+The validated immutable replay is in the local `gl262_faithful_20260914` package.
+The new complete GL262 generation is running with full builder capture enabled.

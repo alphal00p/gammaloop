@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     error::Error,
     fs::{self, File},
-    io::{BufReader, BufWriter, Write},
+    io::{BufReader, BufWriter, Read, Seek, Write},
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -14,12 +14,65 @@ use symbolica::{
     symbol,
 };
 
+// Seed the captured prefix before Symbolica's special-function initializer
+// allocates dynamic IDs. Let the native initializer restore its own callbacks;
+// main then imports the complete registry and requires an identity state map.
+// The fixed sixteen builtins are already initialized.
+// This uses the public, re-entry-safe initializer protocol; no State reset or
+// Atom remapping is needed, and the dependency's evaluator code stays unchanged.
+symbolica::_inventory::submit! {
+    symbolica::state::StateInitializer::new("exact_builder_registry", || {
+        let args = std::env::args().skip(1).collect::<Vec<_>>();
+        if args.first().is_some_and(|a| a == "--exact-builder") {
+            assert_eq!(args.len(), 2);
+            let path = Path::new(&args[1]).join("state.bin");
+            let mut input = BufReader::new(File::open(path).expect("Captured registry"));
+            let mut header = [0; 14];
+            input.read_exact(&mut header).unwrap();
+            let count = u64::from_le_bytes(header[6..].try_into().unwrap());
+            for index in 0..count {
+                let position = input.stream_position().unwrap();
+                let mut size = [0; 4];
+                input.read_exact(&mut size).unwrap();
+                let mut name = vec![0; u32::from_le_bytes(size) as usize];
+                input.read_exact(&mut name).unwrap();
+                input.seek(std::io::SeekFrom::Start(position)).unwrap();
+                // First symbol of pinned Symbolica's GeometricSymbols group.
+                if name == b"symbolica::tan" {
+                    return;
+                }
+                let symbol = Symbol::import(&mut input).unwrap();
+                assert_eq!(symbol.get_id() as u64, index, "Captured prefix changed IDs");
+            }
+            panic!("Captured registry lacks the native special-function boundary");
+        }
+    }, &["symbolica"])
+}
+
 // Audit the pinned FunctionMap binary format without normalizing its Atoms.
 // Sorting only the two serialized hash maps preserves definition IDs, argument
 // order and every raw byte; it does not sort or rewrite symbolic expressions.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct RawAtom(Vec<u8>);
 bincode::impl_borrow_decode!(RawAtom);
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct RawSymbol(Vec<u8>);
+bincode::impl_borrow_decode!(RawSymbol);
+
+impl<C> bincode::Decode<C> for RawSymbol {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let mut bytes = Vec::<u8>::decode(decoder)?;
+        // Symbol::export ends with callback presence, which import explicitly
+        // cannot restore. This flag includes display-only callbacks. Preserve
+        // all names, namespaces, attributes, tags, aliases and user data; the
+        // manifest separately records missing application callbacks.
+        assert!(matches!(bytes.pop(), Some(0 | 1)));
+        Ok(Self(bytes))
+    }
+}
 
 impl<C> bincode::Decode<C> for RawAtom {
     fn decode<D: bincode::de::Decoder<Context = C>>(
@@ -39,13 +92,13 @@ impl<C> bincode::Decode<C> for RawAtom {
 
 #[derive(bincode::Decode, Debug, PartialEq, Eq)]
 enum RawIndeterminate {
-    Symbol(Vec<u8>, ([u8; 16], u8)),
-    Function(Vec<u8>, RawAtom),
+    Symbol(RawSymbol, ([u8; 16], u8)),
+    Function(RawSymbol, RawAtom),
 }
 
 type RawFunctionMap = (
-    BTreeMap<(Vec<u8>, Vec<RawAtom>), (usize, usize, Vec<RawIndeterminate>, RawAtom)>,
-    BTreeMap<Vec<u8>, usize>,
+    BTreeMap<(RawSymbol, Vec<RawAtom>), (usize, usize, Vec<RawIndeterminate>, RawAtom)>,
+    BTreeMap<RawSymbol, usize>,
 );
 
 fn stage(started: Instant, name: &str) {
@@ -97,6 +150,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         assert_eq!(manifest["compile"], false);
         // Import the complete registry first, before registering any user symbol.
         // Refuse remapping: the raw expression must retain its original IDs.
+        println!("registered_symbols={}", State::symbol_iter().count());
         let state_map = State::import(
             &mut BufReader::new(File::open(directory.join("state.bin"))?),
             None,
