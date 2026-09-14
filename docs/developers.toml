@@ -208,6 +208,10 @@ review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloo
 path = "crates/gammaloop-api/src/templates.rs"
 symbol = "gammaloop_api::templates::Assets::extract_templates"
 anchor = "pub fn extract_templates<P: AsRef<Path>>"
+# No-impact attestation 2026-09-11: the entire production source, including
+# extract_templates and its destination contract, is byte-identical to the
+# previous verified scope; only test coverage changed. The migration record's
+# current preface now names the style composer alongside its three adapters.
 digest = "040793fcba3b6f372a03187cfe82cfacc32fa953"
 
 [[section.note]]

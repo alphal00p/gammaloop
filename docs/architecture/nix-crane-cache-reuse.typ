@@ -1587,8 +1587,8 @@ opt-in path without making the release builder link Typst's compiler crates.
 The final Pages derivation remains terminal. Its identity includes all
 rendered documentation sources, the publication channel and optional
 snapshot tag, and the documented commit and timestamp. An exact rerun
-can substitute the complete site, while a content change rebuilds the
-site on top of the stable workspace archive. The Pages workflow and the
+can substitute the complete static documentation site, while a content change rebuilds it
+on top of the stable workspace archive. The Pages workflow and the
 Nix producer workflow build the same reusable Nix artifact chain in
 separate Hestia cache namespaces. Hestia v3 action roots are scoped only
 by ref and system, so sharing a namespace across independent workflows
@@ -1603,6 +1603,21 @@ before an immutable snapshot is compared. The final validator still scans the
 combined site. This ordering keeps a second build byte-identical to the first:
 the previously published snapshot and the fresh candidate are both already in
 their normalized form when immutability is checked.
+
+Revisions with live notebook support add a publication step after the Nix build. The Pages
+workflow copies the static site into writable staging, then exports Marimo notebook assets
+with a Linnet Python WebAssembly wheel built from the documented revision. That wheel has a
+separate cache keyed by the exact source commit and pinned cibuildwheel version; the export
+uses pinned Marimo and the source commit's timestamp. This step leaves the Nix Cargo producer
+boundary unchanged. Notebook assets live inside the selected product version and participate
+in immutable snapshot comparisons. Historical revisions without notebook support keep the
+original static bundle.
+
+The physics notebook export also runs the native GammaLoop CLI to import the bundled Standard
+Model and `save dot` into temporary staging. Its generated particle map and canonical drawing
+packages become `public/gammaloop-drawing.zip`. Browser Python passes edited DOT and controls to
+those Typst templates; model import runs only during export. This additional publication asset
+uses the existing GammaLoop package and does not change the documentation Cargo producer.
 
 Manual Pages dispatches with `publish=false` build and seed this cache
 without merging Pages history or configuring, uploading, or deploying

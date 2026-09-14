@@ -1704,7 +1704,7 @@ impl SiteBuilder {
                 || !top_level
                 || !matches!(
                     entry.file_name().to_str(),
-                    Some(".git" | ".jj" | ".direnv" | ".venv" | "node_modules" | "target")
+                    Some(".git" | ".jj" | ".direnv" | ".venv" | "node_modules" | "target" | "dist")
                 )
         }) {
             let entry = entry?;

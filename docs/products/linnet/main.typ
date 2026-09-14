@@ -6,6 +6,9 @@
 #import "content/quickstart-typst.typ": quickstart-typst
 #import "content/tutorial.typ": tutorial
 #import "content/algorithms.typ": algorithms
+#import "content/dot-input.typ": dot-input
+#import "content/playground.typ": playground
+#import "content/python-rendering.typ": python-rendering
 #import "content/clinnet.typ": clinnet
 #import "content/linnest.typ": linnest
 #import "content/api.typ": api
@@ -32,6 +35,9 @@
     #quickstart-typst
     #tutorial
     #algorithms
+    #dot-input
+    #playground
+    #python-rendering
     #clinnet
     #linnest
     #api

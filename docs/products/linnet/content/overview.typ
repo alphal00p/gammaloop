@@ -22,6 +22,8 @@ than a detached copy of the graph.
   #link("quickstart/rust/")[Rust guide] and the exact
   #link("reference/rust/linnet/half_edge/builder/struct.HedgeGraphBuilder.html")[`HedgeGraphBuilder`
   reference].
+- To understand DOT endpoints and their numbering, read
+  #link("guides/dot-input/")[DOT input and graph indices].
 - To parse and inspect a DOT graph from Python, follow the source-built
   #link("quickstart/python/")[Python guide].
 - To select an internal subgraph and compute a cycle basis, continue with the

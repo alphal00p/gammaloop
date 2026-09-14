@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import contextlib
 import filecmp
 import functools
 import http.server
+import json
+import os
 import re
 import shlex
 import shutil
@@ -15,8 +18,10 @@ import subprocess
 import sys
 import tempfile
 import threading
+import tomllib
 import urllib.parse
 import urllib.request
+import uuid
 import zipfile
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
@@ -30,6 +35,8 @@ PUBLISHED_REQUIREMENT = '#     "linnet-py==0.1.0",'
 class Notebook:
     filename: str
     ready_value: str
+    docs_product: str
+    docs_route: str
 
     @property
     def source(self) -> Path:
@@ -41,13 +48,15 @@ class Notebook:
 
     @property
     def ready_selector(self) -> str:
+        if self.ready_value == "quickstart":
+            return '[data-linnet-notebook="python_quickstart"] svg[width$="pt"]'
         return f'[data-linnet-render-ready="{self.ready_value}"] svg'
 
 
 NOTEBOOKS = (
-    Notebook("rendering_api.py", "generic"),
-    Notebook("physics_render_settings.py", "physics"),
-    Notebook("layout_stream.py", "stream"),
+    Notebook("rendering_api.py", "generic", "linnet", "guides/python-rendering/"),
+    Notebook("physics_render_settings.py", "physics", "gammaloop", "guides/dot-input/"),
+    Notebook("layout_stream.py", "stream", "linnet", "playground/"),
 )
 
 
@@ -108,6 +117,7 @@ def with_local_wheel(source: str, wheel_name: str) -> str:
 def staged_notebooks(
     wheel: Path | None,
     notebooks: Sequence[Notebook],
+    gammaloop: Path | None = None,
 ) -> Iterator[tuple[tuple[Notebook, Path], ...]]:
     """Stage copies so a local wheel override never edits the notebooks."""
 
@@ -123,6 +133,137 @@ def staged_notebooks(
             source = notebook.source.read_text(encoding="utf-8")
             if wheel is not None:
                 source = with_local_wheel(source, wheel.name)
+            if notebook.ready_value == "physics":
+                repository = EXAMPLES_DIR.parents[2]
+                if gammaloop is None:
+                    package = subprocess.check_output(
+                        [
+                            "nix",
+                            "build",
+                            "--no-link",
+                            "--print-out-paths",
+                            ".#gammaloop",
+                        ],
+                        cwd=repository,
+                        text=True,
+                    ).strip()
+                    gammaloop = Path(package) / "bin/gammaloop"
+                gammaloop = gammaloop.expanduser().resolve()
+                drawing_export = stage / "gammaloop-export"
+                model = repository / "assets/models/json/sm/sm.json"
+                print(
+                    "Generating GammaLoop drawing bundle from the Standard Model",
+                    flush=True,
+                )
+                subprocess.run(
+                    [
+                        str(gammaloop),
+                        "-l",
+                        "warn",
+                        "--state-folder",
+                        str(stage / "gammaloop-state"),
+                        "--no-save-state",
+                        "run",
+                        "-c",
+                        (
+                            f"import model {shlex.quote(str(model))}; "
+                            f"save dot {shlex.quote(str(drawing_export))}"
+                        ),
+                    ],
+                    cwd=repository,
+                    check=True,
+                )
+                templates = drawing_export / "drawings/templates"
+                # GammaLoop's CLI can report execution errors without a failing
+                # process status. Require a complete bundle from this source tree.
+                canonical = repository / "assets/embedded/drawing/templates"
+                sources = [
+                    (expected, templates / expected.relative_to(canonical))
+                    for expected in canonical.rglob("*.typ")
+                ]
+                for package in ("linnest", "kurvst"):
+                    relative = Path("crates") / package / "typst"
+                    canonical = repository / relative
+                    sources.extend(
+                        (
+                            expected,
+                            templates / relative / expected.relative_to(canonical),
+                        )
+                        for expected in (
+                            canonical / "typst.toml",
+                            *(canonical / "src").rglob("*.typ"),
+                        )
+                    )
+                    wasm = templates / relative / f"{package}.wasm"
+                    if not wasm.is_file():
+                        raise RuntimeError(
+                            f"GammaLoop drawing bundle is missing {wasm}"
+                        )
+                for expected, actual in sources:
+                    if (
+                        not actual.is_file()
+                        or actual.read_bytes() != expected.read_bytes()
+                    ):
+                        raise RuntimeError(
+                            "GammaLoop exported missing or stale template "
+                            f"{actual.relative_to(templates)}"
+                        )
+                particle_map = templates / "edge-style.typ"
+                if not particle_map.is_file() or not all(
+                    marker in particle_map.read_text(encoding="utf-8")
+                    for marker in (
+                        "#let generated-map = (",
+                        '"a":',
+                        '"g":',
+                        '"t":',
+                        '"H":',
+                    )
+                ):
+                    raise RuntimeError(
+                        "GammaLoop did not generate the Standard Model particle map"
+                    )
+                package_cache = os.environ.get("TYPST_PACKAGE_CACHE_PATH")
+                if not package_cache:
+                    raise RuntimeError(
+                        "Use the flake to provide TYPST_PACKAGE_CACHE_PATH for MiTeX"
+                    )
+                roots = [(templates, "drawings/templates")]
+                for package in ("cetz/0.5.1", "oxifmt/1.0.0", "mitex/0.2.6"):
+                    package_root = (
+                        (
+                            Path(package_cache)
+                            if package.startswith("mitex/")
+                            else EXAMPLES_DIR.parent / "vendor/typst-packages"
+                        )
+                        / "preview"
+                        / package
+                    )
+                    if not (package_root / "typst.toml").is_file():
+                        raise RuntimeError(
+                            f"Missing pinned Typst package {package_root}"
+                        )
+                    roots.append((package_root, "typst-packages/preview/" + package))
+                assets = sorted(
+                    (f"{prefix}/{asset.relative_to(root).as_posix()}", asset)
+                    for root, prefix in roots
+                    for asset in root.rglob("*")
+                    if asset.is_file()
+                )
+                bundle = stage / "gammaloop-drawing.zip"
+                with zipfile.ZipFile(bundle, "w") as archive:
+                    for name, asset in assets:
+                        entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+                        entry.compress_type = zipfile.ZIP_DEFLATED
+                        entry.create_system = 3
+                        entry.external_attr = 0o644 << 16
+                        archive.writestr(entry, asset.read_bytes())
+                marker = "    drawing_bundle = None"
+                if source.count(marker) != 1:
+                    raise ValueError(
+                        "Expected one drawing_bundle placeholder in the physics notebook"
+                    )
+                encoded = base64.b64encode(bundle.read_bytes()).decode("ascii")
+                source = source.replace(marker, f"    drawing_bundle = {encoded!r}")
             path = stage / notebook.filename
             path.write_text(source, encoding="utf-8")
             staged.append((notebook, path))
@@ -150,10 +291,111 @@ def lint(staged: Sequence[tuple[Notebook, Path]]) -> None:
 
 
 def export(
-    staged: Sequence[tuple[Notebook, Path]], output: Path
+    staged: Sequence[tuple[Notebook, Path]], output: Path, *, docs: str | None = None
 ) -> tuple[tuple[Notebook, Path], ...]:
     output.mkdir(parents=True, exist_ok=True)
+    bundle = staged[0][1].parent / "gammaloop-drawing.zip"
+    if bundle.is_file():
+        (output / "public").mkdir(exist_ok=True)
+        shutil.copy2(bundle, output / "public/gammaloop-drawing.zip")
     artifacts = []
+    if docs:
+        import marimo as mo
+
+        generators = []
+        # Islands omit PEP 723 metadata. Install the staged wheel explicitly and
+        # make the import cell depend on it; the browser supplies its absolute URL.
+        for notebook, source in staged:
+            text = source.read_text(encoding="utf-8")
+            metadata = re.search(r"# /// script\n(.*?)# ///", text, re.DOTALL)
+            requirements = tomllib.loads(re.sub(r"(?m)^# ?", "", metadata.group(1)))[
+                "dependencies"
+            ]
+            requirements = [
+                "__LINNET_WHEEL_URL__" if item.startswith("linnet-py @") else item
+                for item in requirements
+                if not item.startswith("marimo==")
+            ]
+            source.write_text(
+                text.replace("    import ", "    linnet_browser_ready\n    import ", 1),
+                encoding="utf-8",
+            )
+            generator = mo.MarimoIslandGenerator.from_file(
+                str(source), display_code=notebook.ready_value == "generic"
+            )
+            generator.add_code(
+                "import micropip as _micropip\n"
+                f"await _micropip.install({requirements!r}, reinstall=True)\n"
+                "linnet_browser_ready = True",
+            )
+            generators.append((notebook, generator))
+
+        if docs == "linnet":
+            # The live quickstart uses the canonical documented example verbatim,
+            # then renders the resulting graph. Keeping
+            # output in the editable cell also gives it Marimo's rerun control.
+            quickstart = (
+                EXAMPLES_DIR.parents[2]
+                / "docs/products/linnet/content/quickstart-python.typ"
+            )
+            match = re.search(
+                r"// docs-example: compile linnet-python-quickstart\s*```python\n(.*?)\n```",
+                quickstart.read_text(encoding="utf-8"),
+                re.DOTALL,
+            )
+            if match is None:
+                raise ValueError("The canonical Linnet Python quickstart was not found")
+            generator = mo.MarimoIslandGenerator()
+            generator.add_code(
+                "import micropip as _micropip\n"
+                "await _micropip.install('__LINNET_WHEEL_URL__')\n"
+                "linnet_browser_ready = True",
+            )
+            generator.add_code(
+                "linnet_browser_ready\n" + match.group(1) + "\n\n"
+                "import marimo as mo\n"
+                "mo.Html(graph.to_svg())",
+                display_code=True,
+            )
+            generators.append(
+                (
+                    Notebook(
+                        "python_quickstart.py",
+                        "quickstart",
+                        "linnet",
+                        "quickstart/python/",
+                    ),
+                    generator,
+                )
+            )
+        wheel = next((staged[0][1].parent / "wheels").glob("*.whl"))
+        hosted_wheel = output / "public" / "wheels" / wheel.name
+        hosted_wheel.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(wheel, hosted_wheel)
+        for notebook, generator in generators:
+            body = generator.render_body(
+                include_init_island=False, include_payload=True
+            )
+            # Static editor handles are random UUIDs in Marimo. Stable handles
+            # keep repeated exports identical for immutable documentation snapshots.
+            for index, identifier in enumerate(
+                dict.fromkeys(re.findall(r"object-id='([^']+)'", body))
+            ):
+                stable = uuid.uuid5(uuid.NAMESPACE_URL, f"{notebook.filename}:{index}")
+                body = body.replace(f"'{identifier}'", f"'{stable}'")
+            artifact = (output / notebook.output_name).with_suffix(".json")
+            artifact.write_text(
+                json.dumps(
+                    {
+                        "head": generator.render_head(),
+                        "body": body,
+                        "wheel": "public/wheels/" + wheel.name,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            artifacts.append((notebook, artifact))
+        return tuple(artifacts)
     for notebook, source in staged:
         artifact = output / notebook.output_name
         marimo(
@@ -197,9 +439,13 @@ def http_smoke(
     artifacts: Sequence[tuple[Notebook, Path]],
     output: Path,
     wheel: Path | None,
+    *,
+    docs: bool = False,
 ) -> None:
     assets = output / "assets"
-    if not assets.is_dir() or not any(path.is_file() for path in assets.rglob("*")):
+    if not docs and (
+        not assets.is_dir() or not any(path.is_file() for path in assets.rglob("*"))
+    ):
         raise RuntimeError(f"Marimo export did not produce assets under {assets}")
 
     if wheel is not None:
@@ -215,6 +461,18 @@ def http_smoke(
             body = response.read().decode("utf-8")
             if response.status != 200:
                 raise RuntimeError(f"Invalid Marimo WASM response from {url}")
+            if docs:
+                payload = json.loads(body)
+                if (
+                    "<marimo-island" not in payload["body"]
+                    or "__LINNET_WHEEL_URL__" not in body
+                ):
+                    raise RuntimeError(
+                        f"{artifact.name} is missing its executable islands"
+                    )
+                if payload["wheel"] != "public/wheels/" + wheel.name:
+                    raise RuntimeError(f"{artifact.name} references the wrong wheel")
+                continue
             required = {
                 "embedded notebook source": "<marimo-code",
                 "edit-mode configuration": '"mode": "edit"',
@@ -242,6 +500,8 @@ def browser_smoke(
     artifacts: Sequence[tuple[Notebook, Path]],
     timeout_seconds: float,
     browser_executable: Path | None,
+    *,
+    docs: bool = False,
 ) -> None:
     try:
         from playwright.sync_api import sync_playwright
@@ -264,7 +524,10 @@ def browser_smoke(
                     "pageerror",
                     lambda error, errors=errors: errors.append(str(error)),
                 )
-                url = urllib.parse.urljoin(base_url, urllib.parse.quote(artifact.name))
+                route = (
+                    notebook.docs_route if docs else urllib.parse.quote(artifact.name)
+                )
+                url = urllib.parse.urljoin(base_url, route)
                 response = page.goto(
                     url,
                     wait_until="domcontentloaded",
@@ -272,16 +535,53 @@ def browser_smoke(
                 )
                 if response is None or not response.ok:
                     raise RuntimeError(f"Browser failed to load {url}")
-                page.locator(".cm-editor").first.wait_for(
-                    state="visible",
-                    timeout=timeout,
-                )
-                # Editable exports intentionally start with unexecuted cells.
-                page.locator('[data-testid="run-button"]').last.click()
+                if docs:
+                    page.locator("[data-linnet-notebook]").scroll_into_view_if_needed()
+                else:
+                    page.locator(".cm-editor").first.wait_for(
+                        state="visible",
+                        timeout=timeout,
+                    )
+                    # Editable exports intentionally start with unexecuted cells.
+                    page.locator('[data-testid="run-button"]').last.click()
                 page.locator(notebook.ready_selector).wait_for(
                     state="visible",
                     timeout=timeout,
                 )
+                if notebook.ready_value == "physics":
+                    settings = page.get_by_role(
+                        "button", name="Layout settings", exact=True
+                    )
+                    if settings.get_attribute("aria-expanded") != "false":
+                        raise RuntimeError(
+                            "Physics layout settings must start collapsed"
+                        )
+                    settings.click()
+                    page.get_by_role("slider").first.wait_for(
+                        state="visible", timeout=timeout
+                    )
+                    for name in (
+                        "Momentum arrows",
+                        "Momentum labels qₑ",
+                        "Cross-section",
+                    ):
+                        previous = page.locator(notebook.ready_selector).evaluate(
+                            "svg => svg.outerHTML"
+                        )
+                        if name == "Cross-section":
+                            page.get_by_role(
+                                "combobox", name="Example", exact=True
+                            ).select_option(label=name)
+                        else:
+                            page.get_by_role("checkbox", name=name, exact=True).check()
+                        page.wait_for_function(
+                            """([selector, previous]) => {
+                                const svg = document.querySelector(selector);
+                                return svg && svg.outerHTML !== previous;
+                            }""",
+                            arg=[notebook.ready_selector, previous],
+                            timeout=timeout,
+                        )
                 if errors:
                     raise RuntimeError(
                         f"Browser errors while loading {artifact.name}: "
@@ -300,7 +600,13 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         required=True,
         help="Directory for the editable HTML-WASM notebooks",
     )
-    parser.add_argument(
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument(
+        "--docs",
+        choices=("linnet", "gammaloop"),
+        help="Export this product's live cells into its built assets/notebooks directory (requires --wheel)",
+    )
+    selection.add_argument(
         "--notebook",
         choices=[Path(notebook.filename).stem for notebook in NOTEBOOKS],
         help="Export one notebook (default: all)",
@@ -312,6 +618,11 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
             "Local linnet-py Emscripten wheel. Without this option the "
             "published linnet-py==0.1.0 dependency is used."
         ),
+    )
+    parser.add_argument(
+        "--gammaloop",
+        type=Path,
+        help="GammaLoop executable for the physics bundle (default: build this revision with Nix)",
     )
     parser.add_argument(
         "--browser-smoke",
@@ -338,24 +649,46 @@ def main(arguments: Sequence[str] | None = None) -> int:
         raise ValueError("--timeout must be greater than zero")
     wheel = validate_wasm_wheel(options.wheel) if options.wheel else None
     output = options.output.expanduser().resolve()
-
+    if options.docs and wheel is None:
+        raise ValueError("--docs requires --wheel")
+    if options.docs and (output.parent.name, output.name) != ("assets", "notebooks"):
+        raise ValueError(
+            "Build the product docs first and use --output <product-version>/assets/notebooks"
+        )
     notebooks = tuple(
         notebook
         for notebook in NOTEBOOKS
-        if options.notebook is None or Path(notebook.filename).stem == options.notebook
+        if (
+            notebook.docs_product == options.docs
+            if options.docs
+            else options.notebook is None
+            or Path(notebook.filename).stem == options.notebook
+        )
     )
-    with staged_notebooks(wheel, notebooks) as staged:
+    with staged_notebooks(wheel, notebooks, options.gammaloop) as staged:
         lint(staged)
-        artifacts = export(staged, output)
+        artifacts = export(staged, output, docs=options.docs)
 
-    with serve(output) as base_url:
-        http_smoke(base_url, artifacts, output, wheel)
+    with serve(output.parent.parent if options.docs else output) as base_url:
+        http_smoke(
+            urllib.parse.urljoin(base_url, "assets/notebooks/")
+            if options.docs
+            else base_url,
+            artifacts,
+            output,
+            wheel,
+            docs=bool(options.docs),
+        )
         if options.browser_smoke:
             browser_smoke(
-                base_url, artifacts, options.timeout, options.browser_executable
+                base_url,
+                artifacts,
+                options.timeout,
+                options.browser_executable,
+                docs=bool(options.docs),
             )
 
-    print(f"Editable Marimo WASM notebooks exported to {output}")
+    print(f"Marimo WASM notebooks exported to {output}")
     return 0
 
 

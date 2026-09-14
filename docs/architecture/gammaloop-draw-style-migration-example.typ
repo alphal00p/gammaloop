@@ -7,15 +7,17 @@
 
 The current generator imports GammaLoop's reusable
 #link("../../assets/embedded/drawing/templates/physics-edge-style.typ")[`physics-edge-style.typ`]
-callbacks and emits only the model-specific particle map plus three
-wrapper functions. The embedded drawing entry points are
+callbacks and emits the model-specific particle map, a `style(...)` composer,
+and `source-style`, `sink-style`, and `edge-label` adapters. The embedded drawing entry points are
 #link("../../assets/embedded/drawing/templates/layout.typ")[`layout.typ`]
 and
 #link("../../assets/embedded/drawing/templates/layout-core.typ")[`layout-core.typ`];.
 They use direct Typst scope and callback values; the placeholder
 interpolation and `source-style-eval`/`sink-style-eval` design shown
 below is not the current interface. Preserve the remainder as design
-history, not copyable guidance.
+history, not copyable guidance. The
+#link("gammaloop-drawing-architecture.typ")[current drawing architecture]
+describes GammaLoop styling and external-edge preparation on Linnest's shared renderer.
 ]
 
 This document records the proposed shape that led to the GammaLoop
