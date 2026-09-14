@@ -73,7 +73,7 @@ use symbolica::{
         WildcardRestriction,
     },
     poly::series::Series,
-    printer::{AtomPrinter, PrintOptions},
+    printer::{AtomPrinter, CanonicalOrderingSettings, PrintOptions},
     transformer::Transformer,
 };
 use utils::simplify_real;
@@ -4279,25 +4279,14 @@ Evaluated (n_loops=1, mu_r=1) :
             }
             let v_id = get_integer_from_atom(m.get(&vk_symbol!("id_")).unwrap().as_view()).unwrap();
             let idx = m.get(&vk_symbol!("idx_")).unwrap();
-            form_expression = form_expression
-                .replace(
-                    vk_parse!(format!("{}({},{})", v, v_id, idx.to_canonical_string()).as_str())
-                        .unwrap()
-                        .to_pattern(),
-                )
-                .with(
-                    vk_parse!(
-                        format!("vec1({}{},{})", v, v_id, idx.to_canonical_string()).as_str()
-                    )
-                    .unwrap()
-                    .to_pattern(),
-                );
-            vector_mapping.insert(
-                vk_parse!(format!("{}{}({})", v, v_id, idx.to_canonical_string()).as_str())
-                    .unwrap(),
-                vk_parse!(format!("{}({},{})", v, v_id, idx.to_canonical_string()).as_str())
-                    .unwrap(),
-            );
+            let vector_symbol = vk_symbol!(format!("{}{}", v, v_id));
+            let vector = function!(v, v_id, idx);
+            form_expression = form_expression.replace(vector.to_pattern()).with(function!(
+                vk_symbol!("vec1"),
+                Atom::var(vector_symbol),
+                idx
+            ));
+            vector_mapping.insert(function!(vector_symbol, idx), vector);
         }
         // println!("Input expression for FORM : {}", form_expression);
 
@@ -4786,62 +4775,37 @@ Evaluated (n_loops=1, mu_r=1) :
 
         for (i_index, user_i) in indices.iter().enumerate() {
             if substitute_indices {
+                // Reuse index atoms directly: canonical text omits symbol user data.
+                let integer_index =
+                    Atom::num((FORM_REPLACEMENT_INDEX_SHIFT + 1 + i_index as u64) as i64);
                 for vecsymbol in [
                     vk_symbol!(LOOP_MOMENTUM_SYMBOL),
                     vk_symbol!(EXTERNAL_MOMENTUM_SYMBOL),
                     vk_symbol!("vec1"),
                     vk_symbol!("vec"),
                 ] {
-                    let pattern = vk_parse!(format!(
-                        "{}(id_,{})",
-                        vecsymbol,
-                        user_i.to_canonical_string()
-                    ))
-                    .unwrap()
-                    .to_pattern();
-                    expression_no_indices = expression_no_indices.replace(pattern).with(
-                        vk_parse!(format!(
-                            "{}(id_,{})",
-                            vecsymbol,
-                            (i_index as u64) + FORM_REPLACEMENT_INDEX_SHIFT + 1
-                        ))
-                        .unwrap(),
-                    );
+                    let id = Atom::var(vk_symbol!("id_"));
+                    expression_no_indices = expression_no_indices
+                        .replace(function!(vecsymbol, &id, user_i).to_pattern())
+                        .with(function!(vecsymbol, &id, &integer_index));
                 }
                 for metric_symbol in ["g", METRIC_SYMBOL] {
-                    let pattern = vk_parse!(format!(
-                        "{}(idx1_,{})",
-                        metric_symbol,
-                        user_i.to_canonical_string()
-                    ))
-                    .unwrap()
-                    .to_pattern();
-                    expression_no_indices = expression_no_indices.replace(pattern).with(
-                        vk_parse!(format!(
-                            "{}(idx1_,{})",
-                            metric_symbol,
-                            (i_index as u64) + FORM_REPLACEMENT_INDEX_SHIFT + 1
-                        ))
-                        .unwrap(),
-                    );
-                    let pattern = vk_parse!(format!(
-                        "{}({},idx2_)",
-                        metric_symbol,
-                        user_i.to_canonical_string()
-                    ))
-                    .unwrap()
-                    .to_pattern();
-                    expression_no_indices = expression_no_indices.replace(pattern).with(
-                        vk_parse!(format!(
-                            "{}({},idx2_)",
-                            metric_symbol,
-                            (i_index as u64) + FORM_REPLACEMENT_INDEX_SHIFT + 1
-                        ))
-                        .unwrap(),
-                    );
+                    let metric = vk_symbol!(metric_symbol);
+                    let idx1 = Atom::var(vk_symbol!("idx1_"));
+                    let idx2 = Atom::var(vk_symbol!("idx2_"));
+                    expression_no_indices = expression_no_indices
+                        .replace(function!(metric, &idx1, user_i).to_pattern())
+                        .with(function!(metric, &idx1, &integer_index))
+                        .replace(function!(metric, user_i, &idx2).to_pattern())
+                        .with(function!(metric, &integer_index, &idx2));
                 }
             } else {
-                let litteral_form_name = format!("[{}]", user_i.to_canonical_string());
+                let litteral_form_name = format!(
+                    "[{}]",
+                    user_i.to_canonically_ordered_string(
+                        CanonicalOrderingSettings::new().include_attributes(false)
+                    )
+                );
                 expression_no_indices = expression_no_indices
                     .replace(user_i.to_pattern())
                     .with(Atom::num(0));
@@ -4911,8 +4875,10 @@ Evaluated (n_loops=1, mu_r=1) :
         }
         let mut string_replacements: HashMap<String, String, ahash::RandomState> =
             HashMap::default();
+        // FORM returns names to this registry; reuse symbols instead of redeclaring attributes
+        // without their user data, normalization callbacks, and other registered metadata.
         for user_f in user_functions.iter() {
-            let litteral_form_name = format!("[{}]", get_full_name(user_f));
+            let litteral_form_name = format!("[{}]", user_f.get_name());
             if user_f.get_namespace() == NAMESPACE || user_f.get_namespace() == "symbolica" {
                 //            if (user_f.get_namespace() == NAMESPACE || user_f.get_namespace() == "symbolica") && user_f.get_attributes().is_empty() {
                 string_replacements.insert(
@@ -4926,7 +4892,7 @@ Evaluated (n_loops=1, mu_r=1) :
             form_header_functions.push(litteral_form_name);
         }
         for user_v in user_variables.iter() {
-            let litteral_form_name = format!("[{}]", get_full_name(user_v));
+            let litteral_form_name = format!("[{}]", user_v.get_name());
             if user_v.get_namespace() == NAMESPACE || user_v.get_namespace() == "symbolica" {
                 //            if (user_v.get_namespace() == NAMESPACE || user_v.get_namespace() == "symbolica") && user_v.get_attributes().is_empty() {
                 string_replacements.insert(
@@ -5112,48 +5078,24 @@ Evaluated (n_loops=1, mu_r=1) :
 
                 for (i_index, user_i) in indices.iter().enumerate() {
                     let mut replacements = vec![];
+                    let integer_index =
+                        Atom::num((FORM_REPLACEMENT_INDEX_SHIFT + 1 + i_index as u64) as i64);
+                    let id = Atom::var(vk_symbol!("id_"));
                     for vec in [LOOP_MOMENTUM_SYMBOL, EXTERNAL_MOMENTUM_SYMBOL] {
+                        let vector = vk_symbol!(vec);
                         replacements.push(Replacement::new(
-                            vk_parse!(format!(
-                                "{}(id_,{})",
-                                vec,
-                                FORM_REPLACEMENT_INDEX_SHIFT + 1 + (i_index as u64)
-                            ))
-                            .unwrap()
-                            .to_pattern(),
-                            vk_parse!(format!("{}(id_,{})", vec, user_i.to_canonical_string()))
-                                .unwrap(),
+                            function!(vector, &id, &integer_index).to_pattern(),
+                            function!(vector, &id, user_i),
                         ));
                     }
+                    let metric = vk_symbol!(METRIC_SYMBOL);
                     replacements.push(Replacement::new(
-                        vk_parse!(format!(
-                            "{}({},id_)",
-                            METRIC_SYMBOL,
-                            FORM_REPLACEMENT_INDEX_SHIFT + 1 + (i_index as u64)
-                        ))
-                        .unwrap()
-                        .to_pattern(),
-                        vk_parse!(format!(
-                            "{}(id_,{})",
-                            METRIC_SYMBOL,
-                            user_i.to_canonical_string()
-                        ))
-                        .unwrap(),
+                        function!(metric, &integer_index, &id).to_pattern(),
+                        function!(metric, &id, user_i),
                     ));
                     replacements.push(Replacement::new(
-                        vk_parse!(format!(
-                            "{}(id_,{})",
-                            METRIC_SYMBOL,
-                            FORM_REPLACEMENT_INDEX_SHIFT + 1 + (i_index as u64)
-                        ))
-                        .unwrap()
-                        .to_pattern(),
-                        vk_parse!(format!(
-                            "{}({},id_)",
-                            METRIC_SYMBOL,
-                            user_i.to_canonical_string()
-                        ))
-                        .unwrap(),
+                        function!(metric, &id, &integer_index).to_pattern(),
+                        function!(metric, user_i, &id),
                     ));
                     processed = processed.replace_multiple(&replacements);
                 }
