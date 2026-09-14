@@ -332,7 +332,7 @@
   "certificate_round/source.patch": {
     "sha256_uncompressed": "61e9a9b07a858f152537dbc98d2778cbb05071558fdb8276b967d7427af4f06d",
     "bytes_uncompressed": 14474,
-    "stored_path": "certificate_round/source.patch"
+    "stored_path": "certificate_round/source.patch.gz"
   },
   "certificate_round/driver_build.json": {
     "sha256_uncompressed": "44201d20df7143651ad46dc8d600e4840b59121355dedce0356e949bfd9f3ea3",
