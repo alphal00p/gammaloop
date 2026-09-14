@@ -1,5 +1,42 @@
 # Matching Cutkosky sampling to the LU localization
 
+## Implemented inverse CDF, 2026-09-14
+
+The current sampler in `ImplicitSurfaceRadialMap::radius_from_coordinate`
+inverts a normalized **proposal approximating h**, rather than the CDF of h
+itself. The physical `h` and `h_dual` factors remain unchanged. The user has
+confirmed that this approximation should be retained.
+
+With the dimensionless auxiliary coordinate `t=R/r`, fitted scale `s>0`,
+shape `a>0`, broad fraction `epsilon`, and radial scale `beta>0`, the proposal
+CDF is
+
+```
+G(t) = (1-epsilon) t^a/(t^a+s^a) + epsilon beta*t/(R+beta*t).
+```
+
+Here `R` is the direction-dependent proposal focusing radius; the physical
+Cutkosky root is still solved independently to its required accuracy.
+
+The focused component is log-logistic. Its default parameters are fitted to
+the supported h family; runtime scale and shape overrides remain available.
+With no broad component its quantile is analytic:
+`t=s*(u/(1-u))^(1/a)`. For the mixture, the implementation solves `G(t)=u`
+by safeguarded Newton iteration in `y=log(t)`, bracketed by the two component
+quantiles. It evaluates the CDF or survival probability according to the tail
+to avoid cancellation. Coincident component quantiles and endpoint solutions
+are handled directly.
+
+The same Symbolica eager dual program evaluates the proposal and its
+derivative. The returned radial factor is `|dr/du|=r/(dG/dy)`; the enclosing
+map supplies the angular and Cartesian factors. This is the Jacobian of the
+proposal actually used, not an assumed `1/h(t)`. Thus a less accurate shape
+match changes sampling efficiency without replacing a physical integrand
+factor. The numerical inversion must still meet its residual checks.
+
+The historical derivations and scalar experiments below explain this choice;
+their exact-h CDF alternatives are not the current implementation.
+
 ## Result and scope
 
 For the current multiplicative LU flow, a useful Cutkosky channel samples the

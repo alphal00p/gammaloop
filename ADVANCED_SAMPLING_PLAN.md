@@ -66,6 +66,11 @@ pointwise identity.
    rescue, certified support decisions and fallback on numerical uncertainty.
    Reuse the existing owners and precision regressions; reduced precision must
    not silently change the proposal or classify uncertain support as absent.
+   Retain the implemented log-logistic approximation to the Cutkosky h density,
+   including its broad mixture and safeguarded inverse-CDF solve. The physical
+   h-function remains unchanged; use the derivative of the actual proposal for
+   its Jacobian. The user explicitly accepts this shape approximation and asks
+   to keep it. See the [implemented CDF](docs/research/advanced_sampling/LU_H_MATCHED_SAMPLING.md#implemented-inverse-cdf-2026-09-14).
 3. Check the latest SymJIT version and benchmark compressed SymJIT O2 against
    the current eager evaluator at both one and 20 concurrent workers. Preserve
    the higher-precision rescue evaluators and use identical physical inputs.
