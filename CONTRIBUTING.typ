@@ -234,7 +234,7 @@ commands from the repository as before. Use `just --list` to see them.
 == NixCI Cache
 <nixci-cache>
 
-See #link("docs/ci.typ")[CI maintenance and measurements] for the build design, measured
+See #link("docs/architecture/ci.typ")[CI maintenance and measurements] for the build design, measured
 results, branch migration and `just ci-report` usage.
 
 Before pushing, contributors and agents should run the selected CI checks

@@ -6,7 +6,7 @@ cache record, reviewed 2026-09-14 against PR 108 and the documentation stack.
 
 The Rust CI experiments below are historical. Uses of “now” or “current”
 describe the surrounding experiment, not the final implementation. See
-#link("../ci.typ")[CI maintenance and measurements] for the maintained CI
+#link("ci.typ")[CI maintenance and measurements] for the maintained CI
 contract, retained results, branch migration and reporting workflow.
 The documentation producer and live-watcher sections retain their separate
 build and cache contract. The earlier source ownership split, crate-level

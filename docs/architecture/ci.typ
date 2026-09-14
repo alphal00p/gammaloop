@@ -2,7 +2,7 @@
 
 Use `just ci-checks` for the selected local suite and `just ci-checks-and-upload`
 before pushing. The latter checks first, then publishes matching outputs to
-NixCI. See #link("../CONTRIBUTING.typ#nixci-cache")[CONTRIBUTING.typ] for credentials,
+NixCI. See #link("../../CONTRIBUTING.typ#nixci-cache")[CONTRIBUTING.typ] for credentials,
 licenses and retries. `just check` runs Cargo checking only.
 
 == Configuration and cache boundaries
@@ -12,6 +12,7 @@ licenses and retries. `just check` runs Cargo checking only.
   table.header([File], [Responsibility]),
   [`flake.nix`], [Compose public packages, checks, apps and development shells],
   [`nix/rust-workspace.nix`], [Rust sources, features, build profiles and artifact reuse],
+  [`nix/documentation.nix`], [Documentation sources, reusable build artifacts and publication checks],
   [`nix/ci.nix`], [Test groups, required producers and NixCI scheduling],
   [`nix/ci-workspace-graph.json`, `nix-ci.nix`], [Generated workspace graph and self-contained NixCI configuration],
   [`just/ci.just`], [Local checks, uploads, regeneration and reporting],
@@ -56,7 +57,7 @@ The shared FeynKit branch was not changed by the experiments.
 The `ci-cache-base` input pins a compatible compiler-state seed. Keep that commit
 reachable in published history. Refresh deliberately after a green revision with
 `just ci-cache-base FULL_COMMIT_SHA`; rebasing or cleaning history alone is not a
-reason to invalidate it. See the #link("architecture/nix-crane-cache-reuse.typ")[cache-reuse audit]
+reason to invalidate it. See the #link("nix-crane-cache-reuse.typ")[cache-reuse audit]
 for earlier investigation and implementation details.
 
 == Measured results
