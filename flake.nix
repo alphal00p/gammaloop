@@ -1816,6 +1816,7 @@
             cargo-flamegraph
             yaml-language-server
             just
+            gitMinimal
             dot-language-server
             cargo-insta
             cargo-udeps
