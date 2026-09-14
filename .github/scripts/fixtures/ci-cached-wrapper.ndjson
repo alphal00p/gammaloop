@@ -1,0 +1,2 @@
+{"utc_time":"2026-09-06 00:00:00.000000000","relative_nanoseconds":0,"log_message":"Downloading cached nix-ci-check-gammaloop-nextest-core from https://cache.nix-ci.com\n"}
+{"utc_time":"2026-09-06 00:00:01.000000000","relative_nanoseconds":1000000000,"log_message":"Downloaded cached nix-ci-check-gammaloop-nextest-core (1016 B) in 20ms\nRun succeeded.\n"}

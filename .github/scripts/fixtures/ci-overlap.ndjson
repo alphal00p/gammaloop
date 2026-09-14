@@ -1,0 +1,9 @@
+{"utc_time":"2026-09-06 00:00:00.000000000","relative_nanoseconds":0,"log_message":"worker started\nDownloading cached incomplete from https://cache.nix-ci.com\n"}
+{"utc_time":"2026-09-06 00:00:05.000000000","relative_nanoseconds":5000000000,"log_message":"\u001b[32mDownloaded cached a-inputs (1 MiB) in 5s\u001b[m\n"}
+{"utc_time":"2026-09-06 00:00:06.000000000","relative_nanoseconds":6000000000,"log_message":"Downloaded cached b-inputs (2 MiB) in 5s\n"}
+{"utc_time":"2026-09-06 00:00:07.000000000","relative_nanoseconds":7000000000,"log_message":"Uploaded result in 3s\n"}
+{"utc_time":"2026-09-06 00:00:08.000000000","relative_nanoseconds":8000000000,"log_message":"Building /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-shared.drv\nbuilding '/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-shared.drv'...\n"}
+{"utc_time":"2026-09-06 00:00:09.000000000","relative_nanoseconds":9000000000,"log_message":"demo> Compiling example v0.1.0 (/build/source)\n"}
+{"utc_time":"2026-09-06 00:00:12.000000000","relative_nanoseconds":12000000000,"log_message":"demo> Finished ci-optim [optimized] target(s) in 4s\n"}
+{"utc_time":"2026-09-06 00:00:13.000000000","relative_nanoseconds":13000000000,"log_message":"demo> PASS [0.01s] example::first\ndemo> SKIP [0.00s] example::ignored\ndemo> Summary [ 0.020s] 2 tests run: 2 passed, 1 skipped\n"}
+{"utc_time":"2026-09-06 00:00:14.000000000","relative_nanoseconds":14000000000,"log_message":"demo> test example::doctest ... ok\ndemo> test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n"}
