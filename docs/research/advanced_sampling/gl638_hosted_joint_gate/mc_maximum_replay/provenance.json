@@ -1,0 +1,129 @@
+{
+  "scope": "Completed replay/precision validation of retained screen extrema plus case-level identity-probe physical attribution from three native traces. No statistical pooling, asymptotic/global boundedness or final confirmation estimate.",
+  "source": {
+    "source_commit": "4d192b5be",
+    "build_manifest": "../phase_space_ray/build5/manifest.json",
+    "source_proof": "../local_cut_matched_hz/source_commit_proof.json",
+    "maximum_driver_source": "sources/max_replay_current.rs",
+    "maximum_driver_build": "sources/driver_build.json",
+    "included_client_source": "sources/gate-max-support.rs",
+    "screen_checkpoints": "../mc_screen/artifact_hashes.json"
+  },
+  "results": {
+    "batches": [
+      {
+        "batch": "throughput20",
+        "pilot_runs": 1,
+        "distinct_retained_samples": 3,
+        "signed_extrema_bit_exact": 4,
+        "forced_arb_controls": 2,
+        "existing_accuracy_checks": 51,
+        "outer_elapsed_seconds": 90.54475927504245,
+        "pilot_files_unchanged": 22,
+        "max_total_relative_error": 2.3513814208880734e-14,
+        "max_cut_relative_error": 2.181049989291236e-14
+      },
+      {
+        "batch": "advanced-firstseed",
+        "pilot_runs": 6,
+        "distinct_retained_samples": 15,
+        "signed_extrema_bit_exact": 24,
+        "forced_arb_controls": 12,
+        "existing_accuracy_checks": 266,
+        "outer_elapsed_seconds": 128.12262875004672,
+        "pilot_files_unchanged": 100,
+        "max_total_relative_error": 2.3811656116204844e-12,
+        "max_cut_relative_error": 6.28734780751328e-13
+      },
+      {
+        "batch": "all-remaining-seeds",
+        "pilot_runs": 14,
+        "distinct_retained_samples": 41,
+        "signed_extrema_bit_exact": 56,
+        "forced_arb_controls": 14,
+        "existing_accuracy_checks": 552,
+        "outer_elapsed_seconds": 149.94467695103958,
+        "pilot_files_unchanged": 214,
+        "max_total_relative_error": 4.810733807022462e-12,
+        "max_cut_relative_error": 3.1246190680473936e-13
+      }
+    ],
+    "totals": {
+      "pilot_runs": 21,
+      "distinct_retained_samples": 59,
+      "signed_extrema_bit_exact": 84,
+      "forced_arb_controls": 28,
+      "existing_accuracy_checks": 869,
+      "pilot_files_unchanged": 336
+    },
+    "independent_checks": 541,
+    "existing_accuracy_checks": 869,
+    "largest_total_relative_complex_error": 4.810733807022462e-12,
+    "largest_cut_relative_complex_error": 6.28734780751328e-13,
+    "component_relative_misses_retained": 31,
+    "input_directory_hash_scope": "Existing recorded before/after maps and independent audit prove all336 files in the3 frozen included pilot directories unchanged; no repeat state/pilot hashing was performed for this draft."
+  },
+  "semantics": {
+    "samples": "Original complete nested Samples, binary64 extrema bits and conditional weights are retained in exact per-run JSON rows. Original serialized integration checkpoint binaries remain linked in ../mc_screen. Aliases identify sign/component/run; shared Samples are not counted as independent draws.",
+    "precision": "All59 ordinary calls use Double and retain6 cuts.28 Arb controls cover the top2 available unique retained-extremum Samples per method and batch, not a global top2 or an unrecorded complex-norm maximum.",
+    "outer_weight": "Native returned events and CT decomposition already contain the outer Sample weight. The existing replay and audit preserve their owners; never multiply it again.",
+    "reporting": "Bit-exact84 signed extrema refer to the ordinary integration-reporting boundary; ordinary/Arb comparisons use declared complex norms and retain31 small-component own-relative diagnostics.",
+    "physical_attribution": "Three retained identity probes now reconstructed through existing native centers/root/alpha/radius and semantic metadata. Selected ordinary thresholds and moved CT-star geometry are identified at these points; no new root solves or directed certificate. See traces/analysis."
+  },
+  "execution": {
+    "workers": 1,
+    "batches": [
+      "throughput20",
+      "advanced-firstseed",
+      "all-remaining-seeds"
+    ],
+    "run_records": "batches/<phase>/run.json through artifact_hashes.json",
+    "environment_scope": "Each run record has RAYON_NUM_THREADS1 and concurrent20worker confirmation. Standard environment/license supplied by root; license value omitted.",
+    "timing": "Elapsed and process resources retained as provenance only; concurrent confirmation excludes standalone throughput/cost claims."
+  },
+  "archive": {
+    "original_result_files": 55,
+    "format": "Exact gzip copies; hashes/counts are original uncompressed bytes. Repeated byte-identical whole records and prior immutable sources/manifests share storage via stored_path. Full native rows and summary hashes are preserved for independent-audit reproduction.",
+    "source_paths": "Use original_path/index to restore original layout in an isolated environment for archived scripts; no alternate statistics or Gamma helper introduced.",
+    "excluded": "No executable, generated-process state payload, unrecorded Sample, new physics run, or incomplete confirmation estimate."
+  },
+  "traces": {
+    "status": "Completed3 exact-native-control traces and bounded case-level reconstruction; no generic tail/variance bound.",
+    "independent_checks": 356,
+    "original_result_files": 7,
+    "case_ids": [
+      "cuts_seed22229_lu_cut5",
+      "composed_seed33331_lu_cut1",
+      "soft_seed11113"
+    ],
+    "lines": [
+      1344,
+      1400,
+      1456
+    ],
+    "native_centers": [
+      34,
+      36,
+      38
+    ],
+    "whole_process_seconds": 83.45950163691305,
+    "client_elapsed_seconds": 72.863528175,
+    "scope": "One read-only loaded-state owner; forced-Arb existing complete-Sample calls; scoped standard JSON tracing retains native file.* data. All7 native control fields including full6cut events exactly unchanged.",
+    "source": "traces/client.rs through artifact_hashes.json",
+    "request": "traces/request.json",
+    "independent_audit": "traces/independent_audit.json",
+    "joins": "Local center surface IDs alone are insufficient. First-pass root group headers precede CT centers; use actual evaluator group/side/local threshold, variant associations/native parent, occurrence and measured root/alpha/radius consistency.",
+    "precision": "LoopMomenta scalar Display forwards F<ArbPrec> to native Rug default without fixed16-digit truncation; raw tables retained. This alone does not certify derived star residuals.",
+    "analysis": {
+      "source": "traces/analysis/analyze_max_native_trace.py.gz",
+      "result": "traces/analysis/analysis.json.gz",
+      "detailed_scope": "traces/analysis/ATTRIBUTION.md",
+      "unique_single_stars": 54,
+      "merged_stars": 12,
+      "measured_WH_checks": 12,
+      "maximum_affine_consistency_error_GeV": "5.59e-299",
+      "maximum_WH_absolute_error": "9.24e-300",
+      "precision_scope": "Decimal350 reconstruction, identity probe only; numerical consistency not directed certification. Six physical-cut external shifts are structurally checked; other selected-threshold sum-energy\u2212Q residuals are numerical checks at recorded stars."
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "scope": "Interrupted fixed confirmation, retained without pooling or replacing draws. All55 original result-directory files are exact gzip copies or exact references to immutable prior records. No successful confirmation or diagnosis is claimed.",
+  "build": {
+    "identity": {
+      "candidate_binary_sha256": "5d3f6d86a975664f8b42262f2e9f1028fe54dc7b4a9ddf9edd98193907f17522",
+      "driver_sha256": "2fd035e87812264837a6cb0feb752a6abb63f827a90d1b461285442fd0dd311d",
+      "source_base_commit": "22eb17a6e389636c26fa7135f90abe421fbbded7",
+      "source_candidate_commit": null,
+      "source_candidate_patch_sha256": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65"
+    },
+    "source_proof": "../../local_cut_matched_hz/source_commit_proof.json",
+    "build_manifest": "../../phase_space_ray/build5/manifest.json",
+    "driver_source": "../../local_hz/extension/gate.rs.gz",
+    "driver_build": "../../local_cut_matched_hz/driver_build.json"
+  },
+  "attempt": {
+    "started_utc": "2026-09-14T11:08:38.226951+00:00",
+    "returncode": 1,
+    "elapsed_seconds": 813.5438767620362,
+    "workers": 20,
+    "completed_rows": [
+      {
+        "mode": "optimized_lmb",
+        "seed": 10007,
+        "samples": 32768
+      },
+      {
+        "mode": "cuts",
+        "seed": 10007,
+        "samples": 32768
+      },
+      {
+        "mode": "cuts_combined_joint",
+        "seed": 10007,
+        "samples": 32768
+      }
+    ],
+    "failed_row": {
+      "mode": "optimized_lmb",
+      "seed": 20011,
+      "requested_samples": 32768,
+      "error": "sampling root is not certified at the current precision: canonical physical overlap graph 'GL638' cut group 3: DidNotConverge { result: NewtonIterationResult { solution: F(VarFloat { float: 4.50096019182270793871156294720615053060112718361364618170932397734514711080987392331940322755100771019674059655008057236752740928154857006112161128562114855544422368074316508870600192219593565649427544978773164779121432253631794038806540811255813327701451237828689832176990555566921873234752788019943785e-2 }), derivative_at_solution: F(VarFloat { float: 15947.7515847915197382229906009716238684820639052766863102939247189292647433796806064815357943825914286672680520425869860307247589322869726693916868899181132224865883496823643904736774712938449859097464691001739892743096176224973672876047140085992981227937651521443373989485856759341750304597183394266484 }), error_of_function: F(VarFloat { float: -2.86698583604188839625755508139156634506370492325388705163790645185321035051758274904404068484469074644867580906595607334158997766559958751695315195045047528315210956637693486164171287342869042640210070772612642749923485444545310860535350764889727519890646541984079814999901126931044646673003826046088028e-298 }), num_iterations_used: 10 }, lower_bound: F(VarFloat { float: 4.50096019182270793871156294720615053060112718361364618170932397734514711080987392331940322755100771019674059655008057236752740928154857006112161128562114855544422368074316508870600192219593565649427544978773164779121432253631794038806540811255813327701451237828689832176990555566921873234752788019943785e-2 }), upper_bound: F(VarFloat { float: 4.50096019182270793871156294720615053060112718361364618170932397734514711080987392331940322755100771019674059655008057236752740928154857006112161128562114855544422368074316508870600192219593565649427544978773164779121432253631794038806540811255813327701451237828689832176990555566921873234752788019943844e-2 }) }"
+    },
+    "remaining_rows": "Not started; actual accepted counts in the failed partial iteration are not retained as a completed result.",
+    "saved_state_hashes_unchanged": 35,
+    "statistics": "No pooling, proposal reselection, additional favorable run, or failed-source replacement."
+  },
+  "source_capture": {
+    "status": "Byte-exact original error reproduced on worker3/local239/global5156; native root-mechanism investigation pending.",
+    "failure_stage": "canonical physical overlap LU root, fixed Arb1000, cut group3, before body/stability attempts",
+    "failed_workspace": "Original failed workspace has only manifest/settings and no Sample/checkpoint. The separate deterministic reduction now captures the complete source and12 binary64 bits.",
+    "schedule": "Actual reduction used the existing fresh grid, slot_seed(20011,0)=14132453377656364828, stream0, contiguous20worker ranges of1639 (last1627). Singleton raw calls preserve within-worker order, omitting the production256-source evaluation barrier.",
+    "capture": "capture/failure_worker3.json through artifact_hashes.json",
+    "request": "capture/request.json",
+    "build": "capture/build.json",
+    "run": "capture/run.json",
+    "independent_audit": "capture/independent_audit.json",
+    "source_path": [
+      0,
+      5
+    ],
+    "partial_evaluated_total": 1844,
+    "whole_process_seconds": 121.4519633220043,
+    "client_elapsed_seconds": 108.698550094,
+    "cancellation": "Workers stop on their first error; other workers cancel after exact original error match. Only1844 sources evaluated; later workers may evaluate zero. This is not a complete32768 scan."
+  },
+  "storage": {
+    "original_result_files": 55,
+    "completed_iteration_checkpoints": 3,
+    "failed_iteration_checkpoints": 0,
+    "exact_paths": "artifact_hashes.json maps logical names to stored_path and original_path. Relative ../../ links resolve from the intended final mc_confirmation_root/attempt1 owner. Shared content is not duplicated.",
+    "saved_state": "No generated-process saved-state payload or executable copied; the3 original integration checkpoint binaries are intentionally retained."
+  }
+}

@@ -70,7 +70,10 @@ separate [completed screen](GL638_MC_SCREEN.md) now retains all 21 stable runs
 and 43,008 draws, freezes optimized LMB/cuts/composed joint for confirmation,
 and preserves the excluded worker control. Its tiny direct/composed score
 separation is not a demonstrated variance improvement between those variants.
-Confirmation and physical maximum attribution remain separate follow-ups.
+The [maximum replay and three-point attribution](GL638_SCREEN_MAXIMUM_REPLAY.md)
+now pass their numerical controls. Confirmation stopped on an ordinary-baseline
+canonical root error; its [retained interruption](GL638_CONFIRMATION_ROOT.md)
+is not pooled and repair validation remains pending.
 
 ## Fixed physical calculation and proposal
 
