@@ -3,9 +3,10 @@
 `codex/ci-consolidated` collects the validated main implementation from
 `dd6ba768692302ca4855727110c4d8422b0979f9`, based on main
 `395610143576507503fd2c785db3ba62340f4277`. The 58 development and measurement
-commits are organized into five review commits: mechanical flake extraction,
+commits are organized into five core review commits: mechanical flake extraction,
 reporting, CI/artifact behavior, Actions triggers, and evidence/documentation.
-Existing implementation files are unchanged from the successful NixCI revision.
+Contributor instructions and the Justfile organization are follow-ups. The Nix
+build definitions and CI selection are unchanged from the successful NixCI revision.
 
 ## What is included
 

@@ -202,15 +202,54 @@ from the rendered PDF.
   symbol, try building with `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T`; see `build.rs`
   for the impact of this setting.
 
+The root `justfile` keeps build and lint commands. Test, NixCI and drawing recipes
+are imported from `just/tests.just`, `just/ci.just` and `just/drawing.just`; run all
+commands from the repository as before. Use `just --list` to see them.
+
 ## NixCI Cache
 
-Run `just ci-checks` for the selected local CI checks. To run them and then
-publish their outputs to NixCI, use `just ci-checks-and-upload`. Licensed tests
-need `SYMBOLICA_LICENSE` in the environment. `nix flake check --impure` additionally
-builds the CLI, documentation and WASM checks exported by the flake.
+Before pushing, contributors and agents should run the selected CI checks
+locally and upload successful results when cache credentials are available.
+Work from the repository root; enter `nix develop` if you need the pinned Just
+and build tools. Stage newly added files first so the Git-backed flake sees them.
 
-Put your NixCI token in `~/.netrc`, or point `NIXCI_NETRC` at an existing file;
-see [the NixCI cache documentation](https://nix-ci.com/documentation/nix-ci-cache).
+`just check` runs Cargo checking only. For the selected CI suite without uploading:
+
+```sh
+just ci-checks
+```
+
+This runs the selected Rust and Python tests, Clippy, doctests, formatting and
+workspace/CI graph checks. Licensed checks require `SYMBOLICA_LICENSE` in your
+local environment. An unchanged successful Nix check can be reused without
+executing its tests again. `nix flake check --impure` additionally builds the CLI,
+documentation and WASM checks exported by the flake.
+
+For the normal pre-push workflow:
+
+```sh
+just ci-checks-and-upload
+```
+
+This already runs `just ci-checks`, so there is no need to run both commands.
+Wait for the command to succeed and print `CI upload completed` before pushing.
+Run it against the final code you intend to push; rerun it if that code changes.
+If you lack upload credentials, run `just ci-checks` and mention in your handoff
+or PR that the results were not uploaded.
+
+After changing workspace manifests or test groups, run `just ci-update` before
+the checks and commit the regenerated `nix/ci-workspace-graph.json` and `nix-ci.nix`
+with the change.
+
+Put your NixCI token in `~/.netrc`, or point `NIXCI_NETRC` at an existing file:
+
+```sh
+export NIXCI_NETRC=/path/to/existing/netrc
+```
+
+On Clan-managed hosts, use the configured `NIXCI_NETRC`; a fresh login may be
+needed after upload access is enabled. Keep tokens and license values outside
+Git. See [the NixCI cache documentation](https://nix-ci.com/documentation/nix-ci-cache).
 Uploads run as your user and need no additional Nix privileges. Entering the dev
 shell enables no upload hook. Bare Cargo builds do not populate this cache.
 An untrusted daemon may warn that it ignores `netrc-file`; the upload client
@@ -224,8 +263,11 @@ select packaging, documentation, WASM, dev shells or unrelated repositories.
 Required shared dependencies can still be part of the uploaded closures.
 
 Check time, publication preparation and upload time are reported separately.
-An upload failure returns a nonzero status; the successful checks remain cached.
-Use plain `just ci-checks` for local benchmarks without publishing.
+An upload failure returns a nonzero status; fix the reported problem and rerun
+`just ci-checks-and-upload`. Successful checks remain cached, so retrying does not
+require rerunning matching tests. Use plain `just ci-checks` for local benchmarks
+without publishing. Remote reuse also requires matching outputs: a macOS build,
+for example, does not replace a Linux build.
 
 The flake retains NixCI's substituter and signing-key settings for downloads.
 On a shared daemon, an administrator must configure the cache's trust and access
