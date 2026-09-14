@@ -749,10 +749,12 @@ fn canonical_representation_name(name: &str) -> String {
     }
 }
 
+#[cfg(feature = "shadowing")]
 fn representation_label_name(name: &str) -> &str {
     name.rsplit("::").next().unwrap_or(name)
 }
 
+#[cfg(feature = "shadowing")]
 fn default_index_row(name: &str) -> IndexRow {
     // Idenso's canonical self-dual bispinor indices conventionally sit below
     // the tensor head. A same-named representation in another namespace is a
@@ -764,6 +766,7 @@ fn default_index_row(name: &str) -> IndexRow {
     }
 }
 
+#[cfg(feature = "shadowing")]
 fn default_index_palette(name: &str) -> IndexPalette {
     let labels: &[&str] = match canonical_representation_name(name).as_str() {
         "spenso::mink" | "spenso::lor" => &["mu", "nu", "rho", "sigma"],
@@ -784,6 +787,7 @@ fn default_index_palette(name: &str) -> IndexPalette {
     .expect("the built-in representation palettes are non-empty and valid")
 }
 
+#[cfg(feature = "shadowing")]
 fn representation_typst_body(label: &IndexDisplay) -> String {
     format!(
         "(dim, ind ) = (content: $ {}^#dim _#ind $, upper:true)",
@@ -1407,6 +1411,7 @@ impl IndexRow {
         }
     }
 
+    #[cfg(feature = "shadowing")]
     fn from_str(value: &str) -> Option<Self> {
         match value {
             "top" => Some(Self::Top),

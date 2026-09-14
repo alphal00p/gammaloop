@@ -67,6 +67,8 @@
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
     (workspaceRoot + "/crates/linnet-py/vendor")
+    # Reviewed 2026-09-14: Spynso's embedded Typst renderer is also a build input;
+    # adding its source directory does not change the documentation cache boundaries.
     (workspaceRoot + "/crates/spynso3/typst")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
@@ -1194,8 +1196,8 @@
       # The workspace sets default-members to gammaloop-api, so CI checks must
       # opt into the full workspace explicitly.
       cargoExtraArgs = "--locked --workspace ${craneWorkspacePrebuildFeatureArgs}";
-      # NixCI provides the runtime Symbolica license, not the compile-time
-      # OEM key consumed by gammalooprs' activate_oem_license! path.
+      # NixCI exercises the runtime Symbolica license, including for the CLI,
+      # rather than the OEM activation in the gammaloop binary entry point.
       NO_SYMBOLICA_OEM_LICENSE = "1";
 
       PYO3_PYTHON = "${pkgs.python313}/bin/python3";

@@ -66,7 +66,7 @@ pages = [
 changelog = "crates/linnet/CHANGELOG.typ"
 related = ["spenso", "gammaloop"]
 rust_components = [
-  { id = "linnet", package = "linnet", kind = "library", version_source = "crates/linnet/Cargo.toml", features = ["nodestore-vec", "serde", "bincode", "drawing", "symbolica"] },
+  { id = "linnet", package = "linnet", kind = "library", version_source = "crates/linnet/Cargo.toml", features = ["native", "nodestore-vec", "serde", "bincode", "drawing", "symbolica"] },
 ]
 python_components = [
   { id = "linnet-py", package = "linnet-py", kind = "maturin-distribution", version_source = "crates/linnet-py/pyproject.toml", module = "linnet_py", features = ["extension-module", "abi3-py310"] },
@@ -97,8 +97,8 @@ pages = [
 changelog = "crates/spenso/CHANGELOG.typ"
 related = ["linnet", "idenso", "gammaloop"]
 rust_components = [
-  { id = "spenso", package = "spenso", kind = "library", version_source = "crates/spenso/Cargo.toml", features = ["shadowing"] },
-  { id = "spenso-macros", package = "spenso-macros", kind = "proc-macro-library", version_source = "crates/spenso-macros/Cargo.toml", features = ["shadowing"] },
+  { id = "spenso", package = "spenso", kind = "library", version_source = "crates/spenso/Cargo.toml", features = ["native", "shadowing"] },
+  { id = "spenso-macros", package = "spenso-macros", kind = "proc-macro-library", version_source = "crates/spenso-macros/Cargo.toml", features = ["native", "shadowing"] },
   { id = "spenso-hep-lib", package = "spenso-hep-lib", kind = "domain-library", version_source = "crates/spenso-hep-lib/Cargo.toml" },
 ]
 python_components = [
@@ -126,7 +126,7 @@ pages = [
 changelog = "crates/idenso/CHANGELOG.typ"
 related = ["spenso", "gammaloop"]
 rust_components = [
-  { id = "idenso", package = "idenso", kind = "library", version_source = "crates/idenso/Cargo.toml", features = ["bincode", "reference-cases"] },
+  { id = "idenso", package = "idenso", kind = "library", version_source = "crates/idenso/Cargo.toml", features = ["native", "bincode", "reference-cases"] },
 ]
 python_components = [
   { id = "idenso-community", package = "idenso", kind = "symbolica-community-module", version_source = "crates/idenso/Cargo.toml", module = "symbolica.community.idenso", features = ["python", "python_stubgen"] },

@@ -107,8 +107,8 @@ jobs:
         env:
           TYMBOLICA_CHECKOUT: ${{ github.workspace }}/tymbolica-pinned
         run: |
-          just check-symbolica-feature-isolation
-          just tydenso::check
+          just --unstable check-symbolica-feature-isolation
+          just --unstable tydenso::check
 
       - name: Run Tydenso payload-boundary tests
         run: |
@@ -206,7 +206,7 @@ jobs:
 
       - name: Run tests
         if: startsWith(matrix.os, 'macos-')
-        run: just test-ci-mac
+        run: just --unstable test-ci-mac
 
       - name: Upload nextest JUnit
         if: always()

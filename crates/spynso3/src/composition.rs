@@ -945,7 +945,7 @@ pub(crate) fn normalize_closed_root_chain(
     let end_rep = end.rep();
     if start.aind() != end.aind()
         || !start_rep.matches(&end_rep)
-        || (!start_rep.rep.is_self_dual() && !(start_rep.rep.is_base() && end_rep.rep.is_dual()))
+        || !(start_rep.rep.is_self_dual() || start_rep.rep.is_base() && end_rep.rep.is_dual())
     {
         return Ok(value);
     }
@@ -1166,8 +1166,8 @@ pub fn compose(
     }
     let left_input_rep = representation(&left_input);
     let left_output_rep = representation(&left_output);
-    if !left_input_rep.rep.is_self_dual()
-        && !(left_input_rep.rep.is_base() && left_output_rep.rep.is_dual())
+    if !(left_input_rep.rep.is_self_dual()
+        || left_input_rep.rep.is_base() && left_output_rep.rep.is_dual())
     {
         return Err(TensorCompositionError::InvalidChannelOrientation {
             input: left_channel.input,
@@ -1182,8 +1182,8 @@ pub fn compose(
     }
     let right_input_rep = representation(&right_input);
     let right_output_rep = representation(&right_output);
-    if !right_input_rep.rep.is_self_dual()
-        && !(right_input_rep.rep.is_base() && right_output_rep.rep.is_dual())
+    if !(right_input_rep.rep.is_self_dual()
+        || right_input_rep.rep.is_base() && right_output_rep.rep.is_dual())
     {
         return Err(TensorCompositionError::InvalidChannelOrientation {
             input: right_channel.input,
@@ -1350,7 +1350,7 @@ pub fn trace(
     }
     let input_rep = representation(&input);
     let output_rep = representation(&output);
-    if !input_rep.rep.is_self_dual() && !(input_rep.rep.is_base() && output_rep.rep.is_dual()) {
+    if !(input_rep.rep.is_self_dual() || input_rep.rep.is_base() && output_rep.rep.is_dual()) {
         return Err(TensorCompositionError::InvalidChannelOrientation {
             input: channel.input,
             output: channel.output,

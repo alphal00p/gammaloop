@@ -2775,8 +2775,8 @@ fn chain(
                 "chain endpoints carry incompatible representations",
             ));
         }
-        if !start_representation.rep.is_self_dual()
-            && !(start_representation.rep.is_base() && end_representation.rep.is_dual())
+        if !(start_representation.rep.is_self_dual()
+            || start_representation.rep.is_base() && end_representation.rep.is_dual())
         {
             return Err(PyValueError::new_err(
                 "chain endpoints do not form an input-to-output propagation channel",
