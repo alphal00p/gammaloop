@@ -1,0 +1,467 @@
+{
+  "/tmp/gl638-hosted-joint-gate/manifest-screen-full-build5.json": {
+    "sha256_uncompressed": "598175f17094dabdf0a22d78b97a58876f7f37cebeb919982650fad720b85251",
+    "bytes_uncompressed": 28557,
+    "stored_path": "../cut_matched_acceptance/mc/manifest-screen-full-build5.json"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-throughput30-build5/pilots.json": {
+    "sha256_uncompressed": "2243189560b20d58e7f71474502744bcfb763ba3656eceec88fc004512a7f50d",
+    "bytes_uncompressed": 18807,
+    "stored_path": "batches/throughput30/pilots.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-throughput30-build5/summary.json": {
+    "sha256_uncompressed": "221a5c78509b7402f68457e0652f3be03b5b0d0c88eb2fa04a1931680eb42467",
+    "bytes_uncompressed": 3674944,
+    "stored_path": "batches/throughput30/summary.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-cut-combined-seven-preflight-build5/summary.json": {
+    "sha256_uncompressed": "447e356f67f7fb452dc916ca764142ba0fc7ceedffe6f31328afe598ee442ef6",
+    "bytes_uncompressed": 7098737,
+    "stored_path": "preflight_summary.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5/pilots.json": {
+    "sha256_uncompressed": "8b42d9601f9019ac5eec71784d29f52cc4f0cc9055506c5c6937da45ed0cc269",
+    "bytes_uncompressed": 18818,
+    "stored_path": "batches/throughput20/pilots.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5/summary.json": {
+    "sha256_uncompressed": "5e4d3e25dca2bf774bed3399ea6aa2ac6d1b831a1b53e5ba1da7b6f6b92efa03",
+    "bytes_uncompressed": 3674955,
+    "stored_path": "batches/throughput20/summary.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5/state_before.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "../local_cut_matched_hz/shared/state_hashes.json"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5/state_after.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "../local_cut_matched_hz/shared/state_hashes.json"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilots.json": {
+    "sha256_uncompressed": "7028ca2564491f4cdb533616eff6a5174aafe339893d0b1d00adb0e9876d9a6e",
+    "bytes_uncompressed": 122836,
+    "stored_path": "batches/advanced-firstseed/pilots.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/summary.json": {
+    "sha256_uncompressed": "a1eea49cd9a149a634d55786b57ca2265399c36d8dd0f22c3f32066853e8e5f0",
+    "bytes_uncompressed": 6099678,
+    "stored_path": "batches/advanced-firstseed/summary.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/state_before.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "../local_cut_matched_hz/shared/state_hashes.json"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/state_after.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "../local_cut_matched_hz/shared/state_hashes.json"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilots.json": {
+    "sha256_uncompressed": "575b1547a2753e931b2b935b4ef7646a1fcd19c14d4eefbc638e4b98562aca4e",
+    "bytes_uncompressed": 283861,
+    "stored_path": "batches/all-remaining-seeds/pilots.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/summary.json": {
+    "sha256_uncompressed": "552f0f5bde9babf88b95442a9fabd6e8ae0f94295d271dac7340f6e349ecdc5e",
+    "bytes_uncompressed": 6726150,
+    "stored_path": "batches/all-remaining-seeds/summary.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/state_before.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "../local_cut_matched_hz/shared/state_hashes.json"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/state_after.json": {
+    "sha256_uncompressed": "eea5232cd0b55f5c3e507b26a4ef9ee00fffcac19532601e34b8a0d6186f5f1f",
+    "bytes_uncompressed": 4106,
+    "stored_path": "../local_cut_matched_hz/shared/state_hashes.json"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5/pilot/optimized_lmb_seed11113/effective-settings.toml": {
+    "sha256_uncompressed": "b8bb1ff836bcf31d52d1569e708bca3d612b131efaf77f1397d20ab7bb5b9239",
+    "bytes_uncompressed": 1366,
+    "stored_path": "batches/throughput20/pilot/optimized_lmb_seed11113/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5/pilot/optimized_lmb_seed11113/workspace/integration_result.json": {
+    "sha256_uncompressed": "7e337cf78bb6e3f57008b05f817706f1bbf39bdfe58eb7bcd9b8d18343fe8ff2",
+    "bytes_uncompressed": 14815,
+    "stored_path": "batches/throughput20/pilot/optimized_lmb_seed11113/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-physics-comparison/cut-matched/cards/optimized_lmb.toml": {
+    "sha256_uncompressed": "c4d99ba8507ab73a5c754e1480c0e37978bd5489b31692f66e0ea030aff5b3e6",
+    "bytes_uncompressed": 1962,
+    "stored_path": "../phase_space_ray/cards/optimized_lmb.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5/optimized_lmb.settings.toml": {
+    "sha256_uncompressed": "123b6faaa533a5ccc3aa53ce2d7a7d7a018a02195cd517f2a6296678f2f8144e",
+    "bytes_uncompressed": 1365,
+    "stored_path": "../local_cut_matched_hz/shared/optimized_lmb.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5/optimized_lmb.json": {
+    "sha256_uncompressed": "4a68dcf99d8f81659013693249678065a4789518e9dd33d389b8f84314407a4e",
+    "bytes_uncompressed": 446956,
+    "stored_path": "batches/throughput20/optimized_lmb.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilot/cuts_seed11113/effective-settings.toml": {
+    "sha256_uncompressed": "397dc5f2231023247d8300b3ea9e047275a75eb07ff193fb0378129477ec28d0",
+    "bytes_uncompressed": 3184,
+    "stored_path": "batches/advanced-firstseed/pilot/cuts_seed11113/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilot/cuts_seed11113/workspace/integration_result.json": {
+    "sha256_uncompressed": "1f48c7511b02516bf7db758441efe22d2ee6b812cbbdf82cbbc54a784df3373e",
+    "bytes_uncompressed": 14685,
+    "stored_path": "batches/advanced-firstseed/pilot/cuts_seed11113/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-physics-comparison/cut-matched/cards/cuts.toml": {
+    "sha256_uncompressed": "71ce4efcf492a51393075382816f8ded9ee79f93dbb1023f590b7b391f29f751",
+    "bytes_uncompressed": 3483,
+    "stored_path": "../phase_space_ray/cards/cuts.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/cuts.settings.toml": {
+    "sha256_uncompressed": "1e4615ad7880a59702f3eabe3950334bb63a075bfa0a97b53ecc2b129c09a198",
+    "bytes_uncompressed": 3183,
+    "stored_path": "../local_cut_matched_hz/shared/cuts.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/cuts.json": {
+    "sha256_uncompressed": "bf2795c08f1ea1af353af235ced92d27028bf1d3eea3e2d0fc4cae3071c00fae",
+    "bytes_uncompressed": 449986,
+    "stored_path": "batches/advanced-firstseed/cuts.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilot/cuts_joint_seed11113/effective-settings.toml": {
+    "sha256_uncompressed": "9cc85f1a253eb7f4f4b43707cc850867c7a8e5959e73ec030ec86ca51a87a114",
+    "bytes_uncompressed": 3452,
+    "stored_path": "batches/advanced-firstseed/pilot/cuts_joint_seed11113/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilot/cuts_joint_seed11113/workspace/integration_result.json": {
+    "sha256_uncompressed": "2ec27d4540809d4fd39d45ba521b7565e4fd1f53b8a38716e366b9852bc87f4a",
+    "bytes_uncompressed": 15959,
+    "stored_path": "batches/advanced-firstseed/pilot/cuts_joint_seed11113/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint.toml": {
+    "sha256_uncompressed": "62afd2a032e956759c5f9a3404857e9eb8442feb1bdd6c0c197d5c1d6ea829d6",
+    "bytes_uncompressed": 3936,
+    "stored_path": "../phase_space_ray/cards/cuts_joint.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/cuts_joint.settings.toml": {
+    "sha256_uncompressed": "b7cf7b8bc621d5093dfe469deb1a4d7259c0db4ed354f0d2b7dc9d0733ea5b68",
+    "bytes_uncompressed": 3451,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_joint.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/cuts_joint.json": {
+    "sha256_uncompressed": "f89243f6d7a243b56e3516149fb173286c36f19286775db41d91b3595dbd81ff",
+    "bytes_uncompressed": 450484,
+    "stored_path": "batches/advanced-firstseed/cuts_joint.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilot/cuts_soft_seed11113/effective-settings.toml": {
+    "sha256_uncompressed": "3a9e38968e9309e6af0bf4a74f5df4728be4b3ad437f1199248ed85d0d4dea34",
+    "bytes_uncompressed": 3352,
+    "stored_path": "batches/advanced-firstseed/pilot/cuts_soft_seed11113/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilot/cuts_soft_seed11113/workspace/integration_result.json": {
+    "sha256_uncompressed": "18aec0d2bec81f0c0254d23282bdeae543fda8903cb555a623dfc640dab3b196",
+    "bytes_uncompressed": 15874,
+    "stored_path": "batches/advanced-firstseed/pilot/cuts_soft_seed11113/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_soft.toml": {
+    "sha256_uncompressed": "041ed87209898600035b7dd46f049d708cb8244ba38c5cc2380831574f9d25ee",
+    "bytes_uncompressed": 3673,
+    "stored_path": "../phase_space_ray/cards/cuts_soft.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/cuts_soft.settings.toml": {
+    "sha256_uncompressed": "653babfc065286afb3fb9329904bccc5affc1802a66a2795628176cdb20cd0d2",
+    "bytes_uncompressed": 3351,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_soft.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/cuts_soft.json": {
+    "sha256_uncompressed": "5252de0c276e76f0dfdbdd1c074dc10a0513dfecb88aba194fdb1f73807f595e",
+    "bytes_uncompressed": 450349,
+    "stored_path": "batches/advanced-firstseed/cuts_soft.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilot/cuts_joint_soft_seed11113/effective-settings.toml": {
+    "sha256_uncompressed": "0e2eeadb7b6df58df9fe887ad70eeeb66331ec3988eaad96b0ee17a7056ae68d",
+    "bytes_uncompressed": 3620,
+    "stored_path": "batches/advanced-firstseed/pilot/cuts_joint_soft_seed11113/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilot/cuts_joint_soft_seed11113/workspace/integration_result.json": {
+    "sha256_uncompressed": "66b5fa3670a5c6b28594595e15997ac58f5611768e6f275e0ad0052cfe74ffdd",
+    "bytes_uncompressed": 17133,
+    "stored_path": "batches/advanced-firstseed/pilot/cuts_joint_soft_seed11113/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_joint_soft.toml": {
+    "sha256_uncompressed": "d92938edd474476914f12a19c414e732cf6338469ef7f30f7cd7b955530e0c5a",
+    "bytes_uncompressed": 4126,
+    "stored_path": "../phase_space_ray/cards/cuts_joint_soft.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/cuts_joint_soft.settings.toml": {
+    "sha256_uncompressed": "6770bf3c884c73e2c5149e9f268a7d738f6be919f83d2b726eebf853e694f1f9",
+    "bytes_uncompressed": 3619,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_joint_soft.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/cuts_joint_soft.json": {
+    "sha256_uncompressed": "ebb3f62237834f8b9fe806bb9dccb8de9af19de714dfcd13f79b82a05bf8d439",
+    "bytes_uncompressed": 450847,
+    "stored_path": "batches/advanced-firstseed/cuts_joint_soft.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilot/cuts_combined_joint_seed11113/effective-settings.toml": {
+    "sha256_uncompressed": "2c5eda8f1d508b6ef9cd111e65add137a77752acd504075821ffc0974473281a",
+    "bytes_uncompressed": 3588,
+    "stored_path": "batches/advanced-firstseed/pilot/cuts_combined_joint_seed11113/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilot/cuts_combined_joint_seed11113/workspace/integration_result.json": {
+    "sha256_uncompressed": "c05700c577bfedc76f4f82285b82bd82ba6321e8f2b1d5786d5fadafbf201f7e",
+    "bytes_uncompressed": 15960,
+    "stored_path": "batches/advanced-firstseed/pilot/cuts_combined_joint_seed11113/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint.toml": {
+    "sha256_uncompressed": "e7c61f30d4e117c53bdd0bcb15ca116ab7bdd3b6005c299c7b828ea0de4f1c9b",
+    "bytes_uncompressed": 4149,
+    "stored_path": "../phase_space_ray/cards/cuts_combined_joint.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/cuts_combined_joint.settings.toml": {
+    "sha256_uncompressed": "02e34ab77d42a9bba05e1a6a2c5b1228e3c54eba9214bb62b390ccdee6682a0a",
+    "bytes_uncompressed": 3587,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_combined_joint.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/cuts_combined_joint.json": {
+    "sha256_uncompressed": "1bb10f3a7c6a98d1dc9c84d916bc9e9dbd9a6b39d3fbc3f7eb97d05f26053aa6",
+    "bytes_uncompressed": 450638,
+    "stored_path": "batches/advanced-firstseed/cuts_combined_joint.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilot/cuts_combined_joint_soft_seed11113/effective-settings.toml": {
+    "sha256_uncompressed": "7aae31f1458c41ce60e13533ebaddb458cf37c2a01ba7449d531d72b7d85f238",
+    "bytes_uncompressed": 3756,
+    "stored_path": "batches/advanced-firstseed/pilot/cuts_combined_joint_soft_seed11113/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/pilot/cuts_combined_joint_soft_seed11113/workspace/integration_result.json": {
+    "sha256_uncompressed": "5b36c53f51371fc62e5e8b681717ecc5ab0e8c1f1ded2803bff055dddd2bd756",
+    "bytes_uncompressed": 17122,
+    "stored_path": "batches/advanced-firstseed/pilot/cuts_combined_joint_soft_seed11113/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-physics-comparison/cut-matched/cards/cuts_combined_joint_soft.toml": {
+    "sha256_uncompressed": "ab492e6e29e6fc275b6d9e99f5c353470e3b59db78fd7248b8ae5b8a9d9b09bb",
+    "bytes_uncompressed": 4339,
+    "stored_path": "../phase_space_ray/cards/cuts_combined_joint_soft.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/cuts_combined_joint_soft.settings.toml": {
+    "sha256_uncompressed": "2e14226a9455900a483381c4494cabd040038de9642c37e741aeb68fb7eb0894",
+    "bytes_uncompressed": 3755,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_combined_joint_soft.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5/cuts_combined_joint_soft.json": {
+    "sha256_uncompressed": "d0a41148aacd16d878416fab09a79bac1813625c0278ecc1705138498a34522e",
+    "bytes_uncompressed": 451001,
+    "stored_path": "batches/advanced-firstseed/cuts_combined_joint_soft.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/optimized_lmb_seed22229/effective-settings.toml": {
+    "sha256_uncompressed": "566cfe39be9cb518c146e4cf0730eec34302ac0d7daf0b98b18ecd91e99127ba",
+    "bytes_uncompressed": 1366,
+    "stored_path": "batches/all-remaining-seeds/pilot/optimized_lmb_seed22229/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/optimized_lmb_seed22229/workspace/integration_result.json": {
+    "sha256_uncompressed": "9b5f3fea5708ddd6690e90dd39b9eae3ae9beb25b1f1d38b6c6323e86981ac6a",
+    "bytes_uncompressed": 14851,
+    "stored_path": "batches/all-remaining-seeds/pilot/optimized_lmb_seed22229/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/optimized_lmb.settings.toml": {
+    "sha256_uncompressed": "123b6faaa533a5ccc3aa53ce2d7a7d7a018a02195cd517f2a6296678f2f8144e",
+    "bytes_uncompressed": 1365,
+    "stored_path": "../local_cut_matched_hz/shared/optimized_lmb.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/optimized_lmb.json": {
+    "sha256_uncompressed": "cbc83fa415d061a750281e4d52e1a8ad3891e93a9a8e54b509c25bc109926814",
+    "bytes_uncompressed": 446956,
+    "stored_path": "batches/all-remaining-seeds/optimized_lmb.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_seed22229/effective-settings.toml": {
+    "sha256_uncompressed": "d759d3e58f3e26062c899af8e64d483b6f016c8fcc271eb85375e89bf312e3f2",
+    "bytes_uncompressed": 3184,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_seed22229/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_seed22229/workspace/integration_result.json": {
+    "sha256_uncompressed": "41afd7a79a7293afb0a6faf4f1271a660f325d2bf887aa483a1a890bc1d2938b",
+    "bytes_uncompressed": 14666,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_seed22229/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/cuts.settings.toml": {
+    "sha256_uncompressed": "1e4615ad7880a59702f3eabe3950334bb63a075bfa0a97b53ecc2b129c09a198",
+    "bytes_uncompressed": 3183,
+    "stored_path": "../local_cut_matched_hz/shared/cuts.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/cuts.json": {
+    "sha256_uncompressed": "1fe7a5e4a9ea6f7cb4ea71a06b7db87a580df88cf7367d3498457b93d04e4baf",
+    "bytes_uncompressed": 449986,
+    "stored_path": "batches/all-remaining-seeds/cuts.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_joint_seed22229/effective-settings.toml": {
+    "sha256_uncompressed": "5d051391d5940ec067d254537a81830d214593e0551414716b64051235187ede",
+    "bytes_uncompressed": 3452,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_joint_seed22229/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_joint_seed22229/workspace/integration_result.json": {
+    "sha256_uncompressed": "9470820e51d619a149187a1033b613178707833ef18465b2bc795c16a1a20216",
+    "bytes_uncompressed": 15936,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_joint_seed22229/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/cuts_joint.settings.toml": {
+    "sha256_uncompressed": "b7cf7b8bc621d5093dfe469deb1a4d7259c0db4ed354f0d2b7dc9d0733ea5b68",
+    "bytes_uncompressed": 3451,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_joint.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/cuts_joint.json": {
+    "sha256_uncompressed": "c3a577daa91f30bd3da3a768cfc0eb996fe27214a198417a0d7c2e1fd74d010d",
+    "bytes_uncompressed": 450484,
+    "stored_path": "batches/all-remaining-seeds/cuts_joint.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_soft_seed22229/effective-settings.toml": {
+    "sha256_uncompressed": "9f2745335213e9659428d01fa5fdf72067116d12ccdf58a77bad1792c9fb24bc",
+    "bytes_uncompressed": 3352,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_soft_seed22229/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_soft_seed22229/workspace/integration_result.json": {
+    "sha256_uncompressed": "463b512ffee8aa9701f9e23f2452050316cead27ff6760f65ab10ea5fae439bf",
+    "bytes_uncompressed": 15933,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_soft_seed22229/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/cuts_soft.settings.toml": {
+    "sha256_uncompressed": "653babfc065286afb3fb9329904bccc5affc1802a66a2795628176cdb20cd0d2",
+    "bytes_uncompressed": 3351,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_soft.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/cuts_soft.json": {
+    "sha256_uncompressed": "ae50aa379db0b3e69bb151695387e13f604203d61d26f76d12315a34a82cee5f",
+    "bytes_uncompressed": 450349,
+    "stored_path": "batches/all-remaining-seeds/cuts_soft.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_joint_soft_seed22229/effective-settings.toml": {
+    "sha256_uncompressed": "9e928db6d0cd813506b43a433025ace521ea2d965acd123d49c3e5fa4f7e9e6f",
+    "bytes_uncompressed": 3620,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_joint_soft_seed22229/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_joint_soft_seed22229/workspace/integration_result.json": {
+    "sha256_uncompressed": "b270526940f7376ccac8974bcc9eafb9404068611eeeed129e7fe922c38754b6",
+    "bytes_uncompressed": 17165,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_joint_soft_seed22229/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/cuts_joint_soft.settings.toml": {
+    "sha256_uncompressed": "6770bf3c884c73e2c5149e9f268a7d738f6be919f83d2b726eebf853e694f1f9",
+    "bytes_uncompressed": 3619,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_joint_soft.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/cuts_joint_soft.json": {
+    "sha256_uncompressed": "b12dcb0dda63c0d2e3d0f3d6b0db7fcb59622536607f08352097daca2962259a",
+    "bytes_uncompressed": 450845,
+    "stored_path": "batches/all-remaining-seeds/cuts_joint_soft.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_combined_joint_seed22229/effective-settings.toml": {
+    "sha256_uncompressed": "274f056ded0ef22f373cd7dca93065e6904c9341c3a1e37f3fa349224c46cc05",
+    "bytes_uncompressed": 3588,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_combined_joint_seed22229/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_combined_joint_seed22229/workspace/integration_result.json": {
+    "sha256_uncompressed": "c57adc40dcef98f77f8615f083ec5ab4e172e829f350193b5455d277c97f9141",
+    "bytes_uncompressed": 15943,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_combined_joint_seed22229/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/cuts_combined_joint.settings.toml": {
+    "sha256_uncompressed": "02e34ab77d42a9bba05e1a6a2c5b1228e3c54eba9214bb62b390ccdee6682a0a",
+    "bytes_uncompressed": 3587,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_combined_joint.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/cuts_combined_joint.json": {
+    "sha256_uncompressed": "9a1119add60684d4f15139e99b06d97c489f5def07ff33ec281245fafb605813",
+    "bytes_uncompressed": 450637,
+    "stored_path": "batches/all-remaining-seeds/cuts_combined_joint.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_combined_joint_soft_seed22229/effective-settings.toml": {
+    "sha256_uncompressed": "d1d5bdd9f43441de2602c839eb7400fd13a05fd7f3030a0ec8bb64c3235333ca",
+    "bytes_uncompressed": 3756,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_combined_joint_soft_seed22229/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_combined_joint_soft_seed22229/workspace/integration_result.json": {
+    "sha256_uncompressed": "3672c11be5bcf54b49ff55c517525a923e7e0e8abc403b4f15b733ec6b2ff27b",
+    "bytes_uncompressed": 17188,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_combined_joint_soft_seed22229/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/cuts_combined_joint_soft.settings.toml": {
+    "sha256_uncompressed": "2e14226a9455900a483381c4494cabd040038de9642c37e741aeb68fb7eb0894",
+    "bytes_uncompressed": 3755,
+    "stored_path": "../local_cut_matched_hz/shared/cuts_combined_joint_soft.settings.toml"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/cuts_combined_joint_soft.json": {
+    "sha256_uncompressed": "05f4cb8eb1b48cc3ea086d935145c00b8b177807ff2164171bcdae6c55711fa4",
+    "bytes_uncompressed": 451001,
+    "stored_path": "batches/all-remaining-seeds/cuts_combined_joint_soft.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/optimized_lmb_seed33331/effective-settings.toml": {
+    "sha256_uncompressed": "2f6a4e60c86092120b5492f7a52c422891dd975e30f0e9ee18ddc4394d00b65c",
+    "bytes_uncompressed": 1366,
+    "stored_path": "batches/all-remaining-seeds/pilot/optimized_lmb_seed33331/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/optimized_lmb_seed33331/workspace/integration_result.json": {
+    "sha256_uncompressed": "14479ab6842a8e11764e2aad2d2cbd1ae6e08197e8d1d215198afeae47577327",
+    "bytes_uncompressed": 14835,
+    "stored_path": "batches/all-remaining-seeds/pilot/optimized_lmb_seed33331/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_seed33331/effective-settings.toml": {
+    "sha256_uncompressed": "bd6e0fe4e165f38f19104bbbaf28d89a2b17ecf5af14a97f3e4a64dc85484c69",
+    "bytes_uncompressed": 3184,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_seed33331/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_seed33331/workspace/integration_result.json": {
+    "sha256_uncompressed": "e2e82c79f241edfa8fe287bc3cfe8c75b43ec75d7d1d8e750a517ba8ccbbea9f",
+    "bytes_uncompressed": 14686,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_seed33331/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_joint_seed33331/effective-settings.toml": {
+    "sha256_uncompressed": "0f24cd469602c9f988c75e78800fe12bc2c2a02ca0dbd035dac6caeaaf5aceec",
+    "bytes_uncompressed": 3452,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_joint_seed33331/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_joint_seed33331/workspace/integration_result.json": {
+    "sha256_uncompressed": "8f8f351c4b6a0db951acf66519dddf5daf3a69814c627cd331db4567b2401efa",
+    "bytes_uncompressed": 15984,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_joint_seed33331/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_soft_seed33331/effective-settings.toml": {
+    "sha256_uncompressed": "04e466898f6fe4774fbdbcc66e40d1a97da376aa3bc53d13e27fd3aa77f4a233",
+    "bytes_uncompressed": 3352,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_soft_seed33331/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_soft_seed33331/workspace/integration_result.json": {
+    "sha256_uncompressed": "62a5586ea87daf09fb0e5350c37b7b1feedfd9ae445d42c431aab4e4c30f69dc",
+    "bytes_uncompressed": 15967,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_soft_seed33331/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_joint_soft_seed33331/effective-settings.toml": {
+    "sha256_uncompressed": "dc4e1e74d073bd107a9c960cd73663358d0e5badff296ac0a3b26fa6c37c121c",
+    "bytes_uncompressed": 3620,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_joint_soft_seed33331/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_joint_soft_seed33331/workspace/integration_result.json": {
+    "sha256_uncompressed": "3ca56dfeaadf8e5aa8af86de82f0fb3898eeee8e49a1d9c9179b0bf45a6ea8ce",
+    "bytes_uncompressed": 17248,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_joint_soft_seed33331/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_combined_joint_seed33331/effective-settings.toml": {
+    "sha256_uncompressed": "65b5ef069dd24a45a08c0eeb554e2fcb91085cc93b31ebf24ef6bd9800e83afb",
+    "bytes_uncompressed": 3588,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_combined_joint_seed33331/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_combined_joint_seed33331/workspace/integration_result.json": {
+    "sha256_uncompressed": "98e4333266eb8f522e36fd99d9cc812eba5a28a3db6ff65af4054058565b9aeb",
+    "bytes_uncompressed": 15969,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_combined_joint_seed33331/workspace/integration_result.json.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_combined_joint_soft_seed33331/effective-settings.toml": {
+    "sha256_uncompressed": "08f0d7651ca4903ff232c824f07f92b99131557efab0ddb8a8d2632961e74a4a",
+    "bytes_uncompressed": 3756,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_combined_joint_soft_seed33331/effective-settings.toml.gz"
+  },
+  "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5/pilot/cuts_combined_joint_soft_seed33331/workspace/integration_result.json": {
+    "sha256_uncompressed": "ae2b92ea6c3c7b6abfd92cb8901b9d78593e8eae3b60af7562b671818c43235f",
+    "bytes_uncompressed": 17228,
+    "stored_path": "batches/all-remaining-seeds/pilot/cuts_combined_joint_soft_seed33331/workspace/integration_result.json.gz"
+  }
+}

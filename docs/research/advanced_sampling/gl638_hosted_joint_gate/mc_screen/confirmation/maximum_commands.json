@@ -1,0 +1,85 @@
+{
+  "status": "prepared_only; each input pilot must be terminal accepted and its statistics frozen first",
+  "max_driver_sha256": "12172b64cd64a5e9aa1871e923d453db56c776dbf9b0b6da3c689fb20aac7eca",
+  "max_source_sha256": "29b9c6a48448935aee70159787063bb8a2c1cdd5b6a762ff596fd2d9061ca498",
+  "environment": {
+    "RAYON_NUM_THREADS": "1",
+    "GL_DISPLAY_FILTER": "off"
+  },
+  "commands": [
+    {
+      "batch": "screen-throughput20",
+      "argv": [
+        "/tmp/gl638-hosted-joint-gate/drivers/max-replay-build5",
+        "/tmp/gl638-hosted-joint-gate/manifest-screen-throughput20-build5.json",
+        "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5",
+        "/tmp/gl638-hosted-joint-gate/results-max-screen-throughput20-build5"
+      ],
+      "audit_argv": [
+        "python",
+        "/tmp/gl638-hosted-joint-gate/audit_maximum_results.py",
+        "/tmp/gl638-hosted-joint-gate/results-max-screen-throughput20-build5"
+      ],
+      "required_audit_result": "/tmp/gl638-hosted-joint-gate/results-max-screen-throughput20-build5/maximum_accuracy_audit.json",
+      "resources": "/tmp/gl638-hosted-joint-gate/results-max-screen-throughput20-build5.resources.txt",
+      "combined_log": "/tmp/gl638-hosted-joint-gate/results-max-screen-throughput20-build5.log",
+      "ranking_scope": "top2 per method across this real batch only, among its retained signed-extremum Samples"
+    },
+    {
+      "batch": "screen-advanced-firstseed",
+      "argv": [
+        "/tmp/gl638-hosted-joint-gate/drivers/max-replay-build5",
+        "/tmp/gl638-hosted-joint-gate/manifest-screen-advanced-firstseed-build5.json",
+        "/tmp/gl638-hosted-joint-gate/results-screen-advanced-firstseed-build5",
+        "/tmp/gl638-hosted-joint-gate/results-max-screen-advanced-firstseed-build5"
+      ],
+      "audit_argv": [
+        "python",
+        "/tmp/gl638-hosted-joint-gate/audit_maximum_results.py",
+        "/tmp/gl638-hosted-joint-gate/results-max-screen-advanced-firstseed-build5"
+      ],
+      "required_audit_result": "/tmp/gl638-hosted-joint-gate/results-max-screen-advanced-firstseed-build5/maximum_accuracy_audit.json",
+      "resources": "/tmp/gl638-hosted-joint-gate/results-max-screen-advanced-firstseed-build5.resources.txt",
+      "combined_log": "/tmp/gl638-hosted-joint-gate/results-max-screen-advanced-firstseed-build5.log",
+      "ranking_scope": "top2 per method across this real batch only, among its retained signed-extremum Samples"
+    },
+    {
+      "batch": "screen-all-remaining-seeds",
+      "argv": [
+        "/tmp/gl638-hosted-joint-gate/drivers/max-replay-build5",
+        "/tmp/gl638-hosted-joint-gate/manifest-screen-all-remaining-seeds-build5.json",
+        "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5",
+        "/tmp/gl638-hosted-joint-gate/results-max-screen-all-remaining-seeds-build5"
+      ],
+      "audit_argv": [
+        "python",
+        "/tmp/gl638-hosted-joint-gate/audit_maximum_results.py",
+        "/tmp/gl638-hosted-joint-gate/results-max-screen-all-remaining-seeds-build5"
+      ],
+      "required_audit_result": "/tmp/gl638-hosted-joint-gate/results-max-screen-all-remaining-seeds-build5/maximum_accuracy_audit.json",
+      "resources": "/tmp/gl638-hosted-joint-gate/results-max-screen-all-remaining-seeds-build5.resources.txt",
+      "combined_log": "/tmp/gl638-hosted-joint-gate/results-max-screen-all-remaining-seeds-build5.log",
+      "ranking_scope": "top2 per method across this real batch only, among its retained signed-extremum Samples"
+    },
+    {
+      "batch": "confirmation",
+      "argv": [
+        "/tmp/gl638-hosted-joint-gate/drivers/max-replay-build5",
+        "/tmp/gl638-hosted-joint-gate/manifest-confirmation-build5.json",
+        "/tmp/gl638-hosted-joint-gate/results-confirmation-build5",
+        "/tmp/gl638-hosted-joint-gate/results-max-confirmation-build5"
+      ],
+      "audit_argv": [
+        "python",
+        "/tmp/gl638-hosted-joint-gate/audit_maximum_results.py",
+        "/tmp/gl638-hosted-joint-gate/results-max-confirmation-build5"
+      ],
+      "required_audit_result": "/tmp/gl638-hosted-joint-gate/results-max-confirmation-build5/maximum_accuracy_audit.json",
+      "resources": "/tmp/gl638-hosted-joint-gate/results-max-confirmation-build5.resources.txt",
+      "combined_log": "/tmp/gl638-hosted-joint-gate/results-max-confirmation-build5.log",
+      "ranking_scope": "top2 per method across this real batch only, among its retained signed-extremum Samples"
+    }
+  ],
+  "excluded_control": "results-screen-throughput30-build5: excluded from screen statistics and screen maxima; remains separate throughput evidence",
+  "scheduling": "One max process may overlap20worker confirmation after input statistics freeze, with separate output paths and combined RSS<=300GB. Do not mutate or analyze the max input pilot while its whole-directory before/after hashes are active. No throughput comparison from overlapped runs."
+}

@@ -1,0 +1,971 @@
+{
+  "passed": true,
+  "scope": "Artifact-only independent check; no Gamma/state load or pilot-directory writes. Decimal70 recomputation from retained original integration_result.json means/errors; no new estimator.",
+  "checks": [
+    {
+      "name": "report complete and frozen byte-for-byte",
+      "passed": true
+    },
+    {
+      "name": "all recorded input hashes unchanged",
+      "passed": true
+    },
+    {
+      "name": "manifest matches report",
+      "passed": true
+    },
+    {
+      "name": "exact 21 unique rows",
+      "passed": true
+    },
+    {
+      "name": "results-screen-throughput20-build5: accepted same build/state/preflight",
+      "passed": true
+    },
+    {
+      "name": "results-screen-throughput20-build5: 35 unchanged state hashes",
+      "passed": true
+    },
+    {
+      "name": "results-screen-advanced-firstseed-build5: accepted same build/state/preflight",
+      "passed": true
+    },
+    {
+      "name": "results-screen-advanced-firstseed-build5: 35 unchanged state hashes",
+      "passed": true
+    },
+    {
+      "name": "results-screen-all-remaining-seeds-build5: accepted same build/state/preflight",
+      "passed": true
+    },
+    {
+      "name": "results-screen-all-remaining-seeds-build5: 35 unchanged state hashes",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/11113: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/11113: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/11113: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/11113: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/11113: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts/11113: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts/11113: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts/11113: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts/11113: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts/11113: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/11113: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/11113: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/11113: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/11113: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/11113: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/11113: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/11113: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/11113: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/11113: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/11113: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/11113: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/11113: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/11113: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/11113: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/11113: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/11113: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/11113: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/11113: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/11113: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/11113: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/11113: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/11113: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/11113: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/11113: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/11113: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/22229: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/22229: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/22229: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/22229: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/22229: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts/22229: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts/22229: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts/22229: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts/22229: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts/22229: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/22229: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/22229: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/22229: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/22229: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/22229: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/22229: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/22229: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/22229: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/22229: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/22229: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/22229: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/22229: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/22229: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/22229: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/22229: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/22229: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/22229: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/22229: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/22229: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/22229: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/22229: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/22229: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/22229: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/22229: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/22229: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/33331: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/33331: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/33331: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/33331: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/33331: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts/33331: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts/33331: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts/33331: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts/33331: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts/33331: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/33331: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/33331: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/33331: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/33331: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/33331: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/33331: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/33331: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/33331: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/33331: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/33331: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/33331: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/33331: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/33331: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/33331: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/33331: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/33331: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/33331: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/33331: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/33331: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/33331: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/33331: raw result matches retained row",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/33331: card hash and selection",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/33331: original settings and fixed N",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/33331: signed/abs/stat counts and validity",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/33331: common physical settings",
+      "passed": true
+    },
+    {
+      "name": "sole 30-worker control excluded",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/abs_re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/abs_im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/re: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb/im: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "cuts/re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts/abs_re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts/im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts/abs_im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts/re: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "cuts/im: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/abs_re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/abs_im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/re: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint/im: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/abs_re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/abs_im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/re: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft/im: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/abs_re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/abs_im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/re: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft/im: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/abs_re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/abs_im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/re: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint/im: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/abs_re: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/abs_im: independent pooling",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/re: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft/im: maximum across included rows only",
+      "passed": true
+    },
+    {
+      "name": "optimized_lmb: normalized score",
+      "passed": true
+    },
+    {
+      "name": "cuts: normalized score",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint: normalized score",
+      "passed": true
+    },
+    {
+      "name": "cuts_soft: normalized score",
+      "passed": true
+    },
+    {
+      "name": "cuts_joint_soft: normalized score",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint: normalized score",
+      "passed": true
+    },
+    {
+      "name": "cuts_combined_joint_soft: normalized score",
+      "passed": true
+    },
+    {
+      "name": "frozen common scales and unique score minimum",
+      "passed": true
+    },
+    {
+      "name": "confirmation uses exact frozen methods/cards/source/preflight and independent seeds",
+      "passed": true
+    }
+  ],
+  "included_runs": 21,
+  "draws_per_method": 6144,
+  "total_draws": 43008,
+  "workers": 20,
+  "excluded_control": [
+    {
+      "directory": "/tmp/gl638-hosted-joint-gate/results-screen-throughput30-build5",
+      "workers": 30,
+      "status": "completed_requested_stages",
+      "error": null,
+      "mode_seed_pairs": [
+        [
+          "optimized_lmb",
+          11113
+        ]
+      ],
+      "scope": "Throughput control explicitly excluded from estimates, errors and maxima"
+    }
+  ],
+  "selection": [
+    "optimized_lmb",
+    "cuts",
+    "cuts_combined_joint"
+  ],
+  "absolute_phase_scales": {
+    "re": 0.0006183385979328378,
+    "im": 0.0008936315639088504
+  },
+  "methods": {
+    "optimized_lmb": {
+      "observables": {
+        "re": {
+          "mean": 0.00014317105484197334,
+          "standard_error": 0.00019269846405187295,
+          "sample_variance": 0.00022814329680661077,
+          "sum_squares": 1.4016102116936133,
+          "seed_mean_standard_error": 0.00026095000129183787
+        },
+        "abs_re": {
+          "mean": 0.0006183385979328378,
+          "standard_error": 0.00019254556466301835,
+          "sample_variance": 0.00022778139323228517,
+          "sum_squares": 1.4016102116936129,
+          "seed_mean_standard_error": 0.00016426774476534803
+        },
+        "im": {
+          "mean": 0.00010504129534754668,
+          "standard_error": 0.00024652394739805444,
+          "sample_variance": 0.0003733958040005757,
+          "sum_squares": 2.2938382148669234,
+          "seed_mean_standard_error": 0.00032685964886971304
+        },
+        "abs_im": {
+          "mean": 0.0008936315639088504,
+          "standard_error": 0.00024626379115506,
+          "sample_variance": 0.00037260813210048324,
+          "sum_squares": 2.2938382148669234,
+          "seed_mean_standard_error": 0.00010422227566563332
+        }
+      },
+      "maxima_pb": {
+        "re": 1.0489218746046691,
+        "im": 1.3467475883036093
+      },
+      "score": 596.6985731176749
+    },
+    "cuts": {
+      "observables": {
+        "re": {
+          "mean": 0.00018993730341121333,
+          "standard_error": 0.00014710275507305714,
+          "sample_variance": 0.00013295137105971512,
+          "sum_squares": 0.8169419244650014,
+          "seed_mean_standard_error": 0.00012330937633035088
+        },
+        "abs_re": {
+          "mean": 0.00021213804918989275,
+          "standard_error": 0.00014709781593701305,
+          "sample_variance": 0.0001329424432339315,
+          "sum_squares": 0.8169419244650015,
+          "seed_mean_standard_error": 0.0001211141703973759
+        },
+        "im": {
+          "mean": 0.0001914975604705101,
+          "standard_error": 0.0001698598598407626,
+          "sample_variance": 0.00017726897347659888,
+          "sum_squares": 1.0891886126301997,
+          "seed_mean_standard_error": 0.00017492476222599865
+        },
+        "abs_im": {
+          "mean": 0.00023826819289153776,
+          "standard_error": 0.00016985022784930752,
+          "sample_variance": 0.00017724886978843658,
+          "sum_squares": 1.0891886126301997,
+          "seed_mean_standard_error": 0.00016861769990524542
+        }
+      },
+      "maxima_pb": {
+        "re": 0.8756793922601525,
+        "im": 1.0341965388661254
+      },
+      "score": 347.728355449415
+    },
+    "cuts_joint": {
+      "observables": {
+        "re": {
+          "mean": 1.97808604730955e-05,
+          "standard_error": 5.580668125375381e-05,
+          "sample_variance": 1.9134785572196825e-05,
+          "sum_squares": 0.11754739180932294,
+          "seed_mean_standard_error": 2.0918316581670965e-05
+        },
+        "abs_re": {
+          "mean": 0.00011608804071035698,
+          "standard_error": 5.578759343505073e-05,
+          "sample_variance": 1.912169829135062e-05,
+          "sum_squares": 0.1175473918093229,
+          "seed_mean_standard_error": 6.545114612217985e-05
+        },
+        "im": {
+          "mean": 3.5658968136120564e-05,
+          "standard_error": 2.8570505823602716e-05,
+          "sample_variance": 5.015186245733478e-06,
+          "sum_squares": 0.03081610158452118,
+          "seed_mean_standard_error": 4.0658401262558116e-05
+        },
+        "abs_im": {
+          "mean": 8.74303361655605e-05,
+          "standard_error": 2.8552345668049862e-05,
+          "sample_variance": 5.008812706700119e-06,
+          "sum_squares": 0.03081610158452118,
+          "seed_mean_standard_error": 3.605150864136305e-05
+        }
+      },
+      "maxima_pb": {
+        "re": 0.22443888880798046,
+        "im": 0.11212338813587489
+      },
+      "score": 50.04617452127427
+    },
+    "cuts_soft": {
+      "observables": {
+        "re": {
+          "mean": -0.0004545290393046126,
+          "standard_error": 0.000646823828044346,
+          "sample_variance": 0.0025705332604473857,
+          "sum_squares": 15.792055148730968,
+          "seed_mean_standard_error": 0.000806464212439772
+        },
+        "abs_re": {
+          "mean": 0.0010479028470815346,
+          "standard_error": 0.0006467116354194228,
+          "sample_variance": 0.002569641611592896,
+          "sum_squares": 15.792055148730963,
+          "seed_mean_standard_error": 0.0005709564096180211
+        },
+        "im": {
+          "mean": 0.0020417285428105223,
+          "standard_error": 0.0019468319862719755,
+          "sample_variance": 0.023286710985349235,
+          "sum_squares": 143.07587780203923,
+          "seed_mean_standard_error": 0.0020021336315362587
+        },
+        "abs_im": {
+          "mean": 0.002343667038723177,
+          "standard_error": 0.0019467766264795834,
+          "sample_variance": 0.023285386650054005,
+          "sum_squares": 143.07587780203926,
+          "seed_mean_standard_error": 0.0020832224027742103
+        }
+      },
+      "maxima_pb": {
+        "re": 3.767557356516622,
+        "im": 11.936880400102186
+      },
+      "score": 29160.243955592334
+    },
+    "cuts_joint_soft": {
+      "observables": {
+        "re": {
+          "mean": -0.0005456115443271988,
+          "standard_error": 0.0007388765829997097,
+          "sample_variance": 0.0033542467885383283,
+          "sum_squares": 20.606967041376624,
+          "seed_mean_standard_error": 0.0009424089508308571
+        },
+        "abs_re": {
+          "mean": 0.0011699589830016187,
+          "standard_error": 0.0007387585815948244,
+          "sample_variance": 0.0033531755021107006,
+          "sum_squares": 20.606967041376624,
+          "seed_mean_standard_error": 0.0006333812971819804
+        },
+        "im": {
+          "mean": 0.002335272323307345,
+          "standard_error": 0.00222489812554732,
+          "sample_variance": 0.030413854734729077,
+          "sum_squares": 186.86581591992743,
+          "seed_mean_standard_error": 0.0022997473349514533
+        },
+        "abs_im": {
+          "mean": 0.002657120696508994,
+          "standard_error": 0.002224839343435905,
+          "sample_variance": 0.030412247679592296,
+          "sum_squares": 186.86581591992737,
+          "seed_mean_standard_error": 0.0023783082308310327
+        }
+      },
+      "maxima_pb": {
+        "re": 4.3057798360189965,
+        "im": 13.642149028688213
+      },
+      "score": 38085.044481061406
+    },
+    "cuts_combined_joint": {
+      "observables": {
+        "re": {
+          "mean": 1.839163123079123e-05,
+          "standard_error": 5.579566587992496e-05,
+          "sample_variance": 1.912723249756706e-05,
+          "sum_squares": 0.11750066745345275,
+          "seed_mean_standard_error": 2.00323151999174e-05
+        },
+        "abs_re": {
+          "mean": 0.00011552277848743533,
+          "standard_error": 5.5776687955232735e-05,
+          "sample_variance": 1.91142231199052e-05,
+          "sum_squares": 0.11750066745345272,
+          "seed_mean_standard_error": 6.561892647304065e-05
+        },
+        "im": {
+          "mean": 3.5644776825433e-05,
+          "standard_error": 2.853260049514908e-05,
+          "sample_variance": 5.001887484000962e-06,
+          "sum_squares": 0.030734401074124066,
+          "seed_mean_standard_error": 4.100404700093734e-05
+        },
+        "abs_im": {
+          "mean": 8.848160660908548e-05,
+          "standard_error": 2.851388542576015e-05,
+          "sample_variance": 4.995327971778828e-06,
+          "sum_squares": 0.030734401074124063,
+          "seed_mean_standard_error": 3.513522732171832e-05
+        }
+      },
+      "maxima_pb": {
+        "re": 0.22443888880798046,
+        "im": 0.11212338813587489
+      },
+      "score": 50.02641979292013
+    },
+    "cuts_combined_joint_soft": {
+      "observables": {
+        "re": {
+          "mean": -0.0005470360917401773,
+          "standard_error": 0.0007388768540568137,
+          "sample_variance": 0.0033542492495517327,
+          "sum_squares": 20.60699172269223,
+          "seed_mean_standard_error": 0.0009428108198969876
+        },
+        "abs_re": {
+          "mean": 0.0011710578391019623,
+          "standard_error": 0.0007387587407661212,
+          "sample_variance": 0.0033531769470464727,
+          "sum_squares": 20.606991722692218,
+          "seed_mean_standard_error": 0.0006340036251283585
+        },
+        "im": {
+          "mean": 0.0023360014150932704,
+          "standard_error": 0.002224897855290231,
+          "sample_variance": 0.03041384734602283,
+          "sum_squares": 186.86579145626217,
+          "seed_mean_standard_error": 0.002299273997838437
+        },
+        "abs_im": {
+          "mean": 0.002658224572847277,
+          "standard_error": 0.00222483898311303,
+          "sample_variance": 0.030412237828788765,
+          "sum_squares": 186.8657914562622,
+          "seed_mean_standard_error": 0.0023787036253358888
+        }
+      },
+      "maxima_pb": {
+        "re": 4.3057798360189965,
+        "im": 13.642149028688213
+      },
+      "score": 38085.035228725304
+    }
+  },
+  "direct_vs_composed_score_improvement_percent": 0.039473003767229474,
+  "input_sha256": {
+    "/tmp/gl638-hosted-joint-gate/results-screen-throughput20-build5/physics_pilot_analysis.json": "ecad2ada9b4b3f29a1f6a6d66e53dfca64b44a1bd8e534b901b062ad87c8c19e",
+    "/tmp/gl638-hosted-joint-gate/manifest-screen-full-build5.json": "598175f17094dabdf0a22d78b97a58876f7f37cebeb919982650fad720b85251",
+    "/tmp/gl638-hosted-joint-gate/screen-selection-frozen-build5.json": "ecad2ada9b4b3f29a1f6a6d66e53dfca64b44a1bd8e534b901b062ad87c8c19e",
+    "/tmp/gl638-hosted-joint-gate/manifest-confirmation-build5.json": "3cd2e7b0416d8a6ee11161231c51832b5a30e0b5ec60747b97358885a669e3a7"
+  },
+  "statistical_scope": "Screen selection only; 0.04% score separation of joint variants does not establish a real improvement. All four observables and large retained maxima remain visible; independent confirmation is required."
+}

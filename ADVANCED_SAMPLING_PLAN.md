@@ -30,8 +30,18 @@ joint weights by approximately `8/7`; its global benefit is unmeasured.
 The [seven-candidate full-state preflight](docs/research/advanced_sampling/GL638_HOSTED_JOINT_GATE.md#completed-cut-matched-acceptance)
 now passes: every mode meets the 32,768-point Gaussian criteria and all 221
 physical comparison checks pass, with 35 saved-file hashes unchanged. The
-predeclared screen is running. Matched-count MC
-errors, maximum attribution and a supported central estimate remain pending.
+[predeclared screen](docs/research/advanced_sampling/GL638_MC_SCREEN.md) now
+passes: 21 stable runs and 43,008 draws, with 167 independent audit checks.
+The frozen confirmation compares optimized LMB, six cuts, and six cuts plus
+composed Cut1 LU-h→H/Z at independent seeds and 32,768 samples per run.
+The composed screen score is only 0.03947% below direct joint, so it does not
+establish superiority between them. Soft-channel outliers remain in the report.
+The measured worker rule chose 20; the 30-worker baseline control is retained
+and excluded from the screen. The first confirmation attempt stopped on the
+ordinary baseline at seed 20011: canonical physical cut-group-3 root certification
+failed at Arb1000 before the body. Three earlier runs completed, but no partial
+confirmation is pooled; source/root investigation is pending. Physical maximum
+attribution and a supported central estimate remain pending.
 See also the [center audit](docs/research/advanced_sampling/CANONICAL_CT_CENTERS.md).
 
 Current implementation status: there is one `SamplingChannelCatalogue` and one

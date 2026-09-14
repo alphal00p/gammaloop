@@ -1,0 +1,111 @@
+{
+  "scope": "Completed seven-method screen and both predeclared worker controls; confirmation definition only. No maximum replay or confirmation outcomes are included.",
+  "build": {
+    "source_commit": "4d192b5be",
+    "source_proof": "../local_cut_matched_hz/source_commit_proof.json",
+    "build_manifest": "../phase_space_ray/build5/manifest.json",
+    "driver_source": "../local_hz/extension/gate.rs.gz",
+    "driver_build": "../local_cut_matched_hz/driver_build.json",
+    "driver_verification": "../phase_space_ray/build5/driver_verification.json",
+    "cards": "../phase_space_ray/cards/",
+    "accepted_settings_and_state_hashes": "../local_cut_matched_hz/shared/",
+    "identity": {
+      "driver_sha256": "2fd035e87812264837a6cb0feb752a6abb63f827a90d1b461285442fd0dd311d",
+      "source_base_commit": "22eb17a6e389636c26fa7135f90abe421fbbded7",
+      "source_candidate_commit": null,
+      "source_candidate_patch_sha256": "667a91d23c759c1a2fe02355569dbc3d64866af681428c40213b8e335b5dfd65",
+      "candidate_binary_sha256": "5d3f6d86a975664f8b42262f2e9f1028fe54dc7b4a9ddf9edd98193907f17522"
+    }
+  },
+  "execution": {
+    "phases": [
+      "throughput20",
+      "throughput30",
+      "advanced-firstseed",
+      "all-remaining-seeds"
+    ],
+    "run_records": "batches/<phase>/run.json",
+    "resource_records": "batches/<phase>/resources.txt (stored through artifact_hashes.json)",
+    "environment_setup": "source /tmp/gammaloop-rebase-dev-env.sh; user-authorized SYMBOLICA_LICENSE supplied (value omitted)",
+    "environment_scope": "Exact RAYON_NUM_THREADS is retained in each run record; original argv/log/resource records are preserved. No timing inference from confirmation or concurrent maximum replay.",
+    "chosen_workers": 20,
+    "excluded_workers": 30,
+    "worker_choice": "worker_choice.json",
+    "worker_criterion": "Choose 30 only if 2048/Integrate-time throughput ratio >=1.35 and peak RSS <=300000000000 bytes; otherwise 20. Integrate time includes warmup. This decision preceded advanced statistics."
+  },
+  "statistics": {
+    "included_runs": 21,
+    "samples_per_run": 2048,
+    "draws_per_method": 6144,
+    "total_draws": 43008,
+    "seeds": [
+      11113,
+      22229,
+      33331
+    ],
+    "observables": [
+      "re",
+      "abs_re",
+      "im",
+      "abs_im"
+    ],
+    "selection": {
+      "confirmation_modes": [
+        "optimized_lmb",
+        "cuts",
+        "cuts_combined_joint"
+      ],
+      "primary_estimate_mode": "cuts_combined_joint",
+      "absolute_phase_scales": {
+        "re": 0.0006183385979328378,
+        "im": 0.0008936315639088504
+      },
+      "score_rule": "minimum worst normalized4-observable sample variance; exact ties use declared order; b has identical soft policy",
+      "card_sha256": {
+        "optimized_lmb": "c4d99ba8507ab73a5c754e1480c0e37978bd5489b31692f66e0ea030aff5b3e6",
+        "cuts": "71ce4efcf492a51393075382816f8ded9ee79f93dbb1023f590b7b391f29f751",
+        "cuts_combined_joint": "e7c61f30d4e117c53bdd0bcb15ca116ab7bdd3b6005c299c7b828ea0de4f1c9b"
+      },
+      "candidate_driver_sha256": "2fd035e87812264837a6cb0feb752a6abb63f827a90d1b461285442fd0dd311d"
+    },
+    "independent_checks": 167,
+    "independent_audit": "independent/summary.json",
+    "independent_source": "independent/audit.py.gz",
+    "analysis_report": "batches/throughput20/physics_pilot_analysis.json.gz",
+    "analysis_inputs": "analysis_input_references.json",
+    "analyzer": "../cut_matched_acceptance/mc/analyze_physics_pilots.py.gz",
+    "protocol": "../cut_matched_acceptance/mc/MC_ANALYSIS_PROTOCOL.md",
+    "worker_protocol": "../cut_matched_acceptance/mc/SCREEN_BUILD5_COMMANDS.md",
+    "limits": "Empirical fixed-N screening; the 0.03947% composed/direct score separation is not evidence of superiority. Component extrema do not establish a bound or identify the largest complex-norm sample."
+  },
+  "confirmation": {
+    "manifest": "confirmation/manifest.json",
+    "execution_recipe": "confirmation/commands.md",
+    "modes": [
+      "optimized_lmb",
+      "cuts",
+      "cuts_combined_joint"
+    ],
+    "primary_estimate_mode": "cuts_combined_joint",
+    "seeds": [
+      10007,
+      20011,
+      30013,
+      40009,
+      50021
+    ],
+    "samples_per_run": 32768,
+    "total_planned_draws": 491520,
+    "workers": 20,
+    "status": "Definition frozen before confirmation results; the unmodified manifest retains preparation-time status/prose."
+  },
+  "archive_convention": {
+    "original_files": 356,
+    "complete_sample_checkpoints": 22,
+    "screen_checkpoints": 21,
+    "excluded_control_checkpoints": 1,
+    "logical_paths": "artifact_hashes.json maps original path and logical archive name to exact uncompressed bytes and stored_path; repeated identical files share storage, including references to prior immutable archives. All four original frozen directory trees can be reconstructed separately, without inventing an aggregate workspace.",
+    "hashes": "SHA256 and byte counts refer to uncompressed original content; gzip copies are byte-preserving. No generated-process saved-state payload or executable is copied.",
+    "script_replay": "The independent audit.py is preserved unchanged and uses original absolute paths; restore files according to original_path in an isolated environment to replay it. The production analyzer accepts the three actual directories; no statistical formula was added for this archive."
+  }
+}

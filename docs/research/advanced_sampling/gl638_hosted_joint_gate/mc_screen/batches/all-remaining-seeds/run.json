@@ -1,0 +1,23 @@
+{
+  "argv": [
+    "/run/current-system/sw/bin/time",
+    "-v",
+    "-o",
+    "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5.resources.txt",
+    "/tmp/gl638-hosted-joint-gate/drivers/gate-physics-build5",
+    "/tmp/gl638-hosted-joint-gate/manifest-screen-all-remaining-seeds-build5.json",
+    "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5",
+    "all",
+    "physics-pilot",
+    "20",
+    "1",
+    "1",
+    "1337"
+  ],
+  "started_utc": "2026-09-14T10:49:18.248475+00:00",
+  "RAYON_NUM_THREADS": 20,
+  "pid": 1254794,
+  "returncode": 0,
+  "elapsed_seconds": 1000.7915906840935,
+  "resources": "/tmp/gl638-hosted-joint-gate/results-screen-all-remaining-seeds-build5.resources.txt"
+}
