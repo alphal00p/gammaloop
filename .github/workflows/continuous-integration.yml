@@ -50,6 +50,7 @@ jobs:
               - 'nix-ci.nix'
               - 'nix/**'
               - 'justfile'
+              - 'just/**'
               - '.github/scripts/**'
               - '.github/workflows/**'
 

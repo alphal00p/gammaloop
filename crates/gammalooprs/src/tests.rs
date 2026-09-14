@@ -245,9 +245,11 @@ fn compare_inspect(
     let target = Complex::new(F(target.re), F(target.im));
     let mut integrand = integrand_factory(settings);
     let (xs, jac) = if is_momentum_space {
-        let mut pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
+        let pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
         let (xs, inv_jac) = utils::global_inv_parameterize::<f128>(
-            &pt.chunks_exact_mut(3)
+            &pt.as_chunks::<3>()
+                .0
+                .iter()
                 .map(|x| crate::momentum::ThreeMomentum::new(x[0], x[1], x[2]).higher())
                 .collect::<Vec<_>>(),
             F(settings.kinematics.e_cm).higher(),
