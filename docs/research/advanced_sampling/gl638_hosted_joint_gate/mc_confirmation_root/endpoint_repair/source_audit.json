@@ -1,0 +1,28 @@
+{
+  "status": "read_only_source_audit_passed",
+  "source_base_commit": "3e68f16588b8272c0f88513c0c43305b5d67a059",
+  "source_patch_sha256": "3f5669ae1de62c09b26d4aa3888cecd47058a786f00e0893bac7bfd191910588",
+  "source_files": {
+    "crates/gammalooprs/src/cff/esurface.rs": "e8e0dac636e02f8098beab808d85edb6ef7575febabebbdb02247c9ae9b3ef03",
+    "crates/gammalooprs/src/utils/newton_solver.rs": "05c829632745d8816862f65371cf87b93524af72e6e94946ca8e02060e56966f"
+  },
+  "scope": "Existing RadialRootDiagnostics owner; production source audit is separate from optimized-build and physical-run acceptance.",
+  "findings": [
+    "Strict successful solves, current-candidate bracket-resolution acceptance, and existing cross-precision rescue return before the alternate-endpoint branch.",
+    "Only DidNotConverge reaches this logic; structural and nonfinite safeguarded errors preserve their original return and observation behavior.",
+    "The alternate is an existing distinct bound of an exhausted finite valid positive bracket; no new root iteration, tolerance, proposal or physics formula is introduced.",
+    "Residual allowance is the existing epsilon*tolerance*Ecm + abs(derivative)*bracket_width. Candidate positivity, finite values, bracket validity and fresh four-probe local consistency remain required.",
+    "The reusable acceptance closure reads candidate and observation, including observation.local_consistency. It does not capture the prior candidate consistency.",
+    "Accepted alternate records its own observation; rejected alternate returns the original error and records the original candidate, preserving occurrence/precision history.",
+    "The actual captured-source regression pins old strict error and unchanged original-equation residual bounds; the alternate-derivative-times-eight negative case rejects a numerically in-budget but inconsistent candidate.",
+    "Final test-only delta removes two needless closure borrows and requires at least four iterations in the negative fixture; production newton source is byte-identical between both tested snapshots."
+  ],
+  "unchanged_successful_solver_paths": true,
+  "unchanged_sampling_and_physics_formulas": true,
+  "optimized_build_accepted": null,
+  "captured_physical_replay_accepted": null,
+  "limits": [
+    "No global exact-root claim; both original directed endpoint intervals exclude zero.",
+    "Four function probes are per candidate; checking an alternate can add a second set. No runtime optimization or cost claim."
+  ]
+}

@@ -92,8 +92,9 @@ its Arb1000 root before body evaluation. The three seed-10007 runs completed;
 they are not pooled as confirmation. The saved-state hashes remain unchanged.
 The [retained interruption](GL638_CONFIRMATION_ROOT.md)
 and [attempt record](gl638_hosted_joint_gate/mc_confirmation_root/attempt1/run.json.gz)
-retain this interruption separately while exact-source/root-owner investigation
-proceeds. No cause or repair is established by the screen results.
+retain this interruption separately. The [subsequent endpoint repair](CANONICAL_LU_ENDPOINT_CERTIFICATION.md)
+passes source and exact physical-replay gates; these are separate from the screen
+results and do not complete the confirmation.
 
 ## Retained evidence
 

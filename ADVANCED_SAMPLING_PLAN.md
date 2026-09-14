@@ -41,7 +41,11 @@ and excluded from the screen. The first confirmation attempt stopped on the
 ordinary baseline at seed 20011: canonical physical cut-group-3 root certification
 failed at Arb1000 before the body. Three earlier runs completed, but no partial
 confirmation is pooled. The [captured source](docs/research/advanced_sampling/GL638_CONFIRMATION_ROOT.md)
-reproduces that exact error; repair validation remains pending. The
+reproduces that exact error. The [endpoint repair](docs/research/advanced_sampling/CANONICAL_LU_ENDPOINT_CERTIFICATION.md)
+now passes 35 broader tests, the final strengthened fixture, build7 and all 25
+checks of the exact-source Double/Arb six-cut replay, without changing its canonical
+point/J/partition or the numerical tolerance. A fresh complete confirmation is
+still required. The
 [maximum replay and three-point attribution](docs/research/advanced_sampling/GL638_SCREEN_MAXIMUM_REPLAY.md)
 now pass: 84 signed extrema, 59 distinct Samples, 28 Arb controls, and unchanged
 native trace totals/events. Remaining large weights include ordinary projected
