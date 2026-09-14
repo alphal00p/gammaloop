@@ -1271,7 +1271,9 @@ impl SiteBuilder {
             "docs/assets/typst/marks/local-unitarity.typ",
             "docs/assets/typst/marks/gammaloop.typ",
             "docs/assets/typst/marks/spenso.typ",
+            "assets/embedded/drawing/templates/impl/physics-edge-style.typ",
             "assets/embedded/drawing/templates/layout-core.typ",
+            "assets/embedded/drawing/templates/physics-edge-style.typ",
             "docs/assets/typst/portal-graphs/figure.typ",
             "docs/assets/typst/portal-graphs/layout.typ",
             "docs/assets/typst/portal-graphs/edge-style.typ",
@@ -2606,7 +2608,7 @@ impl SiteBuilder {
     ) -> Result<String> {
         let mut rendered = String::from(
             "= Python API reference <supported-api-catalog>\n\
-             The supported Python packages available in this version are listed below. The HTML manual provides a separate page for every public class and function; this printable edition keeps a compact inventory. Rust APIs use canonical Rustdoc in the HTML manual.\n",
+             The supported Python packages available in this version are listed below. The HTML manual provides a separate page for every public class, function, and constant; this printable edition keeps a compact inventory. Rust APIs use canonical Rustdoc in the HTML manual.\n",
         );
         for component in &product.python_components {
             // Everything beyond this boundary consumes the neutral catalog
@@ -3081,7 +3083,7 @@ impl SiteBuilder {
             })
             .unwrap_or_default();
         cards.push_str(&format!(
-            "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Canonical Rustdoc</p><h2><a href=\"reference/rust/\">Rust API</a></h2><p>{} crates in their native Rust documentation interface, with authored guidance for choosing the right boundary.</p></article><article class=\"reference-hub-card\"><p class=\"portal-kicker\">Python-native reference</p><h2><a href=\"reference/python/\">Python API</a></h2><p>{} modules with one flat page per supported class or function; stubs remain downloadable for type checkers.</p></article>",
+            "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Canonical Rustdoc</p><h2><a href=\"reference/rust/\">Rust API</a></h2><p>{} crates in their native Rust documentation interface, with authored guidance for choosing the right boundary.</p></article><article class=\"reference-hub-card\"><p class=\"portal-kicker\">Python-native reference</p><h2><a href=\"reference/python/\">Python API</a></h2><p>{} modules with one flat page per supported class, function, or constant; stubs remain downloadable for type checkers.</p></article>",
             product.rust_components.len(),
             product.python_components.len(),
         ));
@@ -3090,7 +3092,7 @@ impl SiteBuilder {
             .iter()
             .any(|page| page.route == "reference/typst/");
         if has_typst {
-            cards.push_str("<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Typst-native reference</p><h2><a href=\"reference/typst/\">Typst API</a></h2><p>Package exports grouped by graph construction, layout, drawing, physics, and subgraph operations.</p></article>");
+            cards.push_str("<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Typst-native reference</p><h2><a href=\"reference/typst/\">Typst API</a></h2><p>Package exports grouped by graph construction, layout, drawing, domain templates, and subgraph operations.</p></article>");
         }
         if let Some((route, title)) = supplemental_reference(&product.id) {
             cards.push_str(&format!(
@@ -3102,7 +3104,7 @@ impl SiteBuilder {
         fs::create_dir_all(&destination)?;
         let mut interface_shapes = vec!["native Rustdoc for crates"];
         if !product.python_components.is_empty() {
-            interface_shapes.push("class and function pages for Python");
+            interface_shapes.push("class, function, and constant pages for Python");
         }
         if has_typst {
             interface_shapes.push("focused function and module pages for Typst");
@@ -3320,7 +3322,6 @@ impl SiteBuilder {
         if let Some((reference_heading, reference_scope)) = match page.route.as_str() {
             "reference/typst/graph/" => Some(("graph", Some("graph"))),
             "reference/typst/layout/" | "reference/typst/drawing/" => Some(("reference", None)),
-            "reference/typst/physics/" => Some(("physics", Some("physics"))),
             "reference/typst/subgraph/" => Some(("subgraph", Some("subgraph"))),
             _ => None,
         } {
@@ -5746,8 +5747,7 @@ fn append_rendered_page_search(
         .strip_prefix("reference/typst/")
         .map(|route| route.trim_matches('/'))
         .filter(|route| !route.is_empty() && !route.contains('/'));
-    let module_scope =
-        typst_scope.filter(|scope| matches!(*scope, "graph" | "physics" | "subgraph"));
+    let module_scope = typst_scope.filter(|scope| matches!(*scope, "graph" | "subgraph"));
     let mut in_generated_reference = false;
     for heading in headings {
         if heading.level == 2 && module_scope == Some(heading.title.as_str()) {
@@ -5864,7 +5864,7 @@ fn python_item_routes(catalog: &DocCatalog) -> BTreeMap<String, String> {
                 .filter(|segment| segment.as_str() != "exports")
                 .cloned()
                 .collect::<Vec<_>>();
-            segments.push(item.name.clone());
+            segments.push(python_item_disambiguated_segment(item, &item.name));
             (
                 anchor,
                 format!(
@@ -5909,6 +5909,7 @@ fn api_item_kind_label(kind: alphal00p_docs_schema::DocItemKind) -> &'static str
         alphal00p_docs_schema::DocItemKind::Command => "Command",
         alphal00p_docs_schema::DocItemKind::Setting => "Setting",
         alphal00p_docs_schema::DocItemKind::PythonClass => "Class",
+        alphal00p_docs_schema::DocItemKind::PythonConstant => "Constant",
         alphal00p_docs_schema::DocItemKind::ContentPage => "Page",
     }
 }
@@ -6175,7 +6176,7 @@ fn render_python_catalog_for_module(
     let routes = python_item_routes(catalog);
     let item_links = python_item_links(catalog, &routes);
     let mut body = format!(
-        "<p><code>{}</code> · version {}</p><p>Choose a public class or function below. Each symbol has its own page with a conventional signature-first layout, flat member sections, stable links, and source-backed details.</p><section class=\"reference-coverage\" aria-labelledby=\"python-inventory-title\"><h2 id=\"python-inventory-title\">API inventory</h2><p>The generated inventory distinguishes the supported module API from names that are merely reachable through the extension.</p><div class=\"reference-coverage-grid\"><article><strong>{}</strong><span>supported exports</span><small>one page per supported class or function</small></article><article><strong>{}</strong><span>implementation-detail exports</span><small>checked for drift but intentionally omitted from the public reference</small></article></div></section>",
+        "<p><code>{}</code> · version {}</p><p>Choose a public class, function, or constant below. Each symbol has its own page with a conventional signature-first layout, flat member sections, stable links, and source-backed details.</p><section class=\"reference-coverage\" aria-labelledby=\"python-inventory-title\"><h2 id=\"python-inventory-title\">API inventory</h2><p>The generated inventory distinguishes the supported module API from names that are merely reachable through the extension.</p><div class=\"reference-coverage-grid\"><article><strong>{}</strong><span>supported exports</span><small>one page per supported class, function, or constant</small></article><article><strong>{}</strong><span>implementation-detail exports</span><small>checked for drift but intentionally omitted from the public reference</small></article></div></section>",
         escape_html(module),
         escape_html(&catalog.component.version),
         supported.len(),
@@ -6193,7 +6194,7 @@ fn render_python_catalog_for_module(
     ));
     let filter_id = format!("{}-symbol-filter", slug(&catalog.component.id));
     body.push_str(&format!(
-        "<div data-reference-filter-root><div class=\"reference-tools\"><label for=\"{}\">Filter public classes and functions</label><input id=\"{}\" type=\"search\" data-reference-filter placeholder=\"Try a class or function name\"><output data-reference-filter-count aria-live=\"polite\"></output></div><div class=\"api-symbol-list\" data-reference-filter-scope>",
+        "<div data-reference-filter-root><div class=\"reference-tools\"><label for=\"{}\">Filter public classes, functions, and constants</label><input id=\"{}\" type=\"search\" data-reference-filter placeholder=\"Try a class, function, or constant name\"><output data-reference-filter-count aria-live=\"polite\"></output></div><div class=\"api-symbol-list\" data-reference-filter-scope>",
         escape_html(&filter_id),
         escape_html(&filter_id),
     ));
@@ -7361,9 +7362,17 @@ fn render_doc_text_omitting_parameters(
     rendered
 }
 
+fn python_item_disambiguated_segment(item: &DocItem, value: &str) -> String {
+    match item.kind {
+        alphal00p_docs_schema::DocItemKind::PythonConstant => format!("{value}-constant"),
+        alphal00p_docs_schema::DocItemKind::PythonFunction => format!("{value}-function"),
+        _ => value.to_owned(),
+    }
+}
+
 fn api_item_anchor(path: &[String], item: &DocItem) -> String {
-    let mut parts = path.iter().map(String::as_str).collect::<Vec<_>>();
-    parts.push(&item.id);
+    let mut parts = path.to_vec();
+    parts.push(python_item_disambiguated_segment(item, &item.id));
     slug(&parts.join("-"))
 }
 
@@ -11627,6 +11636,53 @@ mod tests {
         assert_eq!(
             python_human_callable_signature("def version() -> str:"),
             "version() -> str"
+        );
+    }
+
+    #[test]
+    fn python_constants_keep_their_annotated_signature_and_label() {
+        let mut item = DocItem::new(
+            "AUTO",
+            "AUTO",
+            "AUTO",
+            alphal00p_docs_schema::DocItemKind::PythonConstant,
+        );
+        item.signature = Some("AUTO: Auto".to_owned());
+
+        assert_eq!(api_item_kind_label(item.kind), "Constant");
+        assert_eq!(
+            python_item_display_signature(&item).as_deref(),
+            Some("AUTO: Auto")
+        );
+        let class = DocItem::new(
+            "Auto",
+            "Auto",
+            "Auto",
+            alphal00p_docs_schema::DocItemKind::PythonClass,
+        );
+        assert_eq!(api_item_anchor(&[], &item), "auto-constant");
+        assert_eq!(api_item_anchor(&[], &class), "auto");
+        assert_eq!(
+            python_item_disambiguated_segment(&item, &item.name),
+            "AUTO-constant"
+        );
+        let function = DocItem::new(
+            "edge",
+            "edge",
+            "edge",
+            alphal00p_docs_schema::DocItemKind::PythonFunction,
+        );
+        let edge = DocItem::new(
+            "Edge",
+            "Edge",
+            "Edge",
+            alphal00p_docs_schema::DocItemKind::PythonClass,
+        );
+        assert_eq!(api_item_anchor(&[], &function), "edge-function");
+        assert_eq!(api_item_anchor(&[], &edge), "edge");
+        assert_eq!(
+            python_item_disambiguated_segment(&function, &function.name),
+            "edge-function"
         );
     }
 

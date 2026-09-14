@@ -1400,7 +1400,8 @@ mod tests {
     use crate::{
         dot,
         half_edge::{
-            builder::HedgeGraphBuilder, involution::HedgePair, nodestore::DefaultNodeStore, NoData,
+            algorithms::DirectionBasis, builder::HedgeGraphBuilder, involution::HedgePair,
+            nodestore::DefaultNodeStore, NoData,
         },
         parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData},
     };
@@ -1729,7 +1730,10 @@ mod tests {
         })
         .unwrap();
 
-        let g = graph.graph.transitive_closure().unwrap();
+        let g = graph
+            .graph
+            .transitive_closure(DirectionBasis::Underlying)
+            .unwrap();
         let mut output = String::new();
         g.dot_impl_fmt(
             &mut output,

@@ -55,6 +55,7 @@ pub enum DocItemKind {
     Setting,
     PythonClass,
     PythonFunction,
+    PythonConstant,
     ContentPage,
 }
 
@@ -574,6 +575,14 @@ mod tests {
         assert!(json.find("second").unwrap() < json.find("first").unwrap());
         assert!(json.find("zeta").unwrap() < json.find("alpha").unwrap());
         assert_eq!(serde_json::from_str::<DocScope>(&json).unwrap(), root);
+    }
+
+    #[test]
+    fn python_constants_have_a_stable_serialized_kind() {
+        assert_eq!(
+            serde_json::to_string(&DocItemKind::PythonConstant).unwrap(),
+            "\"python-constant\""
+        );
     }
 
     #[test]

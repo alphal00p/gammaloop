@@ -23,7 +23,7 @@ metric, epsilon, and color algebra.
   #link("quickstart/rust/")[Rust guide].
 - To verify the rewrite as a controlled, observable pass, follow the
   #link("tutorial/")[controlled identity tutorial] and the
-  #link("reference/python/idenso-community/simplify_metrics/")[Python function reference].
+  #link("reference/python/idenso-community/simplify_metrics-function/")[Python function reference].
 - To isolate dummy-index namespaces or cook a large expression, use the
   #link("guides/algebra/")[algebra guide] with the exact
   #link("reference/rust/idenso/trait.IndexTooling.html")[`IndexTooling`] and

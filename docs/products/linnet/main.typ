@@ -13,7 +13,7 @@
 #import "content/typst-graph.typ": typst-graph
 #import "content/typst-layout.typ": typst-layout
 #import "content/typst-drawing.typ": typst-drawing
-#import "content/typst-physics.typ": typst-physics
+#import "content/typst-templates.typ": typst-templates
 #import "content/typst-subgraph.typ": typst-subgraph
 #import "content/changelog.typ": changelog
 #import "content/linnet-releases.typ": linnet-releases
@@ -39,7 +39,7 @@
     #typst-graph
     #typst-layout
     #typst-drawing
-    #typst-physics
+    #typst-templates
     #typst-subgraph
     #changelog
     #linnet-releases

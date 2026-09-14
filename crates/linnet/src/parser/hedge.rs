@@ -10,7 +10,7 @@ use rkyv::{
     Archive, Archived, Deserialize, Fallible, Resolver, Serialize,
 };
 
-use super::{strip_quotes, subgraph_free::PortExt};
+use super::{strip_quotes, subgraph_free::PortExt, DotParseError, ExplicitIdKind};
 
 #[cfg(feature = "rkyv")]
 struct CompassPtRkyv;
@@ -99,6 +99,32 @@ pub struct DotHedgeData {
 }
 
 impl DotHedgeData {
+    pub(crate) fn from_parser(port: Option<&Port>) -> Result<Self, DotParseError> {
+        let Some(port) = port else {
+            return Ok(Self::default());
+        };
+
+        let data = Self::default().with_port(port);
+        if data.id.is_none() {
+            if let Some(value) = port.id() {
+                let digits = value
+                    .strip_prefix('+')
+                    .or_else(|| value.strip_prefix('-'))
+                    .unwrap_or(value);
+                if !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()) {
+                    if let Err(source) = value.parse::<usize>() {
+                        return Err(DotParseError::InvalidExplicitId {
+                            kind: ExplicitIdKind::Hedge,
+                            value: value.to_string(),
+                            source,
+                        });
+                    }
+                }
+            }
+        }
+        Ok(data)
+    }
+
     pub fn is_none(&self) -> bool {
         self.statement.is_none()
             && self.id.is_none()
@@ -157,18 +183,8 @@ impl Display for DotHedgeData {
 impl From<Option<String>> for DotHedgeData {
     fn from(statement: Option<String>) -> Self {
         DotHedgeData {
-            statement: statement.map(|s| strip_quotes(&s).to_string()),
+            statement: statement.map(|s| strip_quotes(&s)),
             ..Default::default()
-        }
-    }
-}
-
-impl From<Option<&Port>> for DotHedgeData {
-    fn from(port: Option<&Port>) -> Self {
-        if let Some(port) = port {
-            DotHedgeData::default().with_port(port)
-        } else {
-            DotHedgeData::default()
         }
     }
 }

@@ -23,10 +23,6 @@ use crate::half_edge::involution::Hedge;
 
 /// A graph, very similar to Ast::Graph, but can not contain subgraphs.
 pub struct SubGraphFreeGraph {
-    /// Specifies if the `Graph` is strict or not. A "strict" graph must not
-    /// contain the same edge multiple times. Notice that, for undirected edge,
-    /// an edge from `A` to `B` and an edge from `B` to `A` are equals.
-    pub strict: bool,
     /// Specifies if the `Graph` is directed.
     pub is_digraph: bool,
     /// The name of the `Graph`, if any.
@@ -85,8 +81,8 @@ impl SubGraphFreeGraph {
 
 impl From<dot_parser::ast::Graph<(String, String)>> for SubGraphFreeGraph {
     fn from(g: dot_parser::ast::Graph<(String, String)>) -> Self {
+        // `HedgeGraph` preserves multigraph topology, so DOT strictness is not retained.
         SubGraphFreeGraph {
-            strict: g.strict,
             is_digraph: g.is_digraph,
             name: g.name,
             stmts: g.stmts.into(),
@@ -333,7 +329,6 @@ impl EdgeStmt {
                 Either::Left(node_from) => (HashSet::from_iter([node_from]), Vec::new()),
                 Either::Right(subgraph) => {
                     let g = SubGraphFreeGraph {
-                        strict: false,
                         is_digraph: false,
                         name: subgraph.id,
                         stmts: subgraph.stmts.into(),
@@ -346,7 +341,6 @@ impl EdgeStmt {
                 Either::Left(node_from) => (HashSet::from_iter([node_from]), Vec::new()),
                 Either::Right(subgraph) => {
                     let g = SubGraphFreeGraph {
-                        strict: false,
                         is_digraph: false,
                         name: subgraph.id,
                         stmts: subgraph.stmts.into(),

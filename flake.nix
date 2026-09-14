@@ -106,6 +106,7 @@
         (workspace)
         docsTypst
         docsFontPath
+        linnetPython
         alphal00pDocsCargoArtifacts
         alphal00pDocsPages
         alphal00pDocsSnapshotFixture
@@ -170,6 +171,7 @@
           nickel
           nls
           docsTypst
+          linnetPython
           docsPkgs.roboto
           cargo-nextest
           pkg-config
@@ -205,7 +207,7 @@
           GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
           TYPST_FONT_PATHS = docsFontPath;
           # `typst.withPackages` injects this only into its executable wrapper.
-          # The persistent Rust renderer needs the same package tree directly.
+          # The persistent Rust renderer and typst-py need the same package tree directly.
           TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
 
           CC = nixCc;

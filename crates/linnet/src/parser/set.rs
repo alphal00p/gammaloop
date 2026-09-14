@@ -41,7 +41,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>>
         let mut global_data = Vec::new();
         for g in ast_graphs.graphs {
             let can_graph = SubGraphFreeGraph::from(g);
-            let graph = DotGraph::from((can_graph, Figment::new()));
+            let graph = DotGraph::<S>::from_parser(can_graph, Figment::new())?;
 
             set.push(graph.graph);
             global_data.push(graph.global_data);
@@ -61,7 +61,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>>
             let can_graph =
                 SubGraphFreeGraph::from(g.filter_map(&|a| Some((a.0.into(), a.1.into()))));
 
-            let graph = DotGraph::from((can_graph, Figment::new()));
+            let graph = DotGraph::<S>::from_parser(can_graph, Figment::new())?;
             global_data.push(graph.global_data);
             set.push(graph.graph);
         }
@@ -83,7 +83,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>>
             let can_graph =
                 SubGraphFreeGraph::from(g.filter_map(&|a| Some((a.0.into(), a.1.into()))));
 
-            let graph = DotGraph::from((can_graph, figment.clone()));
+            let graph = DotGraph::<S>::from_parser(can_graph, figment.clone())?;
             global_data.push(graph.global_data);
             set.push(graph.graph);
         }
