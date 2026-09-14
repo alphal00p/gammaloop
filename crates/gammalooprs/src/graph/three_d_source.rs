@@ -19,8 +19,10 @@ use symbolica::{
     graph::Graph as SymbolicaGraph,
     id::Replacement,
 };
+#[cfg(test)]
+use three_dimensional_reps::LinearSurface;
 use three_dimensional_reps::{
-    EnergyEdgeIndexMap, LinearSurface, MomentumSignature, ParsedGraph, ThreeDGraphSource,
+    EnergyEdgeIndexMap, MomentumSignature, ParsedGraph, ThreeDGraphSource,
     graph_io::{
         GraphIoError, ParsedGraphExternalEdge, ParsedGraphInitialStateCutEdge,
         ParsedGraphInternalEdge, initial_state_cut_external_alias,
@@ -33,8 +35,15 @@ use crate::{
     cff::surface::{GammaLoopLinearEnergyExpr, LinearEnergyExpr},
     graph::{Graph, LMBext, LoopMomentumBasis},
     momentum::SignOrZero,
-    numerator::energy_degree::{EnergyPowerAssignmentPlan, EquivalentEnergyCandidates},
-    utils::{GS, W_},
+    numerator::energy_degree::{
+        EnergyPowerAssignmentPlan, EnergyReference, EquivalentEnergyCandidates,
+        PlannedEnergyExpression,
+    },
+    utils::{
+        GS, W_,
+        symbols::{UvDenominatorClassId, UvMomentumProvenanceRole},
+    },
+    uv::approx::local_4d::CanonicalUvDenominatorClass,
     uv::uv_graph::UVE,
 };
 
@@ -89,7 +98,7 @@ pub(crate) struct GraphThreeDSource<'a> {
 /// vacuum keeps the same owner incidence and sub-LMB provenance after the UV
 /// operator has removed external flow at every vertex. A compatible carrier
 /// chart may retain an affine loop translation in individual denominators.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ExactUvSubLmbFrame {
     RetainedPhysicalCrown,
     TaylorVacuum,
@@ -103,7 +112,7 @@ struct ExactParsedOccurrence {
     is_base: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FourDDenominator {
     pub(crate) source_edge: EdgeIndex,
     pub(crate) momentum: Atom,
@@ -113,7 +122,7 @@ pub(crate) struct FourDDenominator {
 
 type ExactSourceEdgeCoordinates = (EdgeIndex, Vec<Rational>, Vec<(EdgeIndex, SignOrZero)>);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct ExactSourceOwnerOccurrence {
     energy_edge_id: usize,
     raw_momentum: Atom,
@@ -125,9 +134,10 @@ struct ExactSourceOwnerOccurrence {
 /// one source-local CFF energy map. The source graph is temporary; this owned
 /// value deliberately survives it without introducing production orientation
 /// IDs. Source coordinates follow the same carrier-occurrence maps as the
-/// reference evaluator. Repeated denominators retain their immutable source
-/// owner, and a factor-local energy-power assignment may choose only among the
-/// serial occurrences reconstructed for that owner.
+/// reference evaluator. Physical and soft factors retain their source-owner
+/// restrictions. Completed hard UV factors may use any occurrence in their
+/// certified denominator class, including retained nonadjacent carriers;
+/// source incidence remains an independent reconstruction witness.
 #[derive(Clone, Debug)]
 pub(crate) struct ExactSourceEnergyMapper {
     inactive_loop_count: usize,
@@ -135,11 +145,209 @@ pub(crate) struct ExactSourceEnergyMapper {
     parent_loop_edges: Vec<EdgeIndex>,
     edge_coordinates: Vec<ExactSourceEdgeCoordinates>,
     source_edge_occurrences: BTreeMap<EdgeIndex, Vec<ExactSourceOwnerOccurrence>>,
+    uv_classes: BTreeMap<UvDenominatorClassId, (Atom, Vec<ExactSourceOwnerOccurrence>)>,
     cut_alias_edges: AHashSet<EdgeIndex>,
     exact_ose_replacements: Vec<Replacement>,
 }
 
+/// Exact immutable mapping identity. Source incidence is certified separately;
+/// reuse here requires equality of every signed coordinate, occurrence, external
+/// alias and on-shell replacement consumed by the prepared numerator.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct ExactSourceMappingContext {
+    inactive_loop_count: usize,
+    parent_loop_coordinates: Vec<Vec<Rational>>,
+    parent_loop_edges: Vec<EdgeIndex>,
+    edge_coordinates: Vec<ExactSourceEdgeCoordinates>,
+    source_edge_occurrences: BTreeMap<EdgeIndex, Vec<ExactSourceOwnerOccurrence>>,
+    uv_classes: BTreeMap<UvDenominatorClassId, (Atom, Vec<ExactSourceOwnerOccurrence>)>,
+    cut_alias_edges: BTreeSet<EdgeIndex>,
+    on_shell_replacements: Vec<(Atom, Atom)>,
+}
+
+impl ExactSourceMappingContext {
+    pub(crate) fn accounted_bytes(&self) -> usize {
+        let rational = |value: &Rational| {
+            // Charge a fixed owned-number allowance in addition to its exact
+            // atom payload, conservatively covering small-number storage.
+            64 + Atom::num(value.clone()).as_view().get_byte_size()
+        };
+        let occurrences = |values: &[ExactSourceOwnerOccurrence]| {
+            std::mem::size_of_val(values)
+                + values
+                    .iter()
+                    .map(|value| value.raw_momentum.as_view().get_byte_size())
+                    .sum::<usize>()
+        };
+        std::mem::size_of::<Self>()
+            + self
+                .parent_loop_coordinates
+                .iter()
+                .map(|row| {
+                    std::mem::size_of::<Vec<Rational>>() + row.iter().map(rational).sum::<usize>()
+                })
+                .sum::<usize>()
+            + std::mem::size_of_val(self.parent_loop_edges.as_slice())
+            + self
+                .edge_coordinates
+                .iter()
+                .map(|(_, coordinates, shifts)| {
+                    std::mem::size_of::<ExactSourceEdgeCoordinates>()
+                        + coordinates.iter().map(rational).sum::<usize>()
+                        + std::mem::size_of_val(shifts.as_slice())
+                })
+                .sum::<usize>()
+            + self
+                .source_edge_occurrences
+                .values()
+                .map(|values| 64 + occurrences(values))
+                .sum::<usize>()
+            + self
+                .uv_classes
+                .values()
+                .map(|(momentum, values)| {
+                    64 + momentum.as_view().get_byte_size() + occurrences(values)
+                })
+                .sum::<usize>()
+            + self.cut_alias_edges.len() * (std::mem::size_of::<EdgeIndex>() + 32)
+            + self
+                .on_shell_replacements
+                .iter()
+                .map(|(left, right)| {
+                    2 * std::mem::size_of::<Atom>()
+                        + left.as_view().get_byte_size()
+                        + right.as_view().get_byte_size()
+                })
+                .sum::<usize>()
+    }
+}
+
 impl ExactSourceEnergyMapper {
+    fn assigned_occurrence(
+        &self,
+        reference: EnergyReference,
+        occurrence: usize,
+    ) -> Result<&ExactSourceOwnerOccurrence> {
+        let occurrences = match reference {
+            EnergyReference::Physical(edge) => self.source_edge_occurrences.get(&edge),
+            EnergyReference::UvClass(class) => {
+                self.uv_classes.get(&class).map(|(_, values)| values)
+            }
+        };
+        occurrences
+            .and_then(|values| {
+                values
+                    .iter()
+                    .find(|value| value.energy_edge_id == occurrence)
+            })
+            .ok_or_else(|| {
+                eyre::eyre!(
+                    "exact occurrence {occurrence} is not a certified candidate for {reference:?}"
+                )
+            })
+    }
+
+    /// The class/source builder has certified denominator routing and domain.
+    /// Check the actual immutable leaf choices before any native CFF trial.
+    /// The factorized compositor preserves these leaf identities without
+    /// distributing sums or opening an opaque denominator block.
+    pub(crate) fn certify_assignment(&self, plan: &EnergyPowerAssignmentPlan) -> Result<()> {
+        plan.certify_bounds()?;
+        let minkowski_symbol = LibraryRep::from(Minkowski {}).symbol();
+        plan.visit_factors(|factor, assignments| {
+            for (reference, occurrence) in assignments {
+                if let EnergyReference::Physical(edge) = reference
+                    && self.cut_alias_edges.contains(edge)
+                {
+                    continue;
+                }
+                if !matches!(self.assigned_occurrence(*reference, *occurrence)?.raw_to_parsed_sign, -1 | 1) {
+                    return Err(eyre::eyre!("exact occurrence {occurrence} has an invalid signed frame"));
+                }
+            }
+            let mut failure = None;
+            let _ = factor.replace_map(|view, _, _| {
+                let AtomView::Fun(momentum) = view else { return; };
+                if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() != 2 { return; }
+                let index = momentum.get(1);
+                if !(usize::try_from(index).is_ok_and(|index| index == 0)
+                    || index.to_owned() == AIND_SYMBOLS.cind.call(Atom::Zero)
+                    || matches!(index, AtomView::Fun(index) if index.get_symbol() == minkowski_symbol)) {
+                    return;
+                }
+                let (reference, hard) = if let Some(class) = GS.uv_class_data(momentum.get(0)) {
+                    let Some((hard, _)) = self.uv_classes.get(&class) else { return; };
+                    (EnergyReference::UvClass(class), hard.clone())
+                } else if let Some((owner, role, hard)) = GS.uv_momentum_provenance_data(momentum.get(0)) {
+                    if role == UvMomentumProvenanceRole::DenominatorDerivedSoft
+                        || !self.edge_coordinates.iter().any(|(edge, _, _)| *edge == owner) { return; }
+                    // An absent pole is lowered to fixed retained occurrences
+                    // by source preparation, before this assignment boundary.
+                    if role == UvMomentumProvenanceRole::PhysicalSourceFixed
+                        && !self.source_edge_occurrences.contains_key(&owner) { return; }
+                    (EnergyReference::Physical(owner), hard)
+                } else { return; };
+                let result = assignments.get(&reference)
+                    .ok_or_else(|| eyre::eyre!("active temporal momentum {reference:?} has no certified assignment"))
+                    .and_then(|id| self.assigned_occurrence(reference, *id))
+                    .and_then(|occurrence| {
+                        if hard == occurrence.raw_momentum || hard == -occurrence.raw_momentum.clone() {
+                            Ok(())
+                        } else {
+                            Err(eyre::eyre!("assigned hard momentum for {reference:?} is not the signed raw occurrence momentum"))
+                        }
+                    });
+                if let Err(error) = result { failure.get_or_insert(error); }
+            });
+            failure.map_or(Ok(()), Err)
+        })
+    }
+
+    pub(crate) fn mapping_context(&self) -> Result<ExactSourceMappingContext> {
+        let on_shell_replacements = self
+            .exact_ose_replacements
+            .iter()
+            .map(|replacement| {
+                // This owner constructs literal, unconditional OSE replacements.
+                // Store their exact atoms rather than stringifying symbolic rules.
+                let symbolica::id::ReplaceWith::Pattern(rhs) = &replacement.rhs else {
+                    return Err(eyre::eyre!(
+                        "exact source OSE mapping must be a literal replacement"
+                    ));
+                };
+                if replacement.conditions.is_some() {
+                    return Err(eyre::eyre!(
+                        "exact source OSE mapping must be unconditional"
+                    ));
+                }
+                Ok((
+                    replacement
+                        .pat
+                        .to_atom()
+                        .map_err(|error| eyre::eyre!(error))?,
+                    rhs.to_atom().map_err(|error| eyre::eyre!(error))?,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(ExactSourceMappingContext {
+            inactive_loop_count: self.inactive_loop_count,
+            parent_loop_coordinates: self.parent_loop_coordinates.clone(),
+            parent_loop_edges: self.parent_loop_edges.clone(),
+            edge_coordinates: self.edge_coordinates.clone(),
+            source_edge_occurrences: self.source_edge_occurrences.clone(),
+            uv_classes: self.uv_classes.clone(),
+            cut_alias_edges: self.cut_alias_edges.iter().copied().collect(),
+            on_shell_replacements,
+        })
+    }
+
+    pub(crate) fn accounted_bytes(&self) -> Result<usize> {
+        // The exact context charges both literal rule payloads. Also charge
+        // the mapper's actual vector capacity, including inline match settings.
+        Ok(self.mapping_context()?.accounted_bytes()
+            + self.exact_ose_replacements.capacity() * std::mem::size_of::<Replacement>())
+    }
+
     pub(crate) fn exact_ose_replacements(&self) -> &[Replacement] {
         &self.exact_ose_replacements
     }
@@ -180,7 +388,18 @@ impl ExactSourceEnergyMapper {
                 ))
             })
             .collect::<Result<Vec<_>>>()?;
-        Ok(EquivalentEnergyCandidates::try_from_partitioned_source_occurrences(groups)?)
+        let mut candidates =
+            EquivalentEnergyCandidates::try_from_partitioned_source_occurrences(groups)?;
+        candidates.add_uv_classes(self.uv_classes.iter().map(|(id, (_, occurrences))| {
+            (
+                *id,
+                occurrences
+                    .iter()
+                    .map(|occurrence| occurrence.energy_edge_id)
+                    .collect(),
+            )
+        }))?;
+        Ok(candidates)
     }
 
     /// Replace only temporal components. Spatial components remain in the
@@ -202,11 +421,13 @@ impl ExactSourceEnergyMapper {
                 occurrences
                     .iter()
                     .find(|occurrence| occurrence.is_base)
-                    .map(|occurrence| (*edge, occurrence.energy_edge_id))
+                    .map(|occurrence| (EnergyReference::Physical(*edge), occurrence.energy_edge_id))
             })
             .collect();
+        let loop_energy_map = self.energy_atoms(loop_energy_map);
+        let edge_energy_map = self.energy_atoms(edge_energy_map);
         let mapped =
-            self.map_numerator_factor(loop_energy_map, edge_energy_map, numerator, &assignments)?;
+            self.map_numerator_factor(&loop_energy_map, &edge_energy_map, numerator, &assignments)?;
         Ok(self.set_inactive_loop_energies_to_zero(mapped))
     }
 
@@ -226,6 +447,8 @@ impl ExactSourceEnergyMapper {
         physical_edges: impl IntoIterator<Item = EdgeIndex>,
     ) -> Result<Vec<(EdgeIndex, Atom)>> {
         let assignments = BTreeMap::new();
+        let loop_energy_map = self.energy_atoms(loop_energy_map);
+        let edge_energy_map = self.energy_atoms(edge_energy_map);
         physical_edges
             .into_iter()
             .collect::<BTreeSet<_>>()
@@ -245,8 +468,8 @@ impl ExactSourceEnergyMapper {
                 Ok((
                     edge,
                     self.set_inactive_loop_energies_to_zero(self.map_numerator_factor(
-                        loop_energy_map,
-                        edge_energy_map,
+                        &loop_energy_map,
+                        &edge_energy_map,
                         &GS.emr_mom(edge, GS.cind(0)),
                         &assignments,
                     )?),
@@ -255,14 +478,215 @@ impl ExactSourceEnergyMapper {
             .collect()
     }
 
+    /// Prepare the existing assigned expression with capture-free formal energy
+    /// samples. Spatial splitting and signed coordinate patterns are performed
+    /// once; residue rows only substitute the parameters they actually use.
+    pub(crate) fn prepare_numerator(
+        &self,
+        plan: &EnergyPowerAssignmentPlan,
+    ) -> Result<(PlannedEnergyExpression, Vec<Atom>)> {
+        let loop_count = self.parent_loop_coordinates.len() - self.inactive_loop_count;
+        let edge_count = self
+            .source_edge_occurrences
+            .values()
+            .flatten()
+            .map(|occurrence| occurrence.energy_edge_id + 1)
+            .max()
+            .unwrap_or(0);
+        let parameter = symbolica::symbol!("gammalooprs::uv::energy_sample"; Scalar);
+        let mut scope = 0usize;
+        let _ = plan
+            .map_factors(|factor, _| {
+                let _ = factor.replace_map(|view, _, _| {
+                    if let AtomView::Fun(function) = view
+                        && function.get_symbol() == parameter
+                        && function.get_nargs() == 2
+                        && let Ok(existing) = usize::try_from(function.get(0))
+                    {
+                        scope = scope.max(existing.saturating_add(1));
+                    }
+                });
+                Ok::<_, std::convert::Infallible>(factor.clone())
+            })
+            .unwrap();
+        let parameters = (0..loop_count + edge_count)
+            .map(|index| parameter.call_args([Atom::num(scope), Atom::num(index)]))
+            .collect::<Vec<_>>();
+        // On the signed diagonal, every parsed occurrence is its raw source
+        // momentum times P/R. Express that temporal component using the same
+        // neutral source-loop parameters, independently of leaf assignments.
+        let mut diagonal = vec![Atom::Zero; edge_count];
+        for occurrence in self.source_edge_occurrences.values().flatten() {
+            let temporal = GS.indexed_momentum(&occurrence.raw_momentum, &[GS.cind(0)]);
+            diagonal[occurrence.energy_edge_id] = Atom::num(occurrence.raw_to_parsed_sign)
+                * self.map_numerator_factor(
+                    &parameters[..loop_count],
+                    &[],
+                    &temporal,
+                    &BTreeMap::new(),
+                )?;
+        }
+        let neutral_frame = |atom: &Atom| {
+            // Fixed external four-vectors can remain unsplit in the reference,
+            // whereas the occurrence lift separates their temporal shift.
+            // Compare both in the same formal spatial/temporal frame, without
+            // assigning an on-shell energy to those external coordinates.
+            let split = atom.replace_map(|view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                    && momentum.get_nargs() == 2
+                    && let Ok(owner) = usize::try_from(momentum.get(0))
+                    && let AtomView::Fun(index) = momentum.get(1)
+                    && index.get_symbol() == LibraryRep::from(Minkowski {}).symbol()
+                {
+                    let owner = EdgeIndex(owner);
+                    **output = GS.emr_vec_index(owner, momentum.get(1))
+                        + GS.emr_mom(owner, GS.cind(0)) * GS.energy_delta(momentum.get(1));
+                }
+            });
+            let is_energy = |view: AtomView<'_>| {
+                matches!(view, AtomView::Fun(energy)
+                if energy.get_nargs() == 2
+                    && (energy.get_symbol() == parameter
+                        || ((energy.get_symbol() == GS.emr_mom
+                            || energy.get_symbol() == GS.loop_mom)
+                            && usize::try_from(energy.get(0)).is_ok()
+                            && energy.get(1) == GS.cind(0).as_view())))
+            };
+            split
+                .replace_map_bottom_up(|view, _, output| {
+                    let AtomView::Mul(product) = view else {
+                        return;
+                    };
+                    let mut factors = product
+                        .iter()
+                        .filter(|factor| !matches!(factor, AtomView::Num(_)));
+                    let (Some(first), Some(second), None) =
+                        (factors.next(), factors.next(), factors.next())
+                    else {
+                        return;
+                    };
+                    let (delta, sum) = match (first, second) {
+                        (AtomView::Fun(delta), AtomView::Add(sum))
+                        | (AtomView::Add(sum), AtomView::Fun(delta)) => (delta, sum),
+                        _ => return,
+                    };
+                    if delta.get_symbol() != GS.delta_vec
+                        || delta.get_nargs() != 2
+                        || delta.get(0) != GS.cind(0).as_view()
+                    {
+                        return;
+                    }
+                    // Only the finite projector action on an affine energy is
+                    // linearized. Products, powers and sums of graph numerator
+                    // blocks stay factorized, including inside opaque functions.
+                    if !sum.iter().all(|term| match term {
+                        AtomView::Num(_) => true,
+                        AtomView::Mul(term) => {
+                            let mut factors = term
+                                .iter()
+                                .filter(|factor| !matches!(factor, AtomView::Num(_)));
+                            factors.next().is_some_and(is_energy) && factors.next().is_none()
+                        }
+                        _ => is_energy(term),
+                    }) {
+                        return;
+                    }
+                    let coefficient = product
+                        .iter()
+                        .filter(|factor| !matches!(factor, AtomView::Add(_)))
+                        .map(|factor| factor.to_owned())
+                        .product::<Atom>();
+                    **output = sum.iter().map(|term| term * coefficient.as_view()).sum();
+                })
+                .expand_num()
+                .collect_factors()
+        };
+        let expression = plan.prepare_factors(|factor, assignments| {
+            let prepared = self.map_numerator_factor(
+                &parameters[..loop_count],
+                &parameters[loop_count..],
+                factor,
+                assignments,
+            )?;
+            // The reference lowers only this component's hard/class symbols
+            // into their fixed spatial/temporal frame. Remote and soft symbols
+            // retain their own later integration boundary.
+            let reference = factor.replace_map(|view, _, output| {
+                let AtomView::Fun(momentum) = view else { return; };
+                if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() != 2 { return; }
+                let hard = if let Some(class) = GS.uv_class_data(momentum.get(0)) {
+                    let Some((hard, _)) = self.uv_classes.get(&class) else { return; };
+                    hard.clone()
+                } else if let Some((owner, role, hard)) = GS.uv_momentum_provenance_data(momentum.get(0)) {
+                    if role == UvMomentumProvenanceRole::DenominatorDerivedSoft
+                        || !self.edge_coordinates.iter().any(|(edge, _, _)| *edge == owner) { return; }
+                    hard
+                } else { return; };
+                **output = GS.indexed_momentum(&hard, &[momentum.get(1).to_owned()]);
+            });
+            let expected = self.map_numerator_factor(
+                &parameters[..loop_count], &[], &reference, &BTreeMap::new(),
+            )?;
+            let collapsed = prepared.replace_map(|view, _, output| {
+                if let Some(index) = parameters[loop_count..].iter().position(|parameter| parameter.as_view() == view) {
+                    **output = diagonal[index].clone();
+                }
+            });
+            if collapsed != expected
+                && neutral_frame(&collapsed) != neutral_frame(&expected)
+            {
+                return Err(eyre::eyre!(
+                    "prepared exact numerator factor fails its signed diagonal certificate: factor={factor}, collapsed={collapsed}, expected={expected}"
+                ));
+            }
+            Ok(prepared)
+        })?;
+        Ok((expression, parameters))
+    }
+
+    pub(crate) fn sample_energies(
+        &self,
+        loop_energy_map: &[LinearEnergyExpr],
+        edge_energy_map: &[LinearEnergyExpr],
+        required: &[usize],
+    ) -> Result<Vec<Atom>> {
+        let loop_count = self.parent_loop_coordinates.len() - self.inactive_loop_count;
+        if loop_energy_map.len() != loop_count {
+            return Err(eyre::eyre!(
+                "exact source supplies {} active loop-energy maps, expected {loop_count}",
+                loop_energy_map.len()
+            ));
+        }
+        required
+            .iter()
+            .map(|index| {
+                let energy = if *index < loop_count {
+                    loop_energy_map.get(*index)
+                } else {
+                    edge_energy_map.get(*index - loop_count)
+                }
+                .ok_or_else(|| {
+                    eyre::eyre!("exact source row omits required energy parameter {index}")
+                })?;
+                Ok(energy
+                    .to_atom_gs(&[])
+                    .replace_multiple(&self.exact_ose_replacements))
+            })
+            .collect()
+    }
+
+    #[cfg(test)]
     pub(crate) fn map_planned_numerator(
         &self,
         loop_energy_map: &[LinearEnergyExpr],
         edge_energy_map: &[LinearEnergyExpr],
         plan: &EnergyPowerAssignmentPlan,
     ) -> Result<Atom> {
+        let loop_energy_map = self.energy_atoms(loop_energy_map);
+        let edge_energy_map = self.energy_atoms(edge_energy_map);
         let mapped = plan.map_factors(|factor, assignments| {
-            self.map_numerator_factor(loop_energy_map, edge_energy_map, factor, assignments)
+            self.map_numerator_factor(&loop_energy_map, &edge_energy_map, factor, assignments)
         })?;
         Ok(self.set_inactive_loop_energies_to_zero(mapped))
     }
@@ -271,10 +695,10 @@ impl ExactSourceEnergyMapper {
     /// to bound that factor during generalized CFF generation.
     fn map_numerator_factor(
         &self,
-        loop_energy_map: &[LinearEnergyExpr],
-        edge_energy_map: &[LinearEnergyExpr],
+        loop_energy_map: &[Atom],
+        edge_energy_map: &[Atom],
         numerator: &Atom,
-        assignments: &BTreeMap<EdgeIndex, usize>,
+        assignments: &BTreeMap<EnergyReference, usize>,
     ) -> Result<Atom> {
         crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #trace;
             assignments = ?assignments,
@@ -312,15 +736,10 @@ impl ExactSourceEnergyMapper {
         // These are energies of the exact source coordinates themselves. In
         // particular, a carrier denominator may be shifted by an external
         // momentum, so its pole energy is not the corresponding loop energy.
-        let active_source_energies = loop_energy_map.iter().map(|energy| {
-            energy
-                .to_atom_gs(&[])
-                .replace_multiple(&self.exact_ose_replacements)
-        });
         let source_energies = inactive_energies
             .iter()
+            .chain(loop_energy_map)
             .cloned()
-            .chain(active_source_energies)
             .collect::<Vec<_>>();
         let source_energy = |coordinates: &[Rational]| {
             coordinates.iter().zip(&source_energies).fold(
@@ -335,40 +754,24 @@ impl ExactSourceEnergyMapper {
             )
         };
         let mut selected_occurrences = BTreeMap::new();
-        for (edge, occurrence) in assignments {
-            // Cut momenta are external aliases, so occurrence-local pole
-            // energies are neither required nor relevant for their numerator.
-            if self.cut_alias_edges.contains(edge) {
+        for (reference, occurrence) in assignments {
+            // Cut momenta remain literal external aliases, independent of
+            // occurrence-local pole or contact samples.
+            if let EnergyReference::Physical(edge) = reference
+                && self.cut_alias_edges.contains(edge)
+            {
                 continue;
             }
-            let source_occurrence = self
-                .source_edge_occurrences
-                .get(edge)
-                .and_then(|occurrences| {
-                    occurrences
-                        .iter()
-                        .find(|candidate| candidate.energy_edge_id == *occurrence)
-                })
-                .ok_or_else(|| {
-                    eyre::eyre!(
-                        "exact occurrence {occurrence} is not a certified source-owner candidate for physical edge {}",
-                        usize::from(*edge),
-                    )
-                })?;
-            let energy = edge_energy_map
-                .get(*occurrence)
-                .ok_or_else(|| {
-                    eyre::eyre!(
-                        "exact source occurrence {occurrence} for physical edge {} is outside its {} edge-energy maps",
-                        usize::from(*edge),
-                        edge_energy_map.len(),
-                    )
-                })?
-                .to_atom_gs(&[])
-                .replace_multiple(&self.exact_ose_replacements);
-            // Each factor uses the same exact occurrence which owns its bound,
-            // including a zero sample in lower-sector contact terms.
-            selected_occurrences.insert(*edge, (source_occurrence, energy));
+            let source_occurrence = self.assigned_occurrence(*reference, *occurrence)?;
+            let energy = edge_energy_map.get(*occurrence)
+                .ok_or_else(|| eyre::eyre!(
+                    "exact occurrence {occurrence} for {reference:?} is outside its {} edge-energy maps",
+                    edge_energy_map.len()
+                ))?
+                .clone();
+            // The immutable assignment owns both the bound and this sample,
+            // including zero samples in generalized contact terms.
+            selected_occurrences.insert(*reference, (source_occurrence, energy));
         }
         let external_shift = |terms: &[(EdgeIndex, SignOrZero)]| {
             terms.iter().fold(Atom::Zero, |sum, (edge, sign)| {
@@ -392,30 +795,28 @@ impl ExactSourceEnergyMapper {
             if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() != 2 {
                 return;
             }
-            let Some((owner, role, hard)) = GS.uv_momentum_provenance_data(momentum.get(0))
-            else {
+            let (reference, role, hard) = if let Some(class) = GS.uv_class_data(momentum.get(0)) {
+                let Some((hard, _)) = self.uv_classes.get(&class) else {
+                    // A later independent component owns this class.
+                    return;
+                };
+                (EnergyReference::UvClass(class), None, hard.clone())
+            } else if let Some((owner, role, hard)) = GS.uv_momentum_provenance_data(momentum.get(0)) {
+                if role == crate::utils::symbols::UvMomentumProvenanceRole::DenominatorDerivedSoft {
+                    // The outer contour receives the unchanged soft factor and
+                    // certifies its complete affine routing at that boundary.
+                    **output = Atom::from(momentum.to_owned());
+                    return;
+                }
+                // Coordinate membership remains authoritative after a pinch:
+                // absence of a pole cannot remove a fixed affine carrier.
+                if !self.edge_coordinates.iter().any(|(edge, _, _)| *edge == owner) {
+                    return;
+                }
+                (EnergyReference::Physical(owner), Some(role), hard)
+            } else {
                 return;
             };
-            if role == crate::utils::symbols::UvMomentumProvenanceRole::DenominatorDerivedSoft {
-                // The child contour leaves its soft coefficients untouched.
-                // Their complete outer numerator chooses one certified routing
-                // before the outer CFF is generated and mapped.
-                **output = Atom::from(momentum.to_owned());
-                return;
-            }
-            // A factorized component maps only its own coordinate domain. Keep
-            // remote tags intact so the later component can consume the same
-            // unexpanded numerator. Membership in `edge_coordinates`, rather
-            // than the selected denominator occurrences, is authoritative: a
-            // pinched local owner still belongs to this component and must not
-            // leak a spatial provenance tag to the evaluator.
-            if !self
-                .edge_coordinates
-                .iter()
-                .any(|(edge, _, _)| *edge == owner)
-            {
-                return;
-            }
             has_local_provenance = true;
             let index = momentum.get(1);
             let concrete_temporal = usize::try_from(index).is_ok_and(|index| index == 0)
@@ -424,21 +825,24 @@ impl ExactSourceEnergyMapper {
                 index,
                 AtomView::Fun(function) if function.get_symbol() == minkowski_symbol
             );
-            // A fixed factor remains on its canonical owner occurrence, which
-            // keeps it inside the same generalized Laurent/contact functional
-            // as its CFF rank bound. Only a denominator-derived factor can be
-            // reassigned among derivative-created serial copies.
+            // Expand the class's fixed spatial frame, while the independently
+            // sampled temporal part follows its certified occurrence lift.
+            let erased = GS.indexed_momentum(&hard, &[index.to_owned()]);
             if !concrete_temporal && !abstract_index {
-                **output = GS.erase_uv_momentum_provenance(&Atom::from(momentum.to_owned()));
+                **output = erased;
                 return;
             }
-            let Some((occurrence, energy)) = selected_occurrences.get(&owner) else {
-                tag_mapping_error.get_or_insert_with(|| {
-                    eyre::eyre!(
-                        "tagged temporal momentum owned by edge {} has no planned exact occurrence",
-                        usize::from(owner),
-                    )
-                });
+            let Some((occurrence, energy)) = selected_occurrences.get(&reference) else {
+                if let EnergyReference::Physical(owner) = reference
+                    && role == Some(crate::utils::symbols::UvMomentumProvenanceRole::PhysicalSourceFixed)
+                    && !self.source_edge_occurrences.contains_key(&owner)
+                {
+                    **output = erased;
+                    return;
+                }
+                tag_mapping_error.get_or_insert_with(|| eyre::eyre!(
+                    "tagged temporal momentum {reference:?} has no planned exact occurrence"
+                ));
                 return;
             };
             let hard_to_raw_sign = if hard == occurrence.raw_momentum {
@@ -448,9 +852,9 @@ impl ExactSourceEnergyMapper {
             } else {
                 tag_mapping_error.get_or_insert_with(|| {
                     eyre::eyre!(
-                        "tagged hard momentum `{}` for source edge {} is neither the exact denominator momentum `{}` nor its negative",
+                        "tagged hard momentum `{}` for {:?} is neither the exact denominator momentum `{}` nor its negative",
                         hard,
-                        usize::from(owner),
+                        reference,
                         occurrence.raw_momentum,
                     )
                 });
@@ -470,7 +874,7 @@ impl ExactSourceEnergyMapper {
                 energy.clone()
             };
             crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #trace;
-                owner = usize::from(owner),
+                owner = ?reference,
                 role = ?role,
                 energy_edge_id = occurrence.energy_edge_id,
                 assignments = ?assignments,
@@ -481,8 +885,8 @@ impl ExactSourceEnergyMapper {
                 log.raw_momentum = occurrence.raw_momentum,
                 log.selected_energy = energy,
                 log.mapped_energy = signed_energy,
-                "Mapped exact-source tagged temporal factor: owner={} role={:?} occurrence={} hard_to_raw={} raw_to_parsed={} occurrence_to_hard={} hard={} raw={} selected={} mapped={}",
-                usize::from(owner),
+                "Mapped exact-source tagged temporal factor: owner={:?} role={:?} occurrence={} hard_to_raw={} raw_to_parsed={} occurrence_to_hard={} hard={} raw={} selected={} mapped={}",
+                reference,
                 role,
                 occurrence.energy_edge_id,
                 hard_to_raw_sign,
@@ -497,7 +901,6 @@ impl ExactSourceEnergyMapper {
                 **output = signed_energy;
                 return;
             }
-            let erased = GS.erase_uv_momentum_provenance(&Atom::from(momentum.to_owned()));
             let spatial = erased.replace_map(|hard_view, _, hard_output| {
                 let AtomView::Fun(hard_momentum) = hard_view else {
                     return;
@@ -527,7 +930,10 @@ impl ExactSourceEnergyMapper {
         // hard factors may be balanced over serial copies.
         let mut exact_edge_energies = BTreeMap::new();
         if !has_local_provenance {
-            for (edge, (occurrence, energy)) in &selected_occurrences {
+            for (reference, (occurrence, energy)) in &selected_occurrences {
+                let EnergyReference::Physical(edge) = reference else {
+                    continue;
+                };
                 let source_momentum = FunctionBuilder::new(GS.emr_mom)
                     .add_arg(usize::from(*edge))
                     .finish();
@@ -614,7 +1020,19 @@ impl ExactSourceEnergyMapper {
         Ok(tagged_numerator.replace_multiple(&replacements))
     }
 
-    fn set_inactive_loop_energies_to_zero(&self, atom: Atom) -> Atom {
+    #[cfg(test)]
+    fn energy_atoms(&self, energies: &[LinearEnergyExpr]) -> Vec<Atom> {
+        energies
+            .iter()
+            .map(|energy| {
+                energy
+                    .to_atom_gs(&[])
+                    .replace_multiple(&self.exact_ose_replacements)
+            })
+            .collect()
+    }
+
+    pub(crate) fn set_inactive_loop_energies_to_zero(&self, atom: Atom) -> Atom {
         let parent_loop_count = self.parent_loop_coordinates.len();
         (0..self.inactive_loop_count).fold(atom, |atom, index| {
             atom.replace(
@@ -1574,27 +1992,15 @@ impl<'a> GraphThreeDSource<'a> {
         Some(support)
     }
 
+    #[cfg(test)]
     pub(crate) fn physical_linear_surface(&self, surface: &LinearSurface) -> Option<LinearSurface> {
-        let denominators = self.exact_denominators?;
         let edge_map = self.physical_energy_edge_index_map()?;
+        let physical = self.physical_surface_energy_edges();
         let all_physical = surface
             .expression
             .internal_terms
             .iter()
-            .all(|(edge_id, _)| {
-                let energy_edge_id = usize::from(*edge_id);
-                if let Some(denominator) = self
-                    .exact_occurrences
-                    .iter()
-                    .find(|occurrence| occurrence.energy_edge_id == energy_edge_id)
-                    .and_then(|occurrence| denominators.get(occurrence.original_occurrence))
-                {
-                    !self.uv_edges.contains(&denominator.source_edge)
-                        && denominator.is_original_graph_denominator(self.graph)
-                } else {
-                    edge_map.internal.contains_key(&energy_edge_id)
-                }
-            });
+            .all(|(edge_id, _)| physical.contains(&usize::from(*edge_id)));
         all_physical.then(|| {
             let mut surface = surface.clone();
             surface.expression = surface
@@ -1602,6 +2008,26 @@ impl<'a> GraphThreeDSource<'a> {
                 .remap_energy_edges(&edge_map.internal, &BTreeMap::new());
             surface
         })
+    }
+
+    pub(crate) fn physical_surface_energy_edges(&self) -> BTreeSet<usize> {
+        let Some(denominators) = self.exact_denominators else {
+            return BTreeSet::new();
+        };
+        self.physical_energy_edge_index_map()
+            .into_iter()
+            .flat_map(|map| map.internal.into_keys())
+            .filter(|energy_edge_id| {
+                self.exact_occurrences
+                    .iter()
+                    .find(|occurrence| occurrence.energy_edge_id == *energy_edge_id)
+                    .and_then(|occurrence| denominators.get(occurrence.original_occurrence))
+                    .is_none_or(|denominator| {
+                        !self.uv_edges.contains(&denominator.source_edge)
+                            && denominator.is_original_graph_denominator(self.graph)
+                    })
+            })
+            .collect()
     }
 
     fn energy_mapper(
@@ -1725,14 +2151,301 @@ impl<'a> GraphThreeDSource<'a> {
             parent_loop_coordinates: self.parent_loop_coordinates.clone(),
             parent_loop_edges: self.coordinate_lmb().loop_edges.iter().copied().collect(),
             edge_coordinates,
+            uv_classes: BTreeMap::new(),
             source_edge_occurrences,
             cut_alias_edges: self.initial_state_cut_edges.clone(),
             exact_ose_replacements,
         }
     }
 
-    pub(crate) fn exact_source_energy_mapper(&self) -> Option<ExactSourceEnergyMapper> {
-        Some(self.energy_mapper(self.inner_loop_count, self.exact_ose_replacements()?))
+    /// Express completed hard carriers without a pole in the retained source
+    /// frame. The lift uses fixed base occurrences: it introduces no new pole
+    /// family, and interpolation/contact samples act on the same variables as
+    /// the capacities inferred from the prepared numerator. Retain the exact
+    /// complete positive blocks changed by this certified lift, so dispatch
+    /// can assign their fixed dependencies jointly without splitting them.
+    pub(crate) fn prepare_affine_numerator(
+        &self,
+        numerator: &Atom,
+    ) -> Result<(Atom, BTreeSet<Atom>)> {
+        let Some(denominators) = self.exact_denominators else {
+            return Ok((numerator.clone(), BTreeSet::new()));
+        };
+        let owners = denominators
+            .iter()
+            .map(|den| den.source_edge)
+            .collect::<BTreeSet<_>>();
+        let mut missing = BTreeSet::new();
+        let _ = numerator.replace_map(|view, _, _| {
+            if let AtomView::Fun(momentum) = view
+                && momentum.get_symbol() == GS.emr_mom
+                && momentum.get_nargs() >= 1
+                && let Some((owner, role, hard)) = GS.uv_momentum_provenance_data(momentum.get(0))
+                && matches!(
+                    role,
+                    UvMomentumProvenanceRole::TaylorFixed
+                        | UvMomentumProvenanceRole::DenominatorDerived
+                        | UvMomentumProvenanceRole::PhysicalSourceFixed
+                )
+                && self.uv_edges.contains(&owner)
+                && !owners.contains(&owner)
+            {
+                missing.insert((owner, hard));
+            }
+        });
+        if missing.is_empty() {
+            return Ok((numerator.clone(), BTreeSet::new()));
+        }
+
+        let loop_count = self.active_loop_count();
+        let mut basis = Vec::new();
+        let mut rows = Vec::new();
+        for occurrence in self
+            .exact_occurrences
+            .iter()
+            .filter(|occurrence| occurrence.is_base)
+        {
+            let original = occurrence.original_occurrence;
+            rows.push(self.exact_signatures[original].loop_signature.clone());
+            if exact_integer_rank(&rows) > basis.len() {
+                basis.push(original);
+            } else {
+                rows.pop();
+            }
+            if basis.len() == loop_count {
+                break;
+            }
+        }
+        if basis.len() != loop_count {
+            return Err(eyre::eyre!(
+                "retained exact occurrences do not span the source loop frame"
+            ));
+        }
+        let matrix = (0..loop_count)
+            .map(|column| rows.iter().map(|row| Rational::from(row[column])).collect())
+            .collect::<Vec<Vec<_>>>();
+        let mut replacements = BTreeMap::new();
+        for (owner, hard) in missing {
+            let carrier = FourDDenominator {
+                source_edge: owner,
+                momentum: hard.clone(),
+                mass_squared: Atom::Zero,
+                full_expr: Atom::Zero,
+            };
+            let signature = carrier.momentum_signature_in_lmb(self.coordinate_lmb(), true)?;
+            let active = (self.inner_loop_count..self.parent_loop_coordinates.len())
+                .map(|column| {
+                    signature
+                        .loop_signature
+                        .iter()
+                        .zip(&self.parent_loop_coordinates)
+                        .fold(Rational::from(0), |sum, (coefficient, coordinates)| {
+                            sum + Rational::from(*coefficient) * &coordinates[column]
+                        })
+                })
+                .collect::<Vec<_>>();
+            let coefficients = if loop_count == 0 {
+                Vec::new()
+            } else {
+                solve_rational_system(matrix.clone(), active)
+                    .ok_or_else(|| eyre::eyre!("could not solve fixed affine source carrier"))?
+            };
+            let canonical =
+                CanonicalUvDenominatorClass::momentum(&signature, self.coordinate_lmb());
+            let mut residual = canonical.clone();
+            let mut lift = Atom::Zero;
+            for (original, coefficient) in basis.iter().zip(coefficients) {
+                if coefficient == 0 {
+                    continue;
+                }
+                let denominator = &denominators[*original];
+                let raw_signature =
+                    denominator.momentum_signature_in_lmb(self.coordinate_lmb(), true)?;
+                let raw =
+                    CanonicalUvDenominatorClass::momentum(&raw_signature, self.coordinate_lmb());
+                let coefficient = Atom::num(coefficient);
+                residual -= &coefficient * raw;
+                lift += coefficient
+                    * function!(
+                        GS.emr_mom,
+                        GS.uv_momentum_provenance_tag(
+                            usize::from(denominator.source_edge),
+                            UvMomentumProvenanceRole::PhysicalSourceFixed,
+                            denominator.momentum.clone(),
+                        )
+                    );
+            }
+            // Only linear coordinate algebra is normalized. The surrounding
+            // factorized graph numerator is never distributed by this lift.
+            residual = residual.expand();
+            lift += residual;
+            let collapsed = GS.erase_uv_momentum_provenance(&lift);
+            let collapsed_signature = FourDDenominator {
+                momentum: collapsed,
+                ..carrier
+            }
+            .momentum_signature_in_lmb(self.coordinate_lmb(), true)?;
+            if collapsed_signature != signature {
+                return Err(eyre::eyre!(
+                    "fixed affine occurrence lift failed its exact routing certificate"
+                ));
+            }
+            replacements.insert((owner, hard), lift);
+        }
+        let rewrite_momentum = |view: AtomView<'_>| {
+            let AtomView::Fun(momentum) = view else {
+                return None;
+            };
+            if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() < 1 {
+                return None;
+            }
+            if let Some((owner, role, hard)) = GS.uv_momentum_provenance_data(momentum.get(0))
+                && matches!(
+                    role,
+                    UvMomentumProvenanceRole::TaylorFixed
+                        | UvMomentumProvenanceRole::DenominatorDerived
+                        | UvMomentumProvenanceRole::PhysicalSourceFixed
+                )
+                && let Some(lift) = replacements.get(&(owner, hard))
+            {
+                let indices = momentum
+                    .iter()
+                    .skip(1)
+                    .map(|index| index.to_owned())
+                    .collect::<Vec<_>>();
+                return Some(GS.indexed_momentum(lift, &indices));
+            }
+            None
+        };
+        let mut fixed_affine_blocks = BTreeSet::new();
+        let prepared = numerator.replace_map(|view, _, output| {
+            if matches!(view, AtomView::Fun(function) if function.get_symbol() == GS.den && function.get_nargs() == 4) {
+                // Unmatched positive UV blocks retain hard roles zero/one
+                // during canonicalization. Complete the same absent-pole lift
+                // here while keeping the wrapper and its full polynomial
+                // together. Soft factors and retained physical owners are
+                // outside the certified replacement set.
+                let block = view.to_owned().replace_map(|child, _, mapped| {
+                    if let Some(value) = rewrite_momentum(child) {
+                        **mapped = value;
+                    }
+                });
+                if block.as_view() != view {
+                    fixed_affine_blocks.insert(block.clone());
+                    **output = block;
+                }
+            } else if let Some(value) = rewrite_momentum(view) {
+                **output = value;
+            }
+        });
+        Ok((prepared, fixed_affine_blocks))
+    }
+
+    pub(crate) fn exact_source_energy_mapper(
+        &self,
+        classes: &[CanonicalUvDenominatorClass],
+    ) -> Result<ExactSourceEnergyMapper> {
+        let replacements = self
+            .exact_ose_replacements()
+            .ok_or_else(|| eyre::eyre!("exact energy mapping requires denominator occurrences"))?;
+        let mut mapper = self.energy_mapper(self.inner_loop_count, replacements);
+        let denominators = self
+            .exact_denominators
+            .expect("exact mapper has denominators");
+        for class in classes {
+            let mut occurrences = Vec::new();
+            for source_occurrence in &self.exact_occurrences {
+                let denominator = &denominators[source_occurrence.original_occurrence];
+                if !class.members.contains(&denominator.source_edge)
+                    || denominator.mass_squared != class.mass_squared
+                {
+                    continue;
+                }
+                if denominator.polynomial_in_lmb(self.coordinate_lmb())? != class.full_expr {
+                    continue;
+                }
+                let signature =
+                    denominator.momentum_signature_in_lmb(self.coordinate_lmb(), true)?;
+                let hard_to_raw_sign = if signature == class.signature {
+                    1
+                } else if signature == class.signature.negated() {
+                    -1
+                } else {
+                    continue;
+                };
+                let owned = mapper
+                    .source_edge_occurrences
+                    .get(&denominator.source_edge)
+                    .and_then(|occurrences| {
+                        occurrences.iter().find(|occurrence| {
+                            occurrence.energy_edge_id == source_occurrence.energy_edge_id
+                        })
+                    })
+                    .ok_or_else(|| {
+                        eyre::eyre!(
+                            "UV class {:?} has no reconstructed source occurrence",
+                            class.id
+                        )
+                    })?;
+                let mut occurrence = owned.clone();
+                // The class frame is H=hR and the existing parsed frame P=rR.
+                // Store P=(r*h)H for class sampling, while physical ownership
+                // retains its original raw frame unchanged.
+                occurrence.raw_momentum = class.momentum.clone();
+                occurrence.raw_to_parsed_sign *= hard_to_raw_sign;
+                occurrences.push(occurrence);
+            }
+            occurrences.sort_by_key(|occurrence| occurrence.energy_edge_id);
+            occurrences.dedup_by_key(|occurrence| occurrence.energy_edge_id);
+            if occurrences.is_empty() {
+                return Err(eyre::eyre!(
+                    "UV class {:?} has no surviving denominator occurrence",
+                    class.id
+                ));
+            }
+            // The existing builder certifies incidence, loop rank, measure and
+            // contour independently. This routing/mass certificate permits
+            // pooling equal channels across retained, possibly nonserial owners.
+            if mapper
+                .uv_classes
+                .insert(class.id, (class.momentum.clone(), occurrences))
+                .is_some()
+            {
+                return Err(eyre::eyre!("duplicate UV class {:?}", class.id));
+            }
+        }
+        Ok(mapper)
+    }
+
+    fn denominator_on_shell_energy(&self, denominator: &FourDDenominator) -> Result<Atom> {
+        if self.uv_edges.contains(&denominator.source_edge)
+            && self
+                .exact_coordinates
+                .as_ref()
+                .is_some_and(|(_, frame)| *frame == ExactUvSubLmbFrame::TaylorVacuum)
+        {
+            // Completed vacuum classes share one exact spatial frame even if
+            // their chosen source witnesses retain different physical owners.
+            // Mixing E_owner with literal square roots would otherwise prevent
+            // witness-independent algebra after canonical bucket merging. The
+            // square root uses positive-first routing, independent of the
+            // signed class coordinate used by odd numerator factors.
+            let signature = denominator
+                .momentum_signature_in_lmb(self.coordinate_lmb(), true)?
+                .canonical_up_to_sign()
+                .0
+                .negated();
+            let mut canonical = denominator.clone();
+            canonical.momentum =
+                CanonicalUvDenominatorClass::momentum(&signature, self.coordinate_lmb());
+            Ok(canonical.on_shell_energy())
+        } else if denominator.is_original_graph_denominator(self.graph) {
+            // Unchanged physical propagators keep the rescalable OSE dialect
+            // for later local-3D operations on their uncompleted cograph.
+            Ok(crate::utils::ose_atom_from_index(denominator.source_edge))
+        } else {
+            Ok(denominator.on_shell_energy())
+        }
     }
 
     pub(crate) fn exact_ose_replacements(&self) -> Option<Vec<Replacement>> {
@@ -1742,22 +2455,18 @@ impl<'a> GraphThreeDSource<'a> {
             .iter()
             .map(|occurrence| {
                 let denominator = &denominators[occurrence.original_occurrence];
-                // Keep unchanged physical propagators in GammaLoop's OSE
-                // dialect so a later local-3D UV operation can still rescale
-                // them. Rewritten exact denominators have no physical OSE
-                // identity and therefore retain their literal square root.
-                let on_shell_energy = if denominator.is_original_graph_denominator(self.graph) {
-                    crate::utils::ose_atom_from_index(denominator.source_edge)
-                } else {
-                    denominator.on_shell_energy()
-                };
-                Replacement::new(
+                // Rewritten denominators use their literal square root;
+                // physical cographs retain OSE aliases. Completed UV sources
+                // additionally share the canonical component frame above.
+                let on_shell_energy = self.denominator_on_shell_energy(denominator)?;
+                Ok(Replacement::new(
                     crate::utils::ose_atom_from_index(EdgeIndex(occurrence.energy_edge_id))
                         .to_pattern(),
                     on_shell_energy.to_pattern(),
-                )
+                ))
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()
+            .ok()?;
         let parsed = self.exact_parsed_graph().ok()?;
         let energy_map = self.exact_energy_edge_index_map.as_ref()?;
         replacements.extend(
@@ -1779,24 +2488,15 @@ impl<'a> GraphThreeDSource<'a> {
     }
 
     pub(crate) fn exact_inverse_energy_product(&self) -> Option<Atom> {
-        Some(
-            self.exact_denominators?
-                .iter()
-                .map(|denominator| {
-                    // Match the residue-map dialect above: every occurrence
-                    // factor must enter a subsequent local-3D T operation in
-                    // the same rescalable form as its pole energy.
-                    let on_shell_energy = if denominator.is_original_graph_denominator(self.graph) {
-                        crate::utils::ose_atom_from_index(denominator.source_edge)
-                    } else {
-                        denominator.on_shell_energy()
-                    };
-                    -Atom::num(2) * on_shell_energy
-                })
-                .reduce(|product, energy| product * energy)
-                .map(|product| Atom::one() / product)
-                .unwrap_or_else(Atom::one),
-        )
+        // Every occurrence factor uses the same dialect and canonical frame as
+        // its pole energy, including rescalable physical cograph propagators.
+        self.exact_denominators?
+            .iter()
+            .try_fold(Atom::one(), |product, denominator| {
+                self.denominator_on_shell_energy(denominator)
+                    .map(|energy| product / (-Atom::num(2) * energy))
+            })
+            .ok()
     }
 
     pub(crate) fn active_loop_count(&self) -> usize {
@@ -2401,6 +3101,14 @@ impl<'a> GraphThreeDSource<'a> {
 }
 
 impl FourDDenominator {
+    pub(crate) fn accounted_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + [&self.momentum, &self.mass_squared, &self.full_expr]
+                .into_iter()
+                .map(|atom| atom.as_view().get_byte_size())
+                .sum::<usize>()
+    }
+
     fn is_original_graph_denominator(&self, graph: &Graph) -> bool {
         let source_momentum = FunctionBuilder::new(GS.emr_mom)
             .add_arg(usize::from(self.source_edge))
@@ -3450,8 +4158,11 @@ mod tests {
             "every reconstructed propagator must retain its physical owner"
         );
         let options = graph.denominator_only_cff_3d_expression_options();
-        let (generated, mapper, plan, _) =
-            graph.generate_3d_expression_for_4d_term(&source, &options, &Atom::one(), None)?;
+        let preparation =
+            graph.prepare_3d_expression_for_4d_term(&source, &options, &Atom::one(), &[])?;
+        let (generated, _, plan, _) =
+            graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = source.exact_source_energy_mapper(&[])?;
         let surfaces = generated.expression.surfaces.get_all_replacements_gs(&[]);
         let mut contour = Atom::Zero;
         for orientation in &generated.expression.orientations {
@@ -3538,7 +4249,7 @@ mod tests {
                 .flat_map(|term| {
                     term.orientations.iter().map(|orientation| {
                         Ok(orientation.expression.clone()
-                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                            * term.map_exact_source_numerator(&orientation.orientation, None)?)
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -3841,7 +4552,7 @@ mod tests {
         // numerator Q^0 must compose the literal and denominator->canonical
         // signs rather than inherit either sign separately.
         let mut mapper = source
-            .exact_source_energy_mapper()
+            .exact_source_energy_mapper(&[])
             .expect("exact source has an energy mapper");
         let mapped_energy = Atom::var(symbolica::symbol!(
             "three_d_source_test::canonical_odd_energy"
@@ -3865,10 +4576,10 @@ mod tests {
                 vec![LinearEnergyExpr::zero(); graph.underlying.n_edges() + denominators.len()];
             edge_energy_map[occurrence] = loop_energy.clone();
             physical_energies.push(mapper.map_numerator_factor(
-                std::slice::from_ref(&loop_energy),
-                &edge_energy_map,
+                &mapper.energy_atoms(std::slice::from_ref(&loop_energy)),
+                &mapper.energy_atoms(&edge_energy_map),
                 &numerator,
-                &BTreeMap::from([(EdgeIndex(0), occurrence)]),
+                &BTreeMap::from([(EnergyReference::Physical(EdgeIndex(0)), occurrence)]),
             )?);
         }
         assert_eq!(
@@ -4047,12 +4758,15 @@ mod tests {
         );
         let numerator = (GS.emr_mom(EdgeIndex(1), GS.cind(0)) + Atom::num(2))
             * (GS.emr_mom(EdgeIndex(2), GS.cind(0)) + Atom::num(3));
-        let (generated, mapper, plan, _) = graph.generate_3d_expression_for_4d_term(
+        let preparation = graph.prepare_3d_expression_for_4d_term(
             &exact,
             &graph.denominator_only_cff_3d_expression_options(),
             &numerator,
-            None,
+            &[],
         )?;
+        let (generated, _, plan, _) =
+            graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = exact.exact_source_energy_mapper(&[])?;
         assert!(!generated.expression.orientations.is_empty());
         for orientation in &generated.expression.orientations {
             let expected = numerator
@@ -4100,7 +4814,7 @@ mod tests {
             -denominators[usize::from(owner)].momentum.clone();
         let expected_energy = denominators[usize::from(owner)].on_shell_energy();
         let source = GraphThreeDSource::from_exact_denominators(&graph, &denominators)?;
-        let mapper = source.exact_source_energy_mapper().unwrap();
+        let mapper = source.exact_source_energy_mapper(&[]).unwrap();
         let hard = FunctionBuilder::new(GS.emr_mom)
             .add_arg(usize::from(owner))
             .finish();
@@ -4195,7 +4909,7 @@ mod tests {
             for term in exact.terms.values() {
                 for orientation in &term.orientations {
                     exact_sum += &orientation.expression
-                        * term.map_exact_source_numerator(&orientation.orientation)?;
+                        * term.map_exact_source_numerator(&orientation.orientation, None)?;
                 }
             }
             exact_sum *= Atom::num(exact.production_prefactor_factor());
@@ -4240,8 +4954,14 @@ mod tests {
         });
         let options = graph.denominator_only_cff_3d_expression_options();
         let forward_source = GraphThreeDSource::from_exact_denominators(&graph, &denominators)?;
+        let preparation = graph.prepare_3d_expression_for_4d_term(
+            &forward_source,
+            &options,
+            &Atom::one(),
+            &[],
+        )?;
         let forward = graph
-            .generate_3d_expression_for_4d_term(&forward_source, &options, &Atom::one(), None)?
+            .generate_3d_expression_for_4d_term(&preparation, None)?
             .0
             .expression
             .remap_energy_edge_indices(
@@ -4253,8 +4973,14 @@ mod tests {
         let reversed_denominators = [denominators[1].clone(), denominators[0].clone()];
         let reversed_source =
             GraphThreeDSource::from_exact_denominators(&graph, &reversed_denominators)?;
+        let preparation = graph.prepare_3d_expression_for_4d_term(
+            &reversed_source,
+            &options,
+            &Atom::one(),
+            &[],
+        )?;
         let reversed = graph
-            .generate_3d_expression_for_4d_term(&reversed_source, &options, &Atom::one(), None)?
+            .generate_3d_expression_for_4d_term(&preparation, None)?
             .0
             .expression
             .remap_energy_edge_indices(
@@ -4317,12 +5043,15 @@ mod tests {
             + Atom::var(symbolica::symbol!("exact_external_identity::a")))
             * (GS.emr_mom(EdgeIndex(1), GS.cind(0))
                 + Atom::var(symbolica::symbol!("exact_external_identity::b")));
-        let (generated, mapper, plan, _) = graph.generate_3d_expression_for_4d_term(
+        let preparation = graph.prepare_3d_expression_for_4d_term(
             &exact_source,
             &graph.denominator_only_cff_3d_expression_options(),
             &factorized_numerator,
-            None,
+            &[],
         )?;
+        let (generated, _, plan, _) =
+            graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = exact_source.exact_source_energy_mapper(&[])?;
         assert!(!generated.expression.orientations.is_empty());
         for orientation in &generated.expression.orientations {
             let production_mapped = factorized_numerator
@@ -4378,12 +5107,15 @@ mod tests {
 
         let parsed = source.to_three_d_parsed_graph()?;
         assert!(validate_parsed_graph(&parsed).ok);
-        let (generated, mapper, plan, _) = graph.generate_3d_expression_for_4d_term(
+        let preparation = graph.prepare_3d_expression_for_4d_term(
             &source,
             &graph.denominator_only_cff_3d_expression_options(),
             &Atom::one(),
-            None,
+            &[],
         )?;
+        let (generated, _, plan, _) =
+            graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = source.exact_source_energy_mapper(&[])?;
         let surfaces = generated.expression.surfaces.get_all_replacements_gs(&[]);
         let mut contour = Atom::Zero;
         for orientation in &generated.expression.orientations {
@@ -4482,7 +5214,7 @@ mod tests {
         let edge_energy_map = vec![LinearEnergyExpr::zero(); occurrence + 1];
         assert_eq!(
             source
-                .exact_source_energy_mapper()
+                .exact_source_energy_mapper(&[])
                 .expect("exact source has an energy mapper")
                 .map_numerator(&[LinearEnergyExpr::zero()], &edge_energy_map, &temporal_cut,)?,
             expected
@@ -4510,6 +5242,7 @@ mod tests {
                 vec![Rational::from(0), Rational::from(-1)],
                 vec![(external_edge, SignOrZero::Plus)],
             )],
+            uv_classes: BTreeMap::new(),
             source_edge_occurrences: BTreeMap::new(),
             cut_alias_edges: AHashSet::new(),
             exact_ose_replacements: vec![Replacement::new(
@@ -4582,6 +5315,7 @@ mod tests {
             parent_loop_coordinates: Vec::new(),
             parent_loop_edges: Vec::new(),
             edge_coordinates: Vec::new(),
+            uv_classes: BTreeMap::new(),
             source_edge_occurrences: BTreeMap::from([(
                 unique_edge,
                 vec![ExactSourceOwnerOccurrence {
@@ -4631,6 +5365,7 @@ mod tests {
             parent_loop_coordinates: Vec::new(),
             parent_loop_edges: Vec::new(),
             edge_coordinates: Vec::new(),
+            uv_classes: BTreeMap::new(),
             source_edge_occurrences: BTreeMap::from([(
                 repeated_edge,
                 occurrences
@@ -4680,6 +5415,7 @@ mod tests {
             parent_loop_coordinates: Vec::new(),
             parent_loop_edges: Vec::new(),
             edge_coordinates: Vec::new(),
+            uv_classes: BTreeMap::new(),
             source_edge_occurrences: BTreeMap::from([(
                 repeated_edge,
                 occurrences
@@ -4734,6 +5470,7 @@ mod tests {
                 parent_loop_coordinates: vec![vec![Rational::from(1)]],
                 parent_loop_edges: vec![repeated_edge],
                 edge_coordinates: vec![(repeated_edge, vec![Rational::from(1)], Vec::new())],
+                uv_classes: BTreeMap::new(),
                 source_edge_occurrences: BTreeMap::from([(
                     repeated_edge,
                     occurrences
@@ -4842,6 +5579,7 @@ mod tests {
                     parent_loop_coordinates: Vec::new(),
                     parent_loop_edges: Vec::new(),
                     edge_coordinates: vec![(owner, Vec::new(), Vec::new())],
+                    uv_classes: BTreeMap::new(),
                     source_edge_occurrences: BTreeMap::from([(
                         owner,
                         occurrences
@@ -5072,7 +5810,7 @@ mod tests {
             let parsed = source.to_three_d_parsed_graph()?;
             assert!(validate_parsed_graph(&parsed).ok);
             let mut mapper = source
-                .exact_source_energy_mapper()
+                .exact_source_energy_mapper(&[])
                 .expect("the reconstructed source has an exact map");
             let candidates = mapper.equivalent_energy_candidates([owner_a, owner_b])?;
             let plan = EnergyPowerAnalyzer::for_physical_emr_edges([owner_a, owner_b])
@@ -5098,7 +5836,10 @@ mod tests {
                         factor_provenance.insert((owner, role));
                     }
                 });
-                for (&owner, &occurrence) in assignments {
+                for (&reference, &occurrence) in assignments {
+                    let EnergyReference::Physical(owner) = reference else {
+                        panic!("physical owner fixture contains a UV class");
+                    };
                     let roles = factor_provenance
                         .iter()
                         .filter_map(|(provenance_owner, role)| {
@@ -5339,6 +6080,7 @@ mod tests {
             parent_loop_coordinates: vec![vec![Rational::from(1)]],
             parent_loop_edges: vec![repeated_edge],
             edge_coordinates: vec![(repeated_edge, vec![Rational::from(1)], Vec::new())],
+            uv_classes: BTreeMap::new(),
             source_edge_occurrences: BTreeMap::from([(
                 repeated_edge,
                 occurrences
@@ -5415,6 +6157,7 @@ mod tests {
                 .copied()
                 .map(|owner| (owner, vec![Rational::from(1)], Vec::new()))
                 .collect(),
+            uv_classes: BTreeMap::new(),
             source_edge_occurrences: owners
                 .iter()
                 .copied()
@@ -5639,6 +6382,7 @@ mod tests {
                 (literal_edge, vec![Rational::from(1)], Vec::new()),
                 (reconstructed_edge, vec![Rational::from(1)], Vec::new()),
             ],
+            uv_classes: BTreeMap::new(),
             source_edge_occurrences: BTreeMap::from([(
                 literal_edge,
                 vec![ExactSourceOwnerOccurrence {
@@ -5776,6 +6520,7 @@ mod tests {
                 vec![Rational::from(0)],
                 vec![(external_edge, SignOrZero::Minus)],
             )],
+            uv_classes: BTreeMap::new(),
             source_edge_occurrences: BTreeMap::from([(
                 cut_edge,
                 [1, 2]
@@ -5837,7 +6582,7 @@ mod tests {
         let denominators = [denominator];
         let source = GraphThreeDSource::from_exact_denominators(&graph, &denominators)?;
         let mapper = source
-            .exact_source_energy_mapper()
+            .exact_source_energy_mapper(&[])
             .expect("exact UV source has an energy mapper");
         let occurrence = EdgeIndex(
             mapper.source_edge_occurrences[&ownership_edge]
@@ -6151,7 +6896,7 @@ mod tests {
         }));
 
         let options = graph.denominator_only_cff_3d_expression_options();
-        let mut cache = crate::cff::generation::ExactCffGenerationCache::default();
+        let mut cache = crate::uv::approx::projected_4d::Local4dProjectionContext::default();
         for denominators in terms {
             let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
                 &graph,
@@ -6160,12 +6905,15 @@ mod tests {
             )?;
             let mut values = Vec::new();
             for generation_cache in [Some(&mut cache), None] {
-                let (generated, mapper, plan, _) = graph.generate_3d_expression_for_4d_term(
+                let preparation = graph.prepare_3d_expression_for_4d_term(
                     &source,
                     &options,
                     &Atom::one(),
-                    generation_cache,
+                    &[],
                 )?;
+                let (generated, _, plan, _) =
+                    graph.generate_3d_expression_for_4d_term(&preparation, generation_cache)?;
+                let mapper = source.exact_source_energy_mapper(&[])?;
                 let surfaces = generated.expression.surfaces.get_all_replacements_gs(&[]);
                 let mut value = Atom::Zero;
                 for orientation in &generated.expression.orientations {
@@ -6277,12 +7025,14 @@ mod tests {
             &options,
             Some(&direct_numerator),
         )?;
-        let (exact, mapper, plan, _) = graph.generate_3d_expression_for_4d_term(
+        let preparation = graph.prepare_3d_expression_for_4d_term(
             &exact_source,
             &options,
             &exact_numerator,
-            None,
+            &[],
         )?;
+        let (exact, _, plan, _) = graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = exact_source.exact_source_energy_mapper(&[])?;
         let owner_occurrences = owners.map(|owner| &mapper.source_edge_occurrences[&owner][0]);
         let direct_energy_relabels = direct_owners
             .iter()
@@ -6538,12 +7288,10 @@ mod tests {
         let crown_energy = GS.emr_mom(EdgeIndex(3), GS.cind(0));
         let analysis_numerator = &tagged_hard * &crown_energy;
         let options = graph.denominator_only_cff_3d_expression_options();
-        let (generated, mapper, _, _) = graph.generate_3d_expression_for_4d_term(
-            &source,
-            &options,
-            &analysis_numerator,
-            None,
-        )?;
+        let preparation =
+            graph.prepare_3d_expression_for_4d_term(&source, &options, &analysis_numerator, &[])?;
+        let (generated, _, _, _) = graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = source.exact_source_energy_mapper(&[])?;
         let left_occurrence = &mapper.source_edge_occurrences[&uv_edges[0]][0];
         let right_occurrence = &mapper.source_edge_occurrences[&uv_edges[1]][0];
         let abstract_index = LibraryRep::from(Minkowski {}).to_symbolic([Atom::num(2)]);
@@ -6563,8 +7311,11 @@ mod tests {
         let left_temporal = tagged_fixed_hard(uv_edges[0], &denominators[0].momentum, &GS.cind(0));
         let right_temporal = tagged_fixed_hard(uv_edges[1], &denominators[1].momentum, &GS.cind(0));
         let fixed_pair = &left_fixed * &right_fixed;
-        let (pair_generated, pair_mapper, pair_plan, _) =
-            graph.generate_3d_expression_for_4d_term(&source, &options, &fixed_pair, None)?;
+        let preparation =
+            graph.prepare_3d_expression_for_4d_term(&source, &options, &fixed_pair, &[])?;
+        let (pair_generated, _, pair_plan, _) =
+            graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let pair_mapper = source.exact_source_energy_mapper(&[])?;
         let temporal_plan = EnergyPowerAnalyzer::for_physical_emr_edges(uv_edges)
             .plan_atom_assignment(
                 &(&left_temporal * &right_temporal),
@@ -6867,6 +7618,321 @@ mod tests {
     }
 
     #[test]
+    fn pinched_affine_carrier_requires_occurrence_interpolation() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph pinched_affine_sunset {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1 lmb_id=1]
+            a -> b [id=2]
+        })?;
+        let owners = [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)];
+        let denominators = [EdgeIndex(0), EdgeIndex(1)]
+            .into_iter()
+            .flat_map(|owner| {
+                let denominator = FourDDenominator {
+                    source_edge: owner,
+                    momentum: function!(GS.emr_mom, usize::from(owner)),
+                    mass_squared: Atom::one(),
+                    full_expr: Atom::one(),
+                };
+                [denominator.clone(), denominator]
+            })
+            .collect::<Vec<_>>();
+        let source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+            &graph,
+            &denominators,
+            owners,
+            [],
+            &graph.loop_momentum_basis,
+            ExactUvSubLmbFrame::TaylorVacuum,
+        )?;
+        let tagged = |owner, role, hard: Atom| {
+            function!(
+                GS.emr_mom,
+                GS.uv_momentum_provenance_tag(owner, role, hard),
+                GS.cind(0)
+            )
+        };
+        let hard = -function!(GS.emr_mom, 0) - function!(GS.emr_mom, 1);
+        let physical = tagged(
+            2,
+            UvMomentumProvenanceRole::PhysicalSourceFixed,
+            hard.clone(),
+        );
+        let lifted = -tagged(
+            0,
+            UvMomentumProvenanceRole::TaylorFixed,
+            function!(GS.emr_mom, 0),
+        ) - tagged(
+            1,
+            UvMomentumProvenanceRole::TaylorFixed,
+            function!(GS.emr_mom, 1),
+        );
+        // This affine frame lift preserves the two numerator factors. It is
+        // independently certified before either residue functional is applied.
+        let numerator = (&lifted + 3) * (&lifted + 5);
+        let physical_numerator = (&physical + 3) * (&physical + 5);
+        assert_eq!(
+            GS.erase_uv_momentum_provenance(&numerator),
+            GS.erase_uv_momentum_provenance(&physical_numerator)
+        );
+        let (prepared, _) = source.prepare_affine_numerator(&physical_numerator)?;
+        assert_eq!(
+            GS.erase_uv_momentum_provenance(&prepared),
+            GS.erase_uv_momentum_provenance(&numerator)
+        );
+        assert_eq!(source.prepare_affine_numerator(&prepared)?.0, prepared);
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let preparation =
+            graph.prepare_3d_expression_for_4d_term(&source, &options, &physical_numerator, &[])?;
+        let (generated, _, plan, _) =
+            graph.generate_3d_expression_for_4d_term(&preparation, None)?;
+        let mapper = source.exact_source_energy_mapper(&[])?;
+        let surfaces = generated.expression.surfaces.get_all_replacements_gs(&[]);
+        let mut occurrence_contour = Atom::Zero;
+        let mut coordinate_contour = Atom::Zero;
+        let mut distinct_samples = false;
+        let mut row_values = Vec::new();
+        for orientation in &generated.expression.orientations {
+            let carrier = orientation.to_atom_gs().replace_multiple(&surfaces);
+            let occurrence_value = mapper.map_planned_numerator(
+                &orientation.loop_energy_map,
+                &orientation.edge_energy_map,
+                &plan,
+            )?;
+            let coordinate_value = mapper.map_numerator_factor(
+                &mapper.energy_atoms(&orientation.loop_energy_map),
+                &mapper.energy_atoms(&orientation.edge_energy_map),
+                &physical_numerator,
+                &BTreeMap::new(),
+            )?;
+            distinct_samples |= occurrence_value != coordinate_value;
+            row_values.push((
+                carrier.clone(),
+                occurrence_value.clone(),
+                coordinate_value.clone(),
+            ));
+            occurrence_contour += &carrier * occurrence_value;
+            coordinate_contour += carrier * coordinate_value;
+        }
+        assert!(
+            distinct_samples,
+            "contact rows must distinguish occurrence samples from fixed loop coordinates"
+        );
+        // Follow the native raw-contour convention component by component.
+        // Variant-local Laurent terms already encode their generalized core
+        // sign and therefore use the denominator-only frame, as production
+        // gamma_loop_prefactor_conversion does for those components.
+        let source_sign = generated
+            .energy_factor_components
+            .iter()
+            .fold(1, |sign, component| {
+                let frame = match component.ownership {
+                    three_dimensional_reps::CffEnergyFactorOwnership::GlobalSourceProduct => {
+                        component.core_global_prefactor_sign
+                    }
+                    three_dimensional_reps::CffEnergyFactorOwnership::VariantLocal => {
+                        component.denominator_only_global_prefactor_sign
+                    }
+                };
+                sign * three_dimensional_reps::CffGlobalPrefactorSign::from_exponent(
+                    component.internal_edge_ids.len(),
+                )
+                .product(frame)
+                .factor()
+            });
+        let e0 = Atom::var(symbolica::symbol!("pinched_affine_test::E0"));
+        let e1 = Atom::var(symbolica::symbol!("pinched_affine_test::E1"));
+        let normalize = |value: Atom| {
+            (value.replace_multiple(mapper.exact_ose_replacements()) * Atom::num(source_sign))
+                .replace(denominators[0].on_shell_energy().pow(2).pow(W_.a_))
+                .with(e0.pow(Atom::num(2) * W_.a_).to_pattern())
+                .replace(denominators[2].on_shell_energy().pow(2).pow(W_.a_))
+                .with(e1.pow(Atom::num(2) * W_.a_).to_pattern())
+                .replace(crate::utils::ose_atom_from_index(EdgeIndex(0)))
+                .with(e0.to_pattern())
+                .replace(crate::utils::ose_atom_from_index(EdgeIndex(1)))
+                .with(e1.to_pattern())
+        };
+        let occurrence_contour = normalize(occurrence_contour);
+        let coordinate_contour = normalize(coordinate_contour);
+        // With dq0/(2*pi*i), Below gives J[1/D²]=1/(4E³),
+        // J[q0/D²]=0 and J[q0²/D²]=-1/(4E).
+        let expected =
+            (Atom::num(15) - e0.pow(2) - e1.pow(2)) / (Atom::num(16) * e0.pow(3) * e1.pow(3));
+        let common_denominator = Atom::num(16) * e0.pow(3) * e1.pow(3);
+        let energy_analyzer =
+            EnergyPowerAnalyzer::for_physical_emr_edges([EdgeIndex(0), EdgeIndex(1)]);
+        for (carrier, occurrence, coordinate) in row_values {
+            // Clear only the denominator carrier, leaving both graph
+            // numerator factors intact. Every remaining carrier is constant,
+            // and the strict structural analyzer certifies degree <= 2 in
+            // each energy for both independently sampled numerators.
+            let weight = (normalize(carrier) * &common_denominator).collect_factors();
+            assert!(matches!(weight.as_view(), AtomView::Num(_)));
+            for value in [normalize(occurrence), normalize(coordinate)] {
+                let energy_expression = value
+                    .replace(e0.to_pattern())
+                    .with(GS.emr_mom(EdgeIndex(0), GS.cind(0)))
+                    .replace(e1.to_pattern())
+                    .with(GS.emr_mom(EdgeIndex(1), GS.cind(0)));
+                assert!(
+                    energy_analyzer
+                        .analyze_atom(&energy_expression)?
+                        .iter()
+                        .all(|(_, degree)| degree <= 2)
+                );
+            }
+        }
+        let expected_polynomial = (&expected * common_denominator).collect_factors();
+        let expected_degrees = expected_polynomial
+            .replace(e0.to_pattern())
+            .with(GS.emr_mom(EdgeIndex(0), GS.cind(0)))
+            .replace(e1.to_pattern())
+            .with(GS.emr_mom(EdgeIndex(1), GS.cind(0)));
+        assert!(
+            energy_analyzer
+                .analyze_atom(&expected_degrees)?
+                .iter()
+                .all(|(_, degree)| degree <= 2)
+        );
+        // These exact rational values form a complete interpolation oracle:
+        // the cleared difference has degree at most two in each variable,
+        // so a 3 x 3 grid proves its polynomial identity without expansion.
+        let mut coordinate_mismatch = false;
+        for first in 1..=3 {
+            for second in 1..=3 {
+                let actual = occurrence_contour
+                    .replace(e0.to_pattern())
+                    .with(Atom::num(first))
+                    .replace(e1.to_pattern())
+                    .with(Atom::num(second));
+                let expected = expected
+                    .replace(e0.to_pattern())
+                    .with(Atom::num(first))
+                    .replace(e1.to_pattern())
+                    .with(Atom::num(second));
+                assert_eq!(
+                    actual, expected,
+                    "certified affine occurrence lift must reproduce the independent double contours at E0={first}, E1={second}"
+                );
+                let coordinate = coordinate_contour
+                    .replace(e0.to_pattern())
+                    .with(Atom::num(first))
+                    .replace(e1.to_pattern())
+                    .with(Atom::num(second));
+                coordinate_mismatch |= coordinate != expected;
+            }
+        }
+        assert!(
+            coordinate_mismatch,
+            "loop-map-only sampling cannot replace the required occurrence interpolation"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn pinched_positive_block_preserves_joint_affine_assignment() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph pinched_positive_affine_sunset {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1 lmb_id=1]
+            a -> b [id=2]
+        })?;
+        let owners = [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)];
+        let denominators = owners[..2]
+            .iter()
+            .map(|owner| FourDDenominator {
+                source_edge: *owner,
+                momentum: function!(GS.emr_mom, usize::from(*owner)),
+                mass_squared: Atom::one(),
+                full_expr: Atom::one(),
+            })
+            .collect::<Vec<_>>();
+        let source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+            &graph,
+            &denominators,
+            owners,
+            [],
+            &graph.loop_momentum_basis,
+            ExactUvSubLmbFrame::TaylorVacuum,
+        )?;
+        let hard = -function!(GS.emr_mom, 0) - function!(GS.emr_mom, 1);
+        let mapper = source.exact_source_energy_mapper(&[])?;
+        for role in [
+            UvMomentumProvenanceRole::TaylorFixed,
+            UvMomentumProvenanceRole::DenominatorDerived,
+            UvMomentumProvenanceRole::PhysicalSourceFixed,
+            UvMomentumProvenanceRole::DenominatorDerivedSoft,
+        ] {
+            let temporal = function!(
+                GS.emr_mom,
+                GS.uv_momentum_provenance_tag(2, role, hard.clone()),
+                GS.cind(0)
+            );
+            let denominator = function!(GS.den, 2, &hard, 1, temporal.pow(2) - Atom::one());
+            let filter = graph.full_filter();
+            let poles = owners[..2].iter().fold(Atom::one(), |product, owner| {
+                product
+                    * GS.den(
+                        usize::from(*owner),
+                        function!(GS.emr_mom, usize::from(*owner)),
+                        1,
+                        GS.emr_mom(*owner, GS.cind(0)).pow(2) - 1,
+                    )
+            });
+            let canonical = crate::uv::approx::local_4d::FourDSector::new(
+                &denominator / poles,
+                vec![(filter.clone(), filter, graph.loop_momentum_basis.clone())],
+                vec![],
+            )
+            .canonical_projection(&graph)?;
+            // The production projection keeps unmatched positive blocks
+            // opaque, including hard roles zero/one and untouched soft roles.
+            assert_eq!(canonical.terms[0].numerator, denominator);
+            let (prepared, fixed_affine_blocks) =
+                source.prepare_affine_numerator(&canonical.terms[0].numerator)?;
+            assert_eq!(
+                GS.erase_uv_momentum_provenance(&prepared),
+                GS.erase_uv_momentum_provenance(&denominator)
+            );
+            if role == UvMomentumProvenanceRole::DenominatorDerivedSoft {
+                assert_eq!(prepared, denominator);
+                continue;
+            }
+            let AtomView::Fun(wrapper) = prepared.as_view() else {
+                panic!("the complete positive denominator remains one typed block")
+            };
+            assert_eq!(wrapper.get_symbol(), GS.den);
+            assert_eq!(wrapper.get(0), Atom::num(2).as_view());
+            let analyzer = EnergyPowerAnalyzer::for_physical_emr_edges(owners);
+            let mut candidates =
+                mapper.equivalent_energy_candidates(owners[..2].iter().copied())?;
+            // Exact source witnesses authorize only their own whole blocks;
+            // unrelated mixed-owner denominators retain the strict rejection.
+            assert!(
+                analyzer
+                    .plan_atom_assignment(&prepared, &candidates)
+                    .is_err()
+            );
+            candidates.fixed_affine_blocks = fixed_affine_blocks;
+            let plan = analyzer.plan_atom_assignment(&prepared, &candidates)?;
+            mapper.certify_assignment(&plan)?;
+            mapper.prepare_numerator(&plan)?;
+            let mapped = plan.map_factors(|factor, _| Ok::<_, eyre::Report>(factor.clone()))?;
+            assert_eq!(
+                GS.erase_uv_momentum_provenance(&mapped),
+                GS.erase_uv_momentum_provenance(&denominator)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn exact_taylor_vacuum_affine_circulation_preserves_energy_mapping() -> Result<()> {
         test_initialise()?;
         let graph: Graph = dot!(digraph exact_affine_taylor_vacuum {
@@ -6968,7 +8034,8 @@ mod tests {
             let raw_sign = if position == 0 { 1 } else { -1 };
             edge_map[occurrence.energy_edge_id] =
                 LinearEnergyExpr::ose(witness_edge, raw_sign * occurrence.raw_to_parsed_sign);
-            let assignments = BTreeMap::from([(owner, occurrence.energy_edge_id)]);
+            let assignments =
+                BTreeMap::from([(EnergyReference::Physical(owner), occurrence.energy_edge_id)]);
             for derived in [false, true] {
                 let tagged = FunctionBuilder::new(GS.emr_mom)
                     .add_arg(GS.uv_momentum_provenance_tag(
@@ -6979,20 +8046,35 @@ mod tests {
                     .add_arg(GS.cind(0))
                     .finish();
                 assert_eq!(
-                    mapper.map_numerator_factor(&loop_map, &edge_map, &tagged, &assignments)?,
+                    mapper.map_numerator_factor(
+                        &mapper.energy_atoms(&loop_map),
+                        &mapper.energy_atoms(&edge_map),
+                        &tagged,
+                        &assignments
+                    )?,
                     Atom::num(raw_sign) * &energy
                 );
                 let mut contact_map = edge_map.clone();
                 contact_map[occurrence.energy_edge_id] = LinearEnergyExpr::zero();
                 assert!(
                     mapper
-                        .map_numerator_factor(&loop_map, &contact_map, &tagged, &assignments)?
+                        .map_numerator_factor(
+                            &mapper.energy_atoms(&loop_map),
+                            &mapper.energy_atoms(&contact_map),
+                            &tagged,
+                            &assignments
+                        )?
                         .is_zero(),
                     "an affine shift must not turn a zero contact sample into a nonzero numerator"
                 );
                 let spatial = tagged.replace(GS.cind(0)).with(GS.cind(1));
                 assert_eq!(
-                    mapper.map_numerator_factor(&loop_map, &edge_map, &spatial, &assignments)?,
+                    mapper.map_numerator_factor(
+                        &mapper.energy_atoms(&loop_map),
+                        &mapper.energy_atoms(&edge_map),
+                        &spatial,
+                        &assignments
+                    )?,
                     GS.erase_uv_momentum_provenance(&spatial)
                 );
             }
@@ -7004,7 +8086,12 @@ mod tests {
             .replace_multiple(&external_replacements);
             assert_eq!(
                 mapper
-                    .map_numerator_factor(&loop_map, &edge_map, &literal, &assignments)?
+                    .map_numerator_factor(
+                        &mapper.energy_atoms(&loop_map),
+                        &mapper.energy_atoms(&edge_map),
+                        &literal,
+                        &assignments
+                    )?
                     .expand_num()
                     .collect_factors(),
                 expected.expand_num().collect_factors(),
@@ -7031,8 +8118,18 @@ mod tests {
             .push(witness_replacement);
         let literal = GS.emr_mom(owners[1], GS.cind(0));
         assert_eq!(
-            pinched_mapper.map_numerator_factor(&loop_map, &[], &literal, &BTreeMap::new())?,
-            mapper.map_numerator_factor(&loop_map, &edge_map, &literal, &BTreeMap::new())?
+            pinched_mapper.map_numerator_factor(
+                &pinched_mapper.energy_atoms(&loop_map),
+                &[],
+                &literal,
+                &BTreeMap::new()
+            )?,
+            mapper.map_numerator_factor(
+                &mapper.energy_atoms(&loop_map),
+                &mapper.energy_atoms(&edge_map),
+                &literal,
+                &BTreeMap::new()
+            )?
         );
         let missing_tag = FunctionBuilder::new(GS.emr_mom)
             .add_arg(GS.uv_momentum_provenance_tag(
@@ -7044,7 +8141,12 @@ mod tests {
             .finish();
         assert!(
             pinched_mapper
-                .map_numerator_factor(&loop_map, &[], &missing_tag, &BTreeMap::new())
+                .map_numerator_factor(
+                    &pinched_mapper.energy_atoms(&loop_map),
+                    &[],
+                    &missing_tag,
+                    &BTreeMap::new()
+                )
                 .unwrap_err()
                 .to_string()
                 .contains("no planned exact occurrence")

@@ -89,8 +89,34 @@ impl Integrands {
         self.checked_zip(other, |_, v1, v2| Ok(v1 * v2))
     }
 
-    pub fn zip_add(self, other: Integrands) -> Result<Integrands> {
-        self.checked_zip(&other, |_, left, right| Ok(left + right))
+    /// Validate every cut-key shape, then merge each symbolic sum once. Pairwise
+    /// accumulation repeatedly copies the already assembled residue numerator.
+    pub fn zip_add(self, others: impl IntoIterator<Item = Self>) -> Result<Self> {
+        let mut terms = self
+            .0
+            .into_iter()
+            .map(|(key, atom)| (key, vec![atom]))
+            .collect::<BTreeMap<_, _>>();
+        for other in others {
+            for pair in terms
+                .iter_mut()
+                .merge_join_by(other.0, |(left, _), (right, _)| (*left).cmp(right))
+            {
+                match pair {
+                    EitherOrBoth::Both((_, terms), (_, atom)) => terms.push(atom),
+                    EitherOrBoth::Left((key, _)) => {
+                        return Err(eyre!("right integrands are missing key {key:?}"));
+                    }
+                    EitherOrBoth::Right((key, _)) => {
+                        return Err(eyre!("left integrands are missing key {key:?}"));
+                    }
+                }
+            }
+        }
+        Ok(terms
+            .into_iter()
+            .map(|(key, terms)| (key, Atom::add_many(terms)))
+            .collect())
     }
 }
 
