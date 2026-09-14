@@ -3156,7 +3156,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                         orientations,
                         context.settings,
                         context.evaluation_metadata,
-                        context.record_primary_timing,
                     )?
                     .pop()
                     .ok_or_else(|| eyre!("Evaluator returned no cut result"))?;
@@ -3194,7 +3193,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                     pass_two_evaluator,
                     &params_for_pass_two,
                     context.evaluation_metadata,
-                    context.record_primary_timing,
                 );
 
                 debug!("pass_two_result: {:+16e}", pass_two_result);
@@ -3265,7 +3263,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                         &mut self.param_builder,
                         orientations,
                         context.evaluation_metadata,
-                        context.record_primary_timing,
                         record_threshold_decomposition,
                         shared_overlaps[cut_group_id].as_ref(),
                     )?

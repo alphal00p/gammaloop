@@ -798,7 +798,6 @@ impl AmplitudeCountertermData {
         base_sample: &MomentumSample<T>,
         root_sample: &MomentumSample<T>,
         evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
     ) -> Result<(F<T>, F<T>)> {
         let Some(collection) = threshold_multipliers.as_mut() else {
             return Ok((base_sample.one(), base_sample.one()));
@@ -845,7 +844,6 @@ impl AmplitudeCountertermData {
         let local = collection.evaluators_mut()[evaluator_id.0].evaluate(
             local_values,
             evaluation_metadata,
-            record_primary_timing,
         )
         .with_context(|| {
             format!(
@@ -875,7 +873,6 @@ impl AmplitudeCountertermData {
         let integrated = collection.evaluators_mut()[evaluator_id.0].evaluate(
             integrated_values,
             evaluation_metadata,
-            record_primary_timing,
         )
         .with_context(|| {
             format!(
@@ -1029,7 +1026,6 @@ impl AmplitudeCountertermData {
         param_builder: &mut ParamBuilder<f64>,
         orientation: SingleOrAllOrientations<'_, OrientationID>,
         evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
         record_components: bool,
     ) -> Result<AmplitudeCountertermEvaluation<T>> {
         if record_components && self.metadata_registry.is_none() {
@@ -1049,7 +1045,6 @@ impl AmplitudeCountertermData {
                 param_builder,
                 orientation,
                 evaluation_metadata,
-                record_primary_timing,
                 record_components,
             );
         }
@@ -1131,7 +1126,6 @@ impl AmplitudeCountertermData {
                     param_builder,
                     orientation,
                     evaluation_metadata,
-                    record_primary_timing,
                     &mut self.evaluators[raised_esurface_id],
                     &mut self.helper_evaluators,
                     split_helpers,
@@ -1206,7 +1200,6 @@ impl AmplitudeCountertermData {
         param_builder: &mut ParamBuilder<f64>,
         orientation: SingleOrAllOrientations<'_, OrientationID>,
         evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
         record_components: bool,
     ) -> Result<AmplitudeCountertermEvaluation<T>> {
         let catalogue = self.overlap_catalogue(graph, esurfaces);
@@ -1253,7 +1246,6 @@ impl AmplitudeCountertermData {
                 param_builder,
                 orientation,
                 evaluation_metadata,
-                record_primary_timing,
                 record_components,
                 &catalogue,
                 &members,
@@ -1285,7 +1277,6 @@ impl AmplitudeCountertermData {
         param_builder: &mut ParamBuilder<f64>,
         orientation: SingleOrAllOrientations<'_, OrientationID>,
         evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
         record_components: bool,
         catalogue: &AmplitudeOverlapCatalogue,
         allowed_instances: &[usize],
@@ -1469,7 +1460,6 @@ impl AmplitudeCountertermData {
                     momentum_sample,
                     &root_in_metadata_lmb,
                     evaluation_metadata,
-                    record_primary_timing,
                 )?;
                 let both_zero = local_multiplier.is_zero() && integrated_multiplier.is_zero();
                 let evaluation = if both_zero {
@@ -1482,7 +1472,6 @@ impl AmplitudeCountertermData {
                         param_builder,
                         orientation,
                         evaluation_metadata,
-                        record_primary_timing,
                         &real_mass_vector,
                         &lmbs,
                         root_lmb,
@@ -2087,7 +2076,6 @@ fn evaluate_generalized_rstar<T: FloatLike>(
     param_builder: &mut ParamBuilder<f64>,
     orientations: SingleOrAllOrientations<'_, OrientationID>,
     evaluation_metadata: &mut EvaluationMetaData,
-    record_primary_timing: bool,
     real_mass_vector: &EdgeVec<F<T>>,
     all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     common_lmb: &LoopMomentumBasis,
@@ -2208,13 +2196,7 @@ fn evaluate_generalized_rstar<T: FloatLike>(
             None,
         );
         let pass_one = evaluator_stack
-            .evaluate(
-                params,
-                orientations,
-                settings,
-                evaluation_metadata,
-                record_primary_timing,
-            )
+            .evaluate(params, orientations, settings, evaluation_metadata)
             .expect("Amplitude variant counterterm evaluator stack failed")
             .pop()
             .unwrap();
@@ -2258,7 +2240,6 @@ fn evaluate_generalized_rstar<T: FloatLike>(
             &mut helper_evaluators[order_index],
             &helper_params,
             evaluation_metadata,
-            record_primary_timing,
         );
         assert_eq!(
             pieces.len(),
@@ -2641,7 +2622,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         param_builder: &mut ParamBuilder<f64>,
         orientations: SingleOrAllOrientations<'a, OrientationID>,
         evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
         ct_evaluator: &mut AmplitudeCountertermEvaluator,
         helper_evaluators: &mut [GenericEvaluator],
         split_helpers: bool,
@@ -2932,7 +2912,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                     orientations,
                     ct_builder.settings,
                     evaluation_metadata,
-                    record_primary_timing,
                 )
                 .expect("Amplitude counterterm evaluator stack failed")
                 .pop()
@@ -2942,7 +2921,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 &sample_for_order,
                 &model_params,
                 evaluation_metadata,
-                record_primary_timing,
                 order_index,
             );
 
@@ -3054,7 +3032,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                     &mut helper_evaluators[order_index],
                     &params_for_pass_two,
                     evaluation_metadata,
-                    record_primary_timing,
                 );
                 assert_eq!(
                     pieces.len(),
@@ -3083,7 +3060,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                     &mut helper_evaluators[order_index],
                     &params_for_pass_two,
                     evaluation_metadata,
-                    record_primary_timing,
                 );
                 evaluation.weighted += combined.clone();
                 combined
@@ -3138,7 +3114,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         momentum_sample: &MomentumSample<T>,
         model_params: &[Complex<F<T>>],
         evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
         order_index: usize,
     ) -> DualOrNot<Complex<F<T>>> {
         let overlap_builder = self.rstar_solution.esurface_ct_builder.overlap_builder;
@@ -3216,14 +3191,9 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .get(order_index)
             .expect("missing overlap prefactor evaluator for amplitude threshold order");
 
-        evaluate_evaluator(
-            &mut evaluator.borrow_mut(),
-            &params,
-            evaluation_metadata,
-            record_primary_timing,
-        )
-        .pop()
-        .expect("overlap prefactor evaluator should return exactly one value")
+        evaluate_evaluator(&mut evaluator.borrow_mut(), &params, evaluation_metadata)
+            .pop()
+            .expect("overlap prefactor evaluator should return exactly one value")
     }
 }
 
@@ -3746,7 +3716,6 @@ mod tests {
             &base,
             &root,
             &mut EvaluationMetaData::new_empty(),
-            false,
         )
         .unwrap();
         assert_eq!(local, expected_local);

@@ -309,7 +309,6 @@ impl GammaLoopSample<ArbPrec> {
                             event_processing_runtime: runtime.as_mut(),
                             rotation: &rotation,
                             evaluation_metadata: metadata,
-                            record_primary_timing: false,
                             // An explicitly channel-dependent selector retains
                             // its user-requested metadata; geometry never uses it.
                             sampling_channel: row.channel_id,

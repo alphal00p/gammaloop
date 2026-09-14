@@ -1004,12 +1004,17 @@ pub struct EvaluationMetaData {
     /// Report separately while native primal roots are still solved again, so
     /// repeated preparation cannot inflate the sampling-budget denominator.
     pub canonical_physical_preparation_time: Duration,
-    /// Existing primary-call evaluator subset of integrand_evaluation_time.
+    /// All actual evaluator calls across attempts and rotations, including work
+    /// performed before a target fails; a subset of integrand_evaluation_time.
     pub evaluator_evaluation_time: Duration,
     /// Source/map/partition work across all attempts and replays. Canonical
     /// policy preparation is inclusive and charged once, never again per child.
     /// Host-only adoption work is included here and excluded from physical time.
     pub parameterization_time: Duration,
+    /// Subset of sampling time: the one canonical source/map/partition preparation,
+    /// including failed preparation. Native materialization and adoption remain
+    /// in the remaining parameterization time.
+    pub canonical_sampling_preparation_time: Duration,
     pub event_processing_time: Duration,
     pub generated_event_count: usize,
     pub accepted_event_count: usize,
@@ -1045,8 +1050,16 @@ impl Display for EvaluationMetaData {
                 value: format_duration(self.parameterization_time),
             },
             EvaluationSummaryRow {
+                field: "canonical sampling (included)".to_string(),
+                value: format_duration(self.canonical_sampling_preparation_time),
+            },
+            EvaluationSummaryRow {
                 field: "integrand evaluation time".to_string(),
                 value: format_duration(self.integrand_evaluation_time),
+            },
+            EvaluationSummaryRow {
+                field: "canonical physical (included)".to_string(),
+                value: format_duration(self.canonical_physical_preparation_time),
             },
             EvaluationSummaryRow {
                 field: "evaluator evaluation time".to_string(),
@@ -1094,6 +1107,7 @@ impl EvaluationMetaData {
             canonical_physical_preparation_time: Duration::ZERO,
             evaluator_evaluation_time: Duration::ZERO,
             parameterization_time: Duration::ZERO,
+            canonical_sampling_preparation_time: Duration::ZERO,
             event_processing_time: Duration::ZERO,
             generated_event_count: 0,
             accepted_event_count: 0,
@@ -1297,7 +1311,7 @@ impl StatisticsCounter {
         Self::avg_duration(self.sum_total_evaluation_time, self.num_evals)
     }
 
-    /// Compute the average time spent in the original integrand evaluation call.
+    /// Compute the average physical time across all attempts and rotations.
     pub(crate) fn get_avg_integrand_timing(&self) -> Duration {
         Self::avg_duration(self.sum_integrand_evaluation_time, self.num_evals)
     }

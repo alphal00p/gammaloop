@@ -914,7 +914,6 @@ impl AmplitudeGraphTerm {
                 orientations,
                 context.settings,
                 context.evaluation_metadata,
-                context.record_primary_timing,
             )?
             .pop()
             .unwrap()
@@ -930,7 +929,6 @@ impl AmplitudeGraphTerm {
             &mut self.param_builder,
             orientations,
             context.evaluation_metadata,
-            context.record_primary_timing,
             context.settings.general.store_additional_weights_in_event
                 && self.threshold_counterterm.metadata_registry.is_some(),
         )?;
@@ -3458,7 +3456,6 @@ parent_lmb = [4]
                     &double,
                     &rotation,
                     &mut metadata,
-                    false,
                     Some(&canonical),
                 )
                 .unwrap_err();
@@ -3484,7 +3481,6 @@ parent_lmb = [4]
                     &quad,
                     &rotation,
                     &mut metadata,
-                    false,
                     Some(&canonical),
                 )?;
                 assert!(
@@ -3753,7 +3749,6 @@ sampling_multichanneling = false
             &rotated,
             &rotation,
             &mut crate::integrands::evaluation::EvaluationMetaData::new_empty(),
-            false,
             Some(&canonical),
         )?;
         assert!(

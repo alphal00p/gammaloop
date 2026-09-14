@@ -153,12 +153,7 @@ pub(crate) fn evaluate_evaluator_single<T: FloatLike + GenericEvaluatorFloat>(
     generic_evaluator: &mut GenericEvaluator,
     params: &[Complex<F<T>>],
     evaluation_metadata: &mut EvaluationMetaData,
-    record_primary_timing: bool,
 ) -> Complex<F<T>> {
-    if !record_primary_timing {
-        return <T as GenericEvaluatorFloat>::get_evaluator_single(generic_evaluator)(params);
-    }
-
     let start = std::time::Instant::now();
     let result = <T as GenericEvaluatorFloat>::get_evaluator_single(generic_evaluator)(params);
     evaluation_metadata.evaluator_evaluation_time = evaluation_metadata
@@ -171,12 +166,7 @@ pub(crate) fn evaluate_evaluator<T: FloatLike + GenericEvaluatorFloat>(
     generic_evaluator: &mut GenericEvaluator,
     params: &[Complex<F<T>>],
     evaluation_metadata: &mut EvaluationMetaData,
-    record_primary_timing: bool,
 ) -> Vec<DualOrNot<Complex<F<T>>>> {
-    if !record_primary_timing {
-        return <T as GenericEvaluatorFloat>::get_evaluator(generic_evaluator)(params);
-    }
-
     let start = std::time::Instant::now();
     let result = <T as GenericEvaluatorFloat>::get_evaluator(generic_evaluator)(params);
     evaluation_metadata.evaluator_evaluation_time = evaluation_metadata
@@ -2280,7 +2270,6 @@ impl EvaluatorStack {
         mut input: InputParams<'a, T>,
         orientations: SingleOrAllOrientations<'a, OID>,
         evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
     ) -> Vec<DualOrNot<Complex<F<T>>>>
     where
         usize: From<OID>,
@@ -2293,7 +2282,6 @@ impl EvaluatorStack {
                 &mut self.single_parametric,
                 input.as_slice(),
                 evaluation_metadata,
-                record_primary_timing,
             );
             if let Some(result) = &mut result {
                 for (r, v) in result.iter_mut().zip(output) {
@@ -2310,7 +2298,6 @@ impl EvaluatorStack {
         &'a mut self,
         input: InputParams<'a, T>,
         evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
     ) -> Result<Vec<DualOrNot<Complex<F<T>>>>> {
         let Some((iterative, len)) = &mut self.iterative else {
             return Err(eyre!(
@@ -2318,12 +2305,7 @@ impl EvaluatorStack {
             ));
         };
 
-        let output = evaluate_evaluator(
-            iterative,
-            input.as_slice(),
-            evaluation_metadata,
-            record_primary_timing,
-        );
+        let output = evaluate_evaluator(iterative, input.as_slice(), evaluation_metadata);
         if *len == 0 {
             return Err(eyre!("Iterative evaluator has no generated orientations"));
         }
@@ -2345,7 +2327,6 @@ impl EvaluatorStack {
         &'a mut self,
         input: InputParams<'a, T>,
         evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
     ) -> Result<Vec<DualOrNot<Complex<F<T>>>>> {
         let Some(summed_function_map) = &mut self.summed_function_map else {
             return Err(eyre!(
@@ -2363,7 +2344,6 @@ impl EvaluatorStack {
             summed_function_map,
             input.as_slice(),
             evaluation_metadata,
-            record_primary_timing,
         ))
     }
 
@@ -2371,7 +2351,6 @@ impl EvaluatorStack {
         &'a mut self,
         input: InputParams<'a, T>,
         evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
     ) -> Result<Vec<DualOrNot<Complex<F<T>>>>> {
         let Some(summed) = &mut self.summed else {
             return Err(eyre!(
@@ -2383,7 +2362,6 @@ impl EvaluatorStack {
             summed,
             input.as_slice(),
             evaluation_metadata,
-            record_primary_timing,
         ))
     }
     #[instrument(
@@ -2395,7 +2373,6 @@ impl EvaluatorStack {
             orientations,
             settings,
             evaluation_metadata,
-            record_primary_timing
         ),
         fields(
             num_orientations = orientations.len(),
@@ -2408,7 +2385,6 @@ impl EvaluatorStack {
         orientations: SingleOrAllOrientations<'a, OID>,
         settings: &RuntimeSettings,
         evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
     ) -> Result<Vec<DualOrNot<Complex<F<T>>>>>
     where
         usize: From<OID>,
@@ -2426,7 +2402,6 @@ impl EvaluatorStack {
                 &mut self.single_parametric,
                 input.as_slice(),
                 evaluation_metadata,
-                record_primary_timing,
             ));
         }
 
@@ -2443,21 +2418,14 @@ impl EvaluatorStack {
         }
 
         match settings.general.evaluator_method {
-            EvaluatorMethod::SingleParametric => Ok(self.evaluate_parametric(
-                input,
-                orientations,
-                evaluation_metadata,
-                record_primary_timing,
-            )),
-            EvaluatorMethod::Iterative => {
-                self.evaluate_iterative(input, evaluation_metadata, record_primary_timing)
+            EvaluatorMethod::SingleParametric => {
+                Ok(self.evaluate_parametric(input, orientations, evaluation_metadata))
             }
+            EvaluatorMethod::Iterative => self.evaluate_iterative(input, evaluation_metadata),
             EvaluatorMethod::SummedFunctionMap => {
-                self.evaluate_summed_fnmap(input, evaluation_metadata, record_primary_timing)
+                self.evaluate_summed_fnmap(input, evaluation_metadata)
             }
-            EvaluatorMethod::Summed => {
-                self.evaluate_summed(input, evaluation_metadata, record_primary_timing)
-            }
+            EvaluatorMethod::Summed => self.evaluate_summed(input, evaluation_metadata),
         }
     }
 
@@ -5132,7 +5100,6 @@ mod tests {
                     id: OrientationID(runtime_id),
                 },
                 &mut metadata,
-                false,
             );
             assert_eq!(scalar_value(actual), Complex::new_re(F(expected)));
         }
@@ -5143,7 +5110,7 @@ mod tests {
             filter: &filter,
         };
         assert_eq!(
-            scalar_value(stack.evaluate_parametric(make_input(), all, &mut metadata, false)),
+            scalar_value(stack.evaluate_parametric(make_input(), all, &mut metadata)),
             Complex::new_re(F(17.0))
         );
 
@@ -5157,7 +5124,7 @@ mod tests {
             assert_eq!(
                 scalar_value(
                     stack
-                        .evaluate(make_input(), all, &runtime_settings, &mut metadata, false,)
+                        .evaluate(make_input(), all, &runtime_settings, &mut metadata,)
                         .unwrap()
                 ),
                 Complex::new_re(F(17.0))
