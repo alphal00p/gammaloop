@@ -1379,13 +1379,6 @@ in
       secrets = [ "SYMBOLICA_LICENSE" ];
     };
 
-    gammaloop-nextest-docs = {
-      package = "packages.${system}.nix-ci-check-gammaloop-nextest-docs";
-      system = system;
-      in-repo = true;
-      secrets = [ "SYMBOLICA_LICENSE" ];
-    };
-
     gammaloop-nextest-clinnet = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-clinnet";
       system = system;
