@@ -785,6 +785,91 @@ mod tests {
     }
 
     #[test]
+    fn stability_ecm_relative_tolerances_default_and_roundtrip() {
+        let _guard = ShowDefaultsGuard::new(false);
+        for settings in [
+            StabilityLevelSetting::default_double(),
+            StabilityLevelSetting::default_quad(),
+            StabilityLevelSetting::default_arb(),
+        ] {
+            let serialized = toml::to_string(&settings).unwrap();
+            assert!(!serialized.contains("ecm_relative_tolerance"));
+            assert_eq!(
+                toml::from_str::<StabilityLevelSetting>(&serialized).unwrap(),
+                settings
+            );
+        }
+
+        let settings = StabilityLevelSetting {
+            ecm_relative_tolerance_for_re: 1e-100,
+            ecm_relative_tolerance_for_im: 2e-90,
+            ..StabilityLevelSetting::default_arb()
+        };
+        let serialized = toml::to_string(&settings).unwrap();
+        assert_eq!(
+            toml::from_str::<StabilityLevelSetting>(&serialized).unwrap(),
+            settings
+        );
+        let schema = serde_json::to_value(schemars::schema_for!(StabilityLevelSetting)).unwrap();
+        for field in [
+            "ecm_relative_tolerance_for_re",
+            "ecm_relative_tolerance_for_im",
+        ] {
+            assert_eq!(schema["properties"][field]["minimum"], 0.0);
+        }
+
+        let defaults: StabilitySettings = toml::from_str("").unwrap();
+        assert_eq!(defaults.integrated_energy_dimension, None);
+        assert!(
+            !toml::to_string(&defaults)
+                .unwrap()
+                .contains("integrated_energy_dimension")
+        );
+        let declared = StabilitySettings {
+            integrated_energy_dimension: Some(-6),
+            levels: vec![settings],
+            ..defaults
+        };
+        assert_eq!(
+            toml::from_str::<StabilitySettings>(&toml::to_string(&declared).unwrap()).unwrap(),
+            declared
+        );
+        drop(_guard);
+        let _guard = ShowDefaultsGuard::new(true);
+        for settings in [
+            StabilityLevelSetting::default_double(),
+            StabilityLevelSetting::default_quad(),
+            StabilityLevelSetting::default_arb(),
+        ] {
+            let shown = serde_json::to_value(settings).unwrap();
+            assert_eq!(shown["ecm_relative_tolerance_for_re"], 0.0);
+            assert_eq!(shown["ecm_relative_tolerance_for_im"], 0.0);
+        }
+        assert_eq!(
+            serde_json::to_value(&declared).unwrap()["integrated_energy_dimension"],
+            -6
+        );
+    }
+
+    #[test]
+    fn stability_ecm_relative_tolerances_reject_invalid_values() {
+        let _guard = ShowDefaultsGuard::new(false);
+        let defaults = toml::to_string(&StabilityLevelSetting::default_arb()).unwrap();
+        for field in [
+            "ecm_relative_tolerance_for_re",
+            "ecm_relative_tolerance_for_im",
+        ] {
+            for invalid in ["-1.0", "nan", "inf", "-inf"] {
+                let text = format!("{defaults}\n{field} = {invalid}\n");
+                assert!(
+                    toml::from_str::<StabilityLevelSetting>(&text).is_err(),
+                    "{field} = {invalid}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn uv_localisation_smooth_sliver_defaults_and_roundtrips() {
         let defaults: UVLocalisationSettings = toml::from_str("").unwrap();
         assert!(!defaults.smooth_sliver);
@@ -872,6 +957,13 @@ mod tests {
 #[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct StabilitySettings {
+    /// Energy dimension of the integrated physical quantity after flux
+    /// normalization and before conversion to output units. Required when an
+    /// E_cm-relative tolerance is enabled for a physical evaluation; reference
+    /// functions carry their own known dimensions. Direct momentum evaluations
+    /// subtract the dimension of their missing spatial integration measure.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub integrated_energy_dimension: Option<i32>,
     #[serde(skip_serializing_if = "is_default_rotation_axis")]
     pub rotation_axis: Vec<RotationSetting>,
     #[serde(skip_serializing_if = "is_default_stability_levels")]
@@ -889,6 +981,7 @@ pub struct StabilitySettings {
 impl Default for StabilitySettings {
     fn default() -> Self {
         Self {
+            integrated_energy_dimension: None,
             rotation_axis: _default_rotation_axis(),
             levels: _default_stability_levels(),
             check_on_norm: true,
@@ -935,6 +1028,28 @@ pub struct StabilityLevelSetting {
     pub precision: Precision,
     pub required_precision_for_re: f64,
     pub required_precision_for_im: f64,
+    /// Dimensionless real-component probe disagreement relative to E_cm raised
+    /// to the observable's declared energy dimension, with its output-unit
+    /// conversion. Includes every sample factor and the outer grid weight;
+    /// direct momentum densities account for the missing spatial measure.
+    /// Zero disables this alternative to relative accuracy. This is not the
+    /// integrator's target standard error.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_nonnegative_finite_f64",
+        skip_serializing_if = "is_float::<0>"
+    )]
+    #[schemars(range(min = 0.0))]
+    pub ecm_relative_tolerance_for_re: f64,
+    /// Independent dimensionless imaginary-component tolerance, with the same
+    /// E_cm-relative convention as `ecm_relative_tolerance_for_re`.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_nonnegative_finite_f64",
+        skip_serializing_if = "is_float::<0>"
+    )]
+    #[schemars(range(min = 0.0))]
+    pub ecm_relative_tolerance_for_im: f64,
     pub escalate_for_large_weight_threshold: f64,
 }
 
@@ -944,6 +1059,8 @@ impl StabilityLevelSetting {
             precision: Precision::Double,
             required_precision_for_re: 1e-5,
             required_precision_for_im: 1e-5,
+            ecm_relative_tolerance_for_re: 0.0,
+            ecm_relative_tolerance_for_im: 0.0,
             escalate_for_large_weight_threshold: 0.9,
         }
     }
@@ -953,6 +1070,8 @@ impl StabilityLevelSetting {
             precision: Precision::Quad,
             required_precision_for_re: 1e-5,
             required_precision_for_im: 1e-5,
+            ecm_relative_tolerance_for_re: 0.0,
+            ecm_relative_tolerance_for_im: 0.0,
             escalate_for_large_weight_threshold: -1.0,
         }
     }
@@ -962,6 +1081,8 @@ impl StabilityLevelSetting {
             precision: Precision::Arb,
             required_precision_for_re: 1e-5,
             required_precision_for_im: 1e-5,
+            ecm_relative_tolerance_for_re: 0.0,
+            ecm_relative_tolerance_for_im: 0.0,
             escalate_for_large_weight_threshold: -1.0,
         }
     }

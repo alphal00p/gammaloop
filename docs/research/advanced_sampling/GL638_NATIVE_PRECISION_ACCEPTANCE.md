@@ -223,3 +223,72 @@ for `unstable_replay.rs` and
 for `unstable_native_replay.rs`; their link and execution records are retained
 beside the captures. This correction changes no sampling map or threshold
 metadata and establishes no new variance or bounded-weight claim.
+
+## E_cm-relative agreement for a vanishing component
+
+A subsequent 50-worker MC calibration retained fifteen unresolved evaluations.
+The first iteration's eight failures were reproduced as exact Samples: all
+probes were finite, with complete real magnitudes between approximately
+`2.75e-308` and `7.39e-306`, above the machine-underflow rule's bound. Their
+imaginary components agreed accurately. This is a distinct case: increasing a
+physical tolerance must not be disguised as changing floating-point range.
+The other seven flags and the later c=4 SUM validation's single flag retain
+their failed status until independently replayed or reproduced.
+
+The optional runtime agreement test is now dimensionless and defaults to zero:
+
+```toml
+[stability]
+integrated_energy_dimension = -2
+
+# Add these fields to the final Arb entry of the existing stability stack.
+[[stability.levels]]
+precision = "Arb"
+required_precision_for_re = 1e-12
+required_precision_for_im = 1e-12
+ecm_relative_tolerance_for_re = 1e-100
+ecm_relative_tolerance_for_im = 0.0
+escalate_for_large_weight_threshold = -1.0
+```
+
+For every component, compare the native fully weighted probe disagreement with
+the quantity the checker actually returns, divided by `U * E_cm^d`. Here `d`
+is the declared integrated energy dimension after flux normalization and `U`
+is the conversion actually applied to reported units. The component checker
+returns its rotation average; norm checking returns the primary probe. Direct
+momentum densities subtract their missing `3L` powers from `d`. Physical
+evaluations require an explicit dimension when this allowance is enabled;
+arbitrary numerator dimensions are not inferred from UV power counting.
+Gaussian reference values and raw second moments instead have known dimensions
+zero and two and use no cross-section unit conversion.
+
+The optional test waives only relative-disagreement rejection. It preserves
+native values, measured relative discrepancies, large-weight escalation,
+nonfinite rejection and the separately configured exact-zero policy. Signed
+and absolute estimators, and real and imaginary components, remain independent.
+Reference second moments use the stricter of the two component allowances.
+No dimensional cutoff or unscaled absolute-tolerance field is introduced.
+
+Compilation, Clippy and twelve focused tests passed, including the existing
+production cut fixture extended to check actual cube/raw source handling,
+reference admission and physical-dimension errors. Energy/unit rescaling,
+outer-weight amplification, returned-value bounds and independent absolute
+payloads are covered. The Python settings test is added but awaits a rebuilt
+extension. The test run is
+`/tmp/gl638-final-physics-screen/tests-build13-attempt2.log`; earlier compile
+fixture mistakes and a nested serialization-guard deadlock are retained in the
+preceding logs and were corrected without relaxing assertions.
+
+The optimized build13 replay now passes all eleven exact saved Samples: the
+eight captured failures and three stable controls. With the allowance disabled,
+the original eight unstable statuses are reproduced; enabling only the final
+Arb real allowance accepts them. All four returned components (signed and
+absolute, real and imaginary) remain exactly unchanged, including the controls.
+Independent native probes satisfy the configured component bounds. The replay
+took 150.0 seconds and left the state and inputs unchanged; it is a saved-point
+regression, not a new integration or validation of the other unresolved flags.
+The complete capture is
+`/tmp/gl638-final-physics-screen/unstable-replay/results-ecm-regression-build13/summary.json`
+(SHA256 `ebf30236b45bc7300549036b17c567981b288a3e76518e12b46452b971c2efcc`);
+`analysis-ecm-regression-build13.json` in the parent directory contains the
+sixteen aggregate checks and all eleven component-by-component audits.
