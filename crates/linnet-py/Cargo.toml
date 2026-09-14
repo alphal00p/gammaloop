@@ -18,6 +18,7 @@ path = "src/bin/stubgen.rs"
 required-features = ["python_stubgen"]
 
 [dependencies]
+ciborium = "0.2.2"
 dot-parser = { workspace = true }
 linnet = { workspace = true }
 linnest = { workspace = true }

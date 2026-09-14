@@ -10,6 +10,7 @@ mod graph;
 mod mutations;
 mod native_graph;
 mod render;
+mod streaming;
 mod topology;
 mod typst;
 
@@ -21,6 +22,7 @@ fn linnet_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
     dot::register(module)?;
     typst::register_typst_api(module)?;
     render::register(module)?;
+    streaming::register(module)?;
     Ok(())
 }
 
@@ -58,6 +60,7 @@ _NativeValue: typing.TypeAlias = (
     | Compass
     | Routing
     | RoutePoints
+    | DanglingTangent
     | Anchor
     | Pattern
     | EdgeLengthResolution
@@ -104,6 +107,7 @@ _StyleLayers: typing.TypeAlias = _Style | builtins.list[_NativeDict] | builtins.
 _PlacementValue: typing.TypeAlias = Placement | _NativeDict | _TypstExpression | None | Inherit
 _CompassValue: typing.TypeAlias = Compass | None | Inherit
 _RoutingValue: typing.TypeAlias = Routing | None | Inherit
+_DanglingTangentValue: typing.TypeAlias = DanglingTangent | Auto | Inherit
 _AnchorValue: typing.TypeAlias = Anchor | Auto | None | Inherit
 _Radius: typing.TypeAlias = builtins.int | builtins.float | builtins.list[builtins.int | builtins.float] | builtins.tuple[builtins.int | builtins.float, ...] | _ValueExpression | Inherit
 _Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets | _ValueExpression | Inherit
@@ -252,6 +256,7 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         ("PyMarkSymbol", "MarkSymbol"),
         ("PyDrawingSelectors", "DrawingSelectors"),
         ("PyRoutePoints", "RoutePoints"),
+        ("PyDanglingTangent", "DanglingTangent"),
         ("PyStrokeJoin", "StrokeJoin"),
         ("PyTextStyle", "TextStyle"),
         ("PyNodeValue", "NodeValue"),

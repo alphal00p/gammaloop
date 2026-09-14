@@ -2739,6 +2739,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             epochs=10,
             crossing_penalty=20,
             dangling_repulsion=2,
+            dangling_centroid_repulsion=1.25,
             edge_edge_repulsion=0.2,
             directional_force=4.5,
             label_length_scale=1.1,
@@ -2790,6 +2791,8 @@ class TestTypedTypstSurface(unittest.TestCase):
             edge_resolve_length=lp.EdgeLengthResolution.Shorter,
             edge_accuracy=0.001,
             edge_optimize=True,
+            edge_split_gap=0.25,
+            edge_dangling_tangent=lp.DanglingTangent.Horizontal,
             source_style=[{"stroke": stroke}],
             sink_style={"stroke": stroke},
             edge_label=lp.MathSymbol("p", subscript=1),
@@ -2901,6 +2904,25 @@ class TestTypedTypstSurface(unittest.TestCase):
             lp.DrawOptions(node_outset=lp.Length.pt(1))
         with self.assertRaises(TypeError):
             lp.DrawOptions(show_half_edge_ids=1)
+        with self.assertRaises(TypeError):
+            lp.DrawOptions(edge_split_gap=-0.1)
+        with self.assertRaises(TypeError):
+            lp.DrawOptions(edge_dangling_tangent="horizontal")
+        lp.DrawOptions(edge_dangling_tangent=lp.AUTO)
+        for tangent in (
+            lp.DanglingTangent.Horizontal,
+            lp.DanglingTangent.Vertical,
+        ):
+            lp.DrawOptions(edge_dangling_tangent=tangent)
+            lp.EdgeDrawing(style={"dangling-tangent": tangent})
+            lp.DrawOptions(source_style={"dangling-tangent": tangent})
+        lp.EdgeDrawing(style={"dangling-tangent": lp.AUTO})
+        with self.assertRaises(TypeError):
+            lp.EdgeDrawing(style={"dangling-tangent": "horizontal"})
+        with self.assertRaises(TypeError):
+            lp.DrawOptions(source_style={"dangling-tangent": "horizontal"})
+        with self.assertRaises(ValueError):
+            lp.EdgeDrawing(style={"dangling_tangent": lp.AUTO})
         lp.DrawOptions(subgraph=[[True, False], [False, True]])
         lp.DrawOptions(
             subgraph=[
@@ -2961,6 +2983,42 @@ class TestTypedTypstSurface(unittest.TestCase):
                 reference.call()
             with self.subTest(reference=reference), self.assertRaises(TypeError):
                 reference.bind(fill="red")
+
+    def test_draw_cut_geometry_options_are_typed_and_serialized(self):
+        graph, _, _, _ = sample_graph(
+            render_config=lp.RenderConfig(
+                drawing=lp.DrawOptions(
+                    edge_split_gap=0.25,
+                    edge_dangling_tangent=lp.DanglingTangent.Vertical,
+                )
+            )
+        )
+
+        source = graph.prepare_render().typst_source
+        self.assertIn('("edge-split-gap"): 0.25', source)
+        self.assertIn('("edge-dangling-tangent"): "vertical"', source)
+
+        graph, _, _, _ = sample_graph(
+            render_config=lp.RenderConfig(
+                drawing=lp.DrawOptions(edge_dangling_tangent=lp.AUTO)
+            )
+        )
+        self.assertIn(
+            '("edge-dangling-tangent"): auto',
+            graph.prepare_render().typst_source,
+        )
+
+    def test_dangling_centroid_repulsion_is_typed_and_serialized(self):
+        graph, _, _, _ = sample_graph(
+            render_config=lp.RenderConfig(
+                layouts=lp.LayoutOptions(dangling_centroid_repulsion=1.25)
+            )
+        )
+
+        self.assertIn(
+            '("gamma-dangling-centroid"): 1.25',
+            graph.prepare_render().typst_source,
+        )
 
     def test_typed_option_constructors_expose_explicit_runtime_signatures(self):
         constructors = (

@@ -801,7 +801,7 @@ symbol = "documentation source ownership"
 # snapshot renders, whose source-link validation reads the staged repository.
 anchor = "repositoryDocumentationSources ="
 end_anchor = "documentationRegistry = builtins.fromTOML"
-digest = "d22b900d4572a53059527c437c6de9e92caef93f"
+digest = "e9896090fd53ab4f5ede95116048e0420b80bb01"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -818,7 +818,7 @@ symbol = "workspace package source ownership"
 # the notebook sources linked from their generated pages.
 anchor = "documentationCatalogAnnotatedItemSourcePaths ="
 end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
-digest = "dd05832d06b0a3fd8627ca90720992d8f5fda8cc"
+digest = "3cbc3214ce45d19eb3032bf6f3ff067246c7c90a"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -830,7 +830,7 @@ end_anchor = "\nin\n{\n  inherit"
 # Reviewed 2026-09-14: the terminal Python closure supplies pinned Typst;
 # Cargo builds its wheel offline and uv installs it without resolving the
 # inherited Nix packages. The reusable Cargo producer boundary is unchanged.
-digest = "75cb8f9d0ee20d502b428e51a0cfb0bbc79d0c00"
+digest = "81b92fb935c6ac86f29956cf77b5042e166db144"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

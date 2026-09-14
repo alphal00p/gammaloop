@@ -16,6 +16,7 @@ dot-parser = { workspace = true }
 linnet = { workspace = true, features = ["drawing", "rkyv", "serde"] }
 rkyv = { version = "0.7", features = ["validation"] }
 serde = { version = "1.0", features = ["derive"] }
+self_cell = { workspace = true }
 
 cgmath = { version = "0.18.0", features = ["serde"] }
 figment = "0.10.19"

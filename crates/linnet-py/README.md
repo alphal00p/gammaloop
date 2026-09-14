@@ -38,8 +38,8 @@ and development instructions are maintained in the Linnet documentation there.
 
 ## Marimo examples
 
-The generic and physics notebooks under `examples/` carry PEP 723 dependencies
-for native sandboxing and browser installation. Native editable sessions still
+The generic, physics, and streaming notebooks under `examples/` carry PEP 723
+dependencies for native sandboxing and browser installation. Native editable sessions still
 use the workspace package directly:
 
 ```console
@@ -47,7 +47,7 @@ uvx --from marimo==0.24.0 --with-editable crates/linnet-py \
   marimo edit crates/linnet-py/examples/rendering_api.py
 ```
 
-Once an Emscripten wheel is available, export both notebooks as editable static
+Once an Emscripten wheel is available, export the notebooks as editable static
 WASM pages without changing their checked-in dependency metadata:
 
 ```console
@@ -61,12 +61,26 @@ The helper stages the local wheel override temporarily, runs Marimo's strict
 `MW` checks, exports in edit mode, and serves the result for an HTTP smoke test.
 Omit `--wheel` after publishing the browser wheel. Pass `--browser-smoke` in an
 environment with Playwright and Chromium to wait for a real SVG render from
-each Pyodide notebook.
+each Pyodide notebook. Use `--notebook layout_stream` to export just the live
+layout demo, and `--browser-executable /path/to/chromium` for a Nix browser.
 
 The exported pages embed their Python source and open with editable code cells;
-browser edits do not modify the checked-in notebooks. Serve the output directory
-over HTTP (browsers cannot launch Pyodide from `file://`), for example:
+browser edits do not modify the checked-in notebooks. The Linnet wheel is bundled;
+Marimo, Pyodide, and other dependencies load from the network on first use.
+Serve the output directory over HTTP (browsers cannot launch Pyodide from `file://`), for example:
 
 ```console
 python -m http.server --directory dist/linnet-wasm
+```
+
+`examples/layout_stream.py` is a force-layout proof of concept with a DOT editor,
+collapsible parameter sliders, pause/resume, and live SVG updates. It consumes
+`LayoutStream.from_dot(...)` lazily; the preview omits Typst label measurement
+and final typography. Its browser export uses the same native solver compiled
+into the local Emscripten wheel.
+
+```console
+nix develop --command uv run --no-project --with marimo==0.24.0 \
+  --with anywidget==0.9.18 --with-editable crates/linnet-py \
+  marimo edit crates/linnet-py/examples/layout_stream.py
 ```

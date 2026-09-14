@@ -113,9 +113,11 @@ let
         (workspaceRoot + "/crates/linnet-py/uv.lock")
         (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
         (workspaceRoot + "/crates/linnet-py/examples/physics_render_settings.py")
+        (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")
         (workspaceRoot + "/crates/linnet-py/examples/rendering_api.py")
         (workspaceRoot + "/crates/linnet-py/tests/test_basic.py")
         (workspaceRoot + "/crates/linnet-py/tests/test_wasm.py")
+        (workspaceRoot + "/crates/linnet-py/tests/test_streaming.py")
       ]
     );
   };
@@ -330,7 +332,8 @@ let
       "$linnet_wheels"/linnet_py-*.whl
     "$linnet_python/bin/python" -m unittest \
       crates/linnet-py/tests/test_basic.py \
-      crates/linnet-py/tests/test_wasm.py
+      crates/linnet-py/tests/test_wasm.py \
+      crates/linnet-py/tests/test_streaming.py
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
     svg_assets="$TMPDIR/alphal00p-svg-assets"
     bash scripts/render-docs-svg-assets.sh "$svg_assets"

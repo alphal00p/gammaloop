@@ -22,7 +22,8 @@ build = "cp314-*"
 
 [tool.cibuildwheel.pyodide]
 repair-wheel-command = ""
-test-command = "python -m unittest {project}/tests/test_wasm.py"
+test-sources = ["crates/linnet-py/tests/test_wasm.py", "crates/linnet-py/tests/test_streaming.py"]
+test-command = "python -m unittest crates/linnet-py/tests/test_wasm.py crates/linnet-py/tests/test_streaming.py"
 
 [build-system]
 requires = ["maturin>=1.13.2,<2"]

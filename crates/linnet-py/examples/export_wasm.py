@@ -47,6 +47,7 @@ class Notebook:
 NOTEBOOKS = (
     Notebook("rendering_api.py", "generic"),
     Notebook("physics_render_settings.py", "physics"),
+    Notebook("layout_stream.py", "stream"),
 )
 
 
@@ -106,6 +107,7 @@ def with_local_wheel(source: str, wheel_name: str) -> str:
 @contextlib.contextmanager
 def staged_notebooks(
     wheel: Path | None,
+    notebooks: Sequence[Notebook],
 ) -> Iterator[tuple[tuple[Notebook, Path], ...]]:
     """Stage copies so a local wheel override never edits the notebooks."""
 
@@ -117,7 +119,7 @@ def staged_notebooks(
             shutil.copy2(wheel, wheels / wheel.name)
 
         staged = []
-        for notebook in NOTEBOOKS:
+        for notebook in notebooks:
             source = notebook.source.read_text(encoding="utf-8")
             if wheel is not None:
                 source = with_local_wheel(source, wheel.name)
@@ -239,6 +241,7 @@ def browser_smoke(
     base_url: str,
     artifacts: Sequence[tuple[Notebook, Path]],
     timeout_seconds: float,
+    browser_executable: Path | None,
 ) -> None:
     try:
         from playwright.sync_api import sync_playwright
@@ -250,7 +253,9 @@ def browser_smoke(
 
     timeout = timeout_seconds * 1000
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
+        browser = playwright.chromium.launch(
+            executable_path=str(browser_executable) if browser_executable else None
+        )
         try:
             for notebook, artifact in artifacts:
                 page = browser.new_page()
@@ -293,7 +298,12 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         "--output",
         type=Path,
         required=True,
-        help="Directory for the two editable HTML-WASM notebooks",
+        help="Directory for the editable HTML-WASM notebooks",
+    )
+    parser.add_argument(
+        "--notebook",
+        choices=[Path(notebook.filename).stem for notebook in NOTEBOOKS],
+        help="Export one notebook (default: all)",
     )
     parser.add_argument(
         "--wheel",
@@ -306,7 +316,12 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--browser-smoke",
         action="store_true",
-        help="Open both exports in headless Chromium and wait for their SVGs",
+        help="Open the exports in headless Chromium and wait for their SVGs",
+    )
+    parser.add_argument(
+        "--browser-executable",
+        type=Path,
+        help="Chromium executable for --browser-smoke (for example from Nix)",
     )
     parser.add_argument(
         "--timeout",
@@ -324,14 +339,21 @@ def main(arguments: Sequence[str] | None = None) -> int:
     wheel = validate_wasm_wheel(options.wheel) if options.wheel else None
     output = options.output.expanduser().resolve()
 
-    with staged_notebooks(wheel) as staged:
+    notebooks = tuple(
+        notebook
+        for notebook in NOTEBOOKS
+        if options.notebook is None or Path(notebook.filename).stem == options.notebook
+    )
+    with staged_notebooks(wheel, notebooks) as staged:
         lint(staged)
         artifacts = export(staged, output)
 
     with serve(output) as base_url:
         http_smoke(base_url, artifacts, output, wheel)
         if options.browser_smoke:
-            browser_smoke(base_url, artifacts, options.timeout)
+            browser_smoke(
+                base_url, artifacts, options.timeout, options.browser_executable
+            )
 
     print(f"Editable Marimo WASM notebooks exported to {output}")
     return 0

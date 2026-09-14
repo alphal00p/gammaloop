@@ -169,6 +169,26 @@ pub struct PathLengthSpec {
     pub accuracy: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct PathIntersectionsSpec {
+    #[serde(
+        serialize_with = "serialize_bez_path",
+        deserialize_with = "deserialize_bez_path"
+    )]
+    pub a: BezPath,
+    #[serde(
+        serialize_with = "serialize_bez_path",
+        deserialize_with = "deserialize_bez_path"
+    )]
+    pub b: BezPath,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub accuracy: f64,
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum PatternInput {
@@ -249,6 +269,35 @@ pub struct CurvePathOutput {
     )]
     pub path: BezPath,
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct PathIntersection {
+    pub point: CurvePoint,
+    pub distance_a: f64,
+    pub distance_b: f64,
+    pub segment_a: usize,
+    pub segment_b: usize,
+    pub t_a: f64,
+    pub t_b: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SegmentInfo {
+    segment: PathSeg,
+    offset: f64,
+    length: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FlatPiece {
+    line: Line,
+    t0: f64,
+    t1: f64,
+}
+
+const MAX_INTERSECTION_FLATTEN_DEPTH: usize = 20;
+const TANGENT_SINE_TOLERANCE: f64 = 1e-7;
 
 fn default_hobby_omega() -> f64 {
     1.0
@@ -545,6 +594,13 @@ pub fn curve_path_length_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     encode_cbor(&output)
 }
 
+pub fn curve_path_intersections_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: PathIntersectionsSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize path intersections spec: {err}"))?;
+    let output = path_intersections(spec)?;
+    encode_cbor(&output)
+}
+
 fn trim_path(spec: TrimPathSpec) -> Result<CurvePathOutput, String> {
     let accuracy = validate_positive_accuracy(spec.accuracy)?;
     let start_outset = validate_outset(spec.start_outset, "start")?;
@@ -560,6 +616,229 @@ fn path_length(spec: PathLengthSpec) -> Result<f64, String> {
         .segments()
         .map(|segment| segment.arclen(accuracy))
         .sum())
+}
+
+fn path_intersections(spec: PathIntersectionsSpec) -> Result<Vec<PathIntersection>, String> {
+    let accuracy = validate_positive_accuracy(spec.accuracy)?;
+    let a = intersection_segment_info(&spec.a, accuracy)?;
+    let b = intersection_segment_info(&spec.b, accuracy)?;
+    let total_a = a.last().map_or(0.0, |item| item.offset + item.length);
+    let total_b = b.last().map_or(0.0, |item| item.offset + item.length);
+    let b_pieces = b
+        .iter()
+        .map(|info| {
+            let mut pieces = Vec::new();
+            flatten_intersection_segment(info.segment, 0.0, 1.0, accuracy * 0.25, 0, &mut pieces)?;
+            Ok(pieces)
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let mut result = Vec::new();
+
+    for (segment_a, a_info) in a.iter().enumerate() {
+        for (segment_b, (b_info, pieces)) in b.iter().zip(&b_pieces).enumerate() {
+            for &piece in pieces {
+                if (piece.line.p1 - piece.line.p0).hypot() <= f64::EPSILON {
+                    continue;
+                }
+                for hit in a_info.segment.intersect_line(piece.line) {
+                    let t_a = hit.segment_t.clamp(0.0, 1.0);
+                    let t_b = piece.t0 + hit.line_t * (piece.t1 - piece.t0);
+                    let Some((t_a, t_b, point)) =
+                        refine_crossing(a_info.segment, b_info.segment, t_a, t_b, accuracy)
+                    else {
+                        continue;
+                    };
+                    let distance_a =
+                        a_info.offset + a_info.segment.subsegment(0.0..t_a).arclen(accuracy);
+                    let distance_b =
+                        b_info.offset + b_info.segment.subsegment(0.0..t_b).arclen(accuracy);
+                    if path_endpoint_contact(distance_a, total_a, distance_b, total_b, accuracy) {
+                        continue;
+                    }
+                    result.push(PathIntersection {
+                        point: point.into(),
+                        distance_a,
+                        distance_b,
+                        segment_a,
+                        segment_b,
+                        t_a,
+                        t_b,
+                    });
+                }
+            }
+        }
+    }
+
+    result.sort_by(|left, right| {
+        left.distance_a
+            .total_cmp(&right.distance_a)
+            .then(left.distance_b.total_cmp(&right.distance_b))
+    });
+    result.dedup_by(|left, right| same_crossing(*left, *right, accuracy));
+    Ok(result)
+}
+
+fn intersection_segment_info(path: &BezPath, accuracy: f64) -> Result<Vec<SegmentInfo>, String> {
+    let mut offset = 0.0;
+    path.segments()
+        .map(|segment| {
+            if !segment.is_finite() {
+                return Err("curve intersection paths must contain only finite points".to_string());
+            }
+            let length = segment.arclen(accuracy);
+            if !length.is_finite() {
+                return Err("curve intersection path length must be finite".to_string());
+            }
+            let info = SegmentInfo {
+                segment,
+                offset,
+                length,
+            };
+            offset += length;
+            if !offset.is_finite() {
+                return Err("curve intersection cumulative path length must be finite".to_string());
+            }
+            Ok(info)
+        })
+        .collect()
+}
+
+fn flatten_intersection_segment(
+    segment: PathSeg,
+    t0: f64,
+    t1: f64,
+    tolerance: f64,
+    depth: usize,
+    output: &mut Vec<FlatPiece>,
+) -> Result<(), String> {
+    if matches!(segment, PathSeg::Line(_)) || intersection_flatness(segment) <= tolerance {
+        output.push(FlatPiece {
+            line: Line::new(segment.start(), segment.end()),
+            t0,
+            t1,
+        });
+        return Ok(());
+    }
+    if depth == MAX_INTERSECTION_FLATTEN_DEPTH {
+        return Err("curve intersection accuracy is too small for the path scale".to_string());
+    }
+
+    let middle = (t0 + t1) * 0.5;
+    flatten_intersection_segment(
+        segment.subsegment(0.0..0.5),
+        t0,
+        middle,
+        tolerance,
+        depth + 1,
+        output,
+    )?;
+    flatten_intersection_segment(
+        segment.subsegment(0.5..1.0),
+        middle,
+        t1,
+        tolerance,
+        depth + 1,
+        output,
+    )
+}
+
+fn intersection_flatness(segment: PathSeg) -> f64 {
+    match segment {
+        PathSeg::Line(_) => 0.0,
+        PathSeg::Quad(quad) => point_chord_distance(quad.p1, quad.p0, quad.p2)
+            .max(control_polygon_excess(&[quad.p0, quad.p1, quad.p2])),
+        PathSeg::Cubic(cubic) => point_chord_distance(cubic.p1, cubic.p0, cubic.p3)
+            .max(point_chord_distance(cubic.p2, cubic.p0, cubic.p3))
+            .max(control_polygon_excess(&[
+                cubic.p0, cubic.p1, cubic.p2, cubic.p3,
+            ])),
+    }
+}
+
+fn point_chord_distance(point: Point, start: Point, end: Point) -> f64 {
+    let chord = end - start;
+    let length = chord.hypot();
+    if length <= f64::EPSILON {
+        (point - start).hypot()
+    } else {
+        point_line_distance(point, start, chord, length)
+    }
+}
+
+fn control_polygon_excess(points: &[Point]) -> f64 {
+    let polygon: f64 = points
+        .windows(2)
+        .map(|pair| (pair[1] - pair[0]).hypot())
+        .sum();
+    (polygon - (points[points.len() - 1] - points[0]).hypot()).max(0.0)
+}
+
+fn refine_crossing(
+    a: PathSeg,
+    b: PathSeg,
+    mut t_a: f64,
+    mut t_b: f64,
+    accuracy: f64,
+) -> Option<(f64, f64, Point)> {
+    for _ in 0..16 {
+        let point_a = a.eval(t_a);
+        let point_b = b.eval(t_b);
+        let residual = point_a - point_b;
+        if residual.hypot() <= accuracy * 0.05 {
+            break;
+        }
+        let tangent_a = path_seg_tangent(&a, t_a);
+        let tangent_b = path_seg_tangent(&b, t_b);
+        let determinant = tangent_a.cross(tangent_b);
+        if determinant.abs() <= f64::EPSILON * tangent_a.hypot() * tangent_b.hypot() {
+            return None;
+        }
+        t_a -= residual.cross(tangent_b) / determinant;
+        t_b += tangent_a.cross(residual) / determinant;
+        if !(-1e-7..=1.0 + 1e-7).contains(&t_a) || !(-1e-7..=1.0 + 1e-7).contains(&t_b) {
+            return None;
+        }
+        t_a = t_a.clamp(0.0, 1.0);
+        t_b = t_b.clamp(0.0, 1.0);
+    }
+
+    let point_a = a.eval(t_a);
+    let point_b = b.eval(t_b);
+    if (point_a - point_b).hypot() > accuracy {
+        return None;
+    }
+    let tangent_a = path_seg_tangent(&a, t_a);
+    let tangent_b = path_seg_tangent(&b, t_b);
+    let tangent_scale = tangent_a.hypot() * tangent_b.hypot();
+    if tangent_scale <= f64::EPSILON
+        || tangent_a.cross(tangent_b).abs() / tangent_scale <= TANGENT_SINE_TOLERANCE
+    {
+        return None;
+    }
+    Some((
+        t_a,
+        t_b,
+        Point::new((point_a.x + point_b.x) * 0.5, (point_a.y + point_b.y) * 0.5),
+    ))
+}
+
+fn path_endpoint_contact(
+    distance_a: f64,
+    total_a: f64,
+    distance_b: f64,
+    total_b: f64,
+    accuracy: f64,
+) -> bool {
+    let endpoint = |distance: f64, total: f64| distance <= accuracy || total - distance <= accuracy;
+    endpoint(distance_a, total_a) || endpoint(distance_b, total_b)
+}
+
+fn same_crossing(a: PathIntersection, b: PathIntersection, accuracy: f64) -> bool {
+    let a_point = Point::from(a.point);
+    let b_point = Point::from(b.point);
+    (a_point - b_point).hypot() <= accuracy
+        && (a.distance_a - b.distance_a).abs() <= accuracy * 2.0
+        && (a.distance_b - b.distance_b).abs() <= accuracy * 2.0
 }
 
 fn validate_positive_accuracy(value: f64) -> Result<f64, String> {
@@ -1389,6 +1668,196 @@ mod tests {
         let result: Result<CurvePoint, _> = ciborium::de::from_reader(&bytes[..]);
 
         assert!(result.is_err());
+    }
+
+    fn segment_path(segment: impl Into<PathSeg>) -> BezPath {
+        BezPath::from_path_segments(std::iter::once(segment.into()))
+    }
+
+    fn intersection_spec(a: BezPath, b: BezPath) -> PathIntersectionsSpec {
+        PathIntersectionsSpec {
+            a,
+            b,
+            accuracy: 1e-6,
+        }
+    }
+
+    fn assert_close(actual: f64, expected: f64) {
+        assert!((actual - expected).abs() < 2e-5, "{actual} != {expected}");
+    }
+
+    #[test]
+    fn line_cubic_intersection_reports_point_and_arc_distances() {
+        let a = segment_path(Line::new((-2.0, 0.0), (2.0, 0.0)));
+        let b = segment_path(CubicBez::new(
+            (0.0, -2.0),
+            (0.0, -1.0),
+            (0.0, 1.0),
+            (0.0, 2.0),
+        ));
+
+        let hits = path_intersections(intersection_spec(a, b)).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_point_close(hits[0].point, point(0.0, 0.0));
+        assert_close(hits[0].distance_a, 2.0);
+        assert_close(hits[0].distance_b, 2.0);
+    }
+
+    #[test]
+    fn cubic_cubic_intersection_finds_all_crossings() {
+        let a = segment_path(CubicBez::new(
+            (-2.0, 0.0),
+            (-1.0, 0.0),
+            (1.0, 0.0),
+            (2.0, 0.0),
+        ));
+        let b = segment_path(CubicBez::new(
+            (-2.0, -1.0),
+            (-2.0, 4.0),
+            (2.0, -4.0),
+            (2.0, 1.0),
+        ));
+
+        let hits = path_intersections(intersection_spec(a, b)).unwrap();
+        assert_eq!(hits.len(), 3, "{hits:#?}");
+        assert!(
+            hits.windows(2)
+                .all(|pair| pair[0].distance_a < pair[1].distance_a)
+        );
+        assert_point_close(hits[1].point, point(0.0, 0.0));
+    }
+
+    #[test]
+    fn collinear_backtracking_cubic_keeps_distinct_parameter_crossings() {
+        let a = segment_path(Line::new((0.0, -1.0), (0.0, 1.0)));
+        let b = segment_path(CubicBez::new(
+            (-1.0, 0.0),
+            (4.0, 0.0),
+            (-4.0, 0.0),
+            (1.0, 0.0),
+        ));
+
+        let hits = path_intersections(intersection_spec(a, b)).unwrap();
+        assert_eq!(hits.len(), 3, "{hits:#?}");
+        assert!(
+            hits.windows(2)
+                .all(|pair| pair[0].distance_b < pair[1].distance_b)
+        );
+    }
+
+    #[test]
+    fn intersection_coalesces_segment_boundary_duplicates() {
+        let mut a = BezPath::new();
+        a.move_to((-3.0, 0.0));
+        a.line_to((0.0, 0.0));
+        a.line_to((3.0, 0.0));
+        let mut b = BezPath::new();
+        for x in [-2.0, 0.0, 2.0] {
+            b.move_to((x, -1.0));
+            b.line_to((x, 1.0));
+        }
+
+        let hits = path_intersections(intersection_spec(a, b)).unwrap();
+        assert_eq!(hits.len(), 3, "{hits:#?}");
+        assert_close(hits[0].point.x, -2.0);
+        assert_close(hits[1].point.x, 0.0);
+        assert_close(hits[2].point.x, 2.0);
+    }
+
+    #[test]
+    fn intersection_filters_endpoint_contacts_tangencies_and_misses() {
+        let horizontal = segment_path(Line::new((-2.0, 0.0), (2.0, 0.0)));
+        let shared = segment_path(Line::new((-2.0, 0.0), (-2.0, 1.0)));
+        let t_junction = segment_path(Line::new((0.0, 0.0), (0.0, 1.0)));
+        let tangent = segment_path(kurbo::QuadBez::new((-1.0, 1.0), (0.0, -1.0), (1.0, 1.0)));
+        let miss = segment_path(Line::new((-2.0, 1.0), (2.0, 1.0)));
+
+        assert!(
+            path_intersections(intersection_spec(horizontal.clone(), shared))
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            path_intersections(intersection_spec(horizontal.clone(), t_junction))
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            path_intersections(intersection_spec(horizontal.clone(), tangent))
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            path_intersections(intersection_spec(horizontal, miss))
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn reversing_a_path_reverses_its_intersection_distance() {
+        let a = segment_path(Line::new((-2.0, 0.0), (2.0, 0.0)));
+        let forward = segment_path(Line::new((-1.0, -3.0), (-1.0, 1.0)));
+        let reversed = segment_path(Line::new((-1.0, 1.0), (-1.0, -3.0)));
+
+        let forward_hit = path_intersections(intersection_spec(a.clone(), forward)).unwrap()[0];
+        let reverse_hit = path_intersections(intersection_spec(a, reversed)).unwrap()[0];
+        assert_close(forward_hit.distance_b, 3.0);
+        assert_close(reverse_hit.distance_b, 1.0);
+    }
+
+    #[test]
+    fn intersection_rejects_invalid_accuracy_and_geometry() {
+        let finite = segment_path(Line::new((0.0, 0.0), (1.0, 0.0)));
+        for accuracy in [0.0, f64::NAN] {
+            let mut spec = intersection_spec(finite.clone(), finite.clone());
+            spec.accuracy = accuracy;
+            assert!(path_intersections(spec).is_err());
+        }
+        let invalid = segment_path(Line::new((f64::INFINITY, 0.0), (1.0, 0.0)));
+        assert!(path_intersections(intersection_spec(invalid, finite.clone())).is_err());
+        let overflowing = segment_path(Line::new((-f64::MAX, 0.0), (f64::MAX, 0.0)));
+        assert!(path_intersections(intersection_spec(overflowing, finite)).is_err());
+
+        let mut overflowing_total = BezPath::new();
+        for y in [0.0, 1.0] {
+            overflowing_total.move_to((0.0, y));
+            overflowing_total.line_to((f64::MAX * 0.75, y));
+        }
+        let finite = segment_path(Line::new((0.0, 0.0), (1.0, 0.0)));
+        assert!(path_intersections(intersection_spec(overflowing_total, finite)).is_err());
+    }
+
+    #[test]
+    fn intersection_cbor_api_uses_typed_records() {
+        let spec = intersection_spec(
+            segment_path(Line::new((-1.0, 0.0), (1.0, 0.0))),
+            segment_path(Line::new((0.0, -1.0), (0.0, 1.0))),
+        );
+        let bytes = encode_cbor(&spec).unwrap();
+        let output_bytes = curve_path_intersections_bytes(&bytes).unwrap();
+        let output: Vec<PathIntersection> = ciborium::de::from_reader(&output_bytes[..]).unwrap();
+        let value: ciborium::Value = ciborium::de::from_reader(&output_bytes[..]).unwrap();
+
+        assert_eq!(output.len(), 1);
+        assert_point_close(output[0].point, point(0.0, 0.0));
+        let record = match &value {
+            ciborium::Value::Array(records) => &records[0],
+            _ => panic!("expected CBOR record array"),
+        };
+        assert_eq!(
+            cbor_map_keys(record),
+            vec![
+                "point",
+                "distance-a",
+                "distance-b",
+                "segment-a",
+                "segment-b",
+                "t-a",
+                "t-b",
+            ]
+        );
+        assert_cbor_point_tuple(cbor_map_get(record, "point"));
     }
 
     #[test]

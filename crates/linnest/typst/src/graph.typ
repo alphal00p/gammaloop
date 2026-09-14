@@ -609,7 +609,11 @@
   /// DOT compass point such as `"n"`, `"s"`, `"e"`, or `"w"`. -> none | string
   compass: none,
 ) = {
-  _impl.source(node, (name: name, id: id, statement: statement, compass: compass), ..args)
+  _impl.source(
+    node,
+    (name: name, id: id, statement: statement, compass: compass),
+    ..args,
+  )
 }
 
 /// Create a sink half-edge endpoint.
@@ -632,7 +636,11 @@
   /// DOT compass point such as `"n"`, `"s"`, `"e"`, or `"w"`. -> none | string
   compass: none,
 ) = {
-  _impl.sink(node, (name: name, id: id, statement: statement, compass: compass), ..args)
+  _impl.sink(
+    node,
+    (name: name, id: id, statement: statement, compass: compass),
+    ..args,
+  )
 }
 
 /// Create a graph edge item for @build.
@@ -640,9 +648,11 @@
 /// Positional arguments may contain one @source, one @sink, and optionally one
 /// Typst label used as the edge name. The numeric `id` chooses the edge order.
 /// Extra named arguments are captured as edge data fields, so
-/// `edge(source(<a>), sink(<b>), particle: "g")` stores
-/// `(particle: "g")`. The default draw style uses `data.label` as the
-/// visible edge label when present.
+/// `edge(source(<a>), sink(<b>), weight: 3)` stores `(weight: 3)`. `style` is
+/// first-class drawing metadata: `auto` asks `draw` for its configured/default
+/// style, a dictionary or callback patches that style, and `none` hides the
+/// painted edge. The default draw style uses
+/// `data.label` as the visible edge label when present.
 /// -> array
 #let edge(
   /// Source/sink half-edges and optional edge name; extra named arguments become data fields. -> any
@@ -663,6 +673,14 @@
   label-angle: none,
   /// Edge bend stored as a statement. -> none | int | float | string
   bend: none,
+  /// Positive finite dimensionless multiplier of each incidence's preferred
+  /// spring length in force/anneal layout, including dangling-edge doubling.
+  /// `none` preserves statements/defaults; a missing statement means `1`.
+  /// Does not set rendered length or change global `spring.length`.
+  /// -> none | int | float
+  spring-length: none,
+  /// Static logical-edge style, callback, `auto` fallback, or `none` to hide. -> auto | dictionary | array | function | none
+  style: auto,
   /// Additional flat edge statements. Used by DOT; values cannot nest. -> dictionary
   statements: (:),
 ) = _impl.edge(
@@ -675,6 +693,8 @@
     label-pos: label-pos,
     label-angle: label-angle,
     bend: bend,
+    spring-length: spring-length,
+    style: style,
     statements: statements,
   ),
   ..args,
@@ -683,11 +703,14 @@
 /// Create a grouped placement coordinate.
 ///
 /// `side: "+"` keeps the solved coordinate non-negative and `side: "-"`
-/// keeps it non-positive. Groups are layout constraints and therefore require
-/// pin placement, which is the @pos default.
+/// keeps it non-positive. `start` supplies an initial value without fixing the
+/// coordinate; multiple starts for one group are averaged. Groups are layout
+/// constraints and therefore require pin placement, which is the @pos default.
+/// Node and edge coordinates with the same group name and side share one axis
+/// coordinate throughout layout.
 ///
 /// ```example
-/// #group("right", side: "+")
+/// #group("right", side: "+", start: 4)
 /// ```
 /// -> dictionary
 #let group(
@@ -695,7 +718,9 @@
   name,
   /// Optional sign constraint: `"+"`, `"-"`, `"positive"`, or `"negative"`. -> none | string
   side: none,
-) = _impl.group(name, side)
+  /// Optional initial coordinate; unlike @pin, this remains movable. -> none | int | float
+  start: none,
+) = _impl.group(name, side, start)
 
 /// Mark one coordinate as a layout constraint.
 /// -> dictionary
@@ -714,14 +739,30 @@
 /// Create a first-class graph placement.
 ///
 /// The default `mode: "pin"` turns numeric coordinates into layout constraints
-/// and also makes the coordinates immediately drawable without a layout pass.
+/// and also makes the XY coordinates immediately drawable without a layout pass.
 /// Use `start(value)` for an individual coordinate that should only seed the
 /// layout, or `pin(value)` to pin an individual numeric coordinate when
 /// `mode: "start"` is used. Grouped coordinates are always layout constraints
 /// for their axis.
 ///
+/// `z` is auxiliary depth for force-based layout only, in the same numeric
+/// layout units as x and y (not Typst lengths). Use `pos(z: pin(2))` for a
+/// hard raw-depth pin or `pos(z: start(2))` for a movable initial depth.
+/// A bare `pos(z: 2)` follows `mode`, defaulting to `"pin"`. The global depth
+/// scale and flattening schedule may reduce effective depth to zero without
+/// changing a hard raw-depth pin. This is not a rendered third coordinate:
+/// node/edge output `pos` and drawing remain 2D. Statements retain the configured
+/// raw pin/seed, not the solved free depth, as `"pos-z"` (finite numeric text)
+/// and `"pos-z-mode"` (`"pin"` or `"start"`). Other layout backends do not use z.
+///
+/// Both @build and @map accept z placements on nodes and edge control points.
+/// A z-only placement leaves XY placement and constraints alone, including
+/// automatic edge midpoint seeds. Omitting z preserves existing depth metadata.
+/// Z groups, relative depth references, `dz`, and non-finite values are not
+/// supported; `ref`, `dx`, and `dy` continue to affect XY only.
+///
 /// ```example
-/// #pos(x: group("right", side: "+"), y: start(10))
+/// #pos(x: group("right", side: "+"), y: start(10), z: pin(2))
 /// ```
 /// -> dictionary
 #let pos(
@@ -729,7 +770,9 @@
   x: none,
   /// Absolute or grouped y coordinate. -> none | int | float | dictionary
   y: none,
-  /// Node reference for relative placement, by name or numeric index. -> none | label | int
+  /// Auxiliary force-layout depth, numeric or wrapped in @pin / @start. -> none | int | float | dictionary
+  z: none,
+  /// Node reference for relative XY placement, by name or numeric index. -> none | label | int
   ref: none,
   /// Relative x offset from `ref`. -> none | int | float
   dx: none,
@@ -738,23 +781,60 @@
   /// Placement mode: `"pin"` constrains layout, `"start"` only seeds it. -> string
   mode: "pin",
 ) = {
-  _impl.pos((x: x, y: y, ref: ref, dx: dx, dy: dy, mode: mode))
+  _impl.pos((x: x, y: y, z: z, ref: ref, dx: dx, dy: dy, mode: mode))
 }
 
-/// Map graph metadata to new native data.
+/// Map graph records with native-data and structural patches.
 ///
-/// The callbacks receive decoded records plus a `fields` dictionary containing
-/// merged statements and direct record fields. A callback returns `none` to
+/// `node` and `edge` accept either a callback for every record or a name-keyed
+/// dictionary. Dictionary keys are exact string names: `a` matches `<a>`, and
+/// `"D1.0"` matches the `<D1.0>` fragment produced by @cut. Each entry is a
+/// constant patch dictionary, a callback, or `none`. Unlisted records and
+/// unnamed records are skipped by name-keyed dictionaries. Every supplied name
+/// must exist, even when its entry is `none`. Unknown names and invalid mapper,
+/// entry, or callback return types are errors. There are no numeric-ID keys,
+/// array selectors, wildcard/default selectors, or recursive merges.
+/// `graph`, `source`, and `sink` still accept only a callback or `none`.
+///
+/// The callbacks receive the same full decoded records in either form, plus a
+/// `fields` dictionary merging native dictionary data, statements, and direct
+/// record fields, with later sources taking precedence. A callback returns `none` to
 /// leave the record unchanged, `(data: value)` to set new native data, or
-/// structural fields such as `pos`, `shift`, and `statements` to patch data
-/// seen by later layout calls.
+/// structural fields such as `pos`, `shift`, `spring-length`, and `statements`
+/// to patch data seen by later layout calls. `spring-length` is validated as a
+/// positive finite multiplier and stored in the edge statements used by the layout
+/// engine. Structural patches are applied separately from native Typst data, so
+/// content and stored functions in the existing `data` value are preserved.
+/// Unchanged fields in a returned full record are not reapplied; this preserves partial XY placements when patching z or data.
 /// Source and sink callbacks may likewise patch `statement`, `port-label`, and
 /// `compass` before subgraph and layout operations run.
+///
+/// Constant patches and callback results use identical semantics. Node structural
+/// keys are `pos`, `shift`, and `statements`; edges also accept `label-pos`,
+/// `label-angle`, `bend`, and `spring-length`. With no `data` key, other keys shallow-merge into
+/// existing native dictionary data (or replace non-dictionary data with that
+/// patch). An explicit `data` key instead replaces native data, ignoring other
+/// non-structural keys; `data: none` leaves native data unchanged. Native Typst
+/// content and stored functions are preserved, not serialized or invoked.
+/// A mapper or entry of `none`, an empty name map, an empty patch, or a callback
+/// returning `none` leaves the corresponding records unchanged.
 ///
 /// ```example
 /// #let g = build({ node(<a>) })
 /// #let g = map(g, node: node => (data: (label: [A])))
 /// #nodes(g).first().data.label
+/// ```
+///
+/// ```example
+/// #let g = build({
+///   node(<a>); node(<b>)
+///   edge(<D1>, source(<a>), sink(<b>), weight: 2)
+/// })
+/// #let g = map(g,
+///   node: (a: (label: [A]), b: none),
+///   edge: (D1: e => (weight: e.fields.weight + 1)),
+/// )
+/// #edge-data(g, <D1>).weight
 /// ```
 /// -> dictionary
 #let map(
@@ -762,16 +842,22 @@
   graph_,
   /// Callback for graph metadata records. -> none | function
   graph: none,
-  /// Callback for node records. -> none | function
+  /// Callback for all node records, or name-keyed patches/callbacks/no-ops. -> none | function | dictionary
   node: none,
-  /// Callback for edge records. -> none | function
+  /// Callback for all edge records, or name-keyed patches/callbacks/no-ops. -> none | function | dictionary
   edge: none,
   /// Callback for source half-edge records. -> none | function
   source: none,
   /// Callback for sink half-edge records. -> none | function
   sink: none,
 ) = {
-  _impl.map(graph_, (graph: graph, node: node, edge: edge, source: source, sink: sink))
+  _impl.map(graph_, (
+    graph: graph,
+    node: node,
+    edge: edge,
+    source: source,
+    sink: sink,
+  ))
 }
 
 /// Attach layout-relevant drawing style to a graph.
@@ -904,7 +990,7 @@
 #let nodes(
   /// Graph object to inspect. -> dictionary
   graph,
-  /// Optional subgraph filter; only nodes incident to selected half edges are returned. -> none | bytes
+  /// Optional subgraph filter; only nodes incident to selected half edges are returned. -> none | dictionary
   subgraph: none,
 ) = _impl.nodes(graph, subgraph)
 
@@ -924,7 +1010,7 @@
 #let edges(
   /// Graph object to inspect. -> dictionary
   graph,
-  /// Optional subgraph filter; only selected edges/half-edges are returned. -> none | bytes
+  /// Optional subgraph filter; selected edges retain their full endpoint records. -> none | dictionary
   subgraph: none,
 ) = _impl.edges(graph, subgraph)
 
@@ -1008,9 +1094,76 @@
   update,
 ) = _impl.update-edge-data(graph_, name, update)
 
-/// Join two graphs by matching dangling half-edge statements or ids on `key`.
+/// Open paired edges along a weighted directed half-edge cut.
 ///
-/// Supported key values are `"statement"`, `"compass"`, and `"id"`.
+/// `left` and `right` are disjoint subgraphs containing opposite halves of each
+/// cut edge. Their names identify boundary sides, not underlying source/sink flow
+/// or superficial drawing orientation. A half-edge annotation `(winding: n)`
+/// requests `n` same-direction seam passages; absent winding defaults to one.
+/// If both sides specify a winding they must agree. Net counts of cancelling
+/// recrossings are not a supported description of an opening.
+///
+/// The input is unchanged. Every cut edge yields source and sink stubs plus
+/// `n - 1` middle segments on auxiliary, unpainted boundary nodes. Fragment
+/// names are `<original.0>` through `<original.n>` in underlying source-to-sink
+/// order. Unnamed edges use `__linnest_cut_edge_ID` as the prefix; name collisions
+/// are errors.
+/// Cut geometry is reset for re-layout, while physical data and orientation are
+/// retained. Arbitrary Typst data, including content and callbacks, is remapped
+/// without serialization. Generated middle endpoint hedges inherit the data of
+/// the opposite original hedge, corresponding to the joined boundary side.
+///
+/// Output node/edge/half-edge records have `origin` relative to the input graph.
+/// Edge origins contain `(edge, name, segment, winding)`; uncut segments are
+/// `none`. Generated nodes have no original node. Boundary nodes and dangling
+/// cut edges also have `boundary`: `(edge, node, hedge, side, crossing, data,
+/// cut-data, origin)`, where `data` is the side's hedge annotation and `cut-data`
+/// its subgraph-wide data. `crossing` counts from zero along underlying flow.
+/// Boundary `hedge` and `origin` describe the input to the cut that created that
+/// boundary, even after subsequent cuts; `edge` and `node` always locate its
+/// current anchor. This differs from each record's immediate-input `origin`.
+/// The optional callback patches only endpoints created by this operation,
+/// exactly like @map; earlier boundary placements and annotations are retained.
+///
+/// ```example
+/// #let g = build({
+///   node(<a>)
+///   node(<b>)
+///   edge(source(<a>), <e>, sink(<b>), label: [$k$])
+/// })
+/// #let left = subgraph.select(g, sink: (<e>,))
+/// #let left = subgraph.with-data(g, left, hedge: (winding: 2))
+/// #let right = subgraph.select(g, source: (<e>,))
+/// #let opened = cut(g, left: left, right: right)
+/// #edges(opened).len()
+/// ```
+/// -> dictionary
+#let cut(
+  /// Graph to open, without modifying it. -> dictionary
+  graph_,
+  /// Selected left half-edges, optionally annotated with winding. -> dictionary
+  left: none,
+  /// Involution partners defining the right side. -> dictionary
+  right: none,
+  /// Placement/data patch for each newly created boundary node or dangling edge. -> none | dictionary | function
+  boundary: none,
+) = _impl.cut(graph_, left, right, boundary)
+
+/// Inspect all generated cut endpoints with their current solved positions.
+///
+/// Returns the boundary records described by @cut plus `pos`. For a dangling
+/// endpoint, `node` is `none` and `pos` is its edge position; for a middle
+/// segment endpoint it is the auxiliary node position. This makes boundary
+/// annotations independent of their internal node/edge representation.
+/// -> array
+#let boundaries(
+  /// Graph returned by @cut, optionally styled, patched, or laid out. -> dictionary
+  graph_,
+) = _impl.boundaries(graph_)
+
+/// Join two graphs by matching dangling half-edge metadata on `key`.
+///
+/// Supported key values are `"statement"`, `"compass"`, `"port-label"`, and `"id"`. The join is partial: unmatched dangling half-edges remain. Matching identities must be unique within each flow, and node/edge names must not collide across the inputs. Native Typst data is preserved; when both sides provide a dictionary, right-only fields are retained and left-side fields take precedence.
 ///
 /// ```example
 /// #let left = build({
@@ -1029,9 +1182,23 @@
   left,
   /// Right graph object. -> dictionary
   right,
-  /// Dangling half-edge match key: `"statement"`, `"compass"`, or `"id"`. -> string
+  /// Dangling half-edge match key: `"statement"`, `"compass"`, `"port-label"`, or `"id"`. -> string
   key: "statement",
 ) = _impl.join(left, right, key)
+
+/// Join two graphs by matching dangling edge records on an edge statement key.
+///
+/// This is distinct from graph.join: it matches edge-level statements rather than
+/// half-edge metadata. The same partial-join, collision, and data-merge rules
+/// apply. -> dictionary
+#let join-edges(
+  /// Left graph object. -> dictionary
+  left,
+  /// Right graph object. -> dictionary
+  right,
+  /// Nonempty edge statement key used for matching. -> string
+  key: "statement",
+) = _impl.join-edges(left, right, key)
 
 /// Return subgraph objects for the graph's cycle basis.
 ///

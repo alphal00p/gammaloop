@@ -417,6 +417,8 @@
       "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
       "assets/embedded/drawing/templates/layout-core.typ"
       "assets/embedded/drawing/templates/physics-edge-style.typ"
+      "crates/clinnet/tests/resources"
+      "crates/linnest/typst/examples/map-style.typ"
       "tests/resources/graphs/epemttbar.dot"
     ];
     gammalooprs = [
@@ -433,6 +435,7 @@
       "crates/idenso/CHANGELOG.typ"
       "crates/kurvst/typst/docs"
       "crates/linnest/typst/docs"
+      "crates/linnet-py/examples/layout_stream.py"
       "crates/linnet-py/examples/physics_render_settings.py"
       "crates/linnet-py/examples/rendering_api.py"
       "crates/linnet/CHANGELOG.typ"
@@ -2575,6 +2578,11 @@
       cp -R ${nextestRuntimeSrcFor target}/. /build/source/
       chmod -R u+w /build/source
       cd /build/source
+      # Workspace-root discovery checks these directories even for test
+      # targets that do not consume any files from them.
+      mkdir -p tests/resources examples/cli
+      ${workspaceMissingCargoTargetsScript}
+    '' + lib.optionalString (target.name == "docs") ''
       # Tests such as trybuild invoke Cargo again at runtime. Point
       # those nested invocations at the same vendored dependency
       # graph used to compile the archived test binaries.
@@ -2582,11 +2590,6 @@
       mkdir -p "$CARGO_HOME"
       cp ${cargoVendorDir}/config.toml "$CARGO_HOME/config.toml"
       export CARGO_NET_OFFLINE=true
-      # Workspace-root discovery checks these directories even for test
-      # targets that do not consume any files from them.
-      mkdir -p tests/resources examples/cli
-      ${workspaceMissingCargoTargetsScript}
-    '' + lib.optionalString (target.name == "docs") ''
       # The remapped Nix test source deliberately has no .git directory.
       # Give generated test pages stable, explicitly non-publishing
       # provenance rather than making the runner depend on repository

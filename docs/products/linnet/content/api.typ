@@ -419,6 +419,32 @@ The #source-link(
 momentum, edge-index, and node-index layers using the same generic API.
 Run it from a checkout with
 `nix develop -c uvx --from marimo==0.24.0 --with-editable crates/linnet-py marimo edit crates/linnet-py/examples/physics_render_settings.py`.
+The #source-link("crates/linnet-py/examples/layout_stream.py", label: "streaming layout notebook")
+previews the force solver as it runs. Its DOT editor and collapsible sliders restart the
+simulation; pause/resume preserves the current state. The viewer creates SVG topology
+once, then updates coordinates from `LayoutStream.from_dot(...)` frames. It also runs
+in an exported Marimo WebAssembly notebook with the bundled Emscripten wheel.
+
+```python
+from linnet_py import LayoutStream
+
+stream = LayoutStream.from_dot("digraph { a -> b; b -> c; c -> a; }", every=4)
+node_names, endpoints = stream.node_names, stream.endpoints
+for frame in stream:
+    positions = frame.nodes
+    edge_positions = frame.edges
+```
+
+The first frame has iteration zero; subsequent frames advance up to `every` iterations
+until a final `done` frame. Batch size affects observation frequency, not the random
+initialization, cooling, or depth-collapse schedule. No history is retained by the
+iterator. Frames own their position data; changing an earlier frame's returned arrays
+cannot affect later frames. Node names and endpoint indices stay in the same order.
+This proof of concept supports a single DOT graph and the force algorithm. Its numeric
+geometry includes explicit DOT placement constraints and per-edge spring lengths, but
+not Typst label measurement, styling, or final label relaxation. It does not alter an
+existing Python `Graph` or its payloads.
+
 Typst callbacks that require measured geometry use an explicit module function reference:
 
 ```python
